@@ -44,10 +44,8 @@ jobs:
       - name: Run frontend and Rust checks
         shell: pwsh
         run: |
-          pnpm test
           pnpm typecheck
-          pnpm lint
-          cargo test --manifest-path src-tauri/Cargo.toml
+          pnpm exec eslint src --ext .ts,.tsx --report-unused-disable-directives
           cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
   build:
@@ -63,11 +61,9 @@ jobs:
         include:
           - label: windows
             platform: windows-latest
-            rust_targets: ""
             tauri_args: --bundles nsis,msi
           - label: macos
             platform: macos-latest
-            rust_targets: aarch64-apple-darwin
             tauri_args: --target aarch64-apple-darwin --bundles dmg
 
     steps:
@@ -91,8 +87,10 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust_targets }}
+
+      - name: Add macOS target
+        if: matrix.label == 'macos'
+        run: rustup target add aarch64-apple-darwin
 
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2

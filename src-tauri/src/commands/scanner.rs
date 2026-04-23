@@ -294,8 +294,10 @@ pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, S
 mod tests {
     use super::*;
     use std::fs;
-    use std::os::unix::fs::symlink;
     use tempfile::TempDir;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -429,6 +431,7 @@ mod tests {
         assert!(target.is_none());
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_detect_link_type_symlink() {
         let tmp = TempDir::new().unwrap();
@@ -449,6 +452,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_detect_link_type_symlink_is_symlink_regardless_of_is_central() {
         let tmp = TempDir::new().unwrap();
@@ -579,6 +583,7 @@ mod tests {
         assert!(skills[0].is_central);
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_scan_directory_detects_symlinked_skill() {
         let tmp = TempDir::new().unwrap();
