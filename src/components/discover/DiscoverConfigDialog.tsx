@@ -13,6 +13,10 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useDiscoverStore } from "@/stores/discoverStore";
 import { usePlatformStore } from "@/stores/platformStore";
+import {
+  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  filterVisiblePlatformAgents,
+} from "@/lib/platformVisibility";
 import { ScanRoot } from "@/types";
 
 // ─── DiscoverConfigDialog ────────────────────────────────────────────────────
@@ -32,6 +36,7 @@ export function DiscoverConfigDialog({ open, onOpenChange }: DiscoverConfigDialo
   const startScan = useDiscoverStore((s) => s.startScan);
 
   const agents = usePlatformStore((s) => s.agents);
+  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
 
   // Load roots when dialog opens.
   const handleOpenChange = (open: boolean) => {
@@ -42,8 +47,8 @@ export function DiscoverConfigDialog({ open, onOpenChange }: DiscoverConfigDialo
   };
 
   // Get platform skill directory patterns for display.
-  const platformPatterns = agents
-    .filter((a) => a.id !== "central" && a.is_enabled)
+  const visiblePlatformAgents = filterVisiblePlatformAgents(agents, categoryVisibility);
+  const platformPatterns = visiblePlatformAgents
     .map((a) => {
       const rel = a.global_skills_dir.replace(
         /^.*\/(\.[\w-]+\/skills\/?)$/,

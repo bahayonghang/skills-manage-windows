@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Pencil, Loader2, FolderOpen, Cpu, Info, Database, Globe, Palette, Droplets, Bot, ChevronDown, ChevronRight, KeyRound } from "lucide-react";
+import { Plus, Trash2, Pencil, Loader2, FolderOpen, Cpu, Info, Database, Globe, Palette, Droplets, Bot, ChevronDown, ChevronRight, KeyRound, Search } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -17,15 +17,22 @@ import { Switch } from "@/components/ui/switch";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useThemeStore, CatppuccinFlavor, CatppuccinAccent, ACCENT_NAMES } from "@/stores/themeStore";
 import { usePlatformStore } from "@/stores/platformStore";
+import {
+  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  getPlatformCategoryKey,
+  sortPlatformVisibilityAgents,
+  type PlatformCategoryKey,
+} from "@/lib/platformVisibility";
 import { AddDirectoryDialog } from "@/components/settings/AddDirectoryDialog";
 import { PlatformDialog } from "@/components/settings/PlatformDialog";
+import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { Input } from "@/components/ui/input";
 import { AgentWithStatus, ScanDirectory } from "@/types";
 import { AI_PROVIDERS, REGION_LABELS, RegionId } from "@/data/aiProviders";
 
 // ─── App constants ────────────────────────────────────────────────────────────
 
-const APP_VERSION = "0.8.0";
+const APP_VERSION = __APP_VERSION__;
 const DB_PATH = "~/.skillsmanage/db.sqlite";
 
 /** Catppuccin Lavender hex per flavor — used for visual preview dots on flavor buttons (default accent). */
@@ -165,6 +172,163 @@ function CustomPlatformRow({ agent, onEdit, onRemove, isRemoving }: CustomPlatfo
   );
 }
 
+interface PlatformVisibilityRowProps {
+  agent: AgentWithStatus;
+  onToggle: (enabled: boolean) => void;
+}
+
+function formatPlatformPathHint(path: string): string {
+  const normalizedPath = path.replace(/\\/g, "/");
+
+  if (normalizedPath.startsWith("~/")) {
+    const homeSegments = normalizedPath.slice(2).split("/").filter(Boolean);
+    if (homeSegments.length <= 3) {
+      return normalizedPath;
+    }
+
+    return `~/${homeSegments.slice(-3).join("/")}`;
+  }
+
+  const segments = normalizedPath.split("/").filter(Boolean);
+  if (segments.length <= 3) {
+    return normalizedPath;
+  }
+
+  return `…/${segments.slice(-3).join("/")}`;
+}
+
+function matchesPlatformVisibilityQuery(
+  agent: AgentWithStatus,
+  normalizedQuery: string
+): boolean {
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const searchText = [
+    agent.display_name,
+    agent.id,
+    agent.global_skills_dir,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return searchText.includes(normalizedQuery);
+}
+
+function PlatformVisibilityRow({ agent, onToggle }: PlatformVisibilityRowProps) {
+  const { t } = useTranslation();
+  const pathHint = formatPlatformPathHint(agent.global_skills_dir);
+
+  return (
+    <div className="flex items-center gap-3 border-t border-border/40 px-4 py-2 first:border-t-0">
+      <PlatformIcon
+        agentId={agent.id}
+        className="size-4 text-muted-foreground shrink-0"
+        size={16}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="truncate text-sm font-medium">{agent.display_name}</div>
+        <div
+          className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/80"
+          title={agent.global_skills_dir}
+        >
+          <FolderOpen className="size-3 shrink-0" />
+          <span className="truncate">{pathHint}</span>
+        </div>
+      </div>
+      <div className="flex w-16 justify-end shrink-0">
+        <Switch
+          checked={agent.is_enabled}
+          onCheckedChange={onToggle}
+          aria-label={t("settings.togglePlatformVisibilityLabel", {
+            name: agent.display_name,
+          })}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface PlatformVisibilityGroupProps {
+  category: PlatformCategoryKey;
+  title: string;
+  description: string;
+  agents: AgentWithStatus[];
+  enabledCount: number;
+  totalCount: number;
+  groupVisible: boolean;
+  isSearchActive: boolean;
+  onToggleGroup: (visible: boolean) => void;
+  onToggleAgent: (agentId: string, enabled: boolean) => void;
+}
+
+function PlatformVisibilityGroup({
+  category,
+  title,
+  description,
+  agents,
+  enabledCount,
+  totalCount,
+  groupVisible,
+  isSearchActive,
+  onToggleGroup,
+  onToggleAgent,
+}: PlatformVisibilityGroupProps) {
+  const { t } = useTranslation();
+  const isExpanded = groupVisible || isSearchActive;
+
+  return (
+    <div className="rounded-lg border border-border overflow-hidden">
+      <div className="flex items-start justify-between gap-4 border-b border-border/40 bg-muted/20 px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-medium">{title}</div>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+              {t("settings.platformEnabledSummary", {
+                enabled: enabledCount,
+                total: totalCount,
+              })}
+            </span>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">{description}</div>
+        </div>
+        <div className="flex w-24 items-center justify-end gap-2 shrink-0">
+          <span className="text-xs text-muted-foreground">
+            {t("settings.platformGroupVisible")}
+          </span>
+          <Switch
+            checked={groupVisible}
+            onCheckedChange={onToggleGroup}
+            aria-label={t("settings.toggleCategoryVisibilityLabel", { name: title })}
+          />
+        </div>
+      </div>
+
+      {!isExpanded ? (
+        <div className="px-4 py-3 text-xs text-muted-foreground">
+          {t("settings.platformGroupHiddenSummary", {
+            enabled: enabledCount,
+            total: totalCount,
+          })}
+        </div>
+      ) : agents.length === 0 ? (
+        <div className="px-4 py-3 text-xs text-muted-foreground">
+          {t("settings.noPlatformItems")}
+        </div>
+      ) : (
+        agents.map((agent) => (
+          <PlatformVisibilityRow
+            key={`${category}-${agent.id}`}
+            agent={agent}
+            onToggle={(enabled) => onToggleAgent(agent.id, enabled)}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
 // ─── SettingsView ─────────────────────────────────────────────────────────────
 
 export function SettingsView() {
@@ -189,6 +353,9 @@ export function SettingsView() {
   const clearGitHubPat = useSettingsStore((s) => s.clearGitHubPat);
 
   const agents = usePlatformStore((s) => s.agents);
+  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+  const setCategoryVisibility = usePlatformStore((s) => s.setCategoryVisibility) ?? (async () => undefined);
+  const setAgentEnabled = usePlatformStore((s) => s.setAgentEnabled) ?? (async () => undefined);
 
   const flavor = useThemeStore((s) => s.flavor);
   const setFlavor = useThemeStore((s) => s.setFlavor);
@@ -201,6 +368,8 @@ export function SettingsView() {
   const customAgents = agents.filter((a) => !a.is_builtin);
 
   // ── Local State ────────────────────────────────────────────────────────────
+
+  const [platformVisibilityQuery, setPlatformVisibilityQuery] = useState("");
 
   // AI Provider state
   const [aiProvider, setAiProvider] = useState("claude");
@@ -279,6 +448,68 @@ export function SettingsView() {
   const [platformError, setPlatformError] = useState<string | null>(null);
   const [githubPatInput, setGitHubPatInput] = useState("");
   const [githubPatMessage, setGitHubPatMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const normalizedPlatformVisibilityQuery = useMemo(
+    () => platformVisibilityQuery.trim().toLowerCase(),
+    [platformVisibilityQuery]
+  );
+  const isPlatformVisibilitySearchActive =
+    normalizedPlatformVisibilityQuery.length > 0;
+  const allPlatformAgents = useMemo(
+    () => agents.filter((agent) => agent.id !== "central"),
+    [agents]
+  );
+  const platformVisibilityGroups = useMemo(() => {
+    const groupConfigs = [
+      {
+        category: "coding" as const,
+        title: t("sidebar.categoryCoding"),
+        description: t("settings.platformGroupCodingDesc"),
+        groupVisible: categoryVisibility.coding,
+      },
+      {
+        category: "lobster" as const,
+        title: t("sidebar.categoryLobster"),
+        description: t("settings.platformGroupLobsterDesc"),
+        groupVisible: categoryVisibility.lobster,
+      },
+    ];
+
+    return groupConfigs
+      .map((group) => {
+        const groupAgents = sortPlatformVisibilityAgents(
+          allPlatformAgents.filter(
+            (agent) => getPlatformCategoryKey(agent.category) === group.category
+          )
+        );
+        const matchingAgents = sortPlatformVisibilityAgents(
+          groupAgents.filter(
+            (agent) =>
+              matchesPlatformVisibilityQuery(
+                agent,
+                normalizedPlatformVisibilityQuery
+              )
+          )
+        );
+
+        return {
+          ...group,
+          enabledCount: groupAgents.filter((agent) => agent.is_enabled).length,
+          totalCount: groupAgents.length,
+          agents: matchingAgents,
+        };
+      })
+      .filter(
+        (group) =>
+          !isPlatformVisibilitySearchActive || group.agents.length > 0
+      );
+  }, [
+    allPlatformAgents,
+    categoryVisibility.coding,
+    categoryVisibility.lobster,
+    isPlatformVisibilitySearchActive,
+    normalizedPlatformVisibilityQuery,
+    t,
+  ]);
 
   // ── Load on mount ──────────────────────────────────────────────────────────
 
@@ -406,6 +637,22 @@ export function SettingsView() {
     }
   }
 
+  async function handleToggleCategory(category: PlatformCategoryKey, visible: boolean) {
+    try {
+      await setCategoryVisibility(category, visible);
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
+
+  async function handleTogglePlatformVisibility(agentId: string, enabled: boolean) {
+    try {
+      await setAgentEnabled(agentId, enabled);
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
+
   async function handleSaveGitHubPat() {
     setGitHubPatMessage(null);
     try {
@@ -500,7 +747,65 @@ export function SettingsView() {
           </CardContent>
         </Card>
 
-        {/* ── Section 2: GitHub Import Auth ─────────────────────────────── */}
+        {/* ── Section 2: Platform Visibility ────────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>{t("settings.platformVisibility")}</CardTitle>
+              <CardDescription className="mt-1">
+                {t("settings.platformVisibilityDesc")}
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={platformVisibilityQuery}
+                  onChange={(event) =>
+                    setPlatformVisibilityQuery(event.target.value)
+                  }
+                  placeholder={t("settings.platformSearchPlaceholder")}
+                  aria-label={t("settings.platformSearchLabel")}
+                  className="pl-9"
+                />
+              </div>
+
+              <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-sm text-muted-foreground">
+                <p>{t("settings.platformVisibilityScope")}</p>
+              </div>
+
+              {platformVisibilityGroups.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
+                  {t("settings.platformSearchEmpty")}
+                </div>
+              ) : (
+                platformVisibilityGroups.map((group) => (
+                  <PlatformVisibilityGroup
+                    key={group.category}
+                    category={group.category}
+                    title={group.title}
+                    description={group.description}
+                    agents={group.agents}
+                    enabledCount={group.enabledCount}
+                    totalCount={group.totalCount}
+                    groupVisible={group.groupVisible}
+                    isSearchActive={isPlatformVisibilitySearchActive}
+                    onToggleGroup={(visible) =>
+                      void handleToggleCategory(group.category, visible)
+                    }
+                    onToggleAgent={(agentId, enabled) =>
+                      void handleTogglePlatformVisibility(agentId, enabled)
+                    }
+                  />
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Section 3: GitHub Import Auth ─────────────────────────────── */}
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -566,7 +871,7 @@ export function SettingsView() {
           </CardContent>
         </Card>
 
-        {/* ── Section 3: AI Provider ─────────────────────────────────────── */}
+        {/* ── Section 4: AI Provider ─────────────────────────────────────── */}
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -682,7 +987,7 @@ export function SettingsView() {
           </CardContent>
         </Card>
 
-        {/* ── Section 4: Scan Directories (compact) ─────────────────────── */}
+        {/* ── Section 5: Scan Directories (compact) ─────────────────────── */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -748,7 +1053,7 @@ export function SettingsView() {
           </CardContent>
         </Card>
 
-        {/* ── Section 5: About ────────────────────────────────────────────── */}
+        {/* ── Section 6: About ────────────────────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle>{t("settings.about")}</CardTitle>

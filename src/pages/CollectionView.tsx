@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -27,6 +27,10 @@ import {
   consumeScrollPosition,
   createScrollRestorationState,
 } from "@/lib/scrollRestoration";
+import {
+  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  filterVisiblePlatformAgents,
+} from "@/lib/platformVisibility";
 
 // Scroll-restoration key shared with `CollectionsListView` so list-level and
 // single-collection pages interoperate under the same restoration contract.
@@ -53,12 +57,20 @@ export function CollectionView() {
   const addSkillToCollection = useCollectionStore((s) => s.addSkillToCollection);
 
   const agents = usePlatformStore((s) => s.agents);
+  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((s) => s.refreshCounts);
 
   const centralSkills = useCentralSkillsStore((s) => s.skills);
-  const centralAgents = useCentralSkillsStore((s) => s.agents);
   const loadCentralSkills = useCentralSkillsStore((s) => s.loadCentralSkills);
   const installCentralSkill = useCentralSkillsStore((s) => s.installSkill);
+  const visibleCollectionAgents = useMemo(
+    () => filterVisiblePlatformAgents(agents, categoryVisibility),
+    [agents, categoryVisibility]
+  );
+  const visibleCentralAgents = useMemo(
+    () => filterVisiblePlatformAgents(agents, categoryVisibility),
+    [agents, categoryVisibility]
+  );
 
   const importCollection = useCollectionStore((s) => s.importCollection);
 
@@ -452,7 +464,7 @@ export function CollectionView() {
         onOpenChange={setIsInstallOpen}
         collectionName={currentDetail.name}
         skillCount={currentDetail.skills.length}
-        agents={agents}
+        agents={visibleCollectionAgents}
         onInstall={(agentIds) => batchInstallCollection(currentDetail.id, agentIds)}
       />
 
@@ -460,7 +472,7 @@ export function CollectionView() {
         open={isSingleInstallOpen}
         onOpenChange={setIsSingleInstallOpen}
         skill={installTargetSkill}
-        agents={centralAgents}
+        agents={visibleCentralAgents}
         onInstall={handleInstallSingleSkill}
       />
     </div>

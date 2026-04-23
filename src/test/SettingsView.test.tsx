@@ -71,6 +71,36 @@ const mockBuiltinAgent: AgentWithStatus = {
   is_enabled: true,
 };
 
+const mockOpenCodeAgent: AgentWithStatus = {
+  id: "opencode",
+  display_name: "OpenCode",
+  category: "coding",
+  global_skills_dir: "~/.opencode/skills/",
+  is_detected: true,
+  is_builtin: true,
+  is_enabled: true,
+};
+
+const mockCursorAgent: AgentWithStatus = {
+  id: "cursor",
+  display_name: "Cursor",
+  category: "coding",
+  global_skills_dir: "~/.cursor/skills/",
+  is_detected: true,
+  is_builtin: true,
+  is_enabled: false,
+};
+
+const mockLobsterAgent: AgentWithStatus = {
+  id: "openclaw",
+  display_name: "OpenClaw",
+  category: "lobster",
+  global_skills_dir: "~/.openclaw/skills/",
+  is_detected: true,
+  is_builtin: true,
+  is_enabled: false,
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function setupMocks({
@@ -92,6 +122,9 @@ function setupMocks({
   clearGitHubPat = vi.fn(),
   rescan = vi.fn(),
   refreshCounts = vi.fn(),
+  categoryVisibility = { coding: true, lobster: false },
+  setCategoryVisibility = vi.fn(),
+  setAgentEnabled = vi.fn(),
   flavor = "mocha" as const,
   setFlavor = vi.fn(),
   accent = "lavender" as const,
@@ -125,6 +158,7 @@ function setupMocks({
       skillsByAgent: {},
       collectionCount: 0,
       discoveredCount: 0,
+      categoryVisibility,
       lastScanAt: "2026-04-23T01:00:00Z",
       scanState: "idle",
       isLoading: false,
@@ -135,6 +169,8 @@ function setupMocks({
       refreshScanInBackground: vi.fn(),
       rescan,
       refreshCounts,
+      setCategoryVisibility,
+      setAgentEnabled,
       applyScanSummary: vi.fn(),
       setCollectionCount: vi.fn(),
       setDiscoveredCount: vi.fn(),
@@ -189,6 +225,7 @@ describe("SettingsView", () => {
     renderSettingsView();
     expect(screen.getByText("扫描目录")).toBeTruthy();
     expect(screen.getByText("自定义平台")).toBeTruthy();
+    expect(screen.getByText("平台可见性")).toBeTruthy();
     expect(screen.getByText("关于")).toBeTruthy();
   });
 
@@ -284,13 +321,17 @@ describe("SettingsView", () => {
   it("shows toggle for custom directories", () => {
     setupMocks({ scanDirs: [mockCustomDir] });
     renderSettingsView();
-    expect(screen.getByRole("switch")).toBeTruthy();
+    expect(
+      screen.getByLabelText(`启用 ${mockCustomDir.path}`)
+    ).toBeTruthy();
   });
 
   it("does not show toggle for builtin directories", () => {
     setupMocks({ scanDirs: [mockBuiltinDir] });
     renderSettingsView();
-    expect(screen.queryByRole("switch")).toBeNull();
+    expect(
+      screen.queryByLabelText(`启用 ${mockBuiltinDir.path}`)
+    ).toBeNull();
   });
 
   it("shows 启用 label when directory is active", () => {
@@ -365,8 +406,8 @@ describe("SettingsView", () => {
   it("renders custom platform with name and path", () => {
     setupMocks({ agents: [mockBuiltinAgent, mockCustomAgent] });
     renderSettingsView();
-    expect(screen.getByText("QClaw")).toBeTruthy();
-    expect(screen.getByText("~/.qclaw/skills/")).toBeTruthy();
+    expect(screen.getAllByText("QClaw").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("~/.qclaw/skills/").length).toBeGreaterThan(0);
   });
 
   it("shows edit button for custom platforms", () => {
@@ -463,7 +504,7 @@ describe("SettingsView", () => {
   it("shows the app version in the about section", () => {
     setupMocks();
     renderSettingsView();
-    expect(screen.getByText("skills-manage v0.8.0")).toBeTruthy();
+    expect(screen.getByText("skills-manage v0.8.3")).toBeTruthy();
   });
 
   it("shows the database path in the about section", () => {
@@ -581,5 +622,65 @@ describe("SettingsView", () => {
     renderSettingsView();
     const rosewaterSwatch = screen.getByRole("radio", { name: "玫瑰水" });
     expect(rosewaterSwatch.style.backgroundColor).toBe("var(--ctp-rosewater)");
+  });
+
+  it("toggles coding group visibility from settings", async () => {
+    const setCategoryVisibility = vi.fn().mockResolvedValue(undefined);
+    setupMocks({ setCategoryVisibility });
+    renderSettingsView();
+
+    fireEvent.click(screen.getByLabelText("切换 编程类 分组显示"));
+
+    await waitFor(() => {
+      expect(setCategoryVisibility).toHaveBeenCalledWith("coding", false);
+    });
+  });
+
+  it("toggles an individual platform visibility from settings", async () => {
+    const setAgentEnabled = vi.fn().mockResolvedValue(undefined);
+    setupMocks({ agents: [mockBuiltinAgent, mockCustomAgent], setAgentEnabled });
+    renderSettingsView();
+
+    fireEvent.click(screen.getByLabelText("切换平台 Claude Code 的显示"));
+
+    await waitFor(() => {
+      expect(setAgentEnabled).toHaveBeenCalledWith("claude-code", false);
+    });
+  });
+
+  it("keeps lobster collapsed when the group is hidden", () => {
+    setupMocks({
+      agents: [mockBuiltinAgent, mockLobsterAgent],
+      categoryVisibility: { coding: true, lobster: false },
+    });
+    renderSettingsView();
+
+    expect(screen.getByText("已隐藏 · 0 / 1 已启用")).toBeTruthy();
+    expect(screen.queryByText("OpenClaw")).toBeNull();
+  });
+
+  it("filters platform groups by the local search box", () => {
+    setupMocks({
+      agents: [mockBuiltinAgent, mockOpenCodeAgent, mockCursorAgent, mockLobsterAgent],
+    });
+    renderSettingsView();
+
+    fireEvent.change(screen.getByLabelText("搜索平台"), {
+      target: { value: "open" },
+    });
+
+    expect(screen.getByText("OpenCode")).toBeTruthy();
+    expect(screen.getByText("OpenClaw")).toBeTruthy();
+    expect(screen.queryByText("Claude Code")).toBeNull();
+    expect(screen.queryByText("Cursor")).toBeNull();
+  });
+
+  it("does not repeat the 显示工具 text on every platform row", () => {
+    setupMocks({
+      agents: [mockBuiltinAgent, mockOpenCodeAgent, mockLobsterAgent],
+    });
+    renderSettingsView();
+
+    expect(screen.queryByText("显示工具")).toBeNull();
   });
 });

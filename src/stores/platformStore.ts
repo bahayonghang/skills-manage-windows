@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import {
+  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY,
+  resolvePlatformCategoryVisibility,
+  type PlatformCategoryKey,
+  type PlatformCategoryVisibility,
+} from "@/lib/platformVisibility";
+import {
   AgentWithStatus,
   BootstrapSnapshot,
   ScanResult,
@@ -20,13 +27,58 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     is_enabled: true,
   },
   {
+    id: "codex",
+    display_name: "Codex CLI",
+    category: "coding",
+    global_skills_dir: "~/.agents/skills/",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
+    id: "gemini-cli",
+    display_name: "Gemini CLI",
+    category: "coding",
+    global_skills_dir: "~/.gemini/skills/",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
+    id: "opencode",
+    display_name: "OpenCode",
+    category: "coding",
+    global_skills_dir: "~/.opencode/skills/",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
+    id: "kiro",
+    display_name: "Kiro",
+    category: "coding",
+    global_skills_dir: "~/.kiro/skills/",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
     id: "cursor",
     display_name: "Cursor",
     category: "coding",
     global_skills_dir: "~/.cursor/skills/",
     is_detected: true,
     is_builtin: true,
-    is_enabled: true,
+    is_enabled: false,
+  },
+  {
+    id: "openclaw",
+    display_name: "OpenClaw",
+    category: "lobster",
+    global_skills_dir: "~/.openclaw/skills/",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: false,
   },
   {
     id: "central",
@@ -40,12 +92,17 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
 ];
 
 const BROWSER_FIXTURE_COUNTS: ScanResult = {
-  total_skills: 1,
-  agents_scanned: 3,
+  total_skills: 5,
+  agents_scanned: 7,
   skills_by_agent: {
     "claude-code": 1,
-    cursor: 1,
-    central: 1,
+    codex: 1,
+    "gemini-cli": 1,
+    opencode: 1,
+    kiro: 1,
+    cursor: 0,
+    openclaw: 0,
+    central: 5,
   },
 };
 
@@ -90,6 +147,7 @@ interface PlatformState {
   skillsByAgent: Record<string, number>;
   collectionCount: number;
   discoveredCount: number;
+  categoryVisibility: PlatformCategoryVisibility;
   lastScanAt: string | null;
   scanState: ScanState;
   isLoading: boolean;
@@ -102,6 +160,8 @@ interface PlatformState {
   refreshScanInBackground: () => Promise<void>;
   rescan: () => Promise<void>;
   refreshCounts: () => Promise<void>;
+  setCategoryVisibility: (category: PlatformCategoryKey, visible: boolean) => Promise<void>;
+  setAgentEnabled: (agentId: string, enabled: boolean) => Promise<void>;
   applyScanSummary: (summary: SkillCountsSummary) => void;
   setCollectionCount: (count: number) => void;
   setDiscoveredCount: (count: number) => void;
@@ -114,6 +174,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   skillsByAgent: {},
   collectionCount: 0,
   discoveredCount: 0,
+  categoryVisibility: DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
   lastScanAt: null,
   scanState: "idle",
   isLoading: false,
@@ -129,6 +190,10 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         skillsByAgent: BROWSER_FIXTURE_COUNTS.skills_by_agent,
         collectionCount: 0,
         discoveredCount: 1,
+        categoryVisibility: resolvePlatformCategoryVisibility(
+          null,
+          BROWSER_FIXTURE_AGENTS
+        ),
         lastScanAt: "2026-04-23T00:00:00.000Z",
         scanState: "idle",
         isLoading: false,
@@ -137,9 +202,18 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     }
 
     try {
-      const snapshot = await invoke<BootstrapSnapshot>("get_bootstrap_snapshot");
+      const [snapshot, rawCategoryVisibility] = await Promise.all([
+        invoke<BootstrapSnapshot>("get_bootstrap_snapshot"),
+        invoke<string | null>("get_setting", {
+          key: PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY,
+        }),
+      ]);
       set({
         ...applyBootstrapSnapshot(snapshot),
+        categoryVisibility: resolvePlatformCategoryVisibility(
+          rawCategoryVisibility,
+          snapshot.agents
+        ),
         isLoading: false,
       });
       markAppPerformance("shell_ready");
@@ -245,6 +319,58 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
       }));
     } catch (err) {
       set({ error: String(err), isRefreshing: false, scanState: "error" });
+      throw err;
+    }
+  },
+
+  setCategoryVisibility: async (category, visible) => {
+    const previous = get().categoryVisibility;
+    const next = {
+      ...previous,
+      [category]: visible,
+    };
+
+    set({ categoryVisibility: next, error: null });
+
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    try {
+      await invoke("set_setting", {
+        key: PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY,
+        value: JSON.stringify(next),
+      });
+    } catch (err) {
+      set({ categoryVisibility: previous, error: String(err) });
+      throw err;
+    }
+  },
+
+  setAgentEnabled: async (agentId, enabled) => {
+    const previousAgents = get().agents;
+    const nextAgents = previousAgents.map((agent) =>
+      agent.id === agentId ? { ...agent, is_enabled: enabled } : agent
+    );
+
+    set({ agents: nextAgents, error: null });
+
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    try {
+      const updatedAgent = await invoke<AgentWithStatus>("set_agent_enabled", {
+        agentId,
+        isEnabled: enabled,
+      });
+      set((state) => ({
+        agents: state.agents.map((agent) =>
+          agent.id === updatedAgent.id ? updatedAgent : agent
+        ),
+      }));
+    } catch (err) {
+      set({ agents: previousAgents, error: String(err) });
       throw err;
     }
   },

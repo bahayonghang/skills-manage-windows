@@ -18,38 +18,12 @@ import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
+import {
+  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  filterVisiblePlatformAgents,
+} from "@/lib/platformVisibility";
 import { isTauriRuntime } from "@/lib/tauri";
 import { markAppPerformance } from "@/lib/performance";
-
-const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
-  {
-    id: "claude-code",
-    display_name: "Claude Code",
-    category: "coding",
-    global_skills_dir: "~/.claude/skills/",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: true,
-  },
-  {
-    id: "cursor",
-    display_name: "Cursor",
-    category: "coding",
-    global_skills_dir: "~/.cursor/skills/",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: true,
-  },
-  {
-    id: "central",
-    display_name: "Central Skills",
-    category: "central",
-    global_skills_dir: "~/.agents/skills/",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: true,
-  },
-];
 
 const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
   {
@@ -163,7 +137,6 @@ export function CentralSkillsView() {
     rawAgents === undefined &&
     rawLoadCentralSkills === undefined;
   const skills = shouldUseBrowserFixtures ? BROWSER_FIXTURE_SKILLS : rawSkills ?? EMPTY_SKILLS;
-  const agents = shouldUseBrowserFixtures ? BROWSER_FIXTURE_AGENTS : rawAgents ?? EMPTY_AGENTS;
   const isLoading = shouldUseBrowserFixtures ? false : rawIsLoading ?? false;
   const loadCentralSkills = rawLoadCentralSkills ?? noopAsync;
   const installSkill = useCentralSkillsStore((state) => state.installSkill) ?? noopBatchInstall;
@@ -171,6 +144,7 @@ export function CentralSkillsView() {
   const togglingAgentId = useCentralSkillsStore((state) => state.togglingAgentId);
 
   // Keep the platform sidebar counts in sync after install.
+  const categoryVisibility = usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((state) => state.refreshCounts) ?? noopAsync;
   const platformAgents = usePlatformStore((state) => state.agents) ?? EMPTY_AGENTS;
   const skillsByAgent = useSkillStore((state) => state.skillsByAgent) ?? EMPTY_SKILLS_BY_AGENT;
@@ -324,8 +298,8 @@ export function CentralSkillsView() {
   }, [githubImport.importResult, skills]);
 
   const availableInstallAgents = useMemo(
-    () => (agents.length > 0 ? agents : platformAgents),
-    [agents, platformAgents]
+    () => filterVisiblePlatformAgents(platformAgents, categoryVisibility),
+    [platformAgents, categoryVisibility]
   );
 
   async function handleAfterImportSuccess() {
@@ -358,7 +332,7 @@ export function CentralSkillsView() {
         onInstallTo={() => handleInstallClick(skill)}
         detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
         platformIcons={{
-          agents,
+          agents: availableInstallAgents,
           linkedAgents: skill.linked_agents,
           skillId: skill.id,
           onToggle: handleTogglePlatform,
@@ -458,7 +432,7 @@ export function CentralSkillsView() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         skill={installTargetSkill}
-        agents={agents}
+        agents={availableInstallAgents}
         onInstall={handleInstall}
       />
 

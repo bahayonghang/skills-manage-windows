@@ -25,6 +25,10 @@ import { DiscoveredSkill, SkillWithLinks } from "@/types";
 import { invoke } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { consumeScrollPosition } from "@/lib/scrollRestoration";
+import {
+  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  filterVisiblePlatformAgents,
+} from "@/lib/platformVisibility";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 
@@ -116,6 +120,7 @@ export function DiscoverView() {
   const loadScanRoots = useDiscoverStore((s) => s.loadScanRoots);
 
   const agents = usePlatformStore((s) => s.agents);
+  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((s) => s.refreshCounts);
 
   // Local state
@@ -280,8 +285,8 @@ export function DiscoverView() {
 
   // Available platform agents for install dialog.
   const platformAgents = useMemo(
-    () => agents.filter((a) => a.id !== "central" && a.is_enabled),
-    [agents]
+    () => filterVisiblePlatformAgents(agents, categoryVisibility),
+    [agents, categoryVisibility]
   );
 
   // ── Handlers ───────────────────────────────────────────────────────────────

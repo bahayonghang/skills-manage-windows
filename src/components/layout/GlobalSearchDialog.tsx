@@ -25,6 +25,10 @@ import { useCollectionStore } from "@/stores/collectionStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useHotkey } from "@/hooks/useHotkey";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
+import {
+  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  filterVisiblePlatformAgents,
+} from "@/lib/platformVisibility";
 import { buildSearchText, normalizeSearchQuery, scoreSearchMatch } from "@/lib/search";
 
 interface GlobalSearchDialogProps {
@@ -59,6 +63,7 @@ export function GlobalSearchDialog({
   const discoveredProjects = useDiscoverStore((s) => s.discoveredProjects);
   const collections = useCollectionStore((s) => s.collections);
   const agents = usePlatformStore((s) => s.agents);
+  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = useMemo(
@@ -172,9 +177,7 @@ export function GlobalSearchDialog({
     }
 
     // Platform Views
-    const platformAgents = agents.filter(
-      (a) => a.id !== "central" && a.is_enabled
-    );
+    const platformAgents = filterVisiblePlatformAgents(agents, categoryVisibility);
     for (const agent of platformAgents) {
       result.push({
         id: `platform-${agent.id}`,
@@ -247,6 +250,7 @@ export function GlobalSearchDialog({
     discoveredProjects,
     collections,
     agents,
+    categoryVisibility,
     navigate,
     close,
     open,

@@ -13,6 +13,10 @@ import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { SkillWithLinks } from "@/types";
+import {
+  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  filterVisiblePlatformAgents,
+} from "@/lib/platformVisibility";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
@@ -33,13 +37,13 @@ export function PlatformView() {
   const { agentId } = useParams<{ agentId: string }>();
   const { t } = useTranslation();
   const agents = usePlatformStore((state) => state.agents);
+  const categoryVisibility = usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
 
   const skillsByAgent = useSkillStore((state) => state.skillsByAgent);
   const loadingByAgent = useSkillStore((state) => state.loadingByAgent);
   const getSkillsByAgent = useSkillStore((state) => state.getSkillsByAgent);
 
   const centralSkills = useCentralSkillsStore((state) => state.skills);
-  const centralAgents = useCentralSkillsStore((state) => state.agents);
   const loadCentralSkills = useCentralSkillsStore((state) => state.loadCentralSkills);
   const installSkill = useCentralSkillsStore((state) => state.installSkill);
   const refreshCounts = usePlatformStore((state) => state.refreshCounts);
@@ -91,7 +95,11 @@ export function PlatformView() {
     }
   }
 
-  const agent = agents.find((a) => a.id === agentId);
+  const visiblePlatformAgents = useMemo(
+    () => filterVisiblePlatformAgents(agents, categoryVisibility),
+    [agents, categoryVisibility]
+  );
+  const agent = visiblePlatformAgents.find((a) => a.id === agentId);
   const isLoading = agentId ? (loadingByAgent[agentId] ?? false) : false;
 
   // Memoize skills to avoid changing dependency reference on every render
@@ -212,7 +220,7 @@ export function PlatformView() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         skill={installTargetSkill}
-        agents={centralAgents}
+        agents={visiblePlatformAgents}
         onInstall={handleInstall}
       />
 

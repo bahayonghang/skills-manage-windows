@@ -29,6 +29,15 @@ const mockAgents = [
     is_enabled: true,
   },
   {
+    id: "openclaw",
+    display_name: "OpenClaw",
+    category: "lobster",
+    global_skills_dir: "~/.openclaw/skills/",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
     id: "central",
     display_name: "Central Skills",
     category: "central",
@@ -49,6 +58,10 @@ function buildPlatformStoreState(overrides = {}) {
     },
     collectionCount: 2,
     discoveredCount: 6,
+    categoryVisibility: {
+      coding: true,
+      lobster: true,
+    },
     lastScanAt: "2026-04-23T01:00:00Z",
     scanState: "idle",
     isLoading: false,
@@ -59,6 +72,8 @@ function buildPlatformStoreState(overrides = {}) {
     refreshScanInBackground: vi.fn(),
     rescan: vi.fn(),
     refreshCounts: vi.fn(),
+    setCategoryVisibility: vi.fn(),
+    setAgentEnabled: vi.fn(),
     applyScanSummary: vi.fn(),
     setCollectionCount: vi.fn(),
     setDiscoveredCount: vi.fn(),
@@ -97,7 +112,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: /项目技能库/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /技能集合/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Claude Code/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Cursor/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /OpenClaw/ })).toBeInTheDocument();
   });
 
   it("shows a blocking loading row only during shell hydration", () => {
@@ -147,5 +162,27 @@ describe("Sidebar", () => {
     renderSidebar();
     fireEvent.click(screen.getByRole("button", { name: /中央技能库/ }));
     fireEvent.click(screen.getByRole("button", { name: /Claude Code/ }));
+  });
+
+  it("hides lobster platforms when the lobster group is disabled", () => {
+    vi.mocked(usePlatformStore).mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        categoryVisibility: {
+          coding: true,
+          lobster: false,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("button", { name: /Claude Code/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /OpenClaw/ })).not.toBeInTheDocument();
   });
 });

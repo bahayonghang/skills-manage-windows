@@ -23,6 +23,15 @@ const mockAgents: AgentWithStatus[] = [
     is_enabled: true,
   },
   {
+    id: "openclaw",
+    display_name: "OpenClaw",
+    category: "lobster",
+    global_skills_dir: "~/.openclaw/skills/",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: false,
+  },
+  {
     id: "central",
     display_name: "Central Skills",
     category: "central",
@@ -37,6 +46,7 @@ const mockBootstrapSnapshot: BootstrapSnapshot = {
   agents: mockAgents,
   cachedSkillCounts: {
     "claude-code": 5,
+    openclaw: 0,
     central: 3,
   },
   collectionCount: 2,
@@ -49,6 +59,7 @@ const refreshedSnapshot: BootstrapSnapshot = {
   ...mockBootstrapSnapshot,
   cachedSkillCounts: {
     "claude-code": 8,
+    openclaw: 0,
     central: 4,
   },
   lastScanAt: "2026-04-23T01:05:00Z",
@@ -57,10 +68,16 @@ const refreshedSnapshot: BootstrapSnapshot = {
 const mockCountsSummary: SkillCountsSummary = {
   cachedSkillCounts: {
     "claude-code": 9,
+    openclaw: 0,
     central: 4,
   },
   lastScanAt: "2026-04-23T01:06:00Z",
   scanState: "idle",
+};
+
+const mockCategoryVisibility = {
+  coding: false,
+  lobster: true,
 };
 
 describe("platformStore", () => {
@@ -70,6 +87,10 @@ describe("platformStore", () => {
       skillsByAgent: {},
       collectionCount: 0,
       discoveredCount: 0,
+      categoryVisibility: {
+        coding: true,
+        lobster: false,
+      },
       lastScanAt: null,
       scanState: "idle",
       isLoading: false,
@@ -85,6 +106,10 @@ describe("platformStore", () => {
     expect(state.skillsByAgent).toEqual({});
     expect(state.collectionCount).toBe(0);
     expect(state.discoveredCount).toBe(0);
+    expect(state.categoryVisibility).toEqual({
+      coding: true,
+      lobster: false,
+    });
     expect(state.lastScanAt).toBeNull();
     expect(state.scanState).toBe("idle");
     expect(state.isLoading).toBe(false);
@@ -95,6 +120,7 @@ describe("platformStore", () => {
   it("initialize hydrates the shell first and then refreshes in background", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce(mockBootstrapSnapshot)
+      .mockResolvedValueOnce(JSON.stringify(mockCategoryVisibility))
       .mockResolvedValueOnce({ total_skills: 12, agents_scanned: 2, skills_by_agent: {} })
       .mockResolvedValueOnce(refreshedSnapshot);
 
@@ -102,11 +128,15 @@ describe("platformStore", () => {
 
     const state = usePlatformStore.getState();
     expect(invoke).toHaveBeenNthCalledWith(1, "get_bootstrap_snapshot");
-    expect(invoke).toHaveBeenNthCalledWith(2, "scan_all_skills");
-    expect(invoke).toHaveBeenNthCalledWith(3, "get_bootstrap_snapshot");
+    expect(invoke).toHaveBeenNthCalledWith(2, "get_setting", {
+      key: "platform_category_visibility",
+    });
+    expect(invoke).toHaveBeenNthCalledWith(3, "scan_all_skills");
+    expect(invoke).toHaveBeenNthCalledWith(4, "get_bootstrap_snapshot");
     expect(state.skillsByAgent).toEqual(refreshedSnapshot.cachedSkillCounts);
     expect(state.collectionCount).toBe(2);
     expect(state.discoveredCount).toBe(7);
+    expect(state.categoryVisibility).toEqual(mockCategoryVisibility);
     expect(state.scanState).toBe("idle");
     expect(state.isLoading).toBe(false);
     expect(state.isRefreshing).toBe(false);
@@ -119,6 +149,7 @@ describe("platformStore", () => {
       .mockReturnValueOnce(new Promise<BootstrapSnapshot>((resolve) => {
         resolveSnapshot = resolve;
       }))
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ total_skills: 12, agents_scanned: 2, skills_by_agent: {} })
       .mockResolvedValueOnce(refreshedSnapshot);
 
@@ -136,6 +167,7 @@ describe("platformStore", () => {
       .mockReturnValueOnce(new Promise<BootstrapSnapshot>((resolve) => {
         resolveSnapshot = resolve;
       }))
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ total_skills: 12, agents_scanned: 2, skills_by_agent: {} })
       .mockResolvedValueOnce(refreshedSnapshot);
 
@@ -145,7 +177,7 @@ describe("platformStore", () => {
     resolveSnapshot(mockBootstrapSnapshot);
     await Promise.all([firstCall, secondCall]);
 
-    expect(invoke).toHaveBeenCalledTimes(3);
+    expect(invoke).toHaveBeenCalledTimes(4);
   });
 
   it("sets error and clears isLoading when hydrateShell fails", async () => {
@@ -164,6 +196,10 @@ describe("platformStore", () => {
       skillsByAgent: mockBootstrapSnapshot.cachedSkillCounts,
       collectionCount: 2,
       discoveredCount: 7,
+      categoryVisibility: {
+        coding: true,
+        lobster: false,
+      },
       lastScanAt: mockBootstrapSnapshot.lastScanAt,
       scanState: "idle",
       isLoading: false,
@@ -180,5 +216,79 @@ describe("platformStore", () => {
     expect(usePlatformStore.getState().lastScanAt).toBe(mockCountsSummary.lastScanAt);
     expect(usePlatformStore.getState().isLoading).toBe(false);
     expect(usePlatformStore.getState().isRefreshing).toBe(false);
+  });
+
+  it("hydrateShell applies persisted category visibility", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(mockBootstrapSnapshot)
+      .mockResolvedValueOnce(JSON.stringify(mockCategoryVisibility));
+
+    await usePlatformStore.getState().hydrateShell();
+
+    expect(usePlatformStore.getState().categoryVisibility).toEqual(
+      mockCategoryVisibility
+    );
+  });
+
+  it("setCategoryVisibility persists the setting", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await usePlatformStore.getState().setCategoryVisibility("coding", false);
+
+    expect(invoke).toHaveBeenCalledWith("set_setting", {
+      key: "platform_category_visibility",
+      value: JSON.stringify({ coding: false, lobster: false }),
+    });
+    expect(usePlatformStore.getState().categoryVisibility).toEqual({
+      coding: false,
+      lobster: false,
+    });
+  });
+
+  it("setAgentEnabled updates the target agent", async () => {
+    usePlatformStore.setState({
+      agents: mockAgents,
+      skillsByAgent: {},
+      collectionCount: 0,
+      discoveredCount: 0,
+      categoryVisibility: {
+        coding: true,
+        lobster: false,
+      },
+      lastScanAt: null,
+      scanState: "idle",
+      isLoading: false,
+      isRefreshing: false,
+      error: null,
+    });
+
+    vi.mocked(invoke).mockResolvedValueOnce({
+      ...mockAgents[0],
+      is_enabled: false,
+    });
+
+    await usePlatformStore.getState().setAgentEnabled("claude-code", false);
+
+    expect(invoke).toHaveBeenCalledWith("set_agent_enabled", {
+      agentId: "claude-code",
+      isEnabled: false,
+    });
+    expect(
+      usePlatformStore.getState().agents.find((agent) => agent.id === "claude-code")
+        ?.is_enabled
+    ).toBe(false);
+  });
+
+  it("hydrateShell derives category visibility from enabled agents when nothing is saved", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(mockBootstrapSnapshot)
+      .mockResolvedValueOnce(null);
+
+    await usePlatformStore.getState().hydrateShell();
+
+    expect(usePlatformStore.getState().categoryVisibility).toEqual({
+      coding: true,
+      lobster: false,
+    });
   });
 });

@@ -12,6 +12,10 @@ import {
 import { useTranslation } from "react-i18next";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { usePlatformStore } from "@/stores/platformStore";
+import {
+  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  filterVisiblePlatformAgents,
+} from "@/lib/platformVisibility";
 import { cn } from "@/lib/utils";
 import { markAppPerformance } from "@/lib/performance";
 
@@ -87,6 +91,7 @@ export function Sidebar() {
     isRefreshing,
     scanState,
   } = usePlatformStore();
+  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
 
   const [expanded, setExpanded] = useState(true);
 
@@ -96,9 +101,7 @@ export function Sidebar() {
     }
   }, [agents.length, isLoading]);
 
-  const platformAgents = agents.filter(
-    (a) => a.id !== "central" && a.is_enabled
-  );
+  const platformAgents = filterVisiblePlatformAgents(agents, categoryVisibility);
   const lobsterAgents = platformAgents.filter((a) => a.category === "lobster");
   const codingAgents = platformAgents.filter((a) => a.category !== "lobster");
 

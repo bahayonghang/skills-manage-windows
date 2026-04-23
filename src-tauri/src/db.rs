@@ -11,6 +11,9 @@ use uuid::Uuid;
 
 pub type DbPool = SqlitePool;
 
+const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 5] =
+    ["claude-code", "codex", "gemini-cli", "opencode", "kiro"];
+
 // ─── Data Types ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -424,7 +427,7 @@ async fn seed_builtin_agents(pool: &DbPool) -> Result<(), String> {
             "INSERT INTO agents
              (id, display_name, category, global_skills_dir, project_skills_dir,
               icon_name, is_detected, is_builtin, is_enabled)
-             VALUES (?, ?, ?, ?, ?, ?, 0, 1, 1)
+             VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?)
              ON CONFLICT(id) DO UPDATE SET
               display_name = excluded.display_name,
               category = excluded.category,
@@ -438,6 +441,7 @@ async fn seed_builtin_agents(pool: &DbPool) -> Result<(), String> {
         .bind(&agent.global_skills_dir)
         .bind(&agent.project_skills_dir)
         .bind(&agent.icon_name)
+        .bind(agent.is_enabled)
         .execute(pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -579,6 +583,18 @@ pub fn builtin_agents() -> Vec<Agent> {
     builtin_agents_for_home(&crate::paths::resolve_home_dir())
 }
 
+fn is_builtin_agent_enabled_by_default(agent_id: &str, category: &str) -> bool {
+    if category == "central" {
+        return true;
+    }
+
+    if category == "lobster" {
+        return false;
+    }
+
+    DEFAULT_ENABLED_PLATFORM_IDS.contains(&agent_id)
+}
+
 fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
     let central_skills_dir = crate::paths::central_skills_dir_from_home(home)
         .to_string_lossy()
@@ -603,7 +619,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("claude".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("claude-code", "coding"),
         },
         Agent {
             id: "codex".to_string(),
@@ -614,7 +630,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("codex".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("codex", "coding"),
         },
         Agent {
             id: "cursor".to_string(),
@@ -625,7 +641,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("cursor".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("cursor", "coding"),
         },
         Agent {
             id: "gemini-cli".to_string(),
@@ -636,7 +652,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("gemini".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("gemini-cli", "coding"),
         },
         Agent {
             id: "trae".to_string(),
@@ -647,7 +663,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("trae".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("trae", "coding"),
         },
         Agent {
             id: "factory-droid".to_string(),
@@ -658,7 +674,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("factory".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("factory-droid", "coding"),
         },
         Agent {
             id: "junie".to_string(),
@@ -669,7 +685,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("junie".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("junie", "coding"),
         },
         Agent {
             id: "qwen".to_string(),
@@ -680,7 +696,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("qwen".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("qwen", "coding"),
         },
         Agent {
             id: "trae-cn".to_string(),
@@ -691,7 +707,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("trae-cn".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("trae-cn", "coding"),
         },
         Agent {
             id: "windsurf".to_string(),
@@ -702,7 +718,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("windsurf".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("windsurf", "coding"),
         },
         Agent {
             id: "qoder".to_string(),
@@ -713,7 +729,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("qoder".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("qoder", "coding"),
         },
         Agent {
             id: "augment".to_string(),
@@ -724,7 +740,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("augment".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("augment", "coding"),
         },
         Agent {
             id: "opencode".to_string(),
@@ -735,7 +751,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("opencode".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("opencode", "coding"),
         },
         Agent {
             id: "kilocode".to_string(),
@@ -746,7 +762,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("kilocode".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("kilocode", "coding"),
         },
         Agent {
             id: "ob1".to_string(),
@@ -757,7 +773,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("ob1".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("ob1", "coding"),
         },
         Agent {
             id: "amp".to_string(),
@@ -768,7 +784,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("amp".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("amp", "coding"),
         },
         Agent {
             id: "kiro".to_string(),
@@ -779,7 +795,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("kiro".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("kiro", "coding"),
         },
         Agent {
             id: "codebuddy".to_string(),
@@ -790,7 +806,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("codebuddy".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("codebuddy", "coding"),
         },
         Agent {
             id: "hermes".to_string(),
@@ -801,7 +817,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("hermes".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("hermes", "lobster"),
         },
         Agent {
             id: "copilot".to_string(),
@@ -812,7 +828,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("copilot".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("copilot", "coding"),
         },
         Agent {
             id: "aider".to_string(),
@@ -823,7 +839,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("aider".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("aider", "coding"),
         },
         // ── Lobster platforms ────────────────────────────────────────────────
         Agent {
@@ -835,7 +851,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("openclaw".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("openclaw", "lobster"),
         },
         Agent {
             id: "qclaw".to_string(),
@@ -846,7 +862,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("qclaw".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("qclaw", "lobster"),
         },
         Agent {
             id: "easyclaw".to_string(),
@@ -857,7 +873,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("easyclaw".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("easyclaw", "lobster"),
         },
         Agent {
             id: "autoclaw".to_string(),
@@ -868,7 +884,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("autoclaw".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("autoclaw", "lobster"),
         },
         Agent {
             id: "workbuddy".to_string(),
@@ -879,7 +895,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("workbuddy".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("workbuddy", "lobster"),
         },
         // ── Central Skills ────────────────────────────────────────────────────
         Agent {
@@ -891,7 +907,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             icon_name: Some("central".to_string()),
             is_detected: false,
             is_builtin: true,
-            is_enabled: true,
+            is_enabled: is_builtin_agent_enabled_by_default("central", "central"),
         },
     ]
 }
@@ -1246,6 +1262,29 @@ pub async fn update_agent_detected(
         .await
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// Update the `is_enabled` flag for an agent and return the refreshed row.
+pub async fn update_agent_enabled(
+    pool: &DbPool,
+    agent_id: &str,
+    is_enabled: bool,
+) -> Result<Agent, String> {
+    let existing = get_agent_by_id(pool, agent_id).await?;
+    if existing.is_none() {
+        return Err(format!("Agent '{}' not found", agent_id));
+    }
+
+    sqlx::query("UPDATE agents SET is_enabled = ? WHERE id = ?")
+        .bind(is_enabled)
+        .bind(agent_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    get_agent_by_id(pool, agent_id)
+        .await?
+        .ok_or_else(|| "Failed to retrieve updated agent".to_string())
 }
 
 /// Insert a new custom agent (non-builtin).
@@ -1770,6 +1809,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_builtin_agents_seed_default_enabled_subset() {
+        let pool = setup_test_db().await;
+        let agents = get_all_agents(&pool).await.unwrap();
+
+        let enabled_ids: std::collections::HashSet<&str> = agents
+            .iter()
+            .filter(|agent| agent.is_enabled)
+            .map(|agent| agent.id.as_str())
+            .collect();
+
+        let expected_enabled_ids = std::collections::HashSet::from([
+            "claude-code",
+            "codex",
+            "gemini-cli",
+            "opencode",
+            "kiro",
+            "central",
+        ]);
+
+        assert_eq!(enabled_ids, expected_enabled_ids);
+    }
+
+    #[tokio::test]
     async fn test_init_does_not_duplicate_agents_on_reinit() {
         let pool = setup_test_db().await;
         init_database(&pool).await.unwrap(); // Call a second time
@@ -1965,6 +2027,27 @@ mod tests {
         update_agent_detected(&pool, "cursor", false).await.unwrap();
         let agent = get_agent_by_id(&pool, "cursor").await.unwrap().unwrap();
         assert!(!agent.is_detected);
+    }
+
+    #[tokio::test]
+    async fn test_update_agent_enabled() {
+        let pool = setup_test_db().await;
+
+        let updated = update_agent_enabled(&pool, "claude-code", false)
+            .await
+            .unwrap();
+        assert!(!updated.is_enabled);
+
+        let persisted = get_agent_by_id(&pool, "claude-code")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!persisted.is_enabled);
+
+        let reenabled = update_agent_enabled(&pool, "claude-code", true)
+            .await
+            .unwrap();
+        assert!(reenabled.is_enabled);
     }
 
     #[tokio::test]
@@ -2271,6 +2354,37 @@ mod tests {
             central.global_skills_dir,
             crate::paths::central_skills_dir().to_string_lossy()
         );
+    }
+
+    #[tokio::test]
+    async fn test_reinit_preserves_existing_builtin_agent_enabled_flags() {
+        let pool = setup_test_db().await;
+
+        sqlx::query(
+            "UPDATE agents
+             SET is_enabled = CASE id
+               WHEN 'claude-code' THEN 0
+               WHEN 'cursor' THEN 1
+               ELSE is_enabled
+             END",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        init_database(&pool).await.unwrap();
+
+        let claude_code = get_agent_by_id(&pool, "claude-code")
+            .await
+            .unwrap()
+            .expect("claude-code should exist");
+        let cursor = get_agent_by_id(&pool, "cursor")
+            .await
+            .unwrap()
+            .expect("cursor should exist");
+
+        assert!(!claude_code.is_enabled);
+        assert!(cursor.is_enabled);
     }
 
     #[tokio::test]

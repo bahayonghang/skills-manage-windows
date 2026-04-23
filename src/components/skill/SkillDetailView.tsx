@@ -26,6 +26,10 @@ import { CollectionPickerDialog } from "@/components/collection/CollectionPicker
 import { AgentWithStatus, SkillInstallation } from "@/types";
 import { cn } from "@/lib/utils";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
+import {
+  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  filterVisiblePlatformAgents,
+} from "@/lib/platformVisibility";
 
 // ─── Section Label ─────────────────────────────────────────────────────────────
 
@@ -234,6 +238,7 @@ export function SkillDetailView({
 
   // Platform agents (loaded at app init)
   const agents = usePlatformStore((s) => s.agents);
+  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((s) => s.refreshCounts);
 
   // Local state for filePath mode
@@ -295,7 +300,7 @@ export function SkillDetailView({
 
   // ── Derived values ───────────────────────────────────────────────────────
 
-  const targetAgents = agents.filter((a) => a.id !== "central");
+  const targetAgents = filterVisiblePlatformAgents(agents, categoryVisibility);
   const lobsterAgents = targetAgents.filter((a) => a.category === "lobster");
   const codingAgents = targetAgents.filter((a) => a.category !== "lobster");
 

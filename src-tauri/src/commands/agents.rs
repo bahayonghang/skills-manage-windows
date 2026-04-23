@@ -206,6 +206,16 @@ pub async fn remove_custom_agent_impl(pool: &DbPool, agent_id: &str) -> Result<(
     db::delete_custom_agent(pool, agent_id).await
 }
 
+/// Update the enabled state for any agent and return the refreshed representation.
+pub async fn set_agent_enabled_impl(
+    pool: &DbPool,
+    agent_id: &str,
+    is_enabled: bool,
+) -> Result<AgentWithStatus, String> {
+    let updated = db::update_agent_enabled(pool, agent_id, is_enabled).await?;
+    Ok(agent_to_with_status(updated))
+}
+
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
 
 /// Tauri command: return all registered agents with live detection status.
@@ -246,6 +256,16 @@ pub async fn remove_custom_agent(
     agent_id: String,
 ) -> Result<(), String> {
     remove_custom_agent_impl(&state.db, &agent_id).await
+}
+
+/// Tauri command: toggle whether an agent is visible across the app.
+#[tauri::command]
+pub async fn set_agent_enabled(
+    state: State<'_, AppState>,
+    agent_id: String,
+    is_enabled: bool,
+) -> Result<AgentWithStatus, String> {
+    set_agent_enabled_impl(&state.db, &agent_id, is_enabled).await
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -612,5 +632,20 @@ mod tests {
         let pool = setup_test_db().await;
         let result = remove_custom_agent_impl(&pool, "cursor").await;
         assert!(result.is_err(), "Removing a built-in agent should fail");
+    }
+
+    #[tokio::test]
+    async fn test_set_agent_enabled_updates_builtin_agent() {
+        let pool = setup_test_db().await;
+
+        let disabled = set_agent_enabled_impl(&pool, "claude-code", false)
+            .await
+            .unwrap();
+        assert!(!disabled.is_enabled);
+
+        let reenabled = set_agent_enabled_impl(&pool, "claude-code", true)
+            .await
+            .unwrap();
+        assert!(reenabled.is_enabled);
     }
 }
