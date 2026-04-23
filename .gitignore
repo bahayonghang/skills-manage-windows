@@ -21,3 +21,6 @@ coverage/
 .DS_Store
 Thumbs.db
 /tmp/
+/outputs/
+
+.omx/
