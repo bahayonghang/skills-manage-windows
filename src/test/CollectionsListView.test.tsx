@@ -1,14 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useEffect } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import {
-  MemoryRouter,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-  type Location,
-} from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, type Location } from "react-router-dom";
 import { CollectionsListView } from "../pages/CollectionsListView";
 import {
   Collection,
@@ -335,6 +328,22 @@ describe("CollectionsListView", () => {
     expect(mockLoadCollectionDetail).toHaveBeenCalledWith("col-1");
   });
 
+  it("requires a second confirmation click before removing a skill from the selected collection", async () => {
+    mockRemoveSkill.mockResolvedValueOnce(undefined);
+    renderList();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /从技能集中移除 frontend-design/i })
+    );
+    expect(mockRemoveSkill).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /确认删除/i }));
+
+    await waitFor(() => {
+      expect(mockRemoveSkill).toHaveBeenCalledWith("col-1", "frontend-design");
+    });
+  });
+
   // ── Collection context restoration (COLL-RETURN-001) ─────────────────────
 
   it("restores the prior collection context from navigation state on entry", async () => {
@@ -358,21 +367,10 @@ describe("CollectionsListView", () => {
 
   // ── Forward navigation state emission ─────────────────────────────────────
 
-  it("navigates to skill detail with collection context and scroll restoration state", async () => {
+  it("opens skill detail in the drawer without navigating away from /collections", async () => {
     const locations: Location[] = [];
     renderList("/collections", {}, (loc) => {
       locations.push(loc);
-    });
-
-    const scroller = screen
-      .getByText("frontend-design")
-      .closest("[class*='overflow-auto']");
-    expect(scroller).not.toBeNull();
-    if (!scroller) return;
-    Object.defineProperty(scroller, "scrollTop", {
-      value: 220,
-      writable: true,
-      configurable: true,
     });
 
     fireEvent.click(
@@ -380,25 +378,12 @@ describe("CollectionsListView", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("detail-route")).toBeInTheDocument();
+      expect(screen.getByTestId("skill-detail-drawer")).toBeInTheDocument();
     });
 
-    const detailLocation = locations.find((l) =>
-      l.pathname.startsWith("/skill/")
-    );
-    expect(detailLocation).toBeDefined();
-    const state = detailLocation?.state as
-      | {
-          collectionContext?: { collectionId?: string };
-          scrollRestoration?: { key?: string; scrollTop?: number };
-        }
-      | null
-      | undefined;
-    expect(state?.collectionContext).toEqual({ collectionId: "col-1" });
-    expect(state?.scrollRestoration).toEqual({
-      key: "collection:col-1",
-      scrollTop: 220,
-    });
+    expect(screen.queryByText("detail-route")).not.toBeInTheDocument();
+    expect(locations.some((l) => l.pathname.startsWith("/skill/"))).toBe(false);
+    expect(locations.at(-1)?.pathname).toBe("/collections");
   });
 
   it("opens the skill detail drawer without navigating away and does not use return-context helpers on card click", async () => {
@@ -420,12 +405,16 @@ describe("CollectionsListView", () => {
   });
 
   it("preserves selected collection and scroll state when closing the drawer and restores focus", async () => {
-    renderList();
-
-    fireEvent.click(screen.getByRole("button", { name: "Backend" }));
+    renderList(
+      {
+        pathname: "/collections",
+        state: { collectionContext: { collectionId: "col-2" } },
+      },
+      { currentDetail: mockDetailCol2 }
+    );
 
     await waitFor(() => {
-      expect(mockLoadCollectionDetail).toHaveBeenCalledWith("col-2");
+      expect(screen.getByText("api-designer")).toBeInTheDocument();
     });
 
     const trigger = screen.getByRole("button", { name: /查看 api-designer 的详情/i });
@@ -619,48 +608,14 @@ describe("CollectionsListView", () => {
 
   // ── End-to-end return-position round-trip ────────────────────────────────
 
-  it("full round-trip: list → detail → back preserves collection selection and scroll", async () => {
-    // Mimics the real app flow end-to-end, including the SkillDetail
-    // handler that saves the scroll offset before navigating back.
-    applyStoreMocks({ currentDetail: mockDetailCol1 });
+  it("full drawer round-trip preserves collection selection, route, and scroll", async () => {
+    const locations: Location[] = [];
+    renderList("/collections", {}, (loc) => {
+      locations.push(loc);
+    });
 
-    // Minimal stand-in for SkillDetail that mirrors the real go-back logic.
-    function FakeSkillDetail() {
-      const nav = useNavigate();
-      const loc = useLocation();
-      return (
-        <div>
-          <span data-testid="fake-detail">detail</span>
-          <button
-            onClick={() => {
-              const restore = (loc.state as { scrollRestoration?: { key?: string; scrollTop?: number } })
-                ?.scrollRestoration;
-              if (restore?.key) {
-                saveScrollPosition(restore.key, restore.scrollTop ?? 0);
-              }
-              nav(-1);
-            }}
-          >
-            fake-go-back
-          </button>
-        </div>
-      );
-    }
-
-    render(
-      <MemoryRouter initialEntries={["/collections"]}>
-        <Routes>
-          <Route path="/collections" element={<CollectionsListView />} />
-          <Route path="/skill/:skillId" element={<FakeSkillDetail />} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    // On first mount auto-select picks col-1. Seed a scrollTop on the
-    // container so we have something to restore.
-    const scroller = screen
-      .getByText("frontend-design")
-      .closest("[class*='overflow-auto']") as HTMLDivElement;
+    const trigger = screen.getByRole("button", { name: /查看 frontend-design 的详情/i });
+    const scroller = trigger.closest("[class*='overflow-auto']") as HTMLDivElement;
     expect(scroller).not.toBeNull();
     Object.defineProperty(scroller, "scrollTop", {
       value: 260,
@@ -668,31 +623,22 @@ describe("CollectionsListView", () => {
       configurable: true,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /查看 frontend-design 的详情/i })
-    );
+    fireEvent.click(trigger);
 
-    // Detail page renders — handler fires on click.
     await waitFor(() => {
-      expect(screen.getByTestId("fake-detail")).toBeInTheDocument();
+      expect(screen.getByTestId("skill-detail-drawer")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /fake-go-back/i }));
+    fireEvent.click(screen.getByRole("button", { name: /close drawer/i }));
 
-    // Back on /collections: the list view should have re-hydrated the
-    // previously selected collection (col-1, same as before) and restored
-    // the scroll offset from the in-memory map that SkillDetail populated.
     await waitFor(() => {
-      expect(screen.queryByTestId("fake-detail")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("skill-detail-drawer")).not.toBeInTheDocument();
     });
-    await waitFor(() => {
-      expect(screen.getByText("frontend-design")).toBeInTheDocument();
-    });
-    const scrollerAfter = screen
-      .getByText("frontend-design")
-      .closest("[class*='overflow-auto']") as HTMLDivElement;
-    await waitFor(() => {
-      expect(scrollerAfter.scrollTop).toBe(260);
-    });
+
+    expect(locations.some((l) => l.pathname.startsWith("/skill/"))).toBe(false);
+    expect(locations.at(-1)?.pathname).toBe("/collections");
+    expect(screen.getByText("frontend-design")).toBeInTheDocument();
+    expect(scroller.scrollTop).toBe(260);
+    expect(trigger).toHaveFocus();
   });
 });

@@ -41,6 +41,23 @@ pub struct SkillInstallation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct AgentSkillObservation {
+    pub row_id: String,
+    pub agent_id: String,
+    pub skill_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub file_path: String,
+    pub dir_path: String,
+    pub source_kind: String,
+    pub source_root: String,
+    pub link_type: String,
+    pub symlink_target: Option<String>,
+    pub is_read_only: bool,
+    pub scanned_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Agent {
     pub id: String,
     pub display_name: String,
@@ -135,6 +152,27 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_installations_agent_id
          ON skill_installations(agent_id)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS agent_skill_observations (
+            row_id         TEXT PRIMARY KEY,
+            agent_id       TEXT NOT NULL,
+            skill_id       TEXT NOT NULL,
+            name           TEXT NOT NULL,
+            description    TEXT,
+            file_path      TEXT NOT NULL,
+            dir_path       TEXT NOT NULL,
+            source_kind    TEXT NOT NULL,
+            source_root    TEXT NOT NULL,
+            link_type      TEXT NOT NULL,
+            symlink_target TEXT,
+            is_read_only   BOOLEAN NOT NULL DEFAULT 0,
+            scanned_at     TEXT NOT NULL
+        )",
     )
     .execute(pool)
     .await
@@ -953,6 +991,13 @@ pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
 
 /// Retrieve all skills installed for a given agent.
 pub async fn get_skills_by_agent(pool: &DbPool, agent_id: &str) -> Result<Vec<Skill>, String> {
+    if agent_id == "claude-code" {
+        let observations = get_agent_skill_observations(pool, agent_id).await?;
+        if !observations.is_empty() {
+            return Ok(observations.into_iter().map(observation_to_skill).collect());
+        }
+    }
+
     sqlx::query_as::<_, Skill>(
         "SELECT s.* FROM skills s
          JOIN skill_installations si ON s.id = si.skill_id
@@ -972,6 +1017,8 @@ pub async fn get_skills_by_agent(pool: &DbPool, agent_id: &str) -> Result<Vec<Sk
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SkillForAgent {
     pub id: String,
+    /// Stable row identity for source-specific detail routing.
+    pub row_id: String,
     pub name: String,
     pub description: Option<String>,
     /// Absolute path to the `SKILL.md` file.
@@ -984,6 +1031,11 @@ pub struct SkillForAgent {
     /// Symlink target path, if `link_type` is "symlink".
     pub symlink_target: Option<String>,
     pub is_central: bool,
+    pub source_kind: Option<String>,
+    pub source_root: Option<String>,
+    pub is_read_only: bool,
+    pub conflict_group: Option<String>,
+    pub conflict_count: i64,
 }
 
 /// Retrieve skills installed for a given agent, enriched with installation
@@ -993,15 +1045,147 @@ pub async fn get_skills_for_agent(
     pool: &DbPool,
     agent_id: &str,
 ) -> Result<Vec<SkillForAgent>, String> {
+    if agent_id == "claude-code" {
+        let observations = get_agent_skill_observations(pool, agent_id).await?;
+        if !observations.is_empty() {
+            let mut conflict_counts = HashMap::new();
+            for observation in &observations {
+                *conflict_counts
+                    .entry(observation.skill_id.clone())
+                    .or_insert(0_i64) += 1;
+            }
+
+            return Ok(observations
+                .into_iter()
+                .map(|observation| {
+                    let conflict_count = conflict_counts
+                        .get(&observation.skill_id)
+                        .copied()
+                        .unwrap_or(0);
+                    let mut skill = observation_to_skill_for_agent(observation);
+                    if conflict_count > 1 {
+                        skill.conflict_group =
+                            Some(claude_conflict_group(agent_id, &skill.id));
+                        skill.conflict_count = conflict_count;
+                    }
+                    skill
+                })
+                .collect());
+        }
+    }
+
     sqlx::query_as::<_, SkillForAgent>(
-        "SELECT s.id, s.name, s.description, s.file_path,
+        "SELECT s.id,
+                s.id AS row_id,
+                s.name,
+                s.description,
+                s.file_path,
                 si.installed_path AS dir_path,
                 si.link_type,
                 si.symlink_target,
-                s.is_central
+                s.is_central,
+                NULL AS source_kind,
+                NULL AS source_root,
+                0 AS is_read_only,
+                NULL AS conflict_group,
+                0 AS conflict_count
          FROM skills s
          JOIN skill_installations si ON s.id = si.skill_id
          WHERE si.agent_id = ?",
+    )
+    .bind(agent_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+fn observation_to_skill(observation: AgentSkillObservation) -> Skill {
+    Skill {
+        id: observation.skill_id,
+        name: observation.name,
+        description: observation.description,
+        file_path: observation.file_path,
+        canonical_path: None,
+        is_central: false,
+        source: Some(observation.link_type),
+        content: None,
+        scanned_at: observation.scanned_at,
+    }
+}
+
+fn observation_to_skill_for_agent(observation: AgentSkillObservation) -> SkillForAgent {
+    SkillForAgent {
+        id: observation.skill_id,
+        row_id: observation.row_id,
+        name: observation.name,
+        description: observation.description,
+        file_path: observation.file_path,
+        dir_path: observation.dir_path,
+        link_type: observation.link_type,
+        symlink_target: observation.symlink_target,
+        is_central: false,
+        source_kind: Some(observation.source_kind),
+        source_root: Some(observation.source_root),
+        is_read_only: observation.is_read_only,
+        conflict_group: None,
+        conflict_count: 0,
+    }
+}
+
+fn claude_conflict_group(agent_id: &str, skill_id: &str) -> String {
+    format!("{agent_id}::{skill_id}")
+}
+
+pub async fn upsert_agent_skill_observation(
+    pool: &DbPool,
+    observation: &AgentSkillObservation,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO agent_skill_observations
+         (row_id, agent_id, skill_id, name, description, file_path, dir_path,
+          source_kind, source_root, link_type, symlink_target, is_read_only, scanned_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(row_id) DO UPDATE SET
+           agent_id       = excluded.agent_id,
+           skill_id       = excluded.skill_id,
+           name           = excluded.name,
+           description    = excluded.description,
+           file_path      = excluded.file_path,
+           dir_path       = excluded.dir_path,
+           source_kind    = excluded.source_kind,
+           source_root    = excluded.source_root,
+           link_type      = excluded.link_type,
+           symlink_target = excluded.symlink_target,
+           is_read_only   = excluded.is_read_only,
+           scanned_at     = excluded.scanned_at",
+    )
+    .bind(&observation.row_id)
+    .bind(&observation.agent_id)
+    .bind(&observation.skill_id)
+    .bind(&observation.name)
+    .bind(&observation.description)
+    .bind(&observation.file_path)
+    .bind(&observation.dir_path)
+    .bind(&observation.source_kind)
+    .bind(&observation.source_root)
+    .bind(&observation.link_type)
+    .bind(&observation.symlink_target)
+    .bind(observation.is_read_only)
+    .bind(&observation.scanned_at)
+    .execute(pool)
+    .await
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+pub async fn get_agent_skill_observations(
+    pool: &DbPool,
+    agent_id: &str,
+) -> Result<Vec<AgentSkillObservation>, String> {
+    sqlx::query_as::<_, AgentSkillObservation>(
+        "SELECT * FROM agent_skill_observations
+         WHERE agent_id = ?
+         ORDER BY name, dir_path",
     )
     .bind(agent_id)
     .fetch_all(pool)
@@ -1120,6 +1304,38 @@ pub async fn delete_stale_skill_installations(
     for id in found_skill_ids {
         q = q.bind(id.as_str());
     }
+    q.execute(pool).await.map(|_| ()).map_err(|e| e.to_string())
+}
+
+pub async fn delete_stale_agent_skill_observations(
+    pool: &DbPool,
+    agent_id: &str,
+    found_row_ids: &[String],
+) -> Result<(), String> {
+    if found_row_ids.is_empty() {
+        return sqlx::query("DELETE FROM agent_skill_observations WHERE agent_id = ?")
+            .bind(agent_id)
+            .execute(pool)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string());
+    }
+
+    let placeholders = found_row_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "DELETE FROM agent_skill_observations WHERE agent_id = ? AND row_id NOT IN ({})",
+        placeholders
+    );
+
+    let mut q = sqlx::query(&sql).bind(agent_id);
+    for row_id in found_row_ids {
+        q = q.bind(row_id.as_str());
+    }
+
     q.execute(pool).await.map(|_| ()).map_err(|e| e.to_string())
 }
 

@@ -95,6 +95,7 @@ describe("platformStore", () => {
       scanState: "idle",
       isLoading: false,
       isRefreshing: false,
+      scanGeneration: 0,
       error: null,
     });
     vi.clearAllMocks();
@@ -114,6 +115,7 @@ describe("platformStore", () => {
     expect(state.scanState).toBe("idle");
     expect(state.isLoading).toBe(false);
     expect(state.isRefreshing).toBe(false);
+    expect(state.scanGeneration).toBe(0);
     expect(state.error).toBeNull();
   });
 
@@ -204,6 +206,7 @@ describe("platformStore", () => {
       scanState: "idle",
       isLoading: false,
       isRefreshing: false,
+      scanGeneration: 1,
       error: null,
     });
 
@@ -214,6 +217,7 @@ describe("platformStore", () => {
     expect(invoke).toHaveBeenCalledWith("get_skill_counts_summary");
     expect(usePlatformStore.getState().skillsByAgent).toEqual(mockCountsSummary.cachedSkillCounts);
     expect(usePlatformStore.getState().lastScanAt).toBe(mockCountsSummary.lastScanAt);
+    expect(usePlatformStore.getState().scanGeneration).toBe(2);
     expect(usePlatformStore.getState().isLoading).toBe(false);
     expect(usePlatformStore.getState().isRefreshing).toBe(false);
   });

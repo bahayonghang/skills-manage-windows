@@ -5,6 +5,7 @@
   "common": {
     "install": "Install",
     "uninstall": "Uninstall",
+    "confirmDelete": "Confirm delete",
     "confirm": "Confirm",
     "cancel": "Cancel",
     "save": "Save",
@@ -49,7 +50,18 @@
     "sourceSymlinkLabel": "symlink",
     "sourceCopyLabel": "copy",
     "notFound": "Platform not found",
-    "searchSkillLabel": "View skill {{name}}"
+    "searchSkillLabel": "View skill {{name}}",
+    "sourceFilterTabsLabel": "Claude source filters",
+    "sourceFilter": {
+      "all": "All",
+      "user": "User source",
+      "plugin": "Plugin source"
+    },
+    "originUser": "User source",
+    "originPlugin": "Plugin source",
+    "readOnly": "Read-only",
+    "noSourceSkills": "No {{source}} skills installed for {{name}}",
+    "uninstallFromLabel": "Uninstall {{skill}} from {{platform}}"
   },
   "central": {
     "title": "Central Skills",
@@ -67,7 +79,17 @@
     "refreshError": "Refresh failed: {{error}}",
     "linked": "linked",
     "notLinked": "not linked",
-    "toggleInstallLabel": "Toggle {{platform}} link for {{skill}}"
+    "toggleInstallLabel": "Toggle {{platform}} link for {{skill}}",
+    "sortLabel": "Sort",
+    "sortFieldLabel": "Sort field",
+    "sortDirectionLabel": "Sort direction",
+    "sortByName": "Name",
+    "sortByCreatedAt": "Created",
+    "sortByUpdatedAt": "Modified",
+    "sortAscending": "Asc",
+    "sortDescending": "Desc",
+    "sortByNewest": "Newest",
+    "sortByOldest": "Oldest"
   },
   "installDialog": {
     "title": "Install {{name}}",
@@ -128,7 +150,16 @@
     "metadataRegion": "Skill metadata",
     "installStatusRegion": "Installation status",
     "installError": "Install failed: {{error}}",
-    "uninstallError": "Uninstall failed: {{error}}"
+    "uninstallError": "Uninstall failed: {{error}}",
+    "sourceStatus": "Source status",
+    "sourceStatusRegion": "Source status",
+    "directoryPath": "Directory path",
+    "sourceRoot": "Source root",
+    "readOnlySource": "Read-only source",
+    "readOnlyDesc": "Plugin-installed copies are display-only here, so install, uninstall, and collection changes are unavailable.",
+    "userManagedDesc": "This Claude user copy keeps the normal install-state and collection-management controls.",
+    "readOnlyInstallBlocked": "Install and uninstall are unavailable for read-only plugin copies.",
+    "readOnlyCollectionsBlocked": "Collection management is unavailable for read-only plugin copies."
   },
   "collection": {
     "edit": "Edit",

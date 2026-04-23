@@ -418,13 +418,23 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
   body {
+    margin: 0;
+    overflow: hidden;
     @apply bg-background text-foreground;
-    }
+  }
   html {
     @apply font-sans;
-    }
+  }
+  #root {
+    overflow: hidden;
+  }
 
   ::selection {
     background-color: color-mix(in srgb, var(--primary) 35%, transparent);

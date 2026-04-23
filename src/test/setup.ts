@@ -8,16 +8,18 @@ import zh from "../i18n/locales/zh.json";
 type TranslationObj = { [key: string]: TranslationObj | string };
 
 function resolveKey(obj: TranslationObj, key: string, options?: Record<string, unknown>): string {
+  const defaultValue =
+    typeof options?.defaultValue === "string" ? options.defaultValue : undefined;
   const parts = key.split(".");
   let result: TranslationObj | string = obj;
   for (const part of parts) {
     if (result && typeof result === "object") {
       result = (result as TranslationObj)[part];
     } else {
-      return key;
+      return defaultValue ?? key;
     }
   }
-  if (typeof result !== "string") return key;
+  if (typeof result !== "string") return defaultValue ?? key;
   // Handle simple {{var}} interpolation
   if (options) {
     return result.replace(/\{\{(\w+)\}\}/g, (_match, varName) => {

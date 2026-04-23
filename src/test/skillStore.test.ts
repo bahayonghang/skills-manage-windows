@@ -42,6 +42,7 @@ describe("skillStore", () => {
     useSkillStore.setState({
       skillsByAgent: {},
       loadingByAgent: {},
+      pendingSkillActionKeys: {},
       error: null,
     });
     vi.clearAllMocks();
@@ -53,6 +54,7 @@ describe("skillStore", () => {
     const state = useSkillStore.getState();
     expect(state.skillsByAgent).toEqual({});
     expect(state.loadingByAgent).toEqual({});
+    expect(state.pendingSkillActionKeys).toEqual({});
     expect(state.error).toBeNull();
   });
 
@@ -147,5 +149,79 @@ describe("skillStore", () => {
     ]);
 
     isTauriSpy.mockRestore();
+  });
+
+  // ── uninstallSkillFromAgent ──────────────────────────────────────────────
+
+  it("calls uninstall_skill_from_agent and refreshes the agent skill list", async () => {
+    useSkillStore.setState({
+      skillsByAgent: { "claude-code": mockSkills },
+      loadingByAgent: {},
+      pendingSkillActionKeys: {},
+      error: null,
+    });
+
+    const remainingSkills = [mockSkills[1]];
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(remainingSkills);
+
+    await useSkillStore
+      .getState()
+      .uninstallSkillFromAgent("frontend-design", "claude-code");
+
+    expect(invoke).toHaveBeenNthCalledWith(1, "uninstall_skill_from_agent", {
+      skillId: "frontend-design",
+      agentId: "claude-code",
+    });
+    expect(invoke).toHaveBeenNthCalledWith(2, "get_skills_by_agent", {
+      agentId: "claude-code",
+    });
+    expect(useSkillStore.getState().skillsByAgent["claude-code"]).toEqual(
+      remainingSkills
+    );
+    expect(useSkillStore.getState().pendingSkillActionKeys).toEqual({});
+    expect(useSkillStore.getState().error).toBeNull();
+  });
+
+  it("tracks in-flight uninstall mutations by agent and skill", async () => {
+    let resolveUninstall!: () => void;
+    vi.mocked(invoke)
+      .mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          resolveUninstall = resolve;
+        })
+      )
+      .mockResolvedValueOnce([]);
+
+    const uninstallPromise = useSkillStore
+      .getState()
+      .uninstallSkillFromAgent("frontend-design", "claude-code");
+
+    expect(
+      useSkillStore.getState().pendingSkillActionKeys["claude-code::frontend-design"]
+    ).toBe(true);
+
+    resolveUninstall();
+    await uninstallPromise;
+
+    expect(
+      useSkillStore.getState().pendingSkillActionKeys["claude-code::frontend-design"]
+    ).toBeUndefined();
+  });
+
+  it("sets error and clears pending uninstall state when uninstall fails", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("Permission denied"));
+
+    await expect(
+      useSkillStore
+        .getState()
+        .uninstallSkillFromAgent("frontend-design", "claude-code")
+    ).rejects.toThrow("Permission denied");
+
+    expect(useSkillStore.getState().error).toContain("Permission denied");
+    expect(
+      useSkillStore.getState().pendingSkillActionKeys["claude-code::frontend-design"]
+    ).toBeUndefined();
   });
 });

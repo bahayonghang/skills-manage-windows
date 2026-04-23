@@ -5,6 +5,7 @@
   "common": {
     "install": "安装",
     "uninstall": "卸载",
+    "confirmDelete": "确认删除",
     "confirm": "确认",
     "cancel": "取消",
     "save": "保存",
@@ -49,7 +50,18 @@
     "sourceSymlinkLabel": "符号链接",
     "sourceCopyLabel": "复制安装",
     "notFound": "未找到平台",
-    "searchSkillLabel": "查看技能 {{name}}"
+    "searchSkillLabel": "查看技能 {{name}}",
+    "sourceFilterTabsLabel": "Claude 来源筛选",
+    "sourceFilter": {
+      "all": "全部",
+      "user": "用户来源",
+      "plugin": "插件来源"
+    },
+    "originUser": "用户来源",
+    "originPlugin": "插件来源",
+    "readOnly": "只读",
+    "noSourceSkills": "{{name}} 下暂无{{source}}技能",
+    "uninstallFromLabel": "从 {{platform}} 卸载 {{skill}}"
   },
   "central": {
     "title": "中央技能库",
@@ -67,7 +79,17 @@
     "refreshError": "刷新失败: {{error}}",
     "linked": "已链接",
     "notLinked": "未链接",
-    "toggleInstallLabel": "切换 {{skill}} 在 {{platform}} 的链接状态"
+    "toggleInstallLabel": "切换 {{skill}} 在 {{platform}} 的链接状态",
+    "sortLabel": "排序",
+    "sortFieldLabel": "排序字段",
+    "sortDirectionLabel": "排序方向",
+    "sortByName": "名称",
+    "sortByCreatedAt": "创建时间",
+    "sortByUpdatedAt": "修改时间",
+    "sortAscending": "正排",
+    "sortDescending": "倒排",
+    "sortByNewest": "最新",
+    "sortByOldest": "最早"
   },
   "installDialog": {
     "title": "安装 {{name}}",
@@ -128,7 +150,16 @@
     "metadataRegion": "技能基本信息",
     "installStatusRegion": "安装状态",
     "installError": "安装失败: {{error}}",
-    "uninstallError": "卸载失败: {{error}}"
+    "uninstallError": "卸载失败: {{error}}",
+    "sourceStatus": "来源状态",
+    "sourceStatusRegion": "来源状态",
+    "directoryPath": "目录路径",
+    "sourceRoot": "来源根目录",
+    "readOnlySource": "只读来源",
+    "readOnlyDesc": "插件安装的副本仅供查看，不能在这里安装、卸载或调整技能集。",
+    "userManagedDesc": "此 Claude 用户副本会保留正常的安装状态与技能集管理能力。",
+    "readOnlyInstallBlocked": "插件来源的只读副本不可安装或卸载。",
+    "readOnlyCollectionsBlocked": "插件来源的只读副本不可调整技能集。"
   },
   "collection": {
     "edit": "编辑",

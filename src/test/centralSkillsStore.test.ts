@@ -273,7 +273,7 @@ describe("centralSkillsStore", () => {
     expect(invoke).toHaveBeenCalledWith("install_skill_to_agent", {
       skillId: "code-reviewer",
       agentId: "claude-code",
-      method: "symlink",
+      method: "auto",
     });
 
     const state = useCentralSkillsStore.getState();

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import type { UnlistenFn } from "@tauri-apps/api/event";
-import { SkillDetail } from "@/types";
+import { SkillDetail, SkillDetailRequest } from "@/types";
 import {
   ExplanationErrorInfo,
   setupExplanationStreamListeners,
@@ -23,7 +23,7 @@ interface SkillDetailState {
   explanationErrorInfo: ExplanationErrorInfo | null;
 
   // Actions
-  loadDetail: (skillId: string) => Promise<void>;
+  loadDetail: (request: SkillDetailRequest | string) => Promise<void>;
   loadCachedExplanation: (skillId: string, lang: string) => Promise<void>;
   generateExplanation: (skillId: string, content: string, lang: string) => Promise<void>;
   refreshExplanation: (skillId: string, content: string, lang: string) => Promise<void>;
@@ -40,6 +40,50 @@ let unlistenChunk: UnlistenFn | null = null;
 let unlistenComplete: UnlistenFn | null = null;
 let unlistenError: UnlistenFn | null = null;
 let activeExplanationRequestId = 0;
+let activeDetailRequest: SkillDetailRequest | null = null;
+
+function normalizeDetailRequest(request: SkillDetailRequest | string): SkillDetailRequest {
+  return typeof request === "string" ? { skillId: request } : request;
+}
+
+function buildDetailInvokeArgs(request: SkillDetailRequest) {
+  return {
+    skillId: request.skillId,
+    ...(request.agentId ? { agentId: request.agentId } : {}),
+    ...(request.rowId ? { rowId: request.rowId } : {}),
+  };
+}
+
+function resolveDetailRequest(
+  request: SkillDetailRequest,
+  detail: SkillDetail
+): SkillDetailRequest {
+  const resolvedRowId =
+    request.rowId ??
+    (detail.row_id && detail.row_id !== request.skillId ? detail.row_id : undefined);
+
+  return {
+    skillId: request.skillId,
+    ...(request.agentId ? { agentId: request.agentId } : {}),
+    ...(resolvedRowId ? { rowId: resolvedRowId } : {}),
+  };
+}
+
+function setActiveDetailRequestFromDetail(
+  request: SkillDetailRequest,
+  detail: SkillDetail
+): SkillDetailRequest {
+  const resolvedRequest = resolveDetailRequest(request, detail);
+  activeDetailRequest = resolvedRequest;
+  return resolvedRequest;
+}
+
+function getActiveDetailRequest(skillId: string): SkillDetailRequest {
+  if (activeDetailRequest?.skillId === skillId) {
+    return activeDetailRequest;
+  }
+  return { skillId };
+}
 
 function nextExplanationRequestId() {
   activeExplanationRequestId += 1;
@@ -145,10 +189,13 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
   explanationErrorInfo: null,
 
   /**
-   * Load skill detail metadata and raw SKILL.md content in parallel.
-   * Calls get_skill_detail and read_skill_content Tauri commands.
+   * Load skill detail metadata, then read raw SKILL.md content from the
+   * resolved detail row's file path so duplicate/source-aware rows keep the
+   * selected content source.
    */
-  loadDetail: async (skillId: string) => {
+  loadDetail: async (request: SkillDetailRequest | string) => {
+    const detailRequest = normalizeDetailRequest(request);
+    activeDetailRequest = detailRequest;
     set({ isLoading: true, error: null });
     if (!isTauriRuntime()) {
       set({
@@ -160,10 +207,14 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
       return;
     }
     try {
-      const [detail, content] = await Promise.all([
-        invoke<SkillDetail>("get_skill_detail", { skillId }),
-        invoke<string>("read_skill_content", { skillId }),
-      ]);
+      const detail = await invoke<SkillDetail>(
+        "get_skill_detail",
+        buildDetailInvokeArgs(detailRequest)
+      );
+      setActiveDetailRequestFromDetail(detailRequest, detail);
+      const content = await invoke<string>("read_file_by_path", {
+        path: detail.file_path,
+      });
       set({ detail, content, isLoading: false });
     } catch (err) {
       set({ error: String(err), isLoading: false });
@@ -238,7 +289,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
   },
 
   /**
-   * Install the skill to the given agent via symlink.
+   * Install the skill to the given agent via the backend default method.
    * Reloads detail afterward so installation status updates.
    */
   installSkill: async (skillId: string, agentId: string) => {
@@ -254,10 +305,15 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
       await invoke("install_skill_to_agent", {
         skillId,
         agentId,
-        method: "symlink",
+        method: "auto",
       });
       // Reload detail so the installations list reflects the new install.
-      const detail = await invoke<SkillDetail>("get_skill_detail", { skillId });
+      const detailRequest = getActiveDetailRequest(skillId);
+      const detail = await invoke<SkillDetail>(
+        "get_skill_detail",
+        buildDetailInvokeArgs(detailRequest)
+      );
+      setActiveDetailRequestFromDetail(detailRequest, detail);
       set({ detail, installingAgentId: null });
     } catch (err) {
       set({ error: String(err), installingAgentId: null });
@@ -280,7 +336,12 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
     try {
       await invoke("uninstall_skill_from_agent", { skillId, agentId });
       // Reload detail so the installations list reflects the removal.
-      const detail = await invoke<SkillDetail>("get_skill_detail", { skillId });
+      const detailRequest = getActiveDetailRequest(skillId);
+      const detail = await invoke<SkillDetail>(
+        "get_skill_detail",
+        buildDetailInvokeArgs(detailRequest)
+      );
+      setActiveDetailRequestFromDetail(detailRequest, detail);
       set({ detail, installingAgentId: null });
     } catch (err) {
       set({ error: String(err), installingAgentId: null });
@@ -292,7 +353,12 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
       return;
     }
     try {
-      const detail = await invoke<SkillDetail>("get_skill_detail", { skillId });
+      const detailRequest = getActiveDetailRequest(skillId);
+      const detail = await invoke<SkillDetail>(
+        "get_skill_detail",
+        buildDetailInvokeArgs(detailRequest)
+      );
+      setActiveDetailRequestFromDetail(detailRequest, detail);
       set((state) => ({
         detail,
         content: state.content,
@@ -310,6 +376,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
    */
   reset: () => {
     cleanupExplanationListeners();
+    activeDetailRequest = null;
     set({
       detail: null,
       content: null,

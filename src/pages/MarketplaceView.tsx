@@ -30,8 +30,9 @@ import {
 } from "@/data/officialSources";
 import { MarketplaceSkillDetailDrawer, type MarketplaceSkillDetail } from "@/components/marketplace/MarketplaceSkillDetailDrawer";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
-import { isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
+import type { GitHubRepoPreview } from "@/types";
 
 type TabId = "recommended" | "official";
 
@@ -39,6 +40,13 @@ type PreviewStatus =
   | { kind: "idle" }
   | { kind: "browser-fallback"; title: string; detail: string }
   | { kind: "error"; title: string; detail: string };
+
+type PreviewSkill = {
+  id: string;
+  name: string;
+  description?: string;
+  downloadUrl: string;
+};
 
 // ─── Publisher Card ──────────────────────────────────────────────────────────
 
@@ -78,6 +86,7 @@ export function MarketplaceView() {
   const loadRegistries = useMarketplaceStore((s) => s.loadRegistries);
   const loadPreviewSkills = useMarketplaceStore((s) => s.loadPreviewSkills);
   const installSkill = useMarketplaceStore((s) => s.installSkill);
+  const getNormalizedRegistryIdentity = useMarketplaceStore((s) => s.getNormalizedRegistryIdentity);
   const githubImport = useMarketplaceStore((s) => s.githubImport);
   const previewGitHubRepoImport = useMarketplaceStore((s) => s.previewGitHubRepoImport);
   const importGitHubRepoSkills = useMarketplaceStore((s) => s.importGitHubRepoSkills);
@@ -100,9 +109,9 @@ export function MarketplaceView() {
   const [publisherSearch, setPublisherSearch] = useState("");
 
   // Preview state — inline skills preview in Official Directory
-  interface PreviewSkill { id: string; name: string; description?: string; downloadUrl: string }
   const [previewRepo, setPreviewRepo] = useState<string | null>(null); // repo fullName
   const [previewSkills, setPreviewSkills] = useState<PreviewSkill[]>([]);
+  const [previewCache, setPreviewCache] = useState<Record<string, PreviewSkill[]>>({});
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewInstallingIds, setPreviewInstallingIds] = useState<Set<string>>(new Set());
   const [detailSkill, setDetailSkill] = useState<MarketplaceSkillDetail | null>(null);
@@ -154,12 +163,27 @@ export function MarketplaceView() {
   }
 
 
-  async function handlePreviewRepo(repoFullName: string, repoUrl: string) {
-    if (previewRepo === repoFullName) {
+  async function handlePreviewRepo(
+    repoFullName: string,
+    repoUrl: string,
+    options?: { forceRefresh?: boolean }
+  ) {
+    const forceRefresh = options?.forceRefresh ?? false;
+
+    if (previewRepo === repoFullName && !forceRefresh) {
       setPreviewRepo(null); // toggle off
       setPreviewStatus({ kind: "idle" });
       return;
     }
+
+    if (!forceRefresh && Object.prototype.hasOwnProperty.call(previewCache, repoUrl)) {
+      setPreviewRepo(repoFullName);
+      setPreviewSkills(previewCache[repoUrl] ?? []);
+      setPreviewStatus({ kind: "idle" });
+      setIsPreviewLoading(false);
+      return;
+    }
+
     setPreviewRepo(repoFullName);
     setPreviewSkills([]);
     setPreviewStatus({ kind: "idle" });
@@ -180,19 +204,41 @@ export function MarketplaceView() {
         return;
       }
 
-      const registryId = registries.find((registry) => registry.url === repoUrl)?.id;
+      const normalizedRepoIdentity = getNormalizedRegistryIdentity(repoUrl);
+      const registryId = normalizedRepoIdentity
+        ? registries.find((registry) => {
+            const registryIdentity =
+              registry.normalized_url ?? getNormalizedRegistryIdentity(registry.url);
+            return registryIdentity === normalizedRepoIdentity;
+          })?.id
+        : null;
 
-      if (!registryId) throw new Error(lang === "zh" ? "该仓库尚未启用预览" : "Preview is unavailable for this repository right now");
+      if (registryId) {
+        const skills = await loadPreviewSkills(registryId);
+        if (skills.length > 0) {
+          const nextPreviewSkills = skills.map((skill) => ({
+            id: skill.id,
+            name: skill.name,
+            description: skill.description ?? undefined,
+            downloadUrl: skill.download_url,
+          }));
+          setPreviewSkills(nextPreviewSkills);
+          setPreviewCache((current) => ({ ...current, [repoUrl]: nextPreviewSkills }));
+          return;
+        }
+      }
 
-      const skills = await loadPreviewSkills(registryId);
-      setPreviewSkills(
-        skills.map((skill) => ({
-          id: skill.id,
-          name: skill.name,
-          description: skill.description ?? undefined,
-          downloadUrl: skill.download_url,
-        }))
-      );
+      const preview = await invoke<GitHubRepoPreview>("preview_github_repo_import", {
+        repoUrl,
+      });
+      const nextPreviewSkills = preview.skills.map((skill) => ({
+        id: skill.skillId,
+        name: skill.skillName,
+        description: skill.description ?? undefined,
+        downloadUrl: skill.downloadUrl,
+      }));
+      setPreviewSkills(nextPreviewSkills);
+      setPreviewCache((current) => ({ ...current, [repoUrl]: nextPreviewSkills }));
     } catch (err) {
       setPreviewStatus({
         kind: "error",
@@ -511,10 +557,10 @@ export function MarketplaceView() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setPreviewRepo(null);
-                              setTimeout(() => handlePreviewRepo(repo.fullName, repo.url), 50);
+                              void handlePreviewRepo(repo.fullName, repo.url, { forceRefresh: true });
                             }}
                             disabled={isPreviewLoading}
+                            aria-label={lang === "zh" ? "刷新预览" : "Refresh preview"}
                             className="h-6 text-xs px-2"
                           >
                             <RefreshCw className={cn("size-3", isPreviewLoading && "animate-spin")} />

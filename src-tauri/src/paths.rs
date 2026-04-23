@@ -55,6 +55,44 @@ pub fn central_skills_dir_from_home(home_dir: &Path) -> PathBuf {
     home_dir.join(".agents").join("skills")
 }
 
+/*
+ * ========================================================================
+ * 步骤3：补充应用数据与展示路径工具
+ * ========================================================================
+ * 目标：
+ * 1) 统一 `.skillsmanage` 数据目录解析
+ * 2) 统一 `~` 展开与 Path -> String 转换
+ */
+pub fn app_data_dir() -> PathBuf {
+    // 3.1 复用家目录规则构造应用数据目录
+    resolve_home_dir().join(".skillsmanage")
+}
+
+pub fn expand_home_path(path: &str) -> PathBuf {
+    expand_home_path_with_home(path, &resolve_home_dir())
+}
+
+pub fn path_to_string(path: &Path) -> String {
+    // 3.2 用 lossy 规则统一路径序列化
+    path.to_string_lossy().into_owned()
+}
+
+fn expand_home_path_with_home(path: &str, home_dir: &Path) -> PathBuf {
+    let trimmed = path.trim();
+    if trimmed == "~" {
+        return home_dir.to_path_buf();
+    }
+
+    if let Some(rest) = trimmed
+        .strip_prefix("~/")
+        .or_else(|| trimmed.strip_prefix("~\\"))
+    {
+        return home_dir.join(rest);
+    }
+
+    PathBuf::from(trimmed)
+}
+
 fn non_empty_env<F>(get_var: &mut F, key: &str) -> Option<String>
 where
     F: FnMut(&str) -> Option<String>,
@@ -126,5 +164,30 @@ mod tests {
                 .join(".agents")
                 .join("skills")
         );
+    }
+
+    #[test]
+    fn app_data_dir_is_built_under_home() {
+        let app_dir = app_data_dir();
+        assert!(app_dir.ends_with(".skillsmanage"));
+    }
+
+    #[test]
+    fn expand_home_path_expands_unix_style_tilde() {
+        let expanded = expand_home_path_with_home("~/.claude/skills", Path::new("/tmp/home"));
+        assert_eq!(expanded, PathBuf::from("/tmp/home/.claude/skills"));
+    }
+
+    #[test]
+    fn expand_home_path_expands_windows_style_tilde() {
+        let expanded =
+            expand_home_path_with_home("~\\.claude\\skills", Path::new("C:\\Users\\alice"));
+        assert_eq!(expanded, PathBuf::from("C:\\Users\\alice/.claude\\skills"));
+    }
+
+    #[test]
+    fn path_to_string_serializes_lossy_paths() {
+        let path = Path::new(r"C:\Users\lyh\.agents\skills");
+        assert_eq!(path_to_string(path), r"C:\Users\lyh\.agents\skills");
     }
 }

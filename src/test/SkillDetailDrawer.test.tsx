@@ -133,6 +133,41 @@ function TestHarness({
   );
 }
 
+function PlatformViewLikeHarness() {
+  const [open, setOpen] = React.useState(false);
+  const [activeSkillId, setActiveSkillId] = React.useState<string | null>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+
+  return (
+    <MemoryRouter>
+      <button
+        ref={triggerRef}
+        onClick={() => {
+          setActiveSkillId("frontend-design");
+          setOpen(true);
+        }}
+      >
+        Open drawer
+      </button>
+      <SkillDetailDrawer
+        open={open}
+        skillId={activeSkillId}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) {
+            setActiveSkillId(null);
+          }
+        }}
+        returnFocusRef={
+          activeSkillId
+            ? triggerRef
+            : undefined
+        }
+      />
+    </MemoryRouter>
+  );
+}
+
 describe("SkillDetailDrawer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -165,6 +200,21 @@ describe("SkillDetailDrawer", () => {
     });
     expect(screen.getByRole("button", { name: /open drawer/i })).toHaveFocus();
     expect(mockReset).toHaveBeenCalled();
+  });
+
+  it("restores focus even when the parent clears the selected skill during close", async () => {
+    render(<PlatformViewLikeHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: /open drawer/i }));
+
+    const closeButton = await screen.findByRole("button", { name: /close/i });
+    fireEvent.click(closeButton);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
+    });
+
+    expect(screen.getByRole("button", { name: /open drawer/i })).toHaveFocus();
   });
 
   it("closes on Escape key", async () => {

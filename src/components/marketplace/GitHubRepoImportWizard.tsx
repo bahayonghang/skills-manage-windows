@@ -36,9 +36,9 @@ import { cn } from "@/lib/utils";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { MarkdownPreview } from "@/components/marketplace/MarkdownPreview";
 import {
-  GitHubImportAiSummaryEntry,
-  SkillMarkdownEntry,
   useMarketplaceStore,
+  type GitHubImportAiSummaryEntry,
+  type SkillMarkdownEntry,
 } from "@/stores/marketplaceStore";
 
 type WizardStep = "input" | "preview" | "confirm" | "result";

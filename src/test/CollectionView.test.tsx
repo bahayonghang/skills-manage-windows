@@ -216,12 +216,15 @@ describe("CollectionView", () => {
 
   // ── Remove Skill ───────────────────────────────────────────────────────────
 
-  it("calls removeSkillFromCollection when remove button is clicked", async () => {
+  it("calls removeSkillFromCollection only after inline confirmation", async () => {
     mockRemoveSkillFromCollection.mockResolvedValueOnce(undefined);
     renderCollectionView();
 
     const removeButtons = screen.getAllByRole("button", { name: /从技能集中移除/i });
     fireEvent.click(removeButtons[0]);
+    expect(mockRemoveSkillFromCollection).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /确认删除/i }));
 
     await waitFor(() => {
       expect(mockRemoveSkillFromCollection).toHaveBeenCalledWith("col-1", "frontend-design");

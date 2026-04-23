@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type Ref, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Monitor,
   FolderOpen,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
@@ -23,7 +24,7 @@ import { parseFrontmatter } from "@/lib/frontmatter";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { CollectionPickerDialog } from "@/components/collection/CollectionPickerDialog";
-import { AgentWithStatus, SkillInstallation } from "@/types";
+import { AgentWithStatus, ClaudeSourceKind, SkillDetailRequest, SkillInstallation } from "@/types";
 import { cn } from "@/lib/utils";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import {
@@ -51,6 +52,43 @@ function MetadataRow({ label, value }: { label: string; value: string }) {
         {value}
       </div>
     </div>
+  );
+}
+
+function SourceOriginBadge({ originKind }: { originKind: ClaudeSourceKind }) {
+  const { t, i18n } = useTranslation();
+  const isPlugin = originKind === "plugin";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+        isPlugin
+          ? "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300"
+          : "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:text-sky-300"
+      )}
+    >
+      {isPlugin
+        ? t("platform.originPlugin", {
+            defaultValue: i18n.language.startsWith("zh") ? "插件来源" : "Plugin source",
+          })
+        : t("platform.originUser", {
+            defaultValue: i18n.language.startsWith("zh") ? "用户来源" : "User source",
+          })}
+    </span>
+  );
+}
+
+function ReadOnlySourceBadge() {
+  const { t, i18n } = useTranslation();
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70">
+      <Lock className="size-3 shrink-0" />
+      {t("detail.readOnlySource", {
+        defaultValue: i18n.language.startsWith("zh") ? "只读来源" : "Read-only source",
+      })}
+    </span>
   );
 }
 
@@ -187,6 +225,10 @@ export interface DiscoverMetadata {
 export interface SkillDetailViewProps {
   /** The skill id to load from DB. Required for central skills. */
   skillId?: string;
+  /** Optional platform context for source-aware detail loading. */
+  agentId?: string;
+  /** Optional stable row identity for duplicate platform rows. */
+  rowId?: string;
   /** Direct file path to load content from. Used for discover non-central skills. */
   filePath?: string;
   /** Metadata for discover non-central skills (shown in sidebar). */
@@ -205,6 +247,8 @@ export interface SkillDetailViewProps {
 
 export function SkillDetailView({
   skillId,
+  agentId,
+  rowId,
   filePath,
   discoverMetadata,
   variant,
@@ -246,6 +290,16 @@ export function SkillDetailView({
   const [fileIsLoading, setFileIsLoading] = useState(false);
   const [fileExplanation, setFileExplanation] = useState<string | null>(null);
   const [fileIsExplaining, setFileIsExplaining] = useState(false);
+  const detailRequest = useMemo<SkillDetailRequest | null>(
+    () => (skillId ? { skillId, agentId, rowId } : null),
+    [skillId, agentId, rowId]
+  );
+  const explanationRequestKey = useMemo(() => {
+    if (!skillId) {
+      return null;
+    }
+    return detail?.row_id ?? rowId ?? skillId;
+  }, [detail?.row_id, rowId, skillId]);
 
   // Unified accessors
   const content = isFileMode ? fileContent : storeContent;
@@ -258,6 +312,12 @@ export function SkillDetailView({
   const [isCollectionPickerOpen, setIsCollectionPickerOpen] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const addToCollectionButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (detail?.is_read_only && isCollectionPickerOpen) {
+      setIsCollectionPickerOpen(false);
+    }
+  }, [detail?.is_read_only, isCollectionPickerOpen]);
 
   // ── File mode: load content from path ─────────────────────────────────
   const fetchFileContent = useCallback(async () => {
@@ -284,19 +344,19 @@ export function SkillDetailView({
 
   // ── Store mode: load detail by skillId ────────────────────────────────
   useEffect(() => {
-    if (skillId) {
-      loadDetail(skillId);
+    if (detailRequest) {
+      loadDetail(detailRequest);
     }
     return () => {
       reset();
     };
-  }, [skillId, loadDetail, reset]);
+  }, [detailRequest, loadDetail, reset]);
 
-  useEffect(() => {
-    if (skillId && storeContent) {
-      loadCachedExplanation(skillId, i18n.language);
+  useLayoutEffect(() => {
+    if (explanationRequestKey && storeContent) {
+      loadCachedExplanation(explanationRequestKey, i18n.language);
     }
-  }, [skillId, storeContent, i18n.language, loadCachedExplanation]);
+  }, [explanationRequestKey, storeContent, i18n.language, loadCachedExplanation]);
 
   // ── Derived values ───────────────────────────────────────────────────────
 
@@ -312,7 +372,7 @@ export function SkillDetailView({
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   async function handleToggle(agentId: string) {
-    if (!skillId) return;
+    if (!skillId || detail?.is_read_only) return;
     const isInstalled = installationMap.has(agentId);
     try {
       if (isInstalled) {
@@ -334,8 +394,8 @@ export function SkillDetailView({
   }
 
   function handleCollectionAdded() {
-    if (skillId) {
-      loadDetail(skillId);
+    if (detailRequest) {
+      loadDetail(detailRequest);
     }
   }
 
@@ -358,8 +418,8 @@ export function SkillDetailView({
         .finally(() => setFileIsExplaining(false));
       return;
     }
-    if (skillId && content) {
-      generateExplanation(skillId, content, i18n.language);
+    if (explanationRequestKey && content) {
+      generateExplanation(explanationRequestKey, content, i18n.language);
     }
   }
 
@@ -368,8 +428,8 @@ export function SkillDetailView({
       handleGenerateExplanation();
       return;
     }
-    if (skillId && content) {
-      refreshExplanation(skillId, content, i18n.language);
+    if (explanationRequestKey && content) {
+      refreshExplanation(explanationRequestKey, content, i18n.language);
     }
   }
 
@@ -388,7 +448,7 @@ export function SkillDetailView({
   const isBrowserFallback = !isTauriRuntime() && !isLoading && !detail && !error && !isFileMode;
   const effectiveName = isFileMode
     ? (discoverMetadata?.name ?? "")
-    : (detail?.name ?? skillId ?? "");
+    : (detail?.name ?? detailRequest?.skillId ?? "");
   const effectiveDescription = isFileMode
     ? discoverMetadata?.description
     : detail?.description;
@@ -432,7 +492,7 @@ export function SkillDetailView({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => skillId && loadDetail(skillId)}
+                onClick={() => detailRequest && loadDetail(detailRequest)}
               >
                 {t("detail.retry")}
               </Button>
@@ -642,15 +702,70 @@ export function SkillDetailView({
                 </>
               ) : detail ? (
                 <>
+                  {(detail.source_kind || detail.is_read_only) && (
+                    <section
+                      aria-label={t("detail.sourceStatusRegion", {
+                        defaultValue: i18n.language.startsWith("zh") ? "来源状态" : "Source status",
+                      })}
+                    >
+                      <SectionLabel>
+                        {t("detail.sourceStatus", {
+                          defaultValue: i18n.language.startsWith("zh") ? "来源状态" : "Source status",
+                        })}
+                      </SectionLabel>
+                      <div className="rounded-lg border border-border/70 bg-muted/30 p-3 space-y-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {detail.source_kind && (
+                            <SourceOriginBadge originKind={detail.source_kind} />
+                          )}
+                          {detail.is_read_only && <ReadOnlySourceBadge />}
+                        </div>
+                        {detail.is_read_only ? (
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            {t("detail.readOnlyDesc", {
+                              defaultValue: i18n.language.startsWith("zh")
+                                ? "插件安装的副本仅供查看，不能在这里安装、卸载或调整技能集。"
+                                : "Plugin-installed copies are display-only here, so install, uninstall, and collection changes are unavailable.",
+                            })}
+                          </p>
+                        ) : detail.source_kind === "user" ? (
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            {t("detail.userManagedDesc", {
+                              defaultValue: i18n.language.startsWith("zh")
+                                ? "此 Claude 用户副本会保留正常的安装状态与技能集管理能力。"
+                                : "This Claude user copy keeps the normal install-state and collection-management controls.",
+                            })}
+                          </p>
+                        ) : null}
+                      </div>
+                    </section>
+                  )}
+
                   {/* Metadata */}
                   <section aria-label={t("detail.metadataRegion")}>
                     <SectionLabel>{t("detail.metadata")}</SectionLabel>
                     <div className="space-y-2.5">
                       <MetadataRow label={t("detail.filePath")} value={detail.file_path} />
+                      {detail.dir_path && (
+                        <MetadataRow
+                          label={t("detail.directoryPath", {
+                            defaultValue: i18n.language.startsWith("zh") ? "目录路径" : "Directory path",
+                          })}
+                          value={detail.dir_path}
+                        />
+                      )}
                       {detail.canonical_path && (
                         <MetadataRow label={t("detail.canonical")} value={detail.canonical_path} />
                       )}
-                      {detail.source && (
+                      {detail.source_root && (
+                        <MetadataRow
+                          label={t("detail.sourceRoot", {
+                            defaultValue: i18n.language.startsWith("zh") ? "来源根目录" : "Source root",
+                          })}
+                          value={detail.source_root}
+                        />
+                      )}
+                      {!detail.source_kind && detail.source && (
                         <MetadataRow label={t("detail.source")} value={detail.source} />
                       )}
                       <MetadataRow
@@ -664,7 +779,15 @@ export function SkillDetailView({
                   <section aria-label={t("detail.installStatusRegion")}>
                     <SectionLabel>{t("detail.installStatus")}</SectionLabel>
                     <div className="space-y-1.5">
-                      {targetAgents.length === 0 ? (
+                      {detail.is_read_only ? (
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          {t("detail.readOnlyInstallBlocked", {
+                            defaultValue: i18n.language.startsWith("zh")
+                              ? "插件来源的只读副本不可安装或卸载。"
+                              : "Install and uninstall are unavailable for read-only plugin copies.",
+                          })}
+                        </p>
+                      ) : targetAgents.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
                           {t("detail.noPlatforms")}
                         </p>
@@ -716,29 +839,39 @@ export function SkillDetailView({
                   {/* Collections */}
                   <section aria-label={t("detail.collections")}>
                     <SectionLabel>{t("detail.collections")}</SectionLabel>
-                    <div className="flex flex-wrap gap-1.5 items-center">
-                      {skillCollections.map((collection) => (
-                        <span
-                          key={collection.id}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary ring-1 ring-primary/20"
-                          title={collection.description ?? collection.name}
+                    {detail.is_read_only ? (
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        {t("detail.readOnlyCollectionsBlocked", {
+                          defaultValue: i18n.language.startsWith("zh")
+                            ? "插件来源的只读副本不可调整技能集。"
+                            : "Collection management is unavailable for read-only plugin copies.",
+                        })}
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        {skillCollections.map((collection) => (
+                          <span
+                            key={collection.id}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary ring-1 ring-primary/20"
+                            title={collection.description ?? collection.name}
+                          >
+                            <Tag className="size-2.5" />
+                            {collection.name}
+                          </span>
+                        ))}
+                        <Button
+                          ref={addToCollectionButtonRef}
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1 text-muted-foreground hover:text-foreground h-6 px-2 text-xs"
+                          aria-label={t("detail.addToCollection")}
+                          onClick={() => setIsCollectionPickerOpen(true)}
                         >
-                          <Tag className="size-2.5" />
-                          {collection.name}
-                        </span>
-                      ))}
-                      <Button
-                        ref={addToCollectionButtonRef}
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1 text-muted-foreground hover:text-foreground h-6 px-2 text-xs"
-                        aria-label={t("detail.addToCollection")}
-                        onClick={() => setIsCollectionPickerOpen(true)}
-                      >
-                        <Plus className="size-3" />
-                        {t("detail.addToCollection")}
-                      </Button>
-                    </div>
+                          <Plus className="size-3" />
+                          {t("detail.addToCollection")}
+                        </Button>
+                      </div>
+                    )}
                   </section>
                 </>
               ) : null}
@@ -748,7 +881,7 @@ export function SkillDetailView({
       </div>
 
       {/* Collection Picker Dialog */}
-      {skillId && (
+      {skillId && !detail?.is_read_only && (
         <CollectionPickerDialog
           open={isCollectionPickerOpen}
           onOpenChange={handleCollectionPickerOpenChange}

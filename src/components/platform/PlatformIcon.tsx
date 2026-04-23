@@ -50,13 +50,11 @@ const APP_ICONS: Record<string, { src: string; alt: string }> = {
   "hermes": { src: hermesIcon, alt: "Hermes" },
 };
 
-const LOBEHUB_ICONS: Record<
-  string,
-  React.ComponentType<{
-    size?: number | string;
-    className?: string;
-  }>
-> = {
+type LobeIconProps = React.SVGProps<SVGSVGElement> & {
+  size?: number | string;
+};
+
+const LOBEHUB_ICONS: Record<string, React.ComponentType<LobeIconProps>> = {
   "claude-code": ClaudeCodeIcon,
   "copilot": GithubCopilotIcon,
   "gemini-cli": GeminiCliIcon,
@@ -93,13 +91,7 @@ function PlatformIconComponent({ agentId, className, size = 16 }: PlatformIconPr
   // Use lobehub real product icon if available
   const LobeIcon = LOBEHUB_ICONS[agentId];
   if (LobeIcon) {
-    return (
-      <LobeIcon
-        size={size}
-        className={cn("shrink-0", className)}
-        {...({ "aria-hidden": true } as Record<string, unknown>)}
-      />
-    );
+    return <LobeIcon size={size} className={cn("shrink-0", className)} aria-hidden />;
   }
 
   // Fall back to custom SVGs for remaining platforms

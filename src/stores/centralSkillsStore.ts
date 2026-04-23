@@ -42,6 +42,8 @@ export const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
     is_central: true,
     source: "browser-fixture",
     scanned_at: "2026-04-17T00:00:00.000Z",
+    created_at: "2026-04-17T00:00:00.000Z",
+    updated_at: "2026-04-17T00:00:00.000Z",
     linked_agents: ["claude-code"],
   },
 ];
@@ -128,7 +130,7 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
 
   /**
    * Toggle a single platform link for a skill.
-   * If linked, uninstalls; if not linked, installs via symlink.
+   * If linked, uninstalls; if not linked, installs via the backend default method.
    * Refreshes the skill list afterward so linked_agents updates.
    */
   togglePlatformLink: async (skillId, agentId) => {
@@ -140,7 +142,7 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
       if (isLinked) {
         await invoke("uninstall_skill_from_agent", { skillId, agentId });
       } else {
-        await invoke("install_skill_to_agent", { skillId, agentId, method: "symlink" });
+        await invoke("install_skill_to_agent", { skillId, agentId, method: "auto" });
       }
 
       const skills = await invoke<SkillWithLinks[]>("get_central_skills");

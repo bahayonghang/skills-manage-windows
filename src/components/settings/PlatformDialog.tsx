@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AgentWithStatus } from "@/types";
+import { compactHomePath } from "@/lib/path";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ export function PlatformDialog({
   useEffect(() => {
     if (open) {
       setDisplayName(platform?.display_name ?? "");
-      setGlobalSkillsDir(platform?.global_skills_dir ?? "");
+      setGlobalSkillsDir(platform ? compactHomePath(platform.global_skills_dir) : "");
       setDirManuallyEdited(isEditMode);
       setCategory((platform?.category as "coding" | "lobster") ?? "coding");
       setNameError(null);

@@ -1,6 +1,7 @@
 use tauri::State;
 
 use crate::db::{self, DbPool, ScanDirectory};
+use crate::paths::{expand_home_path, path_to_string};
 use crate::AppState;
 
 // ─── Core Implementations (testable without Tauri State) ──────────────────────
@@ -21,7 +22,8 @@ pub async fn add_scan_directory_impl(
     if path.is_empty() {
         return Err("Scan directory path cannot be empty".to_string());
     }
-    db::add_scan_directory(pool, path, label).await
+    let expanded_path = path_to_string(&expand_home_path(path));
+    db::add_scan_directory(pool, &expanded_path, label).await
 }
 
 /// Remove a custom (non-builtin) scan directory by path.
@@ -200,6 +202,19 @@ mod tests {
             .await
             .unwrap();
         assert!(dir.label.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_add_scan_directory_expands_tilde() {
+        let pool = setup_test_db().await;
+        let dir = add_scan_directory_impl(&pool, "~/.skillsmanage/custom-scan", None)
+            .await
+            .unwrap();
+        assert!(
+            !dir.path.starts_with('~'),
+            "tilde paths must be expanded before persistence"
+        );
+        assert!(dir.path.contains(".skillsmanage"));
     }
 
     #[tokio::test]

@@ -95,6 +95,8 @@ const mockSkills: SkillWithLinks[] = [
     canonical_path: "~/.agents/skills/frontend-design",
     is_central: true,
     scanned_at: "2026-04-09T00:00:00Z",
+    created_at: "2026-04-10T00:00:00Z",
+    updated_at: "2026-04-12T00:00:00Z",
     linked_agents: ["claude-code"],
   },
   {
@@ -105,6 +107,8 @@ const mockSkills: SkillWithLinks[] = [
     canonical_path: "~/.agents/skills/code-reviewer",
     is_central: true,
     scanned_at: "2026-04-09T00:00:00Z",
+    created_at: "2026-04-08T00:00:00Z",
+    updated_at: "2026-04-20T00:00:00Z",
     linked_agents: [],
   },
 ];
@@ -249,12 +253,49 @@ describe("CentralSkillsView", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows explicit sort field and direction controls", () => {
+    renderCentralSkillsView();
+
+    expect(screen.getByRole("group", { name: "排序字段" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "名称" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "创建时间" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "修改时间" })).toBeInTheDocument();
+
+    expect(screen.getByRole("group", { name: "排序方向" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "正排" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "倒排" })).toBeInTheDocument();
+  });
+
   // ── Skills List ───────────────────────────────────────────────────────────
 
   it("renders all central skills", () => {
     renderCentralSkillsView();
     expect(screen.getByText("frontend-design")).toBeInTheDocument();
     expect(screen.getByText("code-reviewer")).toBeInTheDocument();
+  });
+
+  it("sorts by modified time and reverses direction explicitly", async () => {
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByRole("button", { name: "修改时间" }));
+
+    await waitFor(() => {
+      const detailButtons = screen.getAllByRole("button", {
+        name: /查看 .* 的详情/i,
+      });
+      expect(detailButtons[0]).toHaveTextContent("frontend-design");
+      expect(detailButtons[1]).toHaveTextContent("code-reviewer");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "倒排" }));
+
+    await waitFor(() => {
+      const detailButtons = screen.getAllByRole("button", {
+        name: /查看 .* 的详情/i,
+      });
+      expect(detailButtons[0]).toHaveTextContent("code-reviewer");
+      expect(detailButtons[1]).toHaveTextContent("frontend-design");
+    });
   });
 
   it("renders skill descriptions", () => {

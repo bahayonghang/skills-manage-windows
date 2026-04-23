@@ -132,6 +132,11 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("button", { name: /Claude Code/ })).not.toBeInTheDocument();
   });
 
+  it("does not render Settings in the sidebar", () => {
+    renderSidebar();
+    expect(screen.queryByRole("button", { name: /设置/ })).not.toBeInTheDocument();
+  });
+
   it("keeps platform entries visible during background refresh", () => {
     vi.mocked(usePlatformStore).mockImplementation((selector?: unknown) => {
       const state = buildPlatformStoreState({
@@ -154,14 +159,14 @@ describe("Sidebar", () => {
 
   it("highlights the active route", () => {
     renderSidebar("/platform/claude-code");
-    const button = screen.getByRole("button", { name: /Claude Code/ });
-    expect(button.className).toContain("bg-hover-bg");
+    const claudeButton = screen.getByRole("button", { name: /Claude Code/ });
+    expect(claudeButton.className).toContain("bg-hover-bg");
   });
 
-  it("central and platform entries remain clickable", () => {
-    renderSidebar();
-    fireEvent.click(screen.getByRole("button", { name: /中央技能库/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Claude Code/ }));
+  it("highlights Central Skills when on /central", () => {
+    renderSidebar("/central");
+    const centralButton = screen.getByRole("button", { name: /中央技能库/ });
+    expect(centralButton.className).toContain("bg-hover-bg");
   });
 
   it("hides lobster platforms when the lobster group is disabled", () => {
@@ -184,5 +189,11 @@ describe("Sidebar", () => {
 
     expect(screen.getByRole("button", { name: /Claude Code/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /OpenClaw/ })).not.toBeInTheDocument();
+  });
+
+  it("central and platform entries remain clickable", () => {
+    renderSidebar();
+    fireEvent.click(screen.getByRole("button", { name: /中央技能库/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Claude Code/ }));
   });
 });

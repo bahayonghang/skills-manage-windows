@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { GlobalSearchDialog } from "./GlobalSearchDialog";
 import { usePlatformStore } from "@/stores/platformStore";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useDiscoverStore } from "@/stores/discoverStore";
 
 /**
@@ -12,19 +13,36 @@ import { useDiscoverStore } from "@/stores/discoverStore";
  */
 export function AppShell() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const mainRef = useRef<HTMLElement | null>(null);
+  const { pathname } = useLocation();
 
   const initialize = usePlatformStore((s) => s.initialize);
-  const startScan = useDiscoverStore((s) => s.startScan);
+  const rescan = usePlatformStore((s) => s.rescan);
+  const loadCentralSkills = useCentralSkillsStore((s) => s.loadCentralSkills);
+  const rescanDiscoverFromDisk = useDiscoverStore((s) => s.rescanFromDisk);
 
   useEffect(() => {
     void initialize().catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!mainRef.current) return;
+    mainRef.current.scrollTop = 0;
+  }, [pathname]);
+
+  async function handleGlobalRescan() {
+    await rescan();
+    await Promise.allSettled([
+      loadCentralSkills(),
+      rescanDiscoverFromDisk(),
+    ]);
+  }
+
   function handleAction(action: string) {
     switch (action) {
       case "rescan":
-        startScan();
+        void handleGlobalRescan();
         break;
     }
   }
@@ -34,7 +52,7 @@ export function AppShell() {
       <TopBar onSearchClick={() => setIsSearchOpen(true)} />
       <div className="flex flex-1 min-h-0">
         <Sidebar />
-        <main className="flex-1 overflow-auto min-w-0">
+        <main ref={mainRef} className="flex-1 min-h-0 min-w-0 overflow-hidden">
           <Outlet />
         </main>
       </div>

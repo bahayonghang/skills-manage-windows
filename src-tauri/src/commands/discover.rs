@@ -107,24 +107,24 @@ static SCAN_CANCEL: AtomicBool = AtomicBool::new(false);
 fn default_scan_roots() -> Vec<ScanRoot> {
     let home = paths::resolve_home_dir();
     let candidates = vec![
-        (home.join("projects"), "projects"),
-        (home.join("Documents"), "Documents"),
-        (home.join("Developer"), "Developer"),
-        (home.join("work"), "work"),
-        (home.join("src"), "src"),
-        (home.join("code"), "code"),
-        (home.join("repos"), "repos"),
-        (home.join("Desktop"), "Desktop"),
+        (paths::path_to_string(&home.join("projects")), "projects"),
+        (paths::path_to_string(&home.join("Documents")), "Documents"),
+        (paths::path_to_string(&home.join("Developer")), "Developer"),
+        (paths::path_to_string(&home.join("work")), "work"),
+        (paths::path_to_string(&home.join("src")), "src"),
+        (paths::path_to_string(&home.join("code")), "code"),
+        (paths::path_to_string(&home.join("repos")), "repos"),
+        (paths::path_to_string(&home.join("Desktop")), "Desktop"),
         // macOS: scan /Applications for apps with built-in skills (e.g. OpenClaw)
-        (PathBuf::from("/Applications"), "Applications"),
+        ("/Applications".to_string(), "Applications"),
     ];
 
     candidates
         .into_iter()
         .map(|(path, label)| {
-            let exists = path.exists();
+            let exists = Path::new(&path).exists();
             ScanRoot {
-                path: path.to_string_lossy().into_owned(),
+                path,
                 label: label.to_string(),
                 exists,
                 enabled: exists, // auto-enable roots that exist
@@ -622,21 +622,6 @@ pub async fn get_discovered_skills(
 
     // Convert DB rows to DiscoveredSkill structs, adding is_already_central.
     let central_dir = paths::central_skills_dir();
-    let central_skill_names: std::collections::HashSet<String> = std::fs::read_dir(&central_dir)
-        .ok()
-        .into_iter()
-        .flat_map(|entries| entries.flatten())
-        .filter_map(|entry| {
-            let path = entry.path();
-            if path.is_dir() {
-                path.file_name()
-                    .and_then(|name| name.to_str())
-                    .map(|name| name.to_string())
-            } else {
-                None
-            }
-        })
-        .collect();
     let platform_names: HashMap<String, String> = db::builtin_agents()
         .into_iter()
         .map(|agent| (agent.id, agent.display_name))
@@ -649,7 +634,7 @@ pub async fn get_discovered_skills(
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
-            let is_already_central = central_skill_names.contains(skill_dir_name);
+            let is_already_central = central_dir.join(skill_dir_name).exists();
             let platform_id = row.platform_id.clone();
 
             DiscoveredSkill {
@@ -812,7 +797,7 @@ pub async fn import_discovered_skill_to_platform(
 
     // Create symlink from discovered skill dir to platform dir.
     let src_path = Path::new(&skill.dir_path);
-    let relative_target = super::linker::make_relative_path(&agent_dir, src_path);
+    let relative_target = super::linker::symlink_target_path(&agent_dir, src_path);
     super::linker::create_symlink(&relative_target, &target_path)?;
 
     // Record the installation.
@@ -1291,7 +1276,7 @@ mod tests {
         }
 
         let src_path = Path::new(&skill.dir_path);
-        let relative_target = super::super::linker::make_relative_path(agent_dir, src_path);
+        let relative_target = super::super::linker::symlink_target_path(agent_dir, src_path);
         super::super::linker::create_symlink(&relative_target, &target_path)?;
 
         // Record the installation.

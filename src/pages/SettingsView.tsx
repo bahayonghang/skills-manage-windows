@@ -13,6 +13,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { Switch } from "@/components/ui/switch";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useThemeStore, CatppuccinFlavor, CatppuccinAccent, ACCENT_NAMES } from "@/stores/themeStore";
@@ -29,6 +30,7 @@ import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { Input } from "@/components/ui/input";
 import { AgentWithStatus, ScanDirectory } from "@/types";
 import { AI_PROVIDERS, REGION_LABELS, RegionId } from "@/data/aiProviders";
+import { compactHomePath } from "@/lib/path";
 
 // ─── App constants ────────────────────────────────────────────────────────────
 
@@ -83,7 +85,7 @@ function ScanDirectoryRow({ dir, onRemove, onToggle, isRemoving }: ScanDirectory
     <div className="flex items-center gap-3 py-2.5 px-4 border-b border-border/50 last:border-0">
       <FolderOpen className="size-4 text-muted-foreground shrink-0" />
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium truncate">{dir.path}</div>
+        <div className="text-sm font-medium truncate">{compactHomePath(dir.path)}</div>
         {dir.label && (
           <div className="text-xs text-muted-foreground mt-0.5">{dir.label}</div>
         )}
@@ -107,18 +109,14 @@ function ScanDirectoryRow({ dir, onRemove, onToggle, isRemoving }: ScanDirectory
         )}
         {/* Remove button for non-builtin dirs */}
         {!dir.is_builtin && (
-          <button
-            onClick={onRemove}
-            disabled={isRemoving}
-            aria-label={t("settings.removeDirLabel", { path: dir.path })}
-            className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isRemoving ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Trash2 className="size-3.5" />
-            )}
-          </button>
+          <InlineConfirmAction
+            onConfirm={onRemove}
+            isLoading={isRemoving}
+            idleAriaLabel={t("settings.removeDirLabel", { path: dir.path })}
+            idleTitle={t("settings.removeDirLabel", { path: dir.path })}
+            confirmLabel={t("common.confirmDelete")}
+            icon={<Trash2 className="size-3.5" />}
+          />
         )}
       </div>
     </div>
@@ -142,7 +140,7 @@ function CustomPlatformRow({ agent, onEdit, onRemove, isRemoving }: CustomPlatfo
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate">{agent.display_name}</div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
-          {agent.global_skills_dir}
+          {compactHomePath(agent.global_skills_dir)}
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -155,18 +153,14 @@ function CustomPlatformRow({ agent, onEdit, onRemove, isRemoving }: CustomPlatfo
           <Pencil className="size-3.5" />
           <span>{t("common.edit")}</span>
         </Button>
-        <button
-          onClick={onRemove}
-          disabled={isRemoving}
-          aria-label={t("settings.removePlatformLabel", { name: agent.display_name })}
-          className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isRemoving ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Trash2 className="size-3.5" />
-          )}
-        </button>
+        <InlineConfirmAction
+          onConfirm={onRemove}
+          isLoading={isRemoving}
+          idleAriaLabel={t("settings.removePlatformLabel", { name: agent.display_name })}
+          idleTitle={t("settings.removePlatformLabel", { name: agent.display_name })}
+          confirmLabel={t("common.confirmDelete")}
+          icon={<Trash2 className="size-3.5" />}
+        />
       </div>
     </div>
   );
@@ -1039,7 +1033,7 @@ export function SettingsView() {
                           {builtinDirs.map((dir) => (
                             <div key={dir.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/30 text-xs text-muted-foreground truncate">
                               <FolderOpen className="size-3 shrink-0" />
-                              <span className="truncate">{dir.path.replace(/^.*\/\./, "~/.")}</span>
+                              <span className="truncate">{compactHomePath(dir.path)}</span>
                               {dir.label && <span className="shrink-0 opacity-60">· {dir.label}</span>}
                             </div>
                           ))}

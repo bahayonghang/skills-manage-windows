@@ -1,4 +1,4 @@
-import { RefObject, ReactNode, useEffect, useId } from "react";
+import { RefObject, ReactNode, useEffect, useId, useRef } from "react";
 import {
   Dialog,
   DialogClose,
@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 export interface SkillDetailDrawerProps {
   open: boolean;
   skillId: string | null;
+  agentId?: string | null;
+  rowId?: string | null;
   onOpenChange: (open: boolean) => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
   children?: ReactNode;
@@ -26,6 +28,8 @@ export interface SkillDetailDrawerProps {
 export function SkillDetailDrawer({
   open,
   skillId,
+  agentId,
+  rowId,
   onOpenChange,
   returnFocusRef,
   children,
@@ -34,12 +38,22 @@ export function SkillDetailDrawer({
 }: SkillDetailDrawerProps) {
   const titleId = useId();
   const showContent = open && (skillId !== null || filePath != null || children != null);
+  const lastReturnFocusRef = useRef<RefObject<HTMLElement | null> | null>(null);
+
+  useEffect(() => {
+    if (returnFocusRef) {
+      lastReturnFocusRef.current = returnFocusRef;
+    }
+  }, [returnFocusRef]);
 
   useEffect(() => {
     if (open) {
       return;
     }
-    const target = returnFocusRef?.current ?? document.body;
+    const target =
+      returnFocusRef?.current ??
+      lastReturnFocusRef.current?.current ??
+      document.body;
     target?.focus?.();
   }, [open, returnFocusRef]);
 
@@ -79,6 +93,8 @@ export function SkillDetailDrawer({
               ? (children ?? (
                   <SkillDetailView
                     skillId={skillId ?? undefined}
+                    agentId={agentId ?? undefined}
+                    rowId={rowId ?? undefined}
                     filePath={filePath ?? undefined}
                     discoverMetadata={discoverMetadata ?? undefined}
                     variant="drawer"

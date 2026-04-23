@@ -5,6 +5,7 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::db::{self, Agent, DbPool};
+use crate::paths::{expand_home_path, path_to_string};
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -151,12 +152,13 @@ pub async fn add_custom_agent_impl(
     }
 
     let category = config.category.unwrap_or_else(|| "other".to_string());
+    let global_skills_dir = path_to_string(&expand_home_path(&config.global_skills_dir));
 
     let agent = Agent {
         id: id.clone(),
         display_name: config.display_name,
         category,
-        global_skills_dir: config.global_skills_dir,
+        global_skills_dir,
         project_skills_dir: None,
         icon_name: None,
         is_detected: false, // will be computed live below
@@ -188,13 +190,14 @@ pub async fn update_custom_agent_impl(
     }
 
     let category = config.category.unwrap_or_else(|| "other".to_string());
+    let global_skills_dir = path_to_string(&expand_home_path(config.global_skills_dir.trim()));
 
     let updated = db::update_custom_agent(
         pool,
         agent_id,
         config.display_name.trim(),
         &category,
-        config.global_skills_dir.trim(),
+        &global_skills_dir,
     )
     .await?;
 
@@ -509,6 +512,25 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_add_custom_agent_expands_tilde_path() {
+        let pool = setup_test_db().await;
+
+        let config = CustomAgentConfig {
+            id: Some("tilde-agent".to_string()),
+            display_name: "Tilde Agent".to_string(),
+            category: Some("coding".to_string()),
+            global_skills_dir: "~/.tilde-agent/skills".to_string(),
+        };
+
+        let agent = add_custom_agent_impl(&pool, config).await.unwrap();
+        assert!(
+            !agent.global_skills_dir.starts_with('~'),
+            "tilde paths must be expanded before persistence"
+        );
+        assert!(agent.global_skills_dir.contains(".tilde-agent"));
+    }
+
     // ── update_custom_agent_impl ──────────────────────────────────────────────
 
     async fn add_test_custom_agent(pool: &DbPool, id: &str) {
@@ -559,6 +581,27 @@ mod tests {
             updated.category, "other",
             "default category should be 'other'"
         );
+    }
+
+    #[tokio::test]
+    async fn test_update_custom_agent_expands_tilde_path() {
+        let pool = setup_test_db().await;
+        add_test_custom_agent(&pool, "tilde-update").await;
+
+        let config = UpdateCustomAgentConfig {
+            display_name: "Tilde Update".to_string(),
+            category: Some("coding".to_string()),
+            global_skills_dir: "~/.tilde-update/skills".to_string(),
+        };
+
+        let updated = update_custom_agent_impl(&pool, "tilde-update", config)
+            .await
+            .unwrap();
+        assert!(
+            !updated.global_skills_dir.starts_with('~'),
+            "tilde paths must be expanded before persistence"
+        );
+        assert!(updated.global_skills_dir.contains(".tilde-update"));
     }
 
     #[tokio::test]

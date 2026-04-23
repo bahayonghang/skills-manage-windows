@@ -2,11 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
-use sqlx::{Sqlite, Transaction};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tauri::State;
 
-use crate::db::{self, DbPool, Skill, SkillInstallation};
+use crate::db::{self, AgentSkillObservation, DbPool, Skill, SkillInstallation};
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -42,6 +41,56 @@ pub struct ScanResult {
     pub total_skills: usize,
     pub agents_scanned: usize,
     pub skills_by_agent: HashMap<String, usize>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClaudeSourceKind {
+    User,
+    Plugin,
+}
+
+impl ClaudeSourceKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Plugin => "plugin",
+        }
+    }
+
+    fn is_read_only(self) -> bool {
+        matches!(self, Self::Plugin)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AgentScanRoot {
+    path: PathBuf,
+    source_root: Option<PathBuf>,
+    claude_source: Option<ClaudeSourceKind>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct ClaudeSettingsFile {
+    #[serde(default, rename = "enabledPlugins")]
+    enabled_plugins: HashMap<String, bool>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct ClaudeInstalledPluginsFile {
+    #[serde(default)]
+    plugins: HashMap<String, Vec<ClaudeInstalledPluginInstall>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct ClaudeInstalledPluginInstall {
+    #[serde(default)]
+    scope: Option<String>,
+    #[serde(rename = "installPath")]
+    install_path: String,
+    #[serde(default, rename = "installedAt")]
+    installed_at: Option<String>,
+    #[serde(default, rename = "lastUpdated")]
+    last_updated: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -213,123 +262,140 @@ fn normalize_scan_key(dir: &Path) -> String {
     }
 }
 
-async fn upsert_skill_in_tx(tx: &mut Transaction<'_, Sqlite>, skill: &Skill) -> Result<(), String> {
-    sqlx::query(
-        "INSERT INTO skills
-         (id, name, description, file_path, canonical_path, is_central, source, content, scanned_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           name           = excluded.name,
-           description    = excluded.description,
-           file_path      = excluded.file_path,
-           canonical_path = COALESCE(excluded.canonical_path, skills.canonical_path),
-           is_central     = MAX(skills.is_central, excluded.is_central),
-           source         = excluded.source,
-           content        = excluded.content,
-           scanned_at     = excluded.scanned_at",
-    )
-    .bind(&skill.id)
-    .bind(&skill.name)
-    .bind(&skill.description)
-    .bind(&skill.file_path)
-    .bind(&skill.canonical_path)
-    .bind(skill.is_central)
-    .bind(&skill.source)
-    .bind(&skill.content)
-    .bind(&skill.scanned_at)
-    .execute(&mut **tx)
-    .await
-    .map(|_| ())
-    .map_err(|e| e.to_string())
+fn read_json_file<T: DeserializeOwned>(path: &Path) -> Option<T> {
+    let content = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&content).ok()
 }
 
-async fn upsert_skill_installation_in_tx(
-    tx: &mut Transaction<'_, Sqlite>,
-    installation: &SkillInstallation,
-) -> Result<(), String> {
-    sqlx::query(
-        "INSERT INTO skill_installations
-         (skill_id, agent_id, installed_path, link_type, symlink_target, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(skill_id, agent_id) DO UPDATE SET
-           installed_path = excluded.installed_path,
-           link_type      = excluded.link_type,
-           symlink_target = excluded.symlink_target",
-    )
-    .bind(&installation.skill_id)
-    .bind(&installation.agent_id)
-    .bind(&installation.installed_path)
-    .bind(&installation.link_type)
-    .bind(&installation.symlink_target)
-    .bind(&installation.created_at)
-    .execute(&mut **tx)
-    .await
-    .map(|_| ())
-    .map_err(|e| e.to_string())
+fn claude_runtime_root(global_skills_dir: &Path) -> Option<PathBuf> {
+    global_skills_dir.parent().map(Path::to_path_buf)
 }
 
-async fn update_agent_detected_in_tx(
-    tx: &mut Transaction<'_, Sqlite>,
-    agent_id: &str,
-    is_detected: bool,
-) -> Result<(), String> {
-    sqlx::query("UPDATE agents SET is_detected = ? WHERE id = ?")
-        .bind(is_detected)
-        .bind(agent_id)
-        .execute(&mut **tx)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+fn claude_enabled_plugin_ids(claude_root: &Path) -> Vec<String> {
+    let settings_path = claude_root.join("settings.json");
+    let Some(settings) = read_json_file::<ClaudeSettingsFile>(&settings_path) else {
+        return Vec::new();
+    };
+
+    let mut enabled: Vec<String> = settings
+        .enabled_plugins
+        .into_iter()
+        .filter_map(|(plugin_id, is_enabled)| is_enabled.then_some(plugin_id))
+        .collect();
+    enabled.sort();
+    enabled
 }
 
-async fn delete_stale_skill_installations_in_tx(
-    tx: &mut Transaction<'_, Sqlite>,
-    agent_id: &str,
-    found_skill_ids: &[String],
-) -> Result<(), String> {
-    if found_skill_ids.is_empty() {
-        return sqlx::query("DELETE FROM skill_installations WHERE agent_id = ?")
-            .bind(agent_id)
-            .execute(&mut **tx)
-            .await
-            .map(|_| ())
-            .map_err(|e| e.to_string());
-    }
-
-    let placeholders = found_skill_ids
+fn claude_select_effective_plugin_installs(
+    installs: &[ClaudeInstalledPluginInstall],
+) -> Vec<ClaudeInstalledPluginInstall> {
+    let preferred_scope = installs
         .iter()
-        .map(|_| "?")
-        .collect::<Vec<_>>()
-        .join(",");
-    let sql = format!(
-        "DELETE FROM skill_installations WHERE agent_id = ? AND skill_id NOT IN ({})",
-        placeholders
-    );
+        .any(|install| install.scope.as_deref() == Some("user"));
 
-    let mut query = sqlx::query(&sql).bind(agent_id);
-    for skill_id in found_skill_ids {
-        query = query.bind(skill_id.as_str());
-    }
-
-    query
-        .execute(&mut **tx)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    installs
+        .iter()
+        .filter(|install| !preferred_scope || install.scope.as_deref() == Some("user"))
+        .max_by(|left, right| {
+            let left_key = left
+                .last_updated
+                .as_deref()
+                .or(left.installed_at.as_deref())
+                .unwrap_or("");
+            let right_key = right
+                .last_updated
+                .as_deref()
+                .or(right.installed_at.as_deref())
+                .unwrap_or("");
+            left_key
+                .cmp(right_key)
+                .then_with(|| left.install_path.cmp(&right.install_path))
+        })
+        .cloned()
+        .into_iter()
+        .collect()
 }
 
-async fn delete_skills_not_in_scope_in_tx(
-    tx: &mut Transaction<'_, Sqlite>,
+fn claude_plugin_roots(global_skills_dir: &Path) -> Vec<AgentScanRoot> {
+    let Some(claude_root) = claude_runtime_root(global_skills_dir) else {
+        return Vec::new();
+    };
+
+    let installed_path = claude_root.join("plugins/installed_plugins.json");
+    let installed =
+        read_json_file::<ClaudeInstalledPluginsFile>(&installed_path).unwrap_or_default();
+    let mut seen_scan_paths = HashSet::new();
+    let mut roots = Vec::new();
+
+    for plugin_id in claude_enabled_plugin_ids(&claude_root) {
+        let Some(installs) = installed.plugins.get(&plugin_id) else {
+            continue;
+        };
+
+        for install in claude_select_effective_plugin_installs(installs) {
+            let install_root = PathBuf::from(&install.install_path);
+            let candidate_paths = [
+                install_root.join("skills"),
+                install_root.join(".claude").join("skills"),
+            ];
+
+            for scan_path in candidate_paths {
+                if !scan_path.exists() {
+                    continue;
+                }
+
+                let scan_path_key = scan_path.to_string_lossy().into_owned();
+                if !seen_scan_paths.insert(scan_path_key) {
+                    continue;
+                }
+
+                roots.push(AgentScanRoot {
+                    path: scan_path,
+                    source_root: Some(install_root.clone()),
+                    claude_source: Some(ClaudeSourceKind::Plugin),
+                });
+            }
+        }
+    }
+
+    roots
+}
+
+fn scan_roots_for_agent(agent: &crate::db::Agent) -> Vec<AgentScanRoot> {
+    let primary_root = PathBuf::from(&agent.global_skills_dir);
+    if agent.id != "claude-code" {
+        return vec![AgentScanRoot {
+            path: primary_root,
+            source_root: None,
+            claude_source: None,
+        }];
+    }
+
+    let mut roots = vec![AgentScanRoot {
+        path: primary_root.clone(),
+        source_root: Some(primary_root.clone()),
+        claude_source: Some(ClaudeSourceKind::User),
+    }];
+    roots.extend(claude_plugin_roots(&primary_root));
+    roots
+}
+
+fn claude_observation_row_id(agent_id: &str, dir_path: &str) -> String {
+    format!("{agent_id}::{dir_path}")
+}
+
+async fn delete_skills_not_in_scope(
+    pool: &DbPool,
     found_skill_ids: &[String],
 ) -> Result<(), String> {
     if found_skill_ids.is_empty() {
         sqlx::query("DELETE FROM skill_installations")
-            .execute(&mut **tx)
+            .execute(pool)
             .await
             .map_err(|e| e.to_string())?;
 
         return sqlx::query("DELETE FROM skills")
-            .execute(&mut **tx)
+            .execute(pool)
             .await
             .map(|_| ())
             .map_err(|e| e.to_string());
@@ -349,7 +415,7 @@ async fn delete_skills_not_in_scope_in_tx(
         installation_query = installation_query.bind(skill_id.as_str());
     }
     installation_query
-        .execute(&mut **tx)
+        .execute(pool)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -359,7 +425,7 @@ async fn delete_skills_not_in_scope_in_tx(
         skill_query = skill_query.bind(skill_id.as_str());
     }
     skill_query
-        .execute(&mut **tx)
+        .execute(pool)
         .await
         .map(|_| ())
         .map_err(|e| e.to_string())
@@ -384,85 +450,117 @@ pub fn scan_directory(dir: &Path, is_central: bool) -> Vec<ScannedSkill> {
 pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
     let agents = db::get_all_agents(pool).await?;
     let custom_dirs = db::get_scan_directories(pool).await?;
-    let cached_install_counts = db::get_skill_counts_by_agent(pool).await?;
     let scan_started_at = Utc::now().to_rfc3339();
 
     let mut total_skills: usize = 0;
     let mut skills_by_agent: HashMap<String, usize> = HashMap::new();
     let mut all_found_skill_ids: HashSet<String> = HashSet::new();
-    let mut grouped_agent_dirs: HashMap<String, (PathBuf, Vec<&db::Agent>)> = HashMap::new();
-
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     for agent in &agents {
-        let dir = Path::new(&agent.global_skills_dir);
-        if !dir.exists() {
-            update_agent_detected_in_tx(&mut tx, &agent.id, false).await?;
-            skills_by_agent.insert(agent.id.clone(), 0);
+        let is_central = agent.category == "central";
+        let scan_roots = scan_roots_for_agent(agent);
+        let existing_roots: Vec<AgentScanRoot> = scan_roots
+            .into_iter()
+            .filter(|root| root.path.exists())
+            .collect();
 
-            if cached_install_counts.get(&agent.id).copied().unwrap_or(0) > 0 {
-                delete_stale_skill_installations_in_tx(&mut tx, &agent.id, &[]).await?;
+        if existing_roots.is_empty() {
+            db::update_agent_detected(pool, &agent.id, false).await?;
+            skills_by_agent.insert(agent.id.clone(), 0);
+            db::delete_stale_skill_installations(pool, &agent.id, &[]).await?;
+            if agent.id == "claude-code" {
+                db::delete_stale_agent_skill_observations(pool, &agent.id, &[]).await?;
             }
             continue;
         }
 
-        let key = normalize_scan_key(dir);
-        grouped_agent_dirs
-            .entry(key)
-            .or_insert_with(|| (dir.to_path_buf(), Vec::new()))
-            .1
-            .push(agent);
-    }
+        db::update_agent_detected(pool, &agent.id, true).await?;
 
-    for (_, (dir_path, grouped_agents)) in grouped_agent_dirs {
-        let scanned_entries = scan_directory_entries(&dir_path);
-        let found_ids: Vec<String> = scanned_entries
-            .iter()
-            .map(|skill| skill.id.clone())
-            .collect();
+        let mut scanned = Vec::new();
+        let mut found_install_ids = Vec::new();
+        let mut found_observation_row_ids = Vec::new();
 
-        for agent in grouped_agents {
-            let is_central = agent.category == "central";
-            update_agent_detected_in_tx(&mut tx, &agent.id, true).await?;
+        for root in &existing_roots {
+            let source_root = root
+                .source_root
+                .as_ref()
+                .unwrap_or(&root.path)
+                .to_string_lossy()
+                .into_owned();
+            let root_scanned = scan_directory(&root.path, is_central);
 
-            for entry in &scanned_entries {
-                let skill = build_scanned_skill(entry, is_central);
-                all_found_skill_ids.insert(skill.id.clone());
+            for skill in &root_scanned {
+                if let Some(source_kind) = root.claude_source {
+                    let observation = AgentSkillObservation {
+                        row_id: claude_observation_row_id(&agent.id, &skill.dir_path),
+                        agent_id: agent.id.clone(),
+                        skill_id: skill.id.clone(),
+                        name: skill.name.clone(),
+                        description: skill.description.clone(),
+                        file_path: skill.file_path.clone(),
+                        dir_path: skill.dir_path.clone(),
+                        source_kind: source_kind.as_str().to_string(),
+                        source_root: source_root.clone(),
+                        link_type: skill.link_type.clone(),
+                        symlink_target: skill.symlink_target.clone(),
+                        is_read_only: source_kind.is_read_only(),
+                        scanned_at: scan_started_at.clone(),
+                    };
+                    db::upsert_agent_skill_observation(pool, &observation).await?;
+                    found_observation_row_ids.push(observation.row_id);
+                }
 
-                let db_skill = Skill {
-                    id: skill.id.clone(),
-                    name: skill.name.clone(),
-                    description: skill.description.clone(),
-                    file_path: skill.file_path.clone(),
-                    canonical_path: if is_central {
-                        Some(skill.dir_path.clone())
-                    } else {
-                        None
-                    },
-                    is_central,
-                    source: Some(skill.link_type.clone()),
-                    content: None,
-                    scanned_at: scan_started_at.clone(),
-                };
-                upsert_skill_in_tx(&mut tx, &db_skill).await?;
+                let should_persist_manageable_state =
+                    root.claude_source != Some(ClaudeSourceKind::Plugin);
+                if should_persist_manageable_state {
+                    all_found_skill_ids.insert(skill.id.clone());
+                    found_install_ids.push(skill.id.clone());
 
-                let installation = SkillInstallation {
-                    skill_id: skill.id.clone(),
-                    agent_id: agent.id.clone(),
-                    installed_path: skill.dir_path.clone(),
-                    link_type: skill.link_type.clone(),
-                    symlink_target: skill.symlink_target.clone(),
-                    created_at: scan_started_at.clone(),
-                };
-                upsert_skill_installation_in_tx(&mut tx, &installation).await?;
+                    let db_skill = Skill {
+                        id: skill.id.clone(),
+                        name: skill.name.clone(),
+                        description: skill.description.clone(),
+                        file_path: skill.file_path.clone(),
+                        canonical_path: if is_central {
+                            Some(skill.dir_path.clone())
+                        } else {
+                            None
+                        },
+                        is_central,
+                        source: Some(skill.link_type.clone()),
+                        content: None,
+                        scanned_at: scan_started_at.clone(),
+                    };
+                    db::upsert_skill(pool, &db_skill).await?;
+
+                    let installation = SkillInstallation {
+                        skill_id: skill.id.clone(),
+                        agent_id: agent.id.clone(),
+                        installed_path: skill.dir_path.clone(),
+                        link_type: skill.link_type.clone(),
+                        symlink_target: skill.symlink_target.clone(),
+                        created_at: scan_started_at.clone(),
+                    };
+                    db::upsert_skill_installation(pool, &installation).await?;
+                }
             }
 
-            delete_stale_skill_installations_in_tx(&mut tx, &agent.id, &found_ids).await?;
-
-            let count = scanned_entries.len();
-            total_skills += count;
-            skills_by_agent.insert(agent.id.clone(), count);
+            scanned.extend(root_scanned);
         }
+
+        db::delete_stale_skill_installations(pool, &agent.id, &found_install_ids).await?;
+        if agent.id == "claude-code" {
+            db::delete_stale_agent_skill_observations(
+                pool,
+                &agent.id,
+                &found_observation_row_ids,
+            )
+            .await?;
+        }
+
+        let count = scanned.len();
+        total_skills += count;
+        skills_by_agent.insert(agent.id.clone(), count);
     }
 
     let mut seen_custom_dirs = HashSet::new();
@@ -477,9 +575,8 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
             continue;
         }
 
-        let scanned_entries = scan_directory_entries(dir);
-        for entry in &scanned_entries {
-            let skill = build_scanned_skill(entry, false);
+        let scanned_skills = scan_directory(dir, false);
+        for skill in &scanned_skills {
             all_found_skill_ids.insert(skill.id.clone());
 
             let db_skill = Skill {
@@ -493,14 +590,13 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                 content: None,
                 scanned_at: scan_started_at.clone(),
             };
-            upsert_skill_in_tx(&mut tx, &db_skill).await?;
+            db::upsert_skill(pool, &db_skill).await?;
         }
-        total_skills += scanned_entries.len();
+        total_skills += scanned_skills.len();
     }
 
     let found_ids_vec: Vec<String> = all_found_skill_ids.into_iter().collect();
-    delete_skills_not_in_scope_in_tx(&mut tx, &found_ids_vec).await?;
-    tx.commit().await.map_err(|e| e.to_string())?;
+    delete_skills_not_in_scope(pool, &found_ids_vec).await?;
 
     Ok(ScanResult {
         total_skills,

@@ -19,14 +19,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
-            // Resolve ~/.skillsmanage/db.sqlite
-            let home_dir = app
-                .path()
-                .home_dir()
-                .expect("Failed to resolve home directory");
-            let db_dir = home_dir.join(".skillsmanage");
+            let _ = app;
+            let db_dir = paths::app_data_dir();
             fs::create_dir_all(&db_dir).expect("Failed to create ~/.skillsmanage directory");
-            let db_path = db_dir.join("db.sqlite").to_string_lossy().into_owned();
+            let db_path = paths::path_to_string(&db_dir.join("db.sqlite"));
 
             // Create pool and initialize schema
             let pool = tauri::async_runtime::block_on(async {

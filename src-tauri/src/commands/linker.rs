@@ -96,6 +96,19 @@ fn remove_symlink_path(path: &Path) -> Result<(), String> {
     std::fs::remove_file(path).map_err(|e| format!("Failed to remove existing symlink: {}", e))
 }
 
+pub fn symlink_target_path(from_dir: &Path, to_path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let from_prefix = from_dir.components().next();
+        let to_prefix = to_path.components().next();
+        if from_prefix != to_prefix {
+            return to_path.to_path_buf();
+        }
+    }
+
+    make_relative_path(from_dir, to_path)
+}
+
 // ─── Recursive Directory Copy ─────────────────────────────────────────────────
 
 /// Recursively copy a directory tree from `src` to `dst`.
@@ -258,7 +271,7 @@ pub async fn install_skill_to_agent_impl(
     }
 
     // 7. Compute the relative path from the agent directory to the canonical dir.
-    let relative_target = make_relative_path(&agent_dir, &canonical_dir);
+    let relative_target = symlink_target_path(&agent_dir, &canonical_dir);
 
     // 8. Create the symlink.
     create_symlink(&relative_target, &symlink_path)?;
@@ -277,6 +290,30 @@ pub async fn install_skill_to_agent_impl(
     Ok(InstallResult {
         symlink_path: symlink_path.to_string_lossy().into_owned(),
     })
+}
+
+pub async fn install_skill_to_agent_auto_impl(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+) -> Result<InstallResult, String> {
+    match install_skill_to_agent_impl(pool, skill_id, agent_id).await {
+        Ok(result) => Ok(result),
+        Err(error) if should_fallback_to_copy(&error) => {
+            install_skill_to_agent_copy_impl(pool, skill_id, agent_id).await
+        }
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(windows)]
+fn should_fallback_to_copy(error: &str) -> bool {
+    error.contains("Failed to create symlink")
+}
+
+#[cfg(not(windows))]
+fn should_fallback_to_copy(_error: &str) -> bool {
+    false
 }
 
 /// Core copy-install logic — copies the skill directory instead of symlinking.
@@ -427,8 +464,13 @@ pub async fn install_skill_to_agent(
     state: State<'_, AppState>,
     skill_id: String,
     agent_id: String,
+    method: Option<String>,
 ) -> Result<InstallResult, String> {
-    install_skill_to_agent_impl(&state.db, &skill_id, &agent_id).await
+    match method.as_deref().unwrap_or("auto") {
+        "copy" => install_skill_to_agent_copy_impl(&state.db, &skill_id, &agent_id).await,
+        "symlink" => install_skill_to_agent_impl(&state.db, &skill_id, &agent_id).await,
+        _ => install_skill_to_agent_auto_impl(&state.db, &skill_id, &agent_id).await,
+    }
 }
 
 /// Tauri command: remove a skill's symlink from an agent.
@@ -454,14 +496,15 @@ pub async fn batch_install_to_agents(
     agent_ids: Vec<String>,
     method: Option<String>,
 ) -> Result<BatchInstallResult, String> {
-    let method = method.as_deref().unwrap_or("symlink");
+    let method = method.as_deref().unwrap_or("auto");
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
 
     for agent_id in &agent_ids {
         let install_result = match method {
             "copy" => install_skill_to_agent_copy_impl(&state.db, &skill_id, agent_id).await,
-            _ => install_skill_to_agent_impl(&state.db, &skill_id, agent_id).await,
+            "symlink" => install_skill_to_agent_impl(&state.db, &skill_id, agent_id).await,
+            _ => install_skill_to_agent_auto_impl(&state.db, &skill_id, agent_id).await,
         };
         match install_result {
             Ok(_) => succeeded.push(agent_id.clone()),

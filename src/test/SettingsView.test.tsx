@@ -361,7 +361,7 @@ describe("SettingsView", () => {
     });
   });
 
-  it("removes a custom directory when × button is clicked", async () => {
+  it("removes a custom directory after inline confirmation", async () => {
     const removeScanDirectory = vi.fn().mockResolvedValue(undefined);
     const rescan = vi.fn().mockResolvedValue(undefined);
     setupMocks({
@@ -374,6 +374,9 @@ describe("SettingsView", () => {
     fireEvent.click(
       screen.getByRole("button", { name: `删除目录 ${mockCustomDir.path}` })
     );
+    expect(removeScanDirectory).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
     await waitFor(() => {
       expect(removeScanDirectory).toHaveBeenCalledWith(mockCustomDir.path);
@@ -389,6 +392,7 @@ describe("SettingsView", () => {
     fireEvent.click(
       screen.getByRole("button", { name: `删除目录 ${mockCustomDir.path}` })
     );
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
     await waitFor(() => {
       expect(refreshCounts).toHaveBeenCalled();
@@ -461,7 +465,7 @@ describe("SettingsView", () => {
     });
   });
 
-  it("removes a custom platform when × button is clicked", async () => {
+  it("removes a custom platform after inline confirmation", async () => {
     const removeCustomAgent = vi.fn().mockResolvedValue(undefined);
     const rescan = vi.fn().mockResolvedValue(undefined);
     setupMocks({
@@ -474,6 +478,9 @@ describe("SettingsView", () => {
     fireEvent.click(
       screen.getByRole("button", { name: `删除平台 ${mockCustomAgent.display_name}` })
     );
+    expect(removeCustomAgent).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
     await waitFor(() => {
       expect(removeCustomAgent).toHaveBeenCalledWith(mockCustomAgent.id);
@@ -493,6 +500,7 @@ describe("SettingsView", () => {
     fireEvent.click(
       screen.getByRole("button", { name: `删除平台 ${mockCustomAgent.display_name}` })
     );
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
     await waitFor(() => {
       expect(rescan).toHaveBeenCalled();
@@ -504,7 +512,7 @@ describe("SettingsView", () => {
   it("shows the app version in the about section", () => {
     setupMocks();
     renderSettingsView();
-    expect(screen.getByText("skills-manage v0.8.3")).toBeTruthy();
+    expect(screen.getByText("skills-manage v0.9.0")).toBeTruthy();
   });
 
   it("shows the database path in the about section", () => {

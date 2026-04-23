@@ -114,14 +114,14 @@ struct SkillFrontmatter {
 }
 
 #[derive(Debug, Clone)]
-struct RemoteSkillCandidate {
-    source_path: String,
-    skill_id: String,
-    skill_name: String,
-    description: Option<String>,
-    root_directory: String,
-    skill_directory_name: String,
-    download_url: String,
+pub(crate) struct RemoteSkillCandidate {
+    pub(crate) source_path: String,
+    pub(crate) skill_id: String,
+    pub(crate) skill_name: String,
+    pub(crate) description: Option<String>,
+    pub(crate) root_directory: String,
+    pub(crate) skill_directory_name: String,
+    pub(crate) download_url: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -597,7 +597,7 @@ async fn build_preview_skills(
     Ok(skills)
 }
 
-async fn resolve_repo_ref(
+pub(crate) async fn resolve_repo_ref(
     repo_url: &str,
     auth_token: Option<&str>,
 ) -> Result<GitHubRepoRef, String> {
@@ -646,7 +646,9 @@ async fn resolve_repo_ref(
     })
 }
 
-async fn github_direct_auth_from_settings(pool: &DbPool) -> Result<Option<String>, String> {
+pub(crate) async fn github_direct_auth_from_settings(
+    pool: &DbPool,
+) -> Result<Option<String>, String> {
     Ok(db::get_setting(pool, GITHUB_PAT_SETTING_KEY)
         .await?
         .map(|token| token.trim().to_string())
@@ -692,7 +694,7 @@ fn parse_github_url(url: &str) -> Result<(String, String), String> {
     Ok((owner.to_lowercase(), repo.to_lowercase()))
 }
 
-async fn fetch_repo_skill_candidates(
+pub(crate) async fn fetch_repo_skill_candidates(
     repo: &GitHubRepoRef,
     auth_token: Option<&str>,
 ) -> Result<Vec<RemoteSkillCandidate>, String> {
@@ -784,12 +786,13 @@ fn classify_skill_manifest_path(path: &str) -> Option<SnapshotSkillManifest> {
     }
 
     let parts = normalized.split('/').collect::<Vec<_>>();
-    match parts.as_slice() {
-        [skill_dir, skill_md]
-            if *skill_dir != ".github"
-                && *skill_dir != "skills"
-                && skill_md.eq_ignore_ascii_case("SKILL.md") =>
-        {
+    let (skill_md, source_parts) = parts.split_last()?;
+    if !skill_md.eq_ignore_ascii_case("SKILL.md") {
+        return None;
+    }
+
+    match source_parts {
+        [skill_dir] if *skill_dir != ".github" && *skill_dir != "skills" => {
             Some(SnapshotSkillManifest {
                 source_path: (*skill_dir).to_string(),
                 root_directory: "/".to_string(),
@@ -797,11 +800,11 @@ fn classify_skill_manifest_path(path: &str) -> Option<SnapshotSkillManifest> {
                 skill_md_path: normalized.to_string(),
             })
         }
-        ["skills", skill_dir, skill_md] if skill_md.eq_ignore_ascii_case("SKILL.md") => {
+        _ if source_parts.first() == Some(&"skills") && source_parts.len() >= 2 => {
             Some(SnapshotSkillManifest {
-                source_path: format!("skills/{}", skill_dir),
-                root_directory: "skills".to_string(),
-                skill_directory_name: (*skill_dir).to_string(),
+                source_path: source_parts.join("/"),
+                root_directory: source_parts[..source_parts.len() - 1].join("/"),
+                skill_directory_name: source_parts.last()?.to_string(),
                 skill_md_path: normalized.to_string(),
             })
         }
@@ -1467,6 +1470,27 @@ mod tests {
         ])
     }
 
+    fn namespaced_skill_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "skills/.curated/openai-docs/SKILL.md",
+                sample_frontmatter("openai-docs", "OpenAI docs skill"),
+            ),
+            (
+                "skills/.curated/openai-docs/references/api.md",
+                "# api\n".to_string(),
+            ),
+            (
+                "skills/.system/skill-creator/SKILL.md",
+                sample_frontmatter("skill-creator", "Create skills"),
+            ),
+            (
+                "skills/.system/skill-creator/scripts/init_skill.py",
+                "print('hi')\n".to_string(),
+            ),
+        ])
+    }
+
     fn repository_archive(files: &[(&str, &[u8])]) -> Vec<u8> {
         let encoder = GzEncoder::new(Vec::new(), Compression::default());
         let mut builder = tar::Builder::new(encoder);
@@ -1890,6 +1914,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn preview_namespaced_skills_directory_discovers_candidates() {
+        let pool = setup_test_db().await;
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &namespaced_skill_snapshot())
+                .expect("candidates");
+
+        assert_eq!(
+            candidates.len(),
+            2,
+            "expected two namespaced skill candidates"
+        );
+
+        let curated = candidates
+            .iter()
+            .find(|candidate| candidate.source_path == "skills/.curated/openai-docs")
+            .expect("curated skill");
+        assert_eq!(curated.root_directory, "skills/.curated");
+        assert_eq!(curated.skill_directory_name, "openai-docs");
+        assert_eq!(curated.skill_id, "openai-docs");
+
+        let system = candidates
+            .iter()
+            .find(|candidate| candidate.source_path == "skills/.system/skill-creator")
+            .expect("system skill");
+        assert_eq!(system.root_directory, "skills/.system");
+        assert_eq!(system.skill_directory_name, "skill-creator");
+        assert_eq!(system.skill_id, "skill-creator");
+
+        let preview = GitHubRepoPreview {
+            repo,
+            skills: build_preview_skills(&pool, &candidates)
+                .await
+                .expect("preview skills"),
+        };
+
+        assert!(preview
+            .skills
+            .iter()
+            .any(|skill| skill.source_path == "skills/.curated/openai-docs"));
+        assert!(preview
+            .skills
+            .iter()
+            .any(|skill| skill.source_path == "skills/.system/skill-creator"));
+    }
+
+    #[tokio::test]
     async fn github_pat_setting_is_trimmed_and_empty_values_are_ignored() {
         let pool = setup_test_db().await;
 
@@ -1915,7 +1992,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn direct_github_request_uses_bearer_auth_only_for_github_endpoint() {
+    async fn authenticated_api_fallback_does_not_forward_bearer_auth_to_mirror() {
         use std::io::{Read, Write};
         use std::net::TcpListener;
         use std::sync::{
@@ -1941,8 +2018,15 @@ mod tests {
                     .expect("lock")
                     .push(request_text.clone());
                 accepted_clone.fetch_add(1, Ordering::SeqCst);
-                let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
-                stream.write_all(response.as_bytes()).expect("write");
+
+                if request_text.contains("GET /direct") {
+                    let response =
+                        "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 11\r\n\r\nbad gateway";
+                    stream.write_all(response.as_bytes()).expect("write direct");
+                } else {
+                    let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+                    stream.write_all(response.as_bytes()).expect("write mirror");
+                }
             }
         });
 
@@ -1950,7 +2034,7 @@ mod tests {
         let direct_url = format!("http://{}/direct", address);
         let mirror_url = format!("http://{}/mirror", address);
 
-        let direct_response = send_github_request_with_fallback(
+        let response = send_github_request_with_fallback(
             &client,
             GitHubFetchSurface::Api,
             |endpoint| {
@@ -1964,19 +2048,8 @@ mod tests {
             Some("direct-token"),
         )
         .await
-        .expect("direct response");
-        assert!(direct_response.status().is_success());
-
-        let mirror_response = send_github_request_with_fallback(
-            &client,
-            GitHubFetchSurface::Api,
-            |_| mirror_url.clone(),
-            "mirror request failed",
-            Some("direct-token"),
-        )
-        .await
-        .expect("mirror response");
-        assert!(mirror_response.status().is_success());
+        .expect("fallback response");
+        assert!(response.status().is_success());
 
         server.join().expect("server join");
         let captured = requests.lock().expect("captured");
@@ -1997,6 +2070,87 @@ mod tests {
             !mirror_request.contains("authorization: Bearer direct-token")
                 && !mirror_request.contains("Authorization: Bearer direct-token"),
             "mirror request should not include bearer auth"
+        );
+    }
+
+    #[tokio::test]
+    async fn authenticated_raw_fallback_does_not_forward_bearer_auth_to_mirror() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc, Mutex,
+        };
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("addr");
+        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let requests_clone = Arc::clone(&requests);
+        let accepted_clone = Arc::clone(&accepted);
+
+        let server = std::thread::spawn(move || {
+            while accepted_clone.load(Ordering::SeqCst) < 2 {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let mut buffer = [0_u8; 2048];
+                let bytes_read = stream.read(&mut buffer).expect("read");
+                let request_text = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+                requests_clone
+                    .lock()
+                    .expect("lock")
+                    .push(request_text.clone());
+                accepted_clone.fetch_add(1, Ordering::SeqCst);
+
+                if request_text.contains("GET /raw-direct") {
+                    let response = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 19\r\n\r\nservice unavailable";
+                    stream.write_all(response.as_bytes()).expect("write direct");
+                } else {
+                    let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+                    stream.write_all(response.as_bytes()).expect("write mirror");
+                }
+            }
+        });
+
+        let client = github_client().expect("client");
+        let direct_url = format!("http://{}/raw-direct", address);
+        let mirror_url = format!("http://{}/raw-mirror", address);
+
+        let response = send_github_request_with_fallback(
+            &client,
+            GitHubFetchSurface::Raw,
+            |endpoint| {
+                if endpoint.label == "github" {
+                    direct_url.clone()
+                } else {
+                    mirror_url.clone()
+                }
+            },
+            "raw request failed",
+            Some("direct-token"),
+        )
+        .await
+        .expect("fallback response");
+        assert!(response.status().is_success());
+
+        server.join().expect("server join");
+        let captured = requests.lock().expect("captured");
+        let direct_request = captured
+            .iter()
+            .find(|request| request.contains("GET /raw-direct"))
+            .expect("captured direct request");
+        let mirror_request = captured
+            .iter()
+            .find(|request| request.contains("GET /raw-mirror"))
+            .expect("captured mirror request");
+        assert!(
+            direct_request.contains("authorization: Bearer direct-token")
+                || direct_request.contains("Authorization: Bearer direct-token"),
+            "direct raw request should include bearer auth"
+        );
+        assert!(
+            !mirror_request.contains("authorization: Bearer direct-token")
+                && !mirror_request.contains("Authorization: Bearer direct-token"),
+            "mirror raw request should not include bearer auth"
         );
     }
 

@@ -98,13 +98,20 @@ const mockAgents: AgentWithStatus[] = [
 
 const mockDetail: SkillDetailType = {
   id: "frontend-design",
+  row_id: "frontend-design",
   name: "frontend-design",
   description: "Build distinctive, production-grade frontend interfaces",
   file_path: "~/.agents/skills/frontend-design/SKILL.md",
+  dir_path: "~/.agents/skills/frontend-design",
   canonical_path: "~/.agents/skills/frontend-design",
   is_central: true,
   source: "native",
   scanned_at: "2026-04-09T00:00:00Z",
+  source_kind: null,
+  source_root: null,
+  is_read_only: false,
+  conflict_group: null,
+  conflict_count: 0,
   collections: [],
   installations: [
     {
@@ -118,8 +125,50 @@ const mockDetail: SkillDetailType = {
   ],
 };
 
+const mockPluginDetail: SkillDetailType = {
+  ...mockDetail,
+  row_id: "claude-code::plugin::frontend-design",
+  file_path: "~/.claude/plugins/cache/publisher/frontend-design/unknown/skills/frontend-design/SKILL.md",
+  dir_path: "~/.claude/plugins/cache/publisher/frontend-design/unknown/skills/frontend-design",
+  canonical_path: undefined,
+  is_central: false,
+  source: "plugin",
+  source_kind: "plugin",
+  source_root: "~/.claude/plugins/cache/publisher/frontend-design/unknown",
+  is_read_only: true,
+  installations: [],
+  collections: [],
+};
+
+const mockClaudeUserDetail: SkillDetailType = {
+  ...mockDetail,
+  row_id: "claude-code::user::frontend-design",
+  file_path: "~/.claude/skills/frontend-design/SKILL.md",
+  dir_path: "~/.claude/skills/frontend-design",
+  is_central: false,
+  source: "user",
+  source_kind: "user",
+  source_root: "~/.claude/skills",
+  is_read_only: false,
+  collections: [
+    {
+      id: "claude-user",
+      name: "Claude User",
+      description: "User-managed Claude skills",
+      created_at: "2026-04-09T00:00:00Z",
+      updated_at: "2026-04-09T00:00:00Z",
+    },
+  ],
+};
+
 const mockContent =
   "---\nname: frontend-design\ndescription: Build distinctive, production-grade frontend interfaces\nmetadata:\n  openclaw:\n    requires:\n      anyBins:\n        - bun\n        - npx\n---\n\n# Frontend Design\n\nContent here.";
+
+const mockPluginContent =
+  "---\nname: frontend-design\ndescription: Plugin copy\n---\n\n# Plugin Frontend Design\n\nPlugin content.";
+
+const mockUserContent =
+  "---\nname: frontend-design\ndescription: User copy\n---\n\n# User Frontend Design\n\nUser content.";
 
 const mockLoadDetail = vi.fn();
 const mockInstallSkill = vi.fn();
@@ -267,12 +316,87 @@ describe("SkillDetailView", () => {
 
   it("shows canonical path", () => {
     renderView();
-    expect(screen.getByText("~/.agents/skills/frontend-design")).toBeInTheDocument();
+    expect(screen.getAllByText("~/.agents/skills/frontend-design").length).toBeGreaterThan(0);
   });
 
   it("shows source", () => {
     renderView();
     expect(screen.getByText("native")).toBeInTheDocument();
+  });
+
+  it("shows a read-only plugin source state and blocks management actions", () => {
+    applyStoreMocks({
+      detail: mockPluginDetail,
+      content: mockPluginContent,
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::plugin::frontend-design"
+          variant="drawer"
+        />
+      </MemoryRouter>
+    );
+
+    const sourceStatusRegion = screen.getByRole("region", { name: /来源状态|Source status/i });
+    expect(
+      within(sourceStatusRegion).getByText(/插件来源|Plugin source/i)
+    ).toBeInTheDocument();
+    expect(
+      within(sourceStatusRegion).getByText(/只读来源|Read-only source/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("~/.claude/plugins/cache/publisher/frontend-design/unknown/skills/frontend-design/SKILL.md")
+    ).toBeInTheDocument();
+    expect(screen.getByText("~/.claude/plugins/cache/publisher/frontend-design/unknown")).toBeInTheDocument();
+    expect(
+      screen.getByText(/插件安装的副本仅供查看|display-only/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/不可安装或卸载|Install and uninstall are unavailable/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/不可调整技能集|Collection management is unavailable/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /切换 .* 的链接状态/i })
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /加入技能集/i })
+    ).toBeNull();
+  });
+
+  it("keeps user-source Claude detail manageable", () => {
+    applyStoreMocks({
+      detail: mockClaudeUserDetail,
+      content: mockUserContent,
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::user::frontend-design"
+          variant="drawer"
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/用户来源|User source/i)).toBeInTheDocument();
+    expect(screen.queryByText(/只读来源|Read-only source/i)).toBeNull();
+    expect(screen.getByText("~/.claude/skills/frontend-design/SKILL.md")).toBeInTheDocument();
+    expect(screen.getByText("~/.claude/skills")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /切换 frontend-design 在 Cursor 的链接状态/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /加入技能集/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Claude User")).toBeInTheDocument();
   });
 
   // ── Installation status ───────────────────────────────────────────────────
@@ -474,6 +598,55 @@ describe("SkillDetailView", () => {
     });
   });
 
+  it("loads cached explanation with the selected Claude row id", async () => {
+    applyStoreMocks({
+      detail: mockPluginDetail,
+      content: mockPluginContent,
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::plugin::frontend-design"
+          variant="page"
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockLoadCachedExplanation).toHaveBeenCalledWith(
+        "claude-code::plugin::frontend-design",
+        "zh"
+      );
+    });
+  });
+
+  it("uses the resolved Claude detail row id for cached explanation lookup when rowId is omitted", async () => {
+    applyStoreMocks({
+      detail: mockClaudeUserDetail,
+      content: mockUserContent,
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          variant="page"
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockLoadCachedExplanation).toHaveBeenCalledWith(
+        "claude-code::user::frontend-design",
+        "zh"
+      );
+    });
+  });
+
   it("shows cached AI explanation in AI Explanation tab", async () => {
     applyStoreMocks({ explanation: "这是缓存的技能解释。" });
     render(
@@ -501,6 +674,35 @@ describe("SkillDetailView", () => {
     });
   });
 
+  it("calls generateExplanation with the selected Claude row id", async () => {
+    applyStoreMocks({
+      detail: mockPluginDetail,
+      content: mockPluginContent,
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::plugin::frontend-design"
+          variant="page"
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /AI 解释/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /生成解释/i })[0]);
+
+    await waitFor(() => {
+      expect(mockGenerateExplanation).toHaveBeenCalledWith(
+        "claude-code::plugin::frontend-design",
+        mockPluginContent,
+        "zh"
+      );
+    });
+  });
+
   it("calls refreshExplanation when cached explanation exists", async () => {
     applyStoreMocks({ explanation: "这是缓存的技能解释。" });
     render(
@@ -513,6 +715,35 @@ describe("SkillDetailView", () => {
     fireEvent.click(screen.getByRole("button", { name: /重新生成/i }));
     await waitFor(() => {
       expect(mockRefreshExplanation).toHaveBeenCalledWith("frontend-design", mockContent, "zh");
+    });
+  });
+
+  it("calls refreshExplanation with the resolved Claude row id", async () => {
+    applyStoreMocks({
+      detail: mockClaudeUserDetail,
+      content: mockUserContent,
+      explanation: "这是用户来源缓存的技能解释。",
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          variant="page"
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /AI 解释/i }));
+    fireEvent.click(screen.getByRole("button", { name: /重新生成/i }));
+
+    await waitFor(() => {
+      expect(mockRefreshExplanation).toHaveBeenCalledWith(
+        "claude-code::user::frontend-design",
+        mockUserContent,
+        "zh"
+      );
     });
   });
 
@@ -702,7 +933,116 @@ describe("SkillDetailView", () => {
 
   it("calls loadDetail on mount with skillId prop", () => {
     renderView("frontend-design");
-    expect(mockLoadDetail).toHaveBeenCalledWith("frontend-design");
+    expect(mockLoadDetail).toHaveBeenCalledWith({
+      skillId: "frontend-design",
+      agentId: undefined,
+      rowId: undefined,
+    });
+  });
+
+  it("passes source-aware Claude row identity into loadDetail when provided", () => {
+    applyStoreMocks();
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::plugin::frontend-design"
+          variant="drawer"
+        />
+      </MemoryRouter>
+    );
+
+    expect(mockLoadDetail).toHaveBeenCalledWith({
+      skillId: "frontend-design",
+      agentId: "claude-code",
+      rowId: "claude-code::plugin::frontend-design",
+    });
+  });
+
+  it("switching duplicate Claude rows updates path, content, and management affordances", async () => {
+    applyStoreMocks({
+      detail: mockPluginDetail,
+      content: mockPluginContent,
+    });
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::plugin::frontend-design"
+          variant="drawer"
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("~/.claude/plugins/cache/publisher/frontend-design/unknown/skills/frontend-design/SKILL.md")).toBeInTheDocument();
+    expect(screen.getByTestId("react-markdown")).toHaveTextContent("# Plugin Frontend Design");
+    expect(screen.queryByRole("button", { name: /加入技能集/i })).toBeNull();
+
+    mockLoadDetail.mockClear();
+    applyStoreMocks({
+      detail: mockClaudeUserDetail,
+      content: mockUserContent,
+    });
+
+    rerender(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::user::frontend-design"
+          variant="drawer"
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockLoadDetail).toHaveBeenCalledWith({
+        skillId: "frontend-design",
+        agentId: "claude-code",
+        rowId: "claude-code::user::frontend-design",
+      });
+    });
+
+    expect(screen.getByText("~/.claude/skills/frontend-design/SKILL.md")).toBeInTheDocument();
+    expect(screen.getByTestId("react-markdown")).toHaveTextContent("# User Frontend Design");
+    expect(screen.getByRole("button", { name: /加入技能集/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /切换 frontend-design 在 Cursor 的链接状态/i })
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/只读来源|Read-only source/i)).toBeNull();
+  });
+
+  it("retries a failed Claude duplicate detail load with the same row identity", async () => {
+    applyStoreMocks({
+      detail: null,
+      content: null,
+      error: "Multiple Claude rows found",
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::user::frontend-design"
+          variant="drawer"
+        />
+      </MemoryRouter>
+    );
+
+    mockLoadDetail.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /重试/i }));
+
+    await waitFor(() => {
+      expect(mockLoadDetail).toHaveBeenCalledWith({
+        skillId: "frontend-design",
+        agentId: "claude-code",
+        rowId: "claude-code::user::frontend-design",
+      });
+    });
   });
 
   it("calls reset on unmount", () => {
@@ -819,7 +1159,11 @@ describe("SkillDetailView", () => {
     fireEvent.click(screen.getByRole("button", { name: /Confirm add to collection/i }));
 
     await waitFor(() => {
-      expect(mockLoadDetail).toHaveBeenCalledWith("frontend-design");
+      expect(mockLoadDetail).toHaveBeenCalledWith({
+        skillId: "frontend-design",
+        agentId: undefined,
+        rowId: undefined,
+      });
     });
   });
 });

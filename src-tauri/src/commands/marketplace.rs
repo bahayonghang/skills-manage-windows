@@ -1,9 +1,11 @@
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::collections::HashSet;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 
+use super::github_import;
 use crate::paths;
 use crate::AppState;
 
@@ -72,162 +74,48 @@ pub struct SyncRegistryOptions {
     pub force_refresh: bool,
 }
 
-// ─── GitHub API types ────────────────────────────────────────────────────────
-
-#[derive(Deserialize)]
-struct GitHubContent {
-    name: String,
-    #[serde(rename = "type")]
-    content_type: String,
-    path: String,
-    download_url: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct SkillFrontmatter {
-    name: String,
-    description: Option<String>,
-}
-
 // ─── Registry Fetcher ────────────────────────────────────────────────────────
 
-/// Parse a GitHub URL like "https://github.com/owner/repo" into (owner, repo).
-fn parse_github_url(url: &str) -> Result<(String, String), String> {
-    let url = url.trim_end_matches('/');
-    let parts: Vec<&str> = url.split('/').collect();
-    if parts.len() < 2 {
-        return Err("Invalid GitHub URL".to_string());
-    }
-    let owner = parts[parts.len() - 2].to_string();
-    let repo = parts[parts.len() - 1].to_string();
-    Ok((owner, repo))
-}
-
 /// Fetch skills from a GitHub repository.
-/// Scans the repo root for skill directories. If a `skills/` subdirectory
-/// exists, also scans inside it. This handles both layouts:
-///   - repo-root/skill-name/SKILL.md
-///   - repo-root/skills/skill-name/SKILL.md
+/// Reuses the same repository snapshot + manifest classification logic as
+/// the GitHub import flow so Marketplace preview and import stay in sync.
 async fn fetch_github_skills(
+    pool: &crate::db::DbPool,
     url: &str,
     registry_id: &str,
 ) -> Result<Vec<MarketplaceSkill>, String> {
-    let (owner, repo) = parse_github_url(url)?;
-    let client = reqwest::Client::builder()
-        .user_agent(crate::commands::APP_USER_AGENT)
-        .build()
-        .map_err(|e| e.to_string())?;
+    let auth = github_import::github_direct_auth_from_settings(pool).await?;
+    let repo = github_import::resolve_repo_ref(url, auth.as_deref()).await?;
+    let candidates = github_import::fetch_repo_skill_candidates(&repo, auth.as_deref()).await?;
+    Ok(marketplace_skills_from_candidates(registry_id, candidates))
+}
 
+fn marketplace_skills_from_candidates(
+    registry_id: &str,
+    candidates: Vec<github_import::RemoteSkillCandidate>,
+) -> Vec<MarketplaceSkill> {
     let now = chrono::Utc::now().to_rfc3339();
+    let mut seen_names = HashSet::new();
     let mut skills = Vec::new();
 
-    // Paths to scan: root + common skill subdirectories
-    let scan_paths = vec!["", "skills"];
-
-    for base_path in &scan_paths {
-        let api_url = if base_path.is_empty() {
-            format!("https://api.github.com/repos/{}/{}/contents/", owner, repo)
-        } else {
-            format!(
-                "https://api.github.com/repos/{}/{}/contents/{}",
-                owner, repo, base_path
-            )
-        };
-
-        let resp = match client.get(&api_url).send().await {
-            Ok(r) if r.status().is_success() => r,
-            _ => continue, // path doesn't exist, skip
-        };
-
-        let contents: Vec<GitHubContent> = match resp.json().await {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-
-        // Filter directories (skip "skills" dir itself to avoid double-scanning)
-        let dirs: Vec<&GitHubContent> = contents
-            .iter()
-            .filter(|c| c.content_type == "dir" && c.name != "skills")
-            .collect();
-
-        for dir in dirs {
-            let dir_api = format!(
-                "https://api.github.com/repos/{}/{}/contents/{}",
-                owner, repo, dir.path
-            );
-            let dir_resp = match client.get(&dir_api).send().await {
-                Ok(r) if r.status().is_success() => r,
-                _ => continue,
-            };
-
-            let dir_contents: Vec<GitHubContent> = match dir_resp.json().await {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-
-            let skill_md = dir_contents
-                .iter()
-                .find(|c| c.name == "SKILL.md" && c.content_type == "file");
-
-            if let Some(skill_file) = skill_md {
-                let download_url = skill_file.download_url.clone().unwrap_or_else(|| {
-                    format!(
-                        "https://raw.githubusercontent.com/{}/{}/main/{}/SKILL.md",
-                        owner, repo, dir.path
-                    )
-                });
-
-                let (name, description) =
-                    fetch_skill_metadata(&client, &download_url, &dir.name).await;
-
-                // Deduplicate by skill name
-                if !skills.iter().any(|s: &MarketplaceSkill| s.name == name) {
-                    skills.push(MarketplaceSkill {
-                        id: format!("{}::{}", registry_id, dir.name),
-                        registry_id: registry_id.to_string(),
-                        name,
-                        description,
-                        download_url,
-                        is_installed: false,
-                        synced_at: now.clone(),
-                        cache_updated_at: Some(now.clone()),
-                    });
-                }
-            }
+    for candidate in candidates {
+        if !seen_names.insert(candidate.skill_name.clone()) {
+            continue;
         }
+
+        skills.push(MarketplaceSkill {
+            id: format!("{}::{}", registry_id, candidate.skill_id),
+            registry_id: registry_id.to_string(),
+            name: candidate.skill_name,
+            description: candidate.description,
+            download_url: candidate.download_url,
+            is_installed: false,
+            synced_at: now.clone(),
+            cache_updated_at: Some(now.clone()),
+        });
     }
 
-    Ok(skills)
-}
-
-/// Fetch SKILL.md content and parse YAML frontmatter for name and description.
-async fn fetch_skill_metadata(
-    client: &reqwest::Client,
-    url: &str,
-    fallback_name: &str,
-) -> (String, Option<String>) {
-    let resp = client.get(url).send().await;
-    if let Ok(resp) = resp {
-        if let Ok(text) = resp.text().await {
-            if let Some((name, desc)) = parse_frontmatter(&text) {
-                return (name, desc);
-            }
-        }
-    }
-    (fallback_name.to_string(), None)
-}
-
-/// Parse YAML frontmatter from SKILL.md content.
-fn parse_frontmatter(content: &str) -> Option<(String, Option<String>)> {
-    let content = content.trim();
-    if !content.starts_with("---") {
-        return None;
-    }
-    let rest = &content[3..];
-    let end = rest.find("---")?;
-    let yaml_str = &rest[..end];
-    let fm: SkillFrontmatter = serde_yaml::from_str(yaml_str).ok()?;
-    Some((fm.name, fm.description))
+    skills
 }
 
 // ─── IPC Commands ────────────────────────────────────────────────────────────
@@ -437,7 +325,7 @@ async fn sync_registry_impl(
 
     // Fetch skills based on source type
     let skills = match registry.source_type.as_str() {
-        "github" => match fetch_github_skills(&registry.url, &registry.id).await {
+        "github" => match fetch_github_skills(pool, &registry.url, &registry.id).await {
             Ok(skills) => skills,
             Err(error) => {
                 sqlx::query(
@@ -1477,10 +1365,12 @@ mod tests {
         add_registry_impl, cache_skill_explanation, central_skill_dir_for_name,
         classify_reqwest_error, detect_explanation_api_protocol, format_reqwest_error,
         get_fallback_endpoint, is_skill_installed_in_central, load_cached_skill_explanation,
+        marketplace_skills_from_candidates,
         registry_has_cached_skills, search_marketplace_skills_impl, sync_registry_impl,
         ExplanationApiProtocol, ExplanationErrorKind, RegistryCacheMetadata, RegistrySyncStatus,
         SyncRegistryOptions,
     };
+    use crate::commands::github_import::RemoteSkillCandidate;
     use crate::db;
     use std::path::Path;
     use tempfile::{tempdir, TempDir};
@@ -1492,6 +1382,49 @@ mod tests {
         let pool = db::create_pool(&db_path).await.expect("create pool");
         db::init_database(&pool).await.expect("init db");
         (pool, dir)
+    }
+
+    #[test]
+    fn marketplace_skills_from_candidates_supports_namespaced_layouts() {
+        let skills = marketplace_skills_from_candidates(
+            "openai",
+            vec![
+                RemoteSkillCandidate {
+                    source_path: "skills/.curated/openai-docs".to_string(),
+                    skill_id: "openai-docs".to_string(),
+                    skill_name: "openai-docs".to_string(),
+                    description: Some("Docs skill".to_string()),
+                    root_directory: "skills/.curated".to_string(),
+                    skill_directory_name: "openai-docs".to_string(),
+                    download_url:
+                        "https://raw.githubusercontent.com/openai/skills/main/skills/.curated/openai-docs/SKILL.md"
+                            .to_string(),
+                },
+                RemoteSkillCandidate {
+                    source_path: "skills/.system/skill-creator".to_string(),
+                    skill_id: "skill-creator".to_string(),
+                    skill_name: "skill-creator".to_string(),
+                    description: Some("Create skills".to_string()),
+                    root_directory: "skills/.system".to_string(),
+                    skill_directory_name: "skill-creator".to_string(),
+                    download_url:
+                        "https://raw.githubusercontent.com/openai/skills/main/skills/.system/skill-creator/SKILL.md"
+                            .to_string(),
+                },
+            ],
+        );
+
+        assert_eq!(skills.len(), 2);
+        assert_eq!(skills[0].id, "openai::openai-docs");
+        assert_eq!(skills[0].name, "openai-docs");
+        assert!(skills[0]
+            .download_url
+            .contains("skills/.curated/openai-docs"));
+        assert_eq!(skills[1].id, "openai::skill-creator");
+        assert_eq!(skills[1].name, "skill-creator");
+        assert!(skills[1]
+            .download_url
+            .contains("skills/.system/skill-creator"));
     }
 
     #[test]
@@ -1830,10 +1763,14 @@ mod tests {
             row.get::<String, _>("last_sync_status"),
             RegistrySyncStatus::Error.as_str()
         );
-        assert!(row
+        let last_sync_error = row
             .get::<Option<String>, _>("last_sync_error")
-            .unwrap_or_default()
-            .contains("Invalid GitHub URL"));
+            .unwrap_or_default();
+        assert!(
+            last_sync_error.contains("GitHub repository URL")
+                || last_sync_error.contains("github.com"),
+            "unexpected sync error: {last_sync_error}"
+        );
         assert!(row.get::<Option<String>, _>("last_synced").is_none());
 
         let cached_skills = search_marketplace_skills_impl(&pool, Some(registry.id.clone()), None)

@@ -34,17 +34,24 @@ const BROWSER_FIXTURE_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {
 interface SkillState {
   skillsByAgent: Record<string, ScannedSkill[]>;
   loadingByAgent: Record<string, boolean>;
+  pendingSkillActionKeys: Record<string, boolean>;
   error: string | null;
 
   // Actions
   getSkillsByAgent: (agentId: string) => Promise<void>;
+  uninstallSkillFromAgent: (skillId: string, agentId: string) => Promise<void>;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
+function skillActionKey(agentId: string, skillId: string) {
+  return `${agentId}::${skillId}`;
+}
+
 export const useSkillStore = create<SkillState>((set) => ({
   skillsByAgent: {},
   loadingByAgent: {},
+  pendingSkillActionKeys: {},
   error: null,
 
   /**
@@ -79,6 +86,55 @@ export const useSkillStore = create<SkillState>((set) => ({
         error: String(err),
         loadingByAgent: { ...state.loadingByAgent, [agentId]: false },
       }));
+    }
+  },
+
+  uninstallSkillFromAgent: async (skillId: string, agentId: string) => {
+    const actionKey = skillActionKey(agentId, skillId);
+    set((state) => ({
+      pendingSkillActionKeys: {
+        ...state.pendingSkillActionKeys,
+        [actionKey]: true,
+      },
+      error: null,
+    }));
+
+    if (!isTauriRuntime()) {
+      set((state) => {
+        const next = { ...state.pendingSkillActionKeys };
+        delete next[actionKey];
+        return {
+          pendingSkillActionKeys: next,
+          error: "Uninstalling skills requires the Tauri desktop runtime.",
+        };
+      });
+      return;
+    }
+
+    try {
+      await invoke("uninstall_skill_from_agent", { skillId, agentId });
+      const skills = await invoke<ScannedSkill[]>("get_skills_by_agent", {
+        agentId,
+      });
+
+      set((state) => {
+        const next = { ...state.pendingSkillActionKeys };
+        delete next[actionKey];
+        return {
+          skillsByAgent: { ...state.skillsByAgent, [agentId]: skills },
+          pendingSkillActionKeys: next,
+        };
+      });
+    } catch (err) {
+      set((state) => {
+        const next = { ...state.pendingSkillActionKeys };
+        delete next[actionKey];
+        return {
+          error: String(err),
+          pendingSkillActionKeys: next,
+        };
+      });
+      throw err;
     }
   },
 }));

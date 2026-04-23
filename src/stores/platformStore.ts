@@ -152,6 +152,7 @@ interface PlatformState {
   scanState: ScanState;
   isLoading: boolean;
   isRefreshing: boolean;
+  scanGeneration?: number;
   error: string | null;
 
   // Actions
@@ -179,13 +180,14 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   scanState: "idle",
   isLoading: false,
   isRefreshing: false,
+  scanGeneration: 0,
   error: null,
 
   hydrateShell: async () => {
     set({ isLoading: true, error: null });
 
     if (!isTauriRuntime()) {
-      set({
+      set((state) => ({
         agents: BROWSER_FIXTURE_AGENTS,
         skillsByAgent: BROWSER_FIXTURE_COUNTS.skills_by_agent,
         collectionCount: 0,
@@ -197,7 +199,8 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         lastScanAt: "2026-04-23T00:00:00.000Z",
         scanState: "idle",
         isLoading: false,
-      });
+        scanGeneration: (state.scanGeneration ?? 0) + 1,
+      }));
       return;
     }
 
@@ -208,14 +211,15 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
           key: PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY,
         }),
       ]);
-      set({
+      set((state) => ({
         ...applyBootstrapSnapshot(snapshot),
         categoryVisibility: resolvePlatformCategoryVisibility(
           rawCategoryVisibility,
           snapshot.agents
         ),
         isLoading: false,
-      });
+        scanGeneration: (state.scanGeneration ?? 0) + 1,
+      }));
       markAppPerformance("shell_ready");
     } catch (err) {
       set({ error: String(err), isLoading: false });
@@ -249,6 +253,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         scanState: "idle",
         error: null,
         isLoading: state.isLoading,
+        scanGeneration: (state.scanGeneration ?? 0) + 1,
       }));
       return;
     }
@@ -289,7 +294,10 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await get().refreshScanInBackground();
-      set({ isLoading: false });
+      set((state) => ({
+        isLoading: false,
+        scanGeneration: (state.scanGeneration ?? 0) + 1,
+      }));
     } catch (err) {
       set({ error: String(err), isLoading: false });
     }
@@ -305,6 +313,8 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         scanState: "idle",
         collectionCount: state.collectionCount,
         discoveredCount: state.discoveredCount,
+        scanGeneration: (state.scanGeneration ?? 0) + 1,
+        isLoading: state.isLoading,
       }));
       return;
     }
@@ -316,6 +326,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         isRefreshing: false,
         error: null,
         isLoading: state.isLoading,
+        scanGeneration: (state.scanGeneration ?? 0) + 1,
       }));
     } catch (err) {
       set({ error: String(err), isRefreshing: false, scanState: "error" });
