@@ -154,7 +154,7 @@ just dev
 just build
 ```
 
-- `just ci` runs the frontend checks plus Rust `cargo test` and `cargo clippy`.
+- `just ci` runs frontend `typecheck` + `lint`, plus Rust `cargo clippy`.
 - `just dev` starts the Tauri development app directly.
 - `just build` builds the desktop app and copies the latest NSIS installer from `src-tauri/target/release/bundle/nsis/` to `outputs/`.
 

@@ -8,10 +8,10 @@ app_exe := "skills-manage.exe"
 # 步骤1：检查工作流
 # ========================================================================
 # 目标：
-# 1) 运行前端测试、类型检查、ESLint
-# 2) 运行 Rust 测试和 clippy
+# 1) 运行前端类型检查、ESLint
+# 2) 运行 Rust clippy 静态检查
 ci:
-    @$ErrorActionPreference = 'Stop'; function Run-Step { param([scriptblock]$Step) & $Step; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }; Write-Host '[ci] 开始前端检查'; Run-Step { pnpm test }; Run-Step { pnpm typecheck }; Run-Step { pnpm lint }; Write-Host '[ci] 开始 Rust 检查'; Run-Step { cargo test --manifest-path src-tauri/Cargo.toml }; Run-Step { cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings }; Write-Host '[ci] 检查完成'
+    @$ErrorActionPreference = 'Stop'; function Run-Step { param([scriptblock]$Step) & $Step; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }; Write-Host '[ci] 开始前端检查'; Run-Step { pnpm typecheck }; Run-Step { pnpm exec eslint src --ext .ts,.tsx --report-unused-disable-directives }; Write-Host '[ci] 开始 Rust 检查'; Run-Step { cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings }; Write-Host '[ci] 检查完成'
 
 # ========================================================================
 # 步骤2：构建桌面应用

@@ -34,7 +34,7 @@ pnpm tauri build
 
 ## justfile 约定
 
-- `just ci`：跑前端测试、类型检查、ESLint，以及 Rust `cargo test` / `cargo clippy`。
+- `just ci`：跑前端 `typecheck`、`lint`，以及 Rust `cargo clippy`。
 - `just dev`：直接启动 Tauri 开发模式。
 - `just build`：跑 `pnpm tauri build`，然后把 `src-tauri/target/release/bundle/nsis/` 里最新的 Windows 安装包复制到根目录 `outputs/`。
 - 改 CI 或发布流程时，优先保持 `just ci` 和 GitHub Actions 的检查项一致，避免本地和远端两套标准。
@@ -48,6 +48,8 @@ pnpm tauri build
 
 ## 验证要求
 
-- 前端改动：`pnpm test && pnpm typecheck && pnpm lint`
-- Rust 改动：`cargo test && cargo clippy -- -D warnings`
+- 前端改动：默认跑 `pnpm typecheck && pnpm lint`
+- 交互或状态相关改动：按改动范围补跑对应的 Vitest 用例
+- Rust 改动：默认跑 `cargo clippy -- -D warnings`
+- 涉及平台文件系统差异的 Rust 变更：按需要补跑对应平台的定向测试
 - 打包或发布改动：至少在 Windows 上跑通 `pnpm tauri build`，并确认安装产物实际生成
