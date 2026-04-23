@@ -17,7 +17,7 @@ export function TopBar({ onSearchClick }: TopBarProps) {
 
   const agents = usePlatformStore((s) => s.agents);
   const skillsByAgent = usePlatformStore((s) => s.skillsByAgent);
-  const totalDiscovered = useDiscoverStore((s) => s.totalSkillsFound);
+  const totalDiscovered = usePlatformStore((s) => s.discoveredCount);
   const isScanning = useDiscoverStore((s) => s.isScanning);
 
   // Determine current view label and count

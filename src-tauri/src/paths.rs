@@ -122,7 +122,9 @@ mod tests {
         let central = central_skills_dir_from_home(Path::new(r"C:\Users\lyh"));
         assert_eq!(
             central,
-            PathBuf::from(r"C:\Users\lyh").join(".agents").join("skills")
+            PathBuf::from(r"C:\Users\lyh")
+                .join(".agents")
+                .join("skills")
         );
     }
 }

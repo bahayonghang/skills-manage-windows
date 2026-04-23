@@ -17,7 +17,7 @@ export function AppShell() {
   const startScan = useDiscoverStore((s) => s.startScan);
 
   useEffect(() => {
-    initialize();
+    void initialize().catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

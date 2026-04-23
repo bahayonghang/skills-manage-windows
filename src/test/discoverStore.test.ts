@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as tauriBridge from "@/lib/tauri";
-import { ScanRoot, DiscoveredProject, DiscoverResult, DiscoverImportResult } from "../types";
+import {
+  ScanRoot,
+  DiscoveredProject,
+  DiscoverResult,
+  DiscoverImportResult,
+  DiscoveredSummary,
+} from "../types";
 
 // Mock Tauri core before importing the store
 vi.mock("@tauri-apps/api/core", () => ({
@@ -10,6 +16,14 @@ vi.mock("@tauri-apps/api/core", () => ({
 // Mock Tauri event (used for streaming scan progress)
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(vi.fn()),
+}));
+
+vi.mock("@/stores/platformStore", () => ({
+  usePlatformStore: {
+    getState: () => ({
+      setDiscoveredCount: vi.fn(),
+    }),
+  },
 }));
 
 import { invoke } from "@tauri-apps/api/core";
@@ -59,6 +73,11 @@ const mockDiscoveredProjects: DiscoveredProject[] = [
 const mockImportResult: DiscoverImportResult = {
   skill_id: "deploy",
   target: "central",
+};
+
+const mockDiscoveredSummary: DiscoveredSummary = {
+  totalSkillsFound: 2,
+  totalProjectsFound: 1,
 };
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -266,6 +285,15 @@ describe("discoverStore", () => {
     const state = useDiscoverStore.getState();
     expect(state.discoveredProjects).toEqual(mockDiscoveredProjects);
     expect(state.totalSkillsFound).toBe(2);
+  });
+
+  it("refreshCounts uses the summary endpoint without loading the full project list", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(mockDiscoveredSummary);
+
+    await useDiscoverStore.getState().refreshCounts();
+
+    expect(invoke).toHaveBeenCalledWith("get_discovered_summary");
+    expect(useDiscoverStore.getState().totalSkillsFound).toBe(2);
   });
 
   it("sets error when loadDiscoveredSkills fails", async () => {

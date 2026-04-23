@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import { Collection, CollectionDetail, CollectionBatchInstallResult } from "@/types";
+import { usePlatformStore } from "@/stores/platformStore";
 
 const BROWSER_FIXTURE_COLLECTIONS: Collection[] = [
   {
@@ -71,11 +72,13 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     set({ isLoading: true, error: null });
     if (!isTauriRuntime()) {
       set({ collections: BROWSER_FIXTURE_COLLECTIONS, isLoading: false });
+      usePlatformStore.getState().setCollectionCount(BROWSER_FIXTURE_COLLECTIONS.length);
       return;
     }
     try {
       const collections = await invoke<Collection[]>("get_collections");
       set({ collections: collections ?? [], isLoading: false });
+      usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
     } catch (err) {
       set({ error: String(err), isLoading: false });
     }
@@ -91,6 +94,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       // Refresh collections list.
       const collections = await invoke<Collection[]>("get_collections");
       set({ collections: collections ?? [] });
+      usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       return collection;
     } catch (err) {
       set({ error: String(err) });
@@ -112,6 +116,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       // Refresh collections list.
       const collections = await invoke<Collection[]>("get_collections");
       set({ collections: collections ?? [] });
+      usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       // Also update currentDetail if it's for this collection.
       const { currentDetail } = get();
       if (currentDetail?.id === id) {
@@ -141,6 +146,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       // Refresh collections list.
       const collections = await invoke<Collection[]>("get_collections");
       set({ collections: collections ?? [] });
+      usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       // Clear currentDetail if it was for this collection.
       const { currentDetail } = get();
       if (currentDetail?.id === id) {
@@ -243,6 +249,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       // Refresh collections list.
       const collections = await invoke<Collection[]>("get_collections");
       set({ collections: collections ?? [] });
+      usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       return collection;
     } catch (err) {
       set({ error: String(err) });
@@ -253,11 +260,13 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   refreshCounts: async () => {
     if (!isTauriRuntime()) {
       set({ collections: BROWSER_FIXTURE_COLLECTIONS });
+      usePlatformStore.getState().setCollectionCount(BROWSER_FIXTURE_COLLECTIONS.length);
       return;
     }
     try {
       const collections = await invoke<Collection[]>("get_collections");
       set({ collections: collections ?? [] });
+      usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
     } catch (err) {
       set({ error: String(err) });
       throw err;

@@ -44,6 +44,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::bootstrap::get_bootstrap_snapshot,
+            commands::bootstrap::get_skill_counts_summary,
             // Scanner
             commands::scanner::scan_all_skills,
             // Agents
@@ -84,6 +86,7 @@ pub fn run() {
             // Discover
             commands::discover::discover_scan_roots,
             commands::discover::get_scan_roots,
+            commands::discover::get_discovered_summary,
             commands::discover::set_scan_root_enabled,
             commands::discover::start_project_scan,
             commands::discover::stop_project_scan,

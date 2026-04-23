@@ -1474,13 +1474,12 @@ pub async fn refresh_skill_explanation(
 #[cfg(test)]
 mod tests {
     use super::{
-        add_registry_impl, cache_skill_explanation, classify_reqwest_error,
-        central_skill_dir_for_name,
-        detect_explanation_api_protocol, format_reqwest_error, get_fallback_endpoint,
-        is_skill_installed_in_central,
-        load_cached_skill_explanation, registry_has_cached_skills, search_marketplace_skills_impl,
-        sync_registry_impl, ExplanationApiProtocol, ExplanationErrorKind, RegistryCacheMetadata,
-        RegistrySyncStatus, SyncRegistryOptions,
+        add_registry_impl, cache_skill_explanation, central_skill_dir_for_name,
+        classify_reqwest_error, detect_explanation_api_protocol, format_reqwest_error,
+        get_fallback_endpoint, is_skill_installed_in_central, load_cached_skill_explanation,
+        registry_has_cached_skills, search_marketplace_skills_impl, sync_registry_impl,
+        ExplanationApiProtocol, ExplanationErrorKind, RegistryCacheMetadata, RegistrySyncStatus,
+        SyncRegistryOptions,
     };
     use crate::db;
     use std::path::Path;

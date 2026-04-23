@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 use tauri::State;
 
 use crate::db::{self, Collection, DbPool, SkillForAgent};
@@ -54,6 +55,19 @@ pub struct SkillDetail {
     pub collections: Vec<Collection>,
 }
 
+#[derive(Debug, Clone, FromRow)]
+struct SkillWithAgentRow {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub file_path: String,
+    pub canonical_path: Option<String>,
+    pub is_central: bool,
+    pub source: Option<String>,
+    pub scanned_at: String,
+    pub linked_agent: Option<String>,
+}
+
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
 
 /// Testable core implementation of `get_skills_by_agent`.
@@ -85,24 +99,56 @@ pub async fn get_skills_by_agent(
 /// for that skill (regardless of whether the link type is symlink or copy).
 #[tauri::command]
 pub async fn get_central_skills(state: State<'_, AppState>) -> Result<Vec<SkillWithLinks>, String> {
-    let skills = db::get_central_skills(&state.db).await?;
+    get_central_skills_impl(&state.db).await
+}
 
-    let mut result = Vec::with_capacity(skills.len());
-    for skill in skills {
-        let installations = db::get_skill_installations(&state.db, &skill.id).await?;
-        let linked_agents: Vec<String> = installations.into_iter().map(|i| i.agent_id).collect();
+async fn get_central_skills_impl(pool: &DbPool) -> Result<Vec<SkillWithLinks>, String> {
+    let rows = sqlx::query_as::<_, SkillWithAgentRow>(
+        "SELECT s.id,
+                s.name,
+                s.description,
+                s.file_path,
+                s.canonical_path,
+                s.is_central,
+                s.source,
+                s.scanned_at,
+                si.agent_id AS linked_agent
+         FROM skills s
+         LEFT JOIN skill_installations si ON s.id = si.skill_id
+         WHERE s.is_central = 1
+         ORDER BY s.name, si.agent_id",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
 
-        result.push(SkillWithLinks {
-            id: skill.id,
-            name: skill.name,
-            description: skill.description,
-            file_path: skill.file_path,
-            canonical_path: skill.canonical_path,
-            is_central: skill.is_central,
-            source: skill.source,
-            scanned_at: skill.scanned_at,
-            linked_agents,
-        });
+    let mut result: Vec<SkillWithLinks> = Vec::new();
+    for row in rows {
+        match result.last_mut() {
+            Some(skill) if skill.id == row.id => {
+                if let Some(linked_agent) = row.linked_agent {
+                    skill.linked_agents.push(linked_agent);
+                }
+            }
+            _ => {
+                let mut linked_agents = Vec::new();
+                if let Some(linked_agent) = row.linked_agent {
+                    linked_agents.push(linked_agent);
+                }
+
+                result.push(SkillWithLinks {
+                    id: row.id,
+                    name: row.name,
+                    description: row.description,
+                    file_path: row.file_path,
+                    canonical_path: row.canonical_path,
+                    is_central: row.is_central,
+                    source: row.source,
+                    scanned_at: row.scanned_at,
+                    linked_agents,
+                });
+            }
+        }
     }
 
     Ok(result)
@@ -382,7 +428,10 @@ mod tests {
             !detail.installations[0].installed_at.is_empty(),
             "installed_at must be set"
         );
-        assert!(detail.collections.is_empty(), "skill should have no collections by default");
+        assert!(
+            detail.collections.is_empty(),
+            "skill should have no collections by default"
+        );
     }
 
     #[tokio::test]
@@ -405,7 +454,8 @@ mod tests {
             .unwrap();
 
         let detail = get_skill_detail_impl(&pool, "detail-skill").await.unwrap();
-        let collection_names: Vec<&str> = detail.collections.iter().map(|c| c.name.as_str()).collect();
+        let collection_names: Vec<&str> =
+            detail.collections.iter().map(|c| c.name.as_str()).collect();
 
         assert_eq!(collection_names, vec!["Alpha", "Beta"]);
     }

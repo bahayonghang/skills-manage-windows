@@ -76,6 +76,13 @@ pub struct DiscoverResult {
     pub projects: Vec<DiscoveredProject>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveredSummary {
+    pub total_skills_found: usize,
+    pub total_projects_found: usize,
+}
+
 /// Target for importing a discovered skill.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ImportTarget {
@@ -591,6 +598,20 @@ pub async fn stop_project_scan() -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub async fn get_discovered_summary(
+    state: State<'_, AppState>,
+) -> Result<DiscoveredSummary, String> {
+    let pool = &state.db;
+    let total_skills_found = db::get_discovered_skill_count(pool).await?;
+    let total_projects_found = db::get_discovered_project_count(pool).await?.max(0) as usize;
+
+    Ok(DiscoveredSummary {
+        total_skills_found,
+        total_projects_found,
+    })
+}
+
 /// Load previously discovered skills from the database, grouped by project.
 #[tauri::command]
 pub async fn get_discovered_skills(
@@ -601,6 +622,25 @@ pub async fn get_discovered_skills(
 
     // Convert DB rows to DiscoveredSkill structs, adding is_already_central.
     let central_dir = paths::central_skills_dir();
+    let central_skill_names: std::collections::HashSet<String> = std::fs::read_dir(&central_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.flatten())
+        .filter_map(|entry| {
+            let path = entry.path();
+            if path.is_dir() {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .map(|name| name.to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+    let platform_names: HashMap<String, String> = db::builtin_agents()
+        .into_iter()
+        .map(|agent| (agent.id, agent.display_name))
+        .collect();
 
     let skills: Vec<DiscoveredSkill> = rows
         .into_iter()
@@ -609,11 +649,7 @@ pub async fn get_discovered_skills(
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
-            // A discovered skill is "already central" if:
-            // 1. The skill directory name exists in the central skills dir, OR
-            // 2. There is a skill_installations record for this skill name
-            //    (meaning it's been installed to at least one platform).
-            let is_already_central = central_dir.join(skill_dir_name).exists();
+            let is_already_central = central_skill_names.contains(skill_dir_name);
             let platform_id = row.platform_id.clone();
 
             DiscoveredSkill {
@@ -623,12 +659,10 @@ pub async fn get_discovered_skills(
                 file_path: row.file_path,
                 dir_path: row.dir_path,
                 platform_id: platform_id.clone(),
-                // Look up display name from builtin agents.
-                platform_name: db::builtin_agents()
-                    .iter()
-                    .find(|a| a.id == platform_id)
-                    .map(|a| a.display_name.clone())
-                    .unwrap_or_else(|| platform_id),
+                platform_name: platform_names
+                    .get(&platform_id)
+                    .cloned()
+                    .unwrap_or_else(|| platform_id.clone()),
                 project_path: row.project_path,
                 project_name: row.project_name,
                 is_already_central,

@@ -33,6 +33,23 @@ export interface ScanResult {
   skills_by_agent: Record<string, number>;
 }
 
+export type ScanState = "idle" | "refreshing" | "error";
+
+export interface SkillCountsSummary {
+  cachedSkillCounts: Record<string, number>;
+  lastScanAt: string | null;
+  scanState: ScanState;
+}
+
+export interface BootstrapSnapshot {
+  agents: AgentWithStatus[];
+  cachedSkillCounts: Record<string, number>;
+  collectionCount: number;
+  discoveredCount: number;
+  lastScanAt: string | null;
+  scanState: ScanState;
+}
+
 export interface ScannedSkill {
   id: string;
   name: string;
@@ -159,6 +176,11 @@ export interface DiscoverResult {
   total_projects: number;
   total_skills: number;
   projects: DiscoveredProject[];
+}
+
+export interface DiscoveredSummary {
+  totalSkillsFound: number;
+  totalProjectsFound: number;
 }
 
 export interface DiscoverProgressPayload {

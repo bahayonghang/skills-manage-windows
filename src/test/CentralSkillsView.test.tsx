@@ -141,12 +141,21 @@ function buildPlatformStoreState(overrides = {}) {
   return {
     agents: mockAgents,
     skillsByAgent: {},
+    collectionCount: 0,
+    discoveredCount: 0,
+    lastScanAt: "2026-04-23T01:00:00Z",
+    scanState: "idle",
     isLoading: false,
     isRefreshing: false,
     error: null,
     initialize: vi.fn(),
+    hydrateShell: vi.fn(),
+    refreshScanInBackground: vi.fn(),
     rescan: mockRescan,
     refreshCounts: mockRescan,
+    applyScanSummary: vi.fn(),
+    setCollectionCount: vi.fn(),
+    setDiscoveredCount: vi.fn(),
     ...overrides,
   };
 }

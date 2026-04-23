@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { UnlistenFn } from "@tauri-apps/api/event";
 import {
+  DiscoveredSummary,
   ScanRoot,
   DiscoveredProject,
   DiscoverResult,
@@ -10,6 +11,7 @@ import {
   DiscoverImportResult,
 } from "@/types";
 import { invoke, listen, isTauriRuntime } from "@/lib/tauri";
+import { usePlatformStore } from "@/stores/platformStore";
 
 const BROWSER_FIXTURE_DISCOVERED_PROJECTS: DiscoveredProject[] = [
   {
@@ -126,6 +128,9 @@ async function setupEventListeners(set: (fn: Partial<DiscoverState> | ((s: Disco
         totalSkillsFound: totalSkills,
       };
     });
+    usePlatformStore
+      .getState()
+      .setDiscoveredCount(useDiscoverStore.getState().totalSkillsFound);
   });
 
   unlistenComplete = await listen<DiscoverCompletePayload>("discover:complete", () => {
@@ -210,6 +215,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       error: null,
       selectedSkillIds: new Set<string>(),
     });
+    usePlatformStore.getState().setDiscoveredCount(0);
 
     // Set up event listeners for streaming updates.
     await setupEventListeners(set);
@@ -226,6 +232,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         totalSkillsFound: result.total_skills,
         lastScanAt: new Date().toISOString(),
       });
+      usePlatformStore.getState().setDiscoveredCount(result.total_skills);
     } catch (err) {
       set({
         isScanning: false,
@@ -252,6 +259,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         discoveredProjects: BROWSER_FIXTURE_DISCOVERED_PROJECTS,
         totalSkillsFound: 1,
       });
+      usePlatformStore.getState().setDiscoveredCount(1);
       return;
     }
     try {
@@ -261,6 +269,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         discoveredProjects: projects,
         totalSkillsFound: totalSkills,
       });
+      usePlatformStore.getState().setDiscoveredCount(totalSkills);
     } catch (err) {
       set({ error: String(err) });
     }
@@ -272,15 +281,15 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         discoveredProjects: BROWSER_FIXTURE_DISCOVERED_PROJECTS,
         totalSkillsFound: 1,
       });
+      usePlatformStore.getState().setDiscoveredCount(1);
       return;
     }
     try {
-      const projects = await invoke<DiscoveredProject[]>("get_discovered_skills");
-      const totalSkills = projects.reduce((sum, p) => sum + p.skills.length, 0);
+      const summary = await invoke<DiscoveredSummary>("get_discovered_summary");
       set({
-        discoveredProjects: projects,
-        totalSkillsFound: totalSkills,
+        totalSkillsFound: summary.totalSkillsFound,
       });
+      usePlatformStore.getState().setDiscoveredCount(summary.totalSkillsFound);
     } catch (err) {
       set({ error: String(err) });
       throw err;
@@ -313,6 +322,9 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
           selectedSkillIds: newSelection,
         };
       });
+      usePlatformStore
+        .getState()
+        .setDiscoveredCount(useDiscoverStore.getState().totalSkillsFound);
       return result;
     } catch (err) {
       set({ error: String(err) });
@@ -349,6 +361,7 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
         lastScanAt: null,
         selectedSkillIds: new Set<string>(),
       });
+      usePlatformStore.getState().setDiscoveredCount(0);
     } catch (err) {
       set({ error: String(err) });
     }

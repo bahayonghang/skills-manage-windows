@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use sqlx::{Sqlite, Transaction};
 use tauri::State;
 
 use crate::db::{self, DbPool, Skill, SkillInstallation};
@@ -41,6 +42,17 @@ pub struct ScanResult {
     pub total_skills: usize,
     pub agents_scanned: usize,
     pub skills_by_agent: HashMap<String, usize>,
+}
+
+#[derive(Debug, Clone)]
+struct DirectorySkillEntry {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub file_path: String,
+    pub dir_path: String,
+    pub is_symlink: bool,
+    pub symlink_target: Option<String>,
 }
 
 // ─── Core Functions ───────────────────────────────────────────────────────────
@@ -100,66 +112,269 @@ pub fn detect_link_type(path: &Path, is_central_dir: bool) -> (String, Option<St
     }
 }
 
-/// Walk `dir` one level deep, looking for immediate subdirectories that contain
-/// a `SKILL.md` file. For each such subdirectory, `parse_skill_md` and
-/// `detect_link_type` are called to build a `ScannedSkill`.
-///
-/// Entries that cannot be read or lack valid frontmatter are silently skipped.
-pub fn scan_directory(dir: &Path, is_central: bool) -> Vec<ScannedSkill> {
+fn inspect_directory_entry(path: &Path) -> (bool, Option<String>) {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => {
+            let target = std::fs::read_link(path)
+                .ok()
+                .and_then(|target| target.to_str().map(|value| value.to_string()));
+            (true, target)
+        }
+        _ => (false, None),
+    }
+}
+
+fn build_scanned_skill(entry: &DirectorySkillEntry, is_central: bool) -> ScannedSkill {
+    let link_type = if entry.is_symlink {
+        "symlink".to_string()
+    } else if is_central {
+        "native".to_string()
+    } else {
+        "copy".to_string()
+    };
+
+    ScannedSkill {
+        id: entry.id.clone(),
+        name: entry.name.clone(),
+        description: entry.description.clone(),
+        file_path: entry.file_path.clone(),
+        dir_path: entry.dir_path.clone(),
+        link_type,
+        symlink_target: entry.symlink_target.clone(),
+        is_central,
+    }
+}
+
+fn scan_directory_entries(dir: &Path) -> Vec<DirectorySkillEntry> {
     let mut skills = Vec::new();
 
     let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
+        Ok(entries) => entries,
         Err(_) => return skills,
     };
 
     for entry in entries.flatten() {
         let entry_path = entry.path();
 
-        // Use regular metadata (follows symlinks) to check if this is a dir.
         let meta = match std::fs::metadata(&entry_path) {
-            Ok(m) => m,
+            Ok(meta) => meta,
             Err(_) => continue,
         };
         if !meta.is_dir() {
             continue;
         }
 
-        // Only include entries that contain a SKILL.md file.
         let skill_md_path = entry_path.join("SKILL.md");
         if !skill_md_path.exists() {
             continue;
         }
 
-        // Parse frontmatter; skip entries with invalid/missing frontmatter.
         let info = match parse_skill_md(&skill_md_path) {
-            Some(i) => i,
+            Some(info) => info,
             None => continue,
         };
 
-        // Detect link type using lstat on the skill directory itself.
-        let (link_type, symlink_target) = detect_link_type(&entry_path, is_central);
-
-        // Derive a stable ID from the directory name.
+        let (is_symlink, symlink_target) = inspect_directory_entry(&entry_path);
         let id = entry_path
             .file_name()
-            .and_then(|n| n.to_str())
-            .map(|s| s.to_lowercase().replace(' ', "-"))
+            .and_then(|name| name.to_str())
+            .map(|value| value.to_lowercase().replace(' ', "-"))
             .unwrap_or_else(|| "unknown".to_string());
 
-        skills.push(ScannedSkill {
+        skills.push(DirectorySkillEntry {
             id,
             name: info.name,
             description: info.description,
             file_path: skill_md_path.to_string_lossy().into_owned(),
             dir_path: entry_path.to_string_lossy().into_owned(),
-            link_type,
+            is_symlink,
             symlink_target,
-            is_central,
         });
     }
 
     skills
+}
+
+fn normalize_scan_key(dir: &Path) -> String {
+    let normalized = dir
+        .canonicalize()
+        .unwrap_or_else(|_| dir.to_path_buf())
+        .to_string_lossy()
+        .into_owned();
+
+    #[cfg(target_os = "windows")]
+    {
+        normalized.to_lowercase()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        normalized
+    }
+}
+
+async fn upsert_skill_in_tx(tx: &mut Transaction<'_, Sqlite>, skill: &Skill) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO skills
+         (id, name, description, file_path, canonical_path, is_central, source, content, scanned_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name           = excluded.name,
+           description    = excluded.description,
+           file_path      = excluded.file_path,
+           canonical_path = COALESCE(excluded.canonical_path, skills.canonical_path),
+           is_central     = MAX(skills.is_central, excluded.is_central),
+           source         = excluded.source,
+           content        = excluded.content,
+           scanned_at     = excluded.scanned_at",
+    )
+    .bind(&skill.id)
+    .bind(&skill.name)
+    .bind(&skill.description)
+    .bind(&skill.file_path)
+    .bind(&skill.canonical_path)
+    .bind(skill.is_central)
+    .bind(&skill.source)
+    .bind(&skill.content)
+    .bind(&skill.scanned_at)
+    .execute(&mut **tx)
+    .await
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+async fn upsert_skill_installation_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    installation: &SkillInstallation,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO skill_installations
+         (skill_id, agent_id, installed_path, link_type, symlink_target, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(skill_id, agent_id) DO UPDATE SET
+           installed_path = excluded.installed_path,
+           link_type      = excluded.link_type,
+           symlink_target = excluded.symlink_target",
+    )
+    .bind(&installation.skill_id)
+    .bind(&installation.agent_id)
+    .bind(&installation.installed_path)
+    .bind(&installation.link_type)
+    .bind(&installation.symlink_target)
+    .bind(&installation.created_at)
+    .execute(&mut **tx)
+    .await
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+async fn update_agent_detected_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    agent_id: &str,
+    is_detected: bool,
+) -> Result<(), String> {
+    sqlx::query("UPDATE agents SET is_detected = ? WHERE id = ?")
+        .bind(is_detected)
+        .bind(agent_id)
+        .execute(&mut **tx)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+async fn delete_stale_skill_installations_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    agent_id: &str,
+    found_skill_ids: &[String],
+) -> Result<(), String> {
+    if found_skill_ids.is_empty() {
+        return sqlx::query("DELETE FROM skill_installations WHERE agent_id = ?")
+            .bind(agent_id)
+            .execute(&mut **tx)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string());
+    }
+
+    let placeholders = found_skill_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "DELETE FROM skill_installations WHERE agent_id = ? AND skill_id NOT IN ({})",
+        placeholders
+    );
+
+    let mut query = sqlx::query(&sql).bind(agent_id);
+    for skill_id in found_skill_ids {
+        query = query.bind(skill_id.as_str());
+    }
+
+    query
+        .execute(&mut **tx)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+async fn delete_skills_not_in_scope_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    found_skill_ids: &[String],
+) -> Result<(), String> {
+    if found_skill_ids.is_empty() {
+        sqlx::query("DELETE FROM skill_installations")
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        return sqlx::query("DELETE FROM skills")
+            .execute(&mut **tx)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string());
+    }
+
+    let placeholders = found_skill_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(",");
+    let installation_sql = format!(
+        "DELETE FROM skill_installations WHERE skill_id NOT IN ({})",
+        placeholders
+    );
+    let mut installation_query = sqlx::query(&installation_sql);
+    for skill_id in found_skill_ids {
+        installation_query = installation_query.bind(skill_id.as_str());
+    }
+    installation_query
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let skill_sql = format!("DELETE FROM skills WHERE id NOT IN ({})", placeholders);
+    let mut skill_query = sqlx::query(&skill_sql);
+    for skill_id in found_skill_ids {
+        skill_query = skill_query.bind(skill_id.as_str());
+    }
+    skill_query
+        .execute(&mut **tx)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Walk `dir` one level deep, looking for immediate subdirectories that contain
+/// a `SKILL.md` file. For each such subdirectory, `parse_skill_md` and
+/// `detect_link_type` are called to build a `ScannedSkill`.
+///
+/// Entries that cannot be read or lack valid frontmatter are silently skipped.
+pub fn scan_directory(dir: &Path, is_central: bool) -> Vec<ScannedSkill> {
+    scan_directory_entries(dir)
+        .into_iter()
+        .map(|entry| build_scanned_skill(&entry, is_central))
+        .collect()
 }
 
 // ─── Tauri Command ────────────────────────────────────────────────────────────
@@ -169,88 +384,104 @@ pub fn scan_directory(dir: &Path, is_central: bool) -> Vec<ScannedSkill> {
 pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
     let agents = db::get_all_agents(pool).await?;
     let custom_dirs = db::get_scan_directories(pool).await?;
+    let cached_install_counts = db::get_skill_counts_by_agent(pool).await?;
+    let scan_started_at = Utc::now().to_rfc3339();
 
     let mut total_skills: usize = 0;
     let mut skills_by_agent: HashMap<String, usize> = HashMap::new();
-
-    // Accumulate every skill ID discovered in this scan so we can purge stale
-    // rows from the database once all directories have been walked.
     let mut all_found_skill_ids: HashSet<String> = HashSet::new();
+    let mut grouped_agent_dirs: HashMap<String, (PathBuf, Vec<&db::Agent>)> = HashMap::new();
 
-    // ── Per-agent scans ───────────────────────────────────────────────────────
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
     for agent in &agents {
         let dir = Path::new(&agent.global_skills_dir);
-        let is_central = agent.category == "central";
-
         if !dir.exists() {
-            // Mark agent as not detected and record zero count.
-            let _ = db::update_agent_detected(pool, &agent.id, false).await;
+            update_agent_detected_in_tx(&mut tx, &agent.id, false).await?;
             skills_by_agent.insert(agent.id.clone(), 0);
-            // Remove every installation row for this agent — the directory is gone.
-            let _ = db::delete_stale_skill_installations(pool, &agent.id, &[]).await;
+
+            if cached_install_counts.get(&agent.id).copied().unwrap_or(0) > 0 {
+                delete_stale_skill_installations_in_tx(&mut tx, &agent.id, &[]).await?;
+            }
             continue;
         }
 
-        let _ = db::update_agent_detected(pool, &agent.id, true).await;
-        let scanned = scan_directory(dir, is_central);
-
-        let found_ids: Vec<String> = scanned.iter().map(|s| s.id.clone()).collect();
-
-        for skill in &scanned {
-            all_found_skill_ids.insert(skill.id.clone());
-            let now = Utc::now().to_rfc3339();
-
-            let db_skill = Skill {
-                id: skill.id.clone(),
-                name: skill.name.clone(),
-                description: skill.description.clone(),
-                file_path: skill.file_path.clone(),
-                canonical_path: if is_central {
-                    Some(skill.dir_path.clone())
-                } else {
-                    None
-                },
-                is_central,
-                source: Some(skill.link_type.clone()),
-                content: None,
-                scanned_at: now.clone(),
-            };
-            db::upsert_skill(pool, &db_skill).await?;
-
-            // Bug fix: store the skill *directory* path, not the SKILL.md file path.
-            let installation = SkillInstallation {
-                skill_id: skill.id.clone(),
-                agent_id: agent.id.clone(),
-                installed_path: skill.dir_path.clone(),
-                link_type: skill.link_type.clone(),
-                symlink_target: skill.symlink_target.clone(),
-                created_at: now.clone(),
-            };
-            db::upsert_skill_installation(pool, &installation).await?;
-        }
-
-        // Reconciliation: remove installation rows for skills no longer present
-        // in this agent's directory.
-        db::delete_stale_skill_installations(pool, &agent.id, &found_ids).await?;
-
-        let count = scanned.len();
-        total_skills += count;
-        skills_by_agent.insert(agent.id.clone(), count);
+        let key = normalize_scan_key(dir);
+        grouped_agent_dirs
+            .entry(key)
+            .or_insert_with(|| (dir.to_path_buf(), Vec::new()))
+            .1
+            .push(agent);
     }
 
-    // ── Custom scan directories ───────────────────────────────────────────────
-    // Skills found in user-added directories are added to the `skills` table
-    // but are not attributed to a specific agent installation record.
-    for scan_dir in custom_dirs.iter().filter(|d| d.is_active) {
+    for (_, (dir_path, grouped_agents)) in grouped_agent_dirs {
+        let scanned_entries = scan_directory_entries(&dir_path);
+        let found_ids: Vec<String> = scanned_entries
+            .iter()
+            .map(|skill| skill.id.clone())
+            .collect();
+
+        for agent in grouped_agents {
+            let is_central = agent.category == "central";
+            update_agent_detected_in_tx(&mut tx, &agent.id, true).await?;
+
+            for entry in &scanned_entries {
+                let skill = build_scanned_skill(entry, is_central);
+                all_found_skill_ids.insert(skill.id.clone());
+
+                let db_skill = Skill {
+                    id: skill.id.clone(),
+                    name: skill.name.clone(),
+                    description: skill.description.clone(),
+                    file_path: skill.file_path.clone(),
+                    canonical_path: if is_central {
+                        Some(skill.dir_path.clone())
+                    } else {
+                        None
+                    },
+                    is_central,
+                    source: Some(skill.link_type.clone()),
+                    content: None,
+                    scanned_at: scan_started_at.clone(),
+                };
+                upsert_skill_in_tx(&mut tx, &db_skill).await?;
+
+                let installation = SkillInstallation {
+                    skill_id: skill.id.clone(),
+                    agent_id: agent.id.clone(),
+                    installed_path: skill.dir_path.clone(),
+                    link_type: skill.link_type.clone(),
+                    symlink_target: skill.symlink_target.clone(),
+                    created_at: scan_started_at.clone(),
+                };
+                upsert_skill_installation_in_tx(&mut tx, &installation).await?;
+            }
+
+            delete_stale_skill_installations_in_tx(&mut tx, &agent.id, &found_ids).await?;
+
+            let count = scanned_entries.len();
+            total_skills += count;
+            skills_by_agent.insert(agent.id.clone(), count);
+        }
+    }
+
+    let mut seen_custom_dirs = HashSet::new();
+    for scan_dir in custom_dirs.iter().filter(|dir| dir.is_active) {
         let dir = Path::new(&scan_dir.path);
         if !dir.exists() {
             continue;
         }
 
-        let scanned = scan_directory(dir, false);
-        for skill in &scanned {
+        let scan_key = normalize_scan_key(dir);
+        if !seen_custom_dirs.insert(scan_key) {
+            continue;
+        }
+
+        let scanned_entries = scan_directory_entries(dir);
+        for entry in &scanned_entries {
+            let skill = build_scanned_skill(entry, false);
             all_found_skill_ids.insert(skill.id.clone());
-            let now = Utc::now().to_rfc3339();
+
             let db_skill = Skill {
                 id: skill.id.clone(),
                 name: skill.name.clone(),
@@ -260,19 +491,16 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                 is_central: false,
                 source: Some(skill.link_type.clone()),
                 content: None,
-                scanned_at: now,
+                scanned_at: scan_started_at.clone(),
             };
-            db::upsert_skill(pool, &db_skill).await?;
+            upsert_skill_in_tx(&mut tx, &db_skill).await?;
         }
-        total_skills += scanned.len();
+        total_skills += scanned_entries.len();
     }
 
-    // ── Global reconciliation ─────────────────────────────────────────────────
-    // Remove skills (and their installation records) that were not found in
-    // any scanned scope during this run. This purges rows left behind when
-    // skills are deleted from disk between scans.
     let found_ids_vec: Vec<String> = all_found_skill_ids.into_iter().collect();
-    db::delete_skills_not_in_scope(pool, &found_ids_vec).await?;
+    delete_skills_not_in_scope_in_tx(&mut tx, &found_ids_vec).await?;
+    tx.commit().await.map_err(|e| e.to_string())?;
 
     Ok(ScanResult {
         total_skills,
@@ -285,7 +513,20 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
 /// SQLite. Returns a `ScanResult` with per-agent skill counts.
 #[tauri::command]
 pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, String> {
-    scan_all_skills_impl(&state.db).await
+    let _ = db::set_setting(&state.db, "scan_state", "refreshing").await;
+
+    match scan_all_skills_impl(&state.db).await {
+        Ok(result) => {
+            let completed_at = Utc::now().to_rfc3339();
+            let _ = db::set_setting(&state.db, "scan_last_completed_at", &completed_at).await;
+            let _ = db::set_setting(&state.db, "scan_state", "idle").await;
+            Ok(result)
+        }
+        Err(error) => {
+            let _ = db::set_setting(&state.db, "scan_state", "error").await;
+            Err(error)
+        }
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -785,6 +1026,52 @@ mod tests {
             .await
             .unwrap();
         assert!(skill.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_scan_all_skills_impl_reuses_shared_directory_for_codex_and_central() {
+        use crate::db;
+
+        let shared_dir = TempDir::new().unwrap();
+        let pool = setup_test_db().await;
+        let shared_path = shared_dir.path().to_string_lossy().into_owned();
+
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id IN ('codex', 'central')")
+            .bind(&shared_path)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        create_skill_dir(
+            shared_dir.path(),
+            "shared-skill",
+            &valid_skill_md("Shared Skill", "Shared"),
+        );
+
+        let result = scan_all_skills_impl(&pool).await.unwrap();
+        assert_eq!(result.skills_by_agent.get("codex").copied(), Some(1));
+        assert_eq!(result.skills_by_agent.get("central").copied(), Some(1));
+
+        let installations = db::get_skill_installations(&pool, "shared-skill")
+            .await
+            .unwrap();
+        assert_eq!(
+            installations.len(),
+            2,
+            "shared skill should be mapped to both agents"
+        );
+        assert!(
+            installations
+                .iter()
+                .any(|installation| installation.agent_id == "codex"),
+            "codex installation should be present"
+        );
+        assert!(
+            installations
+                .iter()
+                .any(|installation| installation.agent_id == "central"),
+            "central installation should be present"
+        );
     }
 
     #[tokio::test]

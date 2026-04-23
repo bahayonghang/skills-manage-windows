@@ -4,6 +4,7 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
     FromRow, Row, SqlitePool,
 };
+use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -128,6 +129,14 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_installations_agent_id
+         ON skill_installations(agent_id)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     // Migration: add created_at column to skill_installations for existing databases
     // that were created before this column was introduced. We check via PRAGMA table_info
     // and run a two-step migration only when the column is absent:
@@ -178,6 +187,14 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
             is_builtin         BOOLEAN NOT NULL DEFAULT 1,
             is_enabled         BOOLEAN NOT NULL DEFAULT 1
         )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skills_is_central
+         ON skills(is_central)",
     )
     .execute(pool)
     .await
@@ -250,6 +267,22 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
             platform_id    TEXT NOT NULL,
             discovered_at  TEXT NOT NULL
         )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_discovered_skills_project_path
+         ON discovered_skills(project_path)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_discovered_skills_platform_id
+         ON discovered_skills(platform_id)",
     )
     .execute(pool)
     .await
@@ -1140,6 +1173,47 @@ pub async fn get_skill_installations(
         .map_err(|e| e.to_string())
 }
 
+/// Retrieve cached installation counts for every agent.
+pub async fn get_skill_counts_by_agent(pool: &DbPool) -> Result<HashMap<String, usize>, String> {
+    let rows = sqlx::query(
+        "SELECT agent_id, COUNT(*) AS cnt
+         FROM skill_installations
+         GROUP BY agent_id",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut counts = HashMap::with_capacity(rows.len());
+    for row in rows {
+        let agent_id: String = row.try_get("agent_id").map_err(|e| e.to_string())?;
+        let count: i64 = row.try_get("cnt").map_err(|e| e.to_string())?;
+        counts.insert(agent_id, count.max(0) as usize);
+    }
+
+    Ok(counts)
+}
+
+/// Retrieve the total number of collections.
+pub async fn get_collection_count(pool: &DbPool) -> Result<usize, String> {
+    let row = sqlx::query("SELECT COUNT(*) AS cnt FROM collections")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    let count: i64 = row.try_get("cnt").map_err(|e| e.to_string())?;
+    Ok(count.max(0) as usize)
+}
+
+/// Retrieve the total number of discovered skills.
+pub async fn get_discovered_skill_count(pool: &DbPool) -> Result<usize, String> {
+    let row = sqlx::query("SELECT COUNT(*) AS cnt FROM discovered_skills")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    let count: i64 = row.try_get("cnt").map_err(|e| e.to_string())?;
+    Ok(count.max(0) as usize)
+}
+
 // ─── Agents ───────────────────────────────────────────────────────────────────
 
 /// Retrieve all agents.
@@ -1380,7 +1454,10 @@ pub async fn get_collection_skills(
 }
 
 /// Retrieve all collections that contain a given skill.
-pub async fn get_skill_collections(pool: &DbPool, skill_id: &str) -> Result<Vec<Collection>, String> {
+pub async fn get_skill_collections(
+    pool: &DbPool,
+    skill_id: &str,
+) -> Result<Vec<Collection>, String> {
     sqlx::query_as::<_, Collection>(
         "SELECT c.* FROM collections c
          JOIN collection_skills cs ON c.id = cs.collection_id
@@ -2177,10 +2254,12 @@ mod tests {
     #[tokio::test]
     async fn test_reinit_updates_stale_builtin_agent_paths() {
         let pool = setup_test_db().await;
-        sqlx::query("UPDATE agents SET global_skills_dir = '/tmp/.agents/skills' WHERE id = 'central'")
-            .execute(&pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "UPDATE agents SET global_skills_dir = '/tmp/.agents/skills' WHERE id = 'central'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         init_database(&pool).await.unwrap();
 
@@ -2213,7 +2292,9 @@ mod tests {
         init_database(&pool).await.unwrap();
 
         let dirs = get_scan_directories(&pool).await.unwrap();
-        let central_path = crate::paths::central_skills_dir().to_string_lossy().into_owned();
+        let central_path = crate::paths::central_skills_dir()
+            .to_string_lossy()
+            .into_owned();
         assert!(
             dirs.iter().any(|dir| dir.path == central_path),
             "reinit should seed the resolved central skills path"

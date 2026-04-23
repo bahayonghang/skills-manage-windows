@@ -9,10 +9,21 @@ vi.mock("../stores/platformStore", () => ({
     const state = {
       agents: [],
       skillsByAgent: {},
+      collectionCount: 0,
+      discoveredCount: 0,
+      lastScanAt: null,
+      scanState: "idle",
       isLoading: false,
+      isRefreshing: false,
       error: null,
-      initialize: vi.fn(),
-      rescan: vi.fn(),
+      initialize: vi.fn().mockResolvedValue(undefined),
+      hydrateShell: vi.fn().mockResolvedValue(undefined),
+      refreshScanInBackground: vi.fn().mockResolvedValue(undefined),
+      rescan: vi.fn().mockResolvedValue(undefined),
+      refreshCounts: vi.fn().mockResolvedValue(undefined),
+      applyScanSummary: vi.fn(),
+      setCollectionCount: vi.fn(),
+      setDiscoveredCount: vi.fn(),
     };
     if (typeof selector === "function") {
       return selector(state);

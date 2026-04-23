@@ -12,9 +12,8 @@ import {
 import { useTranslation } from "react-i18next";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { usePlatformStore } from "@/stores/platformStore";
-import { useCollectionStore } from "@/stores/collectionStore";
-import { useDiscoverStore } from "@/stores/discoverStore";
 import { cn } from "@/lib/utils";
+import { markAppPerformance } from "@/lib/performance";
 
 // ─── Nav Item ────────────────────────────────────────────────────────────────
 
@@ -79,20 +78,23 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { t } = useTranslation();
-  const { agents, skillsByAgent, isLoading } = usePlatformStore();
-
-  const collections = useCollectionStore((s) => s.collections);
-  const loadCollections = useCollectionStore((s) => s.loadCollections);
-
-  const totalDiscovered = useDiscoverStore((s) => s.totalSkillsFound);
-  const loadDiscoveredSkills = useDiscoverStore((s) => s.loadDiscoveredSkills);
+  const {
+    agents,
+    skillsByAgent,
+    collectionCount,
+    discoveredCount,
+    isLoading,
+    isRefreshing,
+    scanState,
+  } = usePlatformStore();
 
   const [expanded, setExpanded] = useState(true);
 
   useEffect(() => {
-    loadCollections();
-    loadDiscoveredSkills();
-  }, [loadCollections, loadDiscoveredSkills]);
+    if (!isLoading && agents.length > 0) {
+      markAppPerformance("sidebar_ready");
+    }
+  }, [agents.length, isLoading]);
 
   const platformAgents = agents.filter(
     (a) => a.id !== "central" && a.is_enabled
@@ -162,7 +164,7 @@ export function Sidebar() {
           onClick={() => navigate("/discover")}
           icon={<Radar className="size-4" />}
           expanded={expanded}
-          count={totalDiscovered}
+          count={discoveredCount}
         />
 
         {/* Marketplace */}
@@ -181,7 +183,7 @@ export function Sidebar() {
           onClick={handleCollectionClick}
           icon={<Layers className="size-4" />}
           expanded={expanded}
-          count={collections.length}
+          count={collectionCount}
         />
 
         {/* Divider */}
@@ -246,6 +248,16 @@ export function Sidebar() {
               </>
             )}
           </>
+        )}
+
+        {!isLoading && (isRefreshing || scanState === "refreshing") && (
+          <div className={cn(
+            "flex items-center py-2 text-muted-foreground text-sm",
+            expanded ? "gap-2 px-2.5" : "justify-center"
+          )}>
+            <Loader2 className="size-4 animate-spin shrink-0" />
+            {expanded && <span>{t("sidebar.scanning")}</span>}
+          </div>
         )}
       </div>
 
