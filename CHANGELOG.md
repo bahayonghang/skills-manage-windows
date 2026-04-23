@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.9.0 - 2026-04-23
+
+Cross-platform merge release focused on upstream 0.9.0 compatibility while keeping this fork's Windows installer contract.
+
+### Features
+
+- Merge upstream 0.9.0 Windows and macOS packaging work so release builds can produce Windows NSIS, Windows MSI, Windows ZIP, and macOS universal DMG/ZIP/TAR.GZ assets.
+- Add source-aware Claude rows, detail loading, and explanation continuity across platform lists, drawers, and refresh flows.
+- Add Windows-friendly path rendering helpers in both backend and frontend surfaces, including home-path compaction in UI.
+
+### Fixes
+
+- Keep this fork's `~/.agents/skills` Windows-first path rules while absorbing upstream home expansion and cross-platform path utilities into the existing `paths.rs` module.
+- Add automatic copy fallback when Windows cannot create a symlink during platform install or import flows.
+- Propagate full rescans across central, platform, and discover stores so counts and row state stay aligned after refresh.
+- Preserve local bootstrap hydration, platform visibility toggles, and agent enablement while extending the data model with Claude source-specific row identity.
+
 ## 0.8.2 - 2026-04-23
 
 Patch release focused on cached shell hydration, cheaper refreshes, and smoother large skill lists.

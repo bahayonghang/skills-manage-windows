@@ -15,6 +15,7 @@
 ## Highlights
 
 - Central skill library plus per-platform install and uninstall flows.
+- Claude Code can surface native skills and read-only marketplace plugin skills in one platform view.
 - Full skill detail view with Markdown preview, raw source view, and AI explanation generation.
 - Collections for organizing skills and batch-installing them to platforms.
 - Discover scan for project-level skill libraries on local disks.
@@ -51,7 +52,7 @@
 ## Download
 
 - Latest release: <https://github.com/iamzhihuix/skills-manage/releases/latest>
-- Current prebuilt packages: Apple Silicon macOS (`.dmg` and `.app.zip`)
+- Current prebuilt packages: Windows x64 (`.exe`, `.msi`, `.zip`) and macOS Universal (`.dmg`, `.zip`, `.tar.gz`)
 - Other platforms: run from source for now
 
 ### macOS Unsigned Build
@@ -106,6 +107,8 @@ Then launch the app again from Finder. If your app is stored somewhere else, rep
 | Lobster | WorkBuddy (打工搭子) | `~/.workbuddy/skills-marketplace/skills/` |
 | Central | Central Skills | `~/.agents/skills/` |
 
+> Note: Claude Code also surfaces marketplace plugin directories under `~/.claude/plugins/marketplaces/*` as read-only rows in the Claude view. Those entries are display-only and are not managed like native skills in `~/.claude/skills/`.
+
 Custom platforms can be added through Settings.
 
 ## Privacy & Security
@@ -154,7 +157,7 @@ just dev
 just build
 ```
 
-- `just ci` runs frontend `typecheck` + `lint`, plus Rust `cargo clippy`.
+- `just ci` runs frontend `typecheck` + `lint`, plus Rust `cargo test` and `cargo clippy`.
 - `just dev` starts the Tauri development app directly.
 - `just build` builds the desktop app and copies the latest NSIS installer from `src-tauri/target/release/bundle/nsis/` to `outputs/`.
 

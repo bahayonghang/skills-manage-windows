@@ -2,6 +2,23 @@
 
 本文件记录该项目的重要变更。
 
+## 0.9.0 - 2026-04-23
+
+这次版本把上游 0.9.0 合进当前 fork，同时保留 Windows 安装包优先的发布契约。
+
+### 新功能
+
+- 合并上游 0.9.0 的桌面打包链路，让 release 构建可产出 Windows NSIS、Windows MSI、Windows ZIP，以及 macOS universal DMG/ZIP/TAR.GZ。
+- 为 Claude 多来源技能补齐 source-aware 平台行、详情加载和 explanation 连续性。
+- 在前后端补齐 Windows 友好的路径展示能力，包括 UI 里的 home 路径压缩显示。
+
+### 修复
+
+- 保留当前 fork 的 `~/.agents/skills` Windows 路径规则，同时把上游 home 展开和跨平台路径工具吸收到现有 `paths.rs` 模块。
+- 在 Windows 无法创建符号链接时，平台安装和导入链路可自动回退到 copy。
+- 让全量重扫同时刷新 central、platform、discover 三条状态链，避免计数和行状态不同步。
+- 保留本地 bootstrap hydration、平台可见性和 agent 启停能力，同时把 Claude source-specific 行标识整合进现有数据模型。
+
 ## 0.8.2 - 2026-04-23
 
 这个补丁版本主要收敛启动缓存、轻量刷新和大列表渲染成本。

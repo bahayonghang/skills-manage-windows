@@ -51,7 +51,7 @@
 ## 下载
 
 - 最新发布：<https://github.com/iamzhihuix/skills-manage/releases/latest>
-- 当前已提供的预编译安装包：Apple Silicon macOS（`.dmg` 和 `.app.zip`）
+- 当前已提供的预编译安装包：Windows x64（`.exe`、`.msi`、`.zip`）和 macOS Universal（`.dmg`、`.zip`、`.tar.gz`）
 - 其他平台：当前请从源码运行
 
 ### macOS 未签名构建说明
@@ -106,6 +106,8 @@ xattr -dr com.apple.quarantine "/Applications/skills-manage.app"
 | Lobster | WorkBuddy（打工搭子） | `~/.workbuddy/skills-marketplace/skills/` |
 | Central | 中央技能库 | `~/.agents/skills/` |
 
+> 说明：Claude Code 还会把 `~/.claude/plugins/marketplaces/*` 下的 marketplace plugin 目录显示成只读行。这些条目只做展示，不按 `~/.claude/skills/` 里的原生技能那套方式管理。
+
 也可以在 Settings 中添加自定义平台。
 
 ## 隐私与安全
@@ -154,7 +156,7 @@ just dev
 just build
 ```
 
-- `just ci` 会运行前端 `typecheck`、`lint`，以及 Rust 的 `cargo clippy`。
+- `just ci` 会运行前端 `typecheck`、`lint`，以及 Rust 的 `cargo test` 和 `cargo clippy`。
 - `just dev` 会直接启动 Tauri 开发应用。
 - `just build` 会构建桌面应用，并把 `src-tauri/target/release/bundle/nsis/` 里最新的 NSIS 安装包复制到 `outputs/`。
 
