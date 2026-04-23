@@ -1,6 +1,6 @@
 [package]
 name = "skills-manage"
-version = "0.8.2"
+version = "0.8.3"
 description = "AI Agent Skills Manager"
 authors = ["iamzhihuix"]
 license = "Apache-2.0"

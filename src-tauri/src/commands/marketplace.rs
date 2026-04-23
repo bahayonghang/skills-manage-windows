@@ -114,7 +114,7 @@ async fn fetch_github_skills(
 ) -> Result<Vec<MarketplaceSkill>, String> {
     let (owner, repo) = parse_github_url(url)?;
     let client = reqwest::Client::builder()
-        .user_agent("skills-manage/0.8.0")
+        .user_agent(crate::commands::APP_USER_AGENT)
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -622,7 +622,7 @@ pub async fn install_marketplace_skill(
 
     // Download SKILL.md content
     let client = reqwest::Client::builder()
-        .user_agent("skills-manage/0.8.0")
+        .user_agent(crate::commands::APP_USER_AGENT)
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -843,7 +843,7 @@ pub async fn explain_skill(state: State<'_, AppState>, content: String) -> Resul
         .unwrap_or_else(|| "claude-sonnet-4-20250514".to_string());
 
     let client = reqwest::Client::builder()
-        .user_agent("skills-manage/0.8.0")
+        .user_agent(crate::commands::APP_USER_AGENT)
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(60))
         .build()
@@ -1198,7 +1198,7 @@ async fn do_explain_skill_stream(
 
     // Streaming: only connect_timeout (total `.timeout()` would kill long streams).
     let client = reqwest::Client::builder()
-        .user_agent("skills-manage/0.8.0")
+        .user_agent(crate::commands::APP_USER_AGENT)
         .connect_timeout(Duration::from_secs(10))
         .pool_idle_timeout(Duration::from_secs(90))
         .build()

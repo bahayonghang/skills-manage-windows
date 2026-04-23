@@ -8,3 +8,5 @@ pub mod marketplace;
 pub mod scanner;
 pub mod settings;
 pub mod skills;
+
+pub const APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));

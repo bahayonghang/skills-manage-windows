@@ -655,7 +655,7 @@ async fn github_direct_auth_from_settings(pool: &DbPool) -> Result<Option<String
 
 fn github_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .user_agent("skills-manage/0.8.0")
+        .user_agent(crate::commands::APP_USER_AGENT)
         .build()
         .map_err(|e| e.to_string())
 }
