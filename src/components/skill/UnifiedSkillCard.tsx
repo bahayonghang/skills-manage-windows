@@ -11,7 +11,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
-import type { MouseEventHandler, Ref } from "react";
+import { memo, useMemo, type MouseEventHandler, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 // ─── Platform Toggle Icon (internal) ──────────────────────────────────────────
 
-function PlatformToggleIcon({
+const PlatformToggleIcon = memo(function PlatformToggleIcon({
   agent,
   skillName,
   isLinked,
@@ -51,7 +51,8 @@ function PlatformToggleIcon({
       <PlatformIcon agentId={agent.id} className="size-4 shrink-0" size={16} />
     </button>
   );
-}
+});
+PlatformToggleIcon.displayName = "PlatformToggleIcon";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -100,7 +101,7 @@ export interface UnifiedSkillCardProps {
 
 // ─── UnifiedSkillCard ─────────────────────────────────────────────────────────
 
-export function UnifiedSkillCard(props: UnifiedSkillCardProps) {
+function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   const { t } = useTranslation();
   const {
     name,
@@ -132,8 +133,18 @@ export function UnifiedSkillCard(props: UnifiedSkillCardProps) {
   const hasActions = !!(onDetail || onInstallTo || onInstallToCentral || onInstallToPlatform || onInstall || onRemove);
 
   // Split agents by category for platform icons
-  const lobsterAgents = platformIcons?.agents.filter((a) => a.id !== "central" && a.category === "lobster") ?? [];
-  const codingAgents = platformIcons?.agents.filter((a) => a.id !== "central" && a.category !== "lobster") ?? [];
+  const lobsterAgents = useMemo(
+    () => platformIcons?.agents.filter((a) => a.id !== "central" && a.category === "lobster") ?? [],
+    [platformIcons?.agents]
+  );
+  const codingAgents = useMemo(
+    () => platformIcons?.agents.filter((a) => a.id !== "central" && a.category !== "lobster") ?? [],
+    [platformIcons?.agents]
+  );
+  const linkedAgentSet = useMemo(
+    () => new Set(platformIcons?.linkedAgents ?? []),
+    [platformIcons?.linkedAgents]
+  );
 
   // ── Platform variant: clickable card style ──
   if (onClick && !hasActions && !hasCheckbox && !hasPlatformIcons) {
@@ -336,7 +347,7 @@ export function UnifiedSkillCard(props: UnifiedSkillCardProps) {
                         key={agent.id}
                         agent={agent}
                         skillName={name}
-                        isLinked={platformIcons.linkedAgents.includes(agent.id)}
+                        isLinked={linkedAgentSet.has(agent.id)}
                         isToggling={platformIcons.togglingAgentId === agent.id}
                         onToggle={() => platformIcons.onToggle(platformIcons.skillId, agent.id)}
                       />
@@ -355,7 +366,7 @@ export function UnifiedSkillCard(props: UnifiedSkillCardProps) {
                         key={agent.id}
                         agent={agent}
                         skillName={name}
-                        isLinked={platformIcons.linkedAgents.includes(agent.id)}
+                        isLinked={linkedAgentSet.has(agent.id)}
                         isToggling={platformIcons.togglingAgentId === agent.id}
                         onToggle={() => platformIcons.onToggle(platformIcons.skillId, agent.id)}
                       />
@@ -370,6 +381,9 @@ export function UnifiedSkillCard(props: UnifiedSkillCardProps) {
     </div>
   );
 }
+
+export const UnifiedSkillCard = memo(UnifiedSkillCardComponent);
+UnifiedSkillCard.displayName = "UnifiedSkillCard";
 
 // ─── Source Indicator (internal) ──────────────────────────────────────────────
 

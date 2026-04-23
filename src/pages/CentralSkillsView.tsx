@@ -16,8 +16,10 @@ import { AgentWithStatus, BatchInstallResult, SkillWithLinks } from "@/types";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
+import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 import { isTauriRuntime } from "@/lib/tauri";
+import { markAppPerformance } from "@/lib/performance";
 
 const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
   {
@@ -191,6 +193,7 @@ export function CentralSkillsView() {
   const [githubRepoUrl, setGitHubRepoUrl] = useState("");
   const contentRef = useRef<HTMLDivElement | null>(null);
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const hasMarkedCentralListReady = useRef(false);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const effectiveSearchQuery =
     skills.length > 80 ? deferredSearchQuery : searchQuery;
@@ -225,6 +228,13 @@ export function CentralSkillsView() {
     if (!isSearchActive || !contentRef.current) return;
     contentRef.current.scrollTop = 0;
   }, [isSearchActive, normalizedSearchQuery]);
+
+  useEffect(() => {
+    if (!isLoading && skills.length > 0 && !hasMarkedCentralListReady.current) {
+      hasMarkedCentralListReady.current = true;
+      markAppPerformance("central_list_ready");
+    }
+  }, [isLoading, skills.length]);
 
   function handleInstallClick(skill: SkillWithLinks) {
     setInstallTargetSkill(skill);
@@ -338,6 +348,27 @@ export function CentralSkillsView() {
     );
   }
 
+  function renderGridCard(skill: SkillWithLinks) {
+    return (
+      <UnifiedSkillCard
+        key={skill.id}
+        name={skill.name}
+        description={skill.description}
+        onDetail={() => handleOpenDrawer(skill.id)}
+        onInstallTo={() => handleInstallClick(skill)}
+        detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
+        platformIcons={{
+          agents,
+          linkedAgents: skill.linked_agents,
+          skillId: skill.id,
+          onToggle: handleTogglePlatform,
+          togglingAgentId,
+        }}
+        className="h-[188px]"
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -402,25 +433,22 @@ export function CentralSkillsView() {
               {filteredSkills.map((skill) => renderSearchResult(skill))}
             </div>
           )
+        ) : filteredSkills.length > 40 ? (
+          <VirtualizedGrid
+            items={filteredSkills}
+            itemHeight={188}
+            rowGap={16}
+            columnGap={16}
+            overscanRows={3}
+            minColumnWidth={420}
+            maxColumns={2}
+            scrollContainerRef={contentRef}
+            itemKey={(skill) => skill.id}
+            renderItem={(skill) => renderGridCard(skill)}
+          />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {filteredSkills.map((skill) => (
-              <UnifiedSkillCard
-                key={skill.id}
-                name={skill.name}
-                description={skill.description}
-                onDetail={() => handleOpenDrawer(skill.id)}
-                onInstallTo={() => handleInstallClick(skill)}
-                detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
-                platformIcons={{
-                  agents,
-                  linkedAgents: skill.linked_agents,
-                  skillId: skill.id,
-                  onToggle: handleTogglePlatform,
-                  togglingAgentId,
-                }}
-              />
-            ))}
+            {filteredSkills.map((skill) => renderGridCard(skill))}
           </div>
         )}
       </div>

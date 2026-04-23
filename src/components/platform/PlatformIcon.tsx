@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 
 // Real app icons extracted from /Applications/*.app
@@ -49,7 +50,13 @@ const APP_ICONS: Record<string, { src: string; alt: string }> = {
   "hermes": { src: hermesIcon, alt: "Hermes" },
 };
 
-const LOBEHUB_ICONS: Record<string, React.ComponentType<{ size?: number | string; className?: string }>> = {
+const LOBEHUB_ICONS: Record<
+  string,
+  React.ComponentType<{
+    size?: number | string;
+    className?: string;
+  }>
+> = {
   "claude-code": ClaudeCodeIcon,
   "copilot": GithubCopilotIcon,
   "gemini-cli": GeminiCliIcon,
@@ -67,7 +74,7 @@ interface PlatformIconProps {
   size?: number;
 }
 
-export function PlatformIcon({ agentId, className, size = 16 }: PlatformIconProps) {
+function PlatformIconComponent({ agentId, className, size = 16 }: PlatformIconProps) {
   // Use real app icon PNG if available
   const appIcon = APP_ICONS[agentId];
   if (appIcon) {
@@ -86,7 +93,13 @@ export function PlatformIcon({ agentId, className, size = 16 }: PlatformIconProp
   // Use lobehub real product icon if available
   const LobeIcon = LOBEHUB_ICONS[agentId];
   if (LobeIcon) {
-    return <LobeIcon size={size} className={cn("shrink-0", className)} />;
+    return (
+      <LobeIcon
+        size={size}
+        className={cn("shrink-0", className)}
+        {...({ "aria-hidden": true } as Record<string, unknown>)}
+      />
+    );
   }
 
   // Fall back to custom SVGs for remaining platforms
@@ -147,3 +160,6 @@ export function PlatformIcon({ agentId, className, size = 16 }: PlatformIconProp
       );
   }
 }
+
+export const PlatformIcon = memo(PlatformIconComponent);
+PlatformIcon.displayName = "PlatformIcon";

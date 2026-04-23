@@ -11,6 +11,7 @@ import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { InstallDialog } from "@/components/central/InstallDialog";
+import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { SkillWithLinks } from "@/types";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
@@ -58,15 +59,14 @@ export function PlatformView() {
     }
   }, [agentId, getSkillsByAgent]);
 
-  // Ensure central skills are loaded so we can resolve SkillWithLinks for InstallDialog.
-  useEffect(() => {
+  async function handleInstallClick(skillId: string) {
     if (centralSkills.length === 0) {
-      loadCentralSkills();
+      await loadCentralSkills();
     }
-  }, [centralSkills.length, loadCentralSkills]);
 
-  function handleInstallClick(skillId: string) {
-    const target = centralSkills.find((s) => s.id === skillId);
+    const target = useCentralSkillsStore
+      .getState()
+      .skills.find((skill) => skill.id === skillId);
     if (!target) {
       toast.error(t("central.installError", { error: t("platform.notFound") }));
       return;
@@ -166,6 +166,30 @@ export function PlatformView() {
           <EmptyState
             message={t("platform.noMatch", { query: searchQuery })}
           />
+        ) : filteredSkills.length > 40 ? (
+          <VirtualizedGrid
+            items={filteredSkills}
+            itemHeight={132}
+            rowGap={16}
+            columnGap={16}
+            overscanRows={3}
+            minColumnWidth={420}
+            maxColumns={2}
+            scrollContainerRef={contentRef}
+            itemKey={(skill) => skill.id}
+            renderItem={(skill) => (
+              <UnifiedSkillCard
+                key={skill.id}
+                name={skill.name}
+                description={skill.description}
+                sourceType={skill.link_type as "symlink" | "copy"}
+                onDetail={() => handleOpenDrawer(skill.id)}
+                onInstallTo={() => void handleInstallClick(skill.id)}
+                detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
+                className="h-[132px]"
+              />
+            )}
+          />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {filteredSkills.map((skill) => (
@@ -175,7 +199,7 @@ export function PlatformView() {
                 description={skill.description}
                 sourceType={skill.link_type as "symlink" | "copy"}
                 onDetail={() => handleOpenDrawer(skill.id)}
-                onInstallTo={() => handleInstallClick(skill.id)}
+                onInstallTo={() => void handleInstallClick(skill.id)}
                 detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
               />
             ))}

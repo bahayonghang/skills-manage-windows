@@ -94,12 +94,21 @@ function buildPlatformStoreState(overrides = {}) {
   return {
     agents: [mockAgent],
     skillsByAgent: { "claude-code": 2 },
+    collectionCount: 0,
+    discoveredCount: 0,
+    lastScanAt: "2026-04-23T01:00:00Z",
+    scanState: "idle",
     isLoading: false,
     isRefreshing: false,
     error: null,
     initialize: vi.fn(),
+    hydrateShell: vi.fn(),
+    refreshScanInBackground: vi.fn(),
     rescan: vi.fn(),
     refreshCounts: vi.fn(),
+    applyScanSummary: vi.fn(),
+    setCollectionCount: vi.fn(),
+    setDiscoveredCount: vi.fn(),
     ...overrides,
   };
 }
@@ -125,6 +134,8 @@ function buildCentralSkillsStoreState(overrides = {}) {
 }
 
 function installDefaultStoreMocks() {
+  let currentCentralState = buildCentralSkillsStoreState();
+
   mockUsePlatformStore.mockImplementation((selector?: unknown) => {
     const state = buildPlatformStoreState();
     if (typeof selector === "function") return selector(state);
@@ -136,9 +147,15 @@ function installDefaultStoreMocks() {
     return state;
   });
   mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
-    const state = buildCentralSkillsStoreState();
-    if (typeof selector === "function") return selector(state);
-    return state;
+    if (typeof selector === "function") return selector(currentCentralState);
+    return currentCentralState;
+  });
+
+  Object.assign(mockUseCentralSkillsStore, {
+    getState: () => currentCentralState,
+    setState: (nextState: Partial<typeof currentCentralState>) => {
+      currentCentralState = { ...currentCentralState, ...nextState };
+    },
   });
 }
 
@@ -347,6 +364,21 @@ describe("PlatformView", () => {
   it("calls getSkillsByAgent on mount", () => {
     renderPlatformView();
     expect(mockGetSkillsByAgent).toHaveBeenCalledWith("claude-code");
+  });
+
+  it("does not preload central skills before the install dialog is opened", () => {
+    renderPlatformView();
+    expect(mockLoadCentralSkills).not.toHaveBeenCalled();
+  });
+
+  it("loads central skills on demand when install is requested", async () => {
+    renderPlatformView();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /将 .* 安装到平台/i })[0]);
+
+    await waitFor(() => {
+      expect(mockLoadCentralSkills).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("opens the skill detail drawer without navigating away", async () => {
