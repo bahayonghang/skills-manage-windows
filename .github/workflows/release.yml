@@ -46,6 +46,7 @@ jobs:
         run: |
           pnpm typecheck
           pnpm exec eslint src --ext .ts,.tsx --report-unused-disable-directives
+          cargo test --manifest-path src-tauri/Cargo.toml
           cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
   build:
