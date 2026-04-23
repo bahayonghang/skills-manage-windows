@@ -1160,8 +1160,12 @@ where
 
     for endpoint in GITHUB_MIRROR_ENDPOINTS {
         let url = build_url(endpoint);
-        let mut request = client.get(url);
-        if endpoint.label == "github" {
+        let mut request = client.get(&url);
+        let mirrors_share_same_url = GITHUB_MIRROR_ENDPOINTS
+            .iter()
+            .filter(|candidate| candidate.label != "github")
+            .any(|candidate| build_url(candidate) == url);
+        if endpoint.label == "github" && !mirrors_share_same_url {
             if let Some(token) = auth_token {
                 request = request.bearer_auth(token);
             }

@@ -557,7 +557,7 @@ mod tests {
         fs::create_dir_all(&deep_dir).unwrap();
         fs::write(
             deep_dir.join("SKILL.md"),
-            &valid_skill_md("Deep Skill", "too deep"),
+            valid_skill_md("Deep Skill", "too deep"),
         )
         .unwrap();
 
@@ -744,10 +744,18 @@ mod tests {
 
         scan_all_skills_impl(&pool).await.unwrap();
 
-        // Not is_central because agent id is "central-test", not "central"
-        // (the "central" agent points to a non-existent dir in CI)
         let skill = db::get_skill_by_id(&pool, "canon-skill").await.unwrap();
         assert!(skill.is_some());
+        assert!(
+            skill.unwrap().is_central,
+            "skills scanned from a category=central agent must be marked central"
+        );
+
+        let central_skills = db::get_central_skills(&pool).await.unwrap();
+        assert!(
+            central_skills.iter().any(|skill| skill.id == "canon-skill"),
+            "scan_all_skills should make the scanned central skill visible to Central Skills queries"
+        );
     }
 
     #[tokio::test]

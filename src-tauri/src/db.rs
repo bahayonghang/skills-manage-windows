@@ -4,6 +4,7 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
     FromRow, Row, SqlitePool,
 };
+use std::path::Path;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -542,14 +543,29 @@ async fn ensure_column(
 
 /// Returns the list of built-in agents using the current user's home directory.
 pub fn builtin_agents() -> Vec<Agent> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    builtin_agents_for_home(&crate::paths::resolve_home_dir())
+}
+
+fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
+    let central_skills_dir = crate::paths::central_skills_dir_from_home(home)
+        .to_string_lossy()
+        .into_owned();
+
+    let skill_dir = |segments: &[&str]| -> String {
+        segments
+            .iter()
+            .fold(home.to_path_buf(), |path, segment| path.join(segment))
+            .to_string_lossy()
+            .into_owned()
+    };
+
     vec![
         // ── Coding platforms ─────────────────────────────────────────────────
         Agent {
             id: "claude-code".to_string(),
             display_name: "Claude Code".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.claude/skills", home),
+            global_skills_dir: skill_dir(&[".claude", "skills"]),
             project_skills_dir: None,
             icon_name: Some("claude".to_string()),
             is_detected: false,
@@ -560,7 +576,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "codex".to_string(),
             display_name: "Codex CLI".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.agents/skills", home),
+            global_skills_dir: central_skills_dir.clone(),
             project_skills_dir: None,
             icon_name: Some("codex".to_string()),
             is_detected: false,
@@ -571,7 +587,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "cursor".to_string(),
             display_name: "Cursor".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.cursor/skills", home),
+            global_skills_dir: skill_dir(&[".cursor", "skills"]),
             project_skills_dir: None,
             icon_name: Some("cursor".to_string()),
             is_detected: false,
@@ -582,7 +598,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "gemini-cli".to_string(),
             display_name: "Gemini CLI".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.gemini/skills", home),
+            global_skills_dir: skill_dir(&[".gemini", "skills"]),
             project_skills_dir: None,
             icon_name: Some("gemini".to_string()),
             is_detected: false,
@@ -593,7 +609,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "trae".to_string(),
             display_name: "Trae".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.trae/skills", home),
+            global_skills_dir: skill_dir(&[".trae", "skills"]),
             project_skills_dir: None,
             icon_name: Some("trae".to_string()),
             is_detected: false,
@@ -604,7 +620,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "factory-droid".to_string(),
             display_name: "Factory Droid".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.factory/skills", home),
+            global_skills_dir: skill_dir(&[".factory", "skills"]),
             project_skills_dir: None,
             icon_name: Some("factory".to_string()),
             is_detected: false,
@@ -615,7 +631,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "junie".to_string(),
             display_name: "Junie".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.junie/skills", home),
+            global_skills_dir: skill_dir(&[".junie", "skills"]),
             project_skills_dir: None,
             icon_name: Some("junie".to_string()),
             is_detected: false,
@@ -626,7 +642,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "qwen".to_string(),
             display_name: "Qwen".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.qwen/skills", home),
+            global_skills_dir: skill_dir(&[".qwen", "skills"]),
             project_skills_dir: None,
             icon_name: Some("qwen".to_string()),
             is_detected: false,
@@ -637,7 +653,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "trae-cn".to_string(),
             display_name: "Trae CN".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.trae-cn/skills", home),
+            global_skills_dir: skill_dir(&[".trae-cn", "skills"]),
             project_skills_dir: None,
             icon_name: Some("trae-cn".to_string()),
             is_detected: false,
@@ -648,7 +664,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "windsurf".to_string(),
             display_name: "Windsurf".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.windsurf/skills", home),
+            global_skills_dir: skill_dir(&[".windsurf", "skills"]),
             project_skills_dir: None,
             icon_name: Some("windsurf".to_string()),
             is_detected: false,
@@ -659,7 +675,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "qoder".to_string(),
             display_name: "Qoder".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.qoder/skills", home),
+            global_skills_dir: skill_dir(&[".qoder", "skills"]),
             project_skills_dir: None,
             icon_name: Some("qoder".to_string()),
             is_detected: false,
@@ -670,7 +686,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "augment".to_string(),
             display_name: "Augment".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.augment/skills", home),
+            global_skills_dir: skill_dir(&[".augment", "skills"]),
             project_skills_dir: None,
             icon_name: Some("augment".to_string()),
             is_detected: false,
@@ -681,7 +697,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "opencode".to_string(),
             display_name: "OpenCode".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.opencode/skills", home),
+            global_skills_dir: skill_dir(&[".opencode", "skills"]),
             project_skills_dir: None,
             icon_name: Some("opencode".to_string()),
             is_detected: false,
@@ -692,7 +708,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "kilocode".to_string(),
             display_name: "KiloCode".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.kilocode/skills", home),
+            global_skills_dir: skill_dir(&[".kilocode", "skills"]),
             project_skills_dir: None,
             icon_name: Some("kilocode".to_string()),
             is_detected: false,
@@ -703,7 +719,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "ob1".to_string(),
             display_name: "OB1".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.ob1/skills", home),
+            global_skills_dir: skill_dir(&[".ob1", "skills"]),
             project_skills_dir: None,
             icon_name: Some("ob1".to_string()),
             is_detected: false,
@@ -714,7 +730,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "amp".to_string(),
             display_name: "Amp".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.amp/skills", home),
+            global_skills_dir: skill_dir(&[".amp", "skills"]),
             project_skills_dir: None,
             icon_name: Some("amp".to_string()),
             is_detected: false,
@@ -725,7 +741,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "kiro".to_string(),
             display_name: "Kiro".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.kiro/skills", home),
+            global_skills_dir: skill_dir(&[".kiro", "skills"]),
             project_skills_dir: None,
             icon_name: Some("kiro".to_string()),
             is_detected: false,
@@ -736,7 +752,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "codebuddy".to_string(),
             display_name: "CodeBuddy".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.codebuddy/skills", home),
+            global_skills_dir: skill_dir(&[".codebuddy", "skills"]),
             project_skills_dir: None,
             icon_name: Some("codebuddy".to_string()),
             is_detected: false,
@@ -747,7 +763,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "hermes".to_string(),
             display_name: "Hermes".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.hermes/skills", home),
+            global_skills_dir: skill_dir(&[".hermes", "skills"]),
             project_skills_dir: None,
             icon_name: Some("hermes".to_string()),
             is_detected: false,
@@ -758,7 +774,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "copilot".to_string(),
             display_name: "Copilot".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.copilot/skills", home),
+            global_skills_dir: skill_dir(&[".copilot", "skills"]),
             project_skills_dir: None,
             icon_name: Some("copilot".to_string()),
             is_detected: false,
@@ -769,7 +785,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "aider".to_string(),
             display_name: "Aider".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: format!("{}/.aider/skills", home),
+            global_skills_dir: skill_dir(&[".aider", "skills"]),
             project_skills_dir: None,
             icon_name: Some("aider".to_string()),
             is_detected: false,
@@ -781,7 +797,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "openclaw".to_string(),
             display_name: "OpenClaw".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.openclaw/skills", home),
+            global_skills_dir: skill_dir(&[".openclaw", "skills"]),
             project_skills_dir: None,
             icon_name: Some("openclaw".to_string()),
             is_detected: false,
@@ -792,7 +808,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "qclaw".to_string(),
             display_name: "QClaw".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.qclaw/skills", home),
+            global_skills_dir: skill_dir(&[".qclaw", "skills"]),
             project_skills_dir: None,
             icon_name: Some("qclaw".to_string()),
             is_detected: false,
@@ -803,7 +819,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "easyclaw".to_string(),
             display_name: "EasyClaw".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.easyclaw/skills", home),
+            global_skills_dir: skill_dir(&[".easyclaw", "skills"]),
             project_skills_dir: None,
             icon_name: Some("easyclaw".to_string()),
             is_detected: false,
@@ -814,7 +830,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "autoclaw".to_string(),
             display_name: "AutoClaw".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.openclaw-autoclaw/skills", home),
+            global_skills_dir: skill_dir(&[".openclaw-autoclaw", "skills"]),
             project_skills_dir: None,
             icon_name: Some("autoclaw".to_string()),
             is_detected: false,
@@ -825,7 +841,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "workbuddy".to_string(),
             display_name: "WorkBuddy".to_string(),
             category: "lobster".to_string(),
-            global_skills_dir: format!("{}/.workbuddy/skills-marketplace/skills", home),
+            global_skills_dir: skill_dir(&[".workbuddy", "skills-marketplace", "skills"]),
             project_skills_dir: None,
             icon_name: Some("workbuddy".to_string()),
             is_detected: false,
@@ -837,7 +853,7 @@ pub fn builtin_agents() -> Vec<Agent> {
             id: "central".to_string(),
             display_name: "Central Skills".to_string(),
             category: "central".to_string(),
-            global_skills_dir: format!("{}/.agents/skills", home),
+            global_skills_dir: central_skills_dir,
             project_skills_dir: None,
             icon_name: Some("central".to_string()),
             is_detected: false,
@@ -1940,9 +1956,11 @@ mod tests {
             .unwrap()
             .expect("WorkBuddy agent should exist");
         assert_eq!(wb.display_name, "WorkBuddy");
+        let expected_suffix = Path::new(".workbuddy")
+            .join("skills-marketplace")
+            .join("skills");
         assert!(
-            wb.global_skills_dir
-                .contains(".workbuddy/skills-marketplace/skills"),
+            Path::new(&wb.global_skills_dir).ends_with(&expected_suffix),
             "WorkBuddy should scan ~/.workbuddy/skills-marketplace/skills, got: {}",
             wb.global_skills_dir
         );
@@ -1957,8 +1975,9 @@ mod tests {
             .expect("AutoClaw agent should exist");
         assert_eq!(ac.display_name, "AutoClaw");
         assert_eq!(ac.category, "lobster");
+        let expected_suffix = Path::new(".openclaw-autoclaw").join("skills");
         assert!(
-            ac.global_skills_dir.contains(".openclaw-autoclaw/skills"),
+            Path::new(&ac.global_skills_dir).ends_with(&expected_suffix),
             "AutoClaw should scan ~/.openclaw-autoclaw/skills, got: {}",
             ac.global_skills_dir
         );
@@ -2152,6 +2171,56 @@ mod tests {
             dirs.len(),
             builtin_count,
             "Repeated init must not create duplicate scan directory rows"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_reinit_updates_stale_builtin_agent_paths() {
+        let pool = setup_test_db().await;
+        sqlx::query("UPDATE agents SET global_skills_dir = '/tmp/.agents/skills' WHERE id = 'central'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        init_database(&pool).await.unwrap();
+
+        let central = get_agent_by_id(&pool, "central")
+            .await
+            .unwrap()
+            .expect("central agent should exist");
+        assert_eq!(
+            central.global_skills_dir,
+            crate::paths::central_skills_dir().to_string_lossy()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_reinit_replaces_stale_builtin_scan_directory_paths() {
+        let pool = setup_test_db().await;
+        sqlx::query("DELETE FROM scan_directories WHERE is_builtin = 1")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO scan_directories (path, label, is_active, is_builtin, added_at)
+             VALUES ('/tmp/.agents/skills', 'Central Skills', 1, 1, ?)",
+        )
+        .bind(Utc::now().to_rfc3339())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        init_database(&pool).await.unwrap();
+
+        let dirs = get_scan_directories(&pool).await.unwrap();
+        let central_path = crate::paths::central_skills_dir().to_string_lossy().into_owned();
+        assert!(
+            dirs.iter().any(|dir| dir.path == central_path),
+            "reinit should seed the resolved central skills path"
+        );
+        assert!(
+            !dirs.iter().any(|dir| dir.path == "/tmp/.agents/skills"),
+            "stale /tmp builtin scan directory should be removed"
         );
     }
 

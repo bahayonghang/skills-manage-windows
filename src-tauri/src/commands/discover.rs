@@ -8,6 +8,7 @@ use serde_json;
 use tauri::{Emitter, State};
 
 use crate::db::{self, DbPool};
+use crate::paths;
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -97,26 +98,26 @@ static SCAN_CANCEL: AtomicBool = AtomicBool::new(false);
 
 /// Returns a list of candidate scan roots, checking which ones exist on disk.
 fn default_scan_roots() -> Vec<ScanRoot> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let home = paths::resolve_home_dir();
     let candidates = vec![
-        (format!("{}/projects", home), "projects"),
-        (format!("{}/Documents", home), "Documents"),
-        (format!("{}/Developer", home), "Developer"),
-        (format!("{}/work", home), "work"),
-        (format!("{}/src", home), "src"),
-        (format!("{}/code", home), "code"),
-        (format!("{}/repos", home), "repos"),
-        (format!("{}/Desktop", home), "Desktop"),
+        (home.join("projects"), "projects"),
+        (home.join("Documents"), "Documents"),
+        (home.join("Developer"), "Developer"),
+        (home.join("work"), "work"),
+        (home.join("src"), "src"),
+        (home.join("code"), "code"),
+        (home.join("repos"), "repos"),
+        (home.join("Desktop"), "Desktop"),
         // macOS: scan /Applications for apps with built-in skills (e.g. OpenClaw)
-        ("/Applications".to_string(), "Applications"),
+        (PathBuf::from("/Applications"), "Applications"),
     ];
 
     candidates
         .into_iter()
         .map(|(path, label)| {
-            let exists = Path::new(&path).exists();
+            let exists = path.exists();
             ScanRoot {
-                path,
+                path: path.to_string_lossy().into_owned(),
                 label: label.to_string(),
                 exists,
                 enabled: exists, // auto-enable roots that exist
@@ -132,7 +133,7 @@ fn platform_skill_patterns(_pool: &DbPool) -> Vec<(String, String, PathBuf)> {
     // (agent_id, display_name, relative_subpath)
     // We compute this synchronously since it only reads from the built-in
     // agent list which is static after init.
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let home = paths::resolve_home_dir();
 
     db::builtin_agents()
         .iter()
@@ -140,8 +141,7 @@ fn platform_skill_patterns(_pool: &DbPool) -> Vec<(String, String, PathBuf)> {
         .filter_map(|a| {
             let full = PathBuf::from(&a.global_skills_dir);
             // Strip home prefix to get relative path like ".claude/skills"
-            let home_path = PathBuf::from(&home);
-            let rel = full.strip_prefix(&home_path).ok()?;
+            let rel = full.strip_prefix(&home).ok()?;
             Some((a.id.clone(), a.display_name.clone(), rel.to_path_buf()))
         })
         .collect()
@@ -479,8 +479,7 @@ pub async fn start_project_scan(
     let patterns = platform_skill_patterns(pool);
 
     // Determine central skills dir.
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let central_dir = PathBuf::from(format!("{}/.agents/skills", home));
+    let central_dir = paths::central_skills_dir();
 
     // Filter to enabled roots that exist.
     let enabled_roots: Vec<&ScanRoot> = roots.iter().filter(|r| r.enabled && r.exists).collect();
@@ -601,8 +600,7 @@ pub async fn get_discovered_skills(
     let rows = db::get_all_discovered_skills(pool).await?;
 
     // Convert DB rows to DiscoveredSkill structs, adding is_already_central.
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let central_dir = PathBuf::from(format!("{}/.agents/skills", home));
+    let central_dir = paths::central_skills_dir();
 
     let skills: Vec<DiscoveredSkill> = rows
         .into_iter()
@@ -682,8 +680,7 @@ pub async fn import_discovered_skill_to_central(
         .ok_or_else(|| format!("Discovered skill '{}' not found", discovered_skill_id))?;
 
     // Determine central dir.
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let central_dir = PathBuf::from(format!("{}/.agents/skills", home));
+    let central_dir = paths::central_skills_dir();
 
     // Extract the original skill directory name (last component of dir_path).
     let skill_dir_name = Path::new(&skill.dir_path)

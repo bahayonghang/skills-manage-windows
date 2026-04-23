@@ -35,7 +35,11 @@ import { isTauriRuntime } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { MarkdownPreview } from "@/components/marketplace/MarkdownPreview";
-import { useMarketplaceStore } from "@/stores/marketplaceStore";
+import {
+  GitHubImportAiSummaryEntry,
+  SkillMarkdownEntry,
+  useMarketplaceStore,
+} from "@/stores/marketplaceStore";
 
 type WizardStep = "input" | "preview" | "confirm" | "result";
 
@@ -104,6 +108,22 @@ function clampPercent(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+const EMPTY_SKILL_MARKDOWN: Record<string, SkillMarkdownEntry> = {};
+const EMPTY_AI_SUMMARIES: Record<string, GitHubImportAiSummaryEntry> = {};
+
+async function noopFetchGitHubSkillMarkdown(
+  _sourcePath: string,
+  _downloadUrl: string,
+): Promise<void> {}
+
+async function noopGenerateGitHubImportAiSummary(
+  _sourcePath: string,
+  _skillName: string,
+  _content: string,
+  _lang: string,
+  _refresh?: boolean,
+): Promise<void> {}
+
 export function GitHubRepoImportWizard({
   open,
   onOpenChange,
@@ -145,16 +165,16 @@ export function GitHubRepoImportWizard({
   const browserMode = !isTauriRuntime();
   const skillMarkdown = useMarketplaceStore(
     (state) => state.githubImport.skillMarkdown,
-  ) ?? {};
+  ) ?? EMPTY_SKILL_MARKDOWN;
   const aiSummaries = useMarketplaceStore(
     (state) => state.githubImport.aiSummaries,
-  ) ?? {};
+  ) ?? EMPTY_AI_SUMMARIES;
   const fetchGitHubSkillMarkdown = useMarketplaceStore(
     (state) => state.fetchGitHubSkillMarkdown,
-  ) ?? (async () => {});
+  ) ?? noopFetchGitHubSkillMarkdown;
   const generateGitHubImportAiSummary = useMarketplaceStore(
     (state) => state.generateGitHubImportAiSummary,
-  ) ?? (async () => {});
+  ) ?? noopGenerateGitHubImportAiSummary;
   const importProgress = useMarketplaceStore(
     (state) => state.githubImport.importProgress,
   ) ?? null;

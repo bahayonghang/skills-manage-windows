@@ -75,9 +75,25 @@ pub fn create_symlink(target: &Path, link: &Path) -> Result<(), String> {
     std::os::unix::fs::symlink(target, link).map_err(|e| format!("Failed to create symlink: {}", e))
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+pub fn create_symlink(target: &Path, link: &Path) -> Result<(), String> {
+    std::os::windows::fs::symlink_dir(target, link)
+        .map_err(|e| format!("Failed to create symlink: {}", e))
+}
+
+#[cfg(not(any(unix, windows)))]
 pub fn create_symlink(_target: &Path, _link: &Path) -> Result<(), String> {
     Err("Symlink creation is only supported on Unix systems".to_string())
+}
+
+#[cfg(windows)]
+fn remove_symlink_path(path: &Path) -> Result<(), String> {
+    std::fs::remove_dir(path).map_err(|e| format!("Failed to remove existing symlink: {}", e))
+}
+
+#[cfg(not(windows))]
+fn remove_symlink_path(path: &Path) -> Result<(), String> {
+    std::fs::remove_file(path).map_err(|e| format!("Failed to remove existing symlink: {}", e))
 }
 
 // ─── Recursive Directory Copy ─────────────────────────────────────────────────
@@ -224,8 +240,7 @@ pub async fn install_skill_to_agent_impl(
     match std::fs::symlink_metadata(&symlink_path) {
         Ok(meta) if meta.file_type().is_symlink() => {
             // Remove stale symlink so we can replace it.
-            std::fs::remove_file(&symlink_path)
-                .map_err(|e| format!("Failed to remove existing symlink: {}", e))?;
+            remove_symlink_path(&symlink_path)?;
         }
         Ok(meta) if meta.is_dir() => {
             return Err(format!(
@@ -306,8 +321,7 @@ pub async fn install_skill_to_agent_copy_impl(
     match std::fs::symlink_metadata(&target_path) {
         Ok(meta) if meta.file_type().is_symlink() => {
             // Remove stale symlink so we can replace it with a real copy.
-            std::fs::remove_file(&target_path)
-                .map_err(|e| format!("Failed to remove existing symlink: {}", e))?;
+            remove_symlink_path(&target_path)?;
         }
         Ok(meta) if meta.is_dir() => {
             return Err(format!(
@@ -373,8 +387,8 @@ pub async fn uninstall_skill_from_agent_impl(
     match std::fs::symlink_metadata(&install_path) {
         Ok(meta) if meta.file_type().is_symlink() => {
             // Always safe to remove symlinks.
-            std::fs::remove_file(&install_path)
-                .map_err(|e| format!("Failed to remove symlink: {}", e))?;
+            remove_symlink_path(&install_path)
+                .map_err(|e| e.replace("existing symlink", "symlink"))?;
         }
         Ok(meta) if meta.is_dir() => {
             // Only remove real directories that were explicitly installed as copies.

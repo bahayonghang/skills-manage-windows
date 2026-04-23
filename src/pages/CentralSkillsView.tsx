@@ -12,7 +12,7 @@ import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AgentWithStatus, SkillWithLinks } from "@/types";
+import { AgentWithStatus, BatchInstallResult, SkillWithLinks } from "@/types";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
@@ -62,6 +62,38 @@ const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
     linked_agents: ["claude-code"],
   },
 ];
+
+const EMPTY_SKILLS: SkillWithLinks[] = [];
+const EMPTY_AGENTS: AgentWithStatus[] = [];
+const EMPTY_SKILLS_BY_AGENT: Record<string, number> = {};
+const EMPTY_BATCH_INSTALL_RESULT: BatchInstallResult = {
+  succeeded: [],
+  failed: [],
+};
+const EMPTY_GITHUB_IMPORT_STATE = {
+  isPreviewLoading: false,
+  isImporting: false,
+  preview: null,
+  importResult: null,
+  previewedRepoUrl: null,
+  error: null,
+};
+
+async function noopAsync(): Promise<void> {}
+
+async function noopBatchInstall(): Promise<BatchInstallResult> {
+  return EMPTY_BATCH_INSTALL_RESULT;
+}
+
+async function noopPreviewGitHubRepoImport() {
+  return null;
+}
+
+async function noopImportGitHubRepoSkills() {
+  throw new Error("GitHub import is unavailable");
+}
+
+async function noopGetSkillsByAgent(_agentId: string): Promise<void> {}
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
@@ -128,36 +160,24 @@ export function CentralSkillsView() {
     rawSkills === undefined &&
     rawAgents === undefined &&
     rawLoadCentralSkills === undefined;
-  const skills = shouldUseBrowserFixtures ? BROWSER_FIXTURE_SKILLS : rawSkills ?? [];
-  const agents = shouldUseBrowserFixtures ? BROWSER_FIXTURE_AGENTS : rawAgents ?? [];
+  const skills = shouldUseBrowserFixtures ? BROWSER_FIXTURE_SKILLS : rawSkills ?? EMPTY_SKILLS;
+  const agents = shouldUseBrowserFixtures ? BROWSER_FIXTURE_AGENTS : rawAgents ?? EMPTY_AGENTS;
   const isLoading = shouldUseBrowserFixtures ? false : rawIsLoading ?? false;
-  const loadCentralSkills = rawLoadCentralSkills ?? (async () => {});
-  const installSkill = useCentralSkillsStore((state) => state.installSkill) ?? (async () => ({
-    succeeded: [],
-    failed: [],
-  }));
-  const togglePlatformLink = useCentralSkillsStore((state) => state.togglePlatformLink) ?? (async () => {});
+  const loadCentralSkills = rawLoadCentralSkills ?? noopAsync;
+  const installSkill = useCentralSkillsStore((state) => state.installSkill) ?? noopBatchInstall;
+  const togglePlatformLink = useCentralSkillsStore((state) => state.togglePlatformLink) ?? noopAsync;
   const togglingAgentId = useCentralSkillsStore((state) => state.togglingAgentId);
 
   // Keep the platform sidebar counts in sync after install.
-  const refreshCounts = usePlatformStore((state) => state.refreshCounts) ?? (async () => {});
-  const platformAgents = usePlatformStore((state) => state.agents) ?? [];
-  const skillsByAgent = useSkillStore((state) => state.skillsByAgent) ?? {};
-  const getSkillsByAgent = useSkillStore((state) => state.getSkillsByAgent) ?? (async () => {});
-  const githubImport = useMarketplaceStore((state) => state.githubImport) ?? {
-    isPreviewLoading: false,
-    isImporting: false,
-    preview: null,
-    importResult: null,
-    previewedRepoUrl: null,
-    error: null,
-  };
+  const refreshCounts = usePlatformStore((state) => state.refreshCounts) ?? noopAsync;
+  const platformAgents = usePlatformStore((state) => state.agents) ?? EMPTY_AGENTS;
+  const skillsByAgent = useSkillStore((state) => state.skillsByAgent) ?? EMPTY_SKILLS_BY_AGENT;
+  const getSkillsByAgent = useSkillStore((state) => state.getSkillsByAgent) ?? noopGetSkillsByAgent;
+  const githubImport = useMarketplaceStore((state) => state.githubImport) ?? EMPTY_GITHUB_IMPORT_STATE;
   const previewGitHubRepoImport =
-    useMarketplaceStore((state) => state.previewGitHubRepoImport) ?? (async () => null);
+    useMarketplaceStore((state) => state.previewGitHubRepoImport) ?? noopPreviewGitHubRepoImport;
   const importGitHubRepoSkills =
-    useMarketplaceStore((state) => state.importGitHubRepoSkills) ?? (async () => {
-      throw new Error("GitHub import is unavailable");
-    });
+    useMarketplaceStore((state) => state.importGitHubRepoSkills) ?? noopImportGitHubRepoSkills;
   const resetGitHubImport =
     useMarketplaceStore((state) => state.resetGitHubImport) ?? (() => {});
 

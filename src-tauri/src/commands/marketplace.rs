@@ -1,8 +1,10 @@
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::paths;
 use crate::AppState;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -462,17 +464,11 @@ async fn sync_registry_impl(
     };
 
     // Check which skills are already installed locally
-    let central_dir = {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        format!("{}/.agents/skills", home)
-    };
+    let central_dir = paths::central_skills_dir();
 
     // Upsert skills into marketplace_skills
     for skill in &skills {
-        let is_installed = std::path::Path::new(&central_dir)
-            .join(&skill.name)
-            .join("SKILL.md")
-            .exists();
+        let is_installed = is_skill_installed_in_central(&central_dir, &skill.name);
 
         sqlx::query(
             "INSERT INTO marketplace_skills (id, registry_id, name, description, download_url, is_installed, synced_at, cache_updated_at)
@@ -592,6 +588,16 @@ fn row_to_marketplace_skill(row: &sqlx::sqlite::SqliteRow) -> MarketplaceSkill {
     }
 }
 
+fn central_skill_dir_for_name(central_dir: &Path, skill_name: &str) -> PathBuf {
+    central_dir.join(skill_name)
+}
+
+fn is_skill_installed_in_central(central_dir: &Path, skill_name: &str) -> bool {
+    central_skill_dir_for_name(central_dir, skill_name)
+        .join("SKILL.md")
+        .exists()
+}
+
 #[derive(sqlx::FromRow)]
 struct MarketplaceSkillRow {
     name: String,
@@ -636,8 +642,7 @@ pub async fn install_marketplace_skill(
         .map_err(|e| format!("Failed to read response: {}", e))?;
 
     // Create directory and write SKILL.md
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let skill_dir = std::path::PathBuf::from(format!("{}/.agents/skills/{}", home, skill.name));
+    let skill_dir = central_skill_dir_for_name(&paths::central_skills_dir(), &skill.name);
     std::fs::create_dir_all(&skill_dir)
         .map_err(|e| format!("Failed to create directory: {}", e))?;
 
@@ -761,16 +766,16 @@ fn classify_reqwest_error(e: &reqwest::Error, fallback_tried: bool) -> Explanati
             "系统代理可能拦截了请求。请尝试为该域名配置直连规则或切换区域端点".to_string(),
             true,
         )
-    } else if e.is_timeout() || low.contains("timed out") {
-        (
-            ExplanationErrorKind::Timeout,
-            "请求超时，可能网络不通或被防火墙拦截。可在终端 `curl -v <url>` 验证连通性".to_string(),
-            true,
-        )
     } else if e.is_connect() || low.contains("connect") {
         (
             ExplanationErrorKind::Connect,
             "无法建立连接。请确认 URL 可从本机访问，或尝试切换区域端点".to_string(),
+            true,
+        )
+    } else if e.is_timeout() || low.contains("timed out") || low.contains("deadline has elapsed") {
+        (
+            ExplanationErrorKind::Timeout,
+            "请求超时，可能网络不通或被防火墙拦截。可在终端 `curl -v <url>` 验证连通性".to_string(),
             true,
         )
     } else if low.contains("dns") || low.contains("lookup") {
@@ -1470,12 +1475,15 @@ pub async fn refresh_skill_explanation(
 mod tests {
     use super::{
         add_registry_impl, cache_skill_explanation, classify_reqwest_error,
+        central_skill_dir_for_name,
         detect_explanation_api_protocol, format_reqwest_error, get_fallback_endpoint,
+        is_skill_installed_in_central,
         load_cached_skill_explanation, registry_has_cached_skills, search_marketplace_skills_impl,
         sync_registry_impl, ExplanationApiProtocol, ExplanationErrorKind, RegistryCacheMetadata,
         RegistrySyncStatus, SyncRegistryOptions,
     };
     use crate::db;
+    use std::path::Path;
     use tempfile::{tempdir, TempDir};
 
     async fn setup_test_db() -> (crate::db::DbPool, TempDir) {
@@ -1946,5 +1954,25 @@ mod tests {
         assert!(registry_has_cached_skills(&pool, &registry.id)
             .await
             .expect("cached"));
+    }
+
+    #[test]
+    fn central_skill_dir_for_name_uses_the_given_central_dir() {
+        let central_dir = Path::new(r"C:\Users\lyh\.agents\skills");
+        let skill_dir = central_skill_dir_for_name(central_dir, "demo-skill");
+
+        assert_eq!(skill_dir, central_dir.join("demo-skill"));
+    }
+
+    #[test]
+    fn is_skill_installed_in_central_checks_for_skill_md() {
+        let dir = tempdir().expect("create tempdir");
+        let skill_dir = dir.path().join("demo-skill");
+        std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::fs::write(skill_dir.join("SKILL.md"), "---\nname: demo-skill\n---\n")
+            .expect("write skill md");
+
+        assert!(is_skill_installed_in_central(dir.path(), "demo-skill"));
+        assert!(!is_skill_installed_in_central(dir.path(), "missing-skill"));
     }
 }
