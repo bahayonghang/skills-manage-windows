@@ -38,6 +38,53 @@ export default defineConfig(async () => ({
     },
   },
 
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            return undefined;
+          }
+
+          const normalizedId = id.replace(/\\/g, "/");
+          const matchesPackage = (packageName: string) =>
+            normalizedId.includes(`/node_modules/${packageName}/`)
+            || normalizedId.includes(
+              `/node_modules/.pnpm/${packageName.replace("/", "+")}@`
+            );
+
+          if (
+            matchesPackage("react")
+            || matchesPackage("react-dom")
+            || matchesPackage("scheduler")
+            || matchesPackage("react-router-dom")
+            || matchesPackage("@remix-run/router")
+          ) {
+            return "react-vendor";
+          }
+
+          if (
+            matchesPackage("i18next")
+            || matchesPackage("react-i18next")
+            || matchesPackage("i18next-browser-languagedetector")
+          ) {
+            return "i18n-vendor";
+          }
+
+          if (matchesPackage("lucide-react") || normalizedId.includes("/node_modules/@lobehub/")) {
+            return "icon-vendor";
+          }
+
+          if (normalizedId.includes("/node_modules/@tauri-apps/")) {
+            return "tauri-vendor";
+          }
+
+          return "ui-vendor";
+        },
+      },
+    },
+  },
+
   // Vitest configuration
   test: {
     globals: true,
