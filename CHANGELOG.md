@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.8.2 - 2026-04-23
+
+Patch release focused on cached shell hydration, cheaper refreshes, and smoother large skill lists.
+
+### Performance
+
+- Hydrate the app shell from a cached bootstrap snapshot before running a background scan so platform counts, collection counts, and Discover totals appear immediately.
+- Virtualize large central and platform skill card grids, and memoize repeated card/icon rendering to reduce scroll and filter cost.
+
+### Fixes
+
+- Normalize Windows home and central skill directory resolution so cached scans, installs, and imports stay aligned with `~/.agents/skills`.
+- Deduplicate shared scan roots across platforms and update cached installation rows in one transaction to avoid stale counts after rescans.
+- Add lightweight bootstrap and discover summary endpoints so the sidebar and refresh flows stop loading full datasets when only counters are needed.
+- Load central skills lazily when the platform install dialog opens instead of preloading them on every platform page visit.
+
 ## 0.8.1 - 2026-04-23
 
 Patch release to repair the GitHub release pipeline.
