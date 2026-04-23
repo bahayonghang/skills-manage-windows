@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.8.1 - 2026-04-23
+
+Patch release to repair the GitHub release pipeline.
+
+### Fixes
+
+- Update the release workflow to use the published `tauri-apps/tauri-action@action-v0.6.2` tag so Windows and macOS release jobs can start correctly.
+
 ## 0.8.0 - 2026-04-20
 
 First public release.
