@@ -657,6 +657,48 @@ mod tests {
         format!("---\nname: {}\n---\n\n# {}\n", name, name)
     }
 
+    fn write_claude_plugin_runtime(claude_root: &Path, enabled_plugins: &[(&str, &Path)]) {
+        fs::create_dir_all(claude_root.join("plugins")).unwrap();
+
+        let enabled_json = enabled_plugins
+            .iter()
+            .map(|(plugin_id, _)| (plugin_id.to_string(), serde_json::Value::Bool(true)))
+            .collect::<serde_json::Map<_, _>>();
+        fs::write(
+            claude_root.join("settings.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "enabledPlugins": enabled_json,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let installed_json = enabled_plugins
+            .iter()
+            .map(|(plugin_id, install_path)| {
+                (
+                    plugin_id.to_string(),
+                    serde_json::json!([{
+                        "scope": "user",
+                        "installPath": install_path.to_string_lossy().to_string(),
+                        "version": "test-version",
+                        "installedAt": "2026-04-23T00:00:00Z",
+                        "lastUpdated": "2026-04-23T00:00:00Z"
+                    }]),
+                )
+            })
+            .collect::<serde_json::Map<_, _>>();
+        fs::write(
+            claude_root.join("plugins/installed_plugins.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "version": 2,
+                "plugins": installed_json,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
     // ── parse_skill_md ────────────────────────────────────────────────────────
 
     #[test]
@@ -1215,6 +1257,516 @@ mod tests {
 
         assert_eq!(result.skills_by_agent.get("agent-a").copied(), Some(2));
         assert_eq!(result.skills_by_agent.get("agent-b").copied(), Some(1));
+    }
+
+    #[tokio::test]
+    async fn test_scan_all_skills_impl_claude_scans_user_and_multiple_plugin_roots() {
+        let tmp = TempDir::new().unwrap();
+        let pool = setup_test_db().await;
+
+        sqlx::query("DELETE FROM agents WHERE id != 'claude-code'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM scan_directories")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let claude_root = tmp.path().join(".claude");
+        let user_root = claude_root.join("skills");
+        let plugin_a_root = claude_root.join("plugins/cache/publisher-a/plugin-a/1.0.0");
+        let plugin_b_root = claude_root.join("plugins/cache/publisher-b/plugin-b/2.0.0");
+        let plugin_a_skill_root = plugin_a_root.join("skills");
+        let plugin_b_skill_root = plugin_b_root.join(".claude").join("skills");
+
+        fs::create_dir_all(&user_root).unwrap();
+        fs::create_dir_all(&plugin_a_skill_root).unwrap();
+        fs::create_dir_all(&plugin_b_skill_root).unwrap();
+
+        create_skill_dir(
+            &user_root,
+            "user-skill",
+            &valid_skill_md("User Skill", "From ~/.claude/skills"),
+        );
+        create_skill_dir(
+            &plugin_a_skill_root,
+            "plugin-a-skill",
+            &valid_skill_md("plugin-a:skill", "From plugin A"),
+        );
+        create_skill_dir(
+            &plugin_b_skill_root,
+            "plugin-b-skill",
+            &valid_skill_md("plugin-b:skill", "From plugin B"),
+        );
+        write_claude_plugin_runtime(
+            &claude_root,
+            &[
+                ("plugin-a@publisher-a", &plugin_a_root),
+                ("plugin-b@publisher-b", &plugin_b_root),
+            ],
+        );
+
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'claude-code'")
+            .bind(user_root.to_string_lossy().to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let result = scan_all_skills_impl(&pool).await.unwrap();
+        assert_eq!(result.agents_scanned, 1);
+        assert_eq!(result.skills_by_agent.get("claude-code").copied(), Some(3));
+
+        let mut skills = db::get_skills_by_agent(&pool, "claude-code").await.unwrap();
+        skills.sort_by(|a, b| a.id.cmp(&b.id));
+        let ids: Vec<&str> = skills.iter().map(|skill| skill.id.as_str()).collect();
+        assert_eq!(ids, vec!["plugin-a-skill", "plugin-b-skill", "user-skill"]);
+
+        let observations = db::get_agent_skill_observations(&pool, "claude-code")
+            .await
+            .unwrap();
+        assert_eq!(observations.len(), 3);
+
+        let plugin_a_rows: Vec<_> = observations
+            .iter()
+            .filter(|row| row.skill_id == "plugin-a-skill")
+            .collect();
+        assert_eq!(plugin_a_rows.len(), 1);
+        assert_eq!(plugin_a_rows[0].source_kind, "plugin");
+        assert_eq!(
+            plugin_a_rows[0].dir_path,
+            plugin_a_skill_root.join("plugin-a-skill").to_string_lossy()
+        );
+        assert_eq!(
+            plugin_a_rows[0].source_root,
+            plugin_a_root.to_string_lossy()
+        );
+
+        let plugin_b_rows: Vec<_> = observations
+            .iter()
+            .filter(|row| row.skill_id == "plugin-b-skill")
+            .collect();
+        assert_eq!(plugin_b_rows.len(), 1);
+        assert_eq!(plugin_b_rows[0].source_kind, "plugin");
+        assert_eq!(
+            plugin_b_rows[0].dir_path,
+            plugin_b_skill_root.join("plugin-b-skill").to_string_lossy()
+        );
+        assert_eq!(
+            plugin_b_rows[0].source_root,
+            plugin_b_root.to_string_lossy()
+        );
+
+        let plugin_a_installations = db::get_skill_installations(&pool, "plugin-a-skill")
+            .await
+            .unwrap();
+        assert!(
+            plugin_a_installations.is_empty(),
+            "plugin rows should not create install-state records"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_scan_all_skills_impl_claude_duplicate_rows_stay_distinct_without_install_pollution(
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let pool = setup_test_db().await;
+
+        sqlx::query("DELETE FROM agents WHERE id != 'claude-code'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM scan_directories")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let claude_root = tmp.path().join(".claude");
+        let user_root = claude_root.join("skills");
+        let plugin_root = claude_root.join("plugins/cache/publisher/shared-plugin/1.0.0");
+        let plugin_skill_root = plugin_root.join("skills");
+        fs::create_dir_all(&user_root).unwrap();
+        fs::create_dir_all(&plugin_skill_root).unwrap();
+
+        create_skill_dir(
+            &user_root,
+            "shared-skill",
+            &valid_skill_md("Shared Skill", "User copy"),
+        );
+        create_skill_dir(
+            &plugin_skill_root,
+            "shared-skill",
+            &valid_skill_md("shared-plugin:shared-skill", "Plugin copy"),
+        );
+        write_claude_plugin_runtime(&claude_root, &[("shared-plugin@publisher", &plugin_root)]);
+
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'claude-code'")
+            .bind(user_root.to_string_lossy().to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        scan_all_skills_impl(&pool).await.unwrap();
+
+        let rows = db::get_agent_skill_observations(&pool, "claude-code")
+            .await
+            .unwrap();
+        let shared_rows: Vec<_> = rows
+            .iter()
+            .filter(|row| row.skill_id == "shared-skill")
+            .collect();
+        assert_eq!(
+            shared_rows.len(),
+            2,
+            "user and plugin copies should remain distinct observation rows"
+        );
+        assert_ne!(shared_rows[0].row_id, shared_rows[1].row_id);
+
+        let installs = db::get_skill_installations(&pool, "shared-skill")
+            .await
+            .unwrap();
+        assert_eq!(
+            installs.len(),
+            1,
+            "only the user copy should remain manageable"
+        );
+        assert_eq!(
+            installs[0].installed_path,
+            user_root.join("shared-skill").to_string_lossy()
+        );
+
+        let stored_skill = db::get_skill_by_id(&pool, "shared-skill")
+            .await
+            .unwrap()
+            .expect("user copy should still back the logical skill row");
+        assert_eq!(
+            stored_skill.file_path,
+            user_root
+                .join("shared-skill")
+                .join("SKILL.md")
+                .to_string_lossy()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_scan_all_skills_impl_claude_scans_plugins_even_without_user_root() {
+        let tmp = TempDir::new().unwrap();
+        let pool = setup_test_db().await;
+
+        sqlx::query("DELETE FROM agents WHERE id != 'claude-code'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM scan_directories")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let claude_root = tmp.path().join(".claude");
+        let user_root = claude_root.join("skills");
+        let plugin_a_root = claude_root.join("plugins/cache/publisher-a/plugin-a/1.0.0");
+        let plugin_b_root = claude_root.join("plugins/cache/publisher-b/plugin-b/2.0.0");
+        let plugin_a_skill_root = plugin_a_root.join("skills");
+        let plugin_b_skill_root = plugin_b_root.join(".claude").join("skills");
+
+        fs::create_dir_all(&plugin_a_skill_root).unwrap();
+        fs::create_dir_all(&plugin_b_skill_root).unwrap();
+
+        create_skill_dir(
+            &plugin_a_skill_root,
+            "plugin-a-skill",
+            &valid_skill_md("plugin-a:skill", "From plugin A"),
+        );
+        create_skill_dir(
+            &plugin_b_skill_root,
+            "plugin-b-skill",
+            &valid_skill_md("plugin-b:skill", "From plugin B"),
+        );
+        write_claude_plugin_runtime(
+            &claude_root,
+            &[
+                ("plugin-a@publisher-a", &plugin_a_root),
+                ("plugin-b@publisher-b", &plugin_b_root),
+            ],
+        );
+
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'claude-code'")
+            .bind(user_root.to_string_lossy().to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let result = scan_all_skills_impl(&pool).await.unwrap();
+        assert_eq!(result.skills_by_agent.get("claude-code").copied(), Some(2));
+
+        let detected = db::get_agent_by_id(&pool, "claude-code")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            detected.is_detected,
+            "claude-code should remain detected when only plugin roots exist"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_scan_all_skills_impl_non_claude_agents_ignore_claude_plugins() {
+        let tmp = TempDir::new().unwrap();
+        let pool = setup_test_db().await;
+
+        sqlx::query("DELETE FROM agents")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM scan_directories")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let claude_like_root = tmp.path().join(".claude");
+        let user_root = claude_like_root.join("skills");
+        let plugin_a_root = claude_like_root.join("plugins/cache/publisher-a/plugin-a/1.0.0");
+        let plugin_b_root = claude_like_root.join("plugins/cache/publisher-b/plugin-b/2.0.0");
+        let plugin_a_skill_root = plugin_a_root.join("skills");
+        let plugin_b_skill_root = plugin_b_root.join(".claude").join("skills");
+
+        fs::create_dir_all(&user_root).unwrap();
+        fs::create_dir_all(&plugin_a_skill_root).unwrap();
+        fs::create_dir_all(&plugin_b_skill_root).unwrap();
+
+        create_skill_dir(
+            &user_root,
+            "user-skill",
+            &valid_skill_md("User Skill", "From primary root"),
+        );
+        create_skill_dir(
+            &plugin_a_skill_root,
+            "plugin-a-skill",
+            &valid_skill_md("plugin-a:skill", "From plugin A"),
+        );
+        create_skill_dir(
+            &plugin_b_skill_root,
+            "plugin-b-skill",
+            &valid_skill_md("plugin-b:skill", "From plugin B"),
+        );
+        write_claude_plugin_runtime(
+            &claude_like_root,
+            &[
+                ("plugin-a@publisher-a", &plugin_a_root),
+                ("plugin-b@publisher-b", &plugin_b_root),
+            ],
+        );
+
+        let agent = db::Agent {
+            id: "not-claude".to_string(),
+            display_name: "Not Claude".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: user_root.to_string_lossy().to_string(),
+            project_skills_dir: None,
+            icon_name: None,
+            is_detected: false,
+            is_builtin: false,
+            is_enabled: true,
+        };
+        db::insert_custom_agent(&pool, &agent).await.unwrap();
+
+        let result = scan_all_skills_impl(&pool).await.unwrap();
+        assert_eq!(result.agents_scanned, 1);
+        assert_eq!(result.skills_by_agent.get("not-claude").copied(), Some(1));
+
+        let skills = db::get_skills_by_agent(&pool, "not-claude").await.unwrap();
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].id, "user-skill");
+    }
+
+    #[tokio::test]
+    #[ignore = "manual isolated-home sanity check"]
+    async fn test_scan_all_skills_impl_claude_fixture_home_sanity() {
+        let fixture_home = Path::new("/tmp/skills-manage-test-fixtures/claude-multi-source");
+        if fixture_home.exists() {
+            fs::remove_dir_all(fixture_home).unwrap();
+        }
+        fs::create_dir_all(fixture_home).unwrap();
+
+        let pool = setup_test_db().await;
+
+        sqlx::query("DELETE FROM agents WHERE id != 'claude-code'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM scan_directories")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let user_root = fixture_home.join(".claude/skills");
+        let plugin_a_root = fixture_home.join(".claude/plugins/cache/publisher-a/plugin-a/1.0.0");
+        let plugin_b_root = fixture_home.join(".claude/plugins/cache/publisher-b/plugin-b/2.0.0");
+        let plugin_a_skill_root = plugin_a_root.join("skills");
+        let plugin_b_skill_root = plugin_b_root.join(".claude").join("skills");
+
+        fs::create_dir_all(&user_root).unwrap();
+        fs::create_dir_all(&plugin_a_skill_root).unwrap();
+        fs::create_dir_all(&plugin_b_skill_root).unwrap();
+
+        create_skill_dir(
+            &user_root,
+            "fixture-user-skill",
+            &valid_skill_md("Fixture User Skill", "From fixture user root"),
+        );
+        create_skill_dir(
+            &plugin_a_skill_root,
+            "fixture-plugin-a-skill",
+            &valid_skill_md("plugin-a:fixture", "From fixture plugin A"),
+        );
+        create_skill_dir(
+            &plugin_b_skill_root,
+            "fixture-plugin-b-skill",
+            &valid_skill_md("plugin-b:fixture", "From fixture plugin B"),
+        );
+        write_claude_plugin_runtime(
+            &fixture_home.join(".claude"),
+            &[
+                ("plugin-a@publisher-a", &plugin_a_root),
+                ("plugin-b@publisher-b", &plugin_b_root),
+            ],
+        );
+
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'claude-code'")
+            .bind(user_root.to_string_lossy().to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let result = scan_all_skills_impl(&pool).await.unwrap();
+        assert_eq!(result.skills_by_agent.get("claude-code").copied(), Some(3));
+    }
+
+    #[tokio::test]
+    async fn test_scan_all_skills_impl_claude_rescan_drops_stale_plugin_duplicate_only() {
+        let tmp = TempDir::new().unwrap();
+        let pool = setup_test_db().await;
+
+        sqlx::query("DELETE FROM agents WHERE id != 'claude-code'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM scan_directories")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let claude_root = tmp.path().join(".claude");
+        let user_root = claude_root.join("skills");
+        let plugin_root = claude_root.join("plugins/cache/publisher/shared-plugin/1.0.0");
+        let plugin_skill_root = plugin_root.join("skills");
+        fs::create_dir_all(&user_root).unwrap();
+        fs::create_dir_all(&plugin_skill_root).unwrap();
+
+        let plugin_skill_dir = create_skill_dir(
+            &plugin_skill_root,
+            "shared-skill",
+            &valid_skill_md("shared-plugin:shared-skill", "Plugin copy"),
+        );
+        create_skill_dir(
+            &user_root,
+            "shared-skill",
+            &valid_skill_md("Shared Skill", "User copy"),
+        );
+        write_claude_plugin_runtime(&claude_root, &[("shared-plugin@publisher", &plugin_root)]);
+
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'claude-code'")
+            .bind(user_root.to_string_lossy().to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        scan_all_skills_impl(&pool).await.unwrap();
+        fs::remove_dir_all(&plugin_skill_dir).unwrap();
+        scan_all_skills_impl(&pool).await.unwrap();
+
+        let rows = db::get_agent_skill_observations(&pool, "claude-code")
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1, "only the user observation should remain");
+        assert_eq!(rows[0].source_kind, "user");
+
+        let installs = db::get_skill_installations(&pool, "shared-skill")
+            .await
+            .unwrap();
+        assert_eq!(
+            installs.len(),
+            1,
+            "user install state should survive plugin cleanup"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_scan_all_skills_impl_claude_plugin_survives_when_user_duplicate_is_removed() {
+        let tmp = TempDir::new().unwrap();
+        let pool = setup_test_db().await;
+
+        sqlx::query("DELETE FROM agents WHERE id != 'claude-code'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM scan_directories")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let claude_root = tmp.path().join(".claude");
+        let user_root = claude_root.join("skills");
+        let plugin_root = claude_root.join("plugins/cache/publisher/shared-plugin/1.0.0");
+        let plugin_skill_root = plugin_root.join("skills");
+        fs::create_dir_all(&user_root).unwrap();
+        fs::create_dir_all(&plugin_skill_root).unwrap();
+
+        let user_skill_dir = create_skill_dir(
+            &user_root,
+            "shared-skill",
+            &valid_skill_md("Shared Skill", "User copy"),
+        );
+        create_skill_dir(
+            &plugin_skill_root,
+            "shared-skill",
+            &valid_skill_md("shared-plugin:shared-skill", "Plugin copy"),
+        );
+        write_claude_plugin_runtime(&claude_root, &[("shared-plugin@publisher", &plugin_root)]);
+
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'claude-code'")
+            .bind(user_root.to_string_lossy().to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        scan_all_skills_impl(&pool).await.unwrap();
+        fs::remove_dir_all(&user_skill_dir).unwrap();
+        scan_all_skills_impl(&pool).await.unwrap();
+
+        let rows = db::get_agent_skill_observations(&pool, "claude-code")
+            .await
+            .unwrap();
+        assert_eq!(
+            rows.len(),
+            1,
+            "plugin observation should survive even after the user duplicate disappears"
+        );
+        assert_eq!(rows[0].source_kind, "plugin");
+
+        let installs = db::get_skill_installations(&pool, "shared-skill")
+            .await
+            .unwrap();
+        assert!(
+            installs.is_empty(),
+            "plugin observations must not keep stale Claude install-state rows alive"
+        );
+
+        let skill = db::get_skill_by_id(&pool, "shared-skill").await.unwrap();
+        assert!(
+            skill.is_none(),
+            "plugin observations should not keep a stale manageable skill row alive"
+        );
     }
 
     // ── Regression: Bug 1 — installed_path must be the skill directory ────────

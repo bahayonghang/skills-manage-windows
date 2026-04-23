@@ -19,21 +19,22 @@ env:
 jobs:
   ci:
     name: just-ci
+    name: just-ci
     runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
-          version: 10.33.1
+          version: 10.12.3
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          node-version: "20"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
@@ -41,6 +42,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+          targets: x86_64-pc-windows-msvc
 
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2
@@ -56,18 +58,90 @@ jobs:
         shell: pwsh
         run: ./scripts/sync-version.ps1
 
-      - name: Type check
+      - name: Run just ci
         shell: pwsh
-        run: pnpm typecheck
+        run: just ci
 
-      - name: Lint
-        shell: pwsh
-        run: pnpm exec eslint src --ext .ts,.tsx --report-unused-disable-directives
+  windows-package:
+    name: Windows x64 smoke package
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Rust tests
-        shell: pwsh
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.12.3
+          run_install: false
 
-      - name: Clippy
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Install dependencies
         shell: pwsh
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: ./scripts/sync-version.ps1
+
+      - name: Build Windows MSI smoke package
+        shell: pwsh
+        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles msi --no-sign --ci
+
+  macos-package:
+    name: macOS universal smoke packages
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.12.3
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: ./scripts/sync-version.ps1
+
+      - name: Build macOS universal app+dmg smoke packages
+        run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg --no-sign --ci

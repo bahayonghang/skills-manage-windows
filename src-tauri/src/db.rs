@@ -989,6 +989,20 @@ pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
+fn observation_to_skill(observation: AgentSkillObservation) -> Skill {
+    Skill {
+        id: observation.skill_id,
+        name: observation.name,
+        description: observation.description,
+        file_path: observation.file_path,
+        canonical_path: None,
+        is_central: false,
+        source: Some(observation.link_type),
+        content: None,
+        scanned_at: observation.scanned_at,
+    }
+}
+
 /// Retrieve all skills installed for a given agent.
 pub async fn get_skills_by_agent(pool: &DbPool, agent_id: &str) -> Result<Vec<Skill>, String> {
     if agent_id == "claude-code" {
@@ -1097,20 +1111,6 @@ pub async fn get_skills_for_agent(
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())
-}
-
-fn observation_to_skill(observation: AgentSkillObservation) -> Skill {
-    Skill {
-        id: observation.skill_id,
-        name: observation.name,
-        description: observation.description,
-        file_path: observation.file_path,
-        canonical_path: None,
-        is_central: false,
-        source: Some(observation.link_type),
-        content: None,
-        scanned_at: observation.scanned_at,
-    }
 }
 
 fn observation_to_skill_for_agent(observation: AgentSkillObservation) -> SkillForAgent {
@@ -1950,10 +1950,11 @@ mod tests {
     async fn test_init_creates_all_tables() {
         let pool = setup_test_db().await;
 
-        // Verify all 7 tables exist by counting rows (empty is fine)
+        // Verify all core tables exist by counting rows (empty is fine)
         let tables = [
             "skills",
             "skill_installations",
+            "agent_skill_observations",
             "agents",
             "collections",
             "collection_skills",

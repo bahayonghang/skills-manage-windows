@@ -5,7 +5,7 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::db::{self, Agent, DbPool};
-use crate::paths::{expand_home_path, path_to_string};
+use crate::path_utils::{expand_home_path, path_to_string};
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────

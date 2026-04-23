@@ -1,0 +1,175 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.12.3
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Windows bundles
+        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles msi --no-sign --ci
+
+      - name: Prepare Windows assets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+
+          $msi = Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi" -Recurse -Filter *.msi | Select-Object -First 1
+          if ($null -eq $msi) {
+            throw "Windows MSI bundle not found."
+          }
+          Copy-Item $msi.FullName "release-assets/skills-manage_${version}_windows_x64.msi"
+
+          $exePath = "src-tauri/target/x86_64-pc-windows-msvc/release/skills-manage.exe"
+          if (-not (Test-Path $exePath)) {
+            throw "Windows executable not found at $exePath."
+          }
+          Compress-Archive -Path $exePath -DestinationPath "release-assets/skills-manage_${version}_windows_x64.zip" -Force
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-windows
+          path: release-assets/*
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS universal
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.12.3
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build macOS bundles
+        run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg --no-sign --ci
+
+      - name: Prepare macOS assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          BUNDLE_ROOT="src-tauri/target/universal-apple-darwin/release/bundle"
+          mkdir -p release-assets
+
+          APP_PATH=$(find "$BUNDLE_ROOT/macos" -maxdepth 1 -type d -name "*.app" | head -1 || true)
+          DMG_PATH=$(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -type f -name "*.dmg" | head -1 || true)
+
+          [ -n "$APP_PATH" ] || { echo "macOS .app bundle not found" >&2; exit 1; }
+          [ -n "$DMG_PATH" ] || { echo "macOS .dmg bundle not found" >&2; exit 1; }
+
+          ditto -c -k --keepParent "$APP_PATH" "release-assets/skills-manage_${VERSION}_macos_universal.zip"
+          cp "$DMG_PATH" "release-assets/skills-manage_${VERSION}_macos_universal.dmg"
+          tar -C "$(dirname "$APP_PATH")" -czf "release-assets/skills-manage_${VERSION}_macos_universal.tar.gz" "$(basename "$APP_PATH")"
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-macos
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos]
+    steps:
+      - name: Checkout release metadata
+        uses: actions/checkout@v4
+
+      - name: Prepare release notes
+        id: release_meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES_PATH="release-notes/${VERSION}.md"
+          [ -f "$NOTES_PATH" ] || { echo "Release notes file not found: $NOTES_PATH" >&2; exit 1; }
+          cp "$NOTES_PATH" release-body.md
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: skills-manage v${{ steps.release_meta.outputs.version }}
+          body_path: release-body.md
+          files: release-assets/*

@@ -313,8 +313,8 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         scanState: "idle",
         collectionCount: state.collectionCount,
         discoveredCount: state.discoveredCount,
-        scanGeneration: (state.scanGeneration ?? 0) + 1,
         isLoading: state.isLoading,
+        scanGeneration: (state.scanGeneration ?? 0) + 1,
       }));
       return;
     }

@@ -5,7 +5,6 @@ out/
 target/
 src-tauri/target/
 reference/
-.factory/
 .vscode/
 *.db
 *.db-shm

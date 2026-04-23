@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod db;
 pub mod paths;
+pub mod path_utils;
 
 use db::DbPool;
 use std::fs;
@@ -19,10 +20,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
-            let _ = app;
-            let db_dir = paths::app_data_dir();
+            let db_dir = path_utils::app_data_dir();
             fs::create_dir_all(&db_dir).expect("Failed to create ~/.skillsmanage directory");
-            let db_path = paths::path_to_string(&db_dir.join("db.sqlite"));
+            let db_path = path_utils::path_to_string(&db_dir.join("db.sqlite"));
 
             // Create pool and initialize schema
             let pool = tauri::async_runtime::block_on(async {

@@ -1,7 +1,7 @@
 use tauri::State;
 
 use crate::db::{self, DbPool, ScanDirectory};
-use crate::paths::{expand_home_path, path_to_string};
+use crate::path_utils::{expand_home_path, path_to_string};
 use crate::AppState;
 
 // ─── Core Implementations (testable without Tauri State) ──────────────────────

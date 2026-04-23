@@ -19,6 +19,7 @@ import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImpor
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
+import { formatPathForDisplay } from "@/lib/path";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
@@ -158,6 +159,10 @@ export function CentralSkillsView() {
     rawAgents === undefined &&
     rawLoadCentralSkills === undefined;
   const skills = shouldUseBrowserFixtures ? BROWSER_FIXTURE_SKILLS : rawSkills ?? EMPTY_SKILLS;
+  const agents = rawAgents ?? EMPTY_AGENTS;
+  const centralSkillsDir = formatPathForDisplay(
+    agents.find((agent) => agent.id === "central")?.global_skills_dir ?? t("central.path")
+  );
   const isLoading = shouldUseBrowserFixtures ? false : rawIsLoading ?? false;
   const loadCentralSkills = rawLoadCentralSkills ?? noopAsync;
   const installSkill = useCentralSkillsStore((state) => state.installSkill) ?? noopInstallSkill;
@@ -419,7 +424,7 @@ export function CentralSkillsView() {
             </Button>
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {t("central.path")}
+            {centralSkillsDir}
           </p>
         </div>
         <Button variant="outline" onClick={() => setIsGitHubImportOpen(true)}>
