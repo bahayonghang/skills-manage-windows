@@ -5,10 +5,17 @@ on:
     types:
       - created
 
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RELEASE_TAG: ${{ github.event.release.tag_name }}
+
 jobs:
   ci:
     name: ci
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
       - name: Checkout release tag
@@ -31,6 +38,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2
@@ -41,31 +50,26 @@ jobs:
         shell: pwsh
         run: pnpm install --frozen-lockfile
 
-      - name: Run frontend and Rust checks
+      - name: Sync version metadata
+        shell: pwsh
+        run: ./scripts/sync-version.ps1
+
+      - name: Run frontend checks
         shell: pwsh
         run: |
           pnpm typecheck
           pnpm exec eslint src --ext .ts,.tsx --report-unused-disable-directives
+
+      - name: Run Rust checks
+        shell: pwsh
+        run: |
           cargo test --manifest-path src-tauri/Cargo.toml
           cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
-  build:
-    name: build-${{ matrix.label }}
+  build-windows:
+    name: build-windows
     needs: ci
-    runs-on: ${{ matrix.platform }}
-    permissions:
-      contents: write
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: windows
-            platform: windows-latest
-            tauri_args: --bundles nsis,msi
-          - label: macos
-            platform: macos-latest
-            tauri_args: --target aarch64-apple-darwin --bundles dmg
+    runs-on: windows-2022
 
     steps:
       - name: Checkout release tag
@@ -88,10 +92,92 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
 
-      - name: Add macOS target
-        if: matrix.label == 'macos'
-        run: rustup target add aarch64-apple-darwin
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install dependencies
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: ./scripts/sync-version.ps1
+
+      - name: Build Windows bundles
+        shell: pwsh
+        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi --no-sign --ci
+
+      - name: Prepare Windows assets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = $env:RELEASE_TAG
+          $version = $version -replace '^v', ''
+
+          $assetDir = "release-assets"
+          $bundleRoot = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          $exePath = "src-tauri/target/x86_64-pc-windows-msvc/release/skills-manage.exe"
+
+          New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
+
+          $nsis = Get-ChildItem -Path (Join-Path $bundleRoot "nsis") -Recurse -Filter *.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($null -eq $nsis) {
+            throw "Windows NSIS bundle not found."
+          }
+
+          $msi = Get-ChildItem -Path (Join-Path $bundleRoot "msi") -Recurse -Filter *.msi | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($null -eq $msi) {
+            throw "Windows MSI bundle not found."
+          }
+
+          if (-not (Test-Path $exePath)) {
+            throw "Windows executable not found at $exePath."
+          }
+
+          Copy-Item -LiteralPath $nsis.FullName -Destination (Join-Path $assetDir ("skills-manage_" + $version + "_windows_x64_nsis.exe")) -Force
+          Copy-Item -LiteralPath $msi.FullName -Destination (Join-Path $assetDir ("skills-manage_" + $version + "_windows_x64.msi")) -Force
+          Compress-Archive -Path $exePath -DestinationPath (Join-Path $assetDir ("skills-manage_" + $version + "_windows_x64.zip")) -Force
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-windows
+          path: release-assets/*
+          if-no-files-found: error
+
+  build-macos:
+    name: build-macos
+    needs: ci
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.1
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2
@@ -101,14 +187,54 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build and upload release assets
-        uses: tauri-apps/tauri-action@action-v0.6.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Sync version metadata
+        shell: pwsh
+        run: ./scripts/sync-version.ps1
+
+      - name: Build macOS bundles
+        run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg --no-sign --ci
+
+      - name: Prepare macOS assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG:-${GITHUB_REF_NAME}}"
+          VERSION="${VERSION#v}"
+          BUNDLE_ROOT="src-tauri/target/universal-apple-darwin/release/bundle"
+          mkdir -p release-assets
+
+          APP_PATH=$(find "$BUNDLE_ROOT/macos" -maxdepth 1 -type d -name "*.app" | head -1 || true)
+          DMG_PATH=$(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -type f -name "*.dmg" | head -1 || true)
+
+          [ -n "$APP_PATH" ] || { echo "macOS .app bundle not found" >&2; exit 1; }
+          [ -n "$DMG_PATH" ] || { echo "macOS .dmg bundle not found" >&2; exit 1; }
+
+          ditto -c -k --keepParent "$APP_PATH" "release-assets/skills-manage_${VERSION}_macos_universal.zip"
+          cp "$DMG_PATH" "release-assets/skills-manage_${VERSION}_macos_universal.dmg"
+          tar -C "$(dirname "$APP_PATH")" -czf "release-assets/skills-manage_${VERSION}_macos_universal.tar.gz" "$(basename "$APP_PATH")"
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
         with:
-          releaseId: ${{ github.event.release.id }}
-          tagName: ${{ github.event.release.tag_name }}
-          releaseDraft: ${{ github.event.release.draft }}
-          prerelease: ${{ github.event.release.prerelease }}
-          tauriScript: pnpm tauri
-          args: ${{ matrix.tauri_args }}
+          name: desktop-release-macos
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos]
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: release-assets/*

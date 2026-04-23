@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    name: just-ci
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.1
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Install dependencies
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: ./scripts/sync-version.ps1
+
+      - name: Type check
+        shell: pwsh
+        run: pnpm typecheck
+
+      - name: Lint
+        shell: pwsh
+        run: pnpm exec eslint src --ext .ts,.tsx --report-unused-disable-directives
+
+      - name: Rust tests
+        shell: pwsh
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Clippy
+        shell: pwsh
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
