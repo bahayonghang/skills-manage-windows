@@ -1,7 +1,7 @@
 pub mod commands;
 pub mod db;
-pub mod paths;
 pub mod path_utils;
+pub mod paths;
 
 use db::DbPool;
 use std::fs;

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::SystemTime;
 use tauri::State;
@@ -26,6 +26,8 @@ pub struct SkillWithLinks {
     pub updated_at: String,
     /// Agent IDs that have an installation record for this skill.
     pub linked_agents: Vec<String>,
+    /// Agent IDs that use the Central skills directory as their own root.
+    pub shared_root_agents: Vec<String>,
 }
 
 /// An installation record enriched with the `installed_at` timestamp for
@@ -317,10 +319,14 @@ pub async fn get_central_skills(state: State<'_, AppState>) -> Result<Vec<SkillW
 
 async fn get_central_skills_impl(pool: &DbPool) -> Result<Vec<SkillWithLinks>, String> {
     let skills = db::get_central_skills(pool).await?;
+    let agents = db::get_all_agents(pool).await?;
+    let shared_root_agents = shared_root_agent_ids(&agents);
     let mut result = Vec::with_capacity(skills.len());
     for skill in skills {
         let installations = db::get_skill_installations(pool, &skill.id).await?;
-        let linked_agents: Vec<String> = installations.into_iter().map(|i| i.agent_id).collect();
+        let mut linked_agents: Vec<String> =
+            installations.into_iter().map(|i| i.agent_id).collect();
+        append_missing_agents(&mut linked_agents, &shared_root_agents);
         let (created_at, updated_at) = skill_filesystem_timestamps(&skill);
 
         result.push(SkillWithLinks {
@@ -335,10 +341,36 @@ async fn get_central_skills_impl(pool: &DbPool) -> Result<Vec<SkillWithLinks>, S
             created_at,
             updated_at,
             linked_agents,
+            shared_root_agents: shared_root_agents.clone(),
         });
     }
 
     Ok(result)
+}
+
+fn shared_root_agent_ids(agents: &[db::Agent]) -> Vec<String> {
+    let Some(central) = agents.iter().find(|agent| agent.id == "central") else {
+        return Vec::new();
+    };
+
+    let central_dir = Path::new(&central.global_skills_dir);
+    agents
+        .iter()
+        .filter(|agent| agent.id != "central")
+        .filter(|agent| {
+            crate::paths::paths_equivalent(Path::new(&agent.global_skills_dir), central_dir)
+        })
+        .map(|agent| agent.id.clone())
+        .collect()
+}
+
+fn append_missing_agents(linked_agents: &mut Vec<String>, extra_agents: &[String]) {
+    let mut seen: HashSet<String> = linked_agents.iter().cloned().collect();
+    for agent_id in extra_agents {
+        if seen.insert(agent_id.clone()) {
+            linked_agents.push(agent_id.clone());
+        }
+    }
 }
 
 /// Tauri command: return detailed information about a skill, including all
@@ -549,7 +581,22 @@ mod tests {
 
         let mut linked = skills_with_links[0].linked_agents.clone();
         linked.sort();
-        assert_eq!(linked, vec!["claude-code", "cursor"]);
+        let mut expected_linked: Vec<String> = crate::db::UNIVERSAL_AGENT_IDS
+            .into_iter()
+            .map(String::from)
+            .chain(std::iter::once("claude-code".to_string()))
+            .collect();
+        expected_linked.sort();
+        assert_eq!(linked, expected_linked);
+
+        let mut shared = skills_with_links[0].shared_root_agents.clone();
+        shared.sort();
+        let mut expected_shared: Vec<String> = crate::db::UNIVERSAL_AGENT_IDS
+            .into_iter()
+            .map(String::from)
+            .collect();
+        expected_shared.sort();
+        assert_eq!(shared, expected_shared);
     }
 
     #[tokio::test]
@@ -561,10 +608,18 @@ mod tests {
 
         let skills_with_links = get_central_skills_impl(&pool).await.unwrap();
         assert_eq!(skills_with_links.len(), 1);
-        assert!(
-            skills_with_links[0].linked_agents.is_empty(),
-            "no links when no installations"
-        );
+        let mut linked = skills_with_links[0].linked_agents.clone();
+        linked.sort();
+        let mut expected_shared: Vec<String> = crate::db::UNIVERSAL_AGENT_IDS
+            .into_iter()
+            .map(String::from)
+            .collect();
+        expected_shared.sort();
+        assert_eq!(linked, expected_shared);
+
+        let mut shared = skills_with_links[0].shared_root_agents.clone();
+        shared.sort();
+        assert_eq!(shared, expected_shared);
     }
 
     #[tokio::test]
@@ -589,10 +644,30 @@ mod tests {
 
         let skills_with_links = get_central_skills_impl(&pool).await.unwrap();
         assert_eq!(skills_with_links.len(), 1);
-        assert!(
-            skills_with_links[0].linked_agents.is_empty(),
+        assert_eq!(
+            {
+                let mut linked = skills_with_links[0].linked_agents.clone();
+                linked.sort();
+                linked
+            },
+            {
+                let mut expected: Vec<String> = crate::db::UNIVERSAL_AGENT_IDS
+                    .into_iter()
+                    .map(String::from)
+                    .collect();
+                expected.sort();
+                expected
+            },
             "plugin observations must not pollute linked_agents state"
         );
+        let mut shared = skills_with_links[0].shared_root_agents.clone();
+        shared.sort();
+        let mut expected_shared: Vec<String> = crate::db::UNIVERSAL_AGENT_IDS
+            .into_iter()
+            .map(String::from)
+            .collect();
+        expected_shared.sort();
+        assert_eq!(shared, expected_shared);
     }
 
     #[tokio::test]
@@ -740,11 +815,14 @@ mod tests {
 
     async fn get_central_skills_impl(pool: &SqlitePool) -> Result<Vec<SkillWithLinks>, String> {
         let skills = db::get_central_skills(pool).await?;
+        let agents = db::get_all_agents(pool).await?;
+        let shared_root_agents = shared_root_agent_ids(&agents);
         let mut result = Vec::with_capacity(skills.len());
         for skill in skills {
             let installations = db::get_skill_installations(pool, &skill.id).await?;
-            let linked_agents: Vec<String> =
+            let mut linked_agents: Vec<String> =
                 installations.into_iter().map(|i| i.agent_id).collect();
+            append_missing_agents(&mut linked_agents, &shared_root_agents);
             let (created_at, updated_at) = skill_filesystem_timestamps(&skill);
             result.push(SkillWithLinks {
                 id: skill.id,
@@ -758,6 +836,7 @@ mod tests {
                 created_at,
                 updated_at,
                 linked_agents,
+                shared_root_agents: shared_root_agents.clone(),
             });
         }
         Ok(result)

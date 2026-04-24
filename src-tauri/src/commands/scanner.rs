@@ -451,10 +451,16 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
     let agents = db::get_all_agents(pool).await?;
     let custom_dirs = db::get_scan_directories(pool).await?;
     let scan_started_at = Utc::now().to_rfc3339();
+    let central_root = agents
+        .iter()
+        .find(|agent| agent.id == "central")
+        .map(|agent| PathBuf::from(&agent.global_skills_dir));
 
     let mut total_skills: usize = 0;
     let mut skills_by_agent: HashMap<String, usize> = HashMap::new();
     let mut all_found_skill_ids: HashSet<String> = HashSet::new();
+    let mut scanned_root_cache: HashMap<String, Vec<ScannedSkill>> = HashMap::new();
+    let mut counted_scan_roots: HashSet<String> = HashSet::new();
 
     for agent in &agents {
         let is_central = agent.category == "central";
@@ -487,7 +493,22 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                 .unwrap_or(&root.path)
                 .to_string_lossy()
                 .into_owned();
-            let root_scanned = scan_directory(&root.path, is_central);
+            let root_uses_central_storage = is_central
+                || central_root
+                    .as_ref()
+                    .map(|central| crate::paths::paths_equivalent(&root.path, central))
+                    .unwrap_or(false);
+            let scan_key = normalize_scan_key(&root.path);
+            let root_scanned = if let Some(cached) = scanned_root_cache.get(&scan_key) {
+                cached.clone()
+            } else {
+                let scanned = scan_directory(&root.path, root_uses_central_storage);
+                scanned_root_cache.insert(scan_key.clone(), scanned.clone());
+                scanned
+            };
+            if counted_scan_roots.insert(scan_key) {
+                total_skills += root_scanned.len();
+            }
 
             for skill in &root_scanned {
                 if let Some(source_kind) = root.claude_source {
@@ -521,12 +542,12 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                         name: skill.name.clone(),
                         description: skill.description.clone(),
                         file_path: skill.file_path.clone(),
-                        canonical_path: if is_central {
+                        canonical_path: if root_uses_central_storage {
                             Some(skill.dir_path.clone())
                         } else {
                             None
                         },
-                        is_central,
+                        is_central: root_uses_central_storage,
                         source: Some(skill.link_type.clone()),
                         content: None,
                         scanned_at: scan_started_at.clone(),
@@ -550,16 +571,11 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
 
         db::delete_stale_skill_installations(pool, &agent.id, &found_install_ids).await?;
         if agent.id == "claude-code" {
-            db::delete_stale_agent_skill_observations(
-                pool,
-                &agent.id,
-                &found_observation_row_ids,
-            )
-            .await?;
+            db::delete_stale_agent_skill_observations(pool, &agent.id, &found_observation_row_ids)
+                .await?;
         }
 
         let count = scanned.len();
-        total_skills += count;
         skills_by_agent.insert(agent.id.clone(), count);
     }
 
@@ -571,11 +587,17 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
         }
 
         let scan_key = normalize_scan_key(dir);
-        if !seen_custom_dirs.insert(scan_key) {
+        if !seen_custom_dirs.insert(scan_key.clone()) {
             continue;
         }
 
-        let scanned_skills = scan_directory(dir, false);
+        let scanned_skills = if let Some(cached) = scanned_root_cache.get(&scan_key) {
+            cached.clone()
+        } else {
+            let scanned = scan_directory(dir, false);
+            scanned_root_cache.insert(scan_key.clone(), scanned.clone());
+            scanned
+        };
         for skill in &scanned_skills {
             all_found_skill_ids.insert(skill.id.clone());
 
@@ -592,7 +614,9 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
             };
             db::upsert_skill(pool, &db_skill).await?;
         }
-        total_skills += scanned_skills.len();
+        if counted_scan_roots.insert(scan_key) {
+            total_skills += scanned_skills.len();
+        }
     }
 
     let found_ids_vec: Vec<String> = all_found_skill_ids.into_iter().collect();
@@ -1173,12 +1197,34 @@ mod tests {
         let shared_dir = TempDir::new().unwrap();
         let pool = setup_test_db().await;
         let shared_path = shared_dir.path().to_string_lossy().into_owned();
+        let missing_path = shared_dir
+            .path()
+            .join("missing")
+            .to_string_lossy()
+            .into_owned();
 
-        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id IN ('codex', 'central')")
-            .bind(&shared_path)
+        sqlx::query("DELETE FROM scan_directories")
             .execute(&pool)
             .await
             .unwrap();
+        sqlx::query("UPDATE agents SET global_skills_dir = ?")
+            .bind(&missing_path)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        for agent_id in crate::db::UNIVERSAL_AGENT_IDS
+            .iter()
+            .copied()
+            .chain(std::iter::once("central"))
+        {
+            sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = ?")
+                .bind(&shared_path)
+                .bind(agent_id)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
 
         create_skill_dir(
             shared_dir.path(),
@@ -1187,7 +1233,10 @@ mod tests {
         );
 
         let result = scan_all_skills_impl(&pool).await.unwrap();
-        assert_eq!(result.skills_by_agent.get("codex").copied(), Some(1));
+        assert_eq!(result.total_skills, 1);
+        for agent_id in crate::db::UNIVERSAL_AGENT_IDS {
+            assert_eq!(result.skills_by_agent.get(agent_id).copied(), Some(1));
+        }
         assert_eq!(result.skills_by_agent.get("central").copied(), Some(1));
 
         let installations = db::get_skill_installations(&pool, "shared-skill")
@@ -1195,14 +1244,15 @@ mod tests {
             .unwrap();
         assert_eq!(
             installations.len(),
-            2,
-            "shared skill should be mapped to both agents"
+            crate::db::UNIVERSAL_AGENT_IDS.len() + 1,
+            "shared skill should be mapped to universal agents and central"
         );
         assert!(
             installations
                 .iter()
-                .any(|installation| installation.agent_id == "codex"),
-            "codex installation should be present"
+                .any(|installation| installation.agent_id == "codex"
+                    && installation.link_type == "native"),
+            "codex shared-root installation should be native"
         );
         assert!(
             installations
@@ -1582,7 +1632,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "manual isolated-home sanity check"]
     async fn test_scan_all_skills_impl_claude_fixture_home_sanity() {
-        let fixture_home = Path::new("/tmp/skills-manage-test-fixtures/claude-multi-source");
+        let fixture_home = Path::new("/tmp/skillport-test-fixtures/claude-multi-source");
         if fixture_home.exists() {
             fs::remove_dir_all(fixture_home).unwrap();
         }

@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 
@@ -1365,10 +1365,9 @@ mod tests {
         add_registry_impl, cache_skill_explanation, central_skill_dir_for_name,
         classify_reqwest_error, detect_explanation_api_protocol, format_reqwest_error,
         get_fallback_endpoint, is_skill_installed_in_central, load_cached_skill_explanation,
-        marketplace_skills_from_candidates,
-        registry_has_cached_skills, search_marketplace_skills_impl, sync_registry_impl,
-        ExplanationApiProtocol, ExplanationErrorKind, RegistryCacheMetadata, RegistrySyncStatus,
-        SyncRegistryOptions,
+        marketplace_skills_from_candidates, registry_has_cached_skills,
+        search_marketplace_skills_impl, sync_registry_impl, ExplanationApiProtocol,
+        ExplanationErrorKind, RegistryCacheMetadata, RegistrySyncStatus, SyncRegistryOptions,
     };
     use crate::commands::github_import::RemoteSkillCandidate;
     use crate::db;

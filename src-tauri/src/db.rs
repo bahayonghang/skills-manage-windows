@@ -14,6 +14,21 @@ pub type DbPool = SqlitePool;
 const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 5] =
     ["claude-code", "codex", "gemini-cli", "opencode", "kiro"];
 
+pub const UNIVERSAL_AGENT_IDS: [&str; 12] = [
+    "amp",
+    "antigravity",
+    "cline",
+    "codex",
+    "cursor",
+    "deep-agents",
+    "firebender",
+    "gemini-cli",
+    "copilot",
+    "kimi-code-cli",
+    "opencode",
+    "warp",
+];
+
 // ─── Data Types ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -633,6 +648,10 @@ fn is_builtin_agent_enabled_by_default(agent_id: &str, category: &str) -> bool {
     DEFAULT_ENABLED_PLATFORM_IDS.contains(&agent_id)
 }
 
+pub fn is_universal_agent(agent_id: &str) -> bool {
+    UNIVERSAL_AGENT_IDS.contains(&agent_id)
+}
+
 fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
     let central_skills_dir = crate::paths::central_skills_dir_from_home(home)
         .to_string_lossy()
@@ -644,6 +663,14 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             .fold(home.to_path_buf(), |path, segment| path.join(segment))
             .to_string_lossy()
             .into_owned()
+    };
+
+    let agent_skill_dir = |agent_id: &str, segments: &[&str]| -> String {
+        if is_universal_agent(agent_id) {
+            return central_skills_dir.clone();
+        }
+
+        skill_dir(segments)
     };
 
     vec![
@@ -663,7 +690,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             id: "codex".to_string(),
             display_name: "Codex CLI".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: central_skills_dir.clone(),
+            global_skills_dir: agent_skill_dir("codex", &[".codex", "skills"]),
             project_skills_dir: None,
             icon_name: Some("codex".to_string()),
             is_detected: false,
@@ -674,7 +701,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             id: "cursor".to_string(),
             display_name: "Cursor".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: skill_dir(&[".cursor", "skills"]),
+            global_skills_dir: agent_skill_dir("cursor", &[".cursor", "skills"]),
             project_skills_dir: None,
             icon_name: Some("cursor".to_string()),
             is_detected: false,
@@ -685,7 +712,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             id: "gemini-cli".to_string(),
             display_name: "Gemini CLI".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: skill_dir(&[".gemini", "skills"]),
+            global_skills_dir: agent_skill_dir("gemini-cli", &[".gemini", "skills"]),
             project_skills_dir: None,
             icon_name: Some("gemini".to_string()),
             is_detected: false,
@@ -784,7 +811,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             id: "opencode".to_string(),
             display_name: "OpenCode".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: skill_dir(&[".opencode", "skills"]),
+            global_skills_dir: agent_skill_dir("opencode", &[".opencode", "skills"]),
             project_skills_dir: None,
             icon_name: Some("opencode".to_string()),
             is_detected: false,
@@ -817,7 +844,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             id: "amp".to_string(),
             display_name: "Amp".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: skill_dir(&[".amp", "skills"]),
+            global_skills_dir: agent_skill_dir("amp", &[".amp", "skills"]),
             project_skills_dir: None,
             icon_name: Some("amp".to_string()),
             is_detected: false,
@@ -859,14 +886,80 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
         },
         Agent {
             id: "copilot".to_string(),
-            display_name: "Copilot".to_string(),
+            display_name: "GitHub Copilot".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: skill_dir(&[".copilot", "skills"]),
+            global_skills_dir: agent_skill_dir("copilot", &[".copilot", "skills"]),
             project_skills_dir: None,
             icon_name: Some("copilot".to_string()),
             is_detected: false,
             is_builtin: true,
             is_enabled: is_builtin_agent_enabled_by_default("copilot", "coding"),
+        },
+        Agent {
+            id: "antigravity".to_string(),
+            display_name: "Antigravity".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: agent_skill_dir("antigravity", &[".antigravity", "skills"]),
+            project_skills_dir: None,
+            icon_name: Some("antigravity".to_string()),
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: is_builtin_agent_enabled_by_default("antigravity", "coding"),
+        },
+        Agent {
+            id: "cline".to_string(),
+            display_name: "Cline".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: agent_skill_dir("cline", &[".cline", "skills"]),
+            project_skills_dir: None,
+            icon_name: Some("cline".to_string()),
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: is_builtin_agent_enabled_by_default("cline", "coding"),
+        },
+        Agent {
+            id: "deep-agents".to_string(),
+            display_name: "Deep Agents".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: agent_skill_dir("deep-agents", &[".deep-agents", "skills"]),
+            project_skills_dir: None,
+            icon_name: Some("deep-agents".to_string()),
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: is_builtin_agent_enabled_by_default("deep-agents", "coding"),
+        },
+        Agent {
+            id: "firebender".to_string(),
+            display_name: "Firebender".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: agent_skill_dir("firebender", &[".firebender", "skills"]),
+            project_skills_dir: None,
+            icon_name: Some("firebender".to_string()),
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: is_builtin_agent_enabled_by_default("firebender", "coding"),
+        },
+        Agent {
+            id: "kimi-code-cli".to_string(),
+            display_name: "Kimi Code CLI".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: agent_skill_dir("kimi-code-cli", &[".kimi-code", "skills"]),
+            project_skills_dir: None,
+            icon_name: Some("kimi-code".to_string()),
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: is_builtin_agent_enabled_by_default("kimi-code-cli", "coding"),
+        },
+        Agent {
+            id: "warp".to_string(),
+            display_name: "Warp".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: agent_skill_dir("warp", &[".warp", "skills"]),
+            project_skills_dir: None,
+            icon_name: Some("warp".to_string()),
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: is_builtin_agent_enabled_by_default("warp", "coding"),
         },
         Agent {
             id: "aider".to_string(),
@@ -940,7 +1033,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             id: "central".to_string(),
             display_name: "Central Skills".to_string(),
             category: "central".to_string(),
-            global_skills_dir: central_skills_dir,
+            global_skills_dir: central_skills_dir.clone(),
             project_skills_dir: None,
             icon_name: Some("central".to_string()),
             is_detected: false,
@@ -1078,8 +1171,7 @@ pub async fn get_skills_for_agent(
                         .unwrap_or(0);
                     let mut skill = observation_to_skill_for_agent(observation);
                     if conflict_count > 1 {
-                        skill.conflict_group =
-                            Some(claude_conflict_group(agent_id, &skill.id));
+                        skill.conflict_group = Some(claude_conflict_group(agent_id, &skill.id));
                         skill.conflict_count = conflict_count;
                     }
                     skill
@@ -1981,7 +2073,7 @@ mod tests {
     async fn test_builtin_agents_seeded() {
         let pool = setup_test_db().await;
         let agents = get_all_agents(&pool).await.unwrap();
-        assert_eq!(agents.len(), 27, "Should have exactly 27 built-in agents");
+        assert_eq!(agents.len(), 33, "Should have exactly 33 built-in agents");
 
         let ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
         // Coding platforms
@@ -2001,10 +2093,16 @@ mod tests {
         assert!(ids.contains(&"kilocode"));
         assert!(ids.contains(&"ob1"));
         assert!(ids.contains(&"amp"));
+        assert!(ids.contains(&"antigravity"));
+        assert!(ids.contains(&"cline"));
+        assert!(ids.contains(&"deep-agents"));
+        assert!(ids.contains(&"firebender"));
         assert!(ids.contains(&"kiro"));
+        assert!(ids.contains(&"kimi-code-cli"));
         assert!(ids.contains(&"codebuddy"));
         assert!(ids.contains(&"hermes"));
         assert!(ids.contains(&"copilot"));
+        assert!(ids.contains(&"warp"));
         assert!(ids.contains(&"aider"));
         // Lobster platforms
         assert!(ids.contains(&"openclaw"));
@@ -2022,6 +2120,30 @@ mod tests {
         let agents = get_all_agents(&pool).await.unwrap();
         for agent in &agents {
             assert!(agent.is_builtin, "All seeded agents should be builtin");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_universal_agents_share_central_skills_dir() {
+        let pool = setup_test_db().await;
+        let agents = get_all_agents(&pool).await.unwrap();
+        let central = agents
+            .iter()
+            .find(|agent| agent.id == "central")
+            .expect("central agent should exist");
+
+        for agent_id in UNIVERSAL_AGENT_IDS {
+            let agent = agents
+                .iter()
+                .find(|agent| agent.id == agent_id)
+                .unwrap_or_else(|| panic!("missing universal agent {agent_id}"));
+            assert!(
+                crate::paths::paths_equivalent(
+                    Path::new(&agent.global_skills_dir),
+                    Path::new(&central.global_skills_dir)
+                ),
+                "{agent_id} should use the central skills directory"
+            );
         }
     }
 
@@ -2053,7 +2175,7 @@ mod tests {
         let pool = setup_test_db().await;
         init_database(&pool).await.unwrap(); // Call a second time
         let agents = get_all_agents(&pool).await.unwrap();
-        assert_eq!(agents.len(), 27, "Reinit must not duplicate agents");
+        assert_eq!(agents.len(), 33, "Reinit must not duplicate agents");
     }
 
     // ── Skills ────────────────────────────────────────────────────────────────
@@ -2284,7 +2406,7 @@ mod tests {
         insert_custom_agent(&pool, &custom).await.unwrap();
 
         let all = get_all_agents(&pool).await.unwrap();
-        assert_eq!(all.len(), 28, "Should have 27 builtins + 1 custom");
+        assert_eq!(all.len(), 34, "Should have 33 builtins + 1 custom");
 
         let retrieved = get_agent_by_id(&pool, "my-custom-agent")
             .await

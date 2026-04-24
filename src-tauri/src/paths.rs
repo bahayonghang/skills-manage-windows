@@ -77,6 +77,23 @@ pub fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
+pub fn paths_equivalent(left: &Path, right: &Path) -> bool {
+    normalize_equivalence_path(left) == normalize_equivalence_path(right)
+}
+
+fn normalize_equivalence_path(path: &Path) -> String {
+    let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let mut value = resolved.to_string_lossy().replace('\\', "/");
+    while value.len() > 1 && value.ends_with('/') {
+        value.pop();
+    }
+
+    #[cfg(windows)]
+    value.make_ascii_lowercase();
+
+    value
+}
+
 fn expand_home_path_with_home(path: &str, home_dir: &Path) -> PathBuf {
     let trimmed = path.trim();
     if trimmed == "~" {
@@ -189,5 +206,13 @@ mod tests {
     fn path_to_string_serializes_lossy_paths() {
         let path = Path::new(r"C:\Users\lyh\.agents\skills");
         assert_eq!(path_to_string(path), r"C:\Users\lyh\.agents\skills");
+    }
+
+    #[test]
+    fn paths_equivalent_ignores_trailing_separator() {
+        assert!(paths_equivalent(
+            Path::new(r"C:\Users\lyh\.agents\skills\"),
+            Path::new(r"C:\Users\lyh\.agents\skills")
+        ));
     }
 }

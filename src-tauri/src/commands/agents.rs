@@ -281,6 +281,8 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    const BUILTIN_AGENT_COUNT: usize = 33;
+
     async fn setup_test_db() -> DbPool {
         let pool = SqlitePool::connect(":memory:").await.unwrap();
         db::init_database(&pool).await.unwrap();
@@ -323,7 +325,11 @@ mod tests {
     async fn test_get_agents_returns_all_builtin() {
         let pool = setup_test_db().await;
         let agents = get_agents_impl(&pool).await.unwrap();
-        assert_eq!(agents.len(), 27, "should return all 27 built-in agents");
+        assert_eq!(
+            agents.len(),
+            BUILTIN_AGENT_COUNT,
+            "should return all built-in agents"
+        );
     }
 
     #[tokio::test]
@@ -402,7 +408,7 @@ mod tests {
     async fn test_detect_agents_returns_all_agents() {
         let pool = setup_test_db().await;
         let agents = detect_agents_impl(&pool).await.unwrap();
-        assert_eq!(agents.len(), 27);
+        assert_eq!(agents.len(), BUILTIN_AGENT_COUNT);
     }
 
     // ── add_custom_agent_impl ─────────────────────────────────────────────────
@@ -421,7 +427,11 @@ mod tests {
         add_custom_agent_impl(&pool, config).await.unwrap();
 
         let agents = get_agents_impl(&pool).await.unwrap();
-        assert_eq!(agents.len(), 28, "should have 27 built-ins + 1 custom");
+        assert_eq!(
+            agents.len(),
+            BUILTIN_AGENT_COUNT + 1,
+            "should have all built-ins + 1 custom"
+        );
 
         let custom = agents.iter().find(|a| a.id == "my-custom").unwrap();
         assert_eq!(custom.display_name, "My Custom Agent");

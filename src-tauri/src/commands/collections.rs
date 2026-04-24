@@ -183,7 +183,7 @@ pub async fn export_collection_impl(pool: &DbPool, collection_id: &str) -> Resul
         description: collection.description,
         skills: skill_ids,
         created_at: collection.created_at,
-        exported_from: "skills-manage".to_string(),
+        exported_from: "SkillPort".to_string(),
     };
 
     serde_json::to_string_pretty(&export).map_err(|e| e.to_string())
@@ -671,7 +671,7 @@ mod tests {
         assert_eq!(parsed.version, 1);
         assert_eq!(parsed.name, "Export Col");
         assert_eq!(parsed.description.as_deref(), Some("Export desc"));
-        assert_eq!(parsed.exported_from, "skills-manage");
+        assert_eq!(parsed.exported_from, "SkillPort");
 
         let mut skills = parsed.skills.clone();
         skills.sort();
@@ -730,7 +730,7 @@ mod tests {
             description: Some("Imported desc".to_string()),
             skills: vec!["import-skill".to_string()],
             created_at: Utc::now().to_rfc3339(),
-            exported_from: "skills-manage".to_string(),
+            exported_from: "SkillPort".to_string(),
         })
         .unwrap();
 
@@ -757,7 +757,7 @@ mod tests {
             description: None,
             skills: vec!["known-skill".to_string(), "unknown-skill".to_string()],
             created_at: Utc::now().to_rfc3339(),
-            exported_from: "skills-manage".to_string(),
+            exported_from: "SkillPort".to_string(),
         })
         .unwrap();
 
@@ -786,7 +786,7 @@ mod tests {
             description: None,
             skills: vec![],
             created_at: Utc::now().to_rfc3339(),
-            exported_from: "skills-manage".to_string(),
+            exported_from: "SkillPort".to_string(),
         })
         .unwrap();
 

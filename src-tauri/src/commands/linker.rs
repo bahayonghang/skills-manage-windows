@@ -216,6 +216,43 @@ async fn ensure_centralized(
 /// - The canonical skill does not exist (no SKILL.md).
 /// - A real (non-symlink) directory already exists at the target path.
 /// - `agent_id` is "central" (would create a self-referencing symlink).
+fn agents_share_skills_dir(agent: &db::Agent, central: &db::Agent) -> bool {
+    crate::paths::paths_equivalent(
+        Path::new(&agent.global_skills_dir),
+        Path::new(&central.global_skills_dir),
+    )
+}
+
+async fn record_native_installation(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+    canonical_dir: &Path,
+) -> Result<InstallResult, String> {
+    let skill_md = canonical_dir.join("SKILL.md");
+    if !skill_md.exists() {
+        return Err(format!(
+            "Canonical skill not found at '{}'",
+            skill_md.display()
+        ));
+    }
+
+    let installed_path = canonical_dir.to_string_lossy().into_owned();
+    let installation = SkillInstallation {
+        skill_id: skill_id.to_string(),
+        agent_id: agent_id.to_string(),
+        installed_path: installed_path.clone(),
+        link_type: "native".to_string(),
+        symlink_target: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    db::upsert_skill_installation(pool, &installation).await?;
+
+    Ok(InstallResult {
+        symlink_path: installed_path,
+    })
+}
+
 pub async fn install_skill_to_agent_impl(
     pool: &DbPool,
     skill_id: &str,
@@ -240,6 +277,10 @@ pub async fn install_skill_to_agent_impl(
 
     // 3. Ensure the skill exists in central (auto-centralize if needed).
     ensure_centralized(pool, skill_id, &canonical_dir).await?;
+
+    if agents_share_skills_dir(&agent, &central) {
+        return record_native_installation(pool, skill_id, agent_id, &canonical_dir).await;
+    }
 
     // 4. Compute symlink location.
     let agent_dir = PathBuf::from(&agent.global_skills_dir);
@@ -346,6 +387,10 @@ pub async fn install_skill_to_agent_copy_impl(
     // 3. Ensure the skill exists in central (auto-centralize if needed).
     ensure_centralized(pool, skill_id, &canonical_dir).await?;
 
+    if agents_share_skills_dir(&agent, &central) {
+        return record_native_installation(pool, skill_id, agent_id, &canonical_dir).await;
+    }
+
     // 4. Compute target location.
     let agent_dir = PathBuf::from(&agent.global_skills_dir);
     let target_path = agent_dir.join(skill_id);
@@ -411,6 +456,17 @@ pub async fn uninstall_skill_from_agent_impl(
     let agent = db::get_agent_by_id(pool, agent_id)
         .await?
         .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
+
+    let central = db::get_agent_by_id(pool, "central")
+        .await?
+        .ok_or_else(|| "Central agent not found in database".to_string())?;
+
+    if agent_id == "central" || agents_share_skills_dir(&agent, &central) {
+        return Err(format!(
+            "{} shares the Central Skills directory and cannot be uninstalled independently.",
+            agent.display_name
+        ));
+    }
 
     // 2. Compute the expected install location.
     let install_path = PathBuf::from(&agent.global_skills_dir).join(skill_id);
@@ -567,6 +623,14 @@ mod tests {
         skill_dir
     }
 
+    async fn point_codex_to_dir(pool: &DbPool, skills_dir: &Path) {
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'codex'")
+            .bind(skills_dir.to_str().unwrap())
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
     // ── make_relative_path ────────────────────────────────────────────────────
 
     #[test]
@@ -696,6 +760,43 @@ mod tests {
         assert_eq!(installations.len(), 1);
         assert_eq!(installations[0].agent_id, "claude-code");
         assert_eq!(installations[0].link_type, "symlink");
+    }
+
+    #[tokio::test]
+    async fn test_install_same_root_agent_records_native_without_symlink() {
+        let tmp = TempDir::new().unwrap();
+        let central_dir = tmp.path().join("central");
+        let agent_dir = tmp.path().join("claude");
+        fs::create_dir_all(&central_dir).unwrap();
+
+        let pool = setup_db(&central_dir, &agent_dir).await;
+        point_codex_to_dir(&pool, &central_dir).await;
+        let skill_dir = create_central_skill(&central_dir, "shared-root-skill");
+
+        let result = install_skill_to_agent_impl(&pool, "shared-root-skill", "codex").await;
+        assert!(
+            result.is_ok(),
+            "same-root install should succeed: {:?}",
+            result
+        );
+
+        let meta = fs::symlink_metadata(&skill_dir).unwrap();
+        assert!(
+            meta.is_dir() && !meta.file_type().is_symlink(),
+            "same-root install must use the existing native directory"
+        );
+
+        let installations = db::get_skill_installations(&pool, "shared-root-skill")
+            .await
+            .unwrap();
+        assert_eq!(installations.len(), 1);
+        assert_eq!(installations[0].agent_id, "codex");
+        assert_eq!(installations[0].link_type, "native");
+        assert_eq!(
+            installations[0].installed_path,
+            skill_dir.to_string_lossy().into_owned()
+        );
+        assert!(installations[0].symlink_target.is_none());
     }
 
     #[tokio::test]
@@ -898,6 +999,42 @@ mod tests {
         assert!(installations.is_empty(), "DB record should be cleaned up");
     }
 
+    #[tokio::test]
+    async fn test_uninstall_same_root_agent_is_rejected_without_deleting_central_dir() {
+        let tmp = TempDir::new().unwrap();
+        let central_dir = tmp.path().join("central");
+        let agent_dir = tmp.path().join("claude");
+        fs::create_dir_all(&central_dir).unwrap();
+
+        let pool = setup_db(&central_dir, &agent_dir).await;
+        point_codex_to_dir(&pool, &central_dir).await;
+        let skill_dir = create_central_skill(&central_dir, "shared-root-uninstall-skill");
+
+        install_skill_to_agent_impl(&pool, "shared-root-uninstall-skill", "codex")
+            .await
+            .unwrap();
+
+        let result =
+            uninstall_skill_from_agent_impl(&pool, "shared-root-uninstall-skill", "codex").await;
+        assert!(
+            result
+                .as_ref()
+                .is_err_and(|error| error.contains("cannot be uninstalled independently")),
+            "same-root uninstall should be rejected: {:?}",
+            result
+        );
+        assert!(
+            skill_dir.join("SKILL.md").exists(),
+            "Central skill directory must not be deleted"
+        );
+
+        let installations = db::get_skill_installations(&pool, "shared-root-uninstall-skill")
+            .await
+            .unwrap();
+        assert_eq!(installations.len(), 1);
+        assert_eq!(installations[0].agent_id, "codex");
+    }
+
     // ── batch install ─────────────────────────────────────────────────────────
 
     #[tokio::test]
@@ -1074,6 +1211,40 @@ mod tests {
             installations[0].link_type, "copy",
             "DB should record link_type as 'copy'"
         );
+    }
+
+    #[tokio::test]
+    async fn test_copy_install_same_root_agent_records_native_without_copying() {
+        let tmp = TempDir::new().unwrap();
+        let central_dir = tmp.path().join("central");
+        let agent_dir = tmp.path().join("claude");
+        fs::create_dir_all(&central_dir).unwrap();
+
+        let pool = setup_db(&central_dir, &agent_dir).await;
+        point_codex_to_dir(&pool, &central_dir).await;
+        let skill_dir = create_central_skill(&central_dir, "shared-root-copy-skill");
+
+        let result =
+            install_skill_to_agent_copy_impl(&pool, "shared-root-copy-skill", "codex").await;
+        assert!(
+            result.is_ok(),
+            "same-root copy install should succeed: {:?}",
+            result
+        );
+
+        let meta = fs::symlink_metadata(&skill_dir).unwrap();
+        assert!(
+            meta.is_dir() && !meta.file_type().is_symlink(),
+            "same-root copy install must keep the native Central directory"
+        );
+
+        let installations = db::get_skill_installations(&pool, "shared-root-copy-skill")
+            .await
+            .unwrap();
+        assert_eq!(installations.len(), 1);
+        assert_eq!(installations[0].agent_id, "codex");
+        assert_eq!(installations[0].link_type, "native");
+        assert!(installations[0].symlink_target.is_none());
     }
 
     #[tokio::test]
