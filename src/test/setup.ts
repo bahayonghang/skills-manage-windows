@@ -45,9 +45,8 @@ vi.mock("react-i18next", () => ({
 
 // Polyfill PointerEvent for base-ui components in jsdom
 // base-ui's Checkbox/Radio use PointerEvent internally which jsdom doesn't support
-if (!global.PointerEvent) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (global as any).PointerEvent = class PointerEvent extends MouseEvent {
+if (!globalThis.PointerEvent) {
+  class TestPointerEvent extends MouseEvent {
     pointerId: number;
     width: number;
     height: number;
@@ -72,8 +71,63 @@ if (!global.PointerEvent) {
       this.pointerType = init.pointerType ?? "";
       this.isPrimary = init.isPrimary ?? false;
     }
+  }
+
+  Object.defineProperty(globalThis, "PointerEvent", {
+    value: TestPointerEvent,
+    configurable: true,
+  });
+}
+
+function createTestStorage(): Storage {
+  const values = new Map<string, string>();
+
+  return {
+    get length() {
+      return values.size;
+    },
+    clear() {
+      values.clear();
+    },
+    getItem(key: string) {
+      return values.has(key) ? values.get(key)! : null;
+    },
+    key(index: number) {
+      return Array.from(values.keys())[index] ?? null;
+    },
+    removeItem(key: string) {
+      values.delete(key);
+    },
+    setItem(key: string, value: string) {
+      values.set(key, String(value));
+    },
   };
 }
+
+let testLocalStorage: Storage | null = null;
+try {
+  if (
+    typeof window.localStorage?.getItem === "function"
+    && typeof window.localStorage?.setItem === "function"
+  ) {
+    testLocalStorage = window.localStorage;
+  }
+} catch {
+  testLocalStorage = null;
+}
+
+if (!testLocalStorage) {
+  testLocalStorage = createTestStorage();
+  Object.defineProperty(window, "localStorage", {
+    value: testLocalStorage,
+    configurable: true,
+  });
+}
+
+Object.defineProperty(globalThis, "localStorage", {
+  value: testLocalStorage,
+  configurable: true,
+});
 
 // Mock Tauri APIs for testing
 Object.defineProperty(window, "__TAURI__", {

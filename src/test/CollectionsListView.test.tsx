@@ -384,7 +384,7 @@ describe("CollectionsListView", () => {
 
     expect(screen.queryByText("detail-route")).not.toBeInTheDocument();
     expect(locations.some((l) => l.pathname.startsWith("/skill/"))).toBe(false);
-    expect(locations.at(-1)?.pathname).toBe("/collections");
+    expect(locations[locations.length - 1]?.pathname).toBe("/collections");
   });
 
   it("opens the skill detail drawer without navigating away and does not use return-context helpers on card click", async () => {
@@ -637,7 +637,7 @@ describe("CollectionsListView", () => {
     });
 
     expect(locations.some((l) => l.pathname.startsWith("/skill/"))).toBe(false);
-    expect(locations.at(-1)?.pathname).toBe("/collections");
+    expect(locations[locations.length - 1]?.pathname).toBe("/collections");
     expect(screen.getByText("frontend-design")).toBeInTheDocument();
     expect(scroller.scrollTop).toBe(260);
     expect(trigger).toHaveFocus();

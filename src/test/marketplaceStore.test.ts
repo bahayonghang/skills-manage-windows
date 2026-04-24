@@ -407,7 +407,7 @@ describe("marketplaceStore", () => {
       if (eventName === "github-import:progress") {
         progressHandler = handler as GitHubImportProgressHandler;
       }
-      return vi.fn();
+      return () => undefined;
     });
 
     type ResolveImport = (value: typeof result) => void;

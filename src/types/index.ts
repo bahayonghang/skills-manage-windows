@@ -103,6 +103,10 @@ export interface SkillDetail extends Omit<Skill, "content"> {
   installations: SkillInstallation[];
   /** Collections this skill currently belongs to. */
   collections?: Collection[];
+  repository?: SkillRepository;
+  tags?: SkillTag[];
+  source_path?: string;
+  is_source_unknown?: boolean;
 }
 
 export interface SkillDetailRequest {
@@ -126,6 +130,10 @@ export interface SkillWithLinks {
   linked_agents: string[];
   /** Agent IDs that share the Central skills directory. */
   shared_root_agents: string[];
+  repository?: SkillRepository;
+  tags?: SkillTag[];
+  source_path?: string;
+  is_source_unknown?: boolean;
 }
 
 export interface BatchInstallResult {
@@ -155,6 +163,93 @@ export interface CollectionDetail extends Collection {
 export interface CollectionBatchInstallResult {
   succeeded: string[];
   failed: Array<{ agent_id: string; error: string }>;
+}
+
+// ─── Repository and Tag Metadata Types ───────────────────────────────────────
+
+export interface SkillRepository {
+  id: string;
+  name: string;
+  source_type: string;
+  owner?: string;
+  repo?: string;
+  branch?: string;
+  url?: string;
+  is_unknown: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillRepositoryWithStats extends SkillRepository {
+  skill_count: number;
+  unknown_skill_count: number;
+}
+
+export interface SkillTag {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  is_builtin: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillTagSuggestion {
+  skill_id: string;
+  tag: SkillTag;
+  confidence: number;
+  reason: string;
+}
+
+export interface SkillTagSuggestionResult {
+  skill_id: string;
+  skill_name?: string;
+  suggestions: SkillTagSuggestion[];
+  succeeded?: boolean;
+  error?: string;
+  low_confidence_count?: number;
+}
+
+export interface SkillAiTagReview {
+  skill_id: string;
+  skill_name: string;
+  tag: SkillTag;
+  confidence: number;
+  reason: string;
+  suggested_at: string;
+  updated_at: string;
+}
+
+export type AiTagItemStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export type AiTagJobStatus = "idle" | "running" | "completed" | "failed" | "cancelled";
+
+export interface AiTagJob {
+  jobId: string | null;
+  status: AiTagJobStatus;
+  total: number;
+  completed: number;
+  succeeded: number;
+  failed: number;
+  lowConfidenceCount: number;
+  currentSkillName?: string;
+  error?: string;
+  items: Record<string, AiTagItemStatus>;
+}
+
+export interface AiTagProgressPayload {
+  jobId: string;
+  skillId?: string;
+  skillName?: string;
+  status: "started" | "running" | "succeeded" | "failed" | "completed" | "cancelled";
+  total: number;
+  completed: number;
+  succeeded: number;
+  failed: number;
+  lowConfidenceCount?: number;
+  suggestions?: SkillTagSuggestion[];
+  error?: string;
 }
 
 // ─── Settings Types ───────────────────────────────────────────────────────────

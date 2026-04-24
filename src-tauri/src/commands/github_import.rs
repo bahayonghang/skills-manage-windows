@@ -499,6 +499,16 @@ async fn import_github_repo_skills_impl(
             scanned_at: Utc::now().to_rfc3339(),
         };
         db::upsert_skill(pool, &db_skill).await?;
+        db::assign_github_repository_to_skill(
+            pool,
+            &repo.owner,
+            &repo.repo,
+            &repo.branch,
+            &repo.normalized_url,
+            &op.final_skill_id,
+            &op.candidate.source_path,
+        )
+        .await?;
 
         imported_skills.push(ImportedGitHubSkillSummary {
             source_path: op.candidate.source_path.clone(),

@@ -220,6 +220,13 @@ describe("SettingsView", () => {
     expect(screen.getByText("GitHub 导入访问令牌")).toBeTruthy();
   });
 
+  it("renders AI tag rate controls", () => {
+    setupMocks();
+    renderSettingsView();
+    expect(screen.getByText(/AI Tag (速率限制|rate limit)/)).toBeTruthy();
+    expect(screen.getByLabelText(/AI Tag .*429/)).toBeTruthy();
+  });
+
   it("renders the existing settings sections", () => {
     setupMocks();
     renderSettingsView();
@@ -227,6 +234,16 @@ describe("SettingsView", () => {
     expect(screen.getByText("自定义平台")).toBeTruthy();
     expect(screen.getByText("平台可见性")).toBeTruthy();
     expect(screen.getByText("关于")).toBeTruthy();
+  });
+
+  it("renders the repository url in about", () => {
+    setupMocks();
+    renderSettingsView();
+    expect(screen.getByText("仓库地址")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "https://github.com/bahayonghang/skills-manage-windows" })).toHaveAttribute(
+      "href",
+      "https://github.com/bahayonghang/skills-manage-windows"
+    );
   });
 
   it("calls loadScanDirectories on mount", () => {
@@ -512,7 +529,7 @@ describe("SettingsView", () => {
   it("shows the app version in the about section", () => {
     setupMocks();
     renderSettingsView();
-    expect(screen.getByText("SkillPort v0.9.1")).toBeTruthy();
+    expect(screen.getByText(/SkillPort v\d+\.\d+\.\d+/)).toBeTruthy();
   });
 
   it("shows the database path in the about section", () => {

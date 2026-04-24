@@ -29,6 +29,9 @@ pub const UNIVERSAL_AGENT_IDS: [&str; 12] = [
     "warp",
 ];
 
+pub const LOCAL_UNKNOWN_REPOSITORY_ID: &str = "local-unknown";
+pub const UNCATEGORIZED_TAG_ID: &str = "uncategorized";
+
 // ─── Data Types ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -91,6 +94,67 @@ pub struct Collection {
     pub name: String,
     pub description: Option<String>,
     pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SkillRepository {
+    pub id: String,
+    pub name: String,
+    pub source_type: String,
+    pub owner: Option<String>,
+    pub repo: Option<String>,
+    pub branch: Option<String>,
+    pub url: Option<String>,
+    pub is_unknown: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillRepositoryWithStats {
+    #[serde(flatten)]
+    pub repository: SkillRepository,
+    pub skill_count: i64,
+    pub unknown_skill_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillRepositoryAssignment {
+    pub repository: SkillRepository,
+    pub source_path: Option<String>,
+    pub is_source_unknown: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SkillTag {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub color: Option<String>,
+    pub is_builtin: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SkillTagLink {
+    pub skill_id: String,
+    pub tag_id: String,
+    pub confidence: Option<f64>,
+    pub reason: Option<String>,
+    pub source: String,
+    pub added_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillAiTagReview {
+    pub skill_id: String,
+    pub skill_name: String,
+    pub tag: SkillTag,
+    pub confidence: f64,
+    pub reason: String,
+    pub suggested_at: String,
     pub updated_at: String,
 }
 
@@ -283,6 +347,109 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    // skill_repositories table — local metadata for grouping Central skills by source repo.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_repositories (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            owner       TEXT,
+            repo        TEXT,
+            branch      TEXT,
+            url         TEXT,
+            is_unknown  BOOLEAN NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_repository_members (
+            skill_id      TEXT PRIMARY KEY,
+            repository_id TEXT NOT NULL,
+            source_path   TEXT,
+            added_at      TEXT NOT NULL,
+            updated_at    TEXT NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_repository_members_repository_id
+         ON skill_repository_members(repository_id)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // skill_tags table — local category taxonomy separate from user Collections.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_tags (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL UNIQUE,
+            description TEXT,
+            color       TEXT,
+            is_builtin  BOOLEAN NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_tag_links (
+            skill_id    TEXT NOT NULL,
+            tag_id      TEXT NOT NULL,
+            confidence  REAL,
+            reason      TEXT,
+            source      TEXT NOT NULL DEFAULT 'manual',
+            added_at    TEXT NOT NULL,
+            PRIMARY KEY (skill_id, tag_id)
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_tag_links_tag_id
+         ON skill_tag_links(tag_id)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_ai_tag_reviews (
+            skill_id     TEXT NOT NULL,
+            tag_id       TEXT NOT NULL,
+            confidence   REAL NOT NULL,
+            reason       TEXT,
+            status       TEXT NOT NULL DEFAULT 'pending',
+            suggested_at TEXT NOT NULL,
+            updated_at   TEXT NOT NULL,
+            PRIMARY KEY (skill_id, tag_id)
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_ai_tag_reviews_status
+         ON skill_ai_tag_reviews(status)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     // scan_directories table
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS scan_directories (
@@ -468,6 +635,8 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
     // Seed built-in skill registries (marketplace sources)
     seed_builtin_registries(pool).await?;
 
+    seed_builtin_skill_metadata(pool).await?;
+
     Ok(())
 }
 
@@ -602,6 +771,111 @@ async fn seed_builtin_registries(pool: &DbPool) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+async fn seed_builtin_skill_metadata(pool: &DbPool) -> Result<(), String> {
+    let now = Utc::now().to_rfc3339();
+    sqlx::query(
+        "INSERT INTO skill_repositories
+         (id, name, source_type, owner, repo, branch, url, is_unknown, created_at, updated_at)
+         VALUES (?, ?, 'local', NULL, NULL, NULL, NULL, 1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           source_type = excluded.source_type,
+           is_unknown = excluded.is_unknown,
+           updated_at = excluded.updated_at",
+    )
+    .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
+    .bind("本地 / 未知来源")
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    for (id, name, description, color) in builtin_skill_tags() {
+        sqlx::query(
+            "INSERT INTO skill_tags
+             (id, name, description, color, is_builtin, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 1, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+               name = excluded.name,
+               description = excluded.description,
+               color = excluded.color,
+               is_builtin = excluded.is_builtin,
+               updated_at = excluded.updated_at",
+        )
+        .bind(id)
+        .bind(name)
+        .bind(description)
+        .bind(color)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+fn builtin_skill_tags() -> Vec<(&'static str, &'static str, &'static str, &'static str)> {
+    vec![
+        (
+            "programming-agent-engineering",
+            "编程与 Agent 工程",
+            "Coding agents, developer tools, automation, and agent engineering skills.",
+            "#7c3aed",
+        ),
+        (
+            "frontend-visual-design",
+            "前端与视觉设计",
+            "Frontend, UI, UX, visual generation, and interaction design skills.",
+            "#2563eb",
+        ),
+        (
+            "academic-research-writing",
+            "学术研究与写作",
+            "Paper search, academic writing, slides, and research workflows.",
+            "#0891b2",
+        ),
+        (
+            "data-analysis-finance",
+            "数据分析与金融",
+            "Data analysis, quantitative finance, markets, and reporting skills.",
+            "#059669",
+        ),
+        (
+            "biomed-research-databases",
+            "生物医药与科研数据库",
+            "Biomedical, chemistry, omics, and scientific database skills.",
+            "#16a34a",
+        ),
+        (
+            "docs-office-knowledge",
+            "文档办公与知识管理",
+            "Documents, office workflows, notes, and knowledge management skills.",
+            "#f59e0b",
+        ),
+        (
+            "business-bid-policy",
+            "业务/投标/政策",
+            "Business writing, bids, policy briefs, and enterprise workflows.",
+            "#dc2626",
+        ),
+        (
+            "ops-security-release",
+            "运行维护/安全/发布",
+            "Ops, security, release, CI, and production maintenance skills.",
+            "#475569",
+        ),
+        (
+            UNCATEGORIZED_TAG_ID,
+            "未分类",
+            "Fallback category for skills that still need review.",
+            "#71717a",
+        ),
+    ]
 }
 
 async fn ensure_column(
@@ -1304,6 +1578,16 @@ pub async fn get_skill_by_id(pool: &DbPool, skill_id: &str) -> Result<Option<Ski
 
 /// Delete a skill and all its installation records.
 pub async fn delete_skill(pool: &DbPool, skill_id: &str) -> Result<(), String> {
+    sqlx::query("DELETE FROM skill_repository_members WHERE skill_id = ?")
+        .bind(skill_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM skill_tag_links WHERE skill_id = ?")
+        .bind(skill_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     sqlx::query("DELETE FROM skill_installations WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
@@ -1445,6 +1729,14 @@ pub async fn delete_skills_not_in_scope(
 ) -> Result<(), String> {
     if found_skill_ids.is_empty() {
         // Nothing found — delete all installation records first, then all skills.
+        sqlx::query("DELETE FROM skill_repository_members")
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        sqlx::query("DELETE FROM skill_tag_links")
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
         sqlx::query("DELETE FROM skill_installations")
             .execute(pool)
             .await
@@ -1463,6 +1755,26 @@ pub async fn delete_skills_not_in_scope(
         .join(",");
 
     // Cascade: remove installation rows for skills that are no longer on disk.
+    let repo_sql = format!(
+        "DELETE FROM skill_repository_members WHERE skill_id NOT IN ({})",
+        placeholders
+    );
+    let mut repo_q = sqlx::query(&repo_sql);
+    for id in found_skill_ids {
+        repo_q = repo_q.bind(id.as_str());
+    }
+    repo_q.execute(pool).await.map_err(|e| e.to_string())?;
+
+    let tag_sql = format!(
+        "DELETE FROM skill_tag_links WHERE skill_id NOT IN ({})",
+        placeholders
+    );
+    let mut tag_q = sqlx::query(&tag_sql);
+    for id in found_skill_ids {
+        tag_q = tag_q.bind(id.as_str());
+    }
+    tag_q.execute(pool).await.map_err(|e| e.to_string())?;
+
     let install_sql = format!(
         "DELETE FROM skill_installations WHERE skill_id NOT IN ({})",
         placeholders
@@ -1817,6 +2129,584 @@ pub async fn get_skill_collections(
     .map_err(|e| e.to_string())
 }
 
+// ─── Skill Repository Metadata ───────────────────────────────────────────────
+
+fn now_rfc3339() -> String {
+    Utc::now().to_rfc3339()
+}
+
+fn normalize_repository_component(value: &str) -> String {
+    value
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.' {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string()
+}
+
+pub fn github_repository_id(owner: &str, repo: &str, branch: &str) -> String {
+    format!(
+        "github:{}-{}-{}",
+        normalize_repository_component(owner),
+        normalize_repository_component(repo),
+        normalize_repository_component(branch)
+    )
+}
+
+pub async fn get_local_unknown_repository(pool: &DbPool) -> Result<SkillRepository, String> {
+    get_skill_repository_by_id(pool, LOCAL_UNKNOWN_REPOSITORY_ID)
+        .await?
+        .ok_or_else(|| "Local unknown repository metadata is not initialized".to_string())
+}
+
+pub async fn get_skill_repository_by_id(
+    pool: &DbPool,
+    repository_id: &str,
+) -> Result<Option<SkillRepository>, String> {
+    sqlx::query_as::<_, SkillRepository>("SELECT * FROM skill_repositories WHERE id = ?")
+        .bind(repository_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn create_or_update_skill_repository(
+    pool: &DbPool,
+    id: Option<&str>,
+    name: &str,
+    source_type: &str,
+    owner: Option<&str>,
+    repo: Option<&str>,
+    branch: Option<&str>,
+    url: Option<&str>,
+    is_unknown: bool,
+) -> Result<SkillRepository, String> {
+    let normalized_id = id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let now = now_rfc3339();
+
+    sqlx::query(
+        "INSERT INTO skill_repositories
+         (id, name, source_type, owner, repo, branch, url, is_unknown, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           source_type = excluded.source_type,
+           owner = excluded.owner,
+           repo = excluded.repo,
+           branch = excluded.branch,
+           url = excluded.url,
+           is_unknown = excluded.is_unknown,
+           updated_at = excluded.updated_at",
+    )
+    .bind(&normalized_id)
+    .bind(name)
+    .bind(source_type)
+    .bind(owner)
+    .bind(repo)
+    .bind(branch)
+    .bind(url)
+    .bind(is_unknown)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    get_skill_repository_by_id(pool, &normalized_id)
+        .await?
+        .ok_or_else(|| "Failed to retrieve repository metadata".to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn assign_github_repository_to_skill(
+    pool: &DbPool,
+    owner: &str,
+    repo: &str,
+    branch: &str,
+    url: &str,
+    skill_id: &str,
+    source_path: &str,
+) -> Result<SkillRepository, String> {
+    let repository_id = github_repository_id(owner, repo, branch);
+    let name = format!("{owner}/{repo}");
+    let repository = create_or_update_skill_repository(
+        pool,
+        Some(&repository_id),
+        &name,
+        "github",
+        Some(owner),
+        Some(repo),
+        Some(branch),
+        Some(url),
+        false,
+    )
+    .await?;
+    assign_skills_to_repository(
+        pool,
+        &repository.id,
+        &[skill_id.to_string()],
+        Some(source_path),
+    )
+    .await?;
+    Ok(repository)
+}
+
+pub async fn assign_skills_to_repository(
+    pool: &DbPool,
+    repository_id: &str,
+    skill_ids: &[String],
+    source_path: Option<&str>,
+) -> Result<(), String> {
+    let existing = get_skill_repository_by_id(pool, repository_id).await?;
+    if existing.is_none() {
+        return Err(format!("Repository '{}' not found", repository_id));
+    }
+
+    let now = now_rfc3339();
+    for skill_id in skill_ids {
+        sqlx::query(
+            "INSERT INTO skill_repository_members
+             (skill_id, repository_id, source_path, added_at, updated_at)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(skill_id) DO UPDATE SET
+               repository_id = excluded.repository_id,
+               source_path = COALESCE(excluded.source_path, skill_repository_members.source_path),
+               updated_at = excluded.updated_at",
+        )
+        .bind(skill_id)
+        .bind(repository_id)
+        .bind(source_path)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+pub async fn get_skill_repository_assignment(
+    pool: &DbPool,
+    skill_id: &str,
+) -> Result<SkillRepositoryAssignment, String> {
+    let assigned = sqlx::query_as::<_, SkillRepository>(
+        "SELECT r.* FROM skill_repositories r
+         JOIN skill_repository_members m ON r.id = m.repository_id
+         WHERE m.skill_id = ?",
+    )
+    .bind(skill_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if let Some(repository) = assigned {
+        let source_path = sqlx::query_scalar::<_, Option<String>>(
+            "SELECT source_path FROM skill_repository_members WHERE skill_id = ?",
+        )
+        .bind(skill_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?
+        .flatten();
+        return Ok(SkillRepositoryAssignment {
+            is_source_unknown: repository.is_unknown,
+            repository,
+            source_path,
+        });
+    }
+
+    Ok(SkillRepositoryAssignment {
+        repository: get_local_unknown_repository(pool).await?,
+        source_path: None,
+        is_source_unknown: true,
+    })
+}
+
+pub async fn get_skill_repositories_with_stats(
+    pool: &DbPool,
+) -> Result<Vec<SkillRepositoryWithStats>, String> {
+    let repositories = sqlx::query_as::<_, SkillRepository>(
+        "SELECT * FROM skill_repositories ORDER BY is_unknown DESC, name",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    let unknown_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM skills s
+         LEFT JOIN skill_repository_members m ON s.id = m.skill_id
+         WHERE s.is_central = 1 AND m.skill_id IS NULL",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::with_capacity(repositories.len());
+    for repository in repositories {
+        let member_count = if repository.id == LOCAL_UNKNOWN_REPOSITORY_ID {
+            unknown_count
+        } else {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM skill_repository_members WHERE repository_id = ?",
+            )
+            .bind(&repository.id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| e.to_string())?
+        };
+        result.push(SkillRepositoryWithStats {
+            unknown_skill_count: if repository.id == LOCAL_UNKNOWN_REPOSITORY_ID {
+                unknown_count
+            } else {
+                0
+            },
+            repository,
+            skill_count: member_count,
+        });
+    }
+
+    Ok(result)
+}
+
+// ─── Skill Tags ──────────────────────────────────────────────────────────────
+
+pub async fn get_skill_tags(pool: &DbPool) -> Result<Vec<SkillTag>, String> {
+    sqlx::query_as::<_, SkillTag>("SELECT * FROM skill_tags ORDER BY is_builtin DESC, name")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn get_skill_tag_by_id(pool: &DbPool, tag_id: &str) -> Result<Option<SkillTag>, String> {
+    sqlx::query_as::<_, SkillTag>("SELECT * FROM skill_tags WHERE id = ?")
+        .bind(tag_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn get_skill_tag_by_name(pool: &DbPool, name: &str) -> Result<Option<SkillTag>, String> {
+    sqlx::query_as::<_, SkillTag>("SELECT * FROM skill_tags WHERE name = ?")
+        .bind(name)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn create_skill_tag(
+    pool: &DbPool,
+    name: &str,
+    description: Option<&str>,
+    color: Option<&str>,
+) -> Result<SkillTag, String> {
+    let trimmed_name = name.trim();
+    if trimmed_name.is_empty() {
+        return Err("Tag name is required".to_string());
+    }
+
+    if let Some(existing) = get_skill_tag_by_name(pool, trimmed_name).await? {
+        return Ok(existing);
+    }
+
+    let id = normalize_repository_component(trimmed_name);
+    let tag_id = if id.is_empty() {
+        Uuid::new_v4().to_string()
+    } else {
+        id
+    };
+    let now = now_rfc3339();
+
+    sqlx::query(
+        "INSERT INTO skill_tags (id, name, description, color, is_builtin, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?)",
+    )
+    .bind(&tag_id)
+    .bind(trimmed_name)
+    .bind(description)
+    .bind(color)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    get_skill_tag_by_id(pool, &tag_id)
+        .await?
+        .ok_or_else(|| "Failed to retrieve created tag".to_string())
+}
+
+pub async fn assign_skill_tags(
+    pool: &DbPool,
+    skill_ids: &[String],
+    tag_ids: &[String],
+    source: &str,
+    confidence: Option<f64>,
+    reason: Option<&str>,
+) -> Result<(), String> {
+    let now = now_rfc3339();
+    for tag_id in tag_ids {
+        if get_skill_tag_by_id(pool, tag_id).await?.is_none() {
+            return Err(format!("Tag '{}' not found", tag_id));
+        }
+    }
+
+    for skill_id in skill_ids {
+        for tag_id in tag_ids {
+            sqlx::query(
+                "INSERT INTO skill_tag_links
+                 (skill_id, tag_id, confidence, reason, source, added_at)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(skill_id, tag_id) DO UPDATE SET
+                   confidence = excluded.confidence,
+                   reason = excluded.reason,
+                   source = excluded.source",
+            )
+            .bind(skill_id)
+            .bind(tag_id)
+            .bind(confidence)
+            .bind(reason)
+            .bind(source)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn replace_skill_ai_tags(
+    pool: &DbPool,
+    skill_id: &str,
+    suggestions: &[(String, f64, String)],
+) -> Result<(), String> {
+    sqlx::query("DELETE FROM skill_tag_links WHERE skill_id = ? AND source = 'ai'")
+        .bind(skill_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    for (tag_id, confidence, reason) in suggestions {
+        assign_skill_tags(
+            pool,
+            &[skill_id.to_string()],
+            std::slice::from_ref(tag_id),
+            "ai",
+            Some(*confidence),
+            Some(reason),
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
+pub async fn replace_pending_ai_tag_reviews(
+    pool: &DbPool,
+    skill_id: &str,
+    suggestions: &[(String, f64, String)],
+) -> Result<(), String> {
+    let now = now_rfc3339();
+    sqlx::query("DELETE FROM skill_ai_tag_reviews WHERE skill_id = ? AND status = 'pending'")
+        .bind(skill_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    for (tag_id, confidence, reason) in suggestions {
+        if get_skill_tag_by_id(pool, tag_id).await?.is_none() {
+            return Err(format!("Tag '{}' not found", tag_id));
+        }
+
+        sqlx::query(
+            "INSERT INTO skill_ai_tag_reviews
+             (skill_id, tag_id, confidence, reason, status, suggested_at, updated_at)
+             VALUES (?, ?, ?, ?, 'pending', ?, ?)
+             ON CONFLICT(skill_id, tag_id) DO UPDATE SET
+               confidence = excluded.confidence,
+               reason = excluded.reason,
+               status = 'pending',
+               updated_at = excluded.updated_at",
+        )
+        .bind(skill_id)
+        .bind(tag_id)
+        .bind(confidence)
+        .bind(reason)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+pub async fn get_pending_ai_tag_reviews(pool: &DbPool) -> Result<Vec<SkillAiTagReview>, String> {
+    let rows = sqlx::query(
+        "SELECT
+           r.skill_id,
+           COALESCE(s.name, r.skill_id) AS skill_name,
+           t.id AS tag_id,
+           t.name AS tag_name,
+           t.description AS tag_description,
+           t.color AS tag_color,
+           t.is_builtin AS tag_is_builtin,
+           t.created_at AS tag_created_at,
+           t.updated_at AS tag_updated_at,
+           r.confidence,
+           r.reason,
+           r.suggested_at,
+           r.updated_at
+         FROM skill_ai_tag_reviews r
+         JOIN skill_tags t ON t.id = r.tag_id
+         LEFT JOIN skills s ON s.id = r.skill_id
+         WHERE r.status = 'pending'
+         ORDER BY r.updated_at DESC, skill_name, t.name",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(SkillAiTagReview {
+                skill_id: row.get("skill_id"),
+                skill_name: row.get("skill_name"),
+                tag: SkillTag {
+                    id: row.get("tag_id"),
+                    name: row.get("tag_name"),
+                    description: row.get("tag_description"),
+                    color: row.get("tag_color"),
+                    is_builtin: row.get("tag_is_builtin"),
+                    created_at: row.get("tag_created_at"),
+                    updated_at: row.get("tag_updated_at"),
+                },
+                confidence: row.get("confidence"),
+                reason: row
+                    .get::<Option<String>, _>("reason")
+                    .unwrap_or_else(|| "AI 低置信度建议".to_string()),
+                suggested_at: row.get("suggested_at"),
+                updated_at: row.get("updated_at"),
+            })
+        })
+        .collect()
+}
+
+pub async fn accept_ai_tag_reviews(
+    pool: &DbPool,
+    skill_id: &str,
+    tag_ids: &[String],
+) -> Result<(), String> {
+    if tag_ids.is_empty() {
+        return Err("No review tags selected".to_string());
+    }
+
+    for tag_id in tag_ids {
+        let review = sqlx::query(
+            "SELECT confidence, reason
+             FROM skill_ai_tag_reviews
+             WHERE skill_id = ? AND tag_id = ? AND status = 'pending'",
+        )
+        .bind(skill_id)
+        .bind(tag_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let confidence = review
+            .as_ref()
+            .map(|row| row.get::<f64, _>("confidence"))
+            .unwrap_or(1.0);
+        let reason = review
+            .as_ref()
+            .and_then(|row| row.get::<Option<String>, _>("reason"))
+            .unwrap_or_else(|| "人工复核确认".to_string());
+
+        assign_skill_tags(
+            pool,
+            &[skill_id.to_string()],
+            std::slice::from_ref(tag_id),
+            "ai",
+            Some(confidence),
+            Some(&reason),
+        )
+        .await?;
+    }
+
+    let now = now_rfc3339();
+    for tag_id in tag_ids {
+        sqlx::query(
+            "UPDATE skill_ai_tag_reviews
+             SET status = 'accepted', updated_at = ?
+             WHERE skill_id = ? AND tag_id = ? AND status = 'pending'",
+        )
+        .bind(&now)
+        .bind(skill_id)
+        .bind(tag_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    sqlx::query(
+        "UPDATE skill_ai_tag_reviews
+         SET status = 'skipped', updated_at = ?
+         WHERE skill_id = ? AND status = 'pending'",
+    )
+    .bind(&now)
+    .bind(skill_id)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+pub async fn skip_ai_tag_reviews(pool: &DbPool, skill_id: &str) -> Result<(), String> {
+    let now = now_rfc3339();
+    sqlx::query(
+        "UPDATE skill_ai_tag_reviews
+         SET status = 'skipped', updated_at = ?
+         WHERE skill_id = ? AND status = 'pending'",
+    )
+    .bind(&now)
+    .bind(skill_id)
+    .execute(pool)
+    .await
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+pub async fn get_skill_tags_for_skill(
+    pool: &DbPool,
+    skill_id: &str,
+) -> Result<Vec<SkillTag>, String> {
+    sqlx::query_as::<_, SkillTag>(
+        "SELECT t.* FROM skill_tags t
+         JOIN skill_tag_links l ON t.id = l.tag_id
+         WHERE l.skill_id = ?
+         ORDER BY t.is_builtin DESC, t.name",
+    )
+    .bind(skill_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
 // ─── Scan Directories ─────────────────────────────────────────────────────────
 
 /// Retrieve all scan directories.
@@ -2050,6 +2940,11 @@ mod tests {
             "agents",
             "collections",
             "collection_skills",
+            "skill_repositories",
+            "skill_repository_members",
+            "skill_tags",
+            "skill_tag_links",
+            "skill_ai_tag_reviews",
             "scan_directories",
             "settings",
         ];
@@ -2602,6 +3497,142 @@ mod tests {
             .await
             .unwrap();
         assert!(rows.is_empty(), "Memberships should be cascade-deleted");
+    }
+
+    // ── Skill Repositories and Tags ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_builtin_skill_metadata_seeded_and_idempotent() {
+        let pool = setup_test_db().await;
+        init_database(&pool).await.unwrap();
+
+        let repositories = get_skill_repositories_with_stats(&pool).await.unwrap();
+        assert!(repositories
+            .iter()
+            .any(|entry| entry.repository.id == LOCAL_UNKNOWN_REPOSITORY_ID));
+
+        let tags = get_skill_tags(&pool).await.unwrap();
+        assert!(
+            tags.iter().any(|tag| tag.id == UNCATEGORIZED_TAG_ID),
+            "uncategorized tag should be seeded"
+        );
+        assert_eq!(
+            tags.iter().filter(|tag| tag.is_builtin).count(),
+            builtin_skill_tags().len()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_assign_github_repository_to_skill_records_source_path() {
+        let pool = setup_test_db().await;
+        let skill = make_skill("github-skill", "GitHub Skill", true);
+        upsert_skill(&pool, &skill).await.unwrap();
+
+        assign_github_repository_to_skill(
+            &pool,
+            "openai",
+            "skills",
+            "main",
+            "https://github.com/openai/skills",
+            "github-skill",
+            "skills/.curated/github-skill",
+        )
+        .await
+        .unwrap();
+
+        let assignment = get_skill_repository_assignment(&pool, "github-skill")
+            .await
+            .unwrap();
+        assert_eq!(assignment.repository.source_type, "github");
+        assert_eq!(assignment.repository.owner.as_deref(), Some("openai"));
+        assert_eq!(
+            assignment.source_path.as_deref(),
+            Some("skills/.curated/github-skill")
+        );
+        assert!(!assignment.is_source_unknown);
+    }
+
+    #[tokio::test]
+    async fn test_unassigned_central_skill_uses_unknown_repository() {
+        let pool = setup_test_db().await;
+        let skill = make_skill("unknown-skill", "Unknown Skill", true);
+        upsert_skill(&pool, &skill).await.unwrap();
+
+        let assignment = get_skill_repository_assignment(&pool, "unknown-skill")
+            .await
+            .unwrap();
+        assert_eq!(assignment.repository.id, LOCAL_UNKNOWN_REPOSITORY_ID);
+        assert!(assignment.is_source_unknown);
+
+        let repositories = get_skill_repositories_with_stats(&pool).await.unwrap();
+        let unknown = repositories
+            .iter()
+            .find(|entry| entry.repository.id == LOCAL_UNKNOWN_REPOSITORY_ID)
+            .unwrap();
+        assert_eq!(unknown.unknown_skill_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_assign_skill_tags_supports_multi_tag_binding() {
+        let pool = setup_test_db().await;
+        let skill = make_skill("tagged-skill", "Tagged Skill", true);
+        upsert_skill(&pool, &skill).await.unwrap();
+        let custom = create_skill_tag(&pool, "自定义标签", Some("custom"), Some("#111111"))
+            .await
+            .unwrap();
+
+        assign_skill_tags(
+            &pool,
+            &["tagged-skill".to_string()],
+            &[custom.id.clone(), UNCATEGORIZED_TAG_ID.to_string()],
+            "manual",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let tags = get_skill_tags_for_skill(&pool, "tagged-skill")
+            .await
+            .unwrap();
+        let ids = tags.iter().map(|tag| tag.id.as_str()).collect::<Vec<_>>();
+        assert!(ids.contains(&custom.id.as_str()));
+        assert!(ids.contains(&UNCATEGORIZED_TAG_ID));
+    }
+
+    #[tokio::test]
+    async fn test_replace_skill_ai_tags_does_not_remove_manual_tags() {
+        let pool = setup_test_db().await;
+        let skill = make_skill("ai-tagged-skill", "AI Tagged Skill", true);
+        upsert_skill(&pool, &skill).await.unwrap();
+        let manual = create_skill_tag(&pool, "人工标签", None, None)
+            .await
+            .unwrap();
+
+        assign_skill_tags(
+            &pool,
+            &["ai-tagged-skill".to_string()],
+            &[manual.id.clone()],
+            "manual",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        replace_skill_ai_tags(
+            &pool,
+            "ai-tagged-skill",
+            &[(UNCATEGORIZED_TAG_ID.to_string(), 0.7, "AI 建议".to_string())],
+        )
+        .await
+        .unwrap();
+
+        let tags = get_skill_tags_for_skill(&pool, "ai-tagged-skill")
+            .await
+            .unwrap();
+        let ids = tags.iter().map(|tag| tag.id.as_str()).collect::<Vec<_>>();
+        assert!(ids.contains(&manual.id.as_str()));
+        assert!(ids.contains(&UNCATEGORIZED_TAG_ID));
     }
 
     // ── Scan Directories ──────────────────────────────────────────────────────

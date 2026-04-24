@@ -43,6 +43,7 @@ import {
 
 const APP_VERSION = __APP_VERSION__;
 const DB_PATH_FALLBACK = "~/.skillsmanage/db.sqlite";
+const REPO_URL = "https://github.com/bahayonghang/skills-manage-windows";
 
 /** Catppuccin Lavender hex per flavor — used for visual preview dots on flavor buttons (default accent). */
 const FLAVOR_COLORS: Record<CatppuccinFlavor, string> = {
@@ -483,6 +484,9 @@ export function SettingsView() {
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiModel, setAiModel] = useState("");
   const [aiCustomUrl, setAiCustomUrl] = useState("");
+  const [aiTagConcurrency, setAiTagConcurrency] = useState("1");
+  const [aiTagIntervalMs, setAiTagIntervalMs] = useState("4000");
+  const [aiTagStopOnRateLimit, setAiTagStopOnRateLimit] = useState(true);
   const [aiLoaded, setAiLoaded] = useState(false);
 
   // Load AI settings on mount
@@ -494,11 +498,19 @@ export function SettingsView() {
         const key = await invoke<string | null>("get_setting", { key: "ai_api_key" });
         const model = await invoke<string | null>("get_setting", { key: "ai_model" });
         const url = await invoke<string | null>("get_setting", { key: "ai_api_url" });
+        const tagConcurrency = await invoke<string | null>("get_setting", { key: "ai_tag_concurrency" });
+        const tagIntervalMs = await invoke<string | null>("get_setting", { key: "ai_tag_interval_ms" });
+        const tagStopOnRateLimit = await invoke<string | null>("get_setting", { key: "ai_tag_stop_on_rate_limit" });
         if (provider) setAiProvider(provider);
         if (region) setAiRegion(region as RegionId);
         if (key) setAiApiKey(key);
         if (model) setAiModel(model);
         if (url) setAiCustomUrl(url);
+        if (tagConcurrency) setAiTagConcurrency(tagConcurrency);
+        if (tagIntervalMs) setAiTagIntervalMs(tagIntervalMs);
+        if (tagStopOnRateLimit) {
+          setAiTagStopOnRateLimit(tagStopOnRateLimit !== "false" && tagStopOnRateLimit !== "0");
+        }
       } catch { /* first run, no settings yet */ }
       setAiLoaded(true);
     })();
@@ -517,10 +529,23 @@ export function SettingsView() {
         const p = AI_PROVIDERS.find((x) => x.id === aiProvider);
         const url = aiProvider === "custom" ? aiCustomUrl : (p?.endpoints[aiRegion] ?? "");
         await invoke("set_setting", { key: "ai_api_url", value: url });
+        await invoke("set_setting", { key: "ai_tag_concurrency", value: aiTagConcurrency });
+        await invoke("set_setting", { key: "ai_tag_interval_ms", value: aiTagIntervalMs });
+        await invoke("set_setting", { key: "ai_tag_stop_on_rate_limit", value: aiTagStopOnRateLimit ? "true" : "false" });
       } catch { /* ignore */ }
     };
     save();
-  }, [aiProvider, aiRegion, aiApiKey, aiModel, aiCustomUrl, aiLoaded]);
+  }, [
+    aiProvider,
+    aiRegion,
+    aiApiKey,
+    aiModel,
+    aiCustomUrl,
+    aiTagConcurrency,
+    aiTagIntervalMs,
+    aiTagStopOnRateLimit,
+    aiLoaded,
+  ]);
 
   // When provider or region changes, update model to default
   function handleProviderChange(id: string) {
@@ -1024,6 +1049,57 @@ export function SettingsView() {
                   <Input placeholder="https://..." value={aiCustomUrl} onChange={(e) => setAiCustomUrl(e.target.value)} />
                 </div>
               )}
+              <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium">
+                      {lang === "zh" ? "AI Tag 速率限制" : "AI Tag rate limit"}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {lang === "zh"
+                        ? "免费模型建议并发 1，请求间隔 4000ms。遇到 429 时会自动中断剩余任务。"
+                        : "For free models, use concurrency 1 and a 4000ms interval. 429 responses stop the remaining job."}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {lang === "zh" ? "429 中断" : "Stop on 429"}
+                    </span>
+                    <Switch
+                      checked={aiTagStopOnRateLimit}
+                      onCheckedChange={setAiTagStopOnRateLimit}
+                      aria-label={lang === "zh" ? "AI Tag 遇到 429 时中断" : "Stop AI Tag on 429"}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {lang === "zh" ? "并发数" : "Concurrency"}
+                    </label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={8}
+                      value={aiTagConcurrency}
+                      onChange={(event) => setAiTagConcurrency(event.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {lang === "zh" ? "请求间隔 ms" : "Interval ms"}
+                    </label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={60000}
+                      step={500}
+                      value={aiTagIntervalMs}
+                      onChange={(event) => setAiTagIntervalMs(event.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
               <div className="flex items-center gap-3">
                 {resolvedUrl && (
                   <div className="text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2 font-mono truncate flex-1 min-w-0">{resolvedUrl}</div>
@@ -1174,6 +1250,20 @@ export function SettingsView() {
                 <div>
                   <div className="text-xs text-muted-foreground">{t("settings.dbPath")}</div>
                   <div className="text-sm font-medium font-mono">{dbPathDisplay}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Globe className="size-4 text-muted-foreground shrink-0" />
+                <div>
+                  <div className="text-xs text-muted-foreground">{t("settings.repoUrl")}</div>
+                  <a
+                    href={REPO_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm font-medium text-primary hover:underline break-all"
+                  >
+                    {REPO_URL}
+                  </a>
                 </div>
               </div>
               {/* ── Flavor Switcher ──────────────────────────────────────── */}

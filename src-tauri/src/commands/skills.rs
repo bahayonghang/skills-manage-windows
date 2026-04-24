@@ -5,7 +5,7 @@ use std::path::Path;
 use std::time::SystemTime;
 use tauri::State;
 
-use crate::db::{self, Collection, DbPool, SkillForAgent};
+use crate::db::{self, Collection, DbPool, SkillForAgent, SkillRepository, SkillTag};
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -28,6 +28,10 @@ pub struct SkillWithLinks {
     pub linked_agents: Vec<String>,
     /// Agent IDs that use the Central skills directory as their own root.
     pub shared_root_agents: Vec<String>,
+    pub repository: Option<SkillRepository>,
+    pub tags: Vec<SkillTag>,
+    pub source_path: Option<String>,
+    pub is_source_unknown: bool,
 }
 
 /// An installation record enriched with the `installed_at` timestamp for
@@ -67,6 +71,10 @@ pub struct SkillDetail {
     pub installations: Vec<SkillInstallationDetail>,
     /// Collections this skill currently belongs to.
     pub collections: Vec<Collection>,
+    pub repository: Option<SkillRepository>,
+    pub tags: Vec<SkillTag>,
+    pub source_path: Option<String>,
+    pub is_source_unknown: bool,
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -201,6 +209,16 @@ async fn get_claude_observation_detail(
     } else {
         db::get_skill_collections(pool, &observation.skill_id).await?
     };
+    let repository_assignment = if observation.is_read_only {
+        None
+    } else {
+        Some(db::get_skill_repository_assignment(pool, &observation.skill_id).await?)
+    };
+    let tags = if observation.is_read_only {
+        Vec::new()
+    } else {
+        db::get_skill_tags_for_skill(pool, &observation.skill_id).await?
+    };
     let (conflict_group, conflict_count) =
         claude_conflict_metadata(agent_id, &observation.skill_id, &conflict_counts);
 
@@ -238,6 +256,17 @@ async fn get_claude_observation_detail(
         conflict_count,
         installations,
         collections,
+        repository: repository_assignment
+            .as_ref()
+            .map(|assignment| assignment.repository.clone()),
+        tags,
+        source_path: repository_assignment
+            .as_ref()
+            .and_then(|assignment| assignment.source_path.clone()),
+        is_source_unknown: repository_assignment
+            .as_ref()
+            .map(|assignment| assignment.is_source_unknown)
+            .unwrap_or(true),
     }))
 }
 
@@ -263,6 +292,8 @@ async fn get_skill_detail_with_row_impl(
     let dir_path = skill_dir_path(&skill);
     let installations = installation_details(db::get_skill_installations(pool, skill_id).await?);
     let collections = db::get_skill_collections(pool, skill_id).await?;
+    let repository_assignment = db::get_skill_repository_assignment(pool, skill_id).await?;
+    let tags = db::get_skill_tags_for_skill(pool, skill_id).await?;
 
     Ok(SkillDetail {
         row_id,
@@ -282,6 +313,10 @@ async fn get_skill_detail_with_row_impl(
         conflict_count: 0,
         installations,
         collections,
+        repository: Some(repository_assignment.repository),
+        tags,
+        source_path: repository_assignment.source_path,
+        is_source_unknown: repository_assignment.is_source_unknown,
     })
 }
 
@@ -328,6 +363,8 @@ async fn get_central_skills_impl(pool: &DbPool) -> Result<Vec<SkillWithLinks>, S
             installations.into_iter().map(|i| i.agent_id).collect();
         append_missing_agents(&mut linked_agents, &shared_root_agents);
         let (created_at, updated_at) = skill_filesystem_timestamps(&skill);
+        let repository_assignment = db::get_skill_repository_assignment(pool, &skill.id).await?;
+        let tags = db::get_skill_tags_for_skill(pool, &skill.id).await?;
 
         result.push(SkillWithLinks {
             id: skill.id,
@@ -342,6 +379,10 @@ async fn get_central_skills_impl(pool: &DbPool) -> Result<Vec<SkillWithLinks>, S
             updated_at,
             linked_agents,
             shared_root_agents: shared_root_agents.clone(),
+            repository: Some(repository_assignment.repository),
+            tags,
+            source_path: repository_assignment.source_path,
+            is_source_unknown: repository_assignment.is_source_unknown,
         });
     }
 
@@ -824,6 +865,9 @@ mod tests {
                 installations.into_iter().map(|i| i.agent_id).collect();
             append_missing_agents(&mut linked_agents, &shared_root_agents);
             let (created_at, updated_at) = skill_filesystem_timestamps(&skill);
+            let repository_assignment =
+                db::get_skill_repository_assignment(pool, &skill.id).await?;
+            let tags = db::get_skill_tags_for_skill(pool, &skill.id).await?;
             result.push(SkillWithLinks {
                 id: skill.id,
                 name: skill.name,
@@ -837,6 +881,10 @@ mod tests {
                 updated_at,
                 linked_agents,
                 shared_root_agents: shared_root_agents.clone(),
+                repository: Some(repository_assignment.repository),
+                tags,
+                source_path: repository_assignment.source_path,
+                is_source_unknown: repository_assignment.is_source_unknown,
             });
         }
         Ok(result)

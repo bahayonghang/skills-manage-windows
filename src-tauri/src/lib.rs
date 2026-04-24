@@ -4,12 +4,50 @@ pub mod path_utils;
 pub mod paths;
 
 use db::DbPool;
+use std::collections::HashMap;
 use std::fs;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use tauri::Manager;
 
 /// Application state shared across Tauri commands.
 pub struct AppState {
     pub db: DbPool,
+    pub ai_tag_jobs: AiTagJobRegistry,
+}
+
+#[derive(Default)]
+pub struct AiTagJobRegistry {
+    jobs: Mutex<HashMap<String, Arc<AtomicBool>>>,
+}
+
+impl AiTagJobRegistry {
+    pub fn register(&self, job_id: &str) -> Arc<AtomicBool> {
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        if let Ok(mut jobs) = self.jobs.lock() {
+            jobs.insert(job_id.to_string(), Arc::clone(&cancel_flag));
+        }
+        cancel_flag
+    }
+
+    pub fn cancel(&self, job_id: &str) -> bool {
+        let Ok(jobs) = self.jobs.lock() else {
+            return false;
+        };
+        let Some(cancel_flag) = jobs.get(job_id) else {
+            return false;
+        };
+        cancel_flag.store(true, Ordering::SeqCst);
+        true
+    }
+
+    pub fn finish(&self, job_id: &str) {
+        if let Ok(mut jobs) = self.jobs.lock() {
+            jobs.remove(job_id);
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -36,7 +74,10 @@ pub fn run() {
                     .expect("Failed to initialize database schema")
             });
 
-            app.manage(AppState { db: pool });
+            app.manage(AppState {
+                db: pool,
+                ai_tag_jobs: AiTagJobRegistry::default(),
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -62,6 +103,19 @@ pub fn run() {
             commands::skills::read_skill_content,
             commands::skills::read_file_by_path,
             commands::skills::open_in_file_manager,
+            // Central metadata
+            commands::central_metadata::get_skill_repositories,
+            commands::central_metadata::create_or_update_skill_repository,
+            commands::central_metadata::assign_skills_to_repository,
+            commands::central_metadata::get_skill_tags,
+            commands::central_metadata::create_skill_tag,
+            commands::central_metadata::assign_skill_tags,
+            commands::central_metadata::suggest_skill_tags,
+            commands::central_metadata::bulk_suggest_skill_tags,
+            commands::central_metadata::cancel_ai_tag_job,
+            commands::central_metadata::get_pending_ai_tag_reviews,
+            commands::central_metadata::accept_ai_tag_review,
+            commands::central_metadata::skip_ai_tag_review,
             // Collections
             commands::collections::create_collection,
             commands::collections::get_collections,

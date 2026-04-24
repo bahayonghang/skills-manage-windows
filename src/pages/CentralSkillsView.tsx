@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Search, RefreshCw, Blocks, FolderOpen, Settings, ArrowUpDown } from "lucide-react";
+import { Search, RefreshCw, Blocks, FolderOpen, Settings, ArrowUpDown, Tag, X, Wand2, AlertTriangle, Check, Eye, ListChecks, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -12,7 +12,7 @@ import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AgentWithStatus, ScannedSkill, SkillWithLinks } from "@/types";
+import { AgentWithStatus, AiTagJob, SkillAiTagReview, ScannedSkill, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
 import { markAppPerformance } from "@/lib/performance";
 import { cn } from "@/lib/utils";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
@@ -41,12 +41,27 @@ const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
     updated_at: "2026-04-17T00:00:00.000Z",
     linked_agents: ["claude-code"],
     shared_root_agents: [],
+    tags: [],
+    is_source_unknown: true,
   },
 ];
 
 const EMPTY_SKILLS: SkillWithLinks[] = [];
 const EMPTY_AGENTS: AgentWithStatus[] = [];
+const EMPTY_REPOSITORIES: SkillRepositoryWithStats[] = [];
+const EMPTY_TAGS: SkillTag[] = [];
+const EMPTY_AI_TAG_REVIEWS: SkillAiTagReview[] = [];
 const EMPTY_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {};
+const IDLE_AI_TAG_JOB: AiTagJob = {
+  jobId: null,
+  status: "idle",
+  total: 0,
+  completed: 0,
+  succeeded: 0,
+  failed: 0,
+  lowConfidenceCount: 0,
+  items: {},
+};
 const EMPTY_GITHUB_IMPORT_STATE = {
   isPreviewLoading: false,
   isImporting: false,
@@ -74,6 +89,10 @@ async function noopImportGitHubRepoSkills() {
 }
 
 async function noopGetSkillsByAgent(_agentId: string): Promise<void> {}
+
+async function noopUnlisten() {
+  return () => {};
+}
 
 function noopResetGitHubImport() {}
 
@@ -150,6 +169,11 @@ export function CentralSkillsView() {
   const { t } = useTranslation();
   const rawSkills = useCentralSkillsStore((state) => state.skills);
   const rawAgents = useCentralSkillsStore((state) => state.agents);
+  const rawRepositories = useCentralSkillsStore((state) => state.repositories);
+  const rawTags = useCentralSkillsStore((state) => state.tags);
+  const rawAiTagReviews = useCentralSkillsStore((state) => state.aiTagReviews);
+  const rawAiTagJob = useCentralSkillsStore((state) => state.aiTagJob);
+  const rawAiTaggingAvailable = useCentralSkillsStore((state) => state.aiTaggingAvailable);
   const rawIsLoading = useCentralSkillsStore((state) => state.isLoading);
   const rawLoadCentralSkills = useCentralSkillsStore(
     (state) => state.loadCentralSkills
@@ -161,6 +185,11 @@ export function CentralSkillsView() {
     rawLoadCentralSkills === undefined;
   const skills = shouldUseBrowserFixtures ? BROWSER_FIXTURE_SKILLS : rawSkills ?? EMPTY_SKILLS;
   const agents = rawAgents ?? EMPTY_AGENTS;
+  const repositories = rawRepositories ?? EMPTY_REPOSITORIES;
+  const tags = rawTags ?? EMPTY_TAGS;
+  const aiTagReviews = rawAiTagReviews ?? EMPTY_AI_TAG_REVIEWS;
+  const aiTagJob = rawAiTagJob ?? IDLE_AI_TAG_JOB;
+  const aiTaggingAvailable = rawAiTaggingAvailable ?? false;
   const centralSkillsDir = formatPathForDisplay(
     agents.find((agent) => agent.id === "central")?.global_skills_dir ?? t("central.path")
   );
@@ -168,6 +197,16 @@ export function CentralSkillsView() {
   const loadCentralSkills = rawLoadCentralSkills ?? noopAsync;
   const installSkill = useCentralSkillsStore((state) => state.installSkill) ?? noopInstallSkill;
   const togglePlatformLink = useCentralSkillsStore((state) => state.togglePlatformLink) ?? noopAsync;
+  const createTag = useCentralSkillsStore((state) => state.createTag);
+  const assignSkillTags = useCentralSkillsStore((state) => state.assignSkillTags);
+  const bulkSuggestSkillTags = useCentralSkillsStore((state) => state.bulkSuggestSkillTags);
+  const cancelAiTagJob = useCentralSkillsStore((state) => state.cancelAiTagJob);
+  const acceptAiTagReview = useCentralSkillsStore((state) => state.acceptAiTagReview);
+  const skipAiTagReview = useCentralSkillsStore((state) => state.skipAiTagReview);
+  const subscribeAiTagProgress =
+    useCentralSkillsStore((state) => state.subscribeAiTagProgress) ?? noopUnlisten;
+  const isMetadataUpdating = useCentralSkillsStore((state) => state.isMetadataUpdating) ?? false;
+  const isSuggestingTags = useCentralSkillsStore((state) => state.isSuggestingTags) ?? false;
   const togglingAgentId = useCentralSkillsStore((state) => state.togglingAgentId);
 
   // Keep the platform sidebar counts in sync after install.
@@ -186,9 +225,16 @@ export function CentralSkillsView() {
 
   type SortField = "name" | "createdAt" | "updatedAt";
   type SortDirection = "asc" | "desc";
+  type CategorizeTab = "manual" | "ai" | "review";
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [searchQuery, setSearchQuery] = useState("");
+  const [repositoryFilter, setRepositoryFilter] = useState("all");
+  const [tagFilter, setTagFilter] = useState("all");
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  const [categorizeTab, setCategorizeTab] = useState<CategorizeTab>("manual");
+  const [manualTagQuery, setManualTagQuery] = useState("");
+  const [manualSelectedTagIds, setManualSelectedTagIds] = useState<string[]>([]);
   const [installTargetSkill, setInstallTargetSkill] =
     useState<SkillWithLinks | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -210,10 +256,48 @@ export function CentralSkillsView() {
     () =>
       skills.map((skill) => ({
         skill,
-        searchText: buildSearchText([skill.name, skill.description]),
+        searchText: buildSearchText([
+          skill.name,
+          skill.description,
+          skill.repository?.name,
+          skill.source_path,
+          ...(skill.tags ?? []).map((tag) => tag.name),
+        ]),
       })),
     [skills]
   );
+  const aiReviewSkillIds = useMemo(
+    () => new Set(aiTagReviews.map((review) => review.skill_id)),
+    [aiTagReviews]
+  );
+  const uncategorizedCount = useMemo(
+    () =>
+      skills.filter((skill) => {
+        const skillTags = skill.tags ?? [];
+        return skillTags.length === 0 || skillTags.some((tag) => tag.id === "uncategorized");
+      }).length,
+    [skills]
+  );
+  const tagCounts = useMemo(
+    () =>
+      tags.map((tag) => ({
+        tag,
+        count: skills.filter((skill) => (skill.tags ?? []).some((item) => item.id === tag.id)).length,
+      })),
+    [skills, tags]
+  );
+  const filteredManualTags = useMemo(() => {
+    const query = normalizeSearchQuery(manualTagQuery);
+    return query
+      ? tags.filter((tag) => normalizeSearchQuery(tag.name).includes(query))
+      : tags;
+  }, [manualTagQuery, tags]);
+  const canCreateManualTag = useMemo(() => {
+    const name = manualTagQuery.trim();
+    if (!name) return false;
+    return !tags.some((tag) => normalizeSearchQuery(tag.name) === normalizeSearchQuery(name));
+  }, [manualTagQuery, tags]);
+  const skillIdsKey = useMemo(() => skills.map((skill) => skill.id).join("\0"), [skills]);
   const isSearchActive = normalizedSearchQuery.length > 0;
 
   // Load central skills on mount.
@@ -221,13 +305,47 @@ export function CentralSkillsView() {
     loadCentralSkills();
   }, [loadCentralSkills]);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    subscribeAiTagProgress().then((unsubscribe) => {
+      if (disposed) {
+        unsubscribe();
+        return;
+      }
+      unlisten = unsubscribe;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [subscribeAiTagProgress]);
+
   // Filter skills by search query.
   const filteredSkills = useMemo(() => {
-    if (!normalizedSearchQuery) return skills;
     return searchableSkills
-      .filter(({ searchText }) => searchText.includes(normalizedSearchQuery))
-      .map(({ skill }) => skill);
-  }, [normalizedSearchQuery, searchableSkills, skills]);
+      .filter(({ searchText }) => !normalizedSearchQuery || searchText.includes(normalizedSearchQuery))
+      .map(({ skill }) => skill)
+      .filter((skill) => {
+        const repository = skill.repository;
+        const skillTags = skill.tags ?? [];
+        const matchesRepository =
+          repositoryFilter === "all" ||
+          (repositoryFilter === "unassigned"
+            ? skill.is_source_unknown || repository?.is_unknown
+            : repository?.id === repositoryFilter);
+        const matchesTag =
+          tagFilter === "all" ||
+          (tagFilter === "ai-review"
+            ? aiReviewSkillIds.has(skill.id)
+            : false) ||
+          (tagFilter === "uncategorized"
+            ? skillTags.length === 0 || skillTags.some((tag) => tag.id === "uncategorized")
+            : skillTags.some((tag) => tag.id === tagFilter));
+        return matchesRepository && matchesTag;
+      });
+  }, [aiReviewSkillIds, normalizedSearchQuery, repositoryFilter, searchableSkills, tagFilter]);
 
   // Sort filtered skills.
   const sortedSkills = useMemo(() => {
@@ -255,6 +373,14 @@ export function CentralSkillsView() {
     if (!isSearchActive || !contentRef.current) return;
     contentRef.current.scrollTop = 0;
   }, [isSearchActive, normalizedSearchQuery]);
+
+  useEffect(() => {
+    const visibleIds = new Set(skillIdsKey ? skillIdsKey.split("\0") : []);
+    setSelectedSkillIds((current) => {
+      const next = current.filter((skillId) => visibleIds.has(skillId));
+      return next.length === current.length ? current : next;
+    });
+  }, [skillIdsKey]);
 
   useEffect(() => {
     if (!isLoading && skills.length > 0 && !hasMarkedCentralListReady.current) {
@@ -308,6 +434,116 @@ export function CentralSkillsView() {
       }
     } catch (err) {
       toast.error(t("central.installError", { error: String(err) }));
+    }
+  }
+
+  function handleToggleSelection(skillId: string) {
+    setSelectedSkillIds((current) =>
+      current.includes(skillId)
+        ? current.filter((id) => id !== skillId)
+        : [...current, skillId]
+    );
+  }
+
+  function handleSelectCurrentFilter() {
+    setSelectedSkillIds(sortedSkills.map((skill) => skill.id));
+  }
+
+  function handleSelectUncategorized() {
+    setSelectedSkillIds(
+      sortedSkills
+        .filter((skill) => {
+          const skillTags = skill.tags ?? [];
+          return skillTags.length === 0 || skillTags.some((tag) => tag.id === "uncategorized");
+        })
+        .map((skill) => skill.id)
+    );
+  }
+
+  function handleToggleManualTag(tagId: string) {
+    setManualSelectedTagIds((current) =>
+      current.includes(tagId)
+        ? current.filter((id) => id !== tagId)
+        : [...current, tagId]
+    );
+  }
+
+  async function handleCreateManualTag() {
+    const name = manualTagQuery.trim();
+    if (!name || !createTag) return;
+    try {
+      const tag = await createTag(name);
+      setManualSelectedTagIds((current) =>
+        current.includes(tag.id) ? current : [...current, tag.id]
+      );
+      setManualTagQuery("");
+      toast.success(t("central.tagCreated"));
+    } catch (err) {
+      toast.error(t("central.metadataError", { error: String(err) }));
+    }
+  }
+
+  async function handleApplyManualTags() {
+    if (!assignSkillTags || selectedSkillIds.length === 0 || manualSelectedTagIds.length === 0) return;
+    try {
+      await assignSkillTags(selectedSkillIds, manualSelectedTagIds);
+      toast.success(t("central.tagsAssigned", { count: selectedSkillIds.length }));
+    } catch (err) {
+      toast.error(t("central.metadataError", { error: String(err) }));
+    }
+  }
+
+  async function handleAcceptReview(review: SkillAiTagReview) {
+    if (!acceptAiTagReview) return;
+    try {
+      await acceptAiTagReview(review.skill_id, [review.tag.id]);
+      toast.success(t("central.reviewAccepted"));
+    } catch (err) {
+      toast.error(t("central.metadataError", { error: String(err) }));
+    }
+  }
+
+  async function handleApplyManualTagsToReview(review: SkillAiTagReview) {
+    if (!assignSkillTags || !skipAiTagReview || manualSelectedTagIds.length === 0) return;
+    try {
+      await assignSkillTags([review.skill_id], manualSelectedTagIds);
+      await skipAiTagReview(review.skill_id);
+      toast.success(t("central.reviewChanged"));
+    } catch (err) {
+      toast.error(t("central.metadataError", { error: String(err) }));
+    }
+  }
+
+  async function handleSkipReview(review: SkillAiTagReview) {
+    if (!skipAiTagReview) return;
+    try {
+      await skipAiTagReview(review.skill_id);
+      toast.success(t("central.reviewSkipped"));
+    } catch (err) {
+      toast.error(t("central.metadataError", { error: String(err) }));
+    }
+  }
+
+  async function handleBulkSuggestTags() {
+    if (!bulkSuggestSkillTags || selectedSkillIds.length === 0) return;
+    try {
+      const result = await bulkSuggestSkillTags(selectedSkillIds);
+      const succeeded = result.filter((item) => item.succeeded !== false && !item.error).length;
+      const failed = result.length - succeeded;
+      const review = result.reduce((count, item) => count + (item.low_confidence_count ?? 0), 0);
+      toast.success(t("central.aiTagsFinished", { succeeded, failed, review }));
+    } catch (err) {
+      toast.error(t("central.metadataError", { error: String(err) }));
+    }
+  }
+
+  async function handleCancelAiTagJob() {
+    if (!cancelAiTagJob) return;
+    try {
+      await cancelAiTagJob();
+      toast.info(t("central.aiTagCancelRequested"));
+    } catch (err) {
+      toast.error(t("central.metadataError", { error: String(err) }));
     }
   }
 
@@ -378,10 +614,16 @@ export function CentralSkillsView() {
         key={skill.id}
         name={skill.name}
         description={skill.description}
+        checkbox={{
+          checked: selectedSkillIds.includes(skill.id),
+          onChange: () => handleToggleSelection(skill.id),
+        }}
+        tags={(skill.tags ?? []).map((tag) => ({ key: tag.id, label: tag.name }))}
+        publisher={skill.repository?.name}
         onDetail={() => handleOpenDrawer(skill.id)}
         onInstallTo={() => handleInstallClick(skill)}
         detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
-        className="h-[104px]"
+        className="h-[132px]"
       />
     );
   }
@@ -392,6 +634,12 @@ export function CentralSkillsView() {
         key={skill.id}
         name={skill.name}
         description={skill.description}
+        checkbox={{
+          checked: selectedSkillIds.includes(skill.id),
+          onChange: () => handleToggleSelection(skill.id),
+        }}
+        tags={(skill.tags ?? []).map((tag) => ({ key: tag.id, label: tag.name }))}
+        publisher={skill.repository?.name}
         onDetail={() => handleOpenDrawer(skill.id)}
         onInstallTo={() => handleInstallClick(skill)}
         detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
@@ -403,7 +651,7 @@ export function CentralSkillsView() {
           onToggle: handleTogglePlatform,
           togglingAgentId,
         }}
-        className="h-[188px]"
+        className="h-[212px]"
       />
     );
   }
@@ -498,12 +746,150 @@ export function CentralSkillsView() {
                 </button>
               ))}
             </div>
+            <select
+              value={tagFilter}
+              onChange={(event) => setTagFilter(event.target.value)}
+              aria-label={t("central.tagFilterLabel")}
+              className="h-9 rounded-xl border border-border bg-background px-3 text-xs text-foreground"
+            >
+              <option value="all">{t("central.allTags")}</option>
+              <option value="uncategorized">{t("central.uncategorizedOnly")}</option>
+              <option value="ai-review">{t("central.aiReviewOnly")}</option>
+              {tags.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant={repositoryFilter === "unassigned" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setRepositoryFilter(repositoryFilter === "unassigned" ? "all" : "unassigned")}
+            >
+              {t("central.unassignedOnly")}
+            </Button>
+            <Button
+              variant={tagFilter === "uncategorized" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setTagFilter(tagFilter === "uncategorized" ? "all" : "uncategorized")}
+            >
+              {t("central.uncategorizedOnly")}
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div ref={contentRef} className="flex-1 overflow-auto p-6">
+      <div className="flex min-h-0 flex-1">
+        <aside className="hidden w-64 shrink-0 border-r border-border bg-muted/20 p-4 md:block">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <FolderOpen className="size-3.5" />
+            {t("central.repositories")}
+          </div>
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={() => setRepositoryFilter("all")}
+              className={cn(
+                "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors",
+                repositoryFilter === "all"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
+              )}
+            >
+              <span>{t("central.allRepositories")}</span>
+              <span>{skills.length}</span>
+            </button>
+            {repositories.map((repository) => (
+              <button
+                key={repository.id}
+                type="button"
+                onClick={() =>
+                  setRepositoryFilter(repository.is_unknown ? "unassigned" : repository.id)
+                }
+                className={cn(
+                  "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors",
+                  (repository.is_unknown && repositoryFilter === "unassigned") ||
+                    repositoryFilter === repository.id
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
+                )}
+              >
+                <span className="min-w-0 truncate">{repository.name}</span>
+                <span className="shrink-0 tabular-nums">
+                  {repository.is_unknown ? repository.unknown_skill_count : repository.skill_count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-6 mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <Tag className="size-3.5" />
+            {t("central.categoryNav")}
+          </div>
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={() => setTagFilter("all")}
+              className={cn(
+                "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors",
+                tagFilter === "all"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
+              )}
+            >
+              <span>{t("central.allTags")}</span>
+              <span>{skills.length}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTagFilter("uncategorized")}
+              className={cn(
+                "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors",
+                tagFilter === "uncategorized"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
+              )}
+            >
+              <span>{t("central.uncategorizedOnly")}</span>
+              <span>{uncategorizedCount}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTagFilter("ai-review");
+                setCategorizeTab("review");
+              }}
+              className={cn(
+                "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors",
+                tagFilter === "ai-review"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
+              )}
+            >
+              <span>{t("central.aiReviewOnly")}</span>
+              <span>{aiTagReviews.length}</span>
+            </button>
+            {tagCounts.map(({ tag, count }) => (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => setTagFilter(tag.id)}
+                className={cn(
+                  "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors",
+                  tagFilter === tag.id
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
+                )}
+              >
+                <span className="min-w-0 truncate">{tag.name}</span>
+                <span className="shrink-0 tabular-nums">{count}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div ref={contentRef} className="flex-1 overflow-auto p-6">
         {isLoading ? (
           <EmptyState message={t("central.loading")} />
         ) : skills.length === 0 ? (
@@ -514,7 +900,7 @@ export function CentralSkillsView() {
           sortedSkills.length > 60 ? (
             <VirtualizedList
               items={sortedSkills}
-              itemHeight={104}
+              itemHeight={132}
               itemGap={12}
               overscan={8}
               scrollContainerRef={contentRef}
@@ -529,7 +915,7 @@ export function CentralSkillsView() {
         ) : sortedSkills.length > 40 ? (
           <VirtualizedGrid
             items={sortedSkills}
-            itemHeight={188}
+            itemHeight={212}
             rowGap={16}
             columnGap={16}
             overscanRows={3}
@@ -544,7 +930,257 @@ export function CentralSkillsView() {
             {sortedSkills.map((skill) => renderGridCard(skill))}
           </div>
         )}
+        </div>
+
+        {skills.length > 0 && (
+          <aside className="hidden w-[360px] shrink-0 border-l border-border bg-background/95 p-4 xl:block">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold">{t("central.categorizePanelTitle")}</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("central.categorizePanelDesc")}
+                </p>
+              </div>
+              <ListChecks className="size-5 text-muted-foreground" />
+            </div>
+
+            <div className="mb-4 rounded-2xl border border-border bg-muted/30 p-3">
+              <div className="mb-2 text-xs font-medium text-foreground">
+                {t("central.categorizeRange")}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={handleSelectCurrentFilter}>
+                  {t("central.selectCurrentFilter")}
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleSelectUncategorized}>
+                  {t("central.selectUncategorized")}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedSkillIds([])}>
+                  <X className="size-3.5" />
+                  {t("central.clearSelection")}
+                </Button>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-xl bg-background p-2">
+                  <div className="text-muted-foreground">{t("central.previewSelected")}</div>
+                  <div className="mt-1 font-semibold">
+                    {t("central.selectedCount", { count: selectedSkillIds.length })}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-background p-2">
+                  <div className="text-muted-foreground">{t("central.previewTags")}</div>
+                  <div className="mt-1 font-semibold">
+                    {t("central.tagsWillBeAdded", { count: manualSelectedTagIds.length })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div
+              role="tablist"
+              aria-label={t("central.categorizeIntent")}
+              className="mb-4 grid grid-cols-3 rounded-xl bg-muted/40 p-1"
+            >
+              {(["manual", "ai", "review"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={categorizeTab === tab}
+                  onClick={() => setCategorizeTab(tab)}
+                  className={cn(
+                    "h-8 rounded-lg text-xs font-medium transition-colors",
+                    categorizeTab === tab
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {t(`central.categorizeTab.${tab}`)}
+                </button>
+              ))}
+            </div>
+
+            {categorizeTab === "manual" && (
+              <div className="space-y-3">
+                <Input
+                  value={manualTagQuery}
+                  onChange={(event) => setManualTagQuery(event.target.value)}
+                  placeholder={t("central.searchTagsPlaceholder")}
+                  aria-label={t("central.searchTagsPlaceholder")}
+                  className="h-9 text-xs"
+                />
+                {canCreateManualTag && (
+                  <Button variant="ghost" size="sm" onClick={handleCreateManualTag}>
+                    <Plus className="size-3.5" />
+                    {t("central.createTagInline", { name: manualTagQuery.trim() })}
+                  </Button>
+                )}
+                <div className="flex max-h-48 flex-wrap gap-2 overflow-auto rounded-2xl border border-border bg-muted/20 p-3">
+                  {filteredManualTags.map((tag) => {
+                    const selected = manualSelectedTagIds.includes(tag.id);
+                    return (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => handleToggleManualTag(tag.id)}
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-xs transition-colors",
+                          selected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {tag.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <Button
+                  className="w-full"
+                  disabled={
+                    selectedSkillIds.length === 0 ||
+                    manualSelectedTagIds.length === 0 ||
+                    isMetadataUpdating
+                  }
+                  onClick={handleApplyManualTags}
+                >
+                  <Check className="size-3.5" />
+                  {t("central.applyManualTags")}
+                </Button>
+              </div>
+            )}
+
+            {categorizeTab === "ai" && (
+              <div className="space-y-3">
+                {!aiTaggingAvailable && (
+                  <div className="rounded-2xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {t("central.aiTaggingNeedsConfig")}
+                  </div>
+                )}
+                <Button
+                  className="w-full"
+                  disabled={
+                    !aiTaggingAvailable ||
+                    selectedSkillIds.length === 0 ||
+                    isSuggestingTags ||
+                    aiTagJob.status === "running"
+                  }
+                  onClick={handleBulkSuggestTags}
+                >
+                  <Wand2 className="size-3.5" />
+                  {t("central.aiSuggestTags")}
+                </Button>
+                <div className="rounded-2xl border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+                  {t("central.aiPreview", { count: selectedSkillIds.length })}
+                </div>
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                  {t("central.aiTagRateHint")}
+                </div>
+              </div>
+            )}
+
+            {categorizeTab === "review" && (
+              <div className="space-y-3">
+                {aiTagReviews.length === 0 ? (
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4 text-center text-xs text-muted-foreground">
+                    {t("central.reviewEmpty")}
+                  </div>
+                ) : (
+                  aiTagReviews.map((review) => (
+                    <div
+                      key={`${review.skill_id}:${review.tag.id}`}
+                      className="rounded-2xl border border-border bg-muted/20 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">{review.skill_name}</div>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <span className="rounded-full bg-background px-2 py-0.5">
+                              {review.tag.name}
+                            </span>
+                            <span>{Math.round(review.confidence * 100)}%</span>
+                          </div>
+                        </div>
+                        <AlertTriangle className="size-4 shrink-0 text-amber-500" />
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">{review.reason}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={() => handleAcceptReview(review)}>
+                          {t("central.reviewAccept")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={manualSelectedTagIds.length === 0}
+                          onClick={() => handleApplyManualTagsToReview(review)}
+                        >
+                          {t("central.reviewChange")}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleSkipReview(review)}>
+                          {t("central.reviewSkip")}
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </aside>
+        )}
       </div>
+
+      {aiTagJob.status !== "idle" && (
+        <div className="sticky bottom-0 z-10 border-t border-border bg-background/95 px-6 py-3 shadow-lg backdrop-blur">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 font-medium text-foreground">
+              <Wand2 className="size-3.5" />
+              <span>{t("central.aiTagProgressTitle")}</span>
+              {aiTagJob.currentSkillName && aiTagJob.status === "running" && (
+                <span className="text-muted-foreground">
+                  {t("central.aiTagCurrent", { name: aiTagJob.currentSkillName })}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
+              <span>{t("central.aiTagCompleted", { completed: aiTagJob.completed, total: aiTagJob.total })}</span>
+              <span>{t("central.aiTagSucceeded", { count: aiTagJob.succeeded })}</span>
+              <span>{t("central.aiTagFailed", { count: aiTagJob.failed })}</span>
+              <span>{t("central.aiTagLowConfidence", { count: aiTagJob.lowConfidenceCount })}</span>
+              {aiTagJob.status === "completed" && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline"
+                  onClick={() => {
+                    setCategorizeTab("review");
+                    setTagFilter("ai-review");
+                  }}
+                >
+                  <Eye className="size-3.5" />
+                  {t("central.viewFailuresAndReviews")}
+                </button>
+              )}
+              {aiTagJob.status === "running" && (
+                <Button variant="outline" size="sm" onClick={handleCancelAiTagJob}>
+                  <X className="size-3.5" />
+                  {t("central.cancelAiTagJob")}
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{
+                width: `${aiTagJob.total > 0 ? Math.round((aiTagJob.completed / aiTagJob.total) * 100) : 0}%`,
+              }}
+            />
+          </div>
+          {aiTagJob.error && (
+            <p className="mt-2 text-xs text-destructive">{aiTagJob.error}</p>
+          )}
+        </div>
+      )}
 
       {/* Install Dialog */}
       <InstallDialog

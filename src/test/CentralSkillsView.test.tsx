@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { CentralSkillsView } from "../pages/CentralSkillsView";
-import { AgentWithStatus, SkillWithLinks } from "../types";
+import { AgentWithStatus, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
 
 // Mock stores
 vi.mock("../stores/centralSkillsStore", () => ({
@@ -108,6 +108,29 @@ const mockSkills: SkillWithLinks[] = [
     updated_at: "2026-04-12T00:00:00Z",
     linked_agents: ["claude-code", "codex"],
     shared_root_agents: ["codex", "cursor"],
+    repository: {
+      id: "github-openai-skills-main",
+      name: "openai/skills",
+      source_type: "github",
+      owner: "openai",
+      repo: "skills",
+      branch: "main",
+      url: "https://github.com/openai/skills",
+      is_unknown: false,
+      created_at: "2026-04-10T00:00:00Z",
+      updated_at: "2026-04-10T00:00:00Z",
+    },
+    tags: [
+      {
+        id: "frontend-visual-design",
+        name: "前端与视觉设计",
+        is_builtin: true,
+        created_at: "2026-04-10T00:00:00Z",
+        updated_at: "2026-04-10T00:00:00Z",
+      },
+    ],
+    source_path: "skills/frontend-design",
+    is_source_unknown: false,
   },
   {
     id: "code-reviewer",
@@ -121,12 +144,75 @@ const mockSkills: SkillWithLinks[] = [
     updated_at: "2026-04-20T00:00:00Z",
     linked_agents: ["codex"],
     shared_root_agents: ["codex", "cursor"],
+    repository: {
+      id: "local-unknown",
+      name: "本地 / 未知来源",
+      source_type: "local",
+      is_unknown: true,
+      created_at: "2026-04-10T00:00:00Z",
+      updated_at: "2026-04-10T00:00:00Z",
+    },
+    tags: [],
+    is_source_unknown: true,
+  },
+];
+
+const mockRepositories: SkillRepositoryWithStats[] = [
+  {
+    id: "local-unknown",
+    name: "本地 / 未知来源",
+    source_type: "local",
+    is_unknown: true,
+    created_at: "2026-04-10T00:00:00Z",
+    updated_at: "2026-04-10T00:00:00Z",
+    skill_count: 1,
+    unknown_skill_count: 1,
+  },
+  {
+    id: "github-openai-skills-main",
+    name: "openai/skills",
+    source_type: "github",
+    owner: "openai",
+    repo: "skills",
+    branch: "main",
+    url: "https://github.com/openai/skills",
+    is_unknown: false,
+    created_at: "2026-04-10T00:00:00Z",
+    updated_at: "2026-04-10T00:00:00Z",
+    skill_count: 1,
+    unknown_skill_count: 0,
+  },
+];
+
+const mockTags: SkillTag[] = [
+  {
+    id: "frontend-visual-design",
+    name: "前端与视觉设计",
+    is_builtin: true,
+    created_at: "2026-04-10T00:00:00Z",
+    updated_at: "2026-04-10T00:00:00Z",
+  },
+  {
+    id: "uncategorized",
+    name: "未分类",
+    is_builtin: true,
+    created_at: "2026-04-10T00:00:00Z",
+    updated_at: "2026-04-10T00:00:00Z",
   },
 ];
 
 const mockLoadCentralSkills = vi.fn();
 const mockInstallSkill = vi.fn();
 const mockTogglePlatformLink = vi.fn();
+const mockCreateRepository = vi.fn();
+const mockAssignSkillsToRepository = vi.fn();
+const mockCreateTag = vi.fn();
+const mockAssignSkillTags = vi.fn();
+const mockBulkSuggestSkillTags = vi.fn();
+const mockCancelAiTagJob = vi.fn();
+const mockAcceptAiTagReview = vi.fn();
+const mockSkipAiTagReview = vi.fn();
+const mockSubscribeAiTagProgress = vi.fn();
 const mockRescan = vi.fn();
 const mockGetSkillsByAgent = vi.fn();
 const mockPreviewGitHubRepoImport = vi.fn();
@@ -141,13 +227,38 @@ function buildCentralStoreState(overrides = {}) {
   return {
     skills: mockSkills,
     agents: mockAgents,
+    repositories: mockRepositories,
+    tags: mockTags,
+    aiTagReviews: [],
+    aiTagJob: {
+      jobId: null,
+      status: "idle",
+      total: 0,
+      completed: 0,
+      succeeded: 0,
+      failed: 0,
+      lowConfidenceCount: 0,
+      items: {},
+    },
+    aiTaggingAvailable: true,
     isLoading: false,
     isInstalling: false,
+    isMetadataUpdating: false,
+    isSuggestingTags: false,
     togglingAgentId: null,
     error: null,
     loadCentralSkills: mockLoadCentralSkills,
     installSkill: mockInstallSkill,
     togglePlatformLink: mockTogglePlatformLink,
+    createRepository: mockCreateRepository,
+    assignSkillsToRepository: mockAssignSkillsToRepository,
+    createTag: mockCreateTag,
+    assignSkillTags: mockAssignSkillTags,
+    bulkSuggestSkillTags: mockBulkSuggestSkillTags,
+    cancelAiTagJob: mockCancelAiTagJob,
+    acceptAiTagReview: mockAcceptAiTagReview,
+    skipAiTagReview: mockSkipAiTagReview,
+    subscribeAiTagProgress: mockSubscribeAiTagProgress.mockResolvedValue(() => {}),
     ...overrides,
   };
 }
@@ -233,6 +344,10 @@ describe("CentralSkillsView", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    cleanup();
+  });
+
   // ── Header ────────────────────────────────────────────────────────────────
 
   it("shows page title in header", () => {
@@ -275,6 +390,16 @@ describe("CentralSkillsView", () => {
     expect(screen.getByRole("group", { name: "排序方向" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "正排" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "倒排" })).toBeInTheDocument();
+  });
+
+  it("shows repository and tag workspace controls", () => {
+    renderCentralSkillsView();
+
+    expect(screen.getByText("仓库来源")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /未归仓/i })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "分类筛选" })).toBeInTheDocument();
+    expect(screen.getAllByText("openai/skills").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("前端与视觉设计").length).toBeGreaterThanOrEqual(1);
   });
 
   // ── Skills List ───────────────────────────────────────────────────────────
@@ -436,6 +561,30 @@ describe("CentralSkillsView", () => {
     });
   });
 
+  it("filters skills by repository shortcut", async () => {
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByRole("button", { name: /未归仓/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("code-reviewer")).toBeInTheDocument();
+      expect(screen.queryByText("frontend-design")).not.toBeInTheDocument();
+    });
+  });
+
+  it("filters skills by tag", async () => {
+    renderCentralSkillsView();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "分类筛选" }), {
+      target: { value: "frontend-visual-design" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("frontend-design")).toBeInTheDocument();
+      expect(screen.queryByText("code-reviewer")).not.toBeInTheDocument();
+    });
+  });
+
   it("shows empty state when search has no results", async () => {
     renderCentralSkillsView();
     const searchInput = screen.getByPlaceholderText(/搜索中央技能库/i);
@@ -494,6 +643,123 @@ describe("CentralSkillsView", () => {
     // Dialog should open (skill name should appear in dialog title)
     await waitFor(() => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+  });
+
+  it("assigns selected skills to multiple tags from the categorize panel", async () => {
+    mockAssignSkillTags.mockResolvedValue(undefined);
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByRole("button", { name: /全选当前筛选/i }));
+    fireEvent.click(screen.getByRole("button", { name: "前端与视觉设计" }));
+    const uncategorizedButtons = screen.getAllByRole("button", { name: "未分类" });
+    fireEvent.click(uncategorizedButtons[uncategorizedButtons.length - 1]);
+    fireEvent.click(screen.getByRole("button", { name: /应用手动标签/i }));
+
+    await waitFor(() => {
+      expect(mockAssignSkillTags).toHaveBeenCalledWith(
+        ["code-reviewer", "frontend-design"],
+        ["frontend-visual-design", "uncategorized"]
+      );
+    });
+  });
+
+  it("shows AI config hint when AI tagging is unavailable", () => {
+    mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
+      const state = buildCentralStoreState({ aiTaggingAvailable: false });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    render(
+      <MemoryRouter>
+        <CentralSkillsView />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "AI" }));
+    expect(screen.getByText(/配置 AI API Key 后可批量自动标注/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /AI 标注/i })).toBeDisabled();
+  });
+
+  it("shows AI tagging progress and review queue entry", () => {
+    mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
+      const state = buildCentralStoreState({
+        aiTagReviews: [
+          {
+            skill_id: "code-reviewer",
+            skill_name: "code-reviewer",
+            tag: mockTags[1],
+            confidence: 0.42,
+            reason: "不确定",
+            suggested_at: "2026-04-24T00:00:00Z",
+            updated_at: "2026-04-24T00:00:00Z",
+          },
+        ],
+        aiTagJob: {
+          jobId: "job-1",
+          status: "completed",
+          total: 2,
+          completed: 2,
+          succeeded: 1,
+          failed: 1,
+          lowConfidenceCount: 1,
+          items: {
+            "frontend-design": "succeeded",
+            "code-reviewer": "failed",
+          },
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    render(
+      <MemoryRouter>
+        <CentralSkillsView />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("AI 标注进度")).toBeInTheDocument();
+    expect(screen.getByText("成功 1")).toBeInTheDocument();
+    expect(screen.getByText("失败 1")).toBeInTheDocument();
+    expect(screen.getAllByText("AI 待复核").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows a cancel button while AI tagging is running", async () => {
+    mockCancelAiTagJob.mockResolvedValue(undefined);
+    mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
+      const state = buildCentralStoreState({
+        aiTagJob: {
+          jobId: "job-1",
+          status: "running",
+          total: 2,
+          completed: 1,
+          succeeded: 1,
+          failed: 0,
+          lowConfidenceCount: 0,
+          currentSkillName: "code-reviewer",
+          items: {
+            "frontend-design": "succeeded",
+            "code-reviewer": "running",
+          },
+        },
+        isSuggestingTags: true,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    render(
+      <MemoryRouter>
+        <CentralSkillsView />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /中断 AI Tag/i }));
+
+    await waitFor(() => {
+      expect(mockCancelAiTagJob).toHaveBeenCalled();
     });
   });
 

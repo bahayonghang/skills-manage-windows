@@ -23,6 +23,7 @@ import { SkillFrontmatterCard } from "@/components/skill/SkillFrontmatterCard";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { usePlatformStore } from "@/stores/platformStore";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { CollectionPickerDialog } from "@/components/collection/CollectionPickerDialog";
 import { AgentWithStatus, ClaudeSourceKind, SkillDetailRequest, SkillInstallation } from "@/types";
 import { cn } from "@/lib/utils";
@@ -306,6 +307,11 @@ export function SkillDetailView({
   const agents = usePlatformStore((s) => s.agents);
   const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((s) => s.refreshCounts);
+  const repositories = useCentralSkillsStore((s) => s.repositories);
+  const tags = useCentralSkillsStore((s) => s.tags);
+  const isMetadataUpdating = useCentralSkillsStore((s) => s.isMetadataUpdating);
+  const assignSkillsToRepository = useCentralSkillsStore((s) => s.assignSkillsToRepository);
+  const assignSkillTags = useCentralSkillsStore((s) => s.assignSkillTags);
 
   // Local state for filePath mode
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -333,6 +339,8 @@ export function SkillDetailView({
   const [activeTab, setActiveTab] = useState<PreviewTab>("markdown");
   const [isCollectionPickerOpen, setIsCollectionPickerOpen] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState("");
+  const [selectedTagId, setSelectedTagId] = useState("");
   const addToCollectionButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -340,6 +348,10 @@ export function SkillDetailView({
       setIsCollectionPickerOpen(false);
     }
   }, [detail?.is_read_only, isCollectionPickerOpen]);
+
+  useEffect(() => {
+    setSelectedRepositoryId(detail?.repository?.id ?? "");
+  }, [detail?.repository?.id]);
 
   // ── File mode: load content from path ─────────────────────────────────
   const fetchFileContent = useCallback(async () => {
@@ -440,6 +452,29 @@ export function SkillDetailView({
       queueMicrotask(() => {
         addToCollectionButtonRef.current?.focus();
       });
+    }
+  }
+
+  async function handleAssignRepository() {
+    if (!skillId || !selectedRepositoryId || !detailRequest) return;
+    try {
+      await assignSkillsToRepository([skillId], selectedRepositoryId);
+      await loadDetail(detailRequest);
+      toast.success(t("central.repositoryAssigned", { count: 1 }));
+    } catch (err) {
+      toast.error(t("central.metadataError", { error: String(err) }));
+    }
+  }
+
+  async function handleAssignTag() {
+    if (!skillId || !selectedTagId || !detailRequest) return;
+    try {
+      await assignSkillTags([skillId], [selectedTagId]);
+      await loadDetail(detailRequest);
+      toast.success(t("central.tagsAssigned", { count: 1 }));
+      setSelectedTagId("");
+    } catch (err) {
+      toast.error(t("central.metadataError", { error: String(err) }));
     }
   }
 
@@ -803,12 +838,108 @@ export function SkillDetailView({
                       {!detail.source_kind && detail.source && (
                         <MetadataRow label={t("detail.source")} value={detail.source} />
                       )}
+                      {detail.repository && (
+                        <MetadataRow
+                          label={t("detail.repository", {
+                            defaultValue: i18n.language.startsWith("zh") ? "仓库来源" : "Repository",
+                          })}
+                          value={detail.repository.name}
+                        />
+                      )}
+                      {detail.source_path && (
+                        <MetadataRow
+                          label={t("detail.sourcePath", {
+                            defaultValue: i18n.language.startsWith("zh") ? "来源路径" : "Source path",
+                          })}
+                          value={detail.source_path}
+                        />
+                      )}
                       <MetadataRow
                         label={t("detail.scannedAt")}
                         value={new Date(detail.scanned_at).toLocaleString()}
                       />
                     </div>
                   </section>
+
+                  {detail.tags && detail.tags.length > 0 && (
+                    <section aria-label={t("detail.tags", {
+                      defaultValue: i18n.language.startsWith("zh") ? "分类标签" : "Tags",
+                    })}>
+                      <SectionLabel>
+                        {t("detail.tags", {
+                          defaultValue: i18n.language.startsWith("zh") ? "分类标签" : "Tags",
+                        })}
+                      </SectionLabel>
+                      <div className="flex flex-wrap gap-1.5">
+                        {detail.tags.map((tag) => (
+                          <span
+                            key={tag.id}
+                            className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70"
+                            title={tag.description ?? tag.name}
+                          >
+                            <Tag className="size-2.5" />
+                            {tag.name}
+                          </span>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {detail.is_central && !detail.is_read_only && (
+                    <section aria-label={t("detail.metadataManagementRegion")}>
+                      <SectionLabel>{t("detail.metadataManagement")}</SectionLabel>
+                      <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
+                        <div className="flex gap-2">
+                          <select
+                            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                            value={selectedRepositoryId}
+                            aria-label={t("central.repositorySelectLabel")}
+                            onChange={(event) => setSelectedRepositoryId(event.target.value)}
+                          >
+                            <option value="">{t("central.chooseRepository")}</option>
+                            {repositories.map((repository) => (
+                              <option key={repository.id} value={repository.id}>
+                                {repository.name}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={!selectedRepositoryId || isMetadataUpdating}
+                            onClick={handleAssignRepository}
+                          >
+                            {t("central.assignRepository")}
+                          </Button>
+                        </div>
+                        <div className="flex gap-2">
+                          <select
+                            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                            value={selectedTagId}
+                            aria-label={t("central.tagSelectLabel")}
+                            onChange={(event) => setSelectedTagId(event.target.value)}
+                          >
+                            <option value="">{t("central.chooseTag")}</option>
+                            {tags.map((tag) => (
+                              <option key={tag.id} value={tag.id}>
+                                {tag.name}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={!selectedTagId || isMetadataUpdating}
+                            onClick={handleAssignTag}
+                          >
+                            {t("central.assignTag")}
+                          </Button>
+                        </div>
+                      </div>
+                    </section>
+                  )}
 
                   {/* Install Status — compact icon grid */}
                   <section aria-label={t("detail.installStatusRegion")}>

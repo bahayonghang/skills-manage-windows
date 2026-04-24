@@ -1,8 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, within, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { SkillDetailView } from "../components/skill/SkillDetailView";
-import { AgentWithStatus, SkillDetail as SkillDetailType } from "../types";
+import {
+  AgentWithStatus,
+  SkillDetail as SkillDetailType,
+  SkillRepositoryWithStats,
+  SkillTag,
+} from "../types";
 
 // ─── Mock stores ──────────────────────────────────────────────────────────────
 
@@ -44,6 +49,7 @@ vi.mock("../components/collection/CollectionPickerDialog", () => ({
 
 import { useSkillDetailStore } from "../stores/skillDetailStore";
 import { usePlatformStore } from "../stores/platformStore";
+import { useCentralSkillsStore } from "../stores/centralSkillsStore";
 
 // ─── Mock react-markdown ──────────────────────────────────────────────────────
 
@@ -93,6 +99,50 @@ const mockAgents: AgentWithStatus[] = [
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
+  },
+];
+
+const mockRepositories: SkillRepositoryWithStats[] = [
+  {
+    id: "local-unknown",
+    name: "本地 / 未知来源",
+    source_type: "local",
+    is_unknown: true,
+    created_at: "2026-04-10T00:00:00Z",
+    updated_at: "2026-04-10T00:00:00Z",
+    skill_count: 1,
+    unknown_skill_count: 1,
+  },
+  {
+    id: "github-openai-skills-main",
+    name: "openai/skills",
+    source_type: "github",
+    owner: "openai",
+    repo: "skills",
+    branch: "main",
+    url: "https://github.com/openai/skills",
+    is_unknown: false,
+    created_at: "2026-04-10T00:00:00Z",
+    updated_at: "2026-04-10T00:00:00Z",
+    skill_count: 1,
+    unknown_skill_count: 0,
+  },
+];
+
+const mockTags: SkillTag[] = [
+  {
+    id: "frontend-visual-design",
+    name: "前端与视觉设计",
+    is_builtin: true,
+    created_at: "2026-04-10T00:00:00Z",
+    updated_at: "2026-04-10T00:00:00Z",
+  },
+  {
+    id: "programming-agent-engineering",
+    name: "编程与 Agent 工程",
+    is_builtin: true,
+    created_at: "2026-04-10T00:00:00Z",
+    updated_at: "2026-04-10T00:00:00Z",
   },
 ];
 
@@ -181,6 +231,8 @@ const mockReset = vi.fn();
 const mockRescan = vi.fn();
 const mockRefreshCounts = vi.fn();
 const mockRefreshInstallations = vi.fn();
+const mockAssignSkillsToRepository = vi.fn();
+const mockAssignSkillTags = vi.fn();
 
 function buildDetailStoreState(overrides = {}) {
   return {
@@ -263,6 +315,19 @@ function renderView(
 describe("SkillDetailView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAssignSkillsToRepository.mockResolvedValue(undefined);
+    mockAssignSkillTags.mockResolvedValue(undefined);
+    useCentralSkillsStore.setState({
+      repositories: mockRepositories,
+      tags: mockTags,
+      isMetadataUpdating: false,
+      assignSkillsToRepository: mockAssignSkillsToRepository,
+      assignSkillTags: mockAssignSkillTags,
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   // ── Shell-agnostic: no back button / breadcrumb is rendered here ─────────
@@ -312,6 +377,40 @@ describe("SkillDetailView", () => {
     expect(
       screen.getByText("~/.agents/skills/frontend-design/SKILL.md")
     ).toBeInTheDocument();
+  });
+
+  it("assigns repository from detail metadata controls", async () => {
+    renderView();
+
+    fireEvent.change(screen.getByLabelText("仓库"), {
+      target: { value: "github-openai-skills-main" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "归仓" }));
+
+    await waitFor(() => {
+      expect(mockAssignSkillsToRepository).toHaveBeenCalledWith(
+        ["frontend-design"],
+        "github-openai-skills-main"
+      );
+    });
+    expect(mockLoadDetail).toHaveBeenCalledWith({ skillId: "frontend-design" });
+  });
+
+  it("assigns tag from detail metadata controls", async () => {
+    renderView();
+
+    fireEvent.change(screen.getByLabelText("分类"), {
+      target: { value: "programming-agent-engineering" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "打标签" }));
+
+    await waitFor(() => {
+      expect(mockAssignSkillTags).toHaveBeenCalledWith(
+        ["frontend-design"],
+        ["programming-agent-engineering"]
+      );
+    });
+    expect(mockLoadDetail).toHaveBeenCalledWith({ skillId: "frontend-design" });
   });
 
   it("shows canonical path", () => {
