@@ -1,5 +1,5 @@
 [package]
-name = "skills-manage"
+name = "skillport"
 version = "0.9.1"
 description = "AI Agent Skills Manager"
 authors = ["iamzhihuix"]
@@ -7,7 +7,7 @@ license = "Apache-2.0"
 edition = "2021"
 
 [lib]
-name = "skills_manage_lib"
+name = "skillport_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

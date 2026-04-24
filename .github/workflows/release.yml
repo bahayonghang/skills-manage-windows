@@ -121,7 +121,7 @@ jobs:
 
           $assetDir = "release-assets"
           $bundleRoot = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
-          $exePath = "src-tauri/target/x86_64-pc-windows-msvc/release/skills-manage.exe"
+          $exePath = "src-tauri/target/x86_64-pc-windows-msvc/release/skillport.exe"
 
           New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
 
@@ -139,9 +139,9 @@ jobs:
             throw "Windows executable not found at $exePath."
           }
 
-          Copy-Item -LiteralPath $nsis.FullName -Destination (Join-Path $assetDir ("skills-manage_" + $version + "_windows_x64_nsis.exe")) -Force
-          Copy-Item -LiteralPath $msi.FullName -Destination (Join-Path $assetDir ("skills-manage_" + $version + "_windows_x64.msi")) -Force
-          Compress-Archive -Path $exePath -DestinationPath (Join-Path $assetDir ("skills-manage_" + $version + "_windows_x64.zip")) -Force
+          Copy-Item -LiteralPath $nsis.FullName -Destination (Join-Path $assetDir ("skillport_" + $version + "_windows_x64_nsis.exe")) -Force
+          Copy-Item -LiteralPath $msi.FullName -Destination (Join-Path $assetDir ("skillport_" + $version + "_windows_x64.msi")) -Force
+          Compress-Archive -Path $exePath -DestinationPath (Join-Path $assetDir ("skillport_" + $version + "_windows_x64.zip")) -Force
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -209,9 +209,9 @@ jobs:
           [ -n "$APP_PATH" ] || { echo "macOS .app bundle not found" >&2; exit 1; }
           [ -n "$DMG_PATH" ] || { echo "macOS .dmg bundle not found" >&2; exit 1; }
 
-          ditto -c -k --keepParent "$APP_PATH" "release-assets/skills-manage_${VERSION}_macos_universal.zip"
-          cp "$DMG_PATH" "release-assets/skills-manage_${VERSION}_macos_universal.dmg"
-          tar -C "$(dirname "$APP_PATH")" -czf "release-assets/skills-manage_${VERSION}_macos_universal.tar.gz" "$(basename "$APP_PATH")"
+          ditto -c -k --keepParent "$APP_PATH" "release-assets/skillport_${VERSION}_macos_universal.zip"
+          cp "$DMG_PATH" "release-assets/skillport_${VERSION}_macos_universal.dmg"
+          tar -C "$(dirname "$APP_PATH")" -czf "release-assets/skillport_${VERSION}_macos_universal.tar.gz" "$(basename "$APP_PATH")"
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4

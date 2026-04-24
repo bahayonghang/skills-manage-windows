@@ -41,7 +41,7 @@ Set-Content -LiteralPath $tauriConfigPath -Value $tauriConfigUpdated -NoNewline
 $cargoTomlContent = Get-Content -LiteralPath $cargoTomlPath -Raw
 $cargoTomlUpdated = Replace-FirstOrFail `
     -Content $cargoTomlContent `
-    -Pattern '(?ms)(\[package\]\s*name\s*=\s*"skills-manage"\s*version\s*=\s*")[^"]+(")' `
+    -Pattern '(?ms)(\[package\]\s*name\s*=\s*"skillport"\s*version\s*=\s*")[^"]+(")' `
     -Replacement ('${1}' + $version + '${2}') `
     -ErrorMessage "Cargo.toml package version was not found."
 Set-Content -LiteralPath $cargoTomlPath -Value $cargoTomlUpdated -NoNewline
@@ -49,7 +49,7 @@ Set-Content -LiteralPath $cargoTomlPath -Value $cargoTomlUpdated -NoNewline
 $cargoLockContent = Get-Content -LiteralPath $cargoLockPath -Raw
 $cargoLockUpdated = Replace-FirstOrFail `
     -Content $cargoLockContent `
-    -Pattern '(?ms)(\[\[package\]\]\s*name\s*=\s*"skills-manage"\s*version\s*=\s*")[^"]+(")' `
+    -Pattern '(?ms)(\[\[package\]\]\s*name\s*=\s*"skillport"\s*version\s*=\s*")[^"]+(")' `
     -Replacement ('${1}' + $version + '${2}') `
     -ErrorMessage "Cargo.lock package version was not found."
 Set-Content -LiteralPath $cargoLockPath -Value $cargoLockUpdated -NoNewline

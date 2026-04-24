@@ -2,7 +2,7 @@ set shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 
 output_dir := "outputs"
 nsis_bundle_dir := "src-tauri/target/release/bundle/nsis"
-app_exe := "skills-manage.exe"
+app_exe := "skillport.exe"
 
 # ========================================================================
 # 步骤1：同步应用版本
