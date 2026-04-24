@@ -19,6 +19,12 @@ import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import type { AgentWithStatus, ClaudeSourceKind } from "@/types";
 import { cn } from "@/lib/utils";
+import {
+  getPlatformTargetInstallAgentIds,
+  getPlatformTargetMemberIds,
+  getPlatformTargetMemberNames,
+  isUniversalPlatformTarget,
+} from "@/lib/platformTargetGroups";
 
 // ─── Platform Toggle Icon (internal) ──────────────────────────────────────────
 
@@ -27,27 +33,44 @@ const PlatformToggleIcon = memo(function PlatformToggleIcon({
   skillName,
   isLinked,
   isToggling,
+  isLocked,
   onToggle,
 }: {
   agent: AgentWithStatus;
   skillName: string;
   isLinked: boolean;
   isToggling: boolean;
+  isLocked: boolean;
   onToggle: () => void;
 }) {
   const { t } = useTranslation();
+  const memberNames = getPlatformTargetMemberNames(agent).join(", ");
+  const displayName = isUniversalPlatformTarget(agent)
+    ? t("platformTargets.universalShortLabel")
+    : agent.display_name;
+  const isDisabled = isToggling || isLocked;
+  const title = isLocked
+    ? `${displayName} - ${t("platformTargets.alwaysIncluded")} - ${memberNames}`
+    : displayName;
+
   return (
     <button
       className={cn(
         "p-1 rounded-md transition-colors cursor-pointer",
-        isLinked
+        isLocked
+          ? "text-primary cursor-default"
+          : isLinked
           ? "text-primary hover:bg-primary/15"
           : "text-muted-foreground/40 hover:bg-muted/60 hover:text-muted-foreground",
         isToggling && "animate-pulse pointer-events-none"
       )}
-      title={agent.display_name}
-      aria-label={t("central.toggleInstallLabel", { platform: agent.display_name, skill: skillName })}
-      disabled={isToggling}
+      title={title}
+      aria-label={
+        isLocked
+          ? title
+          : t("central.toggleInstallLabel", { platform: displayName, skill: skillName })
+      }
+      disabled={isDisabled}
       onClick={onToggle}
     >
       <PlatformIcon agentId={agent.id} className="size-4 shrink-0" size={16} />
@@ -77,6 +100,7 @@ export interface UnifiedSkillCardProps {
   platformIcons?: {
     agents: AgentWithStatus[];
     linkedAgents: string[];
+    lockedAgentIds?: string[];
     skillId: string;
     onToggle: (skillId: string, agentId: string) => void;
     togglingAgentId: string | null;
@@ -162,6 +186,10 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   const linkedAgentSet = useMemo(
     () => new Set(platformIcons?.linkedAgents ?? []),
     [platformIcons?.linkedAgents]
+  );
+  const lockedAgentSet = useMemo(
+    () => new Set(platformIcons?.lockedAgentIds ?? []),
+    [platformIcons?.lockedAgentIds]
   );
 
   // ── Platform variant: clickable card style ──
@@ -380,9 +408,15 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                         key={agent.id}
                         agent={agent}
                         skillName={name}
-                        isLinked={linkedAgentSet.has(agent.id)}
-                        isToggling={platformIcons.togglingAgentId === agent.id}
-                        onToggle={() => platformIcons.onToggle(platformIcons.skillId, agent.id)}
+                        isLinked={getPlatformTargetMemberIds(agent).some((agentId) => linkedAgentSet.has(agentId))}
+                        isToggling={getPlatformTargetMemberIds(agent).some((agentId) => platformIcons.togglingAgentId === agentId)}
+                        isLocked={getPlatformTargetMemberIds(agent).some((agentId) => lockedAgentSet.has(agentId))}
+                        onToggle={() => {
+                          const [agentId] = getPlatformTargetInstallAgentIds(agent);
+                          if (agentId) {
+                            platformIcons.onToggle(platformIcons.skillId, agentId);
+                          }
+                        }}
                       />
                     ))}
                   </div>
@@ -399,9 +433,15 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                         key={agent.id}
                         agent={agent}
                         skillName={name}
-                        isLinked={linkedAgentSet.has(agent.id)}
-                        isToggling={platformIcons.togglingAgentId === agent.id}
-                        onToggle={() => platformIcons.onToggle(platformIcons.skillId, agent.id)}
+                        isLinked={getPlatformTargetMemberIds(agent).some((agentId) => linkedAgentSet.has(agentId))}
+                        isToggling={getPlatformTargetMemberIds(agent).some((agentId) => platformIcons.togglingAgentId === agentId)}
+                        isLocked={getPlatformTargetMemberIds(agent).some((agentId) => lockedAgentSet.has(agentId))}
+                        onToggle={() => {
+                          const [agentId] = getPlatformTargetInstallAgentIds(agent);
+                          if (agentId) {
+                            platformIcons.onToggle(platformIcons.skillId, agentId);
+                          }
+                        }}
                       />
                     ))}
                   </div>

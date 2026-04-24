@@ -88,7 +88,7 @@ describe("App", () => {
       );
     });
     // TopBar shows the app name
-    expect(screen.getByText("skills-manage")).toBeInTheDocument();
+    expect(screen.getByText("SkillPort")).toBeInTheDocument();
   });
 
   it("renders sidebar with icon-only navigation", async () => {

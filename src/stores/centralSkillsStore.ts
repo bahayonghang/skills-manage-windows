@@ -16,7 +16,7 @@ export const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "cursor",
     display_name: "Cursor",
     category: "coding",
-    global_skills_dir: "~/.cursor/skills/",
+    global_skills_dir: "~/.agents/skills/",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -44,7 +44,8 @@ export const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
     scanned_at: "2026-04-17T00:00:00.000Z",
     created_at: "2026-04-17T00:00:00.000Z",
     updated_at: "2026-04-17T00:00:00.000Z",
-    linked_agents: ["claude-code"],
+    linked_agents: ["claude-code", "cursor"],
+    shared_root_agents: ["cursor"],
   },
 ];
 

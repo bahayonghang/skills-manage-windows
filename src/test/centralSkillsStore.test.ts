@@ -22,6 +22,7 @@ const mockSkills: SkillWithLinks[] = [
     is_central: true,
     scanned_at: "2026-04-09T00:00:00Z",
     linked_agents: ["claude-code", "cursor"],
+    shared_root_agents: [],
   },
   {
     id: "code-reviewer",
@@ -32,6 +33,7 @@ const mockSkills: SkillWithLinks[] = [
     is_central: true,
     scanned_at: "2026-04-09T00:00:00Z",
     linked_agents: [],
+    shared_root_agents: [],
   },
 ];
 
@@ -139,7 +141,8 @@ describe("centralSkillsStore", () => {
     expect(state.skills).toEqual([
       expect.objectContaining({
         id: "fixture-central-skill",
-        linked_agents: ["claude-code"],
+        linked_agents: ["claude-code", "cursor"],
+        shared_root_agents: ["cursor"],
       }),
     ]);
     expect(state.agents).toEqual(

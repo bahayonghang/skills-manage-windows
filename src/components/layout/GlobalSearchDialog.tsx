@@ -27,9 +27,13 @@ import { useHotkey } from "@/hooks/useHotkey";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-  filterVisiblePlatformAgents,
 } from "@/lib/platformVisibility";
-import { compactHomePath } from "@/lib/path";
+import {
+  getPlatformTargetGroups,
+  getPlatformTargetMemberNames,
+  getPlatformTargetPathHint,
+  isUniversalPlatformTarget,
+} from "@/lib/platformTargetGroups";
 import { buildSearchText, normalizeSearchQuery, scoreSearchMatch } from "@/lib/search";
 
 interface GlobalSearchDialogProps {
@@ -178,24 +182,29 @@ export function GlobalSearchDialog({
     }
 
     // Platform Views
-    const platformAgents = filterVisiblePlatformAgents(agents, categoryVisibility);
+    const platformAgents = getPlatformTargetGroups(agents, categoryVisibility);
     for (const agent of platformAgents) {
-      const displayPath = compactHomePath(agent.global_skills_dir);
+      const isUniversal = isUniversalPlatformTarget(agent);
+      const displayPath = getPlatformTargetPathHint(agent);
+      const label = isUniversal
+        ? t("platformTargets.universalShortLabel")
+        : agent.display_name;
+      const memberNames = getPlatformTargetMemberNames(agent);
       result.push({
         id: `platform-${agent.id}`,
-        label: agent.display_name,
+        label,
         description: displayPath,
         groupKey: "platforms",
         groupLabel: t("globalSearch.platforms"),
         icon: (
           <PlatformIcon agentId={agent.id} className="size-4 text-primary/70" />
         ),
-        searchText: buildSearchText([agent.display_name, agent.global_skills_dir]),
-        labelText: agent.display_name.toLowerCase(),
+        searchText: buildSearchText([label, agent.global_skills_dir, ...memberNames]),
+        labelText: label.toLowerCase(),
         descriptionText: displayPath.toLowerCase(),
         onSelect: () => {
           close();
-          navigate(`/platform/${agent.id}`);
+          navigate(isUniversal ? "/central" : `/platform/${agent.id}`);
         },
       });
     }

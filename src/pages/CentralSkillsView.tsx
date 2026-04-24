@@ -23,8 +23,8 @@ import { formatPathForDisplay } from "@/lib/path";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-  filterVisiblePlatformAgents,
 } from "@/lib/platformVisibility";
+import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 import { isTauriRuntime } from "@/lib/tauri";
 
 const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
@@ -40,6 +40,7 @@ const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
     created_at: "2026-04-17T00:00:00.000Z",
     updated_at: "2026-04-17T00:00:00.000Z",
     linked_agents: ["claude-code"],
+    shared_root_agents: [],
   },
 ];
 
@@ -361,7 +362,7 @@ export function CentralSkillsView() {
   }, [githubImport.importResult, skills]);
 
   const availableInstallAgents = useMemo(
-    () => filterVisiblePlatformAgents(platformAgents, categoryVisibility),
+    () => getPlatformTargetGroups(platformAgents, categoryVisibility),
     [platformAgents, categoryVisibility]
   );
 
@@ -397,6 +398,7 @@ export function CentralSkillsView() {
         platformIcons={{
           agents: availableInstallAgents,
           linkedAgents: skill.linked_agents,
+          lockedAgentIds: skill.shared_root_agents,
           skillId: skill.id,
           onToggle: handleTogglePlatform,
           togglingAgentId,

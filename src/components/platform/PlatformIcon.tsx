@@ -142,6 +142,15 @@ function PlatformIconComponent({ agentId, className, size = 16 }: PlatformIconPr
         </svg>
       );
 
+    case "universal-agents":
+      return (
+        <svg {...svgProps}>
+          <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.35" />
+          <path d="M8 1.8c1.9 1.5 2.9 3.6 2.9 6.2S9.9 12.7 8 14.2C6.1 12.7 5.1 10.6 5.1 8S6.1 3.3 8 1.8z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M2.7 6h10.6M2.7 10h10.6" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+
     default:
       // Generic terminal / code icon — used for unknown platforms
       return (

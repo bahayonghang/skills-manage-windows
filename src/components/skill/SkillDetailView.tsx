@@ -27,10 +27,17 @@ import { CollectionPickerDialog } from "@/components/collection/CollectionPicker
 import { AgentWithStatus, ClaudeSourceKind, SkillDetailRequest, SkillInstallation } from "@/types";
 import { cn } from "@/lib/utils";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { arePathsEquivalent } from "@/lib/path";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-  filterVisiblePlatformAgents,
 } from "@/lib/platformVisibility";
+import {
+  getPlatformTargetGroups,
+  getPlatformTargetInstallAgentIds,
+  getPlatformTargetMemberIds,
+  getPlatformTargetMemberNames,
+  isUniversalPlatformTarget,
+} from "@/lib/platformTargetGroups";
 
 // ─── Section Label ─────────────────────────────────────────────────────────────
 
@@ -99,23 +106,38 @@ interface PlatformToggleIconProps {
   skillName: string;
   isInstalled: boolean;
   isLoading: boolean;
+  isLocked: boolean;
   onToggle: () => void;
 }
 
-function PlatformToggleIcon({ agent, skillName, isInstalled, isLoading, onToggle }: PlatformToggleIconProps) {
+function PlatformToggleIcon({ agent, skillName, isInstalled, isLoading, isLocked, onToggle }: PlatformToggleIconProps) {
   const { t } = useTranslation();
+  const displayName = isUniversalPlatformTarget(agent)
+    ? t("platformTargets.universalShortLabel")
+    : agent.display_name;
+  const memberNames = getPlatformTargetMemberNames(agent).join(", ");
+  const title = isLocked
+    ? `${displayName} - ${t("platformTargets.alwaysIncluded")} - ${memberNames}`
+    : `${displayName}${isInstalled ? ` - ${t("central.linked")}` : ""}`;
+
   return (
     <button
       className={cn(
         "p-1.5 rounded-md transition-colors cursor-pointer",
-        isInstalled
-          ? "text-primary hover:bg-primary/15"
-          : "text-muted-foreground/40 hover:bg-muted/60 hover:text-muted-foreground",
+        isLocked
+          ? "text-primary cursor-default"
+          : isInstalled
+            ? "text-primary hover:bg-primary/15"
+            : "text-muted-foreground/40 hover:bg-muted/60 hover:text-muted-foreground",
         isLoading && "animate-pulse pointer-events-none"
       )}
-      title={`${agent.display_name}${isInstalled ? ` — ${t("central.linked")}` : ""}`}
-      aria-label={t("central.toggleInstallLabel", { platform: agent.display_name, skill: skillName })}
-      disabled={isLoading}
+      title={title}
+      aria-label={
+        isLocked
+          ? title
+          : t("central.toggleInstallLabel", { platform: displayName, skill: skillName })
+      }
+      disabled={isLoading || isLocked}
       onClick={onToggle}
     >
       <PlatformIcon agentId={agent.id} className="size-4 shrink-0" size={16} />
@@ -360,9 +382,22 @@ export function SkillDetailView({
 
   // ── Derived values ───────────────────────────────────────────────────────
 
-  const targetAgents = filterVisiblePlatformAgents(agents, categoryVisibility);
+  const targetAgents = getPlatformTargetGroups(agents, categoryVisibility);
   const lobsterAgents = targetAgents.filter((a) => a.category === "lobster");
   const codingAgents = targetAgents.filter((a) => a.category !== "lobster");
+  const sharedRootAgentIds = useMemo(() => {
+    if (!detail?.is_central) {
+      return new Set<string>();
+    }
+
+    const centralDir = agents.find((agent) => agent.id === "central")?.global_skills_dir;
+    return new Set(
+      targetAgents
+        .filter((agent) => agent.id !== "central")
+        .filter((agent) => arePathsEquivalent(agent.global_skills_dir, centralDir))
+        .flatMap((agent) => getPlatformTargetMemberIds(agent))
+    );
+  }, [agents, detail?.is_central, targetAgents]);
 
   const installationMap = new Map<string, SkillInstallation>(
     (detail?.installations ?? []).map((inst) => [inst.agent_id, inst])
@@ -372,7 +407,7 @@ export function SkillDetailView({
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   async function handleToggle(agentId: string) {
-    if (!skillId || detail?.is_read_only) return;
+    if (!skillId || detail?.is_read_only || sharedRootAgentIds.has(agentId)) return;
     const isInstalled = installationMap.has(agentId);
     try {
       if (isInstalled) {
@@ -799,16 +834,30 @@ export function SkillDetailView({
                                 {t("sidebar.categoryLobster")}
                               </span>
                               <div className="flex items-center gap-0.5 flex-wrap">
-                                {lobsterAgents.map((agent) => (
-                                  <PlatformToggleIcon
-                                    key={agent.id}
-                                    agent={agent}
-                                    skillName={detail.name}
-                                    isInstalled={installationMap.has(agent.id)}
-                                    isLoading={installingAgentId === agent.id}
-                                    onToggle={() => handleToggle(agent.id)}
-                                  />
-                                ))}
+                                {lobsterAgents.map((agent) => {
+                                  const memberIds = getPlatformTargetMemberIds(agent);
+                                  const isInstalled = memberIds.some((agentId) => installationMap.has(agentId)) ||
+                                    memberIds.some((agentId) => sharedRootAgentIds.has(agentId));
+                                  const isLocked = memberIds.some((agentId) => sharedRootAgentIds.has(agentId));
+                                  const isLoading = memberIds.some((agentId) => installingAgentId === agentId);
+
+                                  return (
+                                    <PlatformToggleIcon
+                                      key={agent.id}
+                                      agent={agent}
+                                      skillName={detail.name}
+                                      isInstalled={isInstalled}
+                                      isLoading={isLoading}
+                                      isLocked={isLocked}
+                                      onToggle={() => {
+                                        const [agentId] = getPlatformTargetInstallAgentIds(agent);
+                                        if (agentId) {
+                                          void handleToggle(agentId);
+                                        }
+                                      }}
+                                    />
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
@@ -818,16 +867,30 @@ export function SkillDetailView({
                                 {t("sidebar.categoryCoding")}
                               </span>
                               <div className="flex items-center gap-0.5 flex-wrap">
-                                {codingAgents.map((agent) => (
-                                  <PlatformToggleIcon
-                                    key={agent.id}
-                                    agent={agent}
-                                    skillName={detail.name}
-                                    isInstalled={installationMap.has(agent.id)}
-                                    isLoading={installingAgentId === agent.id}
-                                    onToggle={() => handleToggle(agent.id)}
-                                  />
-                                ))}
+                                {codingAgents.map((agent) => {
+                                  const memberIds = getPlatformTargetMemberIds(agent);
+                                  const isInstalled = memberIds.some((agentId) => installationMap.has(agentId)) ||
+                                    memberIds.some((agentId) => sharedRootAgentIds.has(agentId));
+                                  const isLocked = memberIds.some((agentId) => sharedRootAgentIds.has(agentId));
+                                  const isLoading = memberIds.some((agentId) => installingAgentId === agentId);
+
+                                  return (
+                                    <PlatformToggleIcon
+                                      key={agent.id}
+                                      agent={agent}
+                                      skillName={detail.name}
+                                      isInstalled={isInstalled}
+                                      isLoading={isLoading}
+                                      isLocked={isLocked}
+                                      onToggle={() => {
+                                        const [agentId] = getPlatformTargetInstallAgentIds(agent);
+                                        if (agentId) {
+                                          void handleToggle(agentId);
+                                        }
+                                      }}
+                                    />
+                                  );
+                                })}
                               </div>
                             </div>
                           )}

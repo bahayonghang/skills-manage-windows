@@ -410,7 +410,7 @@ describe("SettingsView", () => {
   it("renders custom platform with name and path", () => {
     setupMocks({ agents: [mockBuiltinAgent, mockCustomAgent] });
     renderSettingsView();
-    expect(screen.getByText("QClaw")).toBeTruthy();
+    expect(screen.getAllByText("QClaw").length).toBeGreaterThan(0);
     expect(screen.getByText("/Users/test/.qclaw/skills/")).toBeTruthy();
   });
 
@@ -512,7 +512,7 @@ describe("SettingsView", () => {
   it("shows the app version in the about section", () => {
     setupMocks();
     renderSettingsView();
-    expect(screen.getByText("skills-manage v0.9.1")).toBeTruthy();
+    expect(screen.getByText("SkillPort v0.9.1")).toBeTruthy();
   });
 
   it("shows the database path in the about section", () => {

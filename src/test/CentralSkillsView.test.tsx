@@ -70,7 +70,16 @@ const mockAgents: AgentWithStatus[] = [
     id: "cursor",
     display_name: "Cursor",
     category: "coding",
-    global_skills_dir: "/Users/test/.cursor/skills/",
+    global_skills_dir: "/Users/test/.agents/skills/",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
+    id: "codex",
+    display_name: "Codex",
+    category: "coding",
+    global_skills_dir: "/Users/test/.agents/skills/",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -97,7 +106,8 @@ const mockSkills: SkillWithLinks[] = [
     scanned_at: "2026-04-09T00:00:00Z",
     created_at: "2026-04-10T00:00:00Z",
     updated_at: "2026-04-12T00:00:00Z",
-    linked_agents: ["claude-code"],
+    linked_agents: ["claude-code", "codex"],
+    shared_root_agents: ["codex", "cursor"],
   },
   {
     id: "code-reviewer",
@@ -109,7 +119,8 @@ const mockSkills: SkillWithLinks[] = [
     scanned_at: "2026-04-09T00:00:00Z",
     created_at: "2026-04-08T00:00:00Z",
     updated_at: "2026-04-20T00:00:00Z",
-    linked_agents: [],
+    linked_agents: ["codex"],
+    shared_root_agents: ["codex", "cursor"],
   },
 ];
 
@@ -342,14 +353,26 @@ describe("CentralSkillsView", () => {
 
   it("shows platform toggle icons for each non-central agent", () => {
     renderCentralSkillsView();
-    // Each skill card should have a toggle button for each non-central agent (2 agents x 2 skills = 4)
+    // Only independent targets remain toggleable. The Universal group is locked.
     const toggleButtons = screen.getAllByRole("button", {
       name: /切换 .* 的链接状态/i,
     });
-    expect(toggleButtons.length).toBe(4);
+    expect(toggleButtons.length).toBe(2);
   });
 
   // ── Empty State ───────────────────────────────────────────────────────────
+
+  it("renders shared-root platform icon as connected and locked", () => {
+    renderCentralSkillsView();
+
+    const codexButton = screen.getAllByRole("button", {
+      name: /Universal - 始终包含/i,
+    })[0];
+    expect(codexButton).toBeDisabled();
+
+    fireEvent.click(codexButton);
+    expect(mockTogglePlatformLink).not.toHaveBeenCalled();
+  });
 
   it("shows first-visit empty state when no skills exist", () => {
     mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
@@ -365,7 +388,7 @@ describe("CentralSkillsView", () => {
     );
 
     expect(
-      screen.getByText(/欢迎使用 skills-manage/)
+      screen.getByText(/欢迎使用 SkillPort/)
     ).toBeInTheDocument();
     // Should show guidance about creating a skill
     expect(

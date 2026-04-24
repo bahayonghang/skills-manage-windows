@@ -14,8 +14,11 @@ import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { usePlatformStore } from "@/stores/platformStore";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-  filterVisiblePlatformAgents,
 } from "@/lib/platformVisibility";
+import {
+  getPlatformTargetGroups,
+  isUniversalPlatformTarget,
+} from "@/lib/platformTargetGroups";
 import { cn } from "@/lib/utils";
 import { markAppPerformance } from "@/lib/performance";
 
@@ -101,7 +104,7 @@ export function Sidebar() {
     }
   }, [agents.length, isLoading]);
 
-  const platformAgents = filterVisiblePlatformAgents(agents, categoryVisibility);
+  const platformAgents = getPlatformTargetGroups(agents, categoryVisibility);
   const lobsterAgents = platformAgents.filter((a) => a.category === "lobster");
   const codingAgents = platformAgents.filter((a) => a.category !== "lobster");
 
@@ -216,12 +219,21 @@ export function Sidebar() {
                 {lobsterAgents.map((agent) => (
                   <NavItem
                     key={agent.id}
-                    label={agent.display_name}
-                    isActive={pathname === `/platform/${agent.id}`}
-                    onClick={() => navigate(`/platform/${agent.id}`)}
+                    label={
+                      isUniversalPlatformTarget(agent)
+                        ? t("platformTargets.universalShortLabel")
+                        : agent.display_name
+                    }
+                    isActive={
+                      !isUniversalPlatformTarget(agent) &&
+                      pathname === `/platform/${agent.id}`
+                    }
+                    onClick={() =>
+                      navigate(isUniversalPlatformTarget(agent) ? "/central" : `/platform/${agent.id}`)
+                    }
                     icon={<PlatformIcon agentId={agent.id} className="size-4" />}
                     expanded={expanded}
-                    count={skillsByAgent[agent.id]}
+                    count={isUniversalPlatformTarget(agent) ? skillsByAgent["central"] : skillsByAgent[agent.id]}
                   />
                 ))}
               </>
@@ -240,12 +252,21 @@ export function Sidebar() {
                 {codingAgents.map((agent) => (
                   <NavItem
                     key={agent.id}
-                    label={agent.display_name}
-                    isActive={pathname === `/platform/${agent.id}`}
-                    onClick={() => navigate(`/platform/${agent.id}`)}
+                    label={
+                      isUniversalPlatformTarget(agent)
+                        ? t("platformTargets.universalShortLabel")
+                        : agent.display_name
+                    }
+                    isActive={
+                      !isUniversalPlatformTarget(agent) &&
+                      pathname === `/platform/${agent.id}`
+                    }
+                    onClick={() =>
+                      navigate(isUniversalPlatformTarget(agent) ? "/central" : `/platform/${agent.id}`)
+                    }
                     icon={<PlatformIcon agentId={agent.id} className="size-4" />}
                     expanded={expanded}
-                    count={skillsByAgent[agent.id]}
+                    count={isUniversalPlatformTarget(agent) ? skillsByAgent["central"] : skillsByAgent[agent.id]}
                   />
                 ))}
               </>

@@ -16,6 +16,12 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
 import { AgentWithStatus, SkillWithLinks } from "@/types";
+import {
+  getPlatformTargetInstallAgentIds,
+  getPlatformTargetMemberIds,
+  getPlatformTargetMemberNames,
+  isUniversalPlatformTarget,
+} from "@/lib/platformTargetGroups";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +48,20 @@ export function InstallDialog({
   const { t } = useTranslation();
   // Only show non-central agents in the install dialog.
   const targetAgents = agents.filter((a) => a.id !== "central");
+  const sharedRootAgentIds = new Set(skill?.shared_root_agents ?? []);
+
+  const isSharedRootTarget = (agent: AgentWithStatus) =>
+    getPlatformTargetMemberIds(agent).some((agentId) => sharedRootAgentIds.has(agentId));
+
+  const selectedInstallAgentIds = () =>
+    Array.from(
+      new Set(
+        targetAgents
+          .filter((agent) => selectedAgentIds.has(agent.id))
+          .filter((agent) => !isSharedRootTarget(agent))
+          .flatMap((agent) => getPlatformTargetInstallAgentIds(agent))
+      )
+    );
 
   // Track which agents are selected for installation.
   const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(
@@ -59,8 +79,13 @@ export function InstallDialog({
       // Default: check agents that are already linked (show current state).
       const initialSelection = new Set<string>(
         targetAgents
-          .filter((a) => skill.linked_agents.includes(a.id))
-          .map((a) => a.id)
+          .filter((agent) =>
+            getPlatformTargetMemberIds(agent).some((agentId) =>
+              skill.linked_agents.includes(agentId)
+            )
+          )
+          .filter((agent) => !isSharedRootTarget(agent))
+          .map((agent) => agent.id)
       );
       setSelectedAgentIds(initialSelection);
       setInstallMethod("symlink");
@@ -70,6 +95,11 @@ export function InstallDialog({
   }, [open, skill?.id]);
 
   function handleCheckboxChange(agentId: string, checked: boolean) {
+    const target = targetAgents.find((agent) => agent.id === agentId);
+    if (target && isSharedRootTarget(target)) {
+      return;
+    }
+
     setSelectedAgentIds((prev) => {
       const next = new Set(prev);
       if (checked) {
@@ -84,7 +114,7 @@ export function InstallDialog({
   async function handleConfirm() {
     if (!skill) return;
 
-    const agentIds = Array.from(selectedAgentIds);
+    const agentIds = selectedInstallAgentIds();
     if (agentIds.length === 0) {
       setError(t("installDialog.selectPlatform"));
       return;
@@ -103,6 +133,7 @@ export function InstallDialog({
   }
 
   if (!skill) return null;
+  const selectedInstallableCount = selectedInstallAgentIds().length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -125,8 +156,17 @@ export function InstallDialog({
               </p>
             ) : (
               targetAgents.map((agent) => {
-                const isLinked = skill.linked_agents.includes(agent.id);
-                const isChecked = selectedAgentIds.has(agent.id);
+                const memberIds = getPlatformTargetMemberIds(agent);
+                const memberNames = getPlatformTargetMemberNames(agent).join(", ");
+                const isUniversal = isUniversalPlatformTarget(agent);
+                const displayName = isUniversal
+                  ? t("platformTargets.universalLabel")
+                  : agent.display_name;
+                const isLinked = memberIds.some((agentId) =>
+                  skill.linked_agents.includes(agentId)
+                );
+                const isSharedRoot = isSharedRootTarget(agent);
+                const isChecked = isSharedRoot || selectedAgentIds.has(agent.id);
 
                 return (
                   <div
@@ -135,20 +175,36 @@ export function InstallDialog({
                   >
                     <Checkbox
                       checked={isChecked}
+                      disabled={isSharedRoot}
                       onCheckedChange={(checked) =>
                         handleCheckboxChange(agent.id, !!checked)
                       }
-                      aria-label={agent.display_name}
+                      aria-label={displayName}
                     />
-                    <span
-                      className="text-sm text-foreground flex-1 cursor-pointer select-none truncate"
+                    <div
+                      className={`min-w-0 flex-1 select-none ${
+                        isSharedRoot
+                          ? "text-muted-foreground cursor-default"
+                          : "text-foreground cursor-pointer"
+                      }`}
+                      title={isUniversal ? memberNames : agent.global_skills_dir}
                       onClick={() =>
-                        handleCheckboxChange(agent.id, !isChecked)
+                        !isSharedRoot && handleCheckboxChange(agent.id, !isChecked)
                       }
                     >
-                      {agent.display_name}
-                    </span>
-                    {isLinked && (
+                      <div className="truncate text-sm">{displayName}</div>
+                      {isUniversal && (
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {memberNames}
+                        </div>
+                      )}
+                    </div>
+                    {isSharedRoot && (
+                      <span className="text-xs text-primary shrink-0">
+                        {t("platformTargets.alwaysIncluded")}
+                      </span>
+                    )}
+                    {isLinked && !isSharedRoot && (
                       <span className="text-xs text-primary shrink-0">
                         {t("installDialog.alreadyLinked")}
                       </span>
@@ -208,7 +264,7 @@ export function InstallDialog({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={isLoading || selectedAgentIds.size === 0}
+            disabled={isLoading || selectedInstallableCount === 0}
           >
             {isLoading ? (
               <>
@@ -216,7 +272,7 @@ export function InstallDialog({
                 {t("installDialog.installing")}
               </>
             ) : (
-              t("installDialog.confirmInstall", { count: selectedAgentIds.size })
+              t("installDialog.confirmInstall", { count: selectedInstallableCount })
             )}
           </Button>
         </DialogFooter>

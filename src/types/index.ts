@@ -124,6 +124,8 @@ export interface SkillWithLinks {
   updated_at?: string;
   /** Agent IDs that currently have this skill installed (symlink or copy). */
   linked_agents: string[];
+  /** Agent IDs that share the Central skills directory. */
+  shared_root_agents: string[];
 }
 
 export interface BatchInstallResult {

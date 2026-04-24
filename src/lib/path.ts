@@ -2,6 +2,19 @@ export function normalizePathSeparators(path: string): string {
   return path.replace(/\\/g, "/");
 }
 
+export function arePathsEquivalent(left: string | undefined, right: string | undefined): boolean {
+  if (!left || !right) {
+    return false;
+  }
+
+  const normalize = (path: string) => {
+    const normalized = normalizePathSeparators(path.trim()).replace(/\/+$/, "");
+    return isWindowsPath(path) ? normalized.toLocaleLowerCase("en-US") : normalized;
+  };
+
+  return normalize(left) === normalize(right);
+}
+
 export function isWindowsPath(path: string): boolean {
   const normalized = normalizePathSeparators(path);
   return /^[A-Za-z]:\//.test(normalized) || normalized.startsWith("//") || path.includes("\\");

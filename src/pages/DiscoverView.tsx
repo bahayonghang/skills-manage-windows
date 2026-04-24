@@ -27,8 +27,8 @@ import { cn } from "@/lib/utils";
 import { consumeScrollPosition } from "@/lib/scrollRestoration";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-  filterVisiblePlatformAgents,
 } from "@/lib/platformVisibility";
+import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { getPathBasename } from "@/lib/path";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
@@ -286,7 +286,7 @@ export function DiscoverView() {
 
   // Available platform agents for install dialog.
   const platformAgents = useMemo(
-    () => filterVisiblePlatformAgents(agents, categoryVisibility),
+    () => getPlatformTargetGroups(agents, categoryVisibility),
     [agents, categoryVisibility]
   );
 
@@ -751,6 +751,7 @@ export function DiscoverView() {
             file_path: installTargetSkill.file_path,
             is_central: false,
             linked_agents: [],
+            shared_root_agents: [],
             scanned_at: new Date().toISOString(),
           } as SkillWithLinks}
           agents={platformAgents}

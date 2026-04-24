@@ -19,6 +19,7 @@ import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
   filterVisiblePlatformAgents,
 } from "@/lib/platformVisibility";
+import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
@@ -71,6 +72,10 @@ export function PlatformView() {
 
   const visiblePlatformAgents = useMemo(
     () => filterVisiblePlatformAgents(agents, categoryVisibility),
+    [agents, categoryVisibility]
+  );
+  const installTargetAgents = useMemo(
+    () => getPlatformTargetGroups(agents, categoryVisibility),
     [agents, categoryVisibility]
   );
   const agent = visiblePlatformAgents.find((a) => a.id === agentId);
@@ -412,7 +417,7 @@ export function PlatformView() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         skill={installTargetSkill}
-        agents={visiblePlatformAgents}
+        agents={installTargetAgents}
         onInstall={handleInstall}
       />
 

@@ -31,6 +31,13 @@ import { Input } from "@/components/ui/input";
 import { AgentWithStatus, ScanDirectory } from "@/types";
 import { AI_PROVIDERS, REGION_LABELS, RegionId } from "@/data/aiProviders";
 import { deriveHomeDir, formatPathForDisplay, joinPathForDisplay } from "@/lib/path";
+import {
+  createPlatformTargetGroups,
+  getPlatformTargetMemberNames,
+  isUniversalPlatformTarget,
+  type PlatformTarget,
+  type PlatformTargetGroup,
+} from "@/lib/platformTargetGroups";
 
 // ─── App constants ────────────────────────────────────────────────────────────
 
@@ -192,7 +199,7 @@ function formatPlatformPathHint(path: string): string {
 }
 
 function matchesPlatformVisibilityQuery(
-  agent: AgentWithStatus,
+  agent: PlatformTarget,
   normalizedQuery: string
 ): boolean {
   if (!normalizedQuery) {
@@ -200,9 +207,17 @@ function matchesPlatformVisibilityQuery(
   }
 
   const searchText = [
+    isUniversalPlatformTarget(agent) ? "Universal universal-agents" : "",
     agent.display_name,
     agent.id,
     agent.global_skills_dir,
+    ...getPlatformTargetMemberNames(agent),
+    ...(isUniversalPlatformTarget(agent)
+      ? agent.member_agents.flatMap((member) => [
+          member.id,
+          member.global_skills_dir,
+        ])
+      : []),
   ]
     .join(" ")
     .toLowerCase();
@@ -244,11 +259,84 @@ function PlatformVisibilityRow({ agent, onToggle }: PlatformVisibilityRowProps) 
   );
 }
 
+interface PlatformVisibilityUniversalRowProps {
+  agent: PlatformTargetGroup;
+  isSearchActive: boolean;
+  onToggleAgent: (agentId: string, enabled: boolean) => void;
+}
+
+function PlatformVisibilityUniversalRow({
+  agent,
+  isSearchActive,
+  onToggleAgent,
+}: PlatformVisibilityUniversalRowProps) {
+  const { t } = useTranslation();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const members = agent.member_agents ?? [];
+  const pathHint = formatPlatformPathHint(agent.global_skills_dir);
+  const enabledCount = members.filter((member) => member.is_enabled).length;
+  const expanded = isExpanded || isSearchActive;
+
+  return (
+    <div className="border-t border-border/40 first:border-t-0">
+      <button
+        type="button"
+        className="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-muted/30"
+        onClick={() => setIsExpanded((value) => !value)}
+        aria-expanded={expanded}
+      >
+        <PlatformIcon
+          agentId={agent.id}
+          className="size-4 text-muted-foreground shrink-0"
+          size={16}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <div className="truncate text-sm font-medium">
+              {t("platformTargets.universalLabel")}
+            </div>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+              {t("settings.universalMembersSummary", {
+                enabled: enabledCount,
+                total: members.length,
+              })}
+            </span>
+          </div>
+          <div
+            className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/80"
+            title={agent.global_skills_dir}
+          >
+            <FolderOpen className="size-3 shrink-0" />
+            <span className="truncate">{pathHint}</span>
+          </div>
+        </div>
+        {expanded ? (
+          <ChevronDown className="size-4 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="bg-muted/10 pl-5">
+          {members.map((member) => (
+            <PlatformVisibilityRow
+              key={`universal-${member.id}`}
+              agent={member}
+              onToggle={(enabled) => onToggleAgent(member.id, enabled)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface PlatformVisibilityGroupProps {
   category: PlatformCategoryKey;
   title: string;
   description: string;
-  agents: AgentWithStatus[];
+  agents: PlatformTarget[];
   enabledCount: number;
   totalCount: number;
   groupVisible: boolean;
@@ -311,13 +399,22 @@ function PlatformVisibilityGroup({
           {t("settings.noPlatformItems")}
         </div>
       ) : (
-        agents.map((agent) => (
-          <PlatformVisibilityRow
-            key={`${category}-${agent.id}`}
-            agent={agent}
-            onToggle={(enabled) => onToggleAgent(agent.id, enabled)}
-          />
-        ))
+        agents.map((agent) =>
+          isUniversalPlatformTarget(agent) ? (
+            <PlatformVisibilityUniversalRow
+              key={`${category}-${agent.id}`}
+              agent={agent}
+              isSearchActive={isSearchActive}
+              onToggleAgent={onToggleAgent}
+            />
+          ) : (
+            <PlatformVisibilityRow
+              key={`${category}-${agent.id}`}
+              agent={agent}
+              onToggle={(enabled) => onToggleAgent(agent.id, enabled)}
+            />
+          )
+        )
       )}
     </div>
   );
@@ -490,14 +587,9 @@ export function SettingsView() {
             (agent) => getPlatformCategoryKey(agent.category) === group.category
           )
         );
-        const matchingAgents = sortPlatformVisibilityAgents(
-          groupAgents.filter(
-            (agent) =>
-              matchesPlatformVisibilityQuery(
-                agent,
-                normalizedPlatformVisibilityQuery
-              )
-          )
+        const groupedAgents = createPlatformTargetGroups(groupAgents, agents);
+        const matchingAgents = groupedAgents.filter((agent) =>
+          matchesPlatformVisibilityQuery(agent, normalizedPlatformVisibilityQuery)
         );
 
         return {
@@ -513,6 +605,7 @@ export function SettingsView() {
       );
   }, [
     allPlatformAgents,
+    agents,
     categoryVisibility.coding,
     categoryVisibility.lobster,
     isPlatformVisibilitySearchActive,
@@ -1073,7 +1166,7 @@ export function SettingsView() {
                 <Info className="size-4 text-muted-foreground shrink-0" />
                 <div>
                   <div className="text-xs text-muted-foreground">{t("settings.appVersion")}</div>
-                  <div className="text-sm font-medium">skills-manage v{APP_VERSION}</div>
+                  <div className="text-sm font-medium">SkillPort v{APP_VERSION}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3">

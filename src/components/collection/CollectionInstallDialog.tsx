@@ -15,6 +15,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AgentWithStatus, CollectionBatchInstallResult } from "@/types";
+import {
+  getPlatformTargetInstallAgentIds,
+  getPlatformTargetMemberNames,
+  isUniversalPlatformTarget,
+} from "@/lib/platformTargetGroups";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +44,16 @@ export function CollectionInstallDialog({
 }: CollectionInstallDialogProps) {
   const { t } = useTranslation();
   const targetAgents = agents.filter((a) => a.id !== "central");
+  const isLockedTarget = (agent: AgentWithStatus) => isUniversalPlatformTarget(agent);
+  const selectedInstallAgentIds = () =>
+    Array.from(
+      new Set(
+        targetAgents
+          .filter((agent) => selectedAgentIds.has(agent.id))
+          .filter((agent) => !isLockedTarget(agent))
+          .flatMap((agent) => getPlatformTargetInstallAgentIds(agent))
+      )
+    );
 
   const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
@@ -50,7 +65,9 @@ export function CollectionInstallDialog({
     if (open) {
       // Default: select all detected agents.
       const initial = new Set<string>(
-        targetAgents.filter((a) => a.is_detected).map((a) => a.id)
+        targetAgents
+          .filter((agent) => isLockedTarget(agent) || agent.is_detected)
+          .map((agent) => agent.id)
       );
       setSelectedAgentIds(initial);
       setError(null);
@@ -60,6 +77,11 @@ export function CollectionInstallDialog({
   }, [open]);
 
   function handleToggle(agentId: string, checked: boolean) {
+    const target = targetAgents.find((agent) => agent.id === agentId);
+    if (target && isLockedTarget(target)) {
+      return;
+    }
+
     setSelectedAgentIds((prev) => {
       const next = new Set(prev);
       if (checked) next.add(agentId);
@@ -69,7 +91,7 @@ export function CollectionInstallDialog({
   }
 
   async function handleInstall() {
-    const agentIds = Array.from(selectedAgentIds);
+    const agentIds = selectedInstallAgentIds();
     if (agentIds.length === 0) {
       setError(t("batchInstall.selectPlatform"));
       return;
@@ -112,22 +134,44 @@ export function CollectionInstallDialog({
               </p>
             ) : (
               targetAgents.map((agent) => {
+                const isUniversal = isUniversalPlatformTarget(agent);
+                const isLocked = isLockedTarget(agent);
                 const isChecked = selectedAgentIds.has(agent.id);
+                const displayName = isUniversal
+                  ? t("platformTargets.universalLabel")
+                  : agent.display_name;
+                const memberNames = getPlatformTargetMemberNames(agent).join(", ");
                 return (
                   <div key={agent.id} className="flex items-center gap-2">
                     <Checkbox
                       checked={isChecked}
+                      disabled={isLocked}
                       onCheckedChange={(checked) =>
                         handleToggle(agent.id, !!checked)
                       }
-                      aria-label={agent.display_name}
+                      aria-label={displayName}
                     />
-                    <span
-                      className="text-sm text-foreground flex-1 cursor-pointer select-none truncate"
-                      onClick={() => handleToggle(agent.id, !isChecked)}
+                    <div
+                      className={`min-w-0 flex-1 select-none ${
+                        isLocked
+                          ? "text-muted-foreground cursor-default"
+                          : "text-foreground cursor-pointer"
+                      }`}
+                      title={isUniversal ? memberNames : agent.global_skills_dir}
+                      onClick={() => !isLocked && handleToggle(agent.id, !isChecked)}
                     >
-                      {agent.display_name}
-                    </span>
+                      <div className="truncate text-sm">{displayName}</div>
+                      {isUniversal && (
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {memberNames}
+                        </div>
+                      )}
+                    </div>
+                    {isLocked && (
+                      <span className="text-xs text-primary shrink-0">
+                        {t("platformTargets.alwaysIncluded")}
+                      </span>
+                    )}
                     {!agent.is_detected && (
                       <span className="text-xs text-muted-foreground shrink-0">
                         {t("batchInstall.notDetected")}
@@ -184,7 +228,7 @@ export function CollectionInstallDialog({
             </Button>
             <Button
               onClick={handleInstall}
-              disabled={isLoading || selectedAgentIds.size === 0}
+              disabled={isLoading || selectedInstallAgentIds().length === 0}
             >
               {isLoading ? (
                 <>
@@ -192,7 +236,7 @@ export function CollectionInstallDialog({
                   {t("batchInstall.installing")}
                 </>
               ) : (
-                t("batchInstall.install", { count: selectedAgentIds.size })
+                t("batchInstall.install", { count: selectedInstallAgentIds().length })
               )}
             </Button>
           </DialogFooter>

@@ -283,7 +283,7 @@ describe("collectionStore", () => {
       description: "Frontend skills",
       skills: ["frontend-design"],
       createdAt: "2026-04-09T00:00:00Z",
-      exportedFrom: "skills-manage",
+      exportedFrom: "SkillPort",
     });
 
     vi.mocked(invoke).mockResolvedValueOnce(jsonStr);
@@ -303,7 +303,7 @@ describe("collectionStore", () => {
       description: "Imported collection",
       skills: ["frontend-design"],
       createdAt: "2026-04-09T00:00:00Z",
-      exportedFrom: "skills-manage",
+      exportedFrom: "SkillPort",
     });
 
     const importedCollection: Collection = {

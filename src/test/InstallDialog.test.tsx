@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { InstallDialog } from "../components/central/InstallDialog";
 import { AgentWithStatus, SkillWithLinks } from "../types";
+import { getPlatformTargetGroups } from "../lib/platformTargetGroups";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -19,7 +20,7 @@ const mockAgents: AgentWithStatus[] = [
     id: "cursor",
     display_name: "Cursor",
     category: "coding",
-    global_skills_dir: "~/.cursor/skills/",
+    global_skills_dir: "~/.agents/skills/",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -28,8 +29,26 @@ const mockAgents: AgentWithStatus[] = [
     id: "gemini-cli",
     display_name: "Gemini CLI",
     category: "coding",
-    global_skills_dir: "~/.gemini/skills/",
+    global_skills_dir: "~/.agents/skills/",
     is_detected: false,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
+    id: "kiro",
+    display_name: "Kiro",
+    category: "coding",
+    global_skills_dir: "~/.kiro/skills/",
+    is_detected: false,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
+    id: "codex",
+    display_name: "Codex",
+    category: "coding",
+    global_skills_dir: "~/.agents/skills/",
+    is_detected: true,
     is_builtin: true,
     is_enabled: true,
   },
@@ -52,7 +71,8 @@ const mockSkill: SkillWithLinks = {
   canonical_path: "~/.agents/skills/frontend-design",
   is_central: true,
   scanned_at: "2026-04-09T00:00:00Z",
-  linked_agents: ["claude-code"],
+  linked_agents: ["claude-code", "codex"],
+  shared_root_agents: ["codex", "cursor", "gemini-cli"],
 };
 
 const mockOnInstall = vi.fn();
@@ -62,12 +82,17 @@ function renderDialog(props: {
   open?: boolean;
   skill?: SkillWithLinks | null;
 } = {}) {
+  const targetAgents = getPlatformTargetGroups(mockAgents, {
+    coding: true,
+    lobster: true,
+  });
+
   return render(
     <InstallDialog
       open={props.open ?? true}
       onOpenChange={mockOnOpenChange}
       skill={props.skill ?? mockSkill}
-      agents={mockAgents}
+      agents={targetAgents}
       onInstall={mockOnInstall}
     />
   );
@@ -100,8 +125,11 @@ describe("InstallDialog", () => {
   it("shows non-central agent checkboxes", () => {
     renderDialog();
     expect(screen.getByLabelText("Claude Code")).toBeInTheDocument();
-    expect(screen.getByLabelText("Cursor")).toBeInTheDocument();
-    expect(screen.getByLabelText("Gemini CLI")).toBeInTheDocument();
+    expect(screen.getByLabelText("Universal (.agents/skills)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Kiro")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Cursor")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Gemini CLI")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Codex")).not.toBeInTheDocument();
   });
 
   it("does not show 'central' agent checkbox", () => {
@@ -112,13 +140,20 @@ describe("InstallDialog", () => {
   it("shows 'already linked' badge for linked agents", () => {
     renderDialog();
     // Claude Code is in linked_agents
-    expect(screen.getByText("已链接")).toBeInTheDocument();
+    expect(screen.getAllByText("已链接").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows 'not detected' badge for undetected agents", () => {
     renderDialog();
-    // gemini-cli has is_detected: false
+    // Kiro has is_detected: false
     expect(screen.getByText("(未检测到)")).toBeInTheDocument();
+  });
+
+  it("shows Universal as available but disabled for central skills", () => {
+    renderDialog();
+
+    expect(screen.getByLabelText("Universal (.agents/skills)")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("始终包含")).toBeInTheDocument();
   });
 
   it("shows symlink/copy radio options", () => {
@@ -133,7 +168,7 @@ describe("InstallDialog", () => {
   it("shows confirm button with count of selected platforms", () => {
     renderDialog();
     // By default, linked agents (claude-code) are pre-selected.
-    // Unlinked agents (cursor, gemini-cli) are not pre-selected.
+    // Unlinked independent agents are not pre-selected.
     // So 1 is pre-selected: claude-code
     expect(
       screen.getByRole("button", { name: /安装到 1 个平台/i })
@@ -154,6 +189,24 @@ describe("InstallDialog", () => {
         "frontend-design",
         expect.any(Array),
         expect.any(String)
+      );
+    });
+  });
+
+  it("does not submit shared-root agents on confirm", async () => {
+    mockOnInstall.mockResolvedValueOnce(undefined);
+
+    renderDialog();
+    const confirmBtn = screen.getByRole("button", {
+      name: /安装到 .* 个平台/i,
+    });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockOnInstall).toHaveBeenCalledWith(
+        "frontend-design",
+        ["claude-code"],
+        "symlink"
       );
     });
   });
@@ -248,9 +301,9 @@ describe("InstallDialog", () => {
       screen.getByRole("button", { name: /安装到 1 个平台/i })
     ).toBeInTheDocument();
 
-    // Check Cursor (add 1 more)
-    const cursorCheckbox = screen.getByLabelText("Cursor");
-    fireEvent.click(cursorCheckbox);
+    // Check Kiro (add 1 more)
+    const kiroCheckbox = screen.getByLabelText("Kiro");
+    fireEvent.click(kiroCheckbox);
 
     await waitFor(() => {
       expect(
@@ -271,7 +324,10 @@ describe("InstallDialog", () => {
         open={true}
         onOpenChange={mockOnOpenChange}
         skill={noLinkedSkill}
-        agents={mockAgents}
+        agents={getPlatformTargetGroups(mockAgents, {
+          coding: true,
+          lobster: true,
+        })}
         onInstall={mockOnInstall}
       />
     );

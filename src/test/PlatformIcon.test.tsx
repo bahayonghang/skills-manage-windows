@@ -35,6 +35,7 @@ const NEW_PLATFORM_IDS = [
   "autoclaw",
   "copilot",
   "aider",
+  "universal-agents",
 ];
 
 const ALL_PLATFORM_IDS = [...ORIGINAL_PLATFORM_IDS, ...NEW_PLATFORM_IDS];
@@ -178,6 +179,11 @@ describe("PlatformIcon", () => {
 
   it("renders an SVG element for aider", () => {
     const { container } = render(<PlatformIcon agentId="aider" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for universal-agents", () => {
+    const { container } = render(<PlatformIcon agentId="universal-agents" />);
     expect(container.querySelector("svg")).toBeInTheDocument();
   });
 

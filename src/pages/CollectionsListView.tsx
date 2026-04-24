@@ -32,8 +32,8 @@ import {
 } from "@/lib/scrollRestoration";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-  filterVisiblePlatformAgents,
 } from "@/lib/platformVisibility";
+import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 
 // Build a stable scroll-restoration key for a given collection id. The
 // returned key scopes restoration state to that specific collection so that
@@ -78,11 +78,11 @@ export function CollectionsListView() {
   const loadCentralSkills = useCentralSkillsStore((s) => s.loadCentralSkills);
   const installCentralSkill = useCentralSkillsStore((s) => s.installSkill);
   const visibleCollectionAgents = useMemo(
-    () => filterVisiblePlatformAgents(agents, categoryVisibility),
+    () => getPlatformTargetGroups(agents, categoryVisibility),
     [agents, categoryVisibility]
   );
   const visibleCentralAgents = useMemo(
-    () => filterVisiblePlatformAgents(agents, categoryVisibility),
+    () => getPlatformTargetGroups(agents, categoryVisibility),
     [agents, categoryVisibility]
   );
 

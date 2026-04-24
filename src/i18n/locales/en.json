@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "skills-manage"
+    "name": "SkillPort"
   },
   "common": {
     "install": "Install",
@@ -79,6 +79,7 @@
     "refreshError": "Refresh failed: {{error}}",
     "linked": "linked",
     "notLinked": "not linked",
+    "sharedCentralPath": "Uses Central path",
     "toggleInstallLabel": "Toggle {{platform}} link for {{skill}}",
     "sortLabel": "Sort",
     "sortFieldLabel": "Sort field",
@@ -101,12 +102,18 @@
     "copy": "Copy",
     "copyDesc": "(independent copy)",
     "alreadyLinked": "already linked",
+    "sharedCentralPath": "Uses Central path",
     "notDetected": "(not detected)",
     "confirmInstall": "Install to {{count}} platform{{count, select, 1 {} other {s}}}",
     "selectPlatform": "Please select at least one platform.",
     "selectPlatforms": "Select platforms",
     "cancel": "Cancel",
     "installing": "Installing..."
+  },
+  "platformTargets": {
+    "universalLabel": "Universal (.agents/skills)",
+    "universalShortLabel": "Universal",
+    "alwaysIncluded": "Always included"
   },
   "detail": {
     "goBack": "Go back",
@@ -274,6 +281,7 @@
     "platformItemVisible": "Show tool",
     "platformGroupCodingDesc": "Control the Coding group and the tools inside it.",
     "platformGroupLobsterDesc": "Control the Lobster group and the tools inside it.",
+    "universalMembersSummary": "{{enabled}} / {{total}} tools",
     "toggleCategoryVisibilityLabel": "Toggle visibility for the {{name}} group",
     "togglePlatformVisibilityLabel": "Toggle visibility for platform {{name}}",
     "githubPatTitle": "GitHub import access token",
@@ -344,7 +352,7 @@
     "saving": "Saving..."
   },
   "empty": {
-    "welcomeTitle": "Welcome to skills-manage!",
+    "welcomeTitle": "Welcome to SkillPort!",
     "welcomeDesc": "No skills found in ~/.agents/skills/. Get started by creating a SKILL.md file there, or add custom scan directories in Settings.",
     "createHint": "Create a skill directory at",
     "goToSettings": "Go to Settings"
@@ -367,7 +375,7 @@
   },
   "discover": {
     "title": "Discover Project Skills",
-    "desc": "Scan your project directories for skills not yet managed by skills-manage.",
+    "desc": "Scan your project directories for skills not yet managed by SkillPort.",
     "discoverBtn": "Discover",
     "discoverLabel": "Discover project skills",
     "scanRoots": "Scan Roots",

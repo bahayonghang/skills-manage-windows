@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "skills-manage"
+    "name": "SkillPort"
   },
   "common": {
     "install": "安装",
@@ -79,6 +79,7 @@
     "refreshError": "刷新失败: {{error}}",
     "linked": "已链接",
     "notLinked": "未链接",
+    "sharedCentralPath": "共享中央目录",
     "toggleInstallLabel": "切换 {{skill}} 在 {{platform}} 的链接状态",
     "sortLabel": "排序",
     "sortFieldLabel": "排序字段",
@@ -101,12 +102,18 @@
     "copy": "复制安装",
     "copyDesc": "(独立副本)",
     "alreadyLinked": "已链接",
+    "sharedCentralPath": "共享中央目录",
     "notDetected": "(未检测到)",
     "confirmInstall": "安装到 {{count}} 个平台",
     "selectPlatform": "请至少选择一个平台。",
     "selectPlatforms": "选择平台",
     "cancel": "取消",
     "installing": "安装中..."
+  },
+  "platformTargets": {
+    "universalLabel": "Universal (.agents/skills)",
+    "universalShortLabel": "Universal",
+    "alwaysIncluded": "始终包含"
   },
   "detail": {
     "goBack": "返回",
@@ -274,6 +281,7 @@
     "platformItemVisible": "显示工具",
     "platformGroupCodingDesc": "控制 Coding 分组和其中工具的显示。",
     "platformGroupLobsterDesc": "控制 Lobster 分组和其中工具的显示。",
+    "universalMembersSummary": "{{enabled}} / {{total}} 个工具",
     "toggleCategoryVisibilityLabel": "切换 {{name}} 分组显示",
     "togglePlatformVisibilityLabel": "切换平台 {{name}} 的显示",
     "githubPatTitle": "GitHub 导入访问令牌",
@@ -344,7 +352,7 @@
     "saving": "保存中..."
   },
   "empty": {
-    "welcomeTitle": "欢迎使用 skills-manage！",
+    "welcomeTitle": "欢迎使用 SkillPort！",
     "welcomeDesc": "在 ~/.agents/skills/ 中未找到任何技能。请在该目录创建一个 SKILL.md 文件，或在设置中添加自定义扫描目录。",
     "createHint": "在此目录创建一个技能：",
     "goToSettings": "前往设置"
@@ -367,7 +375,7 @@
   },
   "discover": {
     "title": "发现项目技能",
-    "desc": "扫描您的项目目录，查找尚未被 skills-manage 管理的技能。",
+    "desc": "扫描您的项目目录，查找尚未被 SkillPort 管理的技能。",
     "discoverBtn": "发现",
     "discoverLabel": "发现项目技能",
     "scanRoots": "扫描根目录",
