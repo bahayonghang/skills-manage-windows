@@ -1,16 +1,20 @@
-# skills-manage
+# SkillPort
 
-`skills-manage` is a Tauri desktop app for managing AI coding agent skills across multiple platforms from one place.
+`SkillPort` is a Tauri desktop app for managing AI coding agent skills across multiple platforms from one place.
 
 [中文文档](README_CN.md)
 
 > **Disclaimer**
 >
-> `skills-manage` is an independent, unofficial desktop application for managing local skill directories and importing public skill metadata. It is not affiliated with, endorsed by, or sponsored by Anthropic, OpenAI, GitHub, MiniMax, or any other supported platform, publisher, or trademark owner.
+> `SkillPort` is an independent, unofficial desktop application for managing local skill directories and importing public skill metadata. It is not affiliated with, endorsed by, or sponsored by Anthropic, OpenAI, GitHub, MiniMax, or any other supported platform, publisher, or trademark owner.
 
 ## Overview
 
-`skills-manage` follows the [Agent Skills](https://github.com/anthropics/agent-skills) open pattern and uses `~/.agents/skills/` as the canonical central directory. Skills can then be installed to individual platforms through symlinks, so one source of truth can drive multiple AI coding tools.
+`SkillPort` follows the [Agent Skills](https://github.com/anthropics/agent-skills) open pattern and uses `~/.agents/skills/` as the canonical central directory. Skills can then be installed to individual platforms through symlinks, so one source of truth can drive multiple AI coding tools.
+
+## Relationship to upstream
+
+`SkillPort` is derived from [`iamzhihuix/skills-manage`](https://github.com/iamzhihuix/skills-manage). This fork is independently maintained and distributed. The upstream project remains credited as the original base, while this fork keeps a Windows-first build and release contract for installer packaging and release workflows.
 
 ## Highlights
 
@@ -51,7 +55,7 @@
 
 ## Download
 
-- Latest release: <https://github.com/iamzhihuix/skills-manage/releases/latest>
+- Latest release: <https://github.com/bahayonghang/skills-manage-windows/releases/latest>
 - Current prebuilt packages: Windows x64 (`.exe`, `.msi`, `.zip`) and macOS Universal (`.dmg`, `.zip`, `.tar.gz`)
 - Other platforms: run from source for now
 
@@ -61,15 +65,15 @@ The current public macOS build is not notarized. If macOS shows a warning such a
 
 ![macOS damaged app warning](images/app-damaged.png)
 
-- `"skills-manage" is damaged and can't be opened`
-- `"skills-manage" cannot be opened because Apple could not verify it`
+- `"SkillPort" is damaged and can't be opened`
+- `"SkillPort" cannot be opened because Apple could not verify it`
 
 the app is usually not actually corrupted; it is being blocked by Gatekeeper quarantine on an unsigned build.
 
 After moving the app to `/Applications`, run:
 
 ```bash
-xattr -dr com.apple.quarantine "/Applications/skills-manage.app"
+xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 ```
 
 Then launch the app again from Finder. If your app is stored somewhere else, replace the path with the actual `.app` path.
@@ -113,7 +117,7 @@ Custom platforms can be added through Settings.
 
 ## Privacy & Security
 
-- **Local-first storage** — metadata, collections, scan results, settings, and cached AI explanations stay in `~/.skillsmanage/db.sqlite` or the local skill directories you manage.
+- **Local-first storage** — metadata, collections, scan results, settings, and cached AI explanations stay in `~/.skillsmanage/db.sqlite` or the local skill directories you manage. The `.skillsmanage` path is kept for compatibility with existing installations.
 - **No telemetry** — the app does not include analytics, crash reporting, or usage tracking.
 - **Network access is feature-driven** — outbound requests only happen when you explicitly use marketplace sync/download, GitHub import, or AI explanation generation.
 - **Credentials are stored locally** — GitHub PAT and AI API keys are kept in the local SQLite settings table and are not encrypted at rest by the app.
@@ -182,7 +186,7 @@ cd src-tauri && cargo clippy -- -D warnings
 ## Project Structure
 
 ```text
-skills-manage/
+skillport/
 ├── src/                        # React frontend
 │   ├── components/             # UI components
 │   ├── i18n/                   # Locale files and i18n setup
@@ -205,7 +209,7 @@ skills-manage/
 
 ## Database
 
-The SQLite database lives at `~/.skillsmanage/db.sqlite` and is initialized automatically on first launch.
+The SQLite database lives at `~/.skillsmanage/db.sqlite` and is initialized automatically on first launch. This legacy directory name is retained so existing installations keep using their current data.
 
 ## Changelog
 
@@ -222,7 +226,7 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting and data-handling not
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=iamzhihuix/skills-manage&type=Date)](https://www.star-history.com/#iamzhihuix/skills-manage&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=bahayonghang/skills-manage-windows&type=Date)](https://www.star-history.com/#bahayonghang/skills-manage-windows&Date)
 
 ## License
 
