@@ -8,6 +8,7 @@ import {
   BatchDeleteCentralSkillRequest,
   BatchDeleteCentralSkillResult,
   BatchInstallResult,
+  CentralBatchInstallResult,
   CentralSkillUpdateJob,
   CentralSkillUpdateProgressPayload,
   CentralSkillUpdateResult,
@@ -316,6 +317,12 @@ interface CentralSkillsState {
     agentIds: string[],
     method: string
   ) => Promise<BatchInstallResult>;
+  batchInstallSkills: (
+    skillIds: string[],
+    agentIds: string[],
+    method: string,
+    projectPath?: string | null
+  ) => Promise<CentralBatchInstallResult>;
   loadDeletePreview: (skillId: string) => Promise<SkillDetail>;
   loadBatchDeletePreview: (skillIds: string[]) => Promise<BatchDeleteCentralSkillPreviewResult>;
   deleteCentralSkill: (skillId: string, removeAgentIds: string[]) => Promise<void>;
@@ -418,6 +425,27 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
       });
 
       // Refresh central skills to get updated link status.
+      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
+      const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
+      set({ skills, repositories: repositories ?? get().repositories, isInstalling: false });
+
+      return result;
+    } catch (err) {
+      set({ error: String(err), isInstalling: false });
+      throw err;
+    }
+  },
+
+  batchInstallSkills: async (skillIds, agentIds, method, projectPath) => {
+    set({ isInstalling: true, error: null });
+    try {
+      const result = await invoke<CentralBatchInstallResult>("batch_install_central_skills", {
+        skillIds,
+        agentIds,
+        method,
+        projectPath: projectPath ?? null,
+      });
+
       const skills = await invoke<SkillWithLinks[]>("get_central_skills");
       const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
       set({ skills, repositories: repositories ?? get().repositories, isInstalling: false });

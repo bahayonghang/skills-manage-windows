@@ -141,6 +141,23 @@ export interface BatchInstallResult {
   failed: Array<{ agent_id: string; error: string }>;
 }
 
+export interface CentralBatchInstallSuccess {
+  skill_id: string;
+  agent_id: string;
+  target_path: string;
+}
+
+export interface CentralBatchInstallFailure {
+  skill_id: string;
+  agent_id: string;
+  error: string;
+}
+
+export interface CentralBatchInstallResult {
+  succeeded: CentralBatchInstallSuccess[];
+  failed: CentralBatchInstallFailure[];
+}
+
 export interface DeleteCentralSkillPreview {
   skill_id: string;
   skill_name: string;

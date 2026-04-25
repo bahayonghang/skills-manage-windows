@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,29 @@ pub struct BatchInstallResult {
 pub struct FailedInstall {
     pub agent_id: String,
     pub error: String,
+}
+
+/// Successful item from a Central batch install request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CentralBatchInstallSuccess {
+    pub skill_id: String,
+    pub agent_id: String,
+    pub target_path: String,
+}
+
+/// Failed item from a Central batch install request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CentralBatchInstallFailure {
+    pub skill_id: String,
+    pub agent_id: String,
+    pub error: String,
+}
+
+/// Result of installing multiple Central skills to multiple targets.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CentralBatchInstallResult {
+    pub succeeded: Vec<CentralBatchInstallSuccess>,
+    pub failed: Vec<CentralBatchInstallFailure>,
 }
 
 // ─── Path Utilities ───────────────────────────────────────────────────────────
@@ -439,6 +463,201 @@ pub async fn install_skill_to_agent_copy_impl(
     })
 }
 
+async fn install_central_skill_to_agent_by_method(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+    method: &str,
+) -> Result<InstallResult, String> {
+    match method {
+        "copy" => install_skill_to_agent_copy_impl(pool, skill_id, agent_id).await,
+        "symlink" => install_skill_to_agent_impl(pool, skill_id, agent_id).await,
+        _ => install_skill_to_agent_auto_impl(pool, skill_id, agent_id).await,
+    }
+}
+
+fn project_relative_skills_dir(agent: &db::Agent) -> Result<PathBuf, String> {
+    if agent.id == "central" {
+        return Err("Cannot install a project skill to the central agent itself".to_string());
+    }
+
+    if let Some(project_skills_dir) = &agent.project_skills_dir {
+        let trimmed = project_skills_dir.trim();
+        if !trimmed.is_empty() {
+            let relative = trimmed
+                .strip_prefix("~/")
+                .or_else(|| trimmed.strip_prefix("~\\"))
+                .unwrap_or(trimmed);
+            let path = PathBuf::from(relative);
+            if path.is_absolute() {
+                return Err(format!(
+                    "Agent '{}' uses an absolute project skills directory pattern.",
+                    agent.display_name
+                ));
+            }
+            return Ok(path);
+        }
+    }
+
+    let global_dir = crate::paths::expand_home_path(&agent.global_skills_dir);
+    let home_dir = crate::paths::resolve_home_dir();
+    let relative = global_dir.strip_prefix(&home_dir).map_err(|_| {
+        format!(
+            "Agent '{}' does not define a home-relative skills directory pattern.",
+            agent.display_name
+        )
+    })?;
+
+    if relative.as_os_str().is_empty() {
+        return Err(format!(
+            "Agent '{}' does not define a project skills directory pattern.",
+            agent.display_name
+        ));
+    }
+
+    Ok(relative.to_path_buf())
+}
+
+fn ensure_project_dir(project_path: &Path) -> Result<(), String> {
+    if !project_path.exists() {
+        return Err(format!(
+            "Project path '{}' does not exist.",
+            project_path.display()
+        ));
+    }
+    if !project_path.is_dir() {
+        return Err(format!(
+            "Project path '{}' is not a directory.",
+            project_path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_replaceable_target(target_path: &Path) -> Result<(), String> {
+    match std::fs::symlink_metadata(target_path) {
+        Ok(meta) if meta.file_type().is_symlink() => remove_symlink_path(target_path),
+        Ok(meta) if meta.is_dir() => Err(format!(
+            "A real directory already exists at '{}'. Refusing to overwrite.",
+            target_path.display()
+        )),
+        Ok(_) => Err(format!(
+            "A file already exists at '{}'. Refusing to overwrite.",
+            target_path.display()
+        )),
+        Err(_) => Ok(()),
+    }
+}
+
+async fn install_central_skill_to_project_impl(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+    project_path: &Path,
+    method: &str,
+) -> Result<InstallResult, String> {
+    ensure_project_dir(project_path)?;
+
+    let agent = db::get_agent_by_id(pool, agent_id)
+        .await?
+        .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
+    let central = db::get_agent_by_id(pool, "central")
+        .await?
+        .ok_or_else(|| "Central agent not found in database".to_string())?;
+    let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
+
+    ensure_centralized(pool, skill_id, &canonical_dir).await?;
+
+    let relative_skills_dir = project_relative_skills_dir(&agent)?;
+    let project_skills_dir = project_path.join(relative_skills_dir);
+    let target_path = project_skills_dir.join(skill_id);
+
+    std::fs::create_dir_all(&project_skills_dir).map_err(|e| {
+        format!(
+            "Failed to create project skills directory '{}': {}",
+            project_skills_dir.display(),
+            e
+        )
+    })?;
+    ensure_replaceable_target(&target_path)?;
+
+    if method == "copy" {
+        copy_dir_all(&canonical_dir, &target_path)?;
+    } else {
+        let relative_target = symlink_target_path(&project_skills_dir, &canonical_dir);
+        match create_symlink(&relative_target, &target_path) {
+            Ok(()) => {}
+            Err(error) if method != "symlink" && should_fallback_to_copy(&error) => {
+                copy_dir_all(&canonical_dir, &target_path)?;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    Ok(InstallResult {
+        symlink_path: target_path.to_string_lossy().into_owned(),
+    })
+}
+
+fn dedupe_ordered(values: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut deduped = Vec::new();
+    for value in values {
+        if value.is_empty() {
+            continue;
+        }
+        if seen.insert(value.clone()) {
+            deduped.push(value);
+        }
+    }
+    deduped
+}
+
+pub async fn batch_install_central_skills_impl(
+    pool: &DbPool,
+    skill_ids: Vec<String>,
+    agent_ids: Vec<String>,
+    method: &str,
+    project_path: Option<&Path>,
+) -> CentralBatchInstallResult {
+    let skill_ids = dedupe_ordered(skill_ids);
+    let agent_ids = dedupe_ordered(agent_ids);
+    let mut succeeded = Vec::new();
+    let mut failed = Vec::new();
+
+    for skill_id in &skill_ids {
+        for agent_id in &agent_ids {
+            let install_result = if let Some(project_path) = project_path {
+                install_central_skill_to_project_impl(
+                    pool,
+                    skill_id,
+                    agent_id,
+                    project_path,
+                    method,
+                )
+                .await
+            } else {
+                install_central_skill_to_agent_by_method(pool, skill_id, agent_id, method).await
+            };
+
+            match install_result {
+                Ok(result) => succeeded.push(CentralBatchInstallSuccess {
+                    skill_id: skill_id.clone(),
+                    agent_id: agent_id.clone(),
+                    target_path: result.symlink_path,
+                }),
+                Err(error) => failed.push(CentralBatchInstallFailure {
+                    skill_id: skill_id.clone(),
+                    agent_id: agent_id.clone(),
+                    error,
+                }),
+            }
+        }
+    }
+
+    CentralBatchInstallResult { succeeded, failed }
+}
+
 /// Core uninstall logic, separated from the Tauri layer for testability.
 ///
 /// Removes the symlink at `agent.global_skills_dir/<skill_id>` and deletes the
@@ -572,6 +791,32 @@ pub async fn batch_install_to_agents(
     }
 
     Ok(BatchInstallResult { succeeded, failed })
+}
+
+/// Tauri command: install multiple Central skills to multiple platform or project targets.
+#[tauri::command]
+pub async fn batch_install_central_skills(
+    state: State<'_, AppState>,
+    skill_ids: Vec<String>,
+    agent_ids: Vec<String>,
+    method: Option<String>,
+    project_path: Option<String>,
+) -> Result<CentralBatchInstallResult, String> {
+    let method = method.as_deref().unwrap_or("auto");
+    let project_path_buf = project_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from);
+
+    Ok(batch_install_central_skills_impl(
+        &state.db,
+        skill_ids,
+        agent_ids,
+        method,
+        project_path_buf.as_deref(),
+    )
+    .await)
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -1093,6 +1338,156 @@ mod tests {
         assert_eq!(result.succeeded.len(), 1);
         assert_eq!(result.failed.len(), 1);
         assert_eq!(result.failed[0].agent_id, "nonexistent-agent");
+    }
+
+    #[tokio::test]
+    async fn test_central_batch_install_multiple_skills_to_multiple_agents() {
+        let tmp = TempDir::new().unwrap();
+        let central_dir = tmp.path().join("central");
+        let claude_dir = tmp.path().join("claude");
+        let cursor_dir = tmp.path().join("cursor");
+        fs::create_dir_all(&central_dir).unwrap();
+
+        let pool = setup_db(&central_dir, &claude_dir).await;
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+            .bind(cursor_dir.to_str().unwrap())
+            .execute(&pool)
+            .await
+            .unwrap();
+        create_central_skill(&central_dir, "batch-one");
+        create_central_skill(&central_dir, "batch-two");
+
+        let result = batch_install_central_skills_impl(
+            &pool,
+            vec!["batch-one".to_string(), "batch-two".to_string()],
+            vec!["claude-code".to_string(), "cursor".to_string()],
+            "copy",
+            None,
+        )
+        .await;
+
+        assert_eq!(result.succeeded.len(), 4);
+        assert!(result.failed.is_empty());
+        assert!(claude_dir.join("batch-one").join("SKILL.md").exists());
+        assert!(claude_dir.join("batch-two").join("SKILL.md").exists());
+        assert!(cursor_dir.join("batch-one").join("SKILL.md").exists());
+        assert!(cursor_dir.join("batch-two").join("SKILL.md").exists());
+    }
+
+    #[tokio::test]
+    async fn test_project_install_creates_project_relative_skill_dir() {
+        let tmp = TempDir::new().unwrap();
+        let central_dir = tmp.path().join("central");
+        let agent_dir = crate::paths::resolve_home_dir()
+            .join(".claude")
+            .join("skills");
+        let project_dir = tmp.path().join("project");
+        fs::create_dir_all(&central_dir).unwrap();
+        fs::create_dir_all(&project_dir).unwrap();
+
+        let pool = setup_db(&central_dir, &agent_dir).await;
+        create_central_skill(&central_dir, "project-skill");
+
+        let result = install_central_skill_to_project_impl(
+            &pool,
+            "project-skill",
+            "claude-code",
+            &project_dir,
+            "copy",
+        )
+        .await
+        .unwrap();
+
+        let target = project_dir
+            .join(".claude")
+            .join("skills")
+            .join("project-skill");
+        assert_eq!(PathBuf::from(result.symlink_path), target);
+        assert!(target.join("SKILL.md").exists());
+    }
+
+    #[tokio::test]
+    async fn test_project_install_refuses_existing_real_dir() {
+        let tmp = TempDir::new().unwrap();
+        let central_dir = tmp.path().join("central");
+        let agent_dir = crate::paths::resolve_home_dir()
+            .join(".claude")
+            .join("skills");
+        let project_dir = tmp.path().join("project");
+        let existing_dir = project_dir
+            .join(".claude")
+            .join("skills")
+            .join("existing-project-skill");
+        fs::create_dir_all(&central_dir).unwrap();
+        fs::create_dir_all(&existing_dir).unwrap();
+
+        let pool = setup_db(&central_dir, &agent_dir).await;
+        create_central_skill(&central_dir, "existing-project-skill");
+
+        let result = install_central_skill_to_project_impl(
+            &pool,
+            "existing-project-skill",
+            "claude-code",
+            &project_dir,
+            "copy",
+        )
+        .await;
+
+        assert!(
+            result
+                .as_ref()
+                .is_err_and(|error| error.contains("Refusing to overwrite")),
+            "project install should refuse existing real dir: {:?}",
+            result
+        );
+        assert!(existing_dir.is_dir());
+    }
+
+    #[tokio::test]
+    async fn test_project_install_does_not_overwrite_global_installation_record() {
+        let tmp = TempDir::new().unwrap();
+        let central_dir = tmp.path().join("central");
+        let agent_dir = crate::paths::resolve_home_dir()
+            .join(".claude")
+            .join("skills");
+        let project_dir = tmp.path().join("project");
+        fs::create_dir_all(&central_dir).unwrap();
+        fs::create_dir_all(&project_dir).unwrap();
+
+        let pool = setup_db(&central_dir, &agent_dir).await;
+        create_central_skill(&central_dir, "db-project-skill");
+        let global_path = agent_dir.join("db-project-skill");
+        let installation = SkillInstallation {
+            skill_id: "db-project-skill".to_string(),
+            agent_id: "claude-code".to_string(),
+            installed_path: global_path.to_string_lossy().into_owned(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        };
+        db::upsert_skill_installation(&pool, &installation)
+            .await
+            .unwrap();
+
+        install_central_skill_to_project_impl(
+            &pool,
+            "db-project-skill",
+            "claude-code",
+            &project_dir,
+            "copy",
+        )
+        .await
+        .unwrap();
+
+        let installations = db::get_skill_installations(&pool, "db-project-skill")
+            .await
+            .unwrap();
+        assert_eq!(installations.len(), 1);
+        assert_eq!(installations[0].agent_id, "claude-code");
+        assert_eq!(
+            installations[0].installed_path,
+            global_path.to_string_lossy()
+        );
     }
 
     /// Helper that mirrors `batch_install_to_agents` but works with a raw pool

@@ -467,6 +467,39 @@ describe("centralSkillsStore", () => {
     expect(result).toEqual(batchResult);
   });
 
+  it("calls batch_install_central_skills then refreshes skills", async () => {
+    const batchResult = {
+      succeeded: [
+        {
+          skill_id: "frontend-design",
+          agent_id: "cursor",
+          target_path: "~/.cursor/skills/frontend-design",
+        },
+      ],
+      failed: [],
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(batchResult)
+      .mockResolvedValueOnce(mockSkills)
+      .mockResolvedValueOnce(mockRepositories);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .batchInstallSkills(["frontend-design"], ["cursor"], "copy", "D:\\work\\demo");
+
+    expect(result).toEqual(batchResult);
+    expect(invoke).toHaveBeenCalledWith("batch_install_central_skills", {
+      skillIds: ["frontend-design"],
+      agentIds: ["cursor"],
+      method: "copy",
+      projectPath: "D:\\work\\demo",
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+    expect(useCentralSkillsStore.getState().skills).toEqual(mockSkills);
+    expect(useCentralSkillsStore.getState().isInstalling).toBe(false);
+  });
+
   it("sets error and re-throws when installSkill fails", async () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error("symlink failed"));
 
