@@ -167,10 +167,9 @@ describe("InstallDialog", () => {
 
   it("shows confirm button with count of selected platforms", () => {
     renderDialog();
-    // By default, linked agents are pre-selected.
-    // Here that means Claude Code plus the Universal target via Codex.
+    // By default, all enabled and visible targets are pre-selected.
     expect(
-      screen.getByRole("button", { name: /安装到 2 个平台/i })
+      screen.getByRole("button", { name: /安装到 3 个平台/i })
     ).toBeInTheDocument();
   });
 
@@ -205,8 +204,29 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalled();
     });
     const [, agentIds, method] = mockOnInstall.mock.calls[0];
-    expect([...agentIds].sort()).toEqual(["claude-code", "codex"]);
+    expect([...agentIds].sort()).toEqual(["claude-code", "codex", "kiro"]);
     expect(method).toBe("symlink");
+  });
+
+  it("does not submit shared-root targets", async () => {
+    mockOnInstall.mockResolvedValueOnce(undefined);
+
+    renderDialog({
+      skill: {
+        ...mockSkill,
+        shared_root_agents: ["codex", "cursor", "gemini-cli"],
+      },
+    });
+    const confirmBtn = screen.getByRole("button", {
+      name: /安装到 2 个平台/i,
+    });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockOnInstall).toHaveBeenCalled();
+    });
+    const [, agentIds] = mockOnInstall.mock.calls[0];
+    expect([...agentIds].sort()).toEqual(["claude-code", "kiro"]);
   });
 
   it("passes 'symlink' method to onInstall by default", async () => {
@@ -294,24 +314,24 @@ describe("InstallDialog", () => {
   it("updates confirm button count when checkbox toggled", async () => {
     renderDialog();
 
-    // Initially 2 selected: Claude Code plus Universal via Codex.
+    // Initially 3 selected: Claude Code, Kiro, and Universal via Codex.
     expect(
-      screen.getByRole("button", { name: /安装到 2 个平台/i })
+      screen.getByRole("button", { name: /安装到 3 个平台/i })
     ).toBeInTheDocument();
 
-    // Check Kiro (add 1 more)
+    // Uncheck Kiro.
     const kiroCheckbox = screen.getByLabelText("Kiro");
     fireEvent.click(kiroCheckbox);
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /安装到 3 个平台/i })
+        screen.getByRole("button", { name: /安装到 2 个平台/i })
       ).toBeInTheDocument();
     });
   });
 
   it("disables confirm when no platforms selected", async () => {
-    // Start with NO agents linked so none are pre-selected
+    // Start with no linked agents; defaults still select all visible targets.
     const noLinkedSkill: SkillWithLinks = {
       ...mockSkill,
       linked_agents: [],
@@ -330,7 +350,10 @@ describe("InstallDialog", () => {
       />
     );
 
-    // 0 selected → confirm button disabled
+    fireEvent.click(screen.getByLabelText("Universal (.agents/skills)"));
+    fireEvent.click(screen.getByLabelText("Claude Code"));
+    fireEvent.click(screen.getByLabelText("Kiro"));
+
     const confirmBtn = screen.getByRole("button", {
       name: /安装到 0 个平台/i,
     });

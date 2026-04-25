@@ -63,11 +63,9 @@ export function CollectionInstallDialog({
   // Reset when dialog opens.
   useEffect(() => {
     if (open) {
-      // Default: select all detected agents.
+      // Default: select all enabled and visible platform targets.
       const initial = new Set<string>(
-        targetAgents
-          .filter((agent) => isLockedTarget(agent) || agent.is_detected)
-          .map((agent) => agent.id)
+        targetAgents.map((agent) => agent.id)
       );
       setSelectedAgentIds(initial);
       setError(null);

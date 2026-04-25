@@ -76,14 +76,9 @@ export function InstallDialog({
   // user can see the full picture, but they can deselect any.
   useEffect(() => {
     if (open && skill) {
-      // Default: check agents that are already linked (show current state).
+      // Default: check all enabled and visible platform targets.
       const initialSelection = new Set<string>(
         targetAgents
-          .filter((agent) =>
-            getPlatformTargetMemberIds(agent).some((agentId) =>
-              skill.linked_agents.includes(agentId)
-            )
-          )
           .filter((agent) => !isSharedRootTarget(agent))
           .map((agent) => agent.id)
       );
