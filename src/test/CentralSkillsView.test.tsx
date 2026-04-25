@@ -267,6 +267,9 @@ const mockGetSkillsByAgent = vi.fn();
 const mockPreviewGitHubRepoImport = vi.fn();
 const mockImportGitHubRepoSkills = vi.fn();
 const mockResetGitHubImport = vi.fn();
+const mockExportSkillportState = vi.fn();
+const mockPreviewSkillportStateImport = vi.fn();
+const mockImportSkillportState = vi.fn();
 const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
 const mockUsePlatformStore = vi.mocked(usePlatformStore);
 const mockUseSkillStore = vi.mocked(useSkillStore);
@@ -314,6 +317,9 @@ function buildCentralStoreState(overrides = {}) {
     acceptAiTagReview: mockAcceptAiTagReview,
     skipAiTagReview: mockSkipAiTagReview,
     subscribeAiTagProgress: mockSubscribeAiTagProgress.mockResolvedValue(() => {}),
+    exportSkillportState: mockExportSkillportState,
+    previewSkillportStateImport: mockPreviewSkillportStateImport,
+    importSkillportState: mockImportSkillportState,
     ...overrides,
   };
 }
@@ -400,6 +406,17 @@ function renderCentralSkillsView({
 describe("CentralSkillsView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockExportSkillportState.mockResolvedValue(
+      JSON.stringify({
+        kind: "skillport/state-export",
+        version: 1,
+        exportedAt: "2026-04-25T00:00:00Z",
+        exportedFrom: { app: "SkillPort" },
+        githubSources: [],
+        centralSkills: [],
+        unrestorableSkills: [],
+      })
+    );
   });
 
   afterEach(() => {
@@ -416,6 +433,15 @@ describe("CentralSkillsView", () => {
   it("shows the central skills directory path", () => {
     renderCentralSkillsView();
     expect(screen.getByText("/Users/test/.skillsmanage/skills/")).toBeInTheDocument();
+  });
+
+  it("opens the Central state portability dialog", async () => {
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByTestId("central-portability-open"));
+
+    expect(await screen.findByTestId("central-portability-save-export")).toBeInTheDocument();
+    await waitFor(() => expect(mockExportSkillportState).toHaveBeenCalled());
   });
 
   it("shows a refresh button", () => {

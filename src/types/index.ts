@@ -477,6 +477,70 @@ export interface MarketplaceSkill {
   cache_updated_at?: string | null;
 }
 
+// ─── Portable State Types ───────────────────────────────────────────────────
+
+export type SkillportStateSourceStatus = "exists" | "will_add";
+export type SkillportStateSkillStatus = "ready" | "conflict" | "missing" | "unrestorable";
+export type SkillportStateImportResolutionType = "overwrite" | "skip" | "rename";
+
+export interface SkillportStateImportPreviewSummary {
+  sourcesToAdd: number;
+  sourcesExisting: number;
+  ready: number;
+  conflicts: number;
+  missing: number;
+  unrestorable: number;
+}
+
+export interface SkillportStateSourcePreview {
+  name: string;
+  url: string;
+  status: SkillportStateSourceStatus;
+}
+
+export interface SkillportStateSkillPreview {
+  id: string;
+  name: string;
+  sourcePath?: string | null;
+  status: SkillportStateSkillStatus;
+  existingSkillId?: string | null;
+  reason?: string | null;
+}
+
+export interface SkillportStateImportPreview {
+  githubSources: SkillportStateSourcePreview[];
+  skills: SkillportStateSkillPreview[];
+  summary: SkillportStateImportPreviewSummary;
+}
+
+export interface SkillportStateImportResolution {
+  skillId: string;
+  sourcePath?: string | null;
+  resolution: SkillportStateImportResolutionType;
+  renamedSkillId?: string | null;
+}
+
+export interface SkillportStateImportedSkill {
+  sourcePath: string;
+  importedSkillId: string;
+  skillName: string;
+}
+
+export interface SkillportStateImportFailure {
+  skillId: string;
+  sourcePath?: string | null;
+  error: string;
+}
+
+export interface SkillportStateImportResult {
+  sourcesAdded: number;
+  sourcesSkipped: number;
+  importedSkills: SkillportStateImportedSkill[];
+  skippedSkills: string[];
+  failedSkills: SkillportStateImportFailure[];
+  tagsRestored: number;
+}
+
 export interface GitHubRepoRef {
   owner: string;
   repo: string;

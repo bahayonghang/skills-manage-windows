@@ -13,6 +13,9 @@ import {
   CentralSkillUpdateProgressPayload,
   CentralSkillUpdateResult,
   CentralSkillUpdateState,
+  SkillportStateImportPreview,
+  SkillportStateImportResolution,
+  SkillportStateImportResult,
   SkillDetail,
   SkillAiTagReview,
   SkillRepository,
@@ -343,6 +346,12 @@ interface CentralSkillsState {
   skipAiTagReview: (skillId: string) => Promise<void>;
   subscribeAiTagProgress: () => Promise<() => void>;
   subscribeUpdateProgress: () => Promise<() => void>;
+  exportSkillportState: () => Promise<string>;
+  previewSkillportStateImport: (json: string) => Promise<SkillportStateImportPreview>;
+  importSkillportState: (
+    json: string,
+    resolutions: SkillportStateImportResolution[]
+  ) => Promise<SkillportStateImportResult>;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -837,5 +846,33 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
         updateJob: mergeUpdateProgress(state.updateJob, event.payload),
       }));
     });
+  },
+
+  exportSkillportState: async () => {
+    return invoke<string>("export_skillport_state", { options: {} });
+  },
+
+  previewSkillportStateImport: async (json: string) => {
+    return invoke<SkillportStateImportPreview>("preview_skillport_state_import", { json });
+  },
+
+  importSkillportState: async (json: string, resolutions: SkillportStateImportResolution[]) => {
+    const result = await invoke<SkillportStateImportResult>("import_skillport_state", {
+      json,
+      resolutions,
+    });
+    const [skills, repositories, tags, updateStates] = await Promise.all([
+      invoke<SkillWithLinks[]>("get_central_skills"),
+      invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+      invoke<SkillTag[]>("get_skill_tags"),
+      invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+    ]);
+    set({
+      skills: skills ?? [],
+      repositories: repositories ?? [],
+      tags: tags ?? [],
+      updateStatuses: indexUpdateStates(updateStates ?? []),
+    });
+    return result;
   },
 }));

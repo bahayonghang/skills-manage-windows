@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Search, RefreshCw, Blocks, FolderOpen, Settings, ArrowUpDown, Tag, X, Wand2, AlertTriangle, Check, Eye, ListChecks, Plus, Download, Trash2, FolderGit2 } from "lucide-react";
+import { Search, RefreshCw, Blocks, FolderOpen, Settings, ArrowUpDown, Tag, X, Wand2, AlertTriangle, Check, Eye, ListChecks, Plus, Download, Trash2, FolderGit2, FileJson } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -13,9 +13,10 @@ import { InstallDialog } from "@/components/central/InstallDialog";
 import { BatchInstallCentralSkillsDialog } from "@/components/central/BatchInstallCentralSkillsDialog";
 import { DeleteCentralSkillDialog } from "@/components/central/DeleteCentralSkillDialog";
 import { BatchDeleteCentralSkillsDialog } from "@/components/central/BatchDeleteCentralSkillsDialog";
+import { CentralStatePortabilityDialog } from "@/components/central/CentralStatePortabilityDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AgentWithStatus, AiTagJob, BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult, CentralBatchInstallResult, CentralSkillUpdateJob, CentralSkillUpdateState, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
+import { AgentWithStatus, AiTagJob, BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult, CentralBatchInstallResult, CentralSkillUpdateJob, CentralSkillUpdateState, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks, SkillportStateImportPreview, SkillportStateImportResolution, SkillportStateImportResult } from "@/types";
 import { markAppPerformance } from "@/lib/performance";
 import { cn } from "@/lib/utils";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
@@ -107,6 +108,33 @@ async function noopPreviewGitHubRepoImport() {
 
 async function noopImportGitHubRepoSkills() {
   throw new Error("GitHub import is unavailable");
+}
+
+async function noopExportSkillportState(): Promise<string> {
+  return JSON.stringify(
+    {
+      kind: "skillport/state-export",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      exportedFrom: { app: "SkillPort" },
+      githubSources: [],
+      centralSkills: [],
+      unrestorableSkills: [],
+    },
+    null,
+    2
+  );
+}
+
+async function noopPreviewSkillportStateImport(_json: string): Promise<SkillportStateImportPreview> {
+  throw new Error("State import is unavailable");
+}
+
+async function noopImportSkillportState(
+  _json: string,
+  _resolutions: SkillportStateImportResolution[]
+): Promise<SkillportStateImportResult> {
+  throw new Error("State import is unavailable");
 }
 
 async function noopGetSkillsByAgent(_agentId: string): Promise<void> {}
@@ -425,6 +453,12 @@ export function CentralSkillsView() {
     useMarketplaceStore((state) => state.importGitHubRepoSkills) ?? noopImportGitHubRepoSkills;
   const resetGitHubImport =
     useMarketplaceStore((state) => state.resetGitHubImport) ?? noopResetGitHubImport;
+  const exportSkillportState =
+    useCentralSkillsStore((state) => state.exportSkillportState) ?? noopExportSkillportState;
+  const previewSkillportStateImport =
+    useCentralSkillsStore((state) => state.previewSkillportStateImport) ?? noopPreviewSkillportStateImport;
+  const importSkillportState =
+    useCentralSkillsStore((state) => state.importSkillportState) ?? noopImportSkillportState;
 
   type SortField = "name" | "createdAt" | "updatedAt";
   type SortDirection = "asc" | "desc";
@@ -456,6 +490,7 @@ export function CentralSkillsView() {
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isGitHubImportOpen, setIsGitHubImportOpen] = useState(false);
+  const [isPortabilityOpen, setIsPortabilityOpen] = useState(false);
   const [githubRepoUrl, setGitHubRepoUrl] = useState("");
   const contentRef = useRef<HTMLDivElement | null>(null);
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -1130,6 +1165,14 @@ export function CentralSkillsView() {
                 : t("central.updateAvailable", { count: updateTargetSkillIds.length })}
             </Button>
           )}
+          <Button
+            variant="outline"
+            data-testid="central-portability-open"
+            onClick={() => setIsPortabilityOpen(true)}
+          >
+            <FileJson className="size-3.5" />
+            {t("central.portabilityOpen")}
+          </Button>
           <Button variant="outline" onClick={() => setIsGitHubImportOpen(true)}>
             {t("marketplace.githubImportSecondaryCta")}
           </Button>
@@ -1762,6 +1805,17 @@ export function CentralSkillsView() {
           setGitHubRepoUrl("");
         }}
         launcherLabel={t("central.title")}
+      />
+
+      <CentralStatePortabilityDialog
+        open={isPortabilityOpen}
+        onOpenChange={setIsPortabilityOpen}
+        exportState={exportSkillportState}
+        previewImport={previewSkillportStateImport}
+        importState={importSkillportState}
+        onAfterImport={async () => {
+          await Promise.all([refreshCounts(), loadCentralSkills()]);
+        }}
       />
     </div>
   );

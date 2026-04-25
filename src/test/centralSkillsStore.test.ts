@@ -797,6 +797,83 @@ describe("centralSkillsStore", () => {
     expect(state.updateJob.items["frontend-design"]).toBe("succeeded");
   });
 
+  it("exports the SkillPort portable state manifest", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce("{\"kind\":\"skillport/state-export\"}");
+
+    const json = await useCentralSkillsStore.getState().exportSkillportState();
+
+    expect(json).toBe("{\"kind\":\"skillport/state-export\"}");
+    expect(invoke).toHaveBeenCalledWith("export_skillport_state", { options: {} });
+  });
+
+  it("previews a SkillPort portable state import", async () => {
+    const preview = {
+      githubSources: [],
+      skills: [],
+      summary: {
+        sourcesToAdd: 0,
+        sourcesExisting: 0,
+        ready: 0,
+        conflicts: 0,
+        missing: 0,
+        unrestorable: 0,
+      },
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(preview);
+
+    const result = await useCentralSkillsStore.getState().previewSkillportStateImport("{}");
+
+    expect(result).toEqual(preview);
+    expect(invoke).toHaveBeenCalledWith("preview_skillport_state_import", { json: "{}" });
+  });
+
+  it("imports SkillPort portable state and refreshes Central metadata", async () => {
+    const resolutions = [
+      {
+        skillId: "frontend-design",
+        sourcePath: "skills/frontend-design/SKILL.md",
+        resolution: "overwrite" as const,
+        renamedSkillId: null,
+      },
+    ];
+    const importResult = {
+      sourcesAdded: 1,
+      sourcesSkipped: 0,
+      importedSkills: [
+        {
+          sourcePath: "skills/frontend-design/SKILL.md",
+          importedSkillId: "frontend-design",
+          skillName: "frontend-design",
+        },
+      ],
+      skippedSkills: [],
+      failedSkills: [],
+      tagsRestored: 1,
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(importResult)
+      .mockResolvedValueOnce(mockSkills)
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce(mockUpdateStates);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .importSkillportState("{\"kind\":\"skillport/state-export\"}", resolutions);
+
+    expect(result).toEqual(importResult);
+    expect(invoke).toHaveBeenNthCalledWith(1, "import_skillport_state", {
+      json: "{\"kind\":\"skillport/state-export\"}",
+      resolutions,
+    });
+    expect(useCentralSkillsStore.getState().skills).toEqual(mockSkills);
+    expect(useCentralSkillsStore.getState().repositories).toEqual(mockRepositories);
+    expect(useCentralSkillsStore.getState().tags).toEqual(mockTags);
+    expect(useCentralSkillsStore.getState().updateStatuses["frontend-design"]).toEqual(
+      mockUpdateStates[0]
+    );
+  });
+
   it("cancels the active AI tag job", async () => {
     useCentralSkillsStore.setState({
       aiTagJob: {

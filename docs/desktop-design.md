@@ -381,6 +381,45 @@ skills-manage/
 }
 ```
 
+**Central 状态导入导出 v1（JSON）**：
+```json
+{
+  "kind": "skillport/state-export",
+  "version": 1,
+  "exportedAt": "2026-04-25T00:00:00Z",
+  "exportedFrom": { "app": "SkillPort" },
+  "githubSources": [
+    {
+      "name": "OpenAI Skills",
+      "sourceType": "github",
+      "url": "https://github.com/openai/skills",
+      "isEnabled": true
+    }
+  ],
+  "centralSkills": [
+    {
+      "id": "openai-docs",
+      "name": "openai-docs",
+      "description": "OpenAI docs skill",
+      "source": {
+        "type": "github",
+        "owner": "openai",
+        "repo": "skills",
+        "branch": "main",
+        "url": "https://github.com/openai/skills",
+        "sourcePath": "skills/.system/openai-docs/SKILL.md"
+      },
+      "tags": [{ "name": "Docs", "description": null, "color": null }]
+    }
+  ],
+  "unrestorableSkills": [
+    { "id": "local-skill", "name": "local-skill", "reason": "source_unknown" }
+  ]
+}
+```
+
+v1 只导出可迁移清单，不内嵌 skill 文件。导入时需要联网访问 GitHub，并先预览 `ready / conflict / missing / unrestorable` 状态。未知来源、本地手工导入或缺少 GitHub 归属的中央 skill 只进入 `unrestorableSkills`，导入不会自动还原。平台安装链接不导入，跨机器恢复只保证 GitHub 源和中央库清单。
+
 ---
 
 ### 页面 E — 设置页
