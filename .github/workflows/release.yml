@@ -58,7 +58,7 @@ jobs:
         shell: pwsh
         run: |
           pnpm typecheck
-          pnpm exec eslint src --ext .ts,.tsx --report-unused-disable-directives
+          pnpm exec eslint "src/**/*.{ts,tsx}" --report-unused-disable-directives
 
       - name: Run Rust checks
         shell: pwsh
