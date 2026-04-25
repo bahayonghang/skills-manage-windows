@@ -56,7 +56,7 @@ const mockAgents: AgentWithStatus[] = [
     id: "central",
     display_name: "Central Skills",
     category: "central",
-    global_skills_dir: "~/.agents/skills/",
+    global_skills_dir: "~/.skillsmanage/skills/",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -67,12 +67,12 @@ const mockSkill: SkillWithLinks = {
   id: "frontend-design",
   name: "frontend-design",
   description: "Build distinctive, production-grade frontend interfaces",
-  file_path: "~/.agents/skills/frontend-design/SKILL.md",
-  canonical_path: "~/.agents/skills/frontend-design",
+  file_path: "~/.skillsmanage/skills/frontend-design/SKILL.md",
+  canonical_path: "~/.skillsmanage/skills/frontend-design",
   is_central: true,
   scanned_at: "2026-04-09T00:00:00Z",
   linked_agents: ["claude-code", "codex"],
-  shared_root_agents: ["codex", "cursor", "gemini-cli"],
+  shared_root_agents: [],
 };
 
 const mockOnInstall = vi.fn();
@@ -149,11 +149,11 @@ describe("InstallDialog", () => {
     expect(screen.getByText("(未检测到)")).toBeInTheDocument();
   });
 
-  it("shows Universal as available but disabled for central skills", () => {
+  it("shows Universal as a normal selectable platform target", () => {
     renderDialog();
 
-    expect(screen.getByLabelText("Universal (.agents/skills)")).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByText("始终包含")).toBeInTheDocument();
+    expect(screen.getByLabelText("Universal (.agents/skills)")).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByText("始终包含")).not.toBeInTheDocument();
   });
 
   it("shows symlink/copy radio options", () => {
@@ -167,11 +167,10 @@ describe("InstallDialog", () => {
 
   it("shows confirm button with count of selected platforms", () => {
     renderDialog();
-    // By default, linked agents (claude-code) are pre-selected.
-    // Unlinked independent agents are not pre-selected.
-    // So 1 is pre-selected: claude-code
+    // By default, linked agents are pre-selected.
+    // Here that means Claude Code plus the Universal target via Codex.
     expect(
-      screen.getByRole("button", { name: /安装到 1 个平台/i })
+      screen.getByRole("button", { name: /安装到 2 个平台/i })
     ).toBeInTheDocument();
   });
 
@@ -193,7 +192,7 @@ describe("InstallDialog", () => {
     });
   });
 
-  it("does not submit shared-root agents on confirm", async () => {
+  it("submits selected platform targets on confirm", async () => {
     mockOnInstall.mockResolvedValueOnce(undefined);
 
     renderDialog();
@@ -203,12 +202,11 @@ describe("InstallDialog", () => {
     fireEvent.click(confirmBtn);
 
     await waitFor(() => {
-      expect(mockOnInstall).toHaveBeenCalledWith(
-        "frontend-design",
-        ["claude-code"],
-        "symlink"
-      );
+      expect(mockOnInstall).toHaveBeenCalled();
     });
+    const [, agentIds, method] = mockOnInstall.mock.calls[0];
+    expect([...agentIds].sort()).toEqual(["claude-code", "codex"]);
+    expect(method).toBe("symlink");
   });
 
   it("passes 'symlink' method to onInstall by default", async () => {
@@ -296,9 +294,9 @@ describe("InstallDialog", () => {
   it("updates confirm button count when checkbox toggled", async () => {
     renderDialog();
 
-    // Initially 1 selected (claude-code, already linked)
+    // Initially 2 selected: Claude Code plus Universal via Codex.
     expect(
-      screen.getByRole("button", { name: /安装到 1 个平台/i })
+      screen.getByRole("button", { name: /安装到 2 个平台/i })
     ).toBeInTheDocument();
 
     // Check Kiro (add 1 more)
@@ -307,7 +305,7 @@ describe("InstallDialog", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /安装到 2 个平台/i })
+        screen.getByRole("button", { name: /安装到 3 个平台/i })
       ).toBeInTheDocument();
     });
   });

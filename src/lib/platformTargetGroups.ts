@@ -1,5 +1,5 @@
 import type { AgentWithStatus } from "@/types";
-import { arePathsEquivalent, compactHomePath } from "@/lib/path";
+import { compactHomePath } from "@/lib/path";
 import {
   filterVisiblePlatformAgents,
   type PlatformCategoryVisibility,
@@ -38,10 +38,6 @@ export interface PlatformTargetGroup extends AgentWithStatus {
 
 export type PlatformTarget = AgentWithStatus | PlatformTargetGroup;
 
-function getCentralAgent(agents: AgentWithStatus[]): AgentWithStatus | undefined {
-  return agents.find((agent) => agent.id === "central");
-}
-
 function universalAgentRank(agent: AgentWithStatus): number {
   const rank = UNIVERSAL_AGENT_ID_ORDER.indexOf(
     agent.id as (typeof UNIVERSAL_AGENT_ID_ORDER)[number]
@@ -62,14 +58,9 @@ function sortUniversalMembers(agents: AgentWithStatus[]): AgentWithStatus[] {
   });
 }
 
-function isSharedCentralRoot(
-  agent: AgentWithStatus,
-  centralAgent: AgentWithStatus | undefined
-): boolean {
-  return (
-    agent.id !== "central" &&
-    Boolean(centralAgent) &&
-    arePathsEquivalent(agent.global_skills_dir, centralAgent?.global_skills_dir)
+function isUniversalAgent(agent: AgentWithStatus): boolean {
+  return UNIVERSAL_AGENT_ID_ORDER.includes(
+    agent.id as (typeof UNIVERSAL_AGENT_ID_ORDER)[number]
   );
 }
 
@@ -104,30 +95,22 @@ export function isUniversalPlatformTarget(
 export function getUniversalPlatformMembers(
   agents: AgentWithStatus[]
 ): AgentWithStatus[] {
-  const centralAgent = getCentralAgent(agents);
-  if (!centralAgent) {
-    return [];
-  }
-
-  return sortUniversalMembers(
-    agents.filter((agent) => isSharedCentralRoot(agent, centralAgent))
-  );
+  return sortUniversalMembers(agents.filter(isUniversalAgent));
 }
 
 export function createPlatformTargetGroups(
   visibleAgents: AgentWithStatus[],
   allAgents: AgentWithStatus[] = visibleAgents
 ): PlatformTarget[] {
-  const centralAgent = getCentralAgent(allAgents);
   const allUniversalMembers = getUniversalPlatformMembers(allAgents);
 
-  if (!centralAgent || allUniversalMembers.length === 0) {
+  if (allUniversalMembers.length === 0) {
     return visibleAgents.filter((agent) => agent.id !== "central");
   }
 
   const visibleMemberIds = new Set(
     visibleAgents
-      .filter((agent) => isSharedCentralRoot(agent, centralAgent))
+      .filter(isUniversalAgent)
       .map((agent) => agent.id)
   );
 
@@ -150,8 +133,8 @@ export function createPlatformTargetGroups(
     id: UNIVERSAL_PLATFORM_TARGET_ID,
     display_name: "Universal",
     category: "coding",
-    global_skills_dir: centralAgent.global_skills_dir,
-    project_skills_dir: centralAgent.project_skills_dir,
+    global_skills_dir: installAgent.global_skills_dir,
+    project_skills_dir: installAgent.project_skills_dir,
     icon_name: "universal-agents",
     is_detected: allUniversalMembers.some((agent) => agent.is_detected),
     is_builtin: true,

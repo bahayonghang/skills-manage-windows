@@ -34,12 +34,12 @@ function agent(
 }
 
 describe("platformTargetGroups", () => {
-  it("folds shared Windows central paths into one Universal target", () => {
+  it("folds known Universal agents into one Universal target", () => {
     const agents = [
       agent("codex", "Codex CLI", "C:\\Users\\lyh\\.agents\\skills\\"),
       agent("cursor", "Cursor", "c:/users/lyh/.agents/skills"),
       agent("claude-code", "Claude Code", "C:\\Users\\lyh\\.claude\\skills"),
-      agent("central", "Central Skills", "C:\\Users\\lyh\\.agents\\skills"),
+      agent("central", "Central Skills", "C:\\Users\\lyh\\.skillsmanage\\skills"),
     ];
 
     const groups = getPlatformTargetGroups(agents, {
@@ -61,7 +61,7 @@ describe("platformTargetGroups", () => {
       agent("codex", "Codex CLI", "~/.agents/skills"),
       agent("claude-code", "Claude Code", "~/.claude/skills"),
       agent("kiro", "Kiro", "~/.kiro/skills"),
-      agent("central", "Central Skills", "~/.agents/skills"),
+      agent("central", "Central Skills", "~/.skillsmanage/skills"),
     ];
 
     const groups = getPlatformTargetGroups(agents, {
@@ -81,7 +81,7 @@ describe("platformTargetGroups", () => {
       agent("codex", "Codex CLI", "~/.agents/skills", false),
       agent("cursor", "Cursor", "~/.agents/skills", false),
       agent("claude-code", "Claude Code", "~/.claude/skills"),
-      agent("central", "Central Skills", "~/.agents/skills"),
+      agent("central", "Central Skills", "~/.skillsmanage/skills"),
     ];
 
     const groups = getPlatformTargetGroups(agents, {

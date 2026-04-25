@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { render, screen, fireEvent, within } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { Sidebar } from "../components/layout/Sidebar";
 
 vi.mock("../stores/platformStore", () => ({
@@ -15,6 +15,15 @@ const mockAgents = [
     display_name: "Claude Code",
     category: "coding",
     global_skills_dir: "~/.claude/skills/",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
+    id: "codex",
+    display_name: "Codex CLI",
+    category: "coding",
+    global_skills_dir: "~/.agents/skills/",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -41,7 +50,7 @@ const mockAgents = [
     id: "central",
     display_name: "Central Skills",
     category: "central",
-    global_skills_dir: "~/.agents/skills/",
+    global_skills_dir: "~/.skillsmanage/skills/",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -53,6 +62,7 @@ function buildPlatformStoreState(overrides = {}) {
     agents: mockAgents,
     skillsByAgent: {
       "claude-code": 5,
+      codex: 7,
       cursor: 3,
       central: 10,
     },
@@ -91,8 +101,14 @@ function renderSidebar(initialPath = "/central") {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Sidebar />
+      <LocationProbe />
     </MemoryRouter>
   );
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}</div>;
 }
 
 describe("Sidebar", () => {
@@ -112,6 +128,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: /项目技能库/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /技能集合/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Claude Code/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Universal/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /OpenClaw/ })).toBeInTheDocument();
   });
 
@@ -167,6 +184,29 @@ describe("Sidebar", () => {
     renderSidebar("/central");
     const centralButton = screen.getByRole("button", { name: /中央技能库/ });
     expect(centralButton.className).toContain("bg-hover-bg");
+  });
+
+  it("routes Universal to its platform page", () => {
+    renderSidebar();
+    fireEvent.click(screen.getByRole("button", { name: /Universal/ }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/platform/universal-agents");
+  });
+
+  it("highlights Universal without highlighting Central", () => {
+    renderSidebar("/platform/universal-agents");
+    const universalButton = screen.getByRole("button", { name: /Universal/ });
+    const centralButton = screen.getByRole("button", { name: /中央技能库/ });
+
+    expect(universalButton.className).toContain("bg-hover-bg");
+    expect(centralButton.className).not.toContain("bg-hover-bg");
+  });
+
+  it("uses the Universal representative count instead of the Central count", () => {
+    renderSidebar();
+    const universalButton = screen.getByRole("button", { name: /Universal/ });
+
+    expect(within(universalButton).getByText("7")).toBeInTheDocument();
+    expect(within(universalButton).queryByText("10")).not.toBeInTheDocument();
   });
 
   it("hides lobster platforms when the lobster group is disabled", () => {

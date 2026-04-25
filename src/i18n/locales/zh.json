@@ -65,7 +65,8 @@
   },
   "central": {
     "title": "中央技能库",
-    "path": "~/.agents/skills/",
+    "scope": "私有中央库",
+    "path": "~/.skillsmanage/skills/",
     "searchPlaceholder": "搜索中央技能库...",
     "loading": "正在加载技能...",
     "noMatch": "没有匹配的技能「{{query}}」",
@@ -154,7 +155,8 @@
     },
     "cancelAiTagJob": "中断 AI Tag",
     "aiTagCancelRequested": "已请求中断 AI Tag",
-    "aiTagRateHint": "遇到 429 时，请在设置里把 AI Tag 并发设为 1，请求间隔设为 4000ms 或更高。"
+    "aiTagRateHint": "遇到 429 时，请在设置里把 AI Tag 并发设为 1，请求间隔设为 4000ms 或更高。",
+    "platformTargetsLabel": "安装目标"
   },
   "installDialog": {
     "title": "安装 {{name}}",
@@ -177,6 +179,7 @@
   "platformTargets": {
     "universalLabel": "Universal (.agents/skills)",
     "universalShortLabel": "Universal",
+    "universalScope": "通用 .agents/skills",
     "alwaysIncluded": "始终包含"
   },
   "detail": {
@@ -420,7 +423,7 @@
   },
   "empty": {
     "welcomeTitle": "欢迎使用 SkillPort！",
-    "welcomeDesc": "在 ~/.agents/skills/ 中未找到任何技能。请在该目录创建一个 SKILL.md 文件，或在设置中添加自定义扫描目录。",
+    "welcomeDesc": "在 ~/.skillsmanage/skills/ 中未找到任何技能。请在该目录创建一个 SKILL.md 文件，或在设置中添加自定义扫描目录。",
     "createHint": "在此目录创建一个技能：",
     "goToSettings": "前往设置"
   },

@@ -19,7 +19,10 @@ import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
   filterVisiblePlatformAgents,
 } from "@/lib/platformVisibility";
-import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
+import {
+  getPlatformTargetGroups,
+  isUniversalPlatformTarget,
+} from "@/lib/platformTargetGroups";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
@@ -70,23 +73,37 @@ export function PlatformView() {
     return skill.row_id ?? skill.id;
   }
 
-  const visiblePlatformAgents = useMemo(
-    () => filterVisiblePlatformAgents(agents, categoryVisibility),
-    [agents, categoryVisibility]
-  );
-  const installTargetAgents = useMemo(
+  const platformTargets = useMemo(
     () => getPlatformTargetGroups(agents, categoryVisibility),
     [agents, categoryVisibility]
   );
-  const agent = visiblePlatformAgents.find((a) => a.id === agentId);
-  const isClaudePage = agent?.id === "claude-code";
+  const visibleAgents = useMemo(
+    () => filterVisiblePlatformAgents(agents, categoryVisibility),
+    [agents, categoryVisibility]
+  );
+  const installTargetAgents = platformTargets;
+  const platformTarget = platformTargets.find((a) => a.id === agentId);
+  const directAgent = visibleAgents.find((a) => a.id === agentId);
+  const agent = platformTarget ?? directAgent;
+  const isUniversalPage = agent ? isUniversalPlatformTarget(agent) : false;
+  const resolvedAgentId = agent
+    ? isUniversalPlatformTarget(agent)
+      ? agent.install_agent_id
+      : agent.id
+    : undefined;
+  const platformDisplayName = agent
+    ? isUniversalPage
+      ? t("platformTargets.universalShortLabel")
+      : agent.display_name
+    : "";
+  const isClaudePage = !isUniversalPage && agent?.id === "claude-code";
 
   // Load skills for this agent when the route changes or a fresh scan completes.
   useEffect(() => {
-    if (agentId) {
-      getSkillsByAgent(agentId);
+    if (resolvedAgentId) {
+      getSkillsByAgent(resolvedAgentId);
     }
-  }, [agentId, getSkillsByAgent, scanGeneration]);
+  }, [resolvedAgentId, getSkillsByAgent, scanGeneration]);
 
   useEffect(() => {
     if (!contentRef.current) return;
@@ -117,8 +134,8 @@ export function PlatformView() {
     try {
       const result = await installSkill(skillId, agentIds, method);
       await refreshCounts();
-      if (agentId) {
-        await getSkillsByAgent(agentId);
+      if (resolvedAgentId) {
+        await getSkillsByAgent(resolvedAgentId);
       }
       if (result.failed.length > 0) {
         const failedNames = result.failed.map((f) => f.agent_id).join(", ");
@@ -130,21 +147,21 @@ export function PlatformView() {
   }
 
   async function handleUninstall(skillId: string) {
-    if (!agentId) return;
+    if (!resolvedAgentId) return;
     try {
-      await uninstallSkillFromAgent(skillId, agentId);
+      await uninstallSkillFromAgent(skillId, resolvedAgentId);
       await refreshCounts();
-      await getSkillsByAgent(agentId);
+      await getSkillsByAgent(resolvedAgentId);
     } catch (err) {
       toast.error(t("detail.uninstallError", { error: String(err) }));
     }
   }
-  const isLoading = agentId ? (loadingByAgent[agentId] ?? false) : false;
+  const isLoading = resolvedAgentId ? (loadingByAgent[resolvedAgentId] ?? false) : false;
 
   // Memoize skills to avoid changing dependency reference on every render
   const skills = useMemo(
-    () => (agentId ? (skillsByAgent[agentId] ?? []) : []),
-    [agentId, skillsByAgent]
+    () => (resolvedAgentId ? (skillsByAgent[resolvedAgentId] ?? []) : []),
+    [resolvedAgentId, skillsByAgent]
   );
 
   const sourceFilteredSkills = useMemo(() => {
@@ -254,8 +271,13 @@ export function PlatformView() {
       <div className="border-b border-border px-6 py-4">
         <div className="flex items-center gap-2.5">
           <PlatformIcon agentId={agent.id} className="size-6 text-primary/70" size={24} />
-          <h1 className="text-xl font-semibold">{agent.display_name}</h1>
+          <h1 className="text-xl font-semibold">{platformDisplayName}</h1>
         </div>
+        {isUniversalPage && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("platformTargets.universalScope")}
+          </p>
+        )}
         <p className="text-sm text-muted-foreground mt-0.5">
           {formatPathForDisplay(agent.global_skills_dir)}
         </p>
@@ -309,16 +331,16 @@ export function PlatformView() {
           <EmptyState message={t("platform.loading")} />
         ) : skills.length === 0 ? (
           <EmptyState
-            message={t("platform.noSkills", { name: agent.display_name })}
+            message={t("platform.noSkills", { name: platformDisplayName })}
           />
         ) : sourceFilteredSkills.length === 0 ? (
           <EmptyState
             message={t("platform.noSourceSkills", {
-              name: agent.display_name,
+              name: platformDisplayName,
               source: activeSourceLabel,
               defaultValue: i18n.language.startsWith("zh")
-                ? `${agent.display_name} 下暂无${activeSourceLabel}技能`
-                : `No ${activeSourceLabel} skills installed for ${agent.display_name}`,
+                ? `${platformDisplayName} 下暂无${activeSourceLabel}技能`
+                : `No ${activeSourceLabel} skills installed for ${platformDisplayName}`,
             })}
           />
         ) : filteredSkills.length === 0 ? (
@@ -345,8 +367,8 @@ export function PlatformView() {
                 originKind={skill.source_kind ?? null}
                 isReadOnly={skill.is_read_only ?? false}
                 isLoading={
-                  agentId
-                    ? (pendingSkillActionKeys[`${agentId}::${skill.id}`] ?? false)
+                  resolvedAgentId
+                    ? (pendingSkillActionKeys[`${resolvedAgentId}::${skill.id}`] ?? false)
                     : false
                 }
                 onDetail={() => handleOpenDrawer(skill)}
@@ -362,10 +384,10 @@ export function PlatformView() {
                 }
                 uninstallFromLabel={t("platform.uninstallFromLabel", {
                   skill: skill.name,
-                  platform: agent.display_name,
+                  platform: platformDisplayName,
                   defaultValue: i18n.language.startsWith("zh")
-                    ? `从 ${agent.display_name} 卸载 ${skill.name}`
-                    : `Uninstall ${skill.name} from ${agent.display_name}`,
+                    ? `从 ${platformDisplayName} 卸载 ${skill.name}`
+                    : `Uninstall ${skill.name} from ${platformDisplayName}`,
                 })}
                 detailButtonRef={(node) => setDetailButtonRef(getSkillRowKey(skill), node)}
                 className="h-[132px]"
@@ -383,8 +405,8 @@ export function PlatformView() {
                 originKind={skill.source_kind ?? null}
                 isReadOnly={skill.is_read_only ?? false}
                 isLoading={
-                  agentId
-                    ? (pendingSkillActionKeys[`${agentId}::${skill.id}`] ?? false)
+                  resolvedAgentId
+                    ? (pendingSkillActionKeys[`${resolvedAgentId}::${skill.id}`] ?? false)
                     : false
                 }
                 onDetail={() => handleOpenDrawer(skill)}
@@ -400,10 +422,10 @@ export function PlatformView() {
                 }
                 uninstallFromLabel={t("platform.uninstallFromLabel", {
                   skill: skill.name,
-                  platform: agent.display_name,
+                  platform: platformDisplayName,
                   defaultValue: i18n.language.startsWith("zh")
-                    ? `从 ${agent.display_name} 卸载 ${skill.name}`
-                    : `Uninstall ${skill.name} from ${agent.display_name}`,
+                    ? `从 ${platformDisplayName} 卸载 ${skill.name}`
+                    : `Uninstall ${skill.name} from ${platformDisplayName}`,
                 })}
                 detailButtonRef={(node) => setDetailButtonRef(getSkillRowKey(skill), node)}
               />
@@ -424,7 +446,7 @@ export function PlatformView() {
       <SkillDetailDrawer
         open={isDrawerOpen}
         skillId={drawerSkill?.id ?? null}
-        agentId={agentId ?? null}
+        agentId={resolvedAgentId ?? null}
         rowId={drawerSkill?.row_id ?? null}
         onOpenChange={(open) => {
           setIsDrawerOpen(open);

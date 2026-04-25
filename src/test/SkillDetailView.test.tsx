@@ -95,7 +95,7 @@ const mockAgents: AgentWithStatus[] = [
     id: "central",
     display_name: "Central Skills",
     category: "central",
-    global_skills_dir: "~/.agents/skills/",
+    global_skills_dir: "~/.skillsmanage/skills/",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -151,9 +151,9 @@ const mockDetail: SkillDetailType = {
   row_id: "frontend-design",
   name: "frontend-design",
   description: "Build distinctive, production-grade frontend interfaces",
-  file_path: "~/.agents/skills/frontend-design/SKILL.md",
-  dir_path: "~/.agents/skills/frontend-design",
-  canonical_path: "~/.agents/skills/frontend-design",
+  file_path: "~/.skillsmanage/skills/frontend-design/SKILL.md",
+  dir_path: "~/.skillsmanage/skills/frontend-design",
+  canonical_path: "~/.skillsmanage/skills/frontend-design",
   is_central: true,
   source: "native",
   scanned_at: "2026-04-09T00:00:00Z",
@@ -169,7 +169,7 @@ const mockDetail: SkillDetailType = {
       agent_id: "claude-code",
       installed_path: "~/.claude/skills/frontend-design",
       link_type: "symlink",
-      symlink_target: "~/.agents/skills/frontend-design",
+      symlink_target: "~/.skillsmanage/skills/frontend-design",
       installed_at: "2026-04-09T12:00:00Z",
     },
   ],
@@ -375,7 +375,7 @@ describe("SkillDetailView", () => {
   it("shows file path", () => {
     renderView();
     expect(
-      screen.getByText("~/.agents/skills/frontend-design/SKILL.md")
+      screen.getByText("~/.skillsmanage/skills/frontend-design/SKILL.md")
     ).toBeInTheDocument();
   });
 
@@ -415,7 +415,7 @@ describe("SkillDetailView", () => {
 
   it("shows canonical path", () => {
     renderView();
-    expect(screen.getAllByText("~/.agents/skills/frontend-design").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("~/.skillsmanage/skills/frontend-design").length).toBeGreaterThan(0);
   });
 
   it("shows source", () => {
@@ -490,7 +490,7 @@ describe("SkillDetailView", () => {
     expect(screen.getByText("~/.claude/skills/frontend-design/SKILL.md")).toBeInTheDocument();
     expect(screen.getByText("~/.claude/skills")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /切换 frontend-design 在 Cursor 的链接状态/i })
+      screen.getByRole("button", { name: /切换 frontend-design 在 Universal 的链接状态/i })
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /加入技能集/i })
@@ -513,7 +513,7 @@ describe("SkillDetailView", () => {
     const toggleButtons = screen.getAllByRole("button", {
       name: /切换 .* 的链接状态/i,
     });
-    // 2 non-central agents (claude-code, cursor)
+    // 2 non-central targets (Claude Code, Universal)
     expect(toggleButtons).toHaveLength(2);
   });
 
@@ -528,11 +528,11 @@ describe("SkillDetailView", () => {
 
   it("calls installSkill when unlinked platform icon is clicked", async () => {
     renderView();
-    // Cursor is NOT installed
-    const cursorToggle = screen.getByRole("button", {
-      name: /切换 frontend-design 在 Cursor 的链接状态/i,
+    // Universal is NOT installed
+    const universalToggle = screen.getByRole("button", {
+      name: /切换 frontend-design 在 Universal 的链接状态/i,
     });
-    fireEvent.click(cursorToggle);
+    fireEvent.click(universalToggle);
     await waitFor(() => {
       expect(mockInstallSkill).toHaveBeenCalledWith("frontend-design", "cursor");
     });
@@ -1109,7 +1109,7 @@ describe("SkillDetailView", () => {
     expect(screen.getByTestId("react-markdown")).toHaveTextContent("# User Frontend Design");
     expect(screen.getByRole("button", { name: /加入技能集/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /切换 frontend-design 在 Cursor 的链接状态/i })
+      screen.getByRole("button", { name: /切换 frontend-design 在 Universal 的链接状态/i })
     ).toBeInTheDocument();
     expect(screen.queryByText(/只读来源|Read-only source/i)).toBeNull();
   });
@@ -1160,7 +1160,7 @@ describe("SkillDetailView", () => {
       </MemoryRouter>
     );
     const cursorToggle = screen.getByRole("button", {
-      name: /切换 frontend-design 在 Cursor 的链接状态/i,
+      name: /切换 frontend-design 在 Universal 的链接状态/i,
     });
     expect(cursorToggle).toBeDisabled();
   });

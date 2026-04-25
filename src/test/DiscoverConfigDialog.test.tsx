@@ -58,7 +58,7 @@ const mockAgents: AgentWithStatus[] = [
     id: "central",
     display_name: "Central Skills",
     category: "central",
-    global_skills_dir: "/home/user/.agents/skills/",
+    global_skills_dir: "/home/user/.skillsmanage/skills/",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,

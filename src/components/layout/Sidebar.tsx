@@ -110,6 +110,27 @@ export function Sidebar() {
 
   const isCollectionActive = pathname === "/collections";
 
+  function platformRoute(agent: (typeof platformAgents)[number]) {
+    return `/platform/${agent.id}`;
+  }
+
+  function platformCount(agent: (typeof platformAgents)[number]) {
+    if (!isUniversalPlatformTarget(agent)) {
+      return skillsByAgent[agent.id];
+    }
+
+    const primaryCount = skillsByAgent[agent.install_agent_id];
+    if (primaryCount !== undefined) {
+      return primaryCount;
+    }
+
+    const memberCounts = agent.member_agents
+      .map((member) => skillsByAgent[member.id])
+      .filter((count): count is number => count !== undefined);
+
+    return memberCounts.length > 0 ? Math.max(...memberCounts) : undefined;
+  }
+
   function handleCollectionClick() {
     navigate("/collections");
   }
@@ -224,16 +245,11 @@ export function Sidebar() {
                         ? t("platformTargets.universalShortLabel")
                         : agent.display_name
                     }
-                    isActive={
-                      !isUniversalPlatformTarget(agent) &&
-                      pathname === `/platform/${agent.id}`
-                    }
-                    onClick={() =>
-                      navigate(isUniversalPlatformTarget(agent) ? "/central" : `/platform/${agent.id}`)
-                    }
+                    isActive={pathname === platformRoute(agent)}
+                    onClick={() => navigate(platformRoute(agent))}
                     icon={<PlatformIcon agentId={agent.id} className="size-4" />}
                     expanded={expanded}
-                    count={isUniversalPlatformTarget(agent) ? skillsByAgent["central"] : skillsByAgent[agent.id]}
+                    count={platformCount(agent)}
                   />
                 ))}
               </>
@@ -257,16 +273,11 @@ export function Sidebar() {
                         ? t("platformTargets.universalShortLabel")
                         : agent.display_name
                     }
-                    isActive={
-                      !isUniversalPlatformTarget(agent) &&
-                      pathname === `/platform/${agent.id}`
-                    }
-                    onClick={() =>
-                      navigate(isUniversalPlatformTarget(agent) ? "/central" : `/platform/${agent.id}`)
-                    }
+                    isActive={pathname === platformRoute(agent)}
+                    onClick={() => navigate(platformRoute(agent))}
                     icon={<PlatformIcon agentId={agent.id} className="size-4" />}
                     expanded={expanded}
-                    count={isUniversalPlatformTarget(agent) ? skillsByAgent["central"] : skillsByAgent[agent.id]}
+                    count={platformCount(agent)}
                   />
                 ))}
               </>

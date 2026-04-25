@@ -95,6 +95,16 @@ const mockCursorAgent: AgentWithStatus = {
   is_enabled: true,
 };
 
+const mockCodexAgent: AgentWithStatus = {
+  id: "codex",
+  display_name: "Codex CLI",
+  category: "coding",
+  global_skills_dir: "/Users/test/.agents/skills/",
+  is_detected: true,
+  is_builtin: true,
+  is_enabled: true,
+};
+
 const mockSkills: ScannedSkill[] = [
   {
     id: "frontend-design",
@@ -103,7 +113,7 @@ const mockSkills: ScannedSkill[] = [
     file_path: "~/.claude/skills/frontend-design/SKILL.md",
     dir_path: "~/.claude/skills/frontend-design",
     link_type: "symlink",
-    symlink_target: "~/.agents/skills/frontend-design",
+    symlink_target: "~/.skillsmanage/skills/frontend-design",
     is_central: true,
   },
   {
@@ -125,8 +135,20 @@ const mockCursorSkills: ScannedSkill[] = [
     file_path: "~/.cursor/skills/cursor-helper/SKILL.md",
     dir_path: "~/.cursor/skills/cursor-helper",
     link_type: "symlink",
-    symlink_target: "~/.agents/skills/cursor-helper",
+    symlink_target: "~/.skillsmanage/skills/cursor-helper",
     is_central: true,
+  },
+];
+
+const mockUniversalSkills: ScannedSkill[] = [
+  {
+    id: "universal-helper",
+    name: "universal-helper",
+    description: "Shared helper in .agents skills",
+    file_path: "~/.agents/skills/universal-helper/SKILL.md",
+    dir_path: "~/.agents/skills/universal-helper",
+    link_type: "native",
+    is_central: false,
   },
 ];
 
@@ -392,7 +414,7 @@ describe("PlatformView", () => {
               file_path: "~/.claude/skills/fixture-central-skill/SKILL.md",
               dir_path: "~/.claude/skills/fixture-central-skill",
               link_type: "symlink",
-              symlink_target: "~/.agents/skills/fixture-central-skill",
+              symlink_target: "~/.skillsmanage/skills/fixture-central-skill",
               is_central: true,
             },
           ],
@@ -473,6 +495,97 @@ describe("PlatformView", () => {
     );
 
     expect(screen.getByText("未找到平台")).toBeInTheDocument();
+  });
+
+  it("renders Universal as a real platform page backed by the representative agent", () => {
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockCodexAgent, mockCursorAgent],
+        skillsByAgent: {
+          "claude-code": mockSkills.length,
+          codex: mockUniversalSkills.length,
+          cursor: mockCursorSkills.length,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: {
+          "claude-code": mockSkills,
+          codex: mockUniversalSkills,
+          cursor: mockCursorSkills,
+        },
+        loadingByAgent: {
+          "claude-code": false,
+          codex: false,
+          cursor: false,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView("universal-agents");
+
+    expect(screen.getByText("Universal")).toBeInTheDocument();
+    expect(screen.getByText("通用 .agents/skills")).toBeInTheDocument();
+    expect(screen.getByText("/Users/test/.agents/skills/")).toBeInTheDocument();
+    expect(screen.getByText("universal-helper")).toBeInTheDocument();
+    expect(mockGetSkillsByAgent).toHaveBeenCalledWith("codex");
+  });
+
+  it("keeps Claude source tabs hidden on the Universal page", () => {
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockCodexAgent, mockCursorAgent],
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { codex: mockUniversalSkills },
+        loadingByAgent: { codex: false },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView("universal-agents");
+
+    expect(screen.queryByRole("tab", { name: claudeTabName("全部") })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: claudeTabName("用户来源") })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: claudeTabName("插件来源") })).not.toBeInTheDocument();
+  });
+
+  it("opens Universal skill detail through the representative agent", async () => {
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockCodexAgent, mockCursorAgent],
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { codex: mockUniversalSkills },
+        loadingByAgent: { codex: false },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView("universal-agents");
+    fireEvent.click(screen.getByRole("button", { name: /查看 universal-helper 的详情/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("skill-detail-drawer")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("drawer-skill:universal-helper")).toBeInTheDocument();
+    expect(screen.getByText("drawer-agent:codex")).toBeInTheDocument();
   });
 
   // ── Search / Filter ───────────────────────────────────────────────────────

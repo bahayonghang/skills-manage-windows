@@ -20,7 +20,7 @@ const mockSkills: ScannedSkill[] = [
     file_path: "~/.claude/skills/frontend-design/SKILL.md",
     dir_path: "~/.claude/skills/frontend-design",
     link_type: "symlink",
-    symlink_target: "~/.agents/skills/frontend-design",
+    symlink_target: "~/.skillsmanage/skills/frontend-design",
     is_central: true,
   },
   {

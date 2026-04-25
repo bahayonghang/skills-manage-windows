@@ -65,7 +65,8 @@
   },
   "central": {
     "title": "Central Skills",
-    "path": "~/.agents/skills/",
+    "scope": "Private central library",
+    "path": "~/.skillsmanage/skills/",
     "searchPlaceholder": "Search central skills...",
     "loading": "Loading skills...",
     "noMatch": "No skills match \"{{query}}\"",
@@ -154,7 +155,8 @@
     },
     "cancelAiTagJob": "Cancel AI tag",
     "aiTagCancelRequested": "AI tag cancellation requested",
-    "aiTagRateHint": "If you hit 429, set AI Tag concurrency to 1 and request interval to 4000ms or higher in Settings."
+    "aiTagRateHint": "If you hit 429, set AI Tag concurrency to 1 and request interval to 4000ms or higher in Settings.",
+    "platformTargetsLabel": "Targets"
   },
   "installDialog": {
     "title": "Install {{name}}",
@@ -177,6 +179,7 @@
   "platformTargets": {
     "universalLabel": "Universal (.agents/skills)",
     "universalShortLabel": "Universal",
+    "universalScope": "Shared .agents/skills",
     "alwaysIncluded": "Always included"
   },
   "detail": {
@@ -420,7 +423,7 @@
   },
   "empty": {
     "welcomeTitle": "Welcome to SkillPort!",
-    "welcomeDesc": "No skills found in ~/.agents/skills/. Get started by creating a SKILL.md file there, or add custom scan directories in Settings.",
+    "welcomeDesc": "No skills found in ~/.skillsmanage/skills/. Get started by creating a SKILL.md file there, or add custom scan directories in Settings.",
     "createHint": "Create a skill directory at",
     "goToSettings": "Go to Settings"
   },

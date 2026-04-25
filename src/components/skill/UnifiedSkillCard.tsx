@@ -174,13 +174,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     onRemove
   );
 
-  // Split agents by category for platform icons
-  const lobsterAgents = useMemo(
-    () => platformIcons?.agents.filter((a) => a.id !== "central" && a.category === "lobster") ?? [],
-    [platformIcons?.agents]
-  );
-  const codingAgents = useMemo(
-    () => platformIcons?.agents.filter((a) => a.id !== "central" && a.category !== "lobster") ?? [],
+  const targetAgents = useMemo(
+    () => platformIcons?.agents.filter((a) => a.id !== "central") ?? [],
     [platformIcons?.agents]
   );
   const linkedAgentSet = useMemo(
@@ -395,58 +390,31 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
           </div>
 
           {/* Row 3: Platform toggle icons (central) */}
-          {hasPlatformIcons && (lobsterAgents.length > 0 || codingAgents.length > 0) && (
+          {hasPlatformIcons && targetAgents.length > 0 && (
             <div className="space-y-1 mt-auto pt-1">
-              {lobsterAgents.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-14 shrink-0">
-                    {t("sidebar.categoryLobster")}
-                  </span>
-                  <div className="flex items-center gap-0.5 flex-wrap">
-                    {lobsterAgents.map((agent) => (
-                      <PlatformToggleIcon
-                        key={agent.id}
-                        agent={agent}
-                        skillName={name}
-                        isLinked={getPlatformTargetMemberIds(agent).some((agentId) => linkedAgentSet.has(agentId))}
-                        isToggling={getPlatformTargetMemberIds(agent).some((agentId) => platformIcons.togglingAgentId === agentId)}
-                        isLocked={getPlatformTargetMemberIds(agent).some((agentId) => lockedAgentSet.has(agentId))}
-                        onToggle={() => {
-                          const [agentId] = getPlatformTargetInstallAgentIds(agent);
-                          if (agentId) {
-                            platformIcons.onToggle(platformIcons.skillId, agentId);
-                          }
-                        }}
-                      />
-                    ))}
-                  </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-14 shrink-0">
+                  {t("central.platformTargetsLabel")}
+                </span>
+                <div className="flex items-center gap-0.5 flex-wrap">
+                  {targetAgents.map((agent) => (
+                    <PlatformToggleIcon
+                      key={agent.id}
+                      agent={agent}
+                      skillName={name}
+                      isLinked={getPlatformTargetMemberIds(agent).some((agentId) => linkedAgentSet.has(agentId))}
+                      isToggling={getPlatformTargetMemberIds(agent).some((agentId) => platformIcons.togglingAgentId === agentId)}
+                      isLocked={getPlatformTargetMemberIds(agent).some((agentId) => lockedAgentSet.has(agentId))}
+                      onToggle={() => {
+                        const [agentId] = getPlatformTargetInstallAgentIds(agent);
+                        if (agentId) {
+                          platformIcons.onToggle(platformIcons.skillId, agentId);
+                        }
+                      }}
+                    />
+                  ))}
                 </div>
-              )}
-              {codingAgents.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-14 shrink-0">
-                    {t("sidebar.categoryCoding")}
-                  </span>
-                  <div className="flex items-center gap-0.5 flex-wrap">
-                    {codingAgents.map((agent) => (
-                      <PlatformToggleIcon
-                        key={agent.id}
-                        agent={agent}
-                        skillName={name}
-                        isLinked={getPlatformTargetMemberIds(agent).some((agentId) => linkedAgentSet.has(agentId))}
-                        isToggling={getPlatformTargetMemberIds(agent).some((agentId) => platformIcons.togglingAgentId === agentId)}
-                        isLocked={getPlatformTargetMemberIds(agent).some((agentId) => lockedAgentSet.has(agentId))}
-                        onToggle={() => {
-                          const [agentId] = getPlatformTargetInstallAgentIds(agent);
-                          if (agentId) {
-                            platformIcons.onToggle(platformIcons.skillId, agentId);
-                          }
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
           )}
         </div>

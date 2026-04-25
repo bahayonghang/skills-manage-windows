@@ -5,6 +5,13 @@ import { Blocks, Search, Settings } from "lucide-react";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useDiscoverStore } from "@/stores/discoverStore";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+} from "@/lib/platformVisibility";
+import {
+  getPlatformTargetGroups,
+  isUniversalPlatformTarget,
+} from "@/lib/platformTargetGroups";
 
 interface TopBarProps {
   onSearchClick: () => void;
@@ -17,8 +24,11 @@ export function TopBar({ onSearchClick }: TopBarProps) {
 
   const agents = usePlatformStore((s) => s.agents);
   const skillsByAgent = usePlatformStore((s) => s.skillsByAgent);
+  const categoryVisibility =
+    usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const totalDiscovered = usePlatformStore((s) => s.discoveredCount);
   const isScanning = useDiscoverStore((s) => s.isScanning);
+  const platformTargets = getPlatformTargetGroups(agents, categoryVisibility);
 
   // Determine current view label and count
   const viewInfo = (() => {
@@ -28,10 +38,17 @@ export function TopBar({ onSearchClick }: TopBarProps) {
     }
     if (pathname.startsWith("/platform/")) {
       const agentId = pathname.split("/platform/")[1];
-      const agent = agents.find((a) => a.id === agentId);
+      const agent =
+        platformTargets.find((a) => a.id === agentId) ??
+        agents.find((a) => a.id === agentId);
+      const countAgentId =
+        agent && isUniversalPlatformTarget(agent) ? agent.install_agent_id : agentId;
       return {
-        label: agent?.display_name ?? agentId,
-        count: skillsByAgent[agentId] ?? 0,
+        label:
+          agent && isUniversalPlatformTarget(agent)
+            ? t("platformTargets.universalShortLabel")
+            : agent?.display_name ?? agentId,
+        count: skillsByAgent[countAgentId] ?? 0,
       };
     }
     if (pathname.startsWith("/discover")) {

@@ -84,7 +84,7 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "central",
     display_name: "Central Skills",
     category: "central",
-    global_skills_dir: "~/.agents/skills/",
+    global_skills_dir: "~/.skillsmanage/skills/",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,

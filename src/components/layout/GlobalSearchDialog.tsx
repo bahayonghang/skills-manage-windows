@@ -204,7 +204,7 @@ export function GlobalSearchDialog({
         descriptionText: displayPath.toLowerCase(),
         onSelect: () => {
           close();
-          navigate(isUniversal ? "/central" : `/platform/${agent.id}`);
+          navigate(`/platform/${agent.id}`);
         },
       });
     }

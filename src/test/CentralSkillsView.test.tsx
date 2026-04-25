@@ -88,7 +88,7 @@ const mockAgents: AgentWithStatus[] = [
     id: "central",
     display_name: "Central Skills",
     category: "central",
-    global_skills_dir: "/Users/test/.agents/skills/",
+    global_skills_dir: "/Users/test/.skillsmanage/skills/",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -100,14 +100,14 @@ const mockSkills: SkillWithLinks[] = [
     id: "frontend-design",
     name: "frontend-design",
     description: "Build distinctive, production-grade frontend interfaces",
-    file_path: "~/.agents/skills/frontend-design/SKILL.md",
-    canonical_path: "~/.agents/skills/frontend-design",
+    file_path: "~/.skillsmanage/skills/frontend-design/SKILL.md",
+    canonical_path: "~/.skillsmanage/skills/frontend-design",
     is_central: true,
     scanned_at: "2026-04-09T00:00:00Z",
     created_at: "2026-04-10T00:00:00Z",
     updated_at: "2026-04-12T00:00:00Z",
     linked_agents: ["claude-code", "codex"],
-    shared_root_agents: ["codex", "cursor"],
+    shared_root_agents: [],
     repository: {
       id: "github-openai-skills-main",
       name: "openai/skills",
@@ -136,14 +136,14 @@ const mockSkills: SkillWithLinks[] = [
     id: "code-reviewer",
     name: "code-reviewer",
     description: "Review code changes and identify high-confidence, actionable bugs",
-    file_path: "~/.agents/skills/code-reviewer/SKILL.md",
-    canonical_path: "~/.agents/skills/code-reviewer",
+    file_path: "~/.skillsmanage/skills/code-reviewer/SKILL.md",
+    canonical_path: "~/.skillsmanage/skills/code-reviewer",
     is_central: true,
     scanned_at: "2026-04-09T00:00:00Z",
     created_at: "2026-04-08T00:00:00Z",
     updated_at: "2026-04-20T00:00:00Z",
     linked_agents: ["codex"],
-    shared_root_agents: ["codex", "cursor"],
+    shared_root_agents: [],
     repository: {
       id: "local-unknown",
       name: "本地 / 未知来源",
@@ -357,7 +357,7 @@ describe("CentralSkillsView", () => {
 
   it("shows the central skills directory path", () => {
     renderCentralSkillsView();
-    expect(screen.getByText("/Users/test/.agents/skills/")).toBeInTheDocument();
+    expect(screen.getByText("/Users/test/.skillsmanage/skills/")).toBeInTheDocument();
   });
 
   it("shows a refresh button", () => {
@@ -478,25 +478,24 @@ describe("CentralSkillsView", () => {
 
   it("shows platform toggle icons for each non-central agent", () => {
     renderCentralSkillsView();
-    // Only independent targets remain toggleable. The Universal group is locked.
     const toggleButtons = screen.getAllByRole("button", {
       name: /切换 .* 的链接状态/i,
     });
-    expect(toggleButtons.length).toBe(2);
+    expect(toggleButtons.length).toBe(4);
   });
 
   // ── Empty State ───────────────────────────────────────────────────────────
 
-  it("renders shared-root platform icon as connected and locked", () => {
+  it("renders Universal platform icon as toggleable", () => {
     renderCentralSkillsView();
 
     const codexButton = screen.getAllByRole("button", {
-      name: /Universal - 始终包含/i,
+      name: /切换 frontend-design 在 Universal 的链接状态/i,
     })[0];
-    expect(codexButton).toBeDisabled();
+    expect(codexButton).not.toBeDisabled();
 
     fireEvent.click(codexButton);
-    expect(mockTogglePlatformLink).not.toHaveBeenCalled();
+    expect(mockTogglePlatformLink).toHaveBeenCalledWith("frontend-design", "codex");
   });
 
   it("shows first-visit empty state when no skills exist", () => {
@@ -517,7 +516,7 @@ describe("CentralSkillsView", () => {
     ).toBeInTheDocument();
     // Should show guidance about creating a skill
     expect(
-      screen.getAllByText(/agents\/skills/).length
+      screen.getAllByText(/skillsmanage\/skills/).length
     ).toBeGreaterThanOrEqual(1);
   });
 
@@ -794,7 +793,7 @@ describe("CentralSkillsView", () => {
                 originalSkillId: "frontend-design",
                 importedSkillId: "frontend-design",
                 skillName: "frontend-design",
-                targetDirectory: "/Users/test/.agents/skills/frontend-design",
+                targetDirectory: "/Users/test/.skillsmanage/skills/frontend-design",
                 resolution: "overwrite",
               },
             ],
@@ -847,7 +846,7 @@ describe("CentralSkillsView", () => {
                 conflict: {
                   existingSkillId: "frontend-design",
                   existingName: "frontend-design",
-                  existingCanonicalPath: "/Users/test/.agents/skills/frontend-design",
+                  existingCanonicalPath: "/Users/test/.skillsmanage/skills/frontend-design",
                   proposedSkillId: "frontend-design",
                   proposedName: "frontend-design",
                 },

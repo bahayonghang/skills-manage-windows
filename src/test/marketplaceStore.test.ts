@@ -326,7 +326,7 @@ describe("marketplaceStore", () => {
           originalSkillId: "twitterapi-io",
           importedSkillId: "twitterapi-io",
           skillName: "twitterapi-io",
-          targetDirectory: "/Users/test/.agents/skills/twitterapi-io",
+          targetDirectory: "/Users/test/.skillsmanage/skills/twitterapi-io",
           resolution: "overwrite",
         },
       ],

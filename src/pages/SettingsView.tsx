@@ -263,17 +263,26 @@ function PlatformVisibilityRow({ agent, onToggle }: PlatformVisibilityRowProps) 
 interface PlatformVisibilityUniversalRowProps {
   agent: PlatformTargetGroup;
   isSearchActive: boolean;
+  normalizedQuery: string;
   onToggleAgent: (agentId: string, enabled: boolean) => void;
 }
 
 function PlatformVisibilityUniversalRow({
   agent,
   isSearchActive,
+  normalizedQuery,
   onToggleAgent,
 }: PlatformVisibilityUniversalRowProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const members = agent.member_agents ?? [];
+  const matchingMembers = isSearchActive
+    ? members.filter((member) =>
+        matchesPlatformVisibilityQuery(member, normalizedQuery)
+      )
+    : members;
+  const visibleMembers =
+    isSearchActive && matchingMembers.length > 0 ? matchingMembers : members;
   const pathHint = formatPlatformPathHint(agent.global_skills_dir);
   const enabledCount = members.filter((member) => member.is_enabled).length;
   const expanded = isExpanded || isSearchActive;
@@ -320,7 +329,7 @@ function PlatformVisibilityUniversalRow({
 
       {expanded && (
         <div className="bg-muted/10 pl-5">
-          {members.map((member) => (
+          {visibleMembers.map((member) => (
             <PlatformVisibilityRow
               key={`universal-${member.id}`}
               agent={member}
@@ -342,6 +351,7 @@ interface PlatformVisibilityGroupProps {
   totalCount: number;
   groupVisible: boolean;
   isSearchActive: boolean;
+  normalizedQuery: string;
   onToggleGroup: (visible: boolean) => void;
   onToggleAgent: (agentId: string, enabled: boolean) => void;
 }
@@ -355,6 +365,7 @@ function PlatformVisibilityGroup({
   totalCount,
   groupVisible,
   isSearchActive,
+  normalizedQuery,
   onToggleGroup,
   onToggleAgent,
 }: PlatformVisibilityGroupProps) {
@@ -406,6 +417,7 @@ function PlatformVisibilityGroup({
               key={`${category}-${agent.id}`}
               agent={agent}
               isSearchActive={isSearchActive}
+              normalizedQuery={normalizedQuery}
               onToggleAgent={onToggleAgent}
             />
           ) : (
@@ -919,6 +931,7 @@ export function SettingsView() {
                     totalCount={group.totalCount}
                     groupVisible={group.groupVisible}
                     isSearchActive={isPlatformVisibilitySearchActive}
+                    normalizedQuery={normalizedPlatformVisibilityQuery}
                     onToggleGroup={(visible) =>
                       void handleToggleCategory(group.category, visible)
                     }
