@@ -40,18 +40,27 @@ where
 
 /*
  * ========================================================================
- * 步骤2：构造中央技能目录
+ * 步骤2：构造技能存储目录
  * ========================================================================
  * 目标：
- * 1) 统一 `~/.agents/skills` 路径生成
- * 2) 让 db / discover / marketplace 共用同一规则
+ * 1) 将 SkillPort 私有中央仓库隔离到 `~/.skillsmanage/skills`
+ * 2) 保留 `~/.agents/skills` 作为 Universal Agents 安装目标
  */
 pub fn central_skills_dir() -> PathBuf {
     central_skills_dir_from_home(&resolve_home_dir())
 }
 
 pub fn central_skills_dir_from_home(home_dir: &Path) -> PathBuf {
-    // 2.1 在家目录下拼出中央技能目录
+    // 2.1 在家目录下拼出 SkillPort 私有中央技能目录
+    home_dir.join(".skillsmanage").join("skills")
+}
+
+pub fn universal_skills_dir() -> PathBuf {
+    universal_skills_dir_from_home(&resolve_home_dir())
+}
+
+pub fn universal_skills_dir_from_home(home_dir: &Path) -> PathBuf {
+    // 2.2 在家目录下拼出 Universal Agents 技能目录
     home_dir.join(".agents").join("skills")
 }
 
@@ -177,6 +186,17 @@ mod tests {
         let central = central_skills_dir_from_home(Path::new(r"C:\Users\lyh"));
         assert_eq!(
             central,
+            PathBuf::from(r"C:\Users\lyh")
+                .join(".skillsmanage")
+                .join("skills")
+        );
+    }
+
+    #[test]
+    fn universal_skills_dir_is_built_under_home() {
+        let universal = universal_skills_dir_from_home(Path::new(r"C:\Users\lyh"));
+        assert_eq!(
+            universal,
             PathBuf::from(r"C:\Users\lyh")
                 .join(".agents")
                 .join("skills")

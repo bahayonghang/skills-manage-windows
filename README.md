@@ -10,7 +10,7 @@
 
 ## Overview
 
-`SkillPort` follows the [Agent Skills](https://github.com/anthropics/agent-skills) open pattern and uses `~/.agents/skills/` as the canonical central directory. Skills can then be installed to individual platforms through symlinks, so one source of truth can drive multiple AI coding tools.
+`SkillPort` follows the [Agent Skills](https://github.com/anthropics/agent-skills) open pattern, but keeps its private Central library in `~/.skillsmanage/skills/`. The shared Universal Agents target remains `~/.agents/skills/`, so only skills explicitly installed there are exposed to Codex CLI, Cursor, Gemini CLI, and other tools that read that location.
 
 ## Relationship to upstream
 
@@ -84,8 +84,8 @@ Then launch the app again from Finder. If your app is stored somewhere else, rep
 |----------|----------|-----------------|
 | Coding | Claude Code | `~/.claude/skills/` |
 | Coding | Codex CLI | `~/.agents/skills/` |
-| Coding | Cursor | `~/.cursor/skills/` |
-| Coding | Gemini CLI | `~/.gemini/skills/` |
+| Coding | Cursor | `~/.agents/skills/` |
+| Coding | Gemini CLI | `~/.agents/skills/` |
 | Coding | Trae | `~/.trae/skills/` |
 | Coding | Factory Droid | `~/.factory/skills/` |
 | Coding | Junie | `~/.junie/skills/` |
@@ -94,14 +94,14 @@ Then launch the app again from Finder. If your app is stored somewhere else, rep
 | Coding | Windsurf | `~/.windsurf/skills/` |
 | Coding | Qoder | `~/.qoder/skills/` |
 | Coding | Augment | `~/.augment/skills/` |
-| Coding | OpenCode | `~/.opencode/skills/` |
+| Coding | OpenCode | `~/.agents/skills/` |
 | Coding | KiloCode | `~/.kilocode/skills/` |
 | Coding | OB1 | `~/.ob1/skills/` |
-| Coding | Amp | `~/.amp/skills/` |
+| Coding | Amp | `~/.agents/skills/` |
 | Coding | Kiro | `~/.kiro/skills/` |
 | Coding | CodeBuddy | `~/.codebuddy/skills/` |
 | Coding | Hermes | `~/.hermes/skills/` |
-| Coding | Copilot | `~/.copilot/skills/` |
+| Coding | Copilot | `~/.agents/skills/` |
 | Coding | Aider | `~/.aider/skills/` |
 | Lobster | OpenClaw (开爪) | `~/.openclaw/skills/` |
 | Lobster | QClaw (千爪) | `~/.qclaw/skills/` |
@@ -109,7 +109,7 @@ Then launch the app again from Finder. If your app is stored somewhere else, rep
 | Lobster | EasyClaw V2 | `~/.easyclaw-20260322-01/skills/` |
 | Lobster | AutoClaw | `~/.openclaw-autoclaw/skills/` |
 | Lobster | WorkBuddy (打工搭子) | `~/.workbuddy/skills-marketplace/skills/` |
-| Central | Central Skills | `~/.agents/skills/` |
+| Central | Central Skills | `~/.skillsmanage/skills/` |
 
 > Note: Claude Code also surfaces marketplace plugin directories under `~/.claude/plugins/marketplaces/*` as read-only rows in the Claude view. Those entries are display-only and are not managed like native skills in `~/.claude/skills/`.
 

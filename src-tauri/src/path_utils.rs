@@ -43,6 +43,10 @@ pub fn app_data_dir() -> PathBuf {
 }
 
 pub fn central_skills_dir() -> PathBuf {
+    resolve_home_dir().join(".skillsmanage").join("skills")
+}
+
+pub fn universal_skills_dir() -> PathBuf {
     resolve_home_dir().join(".agents").join("skills")
 }
 

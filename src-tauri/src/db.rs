@@ -690,10 +690,10 @@ async fn seed_builtin_agents(pool: &DbPool) -> Result<(), String> {
 }
 
 /// Seed `scan_directories` with one row per unique `global_skills_dir` path
-/// across all built-in agents.  Rows are marked `is_builtin = 1` and cannot
-/// be removed by the user.  `INSERT OR IGNORE` keeps the operation idempotent:
-/// if two built-in agents share the same path (codex and central both use
-/// `~/.agents/skills`) only the first insert takes effect.
+/// across all built-in agents. Rows are marked `is_builtin = 1` and cannot
+/// be removed by the user. `INSERT OR IGNORE` keeps the operation idempotent:
+/// Universal agents share `~/.agents/skills`, while Central uses the private
+/// `~/.skillsmanage/skills` store.
 async fn seed_builtin_scan_directories(pool: &DbPool) -> Result<(), String> {
     let now = Utc::now().to_rfc3339();
     for agent in builtin_agents() {
@@ -930,6 +930,9 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
     let central_skills_dir = crate::paths::central_skills_dir_from_home(home)
         .to_string_lossy()
         .into_owned();
+    let universal_skills_dir = crate::paths::universal_skills_dir_from_home(home)
+        .to_string_lossy()
+        .into_owned();
 
     let skill_dir = |segments: &[&str]| -> String {
         segments
@@ -941,7 +944,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
 
     let agent_skill_dir = |agent_id: &str, segments: &[&str]| -> String {
         if is_universal_agent(agent_id) {
-            return central_skills_dir.clone();
+            return universal_skills_dir.clone();
         }
 
         skill_dir(segments)
@@ -1321,24 +1324,41 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
 
 /// Insert or update a skill record.
 ///
-/// Uses `ON CONFLICT DO UPDATE` to preserve `is_central = true` if a prior
-/// scan already marked the skill as central (e.g., when the central agent and
-/// codex both point to `~/.agents/skills/` and are scanned in different
-/// orders). Once a skill is flagged as central it must never be downgraded to
-/// non-central by a subsequent scan of the same directory by a non-central agent.
+/// Uses `ON CONFLICT DO UPDATE` to preserve the private Central record if a
+/// platform scan later observes the same skill id in an agent directory.
+/// Once a skill is flagged as central it must never be downgraded to non-central
+/// or have its canonical file path overwritten by a platform copy.
 pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
     sqlx::query(
         "INSERT INTO skills
          (id, name, description, file_path, canonical_path, is_central, source, content, scanned_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
-           name           = excluded.name,
-           description    = excluded.description,
-           file_path      = excluded.file_path,
-           canonical_path = COALESCE(excluded.canonical_path, skills.canonical_path),
+           name           = CASE
+                              WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.name
+                              ELSE excluded.name
+                            END,
+           description    = CASE
+                              WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.description
+                              ELSE excluded.description
+                            END,
+           file_path      = CASE
+                              WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.file_path
+                              ELSE excluded.file_path
+                            END,
+           canonical_path = CASE
+                              WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.canonical_path
+                              ELSE COALESCE(excluded.canonical_path, skills.canonical_path)
+                            END,
            is_central     = MAX(skills.is_central, excluded.is_central),
-           source         = excluded.source,
-           content        = excluded.content,
+           source         = CASE
+                              WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.source
+                              ELSE excluded.source
+                            END,
+           content        = CASE
+                              WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.content
+                              ELSE excluded.content
+                            END,
            scanned_at     = excluded.scanned_at",
     )
     .bind(&skill.id)
@@ -3019,13 +3039,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_universal_agents_share_central_skills_dir() {
+    async fn test_universal_agents_share_universal_skills_dir() {
         let pool = setup_test_db().await;
         let agents = get_all_agents(&pool).await.unwrap();
         let central = agents
             .iter()
             .find(|agent| agent.id == "central")
             .expect("central agent should exist");
+        let universal_dir = crate::paths::universal_skills_dir();
+
+        assert!(
+            crate::paths::paths_equivalent(
+                Path::new(&central.global_skills_dir),
+                &crate::paths::central_skills_dir()
+            ),
+            "central should use the private SkillPort skills directory"
+        );
+        assert!(
+            !crate::paths::paths_equivalent(Path::new(&central.global_skills_dir), &universal_dir),
+            "central should not share the Universal Agents directory"
+        );
 
         for agent_id in UNIVERSAL_AGENT_IDS {
             let agent = agents
@@ -3033,11 +3066,8 @@ mod tests {
                 .find(|agent| agent.id == agent_id)
                 .unwrap_or_else(|| panic!("missing universal agent {agent_id}"));
             assert!(
-                crate::paths::paths_equivalent(
-                    Path::new(&agent.global_skills_dir),
-                    Path::new(&central.global_skills_dir)
-                ),
-                "{agent_id} should use the central skills directory"
+                crate::paths::paths_equivalent(Path::new(&agent.global_skills_dir), &universal_dir),
+                "{agent_id} should use the Universal Agents skills directory"
             );
         }
     }
@@ -3082,7 +3112,7 @@ mod tests {
             description: Some(format!("Description for {}", name)),
             file_path: format!("/tmp/{}/SKILL.md", id),
             canonical_path: if is_central {
-                Some(format!("/tmp/.agents/skills/{}", id))
+                Some(format!("/tmp/.skillsmanage/skills/{}", id))
             } else {
                 None
             },
@@ -3117,6 +3147,38 @@ mod tests {
 
         let retrieved = get_skill_by_id(&pool, "skill-1").await.unwrap().unwrap();
         assert_eq!(retrieved.name, "Updated Name");
+    }
+
+    #[tokio::test]
+    async fn test_upsert_skill_preserves_central_record_when_platform_copy_is_seen_later() {
+        let pool = setup_test_db().await;
+        let mut central = make_skill("shared-skill", "Central Truth", true);
+        central.file_path = "/tmp/.skillsmanage/skills/shared-skill/SKILL.md".to_string();
+        central.canonical_path = Some("/tmp/.skillsmanage/skills/shared-skill".to_string());
+        central.source = Some("native".to_string());
+        upsert_skill(&pool, &central).await.unwrap();
+
+        let mut platform = make_skill("shared-skill", "Platform Copy", false);
+        platform.file_path = "/tmp/.agents/skills/shared-skill/SKILL.md".to_string();
+        platform.canonical_path = Some("/tmp/.agents/skills/shared-skill".to_string());
+        platform.source = Some("copy".to_string());
+        upsert_skill(&pool, &platform).await.unwrap();
+
+        let retrieved = get_skill_by_id(&pool, "shared-skill")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(retrieved.is_central);
+        assert_eq!(retrieved.name, "Central Truth");
+        assert_eq!(
+            retrieved.file_path,
+            "/tmp/.skillsmanage/skills/shared-skill/SKILL.md"
+        );
+        assert_eq!(
+            retrieved.canonical_path.as_deref(),
+            Some("/tmp/.skillsmanage/skills/shared-skill")
+        );
+        assert_eq!(retrieved.source.as_deref(), Some("native"));
     }
 
     #[tokio::test]
@@ -3638,8 +3700,9 @@ mod tests {
     // ── Scan Directories ──────────────────────────────────────────────────────
 
     /// Returns the number of *unique* global_skills_dir paths across all
-    /// built-in agents.  This is the number of rows that seed_builtin_scan_directories
-    /// inserts (codex and central share ~/.agents/skills, so the count is 10).
+    /// built-in agents. This is the number of rows that seed_builtin_scan_directories
+    /// inserts, with Universal agents sharing ~/.agents/skills and Central using
+    /// ~/.skillsmanage/skills.
     fn expected_builtin_scan_dir_count() -> usize {
         let mut paths = std::collections::HashSet::new();
         for agent in builtin_agents() {

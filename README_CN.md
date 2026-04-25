@@ -10,7 +10,7 @@
 
 ## 项目简介
 
-`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，使用 `~/.agents/skills/` 作为中央 canonical 目录，再通过符号链接把 skill 安装到各个平台，让同一份 skill 成为多个 AI coding 工具的单一事实来源。
+`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库使用私有目录 `~/.skillsmanage/skills/`。共享的 Universal Agents 目标仍是 `~/.agents/skills/`，只有显式安装到这里的技能才会暴露给 Codex CLI、Cursor、Gemini CLI 等读取该目录的工具。
 
 ## 与上游关系
 
@@ -83,8 +83,8 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 |------|------|------------|
 | Coding | Claude Code | `~/.claude/skills/` |
 | Coding | Codex CLI | `~/.agents/skills/` |
-| Coding | Cursor | `~/.cursor/skills/` |
-| Coding | Gemini CLI | `~/.gemini/skills/` |
+| Coding | Cursor | `~/.agents/skills/` |
+| Coding | Gemini CLI | `~/.agents/skills/` |
 | Coding | Trae | `~/.trae/skills/` |
 | Coding | Factory Droid | `~/.factory/skills/` |
 | Coding | Junie | `~/.junie/skills/` |
@@ -93,14 +93,14 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 | Coding | Windsurf | `~/.windsurf/skills/` |
 | Coding | Qoder | `~/.qoder/skills/` |
 | Coding | Augment | `~/.augment/skills/` |
-| Coding | OpenCode | `~/.opencode/skills/` |
+| Coding | OpenCode | `~/.agents/skills/` |
 | Coding | KiloCode | `~/.kilocode/skills/` |
 | Coding | OB1 | `~/.ob1/skills/` |
-| Coding | Amp | `~/.amp/skills/` |
+| Coding | Amp | `~/.agents/skills/` |
 | Coding | Kiro | `~/.kiro/skills/` |
 | Coding | CodeBuddy | `~/.codebuddy/skills/` |
 | Coding | Hermes | `~/.hermes/skills/` |
-| Coding | Copilot | `~/.copilot/skills/` |
+| Coding | Copilot | `~/.agents/skills/` |
 | Coding | Aider | `~/.aider/skills/` |
 | Lobster | OpenClaw（开爪） | `~/.openclaw/skills/` |
 | Lobster | QClaw（千爪） | `~/.qclaw/skills/` |
@@ -108,7 +108,7 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 | Lobster | EasyClaw V2 | `~/.easyclaw-20260322-01/skills/` |
 | Lobster | AutoClaw | `~/.openclaw-autoclaw/skills/` |
 | Lobster | WorkBuddy（打工搭子） | `~/.workbuddy/skills-marketplace/skills/` |
-| Central | 中央技能库 | `~/.agents/skills/` |
+| Central | 中央技能库 | `~/.skillsmanage/skills/` |
 
 > 说明：Claude Code 还会把 `~/.claude/plugins/marketplaces/*` 下的 marketplace plugin 目录显示成只读行。这些条目只做展示，不按 `~/.claude/skills/` 里的原生技能那套方式管理。
 

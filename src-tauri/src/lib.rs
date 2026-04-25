@@ -1,3 +1,4 @@
+pub mod central_migration;
 pub mod commands;
 pub mod db;
 pub mod path_utils;
@@ -72,6 +73,13 @@ pub fn run() {
                 db::init_database(&pool)
                     .await
                     .expect("Failed to initialize database schema")
+            });
+            tauri::async_runtime::block_on(async {
+                if let Err(error) =
+                    central_migration::migrate_legacy_central_skills_to_private_store(&pool).await
+                {
+                    eprintln!("Failed to migrate legacy Central Skills store: {}", error);
+                }
             });
 
             app.manage(AppState {

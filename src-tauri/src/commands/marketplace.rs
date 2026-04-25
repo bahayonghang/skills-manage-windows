@@ -1893,7 +1893,7 @@ mod tests {
 
     #[test]
     fn central_skill_dir_for_name_uses_the_given_central_dir() {
-        let central_dir = Path::new(r"C:\Users\lyh\.agents\skills");
+        let central_dir = Path::new(r"C:\Users\lyh\.skillsmanage\skills");
         let skill_dir = central_skill_dir_for_name(central_dir, "demo-skill");
 
         assert_eq!(skill_dir, central_dir.join("demo-skill"));

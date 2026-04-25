@@ -622,22 +622,14 @@ mod tests {
 
         let mut linked = skills_with_links[0].linked_agents.clone();
         linked.sort();
-        let mut expected_linked: Vec<String> = crate::db::UNIVERSAL_AGENT_IDS
-            .into_iter()
-            .map(String::from)
-            .chain(std::iter::once("claude-code".to_string()))
-            .collect();
+        let mut expected_linked: Vec<String> =
+            vec!["claude-code".to_string(), "cursor".to_string()];
         expected_linked.sort();
         assert_eq!(linked, expected_linked);
 
         let mut shared = skills_with_links[0].shared_root_agents.clone();
         shared.sort();
-        let mut expected_shared: Vec<String> = crate::db::UNIVERSAL_AGENT_IDS
-            .into_iter()
-            .map(String::from)
-            .collect();
-        expected_shared.sort();
-        assert_eq!(shared, expected_shared);
+        assert!(shared.is_empty());
     }
 
     #[tokio::test]
@@ -651,16 +643,11 @@ mod tests {
         assert_eq!(skills_with_links.len(), 1);
         let mut linked = skills_with_links[0].linked_agents.clone();
         linked.sort();
-        let mut expected_shared: Vec<String> = crate::db::UNIVERSAL_AGENT_IDS
-            .into_iter()
-            .map(String::from)
-            .collect();
-        expected_shared.sort();
-        assert_eq!(linked, expected_shared);
+        assert!(linked.is_empty());
 
         let mut shared = skills_with_links[0].shared_root_agents.clone();
         shared.sort();
-        assert_eq!(shared, expected_shared);
+        assert!(shared.is_empty());
     }
 
     #[tokio::test]
@@ -691,24 +678,12 @@ mod tests {
                 linked.sort();
                 linked
             },
-            {
-                let mut expected: Vec<String> = crate::db::UNIVERSAL_AGENT_IDS
-                    .into_iter()
-                    .map(String::from)
-                    .collect();
-                expected.sort();
-                expected
-            },
+            Vec::<String>::new(),
             "plugin observations must not pollute linked_agents state"
         );
         let mut shared = skills_with_links[0].shared_root_agents.clone();
         shared.sort();
-        let mut expected_shared: Vec<String> = crate::db::UNIVERSAL_AGENT_IDS
-            .into_iter()
-            .map(String::from)
-            .collect();
-        expected_shared.sort();
-        assert_eq!(shared, expected_shared);
+        assert!(shared.is_empty());
     }
 
     #[tokio::test]
