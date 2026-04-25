@@ -1,5 +1,5 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Search, RefreshCw, Blocks, FolderOpen, Settings, ArrowUpDown, Tag, X, Wand2, AlertTriangle, Check, Eye, ListChecks, Plus, Download, Trash2 } from "lucide-react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Search, RefreshCw, Blocks, FolderOpen, Settings, ArrowUpDown, Tag, X, Wand2, AlertTriangle, Check, Eye, ListChecks, Plus, Download, Trash2, FolderGit2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -10,11 +10,12 @@ import { useSkillStore } from "@/stores/skillStore";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { InstallDialog } from "@/components/central/InstallDialog";
+import { BatchInstallCentralSkillsDialog } from "@/components/central/BatchInstallCentralSkillsDialog";
 import { DeleteCentralSkillDialog } from "@/components/central/DeleteCentralSkillDialog";
 import { BatchDeleteCentralSkillsDialog } from "@/components/central/BatchDeleteCentralSkillsDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AgentWithStatus, AiTagJob, BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult, CentralSkillUpdateJob, CentralSkillUpdateState, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
+import { AgentWithStatus, AiTagJob, BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult, CentralBatchInstallResult, CentralSkillUpdateJob, CentralSkillUpdateState, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
 import { markAppPerformance } from "@/lib/performance";
 import { cn } from "@/lib/utils";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
@@ -87,6 +88,13 @@ const EMPTY_GITHUB_IMPORT_STATE = {
 async function noopAsync(): Promise<void> {}
 
 async function noopInstallSkill() {
+  return {
+    succeeded: [],
+    failed: [],
+  };
+}
+
+async function noopBatchInstallSkills(): Promise<CentralBatchInstallResult> {
   return {
     succeeded: [],
     failed: [],
@@ -208,6 +216,140 @@ function getSkillSortTimestamp(
 
 // ─── CentralSkillsView ────────────────────────────────────────────────────────
 
+function isGithubRepository(repository: SkillRepositoryWithStats): boolean {
+  return (
+    repository.source_type === "github" ||
+    Boolean(repository.owner && repository.repo)
+  );
+}
+
+function getRepositorySkillCount(repository: SkillRepositoryWithStats): number {
+  return repository.is_unknown
+    ? repository.unknown_skill_count
+    : repository.skill_count;
+}
+
+function FilterSection({
+  icon,
+  title,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-2.5">
+      <div className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {icon}
+        <span>{title}</span>
+      </div>
+      <div className="space-y-1.5">{children}</div>
+    </section>
+  );
+}
+
+function RepositoryFilterButton({
+  active,
+  count,
+  label,
+  sourceKind,
+  onClick,
+  testId,
+}: {
+  active: boolean;
+  count: number;
+  label: string;
+  sourceKind: "all" | "github" | "local";
+  onClick: () => void;
+  testId: string;
+}) {
+  const Icon = sourceKind === "github" ? FolderGit2 : FolderOpen;
+
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      data-source-kind={sourceKind}
+      onClick={onClick}
+      className={cn(
+        "group flex min-h-10 w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
+        active
+          ? "border-primary/25 bg-background text-foreground shadow-sm ring-1 ring-primary/10"
+          : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-background/70 hover:text-foreground",
+        sourceKind === "local" && !active
+          ? "border-dashed border-border/80 bg-muted/20"
+          : null
+      )}
+    >
+      <span
+        className={cn(
+          "grid size-6 shrink-0 place-items-center rounded-md border",
+          sourceKind === "github"
+            ? "border-sky-500/20 bg-sky-500/10 text-sky-600 dark:text-sky-300"
+            : sourceKind === "local"
+              ? "border-dashed border-border bg-muted text-muted-foreground"
+              : "border-border bg-background text-muted-foreground"
+        )}
+      >
+        <Icon className="size-3.5" />
+      </span>
+      <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+      <span className="shrink-0 rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+        {count}
+      </span>
+    </button>
+  );
+}
+
+function TagFilterButton({
+  active,
+  count,
+  label,
+  tone,
+  onClick,
+  testId,
+}: {
+  active: boolean;
+  count: number;
+  label: string;
+  tone: "all" | "tag" | "uncategorized" | "updates" | "ai";
+  onClick: () => void;
+  testId: string;
+}) {
+  const dotClassName =
+    tone === "updates"
+      ? "bg-amber-500"
+      : tone === "ai"
+        ? "bg-violet-500"
+        : tone === "uncategorized"
+          ? "bg-slate-400"
+          : tone === "tag"
+            ? "bg-emerald-500"
+            : "bg-muted-foreground/60";
+
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      data-filter-kind="tag"
+      onClick={onClick}
+      className={cn(
+        "flex min-h-9 w-full items-center gap-2 rounded-full border px-2.5 py-1.5 text-left text-xs transition-colors",
+        active
+          ? "border-primary/30 bg-primary/10 text-primary ring-1 ring-primary/10"
+          : "border-border/70 bg-background/35 text-muted-foreground hover:bg-background hover:text-foreground"
+      )}
+    >
+      <span className={cn("size-2 shrink-0 rounded-full", dotClassName)} />
+      <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+      <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+        {count}
+      </span>
+    </button>
+  );
+}
+
 export function CentralSkillsView() {
   const { t } = useTranslation();
   const rawSkills = useCentralSkillsStore((state) => state.skills);
@@ -243,6 +385,8 @@ export function CentralSkillsView() {
   const isLoading = shouldUseBrowserFixtures ? false : rawIsLoading ?? false;
   const loadCentralSkills = rawLoadCentralSkills ?? noopAsync;
   const installSkill = useCentralSkillsStore((state) => state.installSkill) ?? noopInstallSkill;
+  const batchInstallSkills =
+    useCentralSkillsStore((state) => state.batchInstallSkills) ?? noopBatchInstallSkills;
   const loadDeletePreview = useCentralSkillsStore((state) => state.loadDeletePreview) ?? noopLoadDeletePreview;
   const loadBatchDeletePreview = useCentralSkillsStore((state) => state.loadBatchDeletePreview) ?? noopLoadBatchDeletePreview;
   const deleteCentralSkill = useCentralSkillsStore((state) => state.deleteCentralSkill) ?? noopDeleteCentralSkill;
@@ -264,6 +408,7 @@ export function CentralSkillsView() {
   const isSuggestingTags = useCentralSkillsStore((state) => state.isSuggestingTags) ?? false;
   const isCheckingUpdates = useCentralSkillsStore((state) => state.isCheckingUpdates) ?? false;
   const updatingSkillIds = useCentralSkillsStore((state) => state.updatingSkillIds) ?? [];
+  const isInstalling = useCentralSkillsStore((state) => state.isInstalling) ?? false;
   const isDeleting = useCentralSkillsStore((state) => state.isDeleting) ?? false;
   const togglingAgentId = useCentralSkillsStore((state) => state.togglingAgentId);
 
@@ -306,6 +451,7 @@ export function CentralSkillsView() {
   const [batchDeletePreviewError, setBatchDeletePreviewError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isBatchInstallDialogOpen, setIsBatchInstallDialogOpen] = useState(false);
   const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -591,6 +737,42 @@ export function CentralSkillsView() {
       }
     } catch (err) {
       toast.error(t("central.installError", { error: String(err) }));
+    }
+  }
+
+  async function handleBatchInstallCentralSkills(
+    agentIds: string[],
+    method: "symlink" | "copy",
+    projectPath?: string | null
+  ) {
+    const requestedSkillIds = [...selectedSkillIds];
+    const requestedSkillCount = requestedSkillIds.length;
+    const platformCount = agentIds.length;
+
+    try {
+      const result = await batchInstallSkills(requestedSkillIds, agentIds, method, projectPath);
+      await refreshCounts();
+      if (result.failed.length > 0) {
+        toast.error(
+          t("central.batchInstallPartialToast", {
+            skillCount: requestedSkillCount,
+            platformCount,
+            failedCount: result.failed.length,
+          })
+        );
+      } else {
+        toast.success(
+          t("central.batchInstallSuccess", {
+            skillCount: requestedSkillCount,
+            platformCount,
+          })
+        );
+        setSelectedSkillIds([]);
+      }
+      return result;
+    } catch (err) {
+      toast.error(t("central.installError", { error: String(err) }));
+      throw err;
     }
   }
 
@@ -1054,124 +1236,98 @@ export function CentralSkillsView() {
 
       {/* Content */}
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-64 shrink-0 border-r border-border bg-muted/20 p-4 md:block">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <FolderOpen className="size-3.5" />
-            {t("central.repositories")}
-          </div>
-          <div className="space-y-1">
-            <button
-              type="button"
-              onClick={() => setRepositoryFilter("all")}
-              className={cn(
-                "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors",
-                repositoryFilter === "all"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
-              )}
+        <aside
+          data-testid="central-filter-sidebar"
+          className="hidden min-h-0 w-[286px] shrink-0 border-r border-border/80 bg-muted/15 md:flex md:flex-col"
+        >
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4 pr-2 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
+            <FilterSection
+              icon={<FolderOpen className="size-3.5" />}
+              title={t("central.repositories")}
             >
-              <span>{t("central.allRepositories")}</span>
-              <span>{skills.length}</span>
-            </button>
-            {repositories.map((repository) => (
-              <button
-                key={repository.id}
-                type="button"
-                onClick={() =>
-                  setRepositoryFilter(repository.is_unknown ? "unassigned" : repository.id)
-                }
-                className={cn(
-                  "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors",
+              <RepositoryFilterButton
+                active={repositoryFilter === "all"}
+                count={skills.length}
+                label={t("central.allRepositories")}
+                sourceKind="all"
+                testId="repository-filter-all"
+                onClick={() => setRepositoryFilter("all")}
+              />
+              {repositories.map((repository) => {
+                const sourceKind = isGithubRepository(repository)
+                  ? "github"
+                  : "local";
+                const isActive =
                   (repository.is_unknown && repositoryFilter === "unassigned") ||
-                    repositoryFilter === repository.id
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
-                )}
-              >
-                <span className="min-w-0 truncate">{repository.name}</span>
-                <span className="shrink-0 tabular-nums">
-                  {repository.is_unknown ? repository.unknown_skill_count : repository.skill_count}
-                </span>
-              </button>
-            ))}
-          </div>
+                  repositoryFilter === repository.id;
 
-          <div className="mt-6 mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <Tag className="size-3.5" />
-            {t("central.categoryNav")}
-          </div>
-          <div className="space-y-1">
-            <button
-              type="button"
-              onClick={() => setTagFilter("all")}
-              className={cn(
-                "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors",
-                tagFilter === "all"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
-              )}
+                return (
+                  <RepositoryFilterButton
+                    key={repository.id}
+                    active={isActive}
+                    count={getRepositorySkillCount(repository)}
+                    label={repository.name}
+                    sourceKind={sourceKind}
+                    testId={`repository-filter-${repository.id}`}
+                    onClick={() =>
+                      setRepositoryFilter(repository.is_unknown ? "unassigned" : repository.id)
+                    }
+                  />
+                );
+              })}
+            </FilterSection>
+
+            <FilterSection
+              icon={<Tag className="size-3.5" />}
+              title={t("central.categoryNav")}
             >
-              <span>{t("central.allTags")}</span>
-              <span>{skills.length}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTagFilter("uncategorized")}
-              className={cn(
-                "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors",
-                tagFilter === "uncategorized"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
-              )}
-            >
-              <span>{t("central.uncategorizedOnly")}</span>
-              <span>{uncategorizedCount}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTagFilter("updates")}
-              className={cn(
-                "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors",
-                tagFilter === "updates"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
-              )}
-            >
-              <span>{t("central.updatesAvailableOnly")}</span>
-              <span>{updateAvailableSkillIds.length}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setTagFilter("ai-review");
-                setCategorizeTab("review");
-              }}
-              className={cn(
-                "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors",
-                tagFilter === "ai-review"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
-              )}
-            >
-              <span>{t("central.aiReviewOnly")}</span>
-              <span>{aiTagReviews.length}</span>
-            </button>
-            {tagCounts.map(({ tag, count }) => (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() => setTagFilter(tag.id)}
-                className={cn(
-                  "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors",
-                  tagFilter === tag.id
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
-                )}
-              >
-                <span className="min-w-0 truncate">{tag.name}</span>
-                <span className="shrink-0 tabular-nums">{count}</span>
-              </button>
-            ))}
+              <TagFilterButton
+                active={tagFilter === "all"}
+                count={skills.length}
+                label={t("central.allTags")}
+                tone="all"
+                testId="tag-filter-all"
+                onClick={() => setTagFilter("all")}
+              />
+              <TagFilterButton
+                active={tagFilter === "uncategorized"}
+                count={uncategorizedCount}
+                label={t("central.uncategorizedOnly")}
+                tone="uncategorized"
+                testId="tag-filter-uncategorized"
+                onClick={() => setTagFilter("uncategorized")}
+              />
+              <TagFilterButton
+                active={tagFilter === "updates"}
+                count={updateAvailableSkillIds.length}
+                label={t("central.updatesAvailableOnly")}
+                tone="updates"
+                testId="tag-filter-updates"
+                onClick={() => setTagFilter("updates")}
+              />
+              <TagFilterButton
+                active={tagFilter === "ai-review"}
+                count={aiTagReviews.length}
+                label={t("central.aiReviewOnly")}
+                tone="ai"
+                testId="tag-filter-ai-review"
+                onClick={() => {
+                  setTagFilter("ai-review");
+                  setCategorizeTab("review");
+                }}
+              />
+              {tagCounts.map(({ tag, count }) => (
+                <TagFilterButton
+                  key={tag.id}
+                  active={tagFilter === tag.id}
+                  count={count}
+                  label={tag.name}
+                  tone="tag"
+                  testId={`tag-filter-${tag.id}`}
+                  onClick={() => setTagFilter(tag.id)}
+                />
+              ))}
+            </FilterSection>
           </div>
         </aside>
 
@@ -1245,6 +1401,18 @@ export function CentralSkillsView() {
                   <X className="size-3.5" />
                   {t("central.clearSelection")}
                 </Button>
+                {selectedSkillIds.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsBatchInstallDialogOpen(true)}
+                    disabled={isInstalling}
+                    data-testid="batch-install-central-skills"
+                  >
+                    <Download className="size-3.5" />
+                    {t("central.batchInstallSelected", { count: selectedSkillIds.length })}
+                  </Button>
+                )}
                 {selectedSkillIds.length > 0 && (
                   <Button
                     variant="destructive"
@@ -1520,6 +1688,15 @@ export function CentralSkillsView() {
         skill={installTargetSkill}
         agents={availableInstallAgents}
         onInstall={handleInstall}
+      />
+
+      <BatchInstallCentralSkillsDialog
+        open={isBatchInstallDialogOpen}
+        onOpenChange={setIsBatchInstallDialogOpen}
+        skillCount={selectedSkillIds.length}
+        agents={availableInstallAgents}
+        isInstalling={isInstalling}
+        onInstall={handleBatchInstallCentralSkills}
       />
 
       <DeleteCentralSkillDialog

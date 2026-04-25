@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { toast } from "sonner";
 import { CentralSkillsView } from "../pages/CentralSkillsView";
 import { AgentWithStatus, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
 
@@ -19,6 +20,14 @@ vi.mock("../stores/skillStore", () => ({
 
 vi.mock("../stores/marketplaceStore", () => ({
   useMarketplaceStore: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  },
 }));
 
 vi.mock("../components/skill/SkillDetailDrawer", () => ({
@@ -238,6 +247,7 @@ const mockDeletePreview: SkillDetail = {
 
 const mockLoadCentralSkills = vi.fn();
 const mockInstallSkill = vi.fn();
+const mockBatchInstallSkills = vi.fn();
 const mockLoadDeletePreview = vi.fn();
 const mockLoadBatchDeletePreview = vi.fn();
 const mockDeleteCentralSkill = vi.fn();
@@ -289,6 +299,7 @@ function buildCentralStoreState(overrides = {}) {
     error: null,
     loadCentralSkills: mockLoadCentralSkills,
     installSkill: mockInstallSkill,
+    batchInstallSkills: mockBatchInstallSkills,
     loadDeletePreview: mockLoadDeletePreview,
     loadBatchDeletePreview: mockLoadBatchDeletePreview,
     deleteCentralSkill: mockDeleteCentralSkill,
@@ -340,14 +351,17 @@ function buildSkillStoreState(overrides = {}) {
   };
 }
 
-function renderCentralSkillsView() {
+function renderCentralSkillsView({
+  centralOverrides = {},
+  platformOverrides = {},
+} = {}) {
   mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
-    const state = buildCentralStoreState();
+    const state = buildCentralStoreState(centralOverrides);
     if (typeof selector === "function") return selector(state);
     return state;
   });
   mockUsePlatformStore.mockImplementation((selector?: unknown) => {
-    const state = buildPlatformStoreState();
+    const state = buildPlatformStoreState(platformOverrides);
     if (typeof selector === "function") return selector(state);
     return state;
   });
@@ -448,6 +462,36 @@ describe("CentralSkillsView", () => {
 
   // ── Skills List ───────────────────────────────────────────────────────────
 
+  it("renders repositories and tags with distinct sidebar semantics", async () => {
+    renderCentralSkillsView();
+
+    const sidebar = screen.getByTestId("central-filter-sidebar");
+    const scrollContainer = sidebar.firstElementChild as HTMLElement;
+    expect(scrollContainer).toHaveClass("overflow-y-auto");
+    expect(
+      within(sidebar).getByTestId("repository-filter-github-openai-skills-main")
+    ).toHaveAttribute("data-source-kind", "github");
+    expect(
+      within(sidebar).getByTestId("repository-filter-local-unknown")
+    ).toHaveAttribute("data-source-kind", "local");
+    expect(
+      within(sidebar).getByTestId("tag-filter-frontend-visual-design")
+    ).toHaveAttribute("data-filter-kind", "tag");
+
+    fireEvent.click(within(sidebar).getByTestId("repository-filter-github-openai-skills-main"));
+    await waitFor(() => {
+      expect(screen.getByText("frontend-design")).toBeInTheDocument();
+      expect(screen.queryByText("code-reviewer")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(within(sidebar).getByTestId("repository-filter-all"));
+    fireEvent.click(within(sidebar).getByTestId("tag-filter-frontend-visual-design"));
+    await waitFor(() => {
+      expect(screen.getByText("frontend-design")).toBeInTheDocument();
+      expect(screen.queryByText("code-reviewer")).not.toBeInTheDocument();
+    });
+  });
+
   it("renders all central skills", () => {
     renderCentralSkillsView();
     expect(screen.getByText("frontend-design")).toBeInTheDocument();
@@ -526,11 +570,165 @@ describe("CentralSkillsView", () => {
     renderCentralSkillsView();
 
     expect(screen.queryByTestId("batch-delete-central-skills")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("batch-install-central-skills")).not.toBeInTheDocument();
 
     const selectionCheckboxes = screen.getAllByRole("checkbox");
     fireEvent.click(selectionCheckboxes[0]);
 
     expect(screen.getByTestId("batch-delete-central-skills")).toBeInTheDocument();
+    expect(screen.getByTestId("batch-install-central-skills")).toBeInTheDocument();
+  });
+
+  it("batch installs selected central skills to global platform targets", async () => {
+    mockBatchInstallSkills.mockResolvedValueOnce({
+      succeeded: [
+        { skill_id: "code-reviewer", agent_id: "codex", target_path: "/Users/test/.agents/skills/code-reviewer" },
+        { skill_id: "code-reviewer", agent_id: "claude-code", target_path: "/Users/test/.claude/skills/code-reviewer" },
+        { skill_id: "frontend-design", agent_id: "codex", target_path: "/Users/test/.agents/skills/frontend-design" },
+        { skill_id: "frontend-design", agent_id: "claude-code", target_path: "/Users/test/.claude/skills/frontend-design" },
+      ],
+      failed: [],
+    });
+    renderCentralSkillsView();
+
+    const selectionCheckboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(selectionCheckboxes[0]);
+    fireEvent.click(selectionCheckboxes[1]);
+    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /将 2 个技能安装到 2 个平台/i }));
+
+    await waitFor(() => {
+      expect(mockBatchInstallSkills).toHaveBeenCalledWith(
+        ["code-reviewer", "frontend-design"],
+        ["codex", "claude-code"],
+        "symlink",
+        null
+      );
+    });
+    expect(toast.success).toHaveBeenCalledWith("已将 2 个技能安装到 2 个平台");
+    expect(mockRescan).toHaveBeenCalled();
+  });
+
+  it("reports seven skills installed in three platforms instead of twenty-one installs", async () => {
+    const sevenSkills: SkillWithLinks[] = Array.from({ length: 7 }, (_, index) => {
+      const baseSkill = mockSkills[index % mockSkills.length]!;
+      const repository = index % 2 === 0 ? mockRepositories[1]! : mockRepositories[0]!;
+
+      return {
+        ...baseSkill,
+        id: `batch-skill-${index + 1}`,
+        name: `batch-skill-${index + 1}`,
+        file_path: `~/.skillsmanage/skills/batch-skill-${index + 1}/SKILL.md`,
+        canonical_path: `~/.skillsmanage/skills/batch-skill-${index + 1}`,
+        repository,
+      };
+    });
+    const extraAgent: AgentWithStatus = {
+      id: "windsurf",
+      display_name: "Windsurf",
+      category: "coding",
+      global_skills_dir: "/Users/test/.windsurf/skills/",
+      is_detected: true,
+      is_builtin: true,
+      is_enabled: true,
+    };
+    const expectedSkillIds = sevenSkills.map((skill) => skill.id);
+    const expectedAgentIds = ["codex", "claude-code", "windsurf"];
+    mockBatchInstallSkills.mockResolvedValueOnce({
+      succeeded: sevenSkills.flatMap((skill) =>
+        expectedAgentIds.map((agentId) => ({
+          skill_id: skill.id,
+          agent_id: agentId,
+          target_path: `/Users/test/${agentId}/${skill.id}`,
+        }))
+      ),
+      failed: [],
+    });
+    renderCentralSkillsView({
+      centralOverrides: { skills: sevenSkills },
+      platformOverrides: { agents: [...mockAgents, extraAgent] },
+    });
+
+    screen.getAllByRole("checkbox").forEach((checkbox) => {
+      fireEvent.click(checkbox);
+    });
+    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /将 7 个技能安装到 3 个平台/i }));
+
+    await waitFor(() => {
+      expect(mockBatchInstallSkills).toHaveBeenCalledWith(
+        expectedSkillIds,
+        expectedAgentIds,
+        "symlink",
+        null
+      );
+    });
+    expect(toast.success).toHaveBeenCalledWith("已将 7 个技能安装到 3 个平台");
+    expect(toast.success).not.toHaveBeenCalledWith(expect.stringContaining("21"));
+  });
+
+  it("uses skill and platform counts for partial batch install failures", async () => {
+    mockBatchInstallSkills.mockResolvedValueOnce({
+      succeeded: [
+        { skill_id: "code-reviewer", agent_id: "codex", target_path: "/Users/test/.agents/skills/code-reviewer" },
+        { skill_id: "frontend-design", agent_id: "codex", target_path: "/Users/test/.agents/skills/frontend-design" },
+        { skill_id: "frontend-design", agent_id: "claude-code", target_path: "/Users/test/.claude/skills/frontend-design" },
+      ],
+      failed: [
+        { skill_id: "code-reviewer", agent_id: "claude-code", error: "already exists" },
+      ],
+    });
+    renderCentralSkillsView();
+
+    const selectionCheckboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(selectionCheckboxes[0]);
+    fireEvent.click(selectionCheckboxes[1]);
+    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /将 2 个技能安装到 2 个平台/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "已请求将 2 个技能安装到 2 个平台，1 个目标失败"
+      );
+    });
+    expect(screen.getByText("已请求将 2 个技能安装到 2 个平台，1 个目标失败")).toBeInTheDocument();
+    expect(screen.queryByText(/4 install/i)).not.toBeInTheDocument();
+  });
+
+  it("batch installs selected central skills to a project target", async () => {
+    mockBatchInstallSkills.mockResolvedValueOnce({
+      succeeded: [
+        { skill_id: "code-reviewer", agent_id: "codex", target_path: "D:\\work\\demo\\.agents\\skills\\code-reviewer" },
+        { skill_id: "code-reviewer", agent_id: "claude-code", target_path: "D:\\work\\demo\\.claude\\skills\\code-reviewer" },
+      ],
+      failed: [],
+    });
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByText("项目目录"));
+    fireEvent.change(within(dialog).getByRole("textbox"), {
+      target: { value: "D:\\work\\demo" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /将 1 个技能安装到 2 个平台/i }));
+
+    await waitFor(() => {
+      expect(mockBatchInstallSkills).toHaveBeenCalledWith(
+        ["code-reviewer"],
+        ["codex", "claude-code"],
+        "copy",
+        "D:\\work\\demo"
+      );
+    });
   });
 
   it("previews and batch deletes selected central skills with selected platform copies", async () => {
