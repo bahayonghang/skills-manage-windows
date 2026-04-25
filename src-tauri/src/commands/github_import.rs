@@ -331,7 +331,7 @@ pub async fn fetch_github_skill_markdown(
     fetch_raw_text(&client, &download_url, auth.as_deref()).await
 }
 
-async fn preview_github_repo_import_impl(
+pub(crate) async fn preview_github_repo_import_impl(
     pool: &DbPool,
     repo_url: &str,
 ) -> Result<GitHubRepoPreview, String> {
@@ -355,7 +355,7 @@ async fn preview_github_repo_import_impl(
     })
 }
 
-async fn import_github_repo_skills_impl(
+pub(crate) async fn import_github_repo_skills_impl(
     pool: &DbPool,
     repo_url: &str,
     selections: Vec<GitHubSkillImportSelection>,

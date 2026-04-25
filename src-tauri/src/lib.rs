@@ -176,6 +176,9 @@ pub fn run() {
             commands::marketplace::get_skill_explanation,
             commands::marketplace::explain_skill_stream,
             commands::marketplace::refresh_skill_explanation,
+            commands::portable_state::export_skillport_state,
+            commands::portable_state::preview_skillport_state_import,
+            commands::portable_state::import_skillport_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
