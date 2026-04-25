@@ -127,6 +127,22 @@ pub struct SkillRepositoryAssignment {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SkillUpdateState {
+    pub skill_id: String,
+    pub source_type: String,
+    pub source_url: Option<String>,
+    #[serde(rename = "ref")]
+    pub ref_name: Option<String>,
+    pub source_path: Option<String>,
+    pub last_remote_hash: Option<String>,
+    pub latest_remote_hash: Option<String>,
+    pub last_checked_at: Option<String>,
+    pub last_updated_at: Option<String>,
+    pub status: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SkillTag {
     pub id: String,
     pub name: String,
@@ -382,6 +398,33 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_repository_members_repository_id
          ON skill_repository_members(repository_id)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_update_states (
+            skill_id           TEXT PRIMARY KEY,
+            source_type        TEXT NOT NULL,
+            source_url         TEXT,
+            ref_name           TEXT,
+            source_path        TEXT,
+            last_remote_hash   TEXT,
+            latest_remote_hash TEXT,
+            last_checked_at    TEXT,
+            last_updated_at    TEXT,
+            status             TEXT NOT NULL,
+            error              TEXT
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_update_states_status
+         ON skill_update_states(status)",
     )
     .execute(pool)
     .await
@@ -1598,6 +1641,11 @@ pub async fn get_skill_by_id(pool: &DbPool, skill_id: &str) -> Result<Option<Ski
 
 /// Delete a skill and all its installation records.
 pub async fn delete_skill(pool: &DbPool, skill_id: &str) -> Result<(), String> {
+    sqlx::query("DELETE FROM skill_update_states WHERE skill_id = ?")
+        .bind(skill_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     sqlx::query("DELETE FROM skill_repository_members WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
@@ -1764,6 +1812,10 @@ pub async fn delete_skills_not_in_scope(
 ) -> Result<(), String> {
     if found_skill_ids.is_empty() {
         // Nothing found — delete all installation records first, then all skills.
+        sqlx::query("DELETE FROM skill_update_states")
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
         sqlx::query("DELETE FROM skill_repository_members")
             .execute(pool)
             .await
@@ -1799,6 +1851,19 @@ pub async fn delete_skills_not_in_scope(
         repo_q = repo_q.bind(id.as_str());
     }
     repo_q.execute(pool).await.map_err(|e| e.to_string())?;
+
+    let update_state_sql = format!(
+        "DELETE FROM skill_update_states WHERE skill_id NOT IN ({})",
+        placeholders
+    );
+    let mut update_state_q = sqlx::query(&update_state_sql);
+    for id in found_skill_ids {
+        update_state_q = update_state_q.bind(id.as_str());
+    }
+    update_state_q
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let tag_sql = format!(
         "DELETE FROM skill_tag_links WHERE skill_id NOT IN ({})",
@@ -2417,6 +2482,74 @@ pub async fn get_skill_repositories_with_stats(
 
 // ─── Skill Tags ──────────────────────────────────────────────────────────────
 
+pub async fn get_skill_update_states(pool: &DbPool) -> Result<Vec<SkillUpdateState>, String> {
+    sqlx::query_as::<_, SkillUpdateState>(
+        "SELECT * FROM skill_update_states ORDER BY last_checked_at DESC, skill_id",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+pub async fn get_skill_update_states_for_skills(
+    pool: &DbPool,
+    skill_ids: &[String],
+) -> Result<Vec<SkillUpdateState>, String> {
+    if skill_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = skill_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT * FROM skill_update_states WHERE skill_id IN ({})",
+        placeholders
+    );
+    let mut query = sqlx::query_as::<_, SkillUpdateState>(&sql);
+    for skill_id in skill_ids {
+        query = query.bind(skill_id);
+    }
+
+    query.fetch_all(pool).await.map_err(|e| e.to_string())
+}
+
+pub async fn upsert_skill_update_state(
+    pool: &DbPool,
+    state: &SkillUpdateState,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO skill_update_states
+         (skill_id, source_type, source_url, ref_name, source_path, last_remote_hash,
+          latest_remote_hash, last_checked_at, last_updated_at, status, error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(skill_id) DO UPDATE SET
+           source_type        = excluded.source_type,
+           source_url         = excluded.source_url,
+           ref_name           = excluded.ref_name,
+           source_path        = excluded.source_path,
+           last_remote_hash   = COALESCE(excluded.last_remote_hash, skill_update_states.last_remote_hash),
+           latest_remote_hash = excluded.latest_remote_hash,
+           last_checked_at    = excluded.last_checked_at,
+           last_updated_at    = COALESCE(excluded.last_updated_at, skill_update_states.last_updated_at),
+           status             = excluded.status,
+           error              = excluded.error",
+    )
+    .bind(&state.skill_id)
+    .bind(&state.source_type)
+    .bind(&state.source_url)
+    .bind(&state.ref_name)
+    .bind(&state.source_path)
+    .bind(&state.last_remote_hash)
+    .bind(&state.latest_remote_hash)
+    .bind(&state.last_checked_at)
+    .bind(&state.last_updated_at)
+    .bind(&state.status)
+    .bind(&state.error)
+    .execute(pool)
+    .await
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
 pub async fn get_skill_tags(pool: &DbPool) -> Result<Vec<SkillTag>, String> {
     sqlx::query_as::<_, SkillTag>("SELECT * FROM skill_tags ORDER BY is_builtin DESC, name")
         .fetch_all(pool)
@@ -2977,6 +3110,7 @@ mod tests {
             "collection_skills",
             "skill_repositories",
             "skill_repository_members",
+            "skill_update_states",
             "skill_tags",
             "skill_tag_links",
             "skill_ai_tag_reviews",
@@ -3220,6 +3354,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_upsert_skill_update_state() {
+        let pool = setup_test_db().await;
+        let state = SkillUpdateState {
+            skill_id: "central-1".to_string(),
+            source_type: "github".to_string(),
+            source_url: Some("https://github.com/example/skills".to_string()),
+            ref_name: Some("main".to_string()),
+            source_path: Some("skills/central-1".to_string()),
+            last_remote_hash: Some("fnv1a64:old".to_string()),
+            latest_remote_hash: Some("fnv1a64:new".to_string()),
+            last_checked_at: Some("2026-04-25T00:00:00Z".to_string()),
+            last_updated_at: None,
+            status: "update_available".to_string(),
+            error: None,
+        };
+
+        upsert_skill_update_state(&pool, &state).await.unwrap();
+        let states = get_skill_update_states_for_skills(&pool, &["central-1".to_string()])
+            .await
+            .unwrap();
+
+        assert_eq!(states.len(), 1);
+        assert_eq!(states[0].skill_id, "central-1");
+        assert_eq!(states[0].status, "update_available");
+        assert_eq!(states[0].latest_remote_hash.as_deref(), Some("fnv1a64:new"));
+    }
+
+    #[tokio::test]
     async fn test_delete_skill() {
         let pool = setup_test_db().await;
         let skill = make_skill("to-delete", "Delete Me", false);
@@ -3267,6 +3429,24 @@ mod tests {
         )
         .await
         .unwrap();
+        upsert_skill_update_state(
+            &pool,
+            &SkillUpdateState {
+                skill_id: "to-delete".to_string(),
+                source_type: "github".to_string(),
+                source_url: Some("https://github.com/owner/repo".to_string()),
+                ref_name: Some("main".to_string()),
+                source_path: Some("skills/to-delete".to_string()),
+                last_remote_hash: Some("fnv1a64:old".to_string()),
+                latest_remote_hash: Some("fnv1a64:new".to_string()),
+                last_checked_at: Some(Utc::now().to_rfc3339()),
+                last_updated_at: None,
+                status: "update_available".to_string(),
+                error: None,
+            },
+        )
+        .await
+        .unwrap();
 
         let collection = create_collection(&pool, "Delete Collection", None)
             .await
@@ -3297,6 +3477,7 @@ mod tests {
 
         for table in [
             "skill_repository_members",
+            "skill_update_states",
             "skill_tag_links",
             "skill_ai_tag_reviews",
             "skill_explanations",

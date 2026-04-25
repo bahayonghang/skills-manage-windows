@@ -108,9 +108,9 @@ pub struct GitHubImportProgressPayload {
 }
 
 #[derive(Debug, Deserialize)]
-struct SkillFrontmatter {
-    name: String,
-    description: Option<String>,
+pub(crate) struct SkillFrontmatter {
+    pub(crate) name: String,
+    pub(crate) description: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -125,8 +125,8 @@ pub(crate) struct RemoteSkillCandidate {
 }
 
 #[derive(Debug, Clone, Default)]
-struct GitHubRepoSnapshot {
-    files: HashMap<String, Vec<u8>>,
+pub(crate) struct GitHubRepoSnapshot {
+    pub(crate) files: HashMap<String, Vec<u8>>,
 }
 
 const GITHUB_PAT_SETTING_KEY: &str = "github_pat";
@@ -744,7 +744,7 @@ pub(crate) async fn github_direct_auth_from_settings(
         .filter(|token| !token.is_empty()))
 }
 
-fn github_client() -> Result<reqwest::Client, String> {
+pub(crate) fn github_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .user_agent(crate::commands::APP_USER_AGENT)
         .build()
@@ -883,7 +883,7 @@ fn build_repo_skill_candidates_from_snapshot(
     build_repo_skill_candidates_from_snapshot_at_path(repo, snapshot, None)
 }
 
-fn build_repo_skill_candidates_from_snapshot_at_path(
+pub(crate) fn build_repo_skill_candidates_from_snapshot_at_path(
     repo: &GitHubRepoRef,
     snapshot: &GitHubRepoSnapshot,
     source_path: Option<&str>,
@@ -1149,7 +1149,7 @@ fn is_skill_md_repo_path(path: &str) -> bool {
     path.eq_ignore_ascii_case("SKILL.md") || path.to_ascii_lowercase().ends_with("/skill.md")
 }
 
-async fn download_repo_snapshot(
+pub(crate) async fn download_repo_snapshot(
     client: &reqwest::Client,
     repo: &GitHubRepoRef,
     auth_token: Option<&str>,
@@ -1718,7 +1718,7 @@ fn parse_rate_limit_reset_epoch(raw: &str) -> Option<String> {
         .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
 }
 
-fn parse_frontmatter(content: &str) -> Option<SkillFrontmatter> {
+pub(crate) fn parse_frontmatter(content: &str) -> Option<SkillFrontmatter> {
     let trimmed = content.trim();
     if !trimmed.starts_with("---") {
         return None;

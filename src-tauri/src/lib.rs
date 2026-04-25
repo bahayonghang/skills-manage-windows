@@ -125,6 +125,10 @@ pub fn run() {
             commands::central_metadata::get_pending_ai_tag_reviews,
             commands::central_metadata::accept_ai_tag_review,
             commands::central_metadata::skip_ai_tag_review,
+            // Central updates
+            commands::central_updates::get_central_skill_update_states,
+            commands::central_updates::check_central_skill_updates,
+            commands::central_updates::update_central_skills,
             // Collections
             commands::collections::create_collection,
             commands::collections::get_collections,
