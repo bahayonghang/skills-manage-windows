@@ -5,6 +5,7 @@ import {
   AiTagJob,
   AiTagProgressPayload,
   BatchInstallResult,
+  SkillDetail,
   SkillAiTagReview,
   SkillRepository,
   SkillRepositoryWithStats,
@@ -206,6 +207,7 @@ interface CentralSkillsState {
   aiTaggingAvailable: boolean;
   isLoading: boolean;
   isInstalling: boolean;
+  isDeleting: boolean;
   isMetadataUpdating: boolean;
   isSuggestingTags: boolean;
   /** Agent ID currently being toggled (null = idle). */
@@ -219,6 +221,8 @@ interface CentralSkillsState {
     agentIds: string[],
     method: string
   ) => Promise<BatchInstallResult>;
+  loadDeletePreview: (skillId: string) => Promise<SkillDetail>;
+  deleteCentralSkill: (skillId: string, removeAgentIds: string[]) => Promise<void>;
   togglePlatformLink: (skillId: string, agentId: string) => Promise<void>;
   createRepository: (name: string) => Promise<SkillRepository>;
   assignSkillsToRepository: (skillIds: string[], repositoryId: string) => Promise<void>;
@@ -244,6 +248,7 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
   aiTaggingAvailable: false,
   isLoading: false,
   isInstalling: false,
+  isDeleting: false,
   isMetadataUpdating: false,
   isSuggestingTags: false,
   togglingAgentId: null,
@@ -311,6 +316,41 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
       return result;
     } catch (err) {
       set({ error: String(err), isInstalling: false });
+      throw err;
+    }
+  },
+
+  loadDeletePreview: async (skillId) => {
+    if (!isTauriRuntime()) {
+      throw new Error("Desktop-only feature: Central skill deletion is available in the Tauri app.");
+    }
+
+    return invoke<SkillDetail>("get_skill_detail", { skillId });
+  },
+
+  deleteCentralSkill: async (skillId, removeAgentIds) => {
+    if (!isTauriRuntime()) {
+      throw new Error("Desktop-only feature: Central skill deletion is available in the Tauri app.");
+    }
+
+    set({ isDeleting: true, error: null });
+    try {
+      await invoke("delete_central_skill", { skillId, removeAgentIds });
+      const [skills, repositories, tags, reviews] = await Promise.all([
+        invoke<SkillWithLinks[]>("get_central_skills"),
+        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+        invoke<SkillTag[]>("get_skill_tags"),
+        invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+      ]);
+      set({
+        skills: skills ?? [],
+        repositories: repositories ?? [],
+        tags: tags ?? [],
+        aiTagReviews: reviews ?? [],
+        isDeleting: false,
+      });
+    } catch (err) {
+      set({ error: String(err), isDeleting: false });
       throw err;
     }
   },

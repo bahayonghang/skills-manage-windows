@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { CentralSkillsView } from "../pages/CentralSkillsView";
-import { AgentWithStatus, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
+import { AgentWithStatus, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
 
 // Mock stores
 vi.mock("../stores/centralSkillsStore", () => ({
@@ -201,8 +201,45 @@ const mockTags: SkillTag[] = [
   },
 ];
 
+const mockDeletePreview: SkillDetail = {
+  id: "frontend-design",
+  row_id: "frontend-design",
+  name: "frontend-design",
+  description: "Build distinctive, production-grade frontend interfaces",
+  file_path: "~/.skillsmanage/skills/frontend-design/SKILL.md",
+  dir_path: "~/.skillsmanage/skills/frontend-design",
+  canonical_path: "~/.skillsmanage/skills/frontend-design",
+  is_central: true,
+  source: "native",
+  scanned_at: "2026-04-09T00:00:00Z",
+  installations: [
+    {
+      skill_id: "frontend-design",
+      agent_id: "cursor",
+      installed_path: "/Users/test/.cursor/skills/frontend-design",
+      link_type: "copy",
+      symlink_target: undefined,
+      installed_at: "2026-04-11T00:00:00Z",
+    },
+    {
+      skill_id: "frontend-design",
+      agent_id: "claude-code",
+      installed_path: "/Users/test/.claude/skills/frontend-design",
+      link_type: "symlink",
+      symlink_target: "/Users/test/.skillsmanage/skills/frontend-design",
+      installed_at: "2026-04-10T00:00:00Z",
+    },
+  ],
+  collections: [],
+  repository: mockRepositories[1],
+  tags: mockTags,
+  is_source_unknown: false,
+};
+
 const mockLoadCentralSkills = vi.fn();
 const mockInstallSkill = vi.fn();
+const mockLoadDeletePreview = vi.fn();
+const mockDeleteCentralSkill = vi.fn();
 const mockTogglePlatformLink = vi.fn();
 const mockCreateRepository = vi.fn();
 const mockAssignSkillsToRepository = vi.fn();
@@ -243,12 +280,15 @@ function buildCentralStoreState(overrides = {}) {
     aiTaggingAvailable: true,
     isLoading: false,
     isInstalling: false,
+    isDeleting: false,
     isMetadataUpdating: false,
     isSuggestingTags: false,
     togglingAgentId: null,
     error: null,
     loadCentralSkills: mockLoadCentralSkills,
     installSkill: mockInstallSkill,
+    loadDeletePreview: mockLoadDeletePreview,
+    deleteCentralSkill: mockDeleteCentralSkill,
     togglePlatformLink: mockTogglePlatformLink,
     createRepository: mockCreateRepository,
     assignSkillsToRepository: mockAssignSkillsToRepository,
@@ -447,6 +487,35 @@ describe("CentralSkillsView", () => {
       name: /将 .* 安装到平台/i,
     });
     expect(installButtons).toHaveLength(2);
+  });
+
+  it("shows delete button for each central skill", () => {
+    renderCentralSkillsView();
+
+    expect(screen.getByTestId("delete-central-skill-frontend-design")).toBeInTheDocument();
+    expect(screen.getByTestId("delete-central-skill-code-reviewer")).toBeInTheDocument();
+  });
+
+  it("opens delete dialog and deletes selected platform copies", async () => {
+    mockLoadDeletePreview.mockResolvedValueOnce(mockDeletePreview);
+    mockDeleteCentralSkill.mockResolvedValueOnce(undefined);
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByTestId("delete-central-skill-frontend-design"));
+
+    await waitFor(() => {
+      expect(mockLoadDeletePreview).toHaveBeenCalledWith("frontend-design");
+    });
+    expect(screen.getByText("/Users/test/.cursor/skills/frontend-design")).toBeInTheDocument();
+    expect(screen.getByText(/Claude Code/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Cursor/i }));
+    fireEvent.click(screen.getByRole("button", { name: /\u5220\u9664\u4e2d\u592e\u6280\u80fd/i }));
+
+    await waitFor(() => {
+      expect(mockDeleteCentralSkill).toHaveBeenCalledWith("frontend-design", ["cursor"]);
+    });
+    expect(mockRescan).toHaveBeenCalled();
   });
 
   it("renders browser fixture skill card on the localhost validation surface without Tauri", async () => {

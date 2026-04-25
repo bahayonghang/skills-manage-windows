@@ -11,6 +11,7 @@ import {
   X,
   Loader2,
   Lock,
+  Trash2,
 } from "lucide-react";
 import { memo, useMemo, type MouseEventHandler, type Ref } from "react";
 import { useTranslation } from "react-i18next";
@@ -119,6 +120,7 @@ export interface UnifiedSkillCardProps {
   // ── actions (pass only the ones relevant to the context) ──
   onDetail?: MouseEventHandler<HTMLButtonElement>;
   onInstallTo?: () => void;
+  onDeleteFromCentral?: () => void;
   onInstallToCentral?: () => void;
   onInstallToPlatform?: () => void;
   onUninstallFromPlatform?: () => void;
@@ -151,6 +153,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     publisher,
     onDetail,
     onInstallTo,
+    onDeleteFromCentral,
     onInstallToCentral,
     onInstallToPlatform,
     onUninstallFromPlatform,
@@ -167,6 +170,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   const hasActions = !!(
     onDetail ||
     onInstallTo ||
+    onDeleteFromCentral ||
     onInstallToCentral ||
     onInstallToPlatform ||
     onUninstallFromPlatform ||
@@ -268,6 +272,19 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
                   >
                     <PackagePlus className="size-4" />
+                  </button>
+                )}
+
+                {onDeleteFromCentral && (
+                  <button
+                    onClick={onDeleteFromCentral}
+                    disabled={isLoading}
+                    title={t("central.deleteSkill")}
+                    aria-label={t("central.deleteSkillLabel", { name })}
+                    data-testid={`delete-central-skill-${name}`}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50 disabled:cursor-default"
+                  >
+                    <Trash2 className="size-4" />
                   </button>
                 )}
 

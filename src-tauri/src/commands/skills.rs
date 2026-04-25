@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tauri::State;
 
@@ -75,6 +75,13 @@ pub struct SkillDetail {
     pub tags: Vec<SkillTag>,
     pub source_path: Option<String>,
     pub is_source_unknown: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteCentralSkillResult {
+    pub removed_central_path: String,
+    pub removed_agent_ids: Vec<String>,
+    pub retained_agent_ids: Vec<String>,
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -414,6 +421,159 @@ fn append_missing_agents(linked_agents: &mut Vec<String>, extra_agents: &[String
     }
 }
 
+#[cfg(windows)]
+fn remove_symlink_path(path: &Path) -> Result<(), String> {
+    std::fs::remove_dir(path).map_err(|e| format!("Failed to remove symlink: {}", e))
+}
+
+#[cfg(not(windows))]
+fn remove_symlink_path(path: &Path) -> Result<(), String> {
+    std::fs::remove_file(path).map_err(|e| format!("Failed to remove symlink: {}", e))
+}
+
+fn skill_delete_dir(skill: &db::Skill) -> Result<PathBuf, String> {
+    skill
+        .canonical_path
+        .as_deref()
+        .map(PathBuf::from)
+        .or_else(|| Path::new(&skill.file_path).parent().map(Path::to_path_buf))
+        .ok_or_else(|| format!("Skill '{}' has no canonical directory", skill.id))
+}
+
+fn ensure_child_path(root: &Path, child: &Path, label: &str) -> Result<(), String> {
+    let root_cmp = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let child_cmp = child.canonicalize().unwrap_or_else(|_| child.to_path_buf());
+
+    if crate::paths::paths_equivalent(&root_cmp, &child_cmp) {
+        return Err(format!("Refusing to delete the Central Skills root for {}", label));
+    }
+
+    if !child_cmp.starts_with(&root_cmp) {
+        return Err(format!(
+            "Refusing to delete '{}' because it is outside Central Skills root '{}'",
+            child.display(),
+            root.display()
+        ));
+    }
+
+    Ok(())
+}
+
+fn remove_skill_dir(path: &Path) -> Result<(), String> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => remove_symlink_path(path),
+        Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(path)
+            .map_err(|e| format!("Failed to remove skill directory '{}': {}", path.display(), e)),
+        Ok(_) => Err(format!(
+            "Path '{}' is not a directory. Refusing to delete.",
+            path.display()
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("Failed to inspect '{}': {}", path.display(), error)),
+    }
+}
+
+fn remove_installation_path(installation: &db::SkillInstallation) -> Result<(), String> {
+    let path = Path::new(&installation.installed_path);
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => remove_symlink_path(path),
+        Ok(metadata) if metadata.is_dir() && installation.link_type == "copy" => {
+            std::fs::remove_dir_all(path).map_err(|e| {
+                format!(
+                    "Failed to remove copied skill directory '{}': {}",
+                    path.display(),
+                    e
+                )
+            })
+        }
+        Ok(metadata) if metadata.is_dir() => Err(format!(
+            "Path '{}' is not a managed copy. Refusing to delete.",
+            path.display()
+        )),
+        Ok(_) => Err(format!(
+            "Path '{}' is not a directory or symlink. Refusing to delete.",
+            path.display()
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("Failed to inspect '{}': {}", path.display(), error)),
+    }
+}
+
+pub async fn delete_central_skill_impl(
+    pool: &DbPool,
+    skill_id: &str,
+    remove_agent_ids: &[String],
+) -> Result<DeleteCentralSkillResult, String> {
+    let skill = db::get_skill_by_id(pool, skill_id)
+        .await?
+        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+    if !skill.is_central {
+        return Err(format!("Skill '{}' is not a Central skill", skill_id));
+    }
+
+    let central = db::get_agent_by_id(pool, "central")
+        .await?
+        .ok_or_else(|| "Central agent not found in database".to_string())?;
+    let central_root = PathBuf::from(&central.global_skills_dir);
+    let central_skill_dir = skill_delete_dir(&skill)?;
+    ensure_child_path(&central_root, &central_skill_dir, skill_id)?;
+
+    let remove_agent_set: HashSet<String> = remove_agent_ids.iter().cloned().collect();
+    let installations = db::get_skill_installations(pool, skill_id).await?;
+    for agent_id in &remove_agent_set {
+        let installation = installations
+            .iter()
+            .find(|item| item.agent_id == *agent_id)
+            .ok_or_else(|| format!("Skill '{}' is not installed for '{}'", skill_id, agent_id))?;
+        if installation.link_type != "copy" {
+            return Err(format!(
+                "Only copy installations can be selected for platform deletion: {}",
+                agent_id
+            ));
+        }
+    }
+
+    let mut removed_agent_ids = Vec::new();
+    let mut retained_agent_ids = Vec::new();
+    for installation in &installations {
+        match installation.link_type.as_str() {
+            "copy" if remove_agent_set.contains(&installation.agent_id) => {
+                remove_installation_path(installation)?;
+                removed_agent_ids.push(installation.agent_id.clone());
+            }
+            "copy" => retained_agent_ids.push(installation.agent_id.clone()),
+            "symlink" => {
+                remove_installation_path(installation)?;
+                removed_agent_ids.push(installation.agent_id.clone());
+            }
+            "native" => {
+                removed_agent_ids.push(installation.agent_id.clone());
+            }
+            _ => {
+                retained_agent_ids.push(installation.agent_id.clone());
+            }
+        }
+    }
+
+    remove_skill_dir(&central_skill_dir)?;
+    db::delete_skill(pool, skill_id).await?;
+
+    Ok(DeleteCentralSkillResult {
+        removed_central_path: central_skill_dir.to_string_lossy().into_owned(),
+        removed_agent_ids,
+        retained_agent_ids,
+    })
+}
+
+#[tauri::command]
+pub async fn delete_central_skill(
+    state: State<'_, AppState>,
+    skill_id: String,
+    remove_agent_ids: Vec<String>,
+) -> Result<DeleteCentralSkillResult, String> {
+    delete_central_skill_impl(&state.db, &skill_id, &remove_agent_ids).await
+}
+
 /// Tauri command: return detailed information about a skill, including all
 /// installation records across agents. Each installation includes `installed_at`
 /// (the `created_at` timestamp from the DB, renamed for frontend clarity).
@@ -493,12 +653,61 @@ mod tests {
     use chrono::Utc;
     use sqlx::SqlitePool;
     use std::fs;
+    use std::path::Path;
     use tempfile::TempDir;
 
     async fn setup_test_db() -> SqlitePool {
         let pool = SqlitePool::connect(":memory:").await.unwrap();
         db::init_database(&pool).await.unwrap();
         pool
+    }
+
+    async fn set_test_central_root(pool: &SqlitePool, root: &Path) {
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+            .bind(root.to_string_lossy().into_owned())
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    fn write_test_skill_dir(dir: &Path) {
+        fs::create_dir_all(dir).unwrap();
+        fs::write(
+            dir.join("SKILL.md"),
+            "---\nname: test-skill\ndescription: test skill\n---\n",
+        )
+        .unwrap();
+    }
+
+    fn make_central_skill_at(id: &str, name: &str, dir: &Path) -> Skill {
+        Skill {
+            id: id.to_string(),
+            name: name.to_string(),
+            description: Some(format!("Desc for {}", name)),
+            file_path: dir.join("SKILL.md").to_string_lossy().into_owned(),
+            canonical_path: Some(dir.to_string_lossy().into_owned()),
+            is_central: true,
+            source: Some("native".to_string()),
+            content: None,
+            scanned_at: Utc::now().to_rfc3339(),
+        }
+    }
+
+    fn make_installation_at(
+        skill_id: &str,
+        agent_id: &str,
+        dir: &Path,
+        link_type: &str,
+        symlink_target: Option<&Path>,
+    ) -> SkillInstallation {
+        SkillInstallation {
+            skill_id: skill_id.to_string(),
+            agent_id: agent_id.to_string(),
+            installed_path: dir.to_string_lossy().into_owned(),
+            link_type: link_type.to_string(),
+            symlink_target: symlink_target.map(|path| path.to_string_lossy().into_owned()),
+            created_at: Utc::now().to_rfc3339(),
+        }
     }
 
     fn make_skill(id: &str, name: &str, is_central: bool) -> Skill {
@@ -705,6 +914,126 @@ mod tests {
     }
 
     // ── get_skill_detail ──────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_delete_central_skill_rejects_non_central_skill() {
+        let pool = setup_test_db().await;
+        let skill = make_skill("plain-skill", "Plain Skill", false);
+        db::upsert_skill(&pool, &skill).await.unwrap();
+
+        let error = delete_central_skill_impl(&pool, "plain-skill", &[])
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("is not a Central skill"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_central_skill_rejects_path_outside_central_root() {
+        let pool = setup_test_db().await;
+        let temp = TempDir::new().unwrap();
+        let central_root = temp.path().join("central");
+        let outside_dir = temp.path().join("outside").join("outside-skill");
+        fs::create_dir_all(&central_root).unwrap();
+        write_test_skill_dir(&outside_dir);
+        set_test_central_root(&pool, &central_root).await;
+
+        let skill = make_central_skill_at("outside-skill", "Outside Skill", &outside_dir);
+        db::upsert_skill(&pool, &skill).await.unwrap();
+
+        let error = delete_central_skill_impl(&pool, "outside-skill", &[])
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("outside Central Skills root"));
+        assert!(outside_dir.exists());
+        assert!(
+            db::get_skill_by_id(&pool, "outside-skill")
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delete_central_skill_removes_selected_copy_and_retains_unselected_copy() {
+        let pool = setup_test_db().await;
+        let temp = TempDir::new().unwrap();
+        let central_root = temp.path().join("central");
+        let central_dir = central_root.join("central-delete");
+        let removed_copy_dir = temp.path().join("cursor").join("central-delete");
+        let retained_copy_dir = temp.path().join("claude").join("central-delete");
+        let missing_symlink_path = temp.path().join("codex").join("central-delete");
+        fs::create_dir_all(&central_root).unwrap();
+        write_test_skill_dir(&central_dir);
+        write_test_skill_dir(&removed_copy_dir);
+        write_test_skill_dir(&retained_copy_dir);
+        set_test_central_root(&pool, &central_root).await;
+
+        let skill = make_central_skill_at("central-delete", "Central Delete", &central_dir);
+        db::upsert_skill(&pool, &skill).await.unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_installation_at("central-delete", "cursor", &removed_copy_dir, "copy", None),
+        )
+        .await
+        .unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_installation_at(
+                "central-delete",
+                "claude-code",
+                &retained_copy_dir,
+                "copy",
+                None,
+            ),
+        )
+        .await
+        .unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_installation_at(
+                "central-delete",
+                "codex",
+                &missing_symlink_path,
+                "symlink",
+                Some(&central_dir),
+            ),
+        )
+        .await
+        .unwrap();
+
+        let result = delete_central_skill_impl(&pool, "central-delete", &["cursor".to_string()])
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result.removed_central_path,
+            central_dir.to_string_lossy().into_owned()
+        );
+        let mut removed_agent_ids = result.removed_agent_ids;
+        removed_agent_ids.sort();
+        assert_eq!(
+            removed_agent_ids,
+            vec!["codex".to_string(), "cursor".to_string()]
+        );
+        assert_eq!(result.retained_agent_ids, vec!["claude-code".to_string()]);
+        assert!(!central_dir.exists());
+        assert!(!removed_copy_dir.exists());
+        assert!(retained_copy_dir.exists());
+        assert!(
+            db::get_skill_by_id(&pool, "central-delete")
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            db::get_skill_installations(&pool, "central-delete")
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     #[tokio::test]
     async fn test_get_skill_detail_returns_installations() {

@@ -10,9 +10,10 @@ import { useSkillStore } from "@/stores/skillStore";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { InstallDialog } from "@/components/central/InstallDialog";
+import { DeleteCentralSkillDialog } from "@/components/central/DeleteCentralSkillDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AgentWithStatus, AiTagJob, SkillAiTagReview, ScannedSkill, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
+import { AgentWithStatus, AiTagJob, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
 import { markAppPerformance } from "@/lib/performance";
 import { cn } from "@/lib/utils";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
@@ -89,6 +90,12 @@ async function noopImportGitHubRepoSkills() {
 }
 
 async function noopGetSkillsByAgent(_agentId: string): Promise<void> {}
+
+async function noopLoadDeletePreview(): Promise<SkillDetail> {
+  throw new Error("Central skill deletion is unavailable");
+}
+
+async function noopDeleteCentralSkill(): Promise<void> {}
 
 async function noopUnlisten() {
   return () => {};
@@ -196,6 +203,8 @@ export function CentralSkillsView() {
   const isLoading = shouldUseBrowserFixtures ? false : rawIsLoading ?? false;
   const loadCentralSkills = rawLoadCentralSkills ?? noopAsync;
   const installSkill = useCentralSkillsStore((state) => state.installSkill) ?? noopInstallSkill;
+  const loadDeletePreview = useCentralSkillsStore((state) => state.loadDeletePreview) ?? noopLoadDeletePreview;
+  const deleteCentralSkill = useCentralSkillsStore((state) => state.deleteCentralSkill) ?? noopDeleteCentralSkill;
   const togglePlatformLink = useCentralSkillsStore((state) => state.togglePlatformLink) ?? noopAsync;
   const createTag = useCentralSkillsStore((state) => state.createTag);
   const assignSkillTags = useCentralSkillsStore((state) => state.assignSkillTags);
@@ -207,6 +216,7 @@ export function CentralSkillsView() {
     useCentralSkillsStore((state) => state.subscribeAiTagProgress) ?? noopUnlisten;
   const isMetadataUpdating = useCentralSkillsStore((state) => state.isMetadataUpdating) ?? false;
   const isSuggestingTags = useCentralSkillsStore((state) => state.isSuggestingTags) ?? false;
+  const isDeleting = useCentralSkillsStore((state) => state.isDeleting) ?? false;
   const togglingAgentId = useCentralSkillsStore((state) => state.togglingAgentId);
 
   // Keep the platform sidebar counts in sync after install.
@@ -237,7 +247,13 @@ export function CentralSkillsView() {
   const [manualSelectedTagIds, setManualSelectedTagIds] = useState<string[]>([]);
   const [installTargetSkill, setInstallTargetSkill] =
     useState<SkillWithLinks | null>(null);
+  const [deleteTargetSkill, setDeleteTargetSkill] =
+    useState<SkillWithLinks | null>(null);
+  const [deletePreview, setDeletePreview] = useState<SkillDetail | null>(null);
+  const [isDeletePreviewLoading, setIsDeletePreviewLoading] = useState(false);
+  const [deletePreviewError, setDeletePreviewError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isGitHubImportOpen, setIsGitHubImportOpen] = useState(false);
@@ -394,6 +410,34 @@ export function CentralSkillsView() {
     setIsDialogOpen(true);
   }
 
+  function handleDeleteDialogOpenChange(open: boolean) {
+    setIsDeleteDialogOpen(open);
+    if (!open) {
+      setDeleteTargetSkill(null);
+      setDeletePreview(null);
+      setDeletePreviewError(null);
+      setIsDeletePreviewLoading(false);
+    }
+  }
+
+  async function handleDeleteClick(skill: SkillWithLinks) {
+    setDeleteTargetSkill(skill);
+    setDeletePreview(null);
+    setDeletePreviewError(null);
+    setIsDeleteDialogOpen(true);
+    setIsDeletePreviewLoading(true);
+    try {
+      const preview = await loadDeletePreview(skill.id);
+      setDeletePreview(preview);
+    } catch (err) {
+      const message = String(err);
+      setDeletePreviewError(message);
+      toast.error(t("central.deletePreviewError", { error: message }));
+    } finally {
+      setIsDeletePreviewLoading(false);
+    }
+  }
+
   const sortFieldOptions: Array<{ value: SortField; label: string }> = [
     { value: "name", label: t("central.sortByName") },
     { value: "createdAt", label: t("central.sortByCreatedAt") },
@@ -434,6 +478,20 @@ export function CentralSkillsView() {
       }
     } catch (err) {
       toast.error(t("central.installError", { error: String(err) }));
+    }
+  }
+
+  async function handleDeleteCentralSkill(skillId: string, removeAgentIds: string[]) {
+    try {
+      await deleteCentralSkill(skillId, removeAgentIds);
+      await refreshCounts();
+      toast.success(t("central.deleteSkillSuccess", { name: deleteTargetSkill?.name ?? skillId }));
+      handleDeleteDialogOpenChange(false);
+    } catch (err) {
+      const message = String(err);
+      setDeletePreviewError(message);
+      toast.error(t("central.deleteSkillError", { error: message }));
+      throw err;
     }
   }
 
@@ -622,6 +680,7 @@ export function CentralSkillsView() {
         publisher={skill.repository?.name}
         onDetail={() => handleOpenDrawer(skill.id)}
         onInstallTo={() => handleInstallClick(skill)}
+        onDeleteFromCentral={() => void handleDeleteClick(skill)}
         detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
         className="h-[132px]"
       />
@@ -642,6 +701,7 @@ export function CentralSkillsView() {
         publisher={skill.repository?.name}
         onDetail={() => handleOpenDrawer(skill.id)}
         onInstallTo={() => handleInstallClick(skill)}
+        onDeleteFromCentral={() => void handleDeleteClick(skill)}
         detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
         platformIcons={{
           agents: availableInstallAgents,
@@ -1192,6 +1252,18 @@ export function CentralSkillsView() {
         skill={installTargetSkill}
         agents={availableInstallAgents}
         onInstall={handleInstall}
+      />
+
+      <DeleteCentralSkillDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={handleDeleteDialogOpenChange}
+        skill={deleteTargetSkill}
+        detail={deletePreview}
+        agents={agents}
+        isPreviewLoading={isDeletePreviewLoading}
+        isDeleting={isDeleting}
+        error={deletePreviewError}
+        onConfirm={handleDeleteCentralSkill}
       />
 
       <SkillDetailDrawer

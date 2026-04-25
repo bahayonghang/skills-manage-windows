@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { AgentWithStatus, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
+import { AgentWithStatus, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
 import * as tauriBridge from "@/lib/tauri";
 
 // Mock Tauri core before importing the store
@@ -97,6 +97,33 @@ const mockTags: SkillTag[] = [
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
+const mockDeletePreview: SkillDetail = {
+  id: "frontend-design",
+  row_id: "frontend-design",
+  name: "frontend-design",
+  description: "Build distinctive frontend UIs",
+  file_path: "~/.skillsmanage/skills/frontend-design/SKILL.md",
+  dir_path: "~/.skillsmanage/skills/frontend-design",
+  canonical_path: "~/.skillsmanage/skills/frontend-design",
+  is_central: true,
+  source: "native",
+  scanned_at: "2026-04-09T00:00:00Z",
+  installations: [
+    {
+      skill_id: "frontend-design",
+      agent_id: "cursor",
+      installed_path: "~/.cursor/skills/frontend-design",
+      link_type: "copy",
+      symlink_target: undefined,
+      installed_at: "2026-04-10T00:00:00Z",
+    },
+  ],
+  collections: [],
+  repository: mockRepositories[0],
+  tags: mockTags,
+  is_source_unknown: false,
+};
+
 describe("centralSkillsStore", () => {
   beforeEach(() => {
     useCentralSkillsStore.setState({
@@ -118,6 +145,7 @@ describe("centralSkillsStore", () => {
       aiTaggingAvailable: false,
       isLoading: false,
       isInstalling: false,
+      isDeleting: false,
       isMetadataUpdating: false,
       isSuggestingTags: false,
       togglingAgentId: null,
@@ -139,6 +167,7 @@ describe("centralSkillsStore", () => {
     expect(state.aiTaggingAvailable).toBe(false);
     expect(state.isLoading).toBe(false);
     expect(state.isInstalling).toBe(false);
+    expect(state.isDeleting).toBe(false);
     expect(state.isMetadataUpdating).toBe(false);
     expect(state.isSuggestingTags).toBe(false);
     expect(state.togglingAgentId).toBeNull();
@@ -225,6 +254,56 @@ describe("centralSkillsStore", () => {
   });
 
   // ── installSkill ──────────────────────────────────────────────────────────
+
+  it("loads delete preview from skill detail", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(mockDeletePreview);
+
+    const preview = await useCentralSkillsStore
+      .getState()
+      .loadDeletePreview("frontend-design");
+
+    expect(preview).toEqual(mockDeletePreview);
+    expect(invoke).toHaveBeenCalledWith("get_skill_detail", {
+      skillId: "frontend-design",
+    });
+  });
+
+  it("deletes a central skill and refreshes central metadata", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([mockSkills[1]])
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce([]);
+
+    await useCentralSkillsStore
+      .getState()
+      .deleteCentralSkill("frontend-design", ["cursor"]);
+
+    expect(invoke).toHaveBeenCalledWith("delete_central_skill", {
+      skillId: "frontend-design",
+      removeAgentIds: ["cursor"],
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+    expect(invoke).toHaveBeenCalledWith("get_skill_tags");
+    expect(invoke).toHaveBeenCalledWith("get_pending_ai_tag_reviews");
+    expect(useCentralSkillsStore.getState().skills).toEqual([mockSkills[1]]);
+    expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
+  });
+
+  it("sets error and clears deleting state when central deletion fails", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("delete failed"));
+
+    await expect(
+      useCentralSkillsStore
+        .getState()
+        .deleteCentralSkill("frontend-design", [])
+    ).rejects.toThrow("delete failed");
+
+    expect(useCentralSkillsStore.getState().error).toContain("delete failed");
+    expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
+  });
 
   it("calls batch_install_to_agents then refreshes skills", async () => {
     const batchResult = { succeeded: ["cursor"], failed: [] };

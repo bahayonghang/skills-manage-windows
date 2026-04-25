@@ -1603,7 +1603,22 @@ pub async fn delete_skill(pool: &DbPool, skill_id: &str) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM collection_skills WHERE skill_id = ?")
+        .bind(skill_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     sqlx::query("DELETE FROM skill_tag_links WHERE skill_id = ?")
+        .bind(skill_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM skill_ai_tag_reviews WHERE skill_id = ?")
+        .bind(skill_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM skill_explanations WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
         .await
@@ -2965,6 +2980,7 @@ mod tests {
             "skill_tags",
             "skill_tag_links",
             "skill_ai_tag_reviews",
+            "skill_explanations",
             "scan_directories",
             "settings",
         ];
@@ -3209,9 +3225,92 @@ mod tests {
         let skill = make_skill("to-delete", "Delete Me", false);
         upsert_skill(&pool, &skill).await.unwrap();
 
+        let repository = create_or_update_skill_repository(
+            &pool,
+            Some("repo-delete-test"),
+            "Delete Test Repo",
+            "github",
+            Some("owner"),
+            Some("repo"),
+            Some("main"),
+            Some("https://example.com/owner/repo"),
+            false,
+        )
+        .await
+        .unwrap();
+        assign_skills_to_repository(
+            &pool,
+            &repository.id,
+            &["to-delete".to_string()],
+            Some("skills/to-delete"),
+        )
+        .await
+        .unwrap();
+
+        let tag = create_skill_tag(&pool, "Delete Tag", None, None)
+            .await
+            .unwrap();
+        assign_skill_tags(
+            &pool,
+            &["to-delete".to_string()],
+            std::slice::from_ref(&tag.id),
+            "manual",
+            Some(1.0),
+            Some("delete test"),
+        )
+        .await
+        .unwrap();
+        replace_pending_ai_tag_reviews(
+            &pool,
+            "to-delete",
+            &[(tag.id.clone(), 0.42, "review".to_string())],
+        )
+        .await
+        .unwrap();
+
+        let collection = create_collection(&pool, "Delete Collection", None)
+            .await
+            .unwrap();
+        add_skill_to_collection(&pool, &collection.id, "to-delete")
+            .await
+            .unwrap();
+        upsert_skill_installation(&pool, &make_installation("to-delete", "cursor", "copy"))
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO skill_explanations (skill_id, explanation, lang, model, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind("to-delete")
+        .bind("Explanation")
+        .bind("zh")
+        .bind("test-model")
+        .bind(Utc::now().to_rfc3339())
+        .bind(Utc::now().to_rfc3339())
+        .execute(&pool)
+        .await
+        .unwrap();
+
         delete_skill(&pool, "to-delete").await.unwrap();
         let result = get_skill_by_id(&pool, "to-delete").await.unwrap();
         assert!(result.is_none());
+
+        for table in [
+            "skill_repository_members",
+            "skill_tag_links",
+            "skill_ai_tag_reviews",
+            "skill_explanations",
+            "collection_skills",
+            "skill_installations",
+        ] {
+            let query = format!("SELECT COUNT(*) FROM {table} WHERE skill_id = ?");
+            let count = sqlx::query_scalar::<_, i64>(&query)
+                .bind("to-delete")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(count, 0, "{table} rows must be deleted");
+        }
     }
 
     // ── Skill Installations ───────────────────────────────────────────────────
