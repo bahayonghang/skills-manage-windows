@@ -130,6 +130,70 @@ struct GitHubRepoSnapshot {
 }
 
 const GITHUB_PAT_SETTING_KEY: &str = "github_pat";
+const NO_IMPORTABLE_SKILLS_ERROR: &str = "No importable skills found in this repository. Supported layouts include root SKILL.md, common skill directories such as skills/, .agents/skills/, .claude/skills/, direct repository subpaths, and bounded recursive SKILL.md discovery.";
+const RECURSIVE_DISCOVERY_MAX_DEPTH: usize = 5;
+const SKIP_DISCOVERY_DIRS: &[&str] = &[
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    "target",
+    "outputs",
+    "__pycache__",
+];
+const PRIORITY_SKILL_ROOTS: &[&str] = &[
+    ".",
+    "skills",
+    "skills/.curated",
+    "skills/.experimental",
+    "skills/.system",
+    ".agents/skills",
+    ".augment/skills",
+    ".bob/skills",
+    ".claude/skills",
+    ".cline/skills",
+    ".codebuddy/skills",
+    ".codex/skills",
+    ".commandcode/skills",
+    ".continue/skills",
+    ".cortex/skills",
+    ".crush/skills",
+    ".factory/skills",
+    ".github/skills",
+    ".goose/skills",
+    ".iflow/skills",
+    ".junie/skills",
+    ".kilocode/skills",
+    ".kiro/skills",
+    ".kode/skills",
+    ".mcpjam/skills",
+    ".mux/skills",
+    ".neovate/skills",
+    ".opencode/skills",
+    ".openhands/skills",
+    ".pi/skills",
+    ".qoder/skills",
+    ".qwen/skills",
+    ".roo/skills",
+    ".trae/skills",
+    ".vibe/skills",
+    ".windsurf/skills",
+    ".zencoder/skills",
+];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResolvedGitHubRepoSource {
+    pub(crate) repo: GitHubRepoRef,
+    pub(crate) source_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedGitHubSource {
+    owner: String,
+    repo: String,
+    branch: Option<String>,
+    source_path: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum GitHubAccessDenialKind {
@@ -272,18 +336,23 @@ async fn preview_github_repo_import_impl(
     repo_url: &str,
 ) -> Result<GitHubRepoPreview, String> {
     let auth = github_direct_auth_from_settings(pool).await?;
-    let repo = resolve_repo_ref(repo_url, auth.as_deref()).await?;
-    let candidates = fetch_repo_skill_candidates(&repo, auth.as_deref()).await?;
+    let resolved = resolve_repo_source(repo_url, auth.as_deref()).await?;
+    let candidates = fetch_repo_skill_candidates_from_source(
+        &resolved.repo,
+        resolved.source_path.as_deref(),
+        auth.as_deref(),
+    )
+    .await?;
     let skills = build_preview_skills(pool, &candidates).await?;
 
     if skills.is_empty() {
-        return Err(
-            "No importable skills found in this repository. Supported layouts are repo-root skill directories or a top-level skills/ directory."
-                .to_string(),
-        );
+        return Err(NO_IMPORTABLE_SKILLS_ERROR.to_string());
     }
 
-    Ok(GitHubRepoPreview { repo, skills })
+    Ok(GitHubRepoPreview {
+        repo: resolved.repo,
+        skills,
+    })
 }
 
 async fn import_github_repo_skills_impl(
@@ -306,15 +375,16 @@ async fn import_github_repo_skills_impl(
     );
 
     let auth = github_direct_auth_from_settings(pool).await?;
-    let repo = resolve_repo_ref(repo_url, auth.as_deref()).await?;
+    let resolved = resolve_repo_source(repo_url, auth.as_deref()).await?;
     let client = github_client()?;
-    let snapshot = download_repo_snapshot(&client, &repo, auth.as_deref()).await?;
-    let candidates = build_repo_skill_candidates_from_snapshot(&repo, &snapshot)?;
+    let snapshot = download_repo_snapshot(&client, &resolved.repo, auth.as_deref()).await?;
+    let candidates = build_repo_skill_candidates_from_snapshot_at_path(
+        &resolved.repo,
+        &snapshot,
+        resolved.source_path.as_deref(),
+    )?;
     if candidates.is_empty() {
-        return Err(
-            "No importable skills found in this repository. Supported layouts are repo-root skill directories or a top-level skills/ directory."
-                .to_string(),
-        );
+        return Err(NO_IMPORTABLE_SKILLS_ERROR.to_string());
     }
 
     if selections.is_empty() {
@@ -494,17 +564,20 @@ async fn import_github_repo_skills_impl(
             file_path: skill_md_path.to_string_lossy().into_owned(),
             canonical_path: Some(target_dir.to_string_lossy().into_owned()),
             is_central: true,
-            source: Some(format!("github:{}/{}", repo.owner, repo.repo)),
+            source: Some(format!(
+                "github:{}/{}",
+                resolved.repo.owner, resolved.repo.repo
+            )),
             content: None,
             scanned_at: Utc::now().to_rfc3339(),
         };
         db::upsert_skill(pool, &db_skill).await?;
         db::assign_github_repository_to_skill(
             pool,
-            &repo.owner,
-            &repo.repo,
-            &repo.branch,
-            &repo.normalized_url,
+            &resolved.repo.owner,
+            &resolved.repo.repo,
+            &resolved.repo.branch,
+            &resolved.repo.normalized_url,
             &op.final_skill_id,
             &op.candidate.source_path,
         )
@@ -534,7 +607,7 @@ async fn import_github_repo_skills_impl(
     );
 
     Ok(GitHubRepoImportResult {
-        repo,
+        repo: resolved.repo,
         imported_skills,
         skipped_skills,
     })
@@ -607,11 +680,13 @@ async fn build_preview_skills(
     Ok(skills)
 }
 
-pub(crate) async fn resolve_repo_ref(
+pub(crate) async fn resolve_repo_source(
     repo_url: &str,
     auth_token: Option<&str>,
-) -> Result<GitHubRepoRef, String> {
-    let (owner, repo) = parse_github_url(repo_url)?;
+) -> Result<ResolvedGitHubRepoSource, String> {
+    let parsed = parse_github_source(repo_url)?;
+    let owner = parsed.owner;
+    let repo = parsed.repo;
     let client = github_client()?;
     let response = send_github_request_with_fallback(
         &client,
@@ -647,12 +722,16 @@ pub(crate) async fn resolve_repo_ref(
         .filter(|value| !value.is_empty())
         .unwrap_or("main")
         .to_string();
+    let branch = parsed.branch.unwrap_or(branch);
 
-    Ok(GitHubRepoRef {
-        owner: owner.clone(),
-        repo: repo.clone(),
-        branch,
-        normalized_url: format!("https://github.com/{owner}/{repo}"),
+    Ok(ResolvedGitHubRepoSource {
+        repo: GitHubRepoRef {
+            owner: owner.clone(),
+            repo: repo.clone(),
+            branch,
+            normalized_url: format!("https://github.com/{owner}/{repo}"),
+        },
+        source_path: parsed.source_path,
     })
 }
 
@@ -672,27 +751,46 @@ fn github_client() -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
-fn parse_github_url(url: &str) -> Result<(String, String), String> {
+fn parse_github_source(url: &str) -> Result<ParsedGitHubSource, String> {
     let trimmed = url.trim();
-    let parsed =
-        reqwest::Url::parse(trimmed).map_err(|_| "Invalid GitHub repository URL.".to_string())?;
+    if trimmed.is_empty() {
+        return Err("Invalid GitHub repository URL.".to_string());
+    }
+    if has_raw_path_traversal(trimmed) {
+        return Err("Repository subpath traversal is not supported.".to_string());
+    }
+
+    let parse_target =
+        if trimmed.starts_with("github.com/") || trimmed.starts_with("www.github.com/") {
+            format!("https://{trimmed}")
+        } else if is_github_shorthand_source(trimmed) {
+            format!("https://github.com/{trimmed}")
+        } else {
+            trimmed.to_string()
+        };
+
+    let parsed = reqwest::Url::parse(&parse_target)
+        .map_err(|_| "Invalid GitHub repository URL.".to_string())?;
 
     if parsed.scheme() != "https" {
         return Err("Only https:// GitHub repository URLs are supported.".to_string());
     }
-    if parsed.host_str() != Some("github.com") {
+    let host = parsed.host_str().unwrap_or_default();
+    if host != "github.com" && host != "www.github.com" {
         return Err("Only github.com repository URLs are supported.".to_string());
     }
 
-    let mut segments = parsed
+    let segments = parsed
         .path_segments()
-        .ok_or_else(|| "Invalid GitHub repository URL.".to_string())?;
+        .ok_or_else(|| "Invalid GitHub repository URL.".to_string())?
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
     let owner = segments
-        .next()
+        .first()
         .filter(|segment| !segment.is_empty())
         .ok_or_else(|| "GitHub repository URL must include an owner.".to_string())?;
     let repo = segments
-        .next()
+        .get(1)
         .filter(|segment| !segment.is_empty())
         .ok_or_else(|| "GitHub repository URL must include a repository name.".to_string())?;
 
@@ -701,31 +799,100 @@ fn parse_github_url(url: &str) -> Result<(String, String), String> {
         return Err("GitHub repository URL is missing owner or repository.".to_string());
     }
 
-    Ok((owner.to_lowercase(), repo.to_lowercase()))
+    let (branch, source_segments) = match segments.get(2).copied() {
+        Some("tree") => {
+            let branch = segments
+                .get(3)
+                .filter(|segment| !segment.is_empty())
+                .ok_or_else(|| "GitHub tree URL must include a branch.".to_string())?;
+            (Some((*branch).to_string()), &segments[4..])
+        }
+        Some("blob") => {
+            return Err("GitHub blob URLs are not supported for repository import.".to_string());
+        }
+        Some(_) => (None, &segments[2..]),
+        None => (None, &segments[2..]),
+    };
+    let source_path = normalize_repo_subpath(source_segments)?;
+
+    Ok(ParsedGitHubSource {
+        owner: owner.to_lowercase(),
+        repo: repo.to_lowercase(),
+        branch,
+        source_path,
+    })
 }
 
-pub(crate) async fn fetch_repo_skill_candidates(
+fn is_github_shorthand_source(value: &str) -> bool {
+    let mut segments = value.split('/').filter(|segment| !segment.is_empty());
+    let Some(owner) = segments.next() else {
+        return false;
+    };
+    let Some(repo) = segments.next() else {
+        return false;
+    };
+
+    !owner.contains(':')
+        && !owner.contains('\\')
+        && !repo.contains(':')
+        && !repo.contains('\\')
+        && !owner.starts_with('.')
+        && !repo.starts_with('.')
+}
+
+fn has_raw_path_traversal(value: &str) -> bool {
+    let path_only = value
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(value)
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    path_only
+        .split('/')
+        .any(|segment| segment == ".." || segment == "%2e%2e")
+}
+
+fn normalize_repo_subpath(segments: &[&str]) -> Result<Option<String>, String> {
+    if segments.is_empty() {
+        return Ok(None);
+    }
+
+    let path = segments.join("/");
+    if !is_safe_repo_relative_path(&path) {
+        return Err(format!("Repository subpath '{}' is not supported.", path));
+    }
+
+    Ok(Some(path))
+}
+
+pub(crate) async fn fetch_repo_skill_candidates_from_source(
     repo: &GitHubRepoRef,
+    source_path: Option<&str>,
     auth_token: Option<&str>,
 ) -> Result<Vec<RemoteSkillCandidate>, String> {
     let client = github_client()?;
     let snapshot = download_repo_snapshot(&client, repo, auth_token).await?;
-    build_repo_skill_candidates_from_snapshot(repo, &snapshot)
+    build_repo_skill_candidates_from_snapshot_at_path(repo, &snapshot, source_path)
 }
 
+#[cfg(test)]
 fn build_repo_skill_candidates_from_snapshot(
     repo: &GitHubRepoRef,
     snapshot: &GitHubRepoSnapshot,
 ) -> Result<Vec<RemoteSkillCandidate>, String> {
+    build_repo_skill_candidates_from_snapshot_at_path(repo, snapshot, None)
+}
+
+fn build_repo_skill_candidates_from_snapshot_at_path(
+    repo: &GitHubRepoRef,
+    snapshot: &GitHubRepoSnapshot,
+    source_path: Option<&str>,
+) -> Result<Vec<RemoteSkillCandidate>, String> {
     let direct_endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
-    let mut manifests = snapshot
-        .files
-        .keys()
-        .filter_map(|path| classify_skill_manifest_path(path))
-        .collect::<Vec<_>>();
-    manifests.sort_by(|left, right| left.source_path.cmp(&right.source_path));
+    let manifests = discover_skill_manifests(snapshot, source_path)?;
 
     let mut candidates = Vec::with_capacity(manifests.len());
+    let mut seen_names = HashSet::new();
     for manifest in manifests {
         let raw = snapshot
             .files
@@ -743,6 +910,9 @@ fn build_repo_skill_candidates_from_snapshot(
                 )
             }
         })?;
+        if !seen_names.insert(frontmatter.name.clone()) {
+            continue;
+        }
 
         let skill_id = if manifest.source_path == "." {
             let repo_skill_id = sanitize_skill_id(&repo.repo)?;
@@ -780,46 +950,203 @@ struct SnapshotSkillManifest {
     skill_md_path: String,
 }
 
-fn classify_skill_manifest_path(path: &str) -> Option<SnapshotSkillManifest> {
-    let normalized = path.trim_matches('/');
-    if normalized.is_empty() {
-        return None;
+fn discover_skill_manifests(
+    snapshot: &GitHubRepoSnapshot,
+    source_path: Option<&str>,
+) -> Result<Vec<SnapshotSkillManifest>, String> {
+    let base_path = source_path
+        .map(normalize_repo_path)
+        .transpose()?
+        .unwrap_or_default();
+    let mut manifests = Vec::new();
+    let mut seen_source_paths = HashSet::new();
+
+    if let Some(manifest) = direct_skill_manifest(snapshot, &base_path) {
+        insert_manifest(&mut manifests, &mut seen_source_paths, manifest);
     }
 
+    for root in PRIORITY_SKILL_ROOTS {
+        let search_root = join_repo_path(&base_path, root)?;
+        for manifest in immediate_skill_manifests(snapshot, &search_root)? {
+            insert_manifest(&mut manifests, &mut seen_source_paths, manifest);
+        }
+    }
+
+    if manifests.is_empty() {
+        for manifest in recursive_skill_manifests(snapshot, &base_path)? {
+            insert_manifest(&mut manifests, &mut seen_source_paths, manifest);
+        }
+    }
+
+    Ok(manifests)
+}
+
+fn direct_skill_manifest(
+    snapshot: &GitHubRepoSnapshot,
+    base_path: &str,
+) -> Option<SnapshotSkillManifest> {
+    let skill_md_path = join_repo_path(base_path, "SKILL.md").ok()?;
+    snapshot
+        .files
+        .contains_key(&skill_md_path)
+        .then(|| manifest_from_skill_md_path(&skill_md_path))
+        .flatten()
+}
+
+fn immediate_skill_manifests(
+    snapshot: &GitHubRepoSnapshot,
+    search_root: &str,
+) -> Result<Vec<SnapshotSkillManifest>, String> {
+    let mut manifests = snapshot
+        .files
+        .keys()
+        .filter(|path| is_immediate_skill_manifest(path, search_root))
+        .filter_map(|path| manifest_from_skill_md_path(path))
+        .collect::<Vec<_>>();
+    manifests.sort_by(|left, right| left.source_path.cmp(&right.source_path));
+    Ok(manifests)
+}
+
+fn recursive_skill_manifests(
+    snapshot: &GitHubRepoSnapshot,
+    base_path: &str,
+) -> Result<Vec<SnapshotSkillManifest>, String> {
+    let mut manifests = snapshot
+        .files
+        .keys()
+        .filter(|path| is_recursive_skill_manifest(path, base_path))
+        .filter_map(|path| manifest_from_skill_md_path(path))
+        .collect::<Vec<_>>();
+    manifests.sort_by(|left, right| left.source_path.cmp(&right.source_path));
+    Ok(manifests)
+}
+
+fn insert_manifest(
+    manifests: &mut Vec<SnapshotSkillManifest>,
+    seen_source_paths: &mut HashSet<String>,
+    manifest: SnapshotSkillManifest,
+) {
+    if seen_source_paths.insert(manifest.source_path.clone()) {
+        manifests.push(manifest);
+    }
+}
+
+fn is_immediate_skill_manifest(path: &str, search_root: &str) -> bool {
+    if !is_skill_md_repo_path(path) {
+        return false;
+    }
+    if has_skipped_discovery_segment(path) {
+        return false;
+    }
+
+    let Some(source_path) = source_path_from_skill_md(path) else {
+        return false;
+    };
+    let source_segments = repo_path_segments(&source_path);
+    let root_segments = repo_path_segments(search_root);
+    source_segments.len() == root_segments.len() + 1 && source_segments.starts_with(&root_segments)
+}
+
+fn is_recursive_skill_manifest(path: &str, base_path: &str) -> bool {
+    if !is_skill_md_repo_path(path) {
+        return false;
+    }
+    if has_skipped_discovery_segment(path) {
+        return false;
+    }
+
+    let Some(source_path) = source_path_from_skill_md(path) else {
+        return false;
+    };
+    let source_segments = repo_path_segments(&source_path);
+    let base_segments = repo_path_segments(base_path);
+    source_segments.starts_with(&base_segments)
+        && source_segments.len().saturating_sub(base_segments.len())
+            <= RECURSIVE_DISCOVERY_MAX_DEPTH
+}
+
+fn manifest_from_skill_md_path(path: &str) -> Option<SnapshotSkillManifest> {
+    let normalized = normalize_repo_path(path).ok()?;
+    let source_path = source_path_from_skill_md(&normalized)?;
+    let skill_directory_name = if source_path == "." {
+        String::new()
+    } else {
+        source_path.rsplit('/').next()?.to_string()
+    };
+    let root_directory = if source_path == "." {
+        "/".to_string()
+    } else {
+        source_path
+            .rsplit_once('/')
+            .map(|(root, _)| {
+                if root.is_empty() {
+                    "/".to_string()
+                } else {
+                    root.to_string()
+                }
+            })
+            .unwrap_or_else(|| "/".to_string())
+    };
+
+    Some(SnapshotSkillManifest {
+        source_path,
+        root_directory,
+        skill_directory_name,
+        skill_md_path: normalized,
+    })
+}
+
+fn source_path_from_skill_md(path: &str) -> Option<String> {
+    let normalized = normalize_repo_path(path).ok()?;
     if normalized.eq_ignore_ascii_case("SKILL.md") {
-        return Some(SnapshotSkillManifest {
-            source_path: ".".to_string(),
-            root_directory: "/".to_string(),
-            skill_directory_name: String::new(),
-            skill_md_path: "SKILL.md".to_string(),
-        });
+        return Some(".".to_string());
     }
 
-    let parts = normalized.split('/').collect::<Vec<_>>();
-    let (skill_md, source_parts) = parts.split_last()?;
-    if !skill_md.eq_ignore_ascii_case("SKILL.md") {
-        return None;
-    }
+    let lower = normalized.to_ascii_lowercase();
+    lower
+        .strip_suffix("/skill.md")
+        .map(|_| normalized[..normalized.len() - "/SKILL.md".len()].to_string())
+}
 
-    match source_parts {
-        [skill_dir] if *skill_dir != ".github" && *skill_dir != "skills" => {
-            Some(SnapshotSkillManifest {
-                source_path: (*skill_dir).to_string(),
-                root_directory: "/".to_string(),
-                skill_directory_name: (*skill_dir).to_string(),
-                skill_md_path: normalized.to_string(),
-            })
+fn join_repo_path(base_path: &str, child: &str) -> Result<String, String> {
+    let mut parts = Vec::new();
+    for part in base_path.split('/').chain(child.split('/')) {
+        let trimmed = part.trim();
+        if trimmed.is_empty() || trimmed == "." {
+            continue;
         }
-        _ if source_parts.first() == Some(&"skills") && source_parts.len() >= 2 => {
-            Some(SnapshotSkillManifest {
-                source_path: source_parts.join("/"),
-                root_directory: source_parts[..source_parts.len() - 1].join("/"),
-                skill_directory_name: source_parts.last()?.to_string(),
-                skill_md_path: normalized.to_string(),
-            })
-        }
-        _ => None,
+        parts.push(trimmed);
     }
+    normalize_repo_path(&parts.join("/"))
+}
+
+fn normalize_repo_path(path: &str) -> Result<String, String> {
+    let normalized = path.trim().trim_matches('/').replace('\\', "/");
+    if normalized.is_empty() || normalized == "." {
+        return Ok(String::new());
+    }
+    if !is_safe_repo_relative_path(&normalized) {
+        return Err(format!("Repository path '{}' is not supported.", path));
+    }
+    Ok(normalized)
+}
+
+fn repo_path_segments(path: &str) -> Vec<&str> {
+    path.split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect()
+}
+
+fn has_skipped_discovery_segment(path: &str) -> bool {
+    repo_path_segments(path).iter().any(|segment| {
+        SKIP_DISCOVERY_DIRS
+            .iter()
+            .any(|skip| segment.eq_ignore_ascii_case(skip))
+    })
+}
+
+fn is_skill_md_repo_path(path: &str) -> bool {
+    path.eq_ignore_ascii_case("SKILL.md") || path.to_ascii_lowercase().ends_with("/skill.md")
 }
 
 async fn download_repo_snapshot(
@@ -1501,6 +1828,71 @@ mod tests {
         ])
     }
 
+    fn content_skills_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "content/skills/development-workflows/code-auditor/SKILL.md",
+                sample_frontmatter("code-auditor", "Audit code"),
+            ),
+            (
+                "content/skills/development-workflows/code-auditor/references/checklist.md",
+                "# checklist\n".to_string(),
+            ),
+            (
+                "content/skills/git-github-collaboration/git-commit/SKILL.md",
+                sample_frontmatter("git-commit", "Commit changes"),
+            ),
+            ("README.md", "# repo\n".to_string()),
+        ])
+    }
+
+    fn agent_path_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                ".agents/skills/universal-skill/SKILL.md",
+                sample_frontmatter("universal-skill", "Universal skill"),
+            ),
+            (
+                ".claude/skills/claude-skill/SKILL.md",
+                sample_frontmatter("claude-skill", "Claude skill"),
+            ),
+            (
+                ".codex/skills/codex-skill/SKILL.md",
+                sample_frontmatter("codex-skill", "Codex skill"),
+            ),
+        ])
+    }
+
+    fn recursive_fallback_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "packages/example/skill/SKILL.md",
+                sample_frontmatter("fallback-skill", "Fallback skill"),
+            ),
+            (
+                "node_modules/example/ignored/SKILL.md",
+                sample_frontmatter("ignored-node-module", "Ignored"),
+            ),
+            (
+                "target/example/ignored/SKILL.md",
+                sample_frontmatter("ignored-target", "Ignored"),
+            ),
+        ])
+    }
+
+    fn duplicate_name_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "skills/preferred/SKILL.md",
+                sample_frontmatter("duplicate-skill", "Preferred"),
+            ),
+            (
+                "packages/fallback/duplicate/SKILL.md",
+                sample_frontmatter("duplicate-skill", "Fallback"),
+            ),
+        ])
+    }
+
     fn repository_archive(files: &[(&str, &[u8])]) -> Vec<u8> {
         let encoder = GzEncoder::new(Vec::new(), Compression::default());
         let mut builder = tar::Builder::new(encoder);
@@ -1520,17 +1912,46 @@ mod tests {
     }
 
     #[test]
-    fn parse_github_url_normalizes_owner_and_repo() {
-        let (owner, repo) =
-            parse_github_url("https://github.com/Anthropics/Skills/").expect("parse");
-        assert_eq!(owner, "anthropics");
-        assert_eq!(repo, "skills");
+    fn parse_github_source_normalizes_owner_repo_and_subpath() {
+        let parsed = parse_github_source("https://github.com/Anthropics/Skills/content/skills/")
+            .expect("parse");
+        assert_eq!(parsed.owner, "anthropics");
+        assert_eq!(parsed.repo, "skills");
+        assert_eq!(parsed.branch, None);
+        assert_eq!(parsed.source_path.as_deref(), Some("content/skills"));
     }
 
     #[test]
-    fn parse_github_url_rejects_non_github_hosts() {
-        let error = parse_github_url("https://gitlab.com/example/repo").unwrap_err();
+    fn parse_github_source_accepts_shorthand_repo_subpaths() {
+        let parsed = parse_github_source("bahayonghang/my-claude-code-settings/content/skills")
+            .expect("parse");
+        assert_eq!(parsed.owner, "bahayonghang");
+        assert_eq!(parsed.repo, "my-claude-code-settings");
+        assert_eq!(parsed.source_path.as_deref(), Some("content/skills"));
+    }
+
+    #[test]
+    fn parse_github_source_accepts_tree_urls() {
+        let parsed = parse_github_source(
+            "https://github.com/bahayonghang/my-claude-code-settings/tree/main/content/skills",
+        )
+        .expect("parse");
+        assert_eq!(parsed.owner, "bahayonghang");
+        assert_eq!(parsed.repo, "my-claude-code-settings");
+        assert_eq!(parsed.branch.as_deref(), Some("main"));
+        assert_eq!(parsed.source_path.as_deref(), Some("content/skills"));
+    }
+
+    #[test]
+    fn parse_github_source_rejects_non_github_hosts() {
+        let error = parse_github_source("https://gitlab.com/example/repo").unwrap_err();
         assert!(error.contains("github.com"));
+    }
+
+    #[test]
+    fn parse_github_source_rejects_unsafe_subpaths() {
+        let error = parse_github_source("owner/repo/../escape").unwrap_err();
+        assert!(error.contains("not supported"));
     }
 
     #[test]
@@ -1974,6 +2395,128 @@ mod tests {
             .skills
             .iter()
             .any(|skill| skill.source_path == "skills/.system/skill-creator"));
+    }
+
+    #[test]
+    fn preview_content_skills_catalog_is_found_by_recursive_fallback() {
+        let repo = GitHubRepoRef {
+            owner: "bahayonghang".to_string(),
+            repo: "my-claude-code-settings".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/bahayonghang/my-claude-code-settings".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &content_skills_snapshot())
+                .expect("candidates");
+
+        assert!(candidates.iter().any(|candidate| {
+            candidate.source_path == "content/skills/development-workflows/code-auditor"
+                && candidate.skill_id == "code-auditor"
+                && candidate.root_directory == "content/skills/development-workflows"
+        }));
+        assert!(candidates.iter().any(|candidate| {
+            candidate.source_path == "content/skills/git-github-collaboration/git-commit"
+        }));
+    }
+
+    #[test]
+    fn preview_content_skills_subpath_discovers_catalog() {
+        let repo = GitHubRepoRef {
+            owner: "bahayonghang".to_string(),
+            repo: "my-claude-code-settings".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/bahayonghang/my-claude-code-settings".to_string(),
+        };
+
+        let candidates = build_repo_skill_candidates_from_snapshot_at_path(
+            &repo,
+            &content_skills_snapshot(),
+            Some("content/skills"),
+        )
+        .expect("candidates");
+
+        assert_eq!(candidates.len(), 2);
+        assert!(candidates
+            .iter()
+            .all(|candidate| candidate.source_path.starts_with("content/skills/")));
+    }
+
+    #[test]
+    fn preview_agent_specific_skill_roots_are_supported() {
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "agent-paths".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/agent-paths".to_string(),
+        };
+
+        let candidates = build_repo_skill_candidates_from_snapshot(&repo, &agent_path_snapshot())
+            .expect("candidates");
+
+        assert!(candidates
+            .iter()
+            .any(|candidate| candidate.source_path == ".agents/skills/universal-skill"));
+        assert!(candidates
+            .iter()
+            .any(|candidate| candidate.source_path == ".claude/skills/claude-skill"));
+        assert!(candidates
+            .iter()
+            .any(|candidate| candidate.source_path == ".codex/skills/codex-skill"));
+    }
+
+    #[test]
+    fn recursive_fallback_skips_large_generated_directories() {
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "fallback".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/fallback".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &recursive_fallback_snapshot())
+                .expect("candidates");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].source_path, "packages/example/skill");
+        assert_eq!(candidates[0].skill_id, "skill");
+    }
+
+    #[test]
+    fn duplicate_skill_names_keep_priority_manifest() {
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "duplicates".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/duplicates".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &duplicate_name_snapshot())
+                .expect("candidates");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].source_path, "skills/preferred");
+        assert_eq!(candidates[0].description.as_deref(), Some("Preferred"));
+    }
+
+    #[test]
+    fn nested_import_copy_is_limited_to_selected_skill_directory() {
+        let snapshot = content_skills_snapshot();
+        let files = collect_snapshot_source_files(
+            &snapshot,
+            "content/skills/development-workflows/code-auditor",
+        )
+        .expect("files");
+
+        assert!(files.iter().any(|file| file.relative_path == "SKILL.md"));
+        assert!(files
+            .iter()
+            .any(|file| file.relative_path == "references/checklist.md"));
+        assert!(!files
+            .iter()
+            .any(|file| file.repo_path.contains("git-commit")));
     }
 
     #[tokio::test]

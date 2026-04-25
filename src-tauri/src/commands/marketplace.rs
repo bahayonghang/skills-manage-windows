@@ -85,8 +85,13 @@ async fn fetch_github_skills(
     registry_id: &str,
 ) -> Result<Vec<MarketplaceSkill>, String> {
     let auth = github_import::github_direct_auth_from_settings(pool).await?;
-    let repo = github_import::resolve_repo_ref(url, auth.as_deref()).await?;
-    let candidates = github_import::fetch_repo_skill_candidates(&repo, auth.as_deref()).await?;
+    let resolved = github_import::resolve_repo_source(url, auth.as_deref()).await?;
+    let candidates = github_import::fetch_repo_skill_candidates_from_source(
+        &resolved.repo,
+        resolved.source_path.as_deref(),
+        auth.as_deref(),
+    )
+    .await?;
     Ok(marketplace_skills_from_candidates(registry_id, candidates))
 }
 
