@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Search, RefreshCw, Blocks, FolderOpen, Settings, ArrowUpDown, Tag, X, Wand2, AlertTriangle, Check, Eye, ListChecks, Plus } from "lucide-react";
+import { Search, RefreshCw, Blocks, FolderOpen, Settings, ArrowUpDown, Tag, X, Wand2, AlertTriangle, Check, Eye, ListChecks, Plus, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -13,7 +13,7 @@ import { InstallDialog } from "@/components/central/InstallDialog";
 import { DeleteCentralSkillDialog } from "@/components/central/DeleteCentralSkillDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AgentWithStatus, AiTagJob, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
+import { AgentWithStatus, AiTagJob, CentralSkillUpdateJob, CentralSkillUpdateState, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
 import { markAppPerformance } from "@/lib/performance";
 import { cn } from "@/lib/utils";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
@@ -53,6 +53,7 @@ const EMPTY_REPOSITORIES: SkillRepositoryWithStats[] = [];
 const EMPTY_TAGS: SkillTag[] = [];
 const EMPTY_AI_TAG_REVIEWS: SkillAiTagReview[] = [];
 const EMPTY_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {};
+const EMPTY_UPDATE_STATUSES: Record<string, CentralSkillUpdateState> = {};
 const IDLE_AI_TAG_JOB: AiTagJob = {
   jobId: null,
   status: "idle",
@@ -61,6 +62,16 @@ const IDLE_AI_TAG_JOB: AiTagJob = {
   succeeded: 0,
   failed: 0,
   lowConfidenceCount: 0,
+  items: {},
+};
+const IDLE_UPDATE_JOB: CentralSkillUpdateJob = {
+  phase: null,
+  status: "idle",
+  total: 0,
+  completed: 0,
+  succeeded: 0,
+  failed: 0,
+  skipped: 0,
   items: {},
 };
 const EMPTY_GITHUB_IMPORT_STATE = {
@@ -99,6 +110,19 @@ async function noopDeleteCentralSkill(): Promise<void> {}
 
 async function noopUnlisten() {
   return () => {};
+}
+
+async function noopCheckUpdates(): Promise<CentralSkillUpdateState[]> {
+  return [];
+}
+
+async function noopUpdateSkills() {
+  return {
+    succeeded: [],
+    failed: [],
+    skipped: [],
+    states: [],
+  };
 }
 
 function noopResetGitHubImport() {}
@@ -180,6 +204,8 @@ export function CentralSkillsView() {
   const rawTags = useCentralSkillsStore((state) => state.tags);
   const rawAiTagReviews = useCentralSkillsStore((state) => state.aiTagReviews);
   const rawAiTagJob = useCentralSkillsStore((state) => state.aiTagJob);
+  const rawUpdateStatuses = useCentralSkillsStore((state) => state.updateStatuses);
+  const rawUpdateJob = useCentralSkillsStore((state) => state.updateJob);
   const rawAiTaggingAvailable = useCentralSkillsStore((state) => state.aiTaggingAvailable);
   const rawIsLoading = useCentralSkillsStore((state) => state.isLoading);
   const rawLoadCentralSkills = useCentralSkillsStore(
@@ -196,6 +222,8 @@ export function CentralSkillsView() {
   const tags = rawTags ?? EMPTY_TAGS;
   const aiTagReviews = rawAiTagReviews ?? EMPTY_AI_TAG_REVIEWS;
   const aiTagJob = rawAiTagJob ?? IDLE_AI_TAG_JOB;
+  const updateStatuses = rawUpdateStatuses ?? EMPTY_UPDATE_STATUSES;
+  const updateJob = rawUpdateJob ?? IDLE_UPDATE_JOB;
   const aiTaggingAvailable = rawAiTaggingAvailable ?? false;
   const centralSkillsDir = formatPathForDisplay(
     agents.find((agent) => agent.id === "central")?.global_skills_dir ?? t("central.path")
@@ -212,10 +240,16 @@ export function CentralSkillsView() {
   const cancelAiTagJob = useCentralSkillsStore((state) => state.cancelAiTagJob);
   const acceptAiTagReview = useCentralSkillsStore((state) => state.acceptAiTagReview);
   const skipAiTagReview = useCentralSkillsStore((state) => state.skipAiTagReview);
+  const checkSkillUpdates = useCentralSkillsStore((state) => state.checkSkillUpdates) ?? noopCheckUpdates;
+  const updateSkills = useCentralSkillsStore((state) => state.updateSkills) ?? noopUpdateSkills;
   const subscribeAiTagProgress =
     useCentralSkillsStore((state) => state.subscribeAiTagProgress) ?? noopUnlisten;
+  const subscribeUpdateProgress =
+    useCentralSkillsStore((state) => state.subscribeUpdateProgress) ?? noopUnlisten;
   const isMetadataUpdating = useCentralSkillsStore((state) => state.isMetadataUpdating) ?? false;
   const isSuggestingTags = useCentralSkillsStore((state) => state.isSuggestingTags) ?? false;
+  const isCheckingUpdates = useCentralSkillsStore((state) => state.isCheckingUpdates) ?? false;
+  const updatingSkillIds = useCentralSkillsStore((state) => state.updatingSkillIds) ?? [];
   const isDeleting = useCentralSkillsStore((state) => state.isDeleting) ?? false;
   const togglingAgentId = useCentralSkillsStore((state) => state.togglingAgentId);
 
@@ -286,6 +320,19 @@ export function CentralSkillsView() {
     () => new Set(aiTagReviews.map((review) => review.skill_id)),
     [aiTagReviews]
   );
+  const updateAvailableSkillIds = useMemo(
+    () =>
+      skills
+        .filter((skill) => updateStatuses[skill.id]?.status === "update_available")
+        .map((skill) => skill.id),
+    [skills, updateStatuses]
+  );
+  const selectedUpdatableSkillIds = useMemo(
+    () => selectedSkillIds.filter((skillId) => updateStatuses[skillId]?.status === "update_available"),
+    [selectedSkillIds, updateStatuses]
+  );
+  const updateTargetSkillIds =
+    selectedSkillIds.length > 0 ? selectedUpdatableSkillIds : updateAvailableSkillIds;
   const uncategorizedCount = useMemo(
     () =>
       skills.filter((skill) => {
@@ -338,6 +385,23 @@ export function CentralSkillsView() {
     };
   }, [subscribeAiTagProgress]);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    subscribeUpdateProgress().then((unsubscribe) => {
+      if (disposed) {
+        unsubscribe();
+        return;
+      }
+      unlisten = unsubscribe;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [subscribeUpdateProgress]);
+
   // Filter skills by search query.
   const filteredSkills = useMemo(() => {
     return searchableSkills
@@ -353,6 +417,9 @@ export function CentralSkillsView() {
             : repository?.id === repositoryFilter);
         const matchesTag =
           tagFilter === "all" ||
+          (tagFilter === "updates"
+            ? updateStatuses[skill.id]?.status === "update_available"
+            : false) ||
           (tagFilter === "ai-review"
             ? aiReviewSkillIds.has(skill.id)
             : false) ||
@@ -361,7 +428,7 @@ export function CentralSkillsView() {
             : skillTags.some((tag) => tag.id === tagFilter));
         return matchesRepository && matchesTag;
       });
-  }, [aiReviewSkillIds, normalizedSearchQuery, repositoryFilter, searchableSkills, tagFilter]);
+  }, [aiReviewSkillIds, normalizedSearchQuery, repositoryFilter, searchableSkills, tagFilter, updateStatuses]);
 
   // Sort filtered skills.
   const sortedSkills = useMemo(() => {
@@ -616,6 +683,35 @@ export function CentralSkillsView() {
     }
   }
 
+  async function handleCheckUpdates() {
+    try {
+      const states = await checkSkillUpdates();
+      const available = states.filter((state) => state.status === "update_available").length;
+      const unsupported = states.filter((state) => state.status === "unsupported").length;
+      const failed = states.filter((state) => state.status === "error").length;
+      toast.success(t("central.updateCheckFinished", { available, unsupported, failed }));
+    } catch (err) {
+      toast.error(t("central.updateCheckError", { error: String(err) }));
+    }
+  }
+
+  async function handleUpdateSkills(skillIds: string[]) {
+    if (skillIds.length === 0) return;
+    try {
+      const result = await updateSkills(skillIds);
+      await refreshCounts();
+      toast.success(
+        t("central.updateFinished", {
+          succeeded: result.succeeded.length,
+          failed: result.failed.length,
+          skipped: result.skipped.length,
+        })
+      );
+    } catch (err) {
+      toast.error(t("central.updateError", { error: String(err) }));
+    }
+  }
+
   async function handleGitHubPreview() {
     try {
       return await previewGitHubRepoImport(githubRepoUrl);
@@ -678,8 +774,17 @@ export function CentralSkillsView() {
         }}
         tags={(skill.tags ?? []).map((tag) => ({ key: tag.id, label: tag.name }))}
         publisher={skill.repository?.name}
+        updateStatus={
+          updateStatuses[skill.id]
+            ? {
+                ...updateStatuses[skill.id],
+                isUpdating: updatingSkillIds.includes(skill.id),
+              }
+            : undefined
+        }
         onDetail={() => handleOpenDrawer(skill.id)}
         onInstallTo={() => handleInstallClick(skill)}
+        onUpdateCentral={() => void handleUpdateSkills([skill.id])}
         onDeleteFromCentral={() => void handleDeleteClick(skill)}
         detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
         className="h-[132px]"
@@ -699,8 +804,17 @@ export function CentralSkillsView() {
         }}
         tags={(skill.tags ?? []).map((tag) => ({ key: tag.id, label: tag.name }))}
         publisher={skill.repository?.name}
+        updateStatus={
+          updateStatuses[skill.id]
+            ? {
+                ...updateStatuses[skill.id],
+                isUpdating: updatingSkillIds.includes(skill.id),
+              }
+            : undefined
+        }
         onDetail={() => handleOpenDrawer(skill.id)}
         onInstallTo={() => handleInstallClick(skill)}
+        onUpdateCentral={() => void handleUpdateSkills([skill.id])}
         onDeleteFromCentral={() => void handleDeleteClick(skill)}
         detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
         platformIcons={{
@@ -740,9 +854,31 @@ export function CentralSkillsView() {
             {centralSkillsDir}
           </p>
         </div>
-        <Button variant="outline" onClick={() => setIsGitHubImportOpen(true)}>
-          {t("marketplace.githubImportSecondaryCta")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleCheckUpdates}
+            disabled={isCheckingUpdates || updateJob.status === "running"}
+          >
+            <RefreshCw className={`size-3.5 ${isCheckingUpdates ? "animate-spin" : ""}`} />
+            {t("central.checkUpdates")}
+          </Button>
+          {updateAvailableSkillIds.length > 0 && (
+            <Button
+              variant="default"
+              onClick={() => void handleUpdateSkills(updateTargetSkillIds)}
+              disabled={updateTargetSkillIds.length === 0 || updatingSkillIds.length > 0}
+            >
+              <Download className="size-3.5" />
+              {selectedSkillIds.length > 0
+                ? t("central.updateSelected", { count: updateTargetSkillIds.length })
+                : t("central.updateAvailable", { count: updateTargetSkillIds.length })}
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setIsGitHubImportOpen(true)}>
+            {t("marketplace.githubImportSecondaryCta")}
+          </Button>
+        </div>
       </div>
 
       {/* Search bar */}
@@ -816,6 +952,7 @@ export function CentralSkillsView() {
               className="h-9 rounded-xl border border-border bg-background px-3 text-xs text-foreground"
             >
               <option value="all">{t("central.allTags")}</option>
+              <option value="updates">{t("central.updatesAvailableOnly")}</option>
               <option value="uncategorized">{t("central.uncategorizedOnly")}</option>
               <option value="ai-review">{t("central.aiReviewOnly")}</option>
               {tags.map((tag) => (
@@ -916,6 +1053,19 @@ export function CentralSkillsView() {
             >
               <span>{t("central.uncategorizedOnly")}</span>
               <span>{uncategorizedCount}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTagFilter("updates")}
+              className={cn(
+                "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors",
+                tagFilter === "updates"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
+              )}
+            >
+              <span>{t("central.updatesAvailableOnly")}</span>
+              <span>{updateAvailableSkillIds.length}</span>
             </button>
             <button
               type="button"
@@ -1241,6 +1391,39 @@ export function CentralSkillsView() {
           </div>
           {aiTagJob.error && (
             <p className="mt-2 text-xs text-destructive">{aiTagJob.error}</p>
+          )}
+        </div>
+      )}
+
+      {updateJob.status !== "idle" && (
+        <div className="sticky bottom-0 z-10 border-t border-border bg-background/95 px-6 py-3 shadow-lg backdrop-blur">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 font-medium text-foreground">
+              <Download className="size-3.5" />
+              <span>{t("central.updateProgressTitle")}</span>
+              {updateJob.currentSkillName && updateJob.status === "running" && (
+                <span className="text-muted-foreground">
+                  {t("central.updateCurrent", { name: updateJob.currentSkillName })}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
+              <span>{t("central.updateCompleted", { completed: updateJob.completed, total: updateJob.total })}</span>
+              <span>{t("central.updateSucceeded", { count: updateJob.succeeded })}</span>
+              <span>{t("central.updateSkipped", { count: updateJob.skipped })}</span>
+              <span>{t("central.updateFailed", { count: updateJob.failed })}</span>
+            </div>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{
+                width: `${updateJob.total > 0 ? Math.round((updateJob.completed / updateJob.total) * 100) : 0}%`,
+              }}
+            />
+          </div>
+          {updateJob.error && (
+            <p className="mt-2 text-xs text-destructive">{updateJob.error}</p>
           )}
         </div>
       )}

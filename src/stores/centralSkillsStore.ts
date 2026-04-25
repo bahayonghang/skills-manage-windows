@@ -5,6 +5,10 @@ import {
   AiTagJob,
   AiTagProgressPayload,
   BatchInstallResult,
+  CentralSkillUpdateJob,
+  CentralSkillUpdateProgressPayload,
+  CentralSkillUpdateResult,
+  CentralSkillUpdateState,
   SkillDetail,
   SkillAiTagReview,
   SkillRepository,
@@ -15,6 +19,7 @@ import {
 } from "@/types";
 
 const AI_TAG_PROGRESS_EVENT = "central://ai-tag-progress";
+const CENTRAL_UPDATE_PROGRESS_EVENT = "central://skill-update-progress";
 
 const BROWSER_UNKNOWN_REPOSITORY: SkillRepositoryWithStats = {
   id: "local-unknown",
@@ -111,6 +116,35 @@ function createIdleAiTagJob(): AiTagJob {
   };
 }
 
+function createIdleUpdateJob(): CentralSkillUpdateJob {
+  return {
+    phase: null,
+    status: "idle",
+    total: 0,
+    completed: 0,
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    items: {},
+  };
+}
+
+function createRunningUpdateJob(
+  phase: NonNullable<CentralSkillUpdateJob["phase"]>,
+  skillIds: string[]
+): CentralSkillUpdateJob {
+  return {
+    phase,
+    status: "running",
+    total: skillIds.length,
+    completed: 0,
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    items: Object.fromEntries(skillIds.map((skillId) => [skillId, "queued"])),
+  };
+}
+
 function createRunningAiTagJob(skillIds: string[]): AiTagJob {
   return {
     jobId: createLocalJobId(),
@@ -165,6 +199,60 @@ function mergeAiTagProgress(current: AiTagJob, payload: AiTagProgressPayload): A
   };
 }
 
+function mergeUpdateProgress(
+  current: CentralSkillUpdateJob,
+  payload: CentralSkillUpdateProgressPayload
+): CentralSkillUpdateJob {
+  const items = { ...current.items };
+  if (payload.skillId && payload.status === "running") {
+    items[payload.skillId] = "running";
+  }
+  if (payload.skillId && (payload.status === "up_to_date" || payload.status === "update_available")) {
+    items[payload.skillId] = "succeeded";
+  }
+  if (payload.skillId && payload.status === "unsupported") {
+    items[payload.skillId] = "skipped";
+  }
+  if (payload.skillId && payload.status === "error") {
+    items[payload.skillId] = "failed";
+  }
+
+  return {
+    ...current,
+    phase: payload.phase,
+    status:
+      payload.status === "completed"
+        ? payload.failed > 0
+          ? "failed"
+          : "completed"
+        : "running",
+    total: payload.total,
+    completed: payload.completed,
+    succeeded: payload.succeeded,
+    failed: payload.failed,
+    skipped: payload.skipped,
+    currentSkillName: payload.skillName ?? current.currentSkillName,
+    error: payload.error ?? current.error,
+    items,
+  };
+}
+
+function indexUpdateStates(
+  states: CentralSkillUpdateState[]
+): Record<string, CentralSkillUpdateState> {
+  return Object.fromEntries(states.map((state) => [state.skill_id, state]));
+}
+
+function mergeUpdateStates(
+  current: Record<string, CentralSkillUpdateState>,
+  states: CentralSkillUpdateState[]
+): Record<string, CentralSkillUpdateState> {
+  return {
+    ...current,
+    ...indexUpdateStates(states),
+  };
+}
+
 function summarizeAiTagResults(skillIds: string[], results: SkillTagSuggestionResult[]): AiTagJob {
   const items: AiTagJob["items"] = Object.fromEntries(
     skillIds.map((skillId) => [skillId, "failed"])
@@ -204,12 +292,16 @@ interface CentralSkillsState {
   tags: SkillTag[];
   aiTagReviews: SkillAiTagReview[];
   aiTagJob: AiTagJob;
+  updateStatuses: Record<string, CentralSkillUpdateState>;
+  updateJob: CentralSkillUpdateJob;
   aiTaggingAvailable: boolean;
   isLoading: boolean;
   isInstalling: boolean;
   isDeleting: boolean;
   isMetadataUpdating: boolean;
   isSuggestingTags: boolean;
+  isCheckingUpdates: boolean;
+  updatingSkillIds: string[];
   /** Agent ID currently being toggled (null = idle). */
   togglingAgentId: string | null;
   error: string | null;
@@ -229,11 +321,14 @@ interface CentralSkillsState {
   createTag: (name: string) => Promise<SkillTag>;
   assignSkillTags: (skillIds: string[], tagIds: string[]) => Promise<void>;
   bulkSuggestSkillTags: (skillIds: string[]) => Promise<SkillTagSuggestionResult[]>;
+  checkSkillUpdates: (skillIds?: string[]) => Promise<CentralSkillUpdateState[]>;
+  updateSkills: (skillIds: string[]) => Promise<CentralSkillUpdateResult>;
   cancelAiTagJob: () => Promise<void>;
   loadAiTagReviews: () => Promise<void>;
   acceptAiTagReview: (skillId: string, tagIds: string[]) => Promise<void>;
   skipAiTagReview: (skillId: string) => Promise<void>;
   subscribeAiTagProgress: () => Promise<() => void>;
+  subscribeUpdateProgress: () => Promise<() => void>;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -245,12 +340,16 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
   tags: [],
   aiTagReviews: [],
   aiTagJob: createIdleAiTagJob(),
+  updateStatuses: {},
+  updateJob: createIdleUpdateJob(),
   aiTaggingAvailable: false,
   isLoading: false,
   isInstalling: false,
   isDeleting: false,
   isMetadataUpdating: false,
   isSuggestingTags: false,
+  isCheckingUpdates: false,
+  updatingSkillIds: [],
   togglingAgentId: null,
   error: null,
 
@@ -267,18 +366,20 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
         repositories: [BROWSER_UNKNOWN_REPOSITORY],
         tags: BROWSER_TAGS,
         aiTagReviews: [],
+        updateStatuses: {},
         aiTaggingAvailable: false,
         isLoading: false,
       });
       return;
     }
     try {
-      const [skills, agents, repositories, tags, reviews, aiApiKey] = await Promise.all([
+      const [skills, agents, repositories, tags, reviews, updateStates, aiApiKey] = await Promise.all([
         invoke<SkillWithLinks[]>("get_central_skills"),
         invoke<AgentWithStatus[]>("get_agents"),
         invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
         invoke<SkillTag[]>("get_skill_tags"),
         invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
         Promise.resolve(invoke<string | null>("get_setting", { key: "ai_api_key" })).catch(() => null),
       ]);
       set({
@@ -287,6 +388,7 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
         repositories: repositories ?? [],
         tags: tags ?? [],
         aiTagReviews: reviews ?? [],
+        updateStatuses: indexUpdateStates(updateStates ?? []),
         aiTaggingAvailable: !!aiApiKey,
         isLoading: false,
       });
@@ -347,6 +449,9 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
         repositories: repositories ?? [],
         tags: tags ?? [],
         aiTagReviews: reviews ?? [],
+        updateStatuses: Object.fromEntries(
+          Object.entries(get().updateStatuses).filter(([id]) => id !== skillId)
+        ),
         isDeleting: false,
       });
     } catch (err) {
@@ -521,6 +626,102 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
     }
   },
 
+  checkSkillUpdates: async (skillIds) => {
+    if (!isTauriRuntime()) {
+      return [];
+    }
+
+    const targetIds = skillIds ?? get().skills.map((skill) => skill.id);
+    set({
+      isCheckingUpdates: true,
+      error: null,
+      updateJob: createRunningUpdateJob("checking", targetIds),
+    });
+    try {
+      const states = await invoke<CentralSkillUpdateState[]>("check_central_skill_updates", {
+        skillIds: skillIds ?? null,
+      });
+      set((state) => ({
+        updateStatuses: mergeUpdateStates(state.updateStatuses, states ?? []),
+        isCheckingUpdates: false,
+        updateJob:
+          state.updateJob.status === "running"
+            ? {
+                ...state.updateJob,
+                status: "completed",
+                completed: states?.length ?? state.updateJob.completed,
+              }
+            : state.updateJob,
+      }));
+      return states ?? [];
+    } catch (err) {
+      set((state) => ({
+        error: String(err),
+        isCheckingUpdates: false,
+        updateJob: {
+          ...state.updateJob,
+          status: "failed",
+          error: String(err),
+        },
+      }));
+      throw err;
+    }
+  },
+
+  updateSkills: async (skillIds) => {
+    if (skillIds.length === 0) {
+      return { succeeded: [], failed: [], skipped: [], states: [] };
+    }
+    if (!isTauriRuntime()) {
+      throw new Error("Desktop-only feature: Central skill updates are available in the Tauri app.");
+    }
+
+    set({
+      updatingSkillIds: skillIds,
+      error: null,
+      updateJob: createRunningUpdateJob("updating", skillIds),
+    });
+    try {
+      const result = await invoke<CentralSkillUpdateResult>("update_central_skills", {
+        skillIds,
+      });
+      const [skills, repositories, updateStates] = await Promise.all([
+        invoke<SkillWithLinks[]>("get_central_skills"),
+        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+      ]);
+      set((state) => ({
+        skills: skills ?? [],
+        repositories: repositories ?? state.repositories,
+        updateStatuses: indexUpdateStates(updateStates ?? result.states ?? []),
+        updatingSkillIds: [],
+        updateJob:
+          state.updateJob.status === "running"
+            ? {
+                ...state.updateJob,
+                status: result.failed.length > 0 ? "failed" : "completed",
+                completed: result.succeeded.length + result.failed.length + result.skipped.length,
+                succeeded: result.succeeded.length,
+                failed: result.failed.length,
+                skipped: result.skipped.length,
+              }
+            : state.updateJob,
+      }));
+      return result;
+    } catch (err) {
+      set((state) => ({
+        error: String(err),
+        updatingSkillIds: [],
+        updateJob: {
+          ...state.updateJob,
+          status: "failed",
+          error: String(err),
+        },
+      }));
+      throw err;
+    }
+  },
+
   cancelAiTagJob: async () => {
     const jobId = get().aiTagJob.jobId;
     if (!jobId) {
@@ -545,6 +746,18 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
     return listen<AiTagProgressPayload>(AI_TAG_PROGRESS_EVENT, (event) => {
       set((state) => ({
         aiTagJob: mergeAiTagProgress(state.aiTagJob, event.payload),
+      }));
+    });
+  },
+
+  subscribeUpdateProgress: async () => {
+    if (!isTauriRuntime()) {
+      return () => {};
+    }
+
+    return listen<CentralSkillUpdateProgressPayload>(CENTRAL_UPDATE_PROGRESS_EVENT, (event) => {
+      set((state) => ({
+        updateJob: mergeUpdateProgress(state.updateJob, event.payload),
       }));
     });
   },

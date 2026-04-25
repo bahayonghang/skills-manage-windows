@@ -16,6 +16,7 @@ import {
   Monitor,
   FolderOpen,
   Lock,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
@@ -310,6 +311,11 @@ export function SkillDetailView({
   const repositories = useCentralSkillsStore((s) => s.repositories);
   const tags = useCentralSkillsStore((s) => s.tags);
   const isMetadataUpdating = useCentralSkillsStore((s) => s.isMetadataUpdating);
+  const updateStatuses = useCentralSkillsStore((s) => s.updateStatuses);
+  const isCheckingUpdates = useCentralSkillsStore((s) => s.isCheckingUpdates);
+  const updatingSkillIds = useCentralSkillsStore((s) => s.updatingSkillIds);
+  const checkSkillUpdates = useCentralSkillsStore((s) => s.checkSkillUpdates);
+  const updateSkills = useCentralSkillsStore((s) => s.updateSkills);
   const assignSkillsToRepository = useCentralSkillsStore((s) => s.assignSkillsToRepository);
   const assignSkillTags = useCentralSkillsStore((s) => s.assignSkillTags);
 
@@ -415,6 +421,8 @@ export function SkillDetailView({
     (detail?.installations ?? []).map((inst) => [inst.agent_id, inst])
   );
   const skillCollections = detail?.collections ?? [];
+  const updateStatus = detail?.id ? updateStatuses[detail.id] : undefined;
+  const isUpdatingThisSkill = detail?.id ? updatingSkillIds.includes(detail.id) : false;
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -475,6 +483,35 @@ export function SkillDetailView({
       setSelectedTagId("");
     } catch (err) {
       toast.error(t("central.metadataError", { error: String(err) }));
+    }
+  }
+
+  async function handleCheckSkillUpdate() {
+    if (!skillId) return;
+    try {
+      await checkSkillUpdates([skillId]);
+      toast.success(t("central.updateCheckOneFinished"));
+    } catch (err) {
+      toast.error(t("central.updateCheckError", { error: String(err) }));
+    }
+  }
+
+  async function handleUpdateSkill() {
+    if (!skillId || updateStatus?.status !== "update_available") return;
+    try {
+      const result = await updateSkills([skillId]);
+      if (result.succeeded.length > 0 && detailRequest) {
+        await loadDetail(detailRequest);
+      }
+      toast.success(
+        t("central.updateFinished", {
+          succeeded: result.succeeded.length,
+          failed: result.failed.length,
+          skipped: result.skipped.length,
+        })
+      );
+    } catch (err) {
+      toast.error(t("central.updateError", { error: String(err) }));
     }
   }
 
@@ -860,6 +897,69 @@ export function SkillDetailView({
                       />
                     </div>
                   </section>
+
+                  {detail.is_central && !detail.is_read_only && (
+                    <section aria-label={t("detail.updateStatusRegion")}>
+                      <SectionLabel>{t("detail.updateStatus")}</SectionLabel>
+                      <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70">
+                            {updateStatus
+                              ? t(`central.updateStatus.${updateStatus.status}`)
+                              : t("central.updateStatus.not_checked")}
+                          </span>
+                          <div className="flex gap-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={isCheckingUpdates || isUpdatingThisSkill}
+                              onClick={handleCheckSkillUpdate}
+                            >
+                              {isCheckingUpdates ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="size-3.5" />
+                              )}
+                              {t("central.checkUpdatesShort")}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              disabled={updateStatus?.status !== "update_available" || isUpdatingThisSkill}
+                              onClick={handleUpdateSkill}
+                            >
+                              {isUpdatingThisSkill ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <Download className="size-3.5" />
+                              )}
+                              {t("central.updateShort")}
+                            </Button>
+                          </div>
+                        </div>
+                        {updateStatus?.source_url && (
+                          <MetadataRow label={t("detail.updateSource")} value={updateStatus.source_url} />
+                        )}
+                        {updateStatus?.ref && (
+                          <MetadataRow label={t("detail.updateRef")} value={updateStatus.ref} />
+                        )}
+                        {updateStatus?.source_path && (
+                          <MetadataRow label={t("detail.sourcePath")} value={updateStatus.source_path} />
+                        )}
+                        {updateStatus?.last_checked_at && (
+                          <MetadataRow
+                            label={t("detail.lastCheckedAt")}
+                            value={new Date(updateStatus.last_checked_at).toLocaleString()}
+                          />
+                        )}
+                        {updateStatus?.error && (
+                          <p className="text-xs leading-relaxed text-destructive">{updateStatus.error}</p>
+                        )}
+                      </div>
+                    </section>
+                  )}
 
                   {detail.tags && detail.tags.length > 0 && (
                     <section aria-label={t("detail.tags", {

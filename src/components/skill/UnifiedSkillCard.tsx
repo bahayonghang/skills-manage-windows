@@ -12,13 +12,14 @@ import {
   Loader2,
   Lock,
   Trash2,
+  Download,
 } from "lucide-react";
 import { memo, useMemo, type MouseEventHandler, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
-import type { AgentWithStatus, ClaudeSourceKind } from "@/types";
+import type { AgentWithStatus, CentralSkillUpdateState, ClaudeSourceKind } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   getPlatformTargetInstallAgentIds,
@@ -120,6 +121,8 @@ export interface UnifiedSkillCardProps {
   // ── actions (pass only the ones relevant to the context) ──
   onDetail?: MouseEventHandler<HTMLButtonElement>;
   onInstallTo?: () => void;
+  onUpdateCentral?: () => void;
+  updateStatus?: CentralSkillUpdateState & { isUpdating?: boolean };
   onDeleteFromCentral?: () => void;
   onInstallToCentral?: () => void;
   onInstallToPlatform?: () => void;
@@ -153,6 +156,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     publisher,
     onDetail,
     onInstallTo,
+    onUpdateCentral,
+    updateStatus,
     onDeleteFromCentral,
     onInstallToCentral,
     onInstallToPlatform,
@@ -170,6 +175,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   const hasActions = !!(
     onDetail ||
     onInstallTo ||
+    onUpdateCentral ||
     onDeleteFromCentral ||
     onInstallToCentral ||
     onInstallToPlatform ||
@@ -272,6 +278,22 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
                   >
                     <PackagePlus className="size-4" />
+                  </button>
+                )}
+
+                {onUpdateCentral && (
+                  <button
+                    onClick={onUpdateCentral}
+                    disabled={isLoading || updateStatus?.status !== "update_available" || updateStatus?.isUpdating}
+                    title={
+                      updateStatus?.status === "update_available"
+                        ? t("central.updateSkill")
+                        : updateStatus?.error ?? t("central.checkUpdatesFirst")
+                    }
+                    aria-label={t("central.updateSkillLabel", { name })}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
+                  >
+                    {updateStatus?.isUpdating ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
                   </button>
                 )}
 
@@ -392,6 +414,22 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             {/* Publisher (marketplace recommended) */}
             {publisher && (
               <span className="text-[10px] text-muted-foreground truncate">{publisher}</span>
+            )}
+
+            {updateStatus && updateStatus.status !== "up_to_date" && (
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
+                  updateStatus.status === "update_available"
+                    ? "bg-primary/10 text-primary ring-primary/20"
+                    : updateStatus.status === "error"
+                      ? "bg-destructive/10 text-destructive ring-destructive/20"
+                      : "bg-muted text-muted-foreground ring-border"
+                )}
+                title={updateStatus.error ?? undefined}
+              >
+                {t(`central.updateStatus.${updateStatus.status}`)}
+              </span>
             )}
 
             {/* Tags (marketplace recommended) */}

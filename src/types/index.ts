@@ -254,6 +254,72 @@ export interface AiTagProgressPayload {
 
 // ─── Settings Types ───────────────────────────────────────────────────────────
 
+export type CentralSkillUpdateStatus =
+  | "up_to_date"
+  | "update_available"
+  | "unsupported"
+  | "error";
+
+export interface CentralSkillUpdateState {
+  skill_id: string;
+  source_type: string;
+  source_url?: string | null;
+  ref?: string | null;
+  source_path?: string | null;
+  last_remote_hash?: string | null;
+  latest_remote_hash?: string | null;
+  last_checked_at?: string | null;
+  last_updated_at?: string | null;
+  status: CentralSkillUpdateStatus;
+  error?: string | null;
+}
+
+export type CentralSkillUpdateItemStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "skipped";
+
+export type CentralSkillUpdateJobStatus = "idle" | "running" | "completed" | "failed";
+
+export interface CentralSkillUpdateJob {
+  phase: "checking" | "updating" | null;
+  status: CentralSkillUpdateJobStatus;
+  total: number;
+  completed: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  currentSkillName?: string;
+  error?: string;
+  items: Record<string, CentralSkillUpdateItemStatus>;
+}
+
+export interface CentralSkillUpdateProgressPayload {
+  phase: "checking" | "updating";
+  skillId?: string;
+  skillName?: string;
+  status:
+    | "started"
+    | "running"
+    | "completed"
+    | CentralSkillUpdateStatus;
+  total: number;
+  completed: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  error?: string;
+}
+
+export interface CentralSkillUpdateResult {
+  succeeded: string[];
+  failed: Array<{ skillId: string; error: string }>;
+  skipped: Array<{ skillId: string; reason: string }>;
+  states: CentralSkillUpdateState[];
+}
+
 export interface ScanDirectory {
   id: number;
   path: string;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { AgentWithStatus, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
+import { AgentWithStatus, CentralSkillUpdateState, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
 import * as tauriBridge from "@/lib/tauri";
 
 // Mock Tauri core before importing the store
@@ -95,6 +95,20 @@ const mockTags: SkillTag[] = [
   },
 ];
 
+const mockUpdateStates: CentralSkillUpdateState[] = [
+  {
+    skill_id: "frontend-design",
+    source_type: "github",
+    source_url: "https://github.com/example/skills",
+    ref: "main",
+    source_path: "skills/frontend-design",
+    last_remote_hash: "fnv1a64:old",
+    latest_remote_hash: "fnv1a64:new",
+    last_checked_at: "2026-04-25T00:00:00Z",
+    status: "update_available",
+  },
+];
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 const mockDeletePreview: SkillDetail = {
@@ -142,12 +156,25 @@ describe("centralSkillsStore", () => {
         lowConfidenceCount: 0,
         items: {},
       },
+      updateStatuses: {},
+      updateJob: {
+        phase: null,
+        status: "idle",
+        total: 0,
+        completed: 0,
+        succeeded: 0,
+        failed: 0,
+        skipped: 0,
+        items: {},
+      },
       aiTaggingAvailable: false,
       isLoading: false,
       isInstalling: false,
       isDeleting: false,
       isMetadataUpdating: false,
       isSuggestingTags: false,
+      isCheckingUpdates: false,
+      updatingSkillIds: [],
       togglingAgentId: null,
       error: null,
     });
@@ -164,12 +191,16 @@ describe("centralSkillsStore", () => {
     expect(state.tags).toEqual([]);
     expect(state.aiTagReviews).toEqual([]);
     expect(state.aiTagJob.status).toBe("idle");
+    expect(state.updateStatuses).toEqual({});
+    expect(state.updateJob.status).toBe("idle");
     expect(state.aiTaggingAvailable).toBe(false);
     expect(state.isLoading).toBe(false);
     expect(state.isInstalling).toBe(false);
     expect(state.isDeleting).toBe(false);
     expect(state.isMetadataUpdating).toBe(false);
     expect(state.isSuggestingTags).toBe(false);
+    expect(state.isCheckingUpdates).toBe(false);
+    expect(state.updatingSkillIds).toEqual([]);
     expect(state.togglingAgentId).toBeNull();
     expect(state.error).toBeNull();
   });
@@ -183,6 +214,7 @@ describe("centralSkillsStore", () => {
       .mockResolvedValueOnce(mockRepositories) // get_skill_repositories
       .mockResolvedValueOnce(mockTags) // get_skill_tags
       .mockResolvedValueOnce([]) // get_pending_ai_tag_reviews
+      .mockResolvedValueOnce([]) // get_central_skill_update_states
       .mockResolvedValueOnce("test-key"); // get_setting
 
     await useCentralSkillsStore.getState().loadCentralSkills();
@@ -192,6 +224,7 @@ describe("centralSkillsStore", () => {
     expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
     expect(invoke).toHaveBeenCalledWith("get_skill_tags");
     expect(invoke).toHaveBeenCalledWith("get_pending_ai_tag_reviews");
+    expect(invoke).toHaveBeenCalledWith("get_central_skill_update_states");
     expect(invoke).toHaveBeenCalledWith("get_setting", { key: "ai_api_key" });
   });
 
@@ -202,6 +235,7 @@ describe("centralSkillsStore", () => {
       .mockResolvedValueOnce(mockRepositories)
       .mockResolvedValueOnce(mockTags)
       .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(mockUpdateStates)
       .mockResolvedValueOnce("test-key");
 
     await useCentralSkillsStore.getState().loadCentralSkills();
@@ -212,6 +246,7 @@ describe("centralSkillsStore", () => {
     expect(state.repositories).toEqual(mockRepositories);
     expect(state.tags).toEqual(mockTags);
     expect(state.aiTagReviews).toEqual([]);
+    expect(state.updateStatuses["frontend-design"]).toEqual(mockUpdateStates[0]);
     expect(state.aiTaggingAvailable).toBe(true);
     expect(state.isLoading).toBe(false);
     expect(state.error).toBeNull();
@@ -517,6 +552,59 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().aiTagJob.status).toBe("completed");
   });
 
+  it("checks central skill updates and indexes returned states", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(mockUpdateStates);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .checkSkillUpdates(["frontend-design"]);
+
+    expect(result).toEqual(mockUpdateStates);
+    expect(invoke).toHaveBeenCalledWith("check_central_skill_updates", {
+      skillIds: ["frontend-design"],
+    });
+    expect(useCentralSkillsStore.getState().updateStatuses["frontend-design"]).toEqual(
+      mockUpdateStates[0]
+    );
+    expect(useCentralSkillsStore.getState().isCheckingUpdates).toBe(false);
+  });
+
+  it("updates central skills and refreshes skills plus update states", async () => {
+    const updatedState: CentralSkillUpdateState = {
+      ...mockUpdateStates[0],
+      latest_remote_hash: "fnv1a64:new",
+      last_remote_hash: "fnv1a64:new",
+      status: "up_to_date",
+    };
+    const updateResult = {
+      succeeded: ["frontend-design"],
+      failed: [],
+      skipped: [],
+      states: [updatedState],
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(updateResult)
+      .mockResolvedValueOnce(mockSkills)
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce([updatedState]);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .updateSkills(["frontend-design"]);
+
+    expect(result).toEqual(updateResult);
+    expect(invoke).toHaveBeenCalledWith("update_central_skills", {
+      skillIds: ["frontend-design"],
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+    expect(invoke).toHaveBeenCalledWith("get_central_skill_update_states");
+    expect(useCentralSkillsStore.getState().updateStatuses["frontend-design"]).toEqual(
+      updatedState
+    );
+    expect(useCentralSkillsStore.getState().updatingSkillIds).toEqual([]);
+  });
+
   it("updates AI tag job state from progress events", async () => {
     let handler: ((event: { payload: unknown }) => void) | undefined;
     const unlisten = vi.fn();
@@ -562,6 +650,52 @@ describe("centralSkillsStore", () => {
     expect(state.aiTagJob.completed).toBe(1);
     expect(state.aiTagJob.lowConfidenceCount).toBe(1);
     expect(state.aiTagJob.items["frontend-design"]).toBe("succeeded");
+  });
+
+  it("updates central update job state from progress events", async () => {
+    let handler: ((event: { payload: unknown }) => void) | undefined;
+    const unlisten = vi.fn();
+    vi.mocked(listen).mockImplementation(async (_event, callback) => {
+      handler = callback as (event: { payload: unknown }) => void;
+      return unlisten;
+    });
+
+    await useCentralSkillsStore.getState().subscribeUpdateProgress();
+    handler?.({
+      payload: {
+        phase: "checking",
+        skillId: "frontend-design",
+        skillName: "frontend-design",
+        status: "running",
+        total: 2,
+        completed: 0,
+        succeeded: 0,
+        failed: 0,
+        skipped: 0,
+      },
+    });
+
+    let state = useCentralSkillsStore.getState();
+    expect(state.updateJob.status).toBe("running");
+    expect(state.updateJob.currentSkillName).toBe("frontend-design");
+    expect(state.updateJob.items["frontend-design"]).toBe("running");
+
+    handler?.({
+      payload: {
+        phase: "checking",
+        skillId: "frontend-design",
+        status: "update_available",
+        total: 2,
+        completed: 1,
+        succeeded: 1,
+        failed: 0,
+        skipped: 0,
+      },
+    });
+
+    state = useCentralSkillsStore.getState();
+    expect(state.updateJob.completed).toBe(1);
+    expect(state.updateJob.items["frontend-design"]).toBe("succeeded");
   });
 
   it("cancels the active AI tag job", async () => {
