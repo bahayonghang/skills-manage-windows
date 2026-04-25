@@ -4,6 +4,9 @@ import {
   AgentWithStatus,
   AiTagJob,
   AiTagProgressPayload,
+  BatchDeleteCentralSkillPreviewResult,
+  BatchDeleteCentralSkillRequest,
+  BatchDeleteCentralSkillResult,
   BatchInstallResult,
   CentralSkillUpdateJob,
   CentralSkillUpdateProgressPayload,
@@ -314,7 +317,11 @@ interface CentralSkillsState {
     method: string
   ) => Promise<BatchInstallResult>;
   loadDeletePreview: (skillId: string) => Promise<SkillDetail>;
+  loadBatchDeletePreview: (skillIds: string[]) => Promise<BatchDeleteCentralSkillPreviewResult>;
   deleteCentralSkill: (skillId: string, removeAgentIds: string[]) => Promise<void>;
+  deleteCentralSkills: (
+    requests: BatchDeleteCentralSkillRequest[]
+  ) => Promise<BatchDeleteCentralSkillResult>;
   togglePlatformLink: (skillId: string, agentId: string) => Promise<void>;
   createRepository: (name: string) => Promise<SkillRepository>;
   assignSkillsToRepository: (skillIds: string[], repositoryId: string) => Promise<void>;
@@ -430,6 +437,16 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
     return invoke<SkillDetail>("get_skill_detail", { skillId });
   },
 
+  loadBatchDeletePreview: async (skillIds) => {
+    if (!isTauriRuntime()) {
+      throw new Error("Desktop-only feature: Central skill deletion is available in the Tauri app.");
+    }
+
+    return invoke<BatchDeleteCentralSkillPreviewResult>("preview_delete_central_skills", {
+      skillIds,
+    });
+  },
+
   deleteCentralSkill: async (skillId, removeAgentIds) => {
     if (!isTauriRuntime()) {
       throw new Error("Desktop-only feature: Central skill deletion is available in the Tauri app.");
@@ -454,6 +471,38 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
         ),
         isDeleting: false,
       });
+    } catch (err) {
+      set({ error: String(err), isDeleting: false });
+      throw err;
+    }
+  },
+
+  deleteCentralSkills: async (requests) => {
+    if (!isTauriRuntime()) {
+      throw new Error("Desktop-only feature: Central skill deletion is available in the Tauri app.");
+    }
+
+    set({ isDeleting: true, error: null });
+    try {
+      const result = await invoke<BatchDeleteCentralSkillResult>("delete_central_skills", {
+        requests,
+      });
+      const [skills, repositories, tags, reviews, updateStates] = await Promise.all([
+        invoke<SkillWithLinks[]>("get_central_skills"),
+        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+        invoke<SkillTag[]>("get_skill_tags"),
+        invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+      ]);
+      set({
+        skills: skills ?? [],
+        repositories: repositories ?? [],
+        tags: tags ?? [],
+        aiTagReviews: reviews ?? [],
+        updateStatuses: indexUpdateStates(updateStates ?? []),
+        isDeleting: false,
+      });
+      return result;
     } catch (err) {
       set({ error: String(err), isDeleting: false });
       throw err;

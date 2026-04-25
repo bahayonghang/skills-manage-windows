@@ -84,6 +84,47 @@ pub struct DeleteCentralSkillResult {
     pub retained_agent_ids: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteCentralSkillPreview {
+    pub skill_id: String,
+    pub skill_name: String,
+    pub central_path: String,
+    pub copy_installations: Vec<SkillInstallationDetail>,
+    pub auto_removed_agent_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailedCentralSkillDelete {
+    pub skill_id: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchDeleteCentralSkillPreviewResult {
+    pub previews: Vec<DeleteCentralSkillPreview>,
+    pub failed: Vec<FailedCentralSkillDelete>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchDeleteCentralSkillRequest {
+    pub skill_id: String,
+    pub remove_agent_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchDeleteCentralSkillSuccess {
+    pub skill_id: String,
+    pub removed_central_path: String,
+    pub removed_agent_ids: Vec<String>,
+    pub retained_agent_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchDeleteCentralSkillResult {
+    pub succeeded: Vec<BatchDeleteCentralSkillSuccess>,
+    pub failed: Vec<FailedCentralSkillDelete>,
+}
+
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
 
 fn system_time_to_rfc3339(time: SystemTime) -> String {
@@ -421,6 +462,17 @@ fn append_missing_agents(linked_agents: &mut Vec<String>, extra_agents: &[String
     }
 }
 
+fn unique_agent_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut result = Vec::new();
+    for id in ids {
+        if seen.insert(id.clone()) {
+            result.push(id);
+        }
+    }
+    result
+}
+
 #[cfg(windows)]
 fn remove_symlink_path(path: &Path) -> Result<(), String> {
     std::fs::remove_dir(path).map_err(|e| format!("Failed to remove symlink: {}", e))
@@ -445,7 +497,10 @@ fn ensure_child_path(root: &Path, child: &Path, label: &str) -> Result<(), Strin
     let child_cmp = child.canonicalize().unwrap_or_else(|_| child.to_path_buf());
 
     if crate::paths::paths_equivalent(&root_cmp, &child_cmp) {
-        return Err(format!("Refusing to delete the Central Skills root for {}", label));
+        return Err(format!(
+            "Refusing to delete the Central Skills root for {}",
+            label
+        ));
     }
 
     if !child_cmp.starts_with(&root_cmp) {
@@ -462,8 +517,13 @@ fn ensure_child_path(root: &Path, child: &Path, label: &str) -> Result<(), Strin
 fn remove_skill_dir(path: &Path) -> Result<(), String> {
     match std::fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => remove_symlink_path(path),
-        Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(path)
-            .map_err(|e| format!("Failed to remove skill directory '{}': {}", path.display(), e)),
+        Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(path).map_err(|e| {
+            format!(
+                "Failed to remove skill directory '{}': {}",
+                path.display(),
+                e
+            )
+        }),
         Ok(_) => Err(format!(
             "Path '{}' is not a directory. Refusing to delete.",
             path.display()
@@ -497,6 +557,76 @@ fn remove_installation_path(installation: &db::SkillInstallation) -> Result<(), 
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(format!("Failed to inspect '{}': {}", path.display(), error)),
     }
+}
+
+pub async fn preview_delete_central_skill_impl(
+    pool: &DbPool,
+    skill_id: &str,
+) -> Result<DeleteCentralSkillPreview, String> {
+    let skill = db::get_skill_by_id(pool, skill_id)
+        .await?
+        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+    if !skill.is_central {
+        return Err(format!("Skill '{}' is not a Central skill", skill_id));
+    }
+
+    let central = db::get_agent_by_id(pool, "central")
+        .await?
+        .ok_or_else(|| "Central agent not found in database".to_string())?;
+    let central_root = PathBuf::from(&central.global_skills_dir);
+    let central_skill_dir = skill_delete_dir(&skill)?;
+    ensure_child_path(&central_root, &central_skill_dir, skill_id)?;
+
+    let agents = db::get_all_agents(pool).await?;
+    let shared_root_agents = shared_root_agent_ids(&agents);
+    let installations = db::get_skill_installations(pool, skill_id).await?;
+    let copy_installations = installation_details(
+        installations
+            .iter()
+            .filter(|installation| installation.link_type == "copy")
+            .cloned()
+            .collect(),
+    );
+    let auto_removed_agent_ids = unique_agent_ids(
+        installations
+            .iter()
+            .filter(|installation| installation.link_type != "copy")
+            .map(|installation| installation.agent_id.clone())
+            .chain(shared_root_agents),
+    );
+
+    Ok(DeleteCentralSkillPreview {
+        skill_id: skill.id,
+        skill_name: skill.name,
+        central_path: central_skill_dir.to_string_lossy().into_owned(),
+        copy_installations,
+        auto_removed_agent_ids,
+    })
+}
+
+pub async fn preview_delete_central_skills_impl(
+    pool: &DbPool,
+    skill_ids: &[String],
+) -> Result<BatchDeleteCentralSkillPreviewResult, String> {
+    let mut previews = Vec::new();
+    let mut failed = Vec::new();
+    let mut seen = HashSet::new();
+
+    for skill_id in skill_ids {
+        if !seen.insert(skill_id.clone()) {
+            continue;
+        }
+
+        match preview_delete_central_skill_impl(pool, skill_id).await {
+            Ok(preview) => previews.push(preview),
+            Err(error) => failed.push(FailedCentralSkillDelete {
+                skill_id: skill_id.clone(),
+                error,
+            }),
+        }
+    }
+
+    Ok(BatchDeleteCentralSkillPreviewResult { previews, failed })
 }
 
 pub async fn delete_central_skill_impl(
@@ -565,6 +695,57 @@ pub async fn delete_central_skill_impl(
     })
 }
 
+pub async fn delete_central_skills_impl(
+    pool: &DbPool,
+    requests: &[BatchDeleteCentralSkillRequest],
+) -> Result<BatchDeleteCentralSkillResult, String> {
+    let mut ordered_requests: Vec<BatchDeleteCentralSkillRequest> = Vec::new();
+    for request in requests {
+        if let Some(existing) = ordered_requests
+            .iter_mut()
+            .find(|existing| existing.skill_id == request.skill_id)
+        {
+            for agent_id in &request.remove_agent_ids {
+                if !existing.remove_agent_ids.contains(agent_id) {
+                    existing.remove_agent_ids.push(agent_id.clone());
+                }
+            }
+        } else {
+            ordered_requests.push(BatchDeleteCentralSkillRequest {
+                skill_id: request.skill_id.clone(),
+                remove_agent_ids: unique_agent_ids(request.remove_agent_ids.clone()),
+            });
+        }
+    }
+
+    let mut succeeded = Vec::new();
+    let mut failed = Vec::new();
+    for request in ordered_requests {
+        match delete_central_skill_impl(pool, &request.skill_id, &request.remove_agent_ids).await {
+            Ok(result) => succeeded.push(BatchDeleteCentralSkillSuccess {
+                skill_id: request.skill_id,
+                removed_central_path: result.removed_central_path,
+                removed_agent_ids: result.removed_agent_ids,
+                retained_agent_ids: result.retained_agent_ids,
+            }),
+            Err(error) => failed.push(FailedCentralSkillDelete {
+                skill_id: request.skill_id,
+                error,
+            }),
+        }
+    }
+
+    Ok(BatchDeleteCentralSkillResult { succeeded, failed })
+}
+
+#[tauri::command]
+pub async fn preview_delete_central_skills(
+    state: State<'_, AppState>,
+    skill_ids: Vec<String>,
+) -> Result<BatchDeleteCentralSkillPreviewResult, String> {
+    preview_delete_central_skills_impl(&state.db, &skill_ids).await
+}
+
 #[tauri::command]
 pub async fn delete_central_skill(
     state: State<'_, AppState>,
@@ -572,6 +753,14 @@ pub async fn delete_central_skill(
     remove_agent_ids: Vec<String>,
 ) -> Result<DeleteCentralSkillResult, String> {
     delete_central_skill_impl(&state.db, &skill_id, &remove_agent_ids).await
+}
+
+#[tauri::command]
+pub async fn delete_central_skills(
+    state: State<'_, AppState>,
+    requests: Vec<BatchDeleteCentralSkillRequest>,
+) -> Result<BatchDeleteCentralSkillResult, String> {
+    delete_central_skills_impl(&state.db, &requests).await
 }
 
 /// Tauri command: return detailed information about a skill, including all
@@ -947,12 +1136,10 @@ mod tests {
 
         assert!(error.contains("outside Central Skills root"));
         assert!(outside_dir.exists());
-        assert!(
-            db::get_skill_by_id(&pool, "outside-skill")
-                .await
-                .unwrap()
-                .is_some()
-        );
+        assert!(db::get_skill_by_id(&pool, "outside-skill")
+            .await
+            .unwrap()
+            .is_some());
     }
 
     #[tokio::test]
@@ -1021,18 +1208,189 @@ mod tests {
         assert!(!central_dir.exists());
         assert!(!removed_copy_dir.exists());
         assert!(retained_copy_dir.exists());
-        assert!(
-            db::get_skill_by_id(&pool, "central-delete")
-                .await
-                .unwrap()
-                .is_none()
+        assert!(db::get_skill_by_id(&pool, "central-delete")
+            .await
+            .unwrap()
+            .is_none());
+        assert!(db::get_skill_installations(&pool, "central-delete")
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_preview_delete_central_skills_reports_copies_and_preview_failures() {
+        let pool = setup_test_db().await;
+        let temp = TempDir::new().unwrap();
+        let central_root = temp.path().join("central");
+        let central_dir = central_root.join("preview-delete");
+        let copy_dir = temp.path().join("cursor").join("preview-delete");
+        let missing_symlink_path = temp.path().join("codex").join("preview-delete");
+        fs::create_dir_all(&central_root).unwrap();
+        write_test_skill_dir(&central_dir);
+        write_test_skill_dir(&copy_dir);
+        set_test_central_root(&pool, &central_root).await;
+
+        let skill = make_central_skill_at("preview-delete", "Preview Delete", &central_dir);
+        db::upsert_skill(&pool, &skill).await.unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_installation_at("preview-delete", "cursor", &copy_dir, "copy", None),
+        )
+        .await
+        .unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_installation_at(
+                "preview-delete",
+                "codex",
+                &missing_symlink_path,
+                "symlink",
+                Some(&central_dir),
+            ),
+        )
+        .await
+        .unwrap();
+
+        let result = preview_delete_central_skills_impl(
+            &pool,
+            &["preview-delete".to_string(), "missing-delete".to_string()],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.previews.len(), 1);
+        assert_eq!(result.previews[0].skill_id, "preview-delete");
+        assert_eq!(result.previews[0].copy_installations.len(), 1);
+        assert_eq!(result.previews[0].copy_installations[0].agent_id, "cursor");
+        assert_eq!(result.previews[0].auto_removed_agent_ids, vec!["codex"]);
+        assert_eq!(result.failed.len(), 1);
+        assert_eq!(result.failed[0].skill_id, "missing-delete");
+    }
+
+    #[tokio::test]
+    async fn test_batch_delete_central_skills_keeps_partial_failures_isolated() {
+        let pool = setup_test_db().await;
+        let temp = TempDir::new().unwrap();
+        let central_root = temp.path().join("central");
+        let valid_dir = central_root.join("valid-delete");
+        let outside_dir = temp.path().join("outside").join("unsafe-delete");
+        fs::create_dir_all(&central_root).unwrap();
+        write_test_skill_dir(&valid_dir);
+        write_test_skill_dir(&outside_dir);
+        set_test_central_root(&pool, &central_root).await;
+
+        db::upsert_skill(
+            &pool,
+            &make_central_skill_at("valid-delete", "Valid Delete", &valid_dir),
+        )
+        .await
+        .unwrap();
+        db::upsert_skill(
+            &pool,
+            &make_central_skill_at("unsafe-delete", "Unsafe Delete", &outside_dir),
+        )
+        .await
+        .unwrap();
+
+        let result = delete_central_skills_impl(
+            &pool,
+            &[
+                BatchDeleteCentralSkillRequest {
+                    skill_id: "valid-delete".to_string(),
+                    remove_agent_ids: Vec::new(),
+                },
+                BatchDeleteCentralSkillRequest {
+                    skill_id: "unsafe-delete".to_string(),
+                    remove_agent_ids: Vec::new(),
+                },
+            ],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.succeeded.len(), 1);
+        assert_eq!(result.succeeded[0].skill_id, "valid-delete");
+        assert_eq!(result.failed.len(), 1);
+        assert_eq!(result.failed[0].skill_id, "unsafe-delete");
+        assert!(!valid_dir.exists());
+        assert!(outside_dir.exists());
+        assert!(db::get_skill_by_id(&pool, "valid-delete")
+            .await
+            .unwrap()
+            .is_none());
+        assert!(db::get_skill_by_id(&pool, "unsafe-delete")
+            .await
+            .unwrap()
+            .is_some());
+    }
+
+    #[tokio::test]
+    async fn test_batch_delete_central_skills_dedupes_and_merges_copy_agents() {
+        let pool = setup_test_db().await;
+        let temp = TempDir::new().unwrap();
+        let central_root = temp.path().join("central");
+        let central_dir = central_root.join("dedupe-delete");
+        let cursor_copy_dir = temp.path().join("cursor").join("dedupe-delete");
+        let claude_copy_dir = temp.path().join("claude").join("dedupe-delete");
+        fs::create_dir_all(&central_root).unwrap();
+        write_test_skill_dir(&central_dir);
+        write_test_skill_dir(&cursor_copy_dir);
+        write_test_skill_dir(&claude_copy_dir);
+        set_test_central_root(&pool, &central_root).await;
+
+        db::upsert_skill(
+            &pool,
+            &make_central_skill_at("dedupe-delete", "Dedupe Delete", &central_dir),
+        )
+        .await
+        .unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_installation_at("dedupe-delete", "cursor", &cursor_copy_dir, "copy", None),
+        )
+        .await
+        .unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_installation_at(
+                "dedupe-delete",
+                "claude-code",
+                &claude_copy_dir,
+                "copy",
+                None,
+            ),
+        )
+        .await
+        .unwrap();
+
+        let result = delete_central_skills_impl(
+            &pool,
+            &[
+                BatchDeleteCentralSkillRequest {
+                    skill_id: "dedupe-delete".to_string(),
+                    remove_agent_ids: vec!["cursor".to_string()],
+                },
+                BatchDeleteCentralSkillRequest {
+                    skill_id: "dedupe-delete".to_string(),
+                    remove_agent_ids: vec!["claude-code".to_string(), "cursor".to_string()],
+                },
+            ],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.succeeded.len(), 1);
+        assert!(result.failed.is_empty());
+        let mut removed_agent_ids = result.succeeded[0].removed_agent_ids.clone();
+        removed_agent_ids.sort();
+        assert_eq!(
+            removed_agent_ids,
+            vec!["claude-code".to_string(), "cursor".to_string()]
         );
-        assert!(
-            db::get_skill_installations(&pool, "central-delete")
-                .await
-                .unwrap()
-                .is_empty()
-        );
+        assert!(!central_dir.exists());
+        assert!(!cursor_copy_dir.exists());
+        assert!(!claude_copy_dir.exists());
     }
 
     #[tokio::test]

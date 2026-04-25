@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { CentralSkillsView } from "../pages/CentralSkillsView";
 import { AgentWithStatus, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
@@ -239,7 +239,9 @@ const mockDeletePreview: SkillDetail = {
 const mockLoadCentralSkills = vi.fn();
 const mockInstallSkill = vi.fn();
 const mockLoadDeletePreview = vi.fn();
+const mockLoadBatchDeletePreview = vi.fn();
 const mockDeleteCentralSkill = vi.fn();
+const mockDeleteCentralSkills = vi.fn();
 const mockTogglePlatformLink = vi.fn();
 const mockCreateRepository = vi.fn();
 const mockAssignSkillsToRepository = vi.fn();
@@ -288,7 +290,9 @@ function buildCentralStoreState(overrides = {}) {
     loadCentralSkills: mockLoadCentralSkills,
     installSkill: mockInstallSkill,
     loadDeletePreview: mockLoadDeletePreview,
+    loadBatchDeletePreview: mockLoadBatchDeletePreview,
     deleteCentralSkill: mockDeleteCentralSkill,
+    deleteCentralSkills: mockDeleteCentralSkills,
     togglePlatformLink: mockTogglePlatformLink,
     createRepository: mockCreateRepository,
     assignSkillsToRepository: mockAssignSkillsToRepository,
@@ -514,6 +518,96 @@ describe("CentralSkillsView", () => {
 
     await waitFor(() => {
       expect(mockDeleteCentralSkill).toHaveBeenCalledWith("frontend-design", ["cursor"]);
+    });
+    expect(mockRescan).toHaveBeenCalled();
+  });
+
+  it("shows batch delete only after selecting central skills", () => {
+    renderCentralSkillsView();
+
+    expect(screen.queryByTestId("batch-delete-central-skills")).not.toBeInTheDocument();
+
+    const selectionCheckboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(selectionCheckboxes[0]);
+
+    expect(screen.getByTestId("batch-delete-central-skills")).toBeInTheDocument();
+  });
+
+  it("previews and batch deletes selected central skills with selected platform copies", async () => {
+    mockLoadBatchDeletePreview.mockResolvedValueOnce({
+      previews: [
+        {
+          skill_id: "frontend-design",
+          skill_name: "frontend-design",
+          central_path: "~/.skillsmanage/skills/frontend-design",
+          copy_installations: [
+            {
+              skill_id: "frontend-design",
+              agent_id: "cursor",
+              installed_path: "/Users/test/.cursor/skills/frontend-design",
+              link_type: "copy",
+              symlink_target: undefined,
+              installed_at: "2026-04-11T00:00:00Z",
+            },
+          ],
+          auto_removed_agent_ids: ["claude-code"],
+        },
+        {
+          skill_id: "code-reviewer",
+          skill_name: "code-reviewer",
+          central_path: "~/.skillsmanage/skills/code-reviewer",
+          copy_installations: [],
+          auto_removed_agent_ids: ["codex"],
+        },
+      ],
+      failed: [],
+    });
+    mockDeleteCentralSkills.mockResolvedValueOnce({
+      succeeded: [
+        {
+          skill_id: "frontend-design",
+          removed_central_path: "~/.skillsmanage/skills/frontend-design",
+          removed_agent_ids: ["cursor"],
+          retained_agent_ids: [],
+        },
+        {
+          skill_id: "code-reviewer",
+          removed_central_path: "~/.skillsmanage/skills/code-reviewer",
+          removed_agent_ids: [],
+          retained_agent_ids: [],
+        },
+      ],
+      failed: [],
+    });
+    renderCentralSkillsView();
+
+    const selectionCheckboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(selectionCheckboxes[0]);
+    fireEvent.click(selectionCheckboxes[1]);
+    fireEvent.click(screen.getByTestId("batch-delete-central-skills"));
+
+    await waitFor(() => {
+      expect(mockLoadBatchDeletePreview).toHaveBeenCalledWith([
+        "code-reviewer",
+        "frontend-design",
+      ]);
+    });
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Cursor/i }));
+    fireEvent.click(within(dialog).getByTestId("confirm-batch-delete-central-skills"));
+
+    await waitFor(() => {
+      expect(mockDeleteCentralSkills).toHaveBeenCalledWith([
+        {
+          skill_id: "frontend-design",
+          remove_agent_ids: ["cursor"],
+        },
+        {
+          skill_id: "code-reviewer",
+          remove_agent_ids: [],
+        },
+      ]);
     });
     expect(mockRescan).toHaveBeenCalled();
   });

@@ -141,6 +141,41 @@ export interface BatchInstallResult {
   failed: Array<{ agent_id: string; error: string }>;
 }
 
+export interface DeleteCentralSkillPreview {
+  skill_id: string;
+  skill_name: string;
+  central_path: string;
+  copy_installations: SkillInstallation[];
+  auto_removed_agent_ids: string[];
+}
+
+export interface FailedCentralSkillDelete {
+  skill_id: string;
+  error: string;
+}
+
+export interface BatchDeleteCentralSkillPreviewResult {
+  previews: DeleteCentralSkillPreview[];
+  failed: FailedCentralSkillDelete[];
+}
+
+export interface BatchDeleteCentralSkillRequest {
+  skill_id: string;
+  remove_agent_ids: string[];
+}
+
+export interface BatchDeleteCentralSkillSuccess {
+  skill_id: string;
+  removed_central_path: string;
+  removed_agent_ids: string[];
+  retained_agent_ids: string[];
+}
+
+export interface BatchDeleteCentralSkillResult {
+  succeeded: BatchDeleteCentralSkillSuccess[];
+  failed: FailedCentralSkillDelete[];
+}
+
 // ─── Collection Types ─────────────────────────────────────────────────────────
 
 export interface Collection {

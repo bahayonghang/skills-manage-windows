@@ -327,6 +327,72 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
   });
 
+  it("loads batch delete preview for selected central skills", async () => {
+    const preview = {
+      previews: [
+        {
+          skill_id: "frontend-design",
+          skill_name: "frontend-design",
+          central_path: "~/.skillsmanage/skills/frontend-design",
+          copy_installations: mockDeletePreview.installations,
+          auto_removed_agent_ids: ["claude-code"],
+        },
+      ],
+      failed: [],
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(preview);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .loadBatchDeletePreview(["frontend-design", "code-reviewer"]);
+
+    expect(result).toEqual(preview);
+    expect(invoke).toHaveBeenCalledWith("preview_delete_central_skills", {
+      skillIds: ["frontend-design", "code-reviewer"],
+    });
+  });
+
+  it("deletes selected central skills and refreshes central metadata", async () => {
+    const result = {
+      succeeded: [
+        {
+          skill_id: "frontend-design",
+          removed_central_path: "~/.skillsmanage/skills/frontend-design",
+          removed_agent_ids: ["cursor"],
+          retained_agent_ids: [],
+        },
+      ],
+      failed: [{ skill_id: "missing-skill", error: "not found" }],
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(result)
+      .mockResolvedValueOnce([mockSkills[1]])
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const actual = await useCentralSkillsStore.getState().deleteCentralSkills([
+      { skill_id: "frontend-design", remove_agent_ids: ["cursor"] },
+      { skill_id: "missing-skill", remove_agent_ids: [] },
+    ]);
+
+    expect(actual).toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("delete_central_skills", {
+      requests: [
+        { skill_id: "frontend-design", remove_agent_ids: ["cursor"] },
+        { skill_id: "missing-skill", remove_agent_ids: [] },
+      ],
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+    expect(invoke).toHaveBeenCalledWith("get_skill_tags");
+    expect(invoke).toHaveBeenCalledWith("get_pending_ai_tag_reviews");
+    expect(invoke).toHaveBeenCalledWith("get_central_skill_update_states");
+    expect(useCentralSkillsStore.getState().skills).toEqual([mockSkills[1]]);
+    expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
+  });
+
   it("sets error and clears deleting state when central deletion fails", async () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error("delete failed"));
 

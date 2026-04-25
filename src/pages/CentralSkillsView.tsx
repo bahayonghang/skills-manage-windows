@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Search, RefreshCw, Blocks, FolderOpen, Settings, ArrowUpDown, Tag, X, Wand2, AlertTriangle, Check, Eye, ListChecks, Plus, Download } from "lucide-react";
+import { Search, RefreshCw, Blocks, FolderOpen, Settings, ArrowUpDown, Tag, X, Wand2, AlertTriangle, Check, Eye, ListChecks, Plus, Download, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -11,9 +11,10 @@ import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { DeleteCentralSkillDialog } from "@/components/central/DeleteCentralSkillDialog";
+import { BatchDeleteCentralSkillsDialog } from "@/components/central/BatchDeleteCentralSkillsDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AgentWithStatus, AiTagJob, CentralSkillUpdateJob, CentralSkillUpdateState, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
+import { AgentWithStatus, AiTagJob, BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult, CentralSkillUpdateJob, CentralSkillUpdateState, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
 import { markAppPerformance } from "@/lib/performance";
 import { cn } from "@/lib/utils";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
@@ -106,7 +107,18 @@ async function noopLoadDeletePreview(): Promise<SkillDetail> {
   throw new Error("Central skill deletion is unavailable");
 }
 
+async function noopLoadBatchDeletePreview(): Promise<BatchDeleteCentralSkillPreviewResult> {
+  throw new Error("Central skill deletion is unavailable");
+}
+
 async function noopDeleteCentralSkill(): Promise<void> {}
+
+async function noopDeleteCentralSkills(): Promise<BatchDeleteCentralSkillResult> {
+  return {
+    succeeded: [],
+    failed: [],
+  };
+}
 
 async function noopUnlisten() {
   return () => {};
@@ -232,7 +244,9 @@ export function CentralSkillsView() {
   const loadCentralSkills = rawLoadCentralSkills ?? noopAsync;
   const installSkill = useCentralSkillsStore((state) => state.installSkill) ?? noopInstallSkill;
   const loadDeletePreview = useCentralSkillsStore((state) => state.loadDeletePreview) ?? noopLoadDeletePreview;
+  const loadBatchDeletePreview = useCentralSkillsStore((state) => state.loadBatchDeletePreview) ?? noopLoadBatchDeletePreview;
   const deleteCentralSkill = useCentralSkillsStore((state) => state.deleteCentralSkill) ?? noopDeleteCentralSkill;
+  const deleteCentralSkills = useCentralSkillsStore((state) => state.deleteCentralSkills) ?? noopDeleteCentralSkills;
   const togglePlatformLink = useCentralSkillsStore((state) => state.togglePlatformLink) ?? noopAsync;
   const createTag = useCentralSkillsStore((state) => state.createTag);
   const assignSkillTags = useCentralSkillsStore((state) => state.assignSkillTags);
@@ -284,10 +298,15 @@ export function CentralSkillsView() {
   const [deleteTargetSkill, setDeleteTargetSkill] =
     useState<SkillWithLinks | null>(null);
   const [deletePreview, setDeletePreview] = useState<SkillDetail | null>(null);
+  const [batchDeletePreview, setBatchDeletePreview] =
+    useState<BatchDeleteCentralSkillPreviewResult | null>(null);
   const [isDeletePreviewLoading, setIsDeletePreviewLoading] = useState(false);
+  const [isBatchDeletePreviewLoading, setIsBatchDeletePreviewLoading] = useState(false);
   const [deletePreviewError, setDeletePreviewError] = useState<string | null>(null);
+  const [batchDeletePreviewError, setBatchDeletePreviewError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isGitHubImportOpen, setIsGitHubImportOpen] = useState(false);
@@ -487,6 +506,15 @@ export function CentralSkillsView() {
     }
   }
 
+  function handleBatchDeleteDialogOpenChange(open: boolean) {
+    setIsBatchDeleteDialogOpen(open);
+    if (!open) {
+      setBatchDeletePreview(null);
+      setBatchDeletePreviewError(null);
+      setIsBatchDeletePreviewLoading(false);
+    }
+  }
+
   async function handleDeleteClick(skill: SkillWithLinks) {
     setDeleteTargetSkill(skill);
     setDeletePreview(null);
@@ -502,6 +530,24 @@ export function CentralSkillsView() {
       toast.error(t("central.deletePreviewError", { error: message }));
     } finally {
       setIsDeletePreviewLoading(false);
+    }
+  }
+
+  async function handleBatchDeleteClick() {
+    if (selectedSkillIds.length === 0) return;
+    setBatchDeletePreview(null);
+    setBatchDeletePreviewError(null);
+    setIsBatchDeleteDialogOpen(true);
+    setIsBatchDeletePreviewLoading(true);
+    try {
+      const preview = await loadBatchDeletePreview(selectedSkillIds);
+      setBatchDeletePreview(preview);
+    } catch (err) {
+      const message = String(err);
+      setBatchDeletePreviewError(message);
+      toast.error(t("central.batchDeletePreviewError", { error: message }));
+    } finally {
+      setIsBatchDeletePreviewLoading(false);
     }
   }
 
@@ -557,6 +603,33 @@ export function CentralSkillsView() {
     } catch (err) {
       const message = String(err);
       setDeletePreviewError(message);
+      toast.error(t("central.deleteSkillError", { error: message }));
+      throw err;
+    }
+  }
+
+  async function handleBatchDeleteCentralSkills(requests: BatchDeleteCentralSkillRequest[]) {
+    try {
+      const result = await deleteCentralSkills(requests);
+      await refreshCounts();
+      const succeededIds = new Set(result.succeeded.map((item) => item.skill_id));
+      setSelectedSkillIds((current) => current.filter((skillId) => !succeededIds.has(skillId)));
+
+      if (result.failed.length > 0) {
+        toast.error(
+          t("central.batchDeletePartialError", {
+            succeeded: result.succeeded.length,
+            failed: result.failed.length,
+          })
+        );
+      } else {
+        toast.success(t("central.batchDeleteSuccess", { count: result.succeeded.length }));
+      }
+      handleBatchDeleteDialogOpenChange(false);
+      return result;
+    } catch (err) {
+      const message = String(err);
+      setBatchDeletePreviewError(message);
       toast.error(t("central.deleteSkillError", { error: message }));
       throw err;
     }
@@ -1172,6 +1245,18 @@ export function CentralSkillsView() {
                   <X className="size-3.5" />
                   {t("central.clearSelection")}
                 </Button>
+                {selectedSkillIds.length > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleBatchDeleteClick}
+                    disabled={isDeleting}
+                    data-testid="batch-delete-central-skills"
+                  >
+                    <Trash2 className="size-3.5" />
+                    {t("central.batchDeleteSelected", { count: selectedSkillIds.length })}
+                  </Button>
+                )}
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-xl bg-background p-2">
@@ -1447,6 +1532,18 @@ export function CentralSkillsView() {
         isDeleting={isDeleting}
         error={deletePreviewError}
         onConfirm={handleDeleteCentralSkill}
+      />
+
+      <BatchDeleteCentralSkillsDialog
+        open={isBatchDeleteDialogOpen}
+        onOpenChange={handleBatchDeleteDialogOpenChange}
+        skillIds={selectedSkillIds}
+        preview={batchDeletePreview}
+        agents={agents}
+        isPreviewLoading={isBatchDeletePreviewLoading}
+        isDeleting={isDeleting}
+        error={batchDeletePreviewError}
+        onConfirm={handleBatchDeleteCentralSkills}
       />
 
       <SkillDetailDrawer
