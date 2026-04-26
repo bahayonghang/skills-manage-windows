@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
 import type { InstallMethod } from "@/components/central/InstallDialog";
 import { AgentWithStatus, CentralBatchInstallResult } from "@/types";
+import { useTargetStore } from "@/stores/targetStore";
 import {
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberNames,
@@ -60,6 +61,8 @@ export function BatchInstallCentralSkillsDialog({
   onInstall,
 }: BatchInstallCentralSkillsDialogProps) {
   const { t } = useTranslation();
+  const activeTarget = useTargetStore((s) => s.activeTarget);
+  const isRemoteTarget = activeTarget.kind === "ssh";
   const targetAgents = useMemo(
     () => agents.filter((agent) => agent.id !== "central"),
     [agents]
@@ -99,17 +102,24 @@ export function BatchInstallCentralSkillsDialog({
     setSelectedAgentIds(initialSelection);
     setError(null);
     setResult(null);
-    if (targetMode === "platform") {
+    if (isRemoteTarget) {
+      setTargetMode("platform");
+      setInstallMethod("copy");
+      setProjectPath("");
+    } else if (targetMode === "platform") {
       setInstallMethod("symlink");
       setProjectPath("");
     } else {
       setInstallMethod("copy");
     }
-  }, [open, targetAgents, targetMode]);
+  }, [open, targetAgents, targetMode, isRemoteTarget]);
 
   function handleModeChange(mode: TargetMode) {
+    if (isRemoteTarget && mode === "project") {
+      return;
+    }
     setTargetMode(mode);
-    setInstallMethod(mode === "project" ? "copy" : "symlink");
+    setInstallMethod(mode === "project" || isRemoteTarget ? "copy" : "symlink");
     setError(null);
     setResult(null);
   }
@@ -181,8 +191,13 @@ export function BatchInstallCentralSkillsDialog({
                 <span className="text-sm">{t("central.batchInstallTargetPlatforms")}</span>
               </label>
               <label className="flex cursor-pointer items-center gap-2.5">
-                <RadioItem value="project" />
+                <RadioItem value="project" disabled={isRemoteTarget} />
                 <span className="text-sm">{t("central.batchInstallTargetProject")}</span>
+                {isRemoteTarget && (
+                  <span className="text-xs text-muted-foreground">
+                    {t("targets.discoverUnsupported")}
+                  </span>
+                )}
               </label>
             </RadioGroup>
           </div>
@@ -259,10 +274,10 @@ export function BatchInstallCentralSkillsDialog({
               onValueChange={(value) => setInstallMethod(value as InstallMethod)}
             >
               <label className="flex cursor-pointer items-center gap-2.5">
-                <RadioItem value="symlink" />
+                <RadioItem value="symlink" disabled={isRemoteTarget} />
                 <span className="text-sm">{t("central.batchInstallSymlink")}</span>
                 <span className="text-xs text-muted-foreground">
-                  {t("central.batchInstallSymlinkDesc")}
+                  {isRemoteTarget ? t("targets.symlinkDisabled") : t("central.batchInstallSymlinkDesc")}
                 </span>
               </label>
               <label className="flex cursor-pointer items-center gap-2.5">

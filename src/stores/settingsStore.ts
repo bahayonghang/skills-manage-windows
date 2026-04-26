@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { ScanDirectory, AgentWithStatus, CustomAgentConfig, UpdateCustomAgentConfig } from "@/types";
+import {
+  AgentWithStatus,
+  CustomAgentConfig,
+  GitHubPatTestResult,
+  ScanDirectory,
+  UpdateCustomAgentConfig,
+} from "@/types";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -11,6 +17,8 @@ interface SettingsState {
   githubPat: string;
   isLoadingGitHubPat: boolean;
   isSavingGitHubPat: boolean;
+  isTestingGitHubPat: boolean;
+  githubPatTestResult: GitHubPatTestResult | null;
 
   // Actions — scan directories
   loadScanDirectories: () => Promise<void>;
@@ -22,6 +30,7 @@ interface SettingsState {
   loadGitHubPat: () => Promise<void>;
   saveGitHubPat: (value: string) => Promise<void>;
   clearGitHubPat: () => Promise<void>;
+  testGitHubPat: () => Promise<GitHubPatTestResult>;
 
   // Actions — custom agents
   addCustomAgent: (config: CustomAgentConfig) => Promise<AgentWithStatus>;
@@ -40,6 +49,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   githubPat: "",
   isLoadingGitHubPat: false,
   isSavingGitHubPat: false,
+  isTestingGitHubPat: false,
+  githubPatTestResult: null,
 
   // ── Scan Directories ───────────────────────────────────────────────────────
 
@@ -100,7 +111,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   loadGitHubPat: async () => {
     set({ isLoadingGitHubPat: true, error: null });
     try {
-      const value = await invoke<string | null>("get_setting", { key: "github_pat" });
+      const value = await invoke<string | null>("get_github_pat");
       set({
         githubPat: value ?? "",
         isLoadingGitHubPat: false,
@@ -116,10 +127,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   saveGitHubPat: async (value: string) => {
     set({ isSavingGitHubPat: true, error: null });
     try {
-      await invoke("set_setting", { key: "github_pat", value });
+      await invoke("set_github_pat", { value });
       set({
         githubPat: value.trim(),
         isSavingGitHubPat: false,
+        githubPatTestResult: null,
       });
     } catch (err) {
       set({
@@ -133,15 +145,34 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   clearGitHubPat: async () => {
     set({ isSavingGitHubPat: true, error: null });
     try {
-      await invoke("set_setting", { key: "github_pat", value: "" });
+      await invoke("clear_github_pat");
       set({
         githubPat: "",
         isSavingGitHubPat: false,
+        githubPatTestResult: null,
       });
     } catch (err) {
       set({
         error: String(err),
         isSavingGitHubPat: false,
+      });
+      throw err;
+    }
+  },
+
+  testGitHubPat: async () => {
+    set({ isTestingGitHubPat: true, error: null, githubPatTestResult: null });
+    try {
+      const result = await invoke<GitHubPatTestResult>("test_github_pat");
+      set({
+        githubPatTestResult: result,
+        isTestingGitHubPat: false,
+      });
+      return result;
+    } catch (err) {
+      set({
+        error: String(err),
+        isTestingGitHubPat: false,
       });
       throw err;
     }

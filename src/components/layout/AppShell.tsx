@@ -6,6 +6,9 @@ import { GlobalSearchDialog } from "./GlobalSearchDialog";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useDiscoverStore } from "@/stores/discoverStore";
+import { useTargetStore } from "@/stores/targetStore";
+import { useSkillStore } from "@/stores/skillStore";
+import { useMarketplaceStore } from "@/stores/marketplaceStore";
 
 /**
  * Top-level app shell: TopBar + icon sidebar + scrollable main content area.
@@ -18,13 +21,44 @@ export function AppShell() {
 
   const initialize = usePlatformStore((s) => s.initialize);
   const rescan = usePlatformStore((s) => s.rescan);
+  const resetPlatformForTargetChange = usePlatformStore((s) => s.resetForTargetChange);
   const loadCentralSkills = useCentralSkillsStore((s) => s.loadCentralSkills);
+  const resetCentralForTargetChange = useCentralSkillsStore((s) => s.resetForTargetChange);
   const rescanDiscoverFromDisk = useDiscoverStore((s) => s.rescanFromDisk);
+  const resetDiscoverForTargetChange = useDiscoverStore((s) => s.resetForTargetChange);
+  const resetSkillsForTargetChange = useSkillStore((s) => s.resetForTargetChange);
+  const resetMarketplaceForTargetChange = useMarketplaceStore((s) => s.resetForTargetChange);
+  const loadTargets = useTargetStore((s) => s.loadTargets);
+  const activeTargetId = useTargetStore((s) => s.activeTarget.id);
+  const lastTargetIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    void initialize().catch(() => undefined);
+    void (async () => {
+      await loadTargets().catch(() => undefined);
+      await initialize().catch(() => undefined);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!activeTargetId) return;
+
+    if (lastTargetIdRef.current === null) {
+      lastTargetIdRef.current = activeTargetId;
+      return;
+    }
+
+    if (lastTargetIdRef.current === activeTargetId) return;
+
+    lastTargetIdRef.current = activeTargetId;
+    resetPlatformForTargetChange();
+    resetCentralForTargetChange();
+    resetDiscoverForTargetChange();
+    resetSkillsForTargetChange();
+    resetMarketplaceForTargetChange();
+    void handleGlobalRescan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTargetId]);
 
   useEffect(() => {
     if (!mainRef.current) return;

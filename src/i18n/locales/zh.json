@@ -21,6 +21,40 @@
     "search": "搜索",
     "refresh": "刷新"
   },
+  "targets": {
+    "title": "远程目标",
+    "description": "在本机技能和 SSH 远程用户目录之间切换。",
+    "local": "本机",
+    "localDescription": "管理当前电脑上的 skills。",
+    "active": "当前",
+    "activate": "切换",
+    "add": "新增目标",
+    "test": "测试",
+    "created": "已创建目标 {{label}}",
+    "deleted": "目标已删除",
+    "switched": "已切换到 {{label}}",
+    "deleteLabel": "删除目标 {{label}}",
+    "testSucceeded": "连接成功：{{os}} {{home}}",
+    "authKey": "SSH key",
+    "authPassword": "账号密码",
+    "labelPlaceholder": "别名",
+    "hostPlaceholder": "主机",
+    "usernamePlaceholder": "用户",
+    "keyPathPlaceholder": "SSH 密钥路径",
+    "passwordPlaceholder": "SSH 密码",
+    "updatePassword": "保存密码",
+    "updatePasswordPlaceholder": "SSH 密码",
+    "updatePasswordFor": "{{label}} 的 SSH 密码",
+    "passwordUpdated": "已保存 {{label}} 的 SSH 密码。",
+    "passwordRequired": "请先输入 SSH 密码。",
+    "passwordRepairHint": "密码登录目标如果重装系统凭据、迁移应用或凭据丢失，需要在这里重新保存密码。",
+    "sshHint": "SkillPort 支持 SSH key 和账号密码两种登录。Key 模式只保存本机密钥路径。密码模式把密码存入系统凭据库，不写入 SQLite 配置。",
+    "sshKeyPathHelp": "SSH key path 在 Windows 上通常是 C:\\Users\\你的用户名\\.ssh\\id_ed25519 或 id_rsa。PowerShell 可用 Get-ChildItem ~/.ssh 查看。Host 填服务器 IP 或域名，通常在云服务器控制台、路由器 DHCP 列表，或远程机器 hostname -I 中查看。",
+    "symlinkDisabled": "远程目标默认使用 copy 安装。",
+    "discoverUnsupported": "首版远程目标不支持 Discover 扫描。",
+    "centralUpdatesUnsupported": "首版远程目标不支持中央库更新检查。",
+    "pathCopied": "远程路径已复制"
+  },
   "sidebar": {
     "byTool": "按工具",
     "centralSkills": "中央技能库",
@@ -38,7 +72,8 @@
     "discovered": "项目技能库",
     "rescan": "重新扫描...",
     "categoryLobster": "龙虾类",
-    "categoryCoding": "编程类"
+    "categoryCoding": "编程类",
+    "resizeSidebar": "调整侧边栏宽度"
   },
   "platform": {
     "searchPlaceholder": "搜索技能...",
@@ -173,6 +208,7 @@
     "aiTaggingNeedsConfig": "配置 AI API Key 后可批量自动标注",
     "metadataError": "元数据更新失败：{{error}}",
     "categoryNav": "分类导航",
+    "resizeFilterSidebar": "调整中央筛选栏宽度",
     "aiReviewOnly": "AI 待复核",
     "categorizePanelTitle": "Categorize",
     "categorizePanelDesc": "选择范围、意图，预览后应用。",
@@ -479,8 +515,10 @@
     "githubPatLabel": "GitHub Personal Access Token",
     "githubPatDirectOnly": "该令牌只会用于直连 GitHub 的请求：github.com、api.github.com 和 raw.githubusercontent.com。它绝不会被发送到公共镜像或代理回退链路。",
     "githubPatRateLimitHint": "当 GitHub 预览/导入遇到限流，或需要已认证访问时，请配置这个令牌。",
+    "githubPatAppWideHint": "该令牌是应用级配置。SSH 目标会复用它访问 GitHub，但不会写入远程目标缓存库。",
     "githubPatSaved": "GitHub 令牌已保存",
     "githubPatCleared": "GitHub 令牌已清除",
+    "githubPatTest": "测试令牌",
     "githubPatClear": "清除令牌",
     "about": "关于",
     "appVersion": "应用版本",
@@ -750,6 +788,7 @@
     "githubImportResultActionRestart": "开始新的导入",
     "githubImportResultSkippedTitle": "已跳过项目",
     "githubImportResultSkippedNone": "没有跳过任何技能。",
-    "githubPatSettingsHint": "请前往设置并保存 GitHub Personal Access Token，让该导入流程改用经过认证的直连 GitHub 请求。"
+    "githubPatSettingsHint": "请前往设置并保存 GitHub Personal Access Token，让该导入流程改用经过认证的直连 GitHub 请求。",
+    "githubPatConfiguredFailureHint": "当前请求已经使用已配置的 GitHub 令牌。请检查令牌所属账号是否能读取该仓库，以及令牌是否有足够的仓库访问权限。"
   }
 }

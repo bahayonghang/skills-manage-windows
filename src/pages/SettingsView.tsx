@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Pencil, Loader2, FolderOpen, Cpu, Info, Database, Globe, Palette, Droplets, Bot, ChevronDown, ChevronRight, KeyRound, Search } from "lucide-react";
+import { Plus, Trash2, Pencil, Loader2, FolderOpen, Cpu, Info, Database, Globe, Palette, Droplets, Bot, ChevronDown, ChevronRight, KeyRound, Search, Server } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -18,6 +18,10 @@ import { Switch } from "@/components/ui/switch";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useThemeStore, CatppuccinFlavor, CatppuccinAccent, ACCENT_NAMES } from "@/stores/themeStore";
 import { usePlatformStore } from "@/stores/platformStore";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
+import { useDiscoverStore } from "@/stores/discoverStore";
+import { useMarketplaceStore } from "@/stores/marketplaceStore";
+import { useTargetStore } from "@/stores/targetStore";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
   getPlatformCategoryKey,
@@ -28,7 +32,7 @@ import { AddDirectoryDialog } from "@/components/settings/AddDirectoryDialog";
 import { PlatformDialog } from "@/components/settings/PlatformDialog";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { Input } from "@/components/ui/input";
-import { AgentWithStatus, ScanDirectory } from "@/types";
+import { AgentWithStatus, ScanDirectory, SshAuthMethod, TargetSummary } from "@/types";
 import { AI_PROVIDERS, REGION_LABELS, RegionId } from "@/data/aiProviders";
 import { deriveHomeDir, formatPathForDisplay, joinPathForDisplay } from "@/lib/path";
 import {
@@ -452,14 +456,35 @@ export function SettingsView() {
   const githubPat = useSettingsStore((s) => s.githubPat);
   const isLoadingGitHubPat = useSettingsStore((s) => s.isLoadingGitHubPat);
   const isSavingGitHubPat = useSettingsStore((s) => s.isSavingGitHubPat);
+  const isTestingGitHubPat = useSettingsStore((s) => s.isTestingGitHubPat);
   const loadGitHubPat = useSettingsStore((s) => s.loadGitHubPat);
   const saveGitHubPat = useSettingsStore((s) => s.saveGitHubPat);
   const clearGitHubPat = useSettingsStore((s) => s.clearGitHubPat);
+  const testGitHubPat = useSettingsStore((s) => s.testGitHubPat);
 
   const agents = usePlatformStore((s) => s.agents);
   const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const setCategoryVisibility = usePlatformStore((s) => s.setCategoryVisibility) ?? (async () => undefined);
   const setAgentEnabled = usePlatformStore((s) => s.setAgentEnabled) ?? (async () => undefined);
+  const loadCentralSkills = useCentralSkillsStore((s) => s.loadCentralSkills);
+  const refreshDiscoverCounts = useDiscoverStore((s) => s.refreshCounts);
+  const loadMarketplaceRegistries = useMarketplaceStore((s) => s.loadRegistries);
+  const selectedMarketplaceRegistryId = useMarketplaceStore((s) => s.selectedRegistryId);
+  const loadMarketplaceSkills = useMarketplaceStore((s) => s.loadSkills);
+  const targets = useTargetStore((s) => s.targets);
+  const activeTarget = useTargetStore((s) => s.activeTarget);
+  const isLoadingTargets = useTargetStore((s) => s.isLoading);
+  const isCreatingTarget = useTargetStore((s) => s.isCreating);
+  const testingTargetId = useTargetStore((s) => s.testingTargetId);
+  const updatingPasswordTargetId = useTargetStore((s) => s.updatingPasswordTargetId);
+  const switchingTargetId = useTargetStore((s) => s.switchingTargetId);
+  const deletingTargetId = useTargetStore((s) => s.deletingTargetId);
+  const loadTargets = useTargetStore((s) => s.loadTargets);
+  const createSshTarget = useTargetStore((s) => s.createSshTarget);
+  const testSshTarget = useTargetStore((s) => s.testSshTarget);
+  const updateSshTargetPassword = useTargetStore((s) => s.updateSshTargetPassword);
+  const deleteTarget = useTargetStore((s) => s.deleteTarget);
+  const switchTarget = useTargetStore((s) => s.switchTarget);
 
   const flavor = useThemeStore((s) => s.flavor);
   const setFlavor = useThemeStore((s) => s.setFlavor);
@@ -591,6 +616,17 @@ export function SettingsView() {
   const [platformError, setPlatformError] = useState<string | null>(null);
   const [githubPatInput, setGitHubPatInput] = useState("");
   const [githubPatMessage, setGitHubPatMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [sshTargetForm, setSshTargetForm] = useState({
+    label: "",
+    host: "",
+    username: "",
+    port: "22",
+    authMethod: "key" as SshAuthMethod,
+    keyPath: "",
+    password: "",
+  });
+  const [sshTargetPasswordUpdates, setSshTargetPasswordUpdates] = useState<Record<string, string>>({});
+  const [targetMessage, setTargetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const normalizedPlatformVisibilityQuery = useMemo(
     () => platformVisibilityQuery.trim().toLowerCase(),
     [platformVisibilityQuery]
@@ -655,13 +691,176 @@ export function SettingsView() {
   useEffect(() => {
     loadScanDirectories();
     loadGitHubPat();
-  }, [loadScanDirectories, loadGitHubPat]);
+    loadTargets();
+  }, [loadScanDirectories, loadGitHubPat, loadTargets]);
 
   useEffect(() => {
     setGitHubPatInput(githubPat);
   }, [githubPat]);
 
   const isGitHubPatDirty = useMemo(() => githubPatInput.trim() !== githubPat, [githubPatInput, githubPat]);
+
+  async function refreshAfterTargetChange() {
+    await rescan();
+    await Promise.allSettled([
+      loadCentralSkills(),
+      refreshDiscoverCounts(),
+      loadMarketplaceRegistries().then(() => {
+        if (selectedMarketplaceRegistryId) {
+          return loadMarketplaceSkills(selectedMarketplaceRegistryId);
+        }
+      }),
+    ]);
+  }
+
+  function updateSshTargetForm(field: keyof typeof sshTargetForm, value: string) {
+    setSshTargetForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateExistingTargetPassword(targetId: string, value: string) {
+    setSshTargetPasswordUpdates((current) => ({ ...current, [targetId]: value }));
+  }
+
+  function sshTargetPayload() {
+    const port = Number(sshTargetForm.port.trim() || "22");
+    const authMethod = sshTargetForm.authMethod;
+    return {
+      label: sshTargetForm.label.trim(),
+      host: sshTargetForm.host.trim(),
+      username: sshTargetForm.username.trim(),
+      port: Number.isFinite(port) ? port : 22,
+      authMethod,
+      keyPath: authMethod === "key" ? sshTargetForm.keyPath.trim() : null,
+      password: authMethod === "password" ? sshTargetForm.password : null,
+    };
+  }
+
+  async function handleCreateSshTarget() {
+    setTargetMessage(null);
+    try {
+      const target = await createSshTarget(sshTargetPayload());
+      setSshTargetForm({
+        label: "",
+        host: "",
+        username: "",
+        port: "22",
+        authMethod: "key",
+        keyPath: "",
+        password: "",
+      });
+      setTargetMessage({ type: "success", text: t("targets.created", { label: target.label }) });
+      toast.success(t("targets.created", { label: target.label }));
+    } catch (err) {
+      const text = String(err);
+      setTargetMessage({ type: "error", text });
+      toast.error(text);
+    }
+  }
+
+  async function handleTestNewSshTarget() {
+    setTargetMessage(null);
+    try {
+      const result = await testSshTarget(sshTargetPayload());
+      const text = result.ok
+        ? t("targets.testSucceeded", {
+            home: result.remoteHome ?? "",
+            os: result.remoteOs ?? "",
+          })
+        : result.message;
+      setTargetMessage({ type: result.ok ? "success" : "error", text });
+      if (result.ok) {
+        toast.success(text);
+      } else {
+        toast.error(text);
+      }
+    } catch (err) {
+      const text = String(err);
+      setTargetMessage({ type: "error", text });
+      toast.error(text);
+    }
+  }
+
+  async function handleTestExistingTarget(targetId: string) {
+    setTargetMessage(null);
+    try {
+      const password = sshTargetPasswordUpdates[targetId];
+      const result = await testSshTarget({
+        id: targetId,
+        password: password?.trim() ? password : null,
+      });
+      const text = result.ok
+        ? t("targets.testSucceeded", {
+            home: result.remoteHome ?? "",
+            os: result.remoteOs ?? "",
+          })
+        : result.message;
+      setTargetMessage({ type: result.ok ? "success" : "error", text });
+      if (result.ok) {
+        toast.success(text);
+      } else {
+        toast.error(text);
+      }
+    } catch (err) {
+      const text = String(err);
+      setTargetMessage({ type: "error", text });
+      toast.error(text);
+    }
+  }
+
+  async function handleUpdateTargetPassword(target: TargetSummary) {
+    const password = sshTargetPasswordUpdates[target.id] ?? "";
+    if (!password.trim()) {
+      const text = t("targets.passwordRequired");
+      setTargetMessage({ type: "error", text });
+      toast.error(text);
+      return;
+    }
+
+    setTargetMessage(null);
+    try {
+      const result = await updateSshTargetPassword(target.id, password);
+      const text = result.ok
+        ? t("targets.passwordUpdated", { label: target.label })
+        : result.message;
+      setTargetMessage({ type: result.ok ? "success" : "error", text });
+      if (result.ok) {
+        updateExistingTargetPassword(target.id, "");
+        toast.success(text);
+      } else {
+        toast.error(text);
+      }
+    } catch (err) {
+      const text = String(err);
+      setTargetMessage({ type: "error", text });
+      toast.error(text);
+    }
+  }
+
+  async function handleSwitchTarget(targetId: string) {
+    setTargetMessage(null);
+    try {
+      const target = await switchTarget(targetId);
+      await refreshAfterTargetChange();
+      toast.success(t("targets.switched", { label: target.label }));
+    } catch (err) {
+      const text = String(err);
+      setTargetMessage({ type: "error", text });
+      toast.error(text);
+    }
+  }
+
+  async function handleDeleteTarget(targetId: string) {
+    setTargetMessage(null);
+    try {
+      await deleteTarget(targetId);
+      await refreshAfterTargetChange();
+      toast.success(t("targets.deleted"));
+    } catch (err) {
+      const text = String(err);
+      setTargetMessage({ type: "error", text });
+      toast.error(text);
+    }
+  }
 
   // ── Scan Directories Handlers ──────────────────────────────────────────────
 
@@ -825,6 +1024,26 @@ export function SettingsView() {
     }
   }
 
+  async function handleTestGitHubPat() {
+    setGitHubPatMessage(null);
+    try {
+      const result = await testGitHubPat();
+      setGitHubPatMessage({
+        type: result.ok ? "success" : "error",
+        text: result.message,
+      });
+      if (result.ok) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (err) {
+      const text = String(err);
+      setGitHubPatMessage({ type: "error", text });
+      toast.error(text);
+    }
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -836,6 +1055,219 @@ export function SettingsView() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6 space-y-6">
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Server className="size-5 text-muted-foreground" />
+              <div>
+                <CardTitle>{t("targets.title")}</CardTitle>
+                <CardDescription className="mt-1">
+                  {t("targets.description")}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {targetMessage && (
+                <p
+                  className={`text-xs ${targetMessage.type === "success" ? "text-primary" : "text-destructive"}`}
+                  role="status"
+                >
+                  {targetMessage.text}
+                </p>
+              )}
+
+              <div className="rounded-lg border border-border overflow-hidden">
+                {targets.map((target) => {
+                  const isLocal = target.kind === "local";
+                  const isActive = target.id === activeTarget.id || target.isActive;
+                  const passwordUpdateValue = sshTargetPasswordUpdates[target.id] ?? "";
+                  return (
+                    <div
+                      key={target.id}
+                      className="flex items-center gap-3 border-b border-border/50 px-4 py-3 last:border-0"
+                    >
+                      <Server className="size-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-medium">
+                            {isLocal ? t("targets.local") : target.label}
+                          </span>
+                          {isActive && (
+                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                              {t("targets.active")}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {isLocal
+                            ? t("targets.localDescription")
+                            : `${target.authMethod === "password" ? t("targets.authPassword") : t("targets.authKey")} - ${target.username ?? ""}@${target.host ?? ""}:${target.port ?? 22} - ${target.remoteOs ?? "unknown"} - ${target.remoteHome ?? ""}`}
+                        </div>
+                        {!isLocal && target.cacheDbPath && (
+                          <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/80">
+                            {target.cacheDbPath}
+                          </div>
+                        )}
+                        {!isLocal && target.authMethod === "password" && (
+                          <div className="mt-2 flex max-w-xl flex-col gap-2 sm:flex-row">
+                            <Input
+                              type="password"
+                              value={passwordUpdateValue}
+                              onChange={(event) => updateExistingTargetPassword(target.id, event.target.value)}
+                              placeholder={t("targets.updatePasswordPlaceholder")}
+                              aria-label={t("targets.updatePasswordFor", { label: target.label })}
+                              className="h-8 text-xs"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={
+                                updatingPasswordTargetId === target.id ||
+                                testingTargetId === target.id ||
+                                !passwordUpdateValue.trim()
+                              }
+                              onClick={() => void handleUpdateTargetPassword(target)}
+                            >
+                              {updatingPasswordTargetId === target.id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : null}
+                              {t("targets.updatePassword")}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {!isLocal && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={testingTargetId === target.id}
+                            onClick={() => void handleTestExistingTarget(target.id)}
+                          >
+                            {testingTargetId === target.id ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : null}
+                            {t("targets.test")}
+                          </Button>
+                        )}
+                        {!isActive && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={switchingTargetId === target.id || isLoadingTargets}
+                            onClick={() => void handleSwitchTarget(target.id)}
+                          >
+                            {switchingTargetId === target.id ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : null}
+                            {t("targets.activate")}
+                          </Button>
+                        )}
+                        {!isLocal && (
+                          <InlineConfirmAction
+                            onConfirm={() => handleDeleteTarget(target.id)}
+                            isLoading={deletingTargetId === target.id}
+                            idleAriaLabel={t("targets.deleteLabel", { label: target.label })}
+                            idleTitle={t("targets.deleteLabel", { label: target.label })}
+                            confirmLabel={t("common.confirmDelete")}
+                            icon={<Trash2 className="size-3.5" />}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="grid gap-3 rounded-lg border border-border/70 bg-muted/20 p-4 md:grid-cols-5">
+                <div className="flex gap-2 md:col-span-5">
+                  {(["key", "password"] as const).map((method) => (
+                    <Button
+                      key={method}
+                      type="button"
+                      variant={sshTargetForm.authMethod === method ? "default" : "outline"}
+                      className="flex-1"
+                      onClick={() => updateSshTargetForm("authMethod", method)}
+                    >
+                      {method === "key" ? t("targets.authKey") : t("targets.authPassword")}
+                    </Button>
+                  ))}
+                </div>
+                <Input
+                  value={sshTargetForm.label}
+                  onChange={(event) => updateSshTargetForm("label", event.target.value)}
+                  placeholder={t("targets.labelPlaceholder")}
+                />
+                <Input
+                  value={sshTargetForm.host}
+                  onChange={(event) => updateSshTargetForm("host", event.target.value)}
+                  placeholder={t("targets.hostPlaceholder")}
+                />
+                <Input
+                  value={sshTargetForm.username}
+                  onChange={(event) => updateSshTargetForm("username", event.target.value)}
+                  placeholder={t("targets.usernamePlaceholder")}
+                />
+                <Input
+                  value={sshTargetForm.port}
+                  onChange={(event) => updateSshTargetForm("port", event.target.value)}
+                  placeholder="22"
+                />
+                <Input
+                  type={sshTargetForm.authMethod === "password" ? "password" : "text"}
+                  value={sshTargetForm.authMethod === "key" ? sshTargetForm.keyPath : sshTargetForm.password}
+                  onChange={(event) =>
+                    updateSshTargetForm(
+                      sshTargetForm.authMethod === "key" ? "keyPath" : "password",
+                      event.target.value
+                    )
+                  }
+                  placeholder={
+                    sshTargetForm.authMethod === "key"
+                      ? t("targets.keyPathPlaceholder")
+                      : t("targets.passwordPlaceholder")
+                  }
+                  className="md:col-span-3"
+                />
+                <div className="flex gap-2 md:col-span-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    disabled={testingTargetId === "new" || isCreatingTarget}
+                    onClick={() => void handleTestNewSshTarget()}
+                  >
+                    {testingTargetId === "new" ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : null}
+                    {t("targets.test")}
+                  </Button>
+                  <Button
+                    type="button"
+                    className="flex-1"
+                    disabled={isCreatingTarget}
+                    onClick={() => void handleCreateSshTarget()}
+                  >
+                    {isCreatingTarget ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                    {t("targets.add")}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p>{t("targets.sshHint")}</p>
+                <p>{t("targets.passwordRepairHint")}</p>
+                <p>{t("targets.sshKeyPathHelp")}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* ── Section 1: Custom Platforms ───────────────────────────────────── */}
         <Card>
@@ -977,6 +1409,7 @@ export function SettingsView() {
               <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-sm text-muted-foreground">
                 <p>{t("settings.githubPatDirectOnly")}</p>
                 <p className="mt-2">{t("settings.githubPatRateLimitHint")}</p>
+                <p className="mt-2">{t("settings.githubPatAppWideHint")}</p>
               </div>
 
               {githubPatMessage ? (
@@ -1002,6 +1435,20 @@ export function SettingsView() {
                   disabled={isLoadingGitHubPat || isSavingGitHubPat || !githubPat}
                 >
                   <span>{t("settings.githubPatClear")}</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleTestGitHubPat}
+                  disabled={
+                    isLoadingGitHubPat ||
+                    isSavingGitHubPat ||
+                    isTestingGitHubPat ||
+                    !githubPat ||
+                    isGitHubPatDirty
+                  }
+                >
+                  {isTestingGitHubPat ? <Loader2 className="size-4 animate-spin" /> : null}
+                  <span>{t("settings.githubPatTest")}</span>
                 </Button>
                 {isLoadingGitHubPat ? (
                   <span className="text-xs text-muted-foreground">{t("settings.loading")}</span>

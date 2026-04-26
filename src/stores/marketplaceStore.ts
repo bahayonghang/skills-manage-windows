@@ -73,6 +73,7 @@ interface MarketplaceState {
     refresh?: boolean
   ) => Promise<void>;
   resetGitHubImport: () => void;
+  resetForTargetChange: () => void;
 }
 
 const initialGitHubImportState = (): GitHubImportState => ({
@@ -90,6 +91,7 @@ const initialGitHubImportState = (): GitHubImportState => ({
 
 let unlistenGitHubImportProgress: UnlistenFn | null = null;
 const githubImportAiUnlisteners = new Map<string, UnlistenFn>();
+let marketplaceStoreGeneration = 0;
 
 function cleanupGitHubImportAiSummaryListener(sourcePath?: string) {
   if (sourcePath) {
@@ -110,6 +112,7 @@ async function setupGitHubImportEventListeners(
       | Partial<MarketplaceState>
       | ((s: MarketplaceState) => Partial<MarketplaceState>),
   ) => void,
+  generation: number,
 ) {
   if (unlistenGitHubImportProgress) {
     unlistenGitHubImportProgress();
@@ -119,6 +122,9 @@ async function setupGitHubImportEventListeners(
   unlistenGitHubImportProgress = await listen<GitHubImportProgressPayload>(
     "github-import:progress",
     (event) => {
+      if (generation !== marketplaceStoreGeneration) {
+        return;
+      }
       set((state) => ({
         githubImport: {
           ...state.githubImport,
@@ -174,12 +180,17 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   loadRegistries: async () => {
+    const generation = marketplaceStoreGeneration;
     set({ isLoading: true, error: null });
     try {
       const registries = await invoke<SkillRegistry[]>("list_registries");
-      set({ registries: registries ?? [], isLoading: false });
+      if (generation === marketplaceStoreGeneration) {
+        set({ registries: registries ?? [], isLoading: false });
+      }
     } catch (err) {
-      set({ error: String(err), isLoading: false });
+      if (generation === marketplaceStoreGeneration) {
+        set({ error: String(err), isLoading: false });
+      }
     }
   },
 
@@ -197,6 +208,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   syncRegistry: async (registryId: string, forceRefresh = false) => {
+    const generation = marketplaceStoreGeneration;
     set({ isSyncing: true, error: null });
     try {
       const command = forceRefresh ? "sync_registry_with_options" : "sync_registry";
@@ -207,32 +219,41 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
           })
         : await invoke<MarketplaceSkill[]>(command, { registryId });
       const registries = await invoke<SkillRegistry[]>("list_registries");
-      set({
-        skills: skills ?? [],
-        registries: registries ?? [],
-        isSyncing: false,
-      });
+      if (generation === marketplaceStoreGeneration) {
+        set({
+          skills: skills ?? [],
+          registries: registries ?? [],
+          isSyncing: false,
+        });
+      }
     } catch (err) {
       const registries = await invoke<SkillRegistry[]>("list_registries").catch(() => null);
-      set({
-        error: String(err),
-        registries: registries ?? get().registries,
-        isSyncing: false,
-      });
+      if (generation === marketplaceStoreGeneration) {
+        set({
+          error: String(err),
+          registries: registries ?? get().registries,
+          isSyncing: false,
+        });
+      }
       throw err;
     }
   },
 
   loadSkills: async (registryId: string, query?: string) => {
+    const generation = marketplaceStoreGeneration;
     set({ isLoading: true, error: null });
     try {
       const skills = await invoke<MarketplaceSkill[]>("search_marketplace_skills", {
         registryId,
         query: query || null,
       });
-      set({ skills: skills ?? [], isLoading: false });
+      if (generation === marketplaceStoreGeneration) {
+        set({ skills: skills ?? [], isLoading: false });
+      }
     } catch (err) {
-      set({ error: String(err), isLoading: false });
+      if (generation === marketplaceStoreGeneration) {
+        set({ error: String(err), isLoading: false });
+      }
     }
   },
 
@@ -244,31 +265,36 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   installSkill: async (skillId: string) => {
+    const generation = marketplaceStoreGeneration;
     set((s) => ({ installingIds: new Set(s.installingIds).add(skillId) }));
     try {
       await invoke("install_marketplace_skill", { skillId });
-      // Update the skill's is_installed status locally
-      set((s) => ({
-        skills: s.skills.map((sk) =>
-          sk.id === skillId ? { ...sk, is_installed: true } : sk
-        ),
-        installingIds: (() => {
+      if (generation === marketplaceStoreGeneration) {
+        set((s) => ({
+          skills: s.skills.map((sk) =>
+            sk.id === skillId ? { ...sk, is_installed: true } : sk
+          ),
+          installingIds: (() => {
+            const next = new Set(s.installingIds);
+            next.delete(skillId);
+            return next;
+          })(),
+        }));
+      }
+    } catch (err) {
+      if (generation === marketplaceStoreGeneration) {
+        set((s) => {
           const next = new Set(s.installingIds);
           next.delete(skillId);
-          return next;
-        })(),
-      }));
-    } catch (err) {
-      set((s) => {
-        const next = new Set(s.installingIds);
-        next.delete(skillId);
-        return { installingIds: next, error: String(err) };
-      });
+          return { installingIds: next, error: String(err) };
+        });
+      }
       throw err;
     }
   },
 
   addRegistry: async (name: string, sourceType: string, url: string) => {
+    const generation = marketplaceStoreGeneration;
     const duplicate = get().findDuplicateRegistry(url);
     if (duplicate) {
       throw new Error(
@@ -282,20 +308,26 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     }
     const registry = await invoke<SkillRegistry>("add_registry", { name, sourceType, url });
     const registries = await invoke<SkillRegistry[]>("list_registries");
-    set({ registries: registries ?? [] });
+    if (generation === marketplaceStoreGeneration) {
+      set({ registries: registries ?? [] });
+    }
     return registry;
   },
 
   removeRegistry: async (registryId: string) => {
+    const generation = marketplaceStoreGeneration;
     await invoke("remove_registry", { registryId });
     const registries = await invoke<SkillRegistry[]>("list_registries");
-    set((s) => ({
-      registries: registries ?? [],
-      selectedRegistryId: s.selectedRegistryId === registryId ? null : s.selectedRegistryId,
-    }));
+    if (generation === marketplaceStoreGeneration) {
+      set((s) => ({
+        registries: registries ?? [],
+        selectedRegistryId: s.selectedRegistryId === registryId ? null : s.selectedRegistryId,
+      }));
+    }
   },
 
   previewGitHubRepoImport: async (repoUrl: string) => {
+    const generation = marketplaceStoreGeneration;
     if (!isTauriRuntime()) {
       const error = "Desktop-only feature: GitHub repo preview is available in the Tauri app.";
       set((state) => ({
@@ -330,37 +362,42 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       const preview = await invoke<GitHubRepoPreview>("preview_github_repo_import", {
         repoUrl,
       });
-      set((state) => ({
-        githubImport: {
-          ...state.githubImport,
-          isPreviewLoading: false,
-          preview,
-          importResult: null,
-          previewedRepoUrl: repoUrl,
-          error: null,
-          importProgress: null,
-          importStartedAt: null,
-        },
-      }));
+      if (generation === marketplaceStoreGeneration) {
+        set((state) => ({
+          githubImport: {
+            ...state.githubImport,
+            isPreviewLoading: false,
+            preview,
+            importResult: null,
+            previewedRepoUrl: repoUrl,
+            error: null,
+            importProgress: null,
+            importStartedAt: null,
+          },
+        }));
+      }
       return preview;
     } catch (err) {
-      set((state) => ({
-        githubImport: {
-          ...state.githubImport,
-          isPreviewLoading: false,
-          preview: null,
-          importResult: null,
-          previewedRepoUrl: repoUrl,
-          error: String(err),
-          importProgress: null,
-          importStartedAt: null,
-        },
-      }));
+      if (generation === marketplaceStoreGeneration) {
+        set((state) => ({
+          githubImport: {
+            ...state.githubImport,
+            isPreviewLoading: false,
+            preview: null,
+            importResult: null,
+            previewedRepoUrl: repoUrl,
+            error: String(err),
+            importProgress: null,
+            importStartedAt: null,
+          },
+        }));
+      }
       throw err;
     }
   },
 
   importGitHubRepoSkills: async (repoUrl: string, selections: GitHubSkillImportSelection[]) => {
+    const generation = marketplaceStoreGeneration;
     if (!isTauriRuntime()) {
       const error = "Desktop-only feature: GitHub repo import is available in the Tauri app.";
       set((state) => ({
@@ -394,38 +431,43 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     }));
 
     try {
-      await setupGitHubImportEventListeners(set);
+      await setupGitHubImportEventListeners(set, generation);
 
       const importResult = await invoke<GitHubRepoImportResult>("import_github_repo_skills", {
         repoUrl,
         selections,
       });
-      set((state) => ({
-        githubImport: {
-          ...state.githubImport,
-          isImporting: false,
-          importResult,
-          error: null,
-          importProgress: null,
-          importStartedAt: null,
-        },
-      }));
+      if (generation === marketplaceStoreGeneration) {
+        set((state) => ({
+          githubImport: {
+            ...state.githubImport,
+            isImporting: false,
+            importResult,
+            error: null,
+            importProgress: null,
+            importStartedAt: null,
+          },
+        }));
+      }
       return importResult;
     } catch (err) {
-      set((state) => ({
-        githubImport: {
-          ...state.githubImport,
-          isImporting: false,
-          error: String(err),
-          importProgress: null,
-          importStartedAt: null,
-        },
-      }));
+      if (generation === marketplaceStoreGeneration) {
+        set((state) => ({
+          githubImport: {
+            ...state.githubImport,
+            isImporting: false,
+            error: String(err),
+            importProgress: null,
+            importStartedAt: null,
+          },
+        }));
+      }
       throw err;
     }
   },
 
   fetchGitHubSkillMarkdown: async (sourcePath: string, downloadUrl: string) => {
+    const generation = marketplaceStoreGeneration;
     const existing = get().githubImport.skillMarkdown[sourcePath];
     if (existing?.status === "loading" || existing?.status === "ready") {
       return;
@@ -461,25 +503,29 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       const content = await invoke<string>("fetch_github_skill_markdown", {
         downloadUrl,
       });
-      set((state) => ({
-        githubImport: {
-          ...state.githubImport,
-          skillMarkdown: {
-            ...state.githubImport.skillMarkdown,
-            [sourcePath]: { status: "ready", content },
+      if (generation === marketplaceStoreGeneration) {
+        set((state) => ({
+          githubImport: {
+            ...state.githubImport,
+            skillMarkdown: {
+              ...state.githubImport.skillMarkdown,
+              [sourcePath]: { status: "ready", content },
+            },
           },
-        },
-      }));
+        }));
+      }
     } catch (err) {
-      set((state) => ({
-        githubImport: {
-          ...state.githubImport,
-          skillMarkdown: {
-            ...state.githubImport.skillMarkdown,
-            [sourcePath]: { status: "error", error: String(err) },
+      if (generation === marketplaceStoreGeneration) {
+        set((state) => ({
+          githubImport: {
+            ...state.githubImport,
+            skillMarkdown: {
+              ...state.githubImport.skillMarkdown,
+              [sourcePath]: { status: "error", error: String(err) },
+            },
           },
-        },
-      }));
+        }));
+      }
     }
   },
 
@@ -490,6 +536,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     lang: string,
     refresh = false
   ) => {
+    const generation = marketplaceStoreGeneration;
     const existing = get().githubImport.aiSummaries[sourcePath];
     if (!refresh && (existing?.isLoading || existing?.summary)) {
       return;
@@ -538,6 +585,9 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       const skillId = `github-import:${sourcePath}`;
       const stopListening = await setupExplanationStreamListeners(skillId, {
         onChunk: (chunkText) => {
+          if (generation !== marketplaceStoreGeneration) {
+            return;
+          }
           set((state) => ({
             githubImport: {
               ...state.githubImport,
@@ -554,6 +604,9 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
           }));
         },
         onComplete: (payload) => {
+          if (generation !== marketplaceStoreGeneration) {
+            return;
+          }
           cleanupGitHubImportAiSummaryListener(sourcePath);
           set((state) => {
             const currentSummary = state.githubImport.aiSummaries[sourcePath]?.summary;
@@ -576,6 +629,9 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
           });
         },
         onError: (payload) => {
+          if (generation !== marketplaceStoreGeneration) {
+            return;
+          }
           cleanupGitHubImportAiSummaryListener(sourcePath);
           set((state) => ({
             githubImport: {
@@ -596,41 +652,69 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       githubImportAiUnlisteners.set(sourcePath, stopListening);
       await invoke(command, { skillId, content: prompt, lang });
       const summary = await invoke<string | null>("get_skill_explanation", { skillId, lang }).catch(() => null);
-      set((state) => ({
-        githubImport: {
-          ...state.githubImport,
-          aiSummaries: {
-            ...state.githubImport.aiSummaries,
-            [sourcePath]: {
-              summary: summary ?? state.githubImport.aiSummaries[sourcePath]?.summary ?? null,
-              isLoading: false,
-              isStreaming: false,
-              error: null,
+      if (generation === marketplaceStoreGeneration) {
+        set((state) => ({
+          githubImport: {
+            ...state.githubImport,
+            aiSummaries: {
+              ...state.githubImport.aiSummaries,
+              [sourcePath]: {
+                summary: summary ?? state.githubImport.aiSummaries[sourcePath]?.summary ?? null,
+                isLoading: false,
+                isStreaming: false,
+                error: null,
+              },
             },
           },
-        },
-      }));
+        }));
+      }
     } catch (err) {
       cleanupGitHubImportAiSummaryListener(sourcePath);
-      set((state) => ({
-        githubImport: {
-          ...state.githubImport,
-          aiSummaries: {
-            ...state.githubImport.aiSummaries,
-            [sourcePath]: {
-              summary: null,
-              isLoading: false,
-              isStreaming: false,
-              error: String(err),
+      if (generation === marketplaceStoreGeneration) {
+        set((state) => ({
+          githubImport: {
+            ...state.githubImport,
+            aiSummaries: {
+              ...state.githubImport.aiSummaries,
+              [sourcePath]: {
+                summary: null,
+                isLoading: false,
+                isStreaming: false,
+                error: String(err),
+              },
             },
           },
-        },
-      }));
+        }));
+      }
     }
   },
 
   resetGitHubImport: () => {
+    if (unlistenGitHubImportProgress) {
+      unlistenGitHubImportProgress();
+      unlistenGitHubImportProgress = null;
+    }
     cleanupGitHubImportAiSummaryListener();
     set({ githubImport: initialGitHubImportState() });
+  },
+
+  resetForTargetChange: () => {
+    marketplaceStoreGeneration += 1;
+    if (unlistenGitHubImportProgress) {
+      unlistenGitHubImportProgress();
+      unlistenGitHubImportProgress = null;
+    }
+    cleanupGitHubImportAiSummaryListener();
+    set({
+      registries: [],
+      skills: [],
+      selectedRegistryId: null,
+      searchQuery: "",
+      isLoading: false,
+      isSyncing: false,
+      installingIds: new Set(),
+      error: null,
+      githubImport: initialGitHubImportState(),
+    });
   },
 }));

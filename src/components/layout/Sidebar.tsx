@@ -21,6 +21,12 @@ import {
 } from "@/lib/platformTargetGroups";
 import { cn } from "@/lib/utils";
 import { markAppPerformance } from "@/lib/performance";
+import { useResizableWidth } from "@/hooks/useResizableWidth";
+
+const EXPANDED_SIDEBAR_WIDTH = 208;
+const COLLAPSED_SIDEBAR_WIDTH = 56;
+const MIN_SIDEBAR_WIDTH = 168;
+const MAX_SIDEBAR_WIDTH = 360;
 
 // ─── Nav Item ────────────────────────────────────────────────────────────────
 
@@ -97,6 +103,16 @@ export function Sidebar() {
   const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
 
   const [expanded, setExpanded] = useState(true);
+  const {
+    width: sidebarWidth,
+    startResize,
+    handleResizeKeyDown,
+  } = useResizableWidth({
+    defaultWidth: EXPANDED_SIDEBAR_WIDTH,
+    minWidth: MIN_SIDEBAR_WIDTH,
+    maxWidth: MAX_SIDEBAR_WIDTH,
+  });
+  const resolvedSidebarWidth = expanded ? sidebarWidth : COLLAPSED_SIDEBAR_WIDTH;
 
   useEffect(() => {
     if (!isLoading && agents.length > 0) {
@@ -138,9 +154,9 @@ export function Sidebar() {
   return (
     <nav
       className={cn(
-        "flex flex-col shrink-0 h-full border-r border-border bg-sidebar text-sidebar-foreground transition-[width] duration-200",
-        expanded ? "w-52" : "w-14"
+        "relative flex flex-col shrink-0 h-full border-r border-border bg-sidebar text-sidebar-foreground transition-[width] duration-200"
       )}
+      style={{ width: resolvedSidebarWidth }}
       aria-label={t("sidebar.mainNav")}
     >
       {/* Toggle button */}
@@ -296,6 +312,17 @@ export function Sidebar() {
         )}
       </div>
 
+      {expanded && (
+        <div
+          role="separator"
+          aria-label={t("sidebar.resizeSidebar")}
+          aria-orientation="vertical"
+          tabIndex={0}
+          onPointerDown={startResize}
+          onKeyDown={handleResizeKeyDown}
+          className="absolute right-0 top-0 z-20 h-full w-1.5 translate-x-1/2 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-primary/30 focus:outline-none focus-visible:bg-primary/40"
+        />
+      )}
     </nav>
   );
 }

@@ -108,6 +108,8 @@ const BROWSER_FIXTURE_COUNTS: ScanResult = {
 
 let initializePromise: Promise<void> | null = null;
 let backgroundRefreshPromise: Promise<void> | null = null;
+let refreshToken = 0;
+let refreshRunId = 0;
 
 function buildAgentCounts(
   agents: AgentWithStatus[],
@@ -161,6 +163,7 @@ interface PlatformState {
   refreshScanInBackground: () => Promise<void>;
   rescan: () => Promise<void>;
   refreshCounts: () => Promise<void>;
+  resetForTargetChange: () => void;
   setCategoryVisibility: (category: PlatformCategoryKey, visible: boolean) => Promise<void>;
   setAgentEnabled: (agentId: string, enabled: boolean) => Promise<void>;
   applyScanSummary: (summary: SkillCountsSummary) => void;
@@ -184,6 +187,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   error: null,
 
   hydrateShell: async () => {
+    const currentRefreshToken = refreshToken;
     set({ isLoading: true, error: null });
 
     if (!isTauriRuntime()) {
@@ -211,18 +215,22 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
           key: PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY,
         }),
       ]);
-      set((state) => ({
-        ...applyBootstrapSnapshot(snapshot),
-        categoryVisibility: resolvePlatformCategoryVisibility(
-          rawCategoryVisibility,
-          snapshot.agents
-        ),
-        isLoading: false,
-        scanGeneration: (state.scanGeneration ?? 0) + 1,
-      }));
+      if (currentRefreshToken === refreshToken) {
+        set((state) => ({
+          ...applyBootstrapSnapshot(snapshot),
+          categoryVisibility: resolvePlatformCategoryVisibility(
+            rawCategoryVisibility,
+            snapshot.agents
+          ),
+          isLoading: false,
+          scanGeneration: (state.scanGeneration ?? 0) + 1,
+        }));
+      }
       markAppPerformance("shell_ready");
     } catch (err) {
-      set({ error: String(err), isLoading: false });
+      if (currentRefreshToken === refreshToken) {
+        set({ error: String(err), isLoading: false });
+      }
       throw err;
     }
   },
@@ -262,44 +270,58 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
       return backgroundRefreshPromise;
     }
 
+    const currentRefreshToken = refreshToken;
+    const currentRefreshRunId = ++refreshRunId;
     set({ isRefreshing: true, scanState: "refreshing", error: null });
 
-    backgroundRefreshPromise = (async () => {
+    const refreshPromise = (async () => {
       try {
         await invoke<ScanResult>("scan_all_skills");
         const snapshot = await invoke<BootstrapSnapshot>("get_bootstrap_snapshot");
-        set((state) => ({
-          ...applyBootstrapSnapshot(snapshot),
-          isRefreshing: false,
-          isLoading: state.isLoading,
-          error: null,
-        }));
+        if (currentRefreshToken === refreshToken) {
+          set((state) => ({
+            ...applyBootstrapSnapshot(snapshot),
+            isRefreshing: false,
+            isLoading: state.isLoading,
+            error: null,
+          }));
+        }
         markAppPerformance("scan_finished");
       } catch (err) {
-        set({
-          isRefreshing: false,
-          scanState: "error",
-          error: String(err),
-        });
+        if (currentRefreshToken === refreshToken) {
+          set({
+            isRefreshing: false,
+            scanState: "error",
+            error: String(err),
+          });
+        }
         throw err;
       } finally {
-        backgroundRefreshPromise = null;
+        if (currentRefreshRunId === refreshRunId) {
+          backgroundRefreshPromise = null;
+        }
       }
     })();
 
+    backgroundRefreshPromise = refreshPromise;
     return backgroundRefreshPromise;
   },
 
   rescan: async () => {
+    const currentRefreshToken = refreshToken;
     set({ isLoading: true, error: null });
     try {
       await get().refreshScanInBackground();
-      set((state) => ({
-        isLoading: false,
-        scanGeneration: (state.scanGeneration ?? 0) + 1,
-      }));
+      if (currentRefreshToken === refreshToken) {
+        set((state) => ({
+          isLoading: false,
+          scanGeneration: (state.scanGeneration ?? 0) + 1,
+        }));
+      }
     } catch (err) {
-      set({ error: String(err), isLoading: false });
+      if (currentRefreshToken === refreshToken) {
+        set({ error: String(err), isLoading: false });
+      }
     }
   },
 
@@ -332,6 +354,25 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
       set({ error: String(err), isRefreshing: false, scanState: "error" });
       throw err;
     }
+  },
+
+  resetForTargetChange: () => {
+    refreshToken += 1;
+    refreshRunId += 1;
+    initializePromise = null;
+    backgroundRefreshPromise = null;
+    set((state) => ({
+      agents: [],
+      skillsByAgent: {},
+      collectionCount: 0,
+      discoveredCount: 0,
+      lastScanAt: null,
+      scanState: "idle",
+      isRefreshing: false,
+      isLoading: true,
+      error: null,
+      scanGeneration: (state.scanGeneration ?? 0) + 1,
+    }));
   },
 
   setCategoryVisibility: async (category, visible) => {

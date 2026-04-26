@@ -21,6 +21,40 @@
     "search": "Search",
     "refresh": "Refresh"
   },
+  "targets": {
+    "title": "Remote Targets",
+    "description": "Switch between local skills and SSH-managed remote user directories.",
+    "local": "Local",
+    "localDescription": "Manage skills on this computer.",
+    "active": "Active",
+    "activate": "Activate",
+    "add": "Add target",
+    "test": "Test",
+    "created": "Target {{label}} created",
+    "deleted": "Target deleted",
+    "switched": "Switched to {{label}}",
+    "deleteLabel": "Delete target {{label}}",
+    "testSucceeded": "Connected: {{os}} {{home}}",
+    "authKey": "SSH key",
+    "authPassword": "Password",
+    "labelPlaceholder": "Alias",
+    "hostPlaceholder": "Host",
+    "usernamePlaceholder": "User",
+    "keyPathPlaceholder": "SSH key path",
+    "passwordPlaceholder": "SSH password",
+    "updatePassword": "Save password",
+    "updatePasswordPlaceholder": "SSH password",
+    "updatePasswordFor": "SSH password for {{label}}",
+    "passwordUpdated": "SSH password saved for {{label}}.",
+    "passwordRequired": "Enter the SSH password first.",
+    "passwordRepairHint": "For password targets, use Save password after recreating Windows credentials or moving the app to another machine.",
+    "sshHint": "SkillPort supports SSH key and password login. Key mode stores only the local key path. Password mode stores the password in the system credential store, not in the SQLite config.",
+    "sshKeyPathHelp": "SSH key path is usually C:\\Users\\<you>\\.ssh\\id_ed25519 or id_rsa on Windows. Check it with PowerShell: Get-ChildItem ~/.ssh. Host is the server IP or domain, usually from your cloud console, router DHCP list, or hostname -I on the remote host.",
+    "symlinkDisabled": "Remote targets use copy install by default.",
+    "discoverUnsupported": "Remote Discover scanning is not available in this version.",
+    "centralUpdatesUnsupported": "Remote Central update checks are not available in this version.",
+    "pathCopied": "Remote path copied"
+  },
   "sidebar": {
     "byTool": "By Tool",
     "centralSkills": "Central Skills",
@@ -38,7 +72,8 @@
     "discovered": "Discovered",
     "rescan": "Re-scan...",
     "categoryLobster": "Lobster",
-    "categoryCoding": "Coding"
+    "categoryCoding": "Coding",
+    "resizeSidebar": "Resize sidebar"
   },
   "platform": {
     "searchPlaceholder": "Search skills...",
@@ -173,6 +208,7 @@
     "aiTaggingNeedsConfig": "AI tagging needs Settings API key",
     "metadataError": "Metadata update failed: {{error}}",
     "categoryNav": "Categories",
+    "resizeFilterSidebar": "Resize Central filters",
     "aiReviewOnly": "AI review",
     "categorizePanelTitle": "Categorize",
     "categorizePanelDesc": "Select scope and intent, preview impact, then apply.",
@@ -479,8 +515,10 @@
     "githubPatLabel": "GitHub Personal Access Token",
     "githubPatDirectOnly": "This token is used only for direct GitHub requests to github.com, api.github.com, and raw.githubusercontent.com. It is never sent to public mirrors or proxy fallbacks.",
     "githubPatRateLimitHint": "Use a token when GitHub preview/import hits rate limits or requires authenticated access.",
+    "githubPatAppWideHint": "This is an app-wide token. SSH targets reuse it for GitHub requests, but it is not stored in remote target caches.",
     "githubPatSaved": "GitHub token saved",
     "githubPatCleared": "GitHub token cleared",
+    "githubPatTest": "Test token",
     "githubPatClear": "Clear token",
     "about": "About",
     "appVersion": "App Version",
@@ -750,6 +788,7 @@
     "githubImportResultActionRestart": "Start another import",
     "githubImportResultSkippedTitle": "Skipped items",
     "githubImportResultSkippedNone": "No skills were skipped.",
-    "githubPatSettingsHint": "Open Settings and save a GitHub Personal Access Token to use authenticated direct GitHub requests for this import flow."
+    "githubPatSettingsHint": "Open Settings and save a GitHub Personal Access Token to use authenticated direct GitHub requests for this import flow.",
+    "githubPatConfiguredFailureHint": "A configured GitHub token was already used. Check that the token owner can read this repo and that the token has sufficient repository access."
   }
 }

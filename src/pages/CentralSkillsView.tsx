@@ -21,6 +21,7 @@ import { markAppPerformance } from "@/lib/performance";
 import { cn } from "@/lib/utils";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
+import { useTargetStore } from "@/stores/targetStore";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { formatPathForDisplay } from "@/lib/path";
@@ -30,6 +31,7 @@ import {
 } from "@/lib/platformVisibility";
 import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 import { isTauriRuntime } from "@/lib/tauri";
+import { useResizableWidth } from "@/hooks/useResizableWidth";
 
 const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
   {
@@ -57,6 +59,9 @@ const EMPTY_TAGS: SkillTag[] = [];
 const EMPTY_AI_TAG_REVIEWS: SkillAiTagReview[] = [];
 const EMPTY_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {};
 const EMPTY_UPDATE_STATUSES: Record<string, CentralSkillUpdateState> = {};
+const CENTRAL_FILTER_DEFAULT_WIDTH = 286;
+const CENTRAL_FILTER_MIN_WIDTH = 220;
+const CENTRAL_FILTER_MAX_WIDTH = 460;
 const IDLE_AI_TAG_JOB: AiTagJob = {
   jobId: null,
   status: "idle",
@@ -439,6 +444,8 @@ export function CentralSkillsView() {
   const isInstalling = useCentralSkillsStore((state) => state.isInstalling) ?? false;
   const isDeleting = useCentralSkillsStore((state) => state.isDeleting) ?? false;
   const togglingAgentId = useCentralSkillsStore((state) => state.togglingAgentId);
+  const activeTarget = useTargetStore((state) => state.activeTarget);
+  const isRemoteTarget = activeTarget.kind === "ssh";
 
   // Keep the platform sidebar counts in sync after install.
   const categoryVisibility = usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
@@ -479,6 +486,15 @@ export function CentralSkillsView() {
   const [deletePreview, setDeletePreview] = useState<SkillDetail | null>(null);
   const [batchDeletePreview, setBatchDeletePreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
+  const {
+    width: filterSidebarWidth,
+    startResize: startFilterSidebarResize,
+    handleResizeKeyDown: handleFilterSidebarResizeKeyDown,
+  } = useResizableWidth({
+    defaultWidth: CENTRAL_FILTER_DEFAULT_WIDTH,
+    minWidth: CENTRAL_FILTER_MIN_WIDTH,
+    maxWidth: CENTRAL_FILTER_MAX_WIDTH,
+  });
   const [isDeletePreviewLoading, setIsDeletePreviewLoading] = useState(false);
   const [isBatchDeletePreviewLoading, setIsBatchDeletePreviewLoading] = useState(false);
   const [deletePreviewError, setDeletePreviewError] = useState<string | null>(null);
@@ -1148,7 +1164,8 @@ export function CentralSkillsView() {
           <Button
             variant="outline"
             onClick={handleCheckUpdates}
-            disabled={isCheckingUpdates || updateJob.status === "running"}
+            disabled={isRemoteTarget || isCheckingUpdates || updateJob.status === "running"}
+            title={isRemoteTarget ? t("targets.centralUpdatesUnsupported") : undefined}
           >
             <RefreshCw className={`size-3.5 ${isCheckingUpdates ? "animate-spin" : ""}`} />
             {t("central.checkUpdates")}
@@ -1157,7 +1174,8 @@ export function CentralSkillsView() {
             <Button
               variant="default"
               onClick={() => void handleUpdateSkills(updateTargetSkillIds)}
-              disabled={updateTargetSkillIds.length === 0 || updatingSkillIds.length > 0}
+              disabled={isRemoteTarget || updateTargetSkillIds.length === 0 || updatingSkillIds.length > 0}
+              title={isRemoteTarget ? t("targets.centralUpdatesUnsupported") : undefined}
             >
               <Download className="size-3.5" />
               {selectedSkillIds.length > 0
@@ -1281,7 +1299,8 @@ export function CentralSkillsView() {
       <div className="flex min-h-0 flex-1">
         <aside
           data-testid="central-filter-sidebar"
-          className="hidden min-h-0 w-[286px] shrink-0 border-r border-border/80 bg-muted/15 md:flex md:flex-col"
+          className="relative hidden min-h-0 shrink-0 border-r border-border/80 bg-muted/15 md:flex md:flex-col"
+          style={{ width: filterSidebarWidth }}
         >
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4 pr-2 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
             <FilterSection
@@ -1372,6 +1391,15 @@ export function CentralSkillsView() {
               ))}
             </FilterSection>
           </div>
+          <div
+            role="separator"
+            aria-label={t("central.resizeFilterSidebar")}
+            aria-orientation="vertical"
+            tabIndex={0}
+            onPointerDown={startFilterSidebarResize}
+            onKeyDown={handleFilterSidebarResizeKeyDown}
+            className="absolute right-0 top-0 z-20 h-full w-1.5 translate-x-1/2 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-primary/30 focus:outline-none focus-visible:bg-primary/40"
+          />
         </aside>
 
         <div ref={contentRef} className="flex-1 overflow-auto p-6">

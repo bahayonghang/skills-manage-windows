@@ -51,6 +51,7 @@ interface SkillState {
   // Actions
   getSkillsByAgent: (agentId: string) => Promise<void>;
   uninstallSkillFromAgent: (skillId: string, agentId: string) => Promise<void>;
+  resetForTargetChange: () => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -58,6 +59,8 @@ interface SkillState {
 function skillActionKey(agentId: string, skillId: string) {
   return `${agentId}::${skillId}`;
 }
+
+let skillStoreGeneration = 0;
 
 export const useSkillStore = create<SkillState>((set) => ({
   skillsByAgent: {},
@@ -70,6 +73,7 @@ export const useSkillStore = create<SkillState>((set) => ({
    * Results are cached per agentId in skillsByAgent.
    */
   getSkillsByAgent: async (agentId: string) => {
+    const generation = skillStoreGeneration;
     set((state) => ({
       loadingByAgent: { ...state.loadingByAgent, [agentId]: true },
       error: null,
@@ -89,7 +93,10 @@ export const useSkillStore = create<SkillState>((set) => ({
         agentId,
       });
       set((state) => ({
-        skillsByAgent: { ...state.skillsByAgent, [agentId]: skills },
+        skillsByAgent:
+          generation === skillStoreGeneration
+            ? { ...state.skillsByAgent, [agentId]: skills }
+            : state.skillsByAgent,
         loadingByAgent: { ...state.loadingByAgent, [agentId]: false },
       }));
     } catch (err) {
@@ -101,6 +108,7 @@ export const useSkillStore = create<SkillState>((set) => ({
   },
 
   uninstallSkillFromAgent: async (skillId: string, agentId: string) => {
+    const generation = skillStoreGeneration;
     const actionKey = skillActionKey(agentId, skillId);
     set((state) => ({
       pendingSkillActionKeys: {
@@ -132,7 +140,10 @@ export const useSkillStore = create<SkillState>((set) => ({
         const next = { ...state.pendingSkillActionKeys };
         delete next[actionKey];
         return {
-          skillsByAgent: { ...state.skillsByAgent, [agentId]: skills },
+          skillsByAgent:
+            generation === skillStoreGeneration
+              ? { ...state.skillsByAgent, [agentId]: skills }
+              : state.skillsByAgent,
           pendingSkillActionKeys: next,
         };
       });
@@ -147,5 +158,15 @@ export const useSkillStore = create<SkillState>((set) => ({
       });
       throw err;
     }
+  },
+
+  resetForTargetChange: () => {
+    skillStoreGeneration += 1;
+    set({
+      skillsByAgent: {},
+      loadingByAgent: {},
+      pendingSkillActionKeys: {},
+      error: null,
+    });
   },
 }));

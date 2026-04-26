@@ -21,6 +21,7 @@ import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { useDiscoverStore } from "@/stores/discoverStore";
 import { usePlatformStore } from "@/stores/platformStore";
+import { useTargetStore } from "@/stores/targetStore";
 import { DiscoveredSkill, SkillWithLinks } from "@/types";
 import { invoke } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
@@ -123,6 +124,8 @@ export function DiscoverView() {
   const agents = usePlatformStore((s) => s.agents);
   const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((s) => s.refreshCounts);
+  const activeTarget = useTargetStore((s) => s.activeTarget);
+  const isRemoteTarget = activeTarget.kind === "ssh";
 
   // Local state
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -351,9 +354,13 @@ export function DiscoverView() {
   );
 
   const handleRescan = useCallback(async () => {
+    if (isRemoteTarget) {
+      toast.error(t("targets.discoverUnsupported"));
+      return;
+    }
     await loadScanRoots();
     setIsConfigOpen(true);
-  }, [loadScanRoots]);
+  }, [isRemoteTarget, loadScanRoots, t]);
 
   // Selecting a project is a purely navigational event — no store rescan or
   // heavy data reload is needed, just a URL change. Keep the current skill
@@ -401,12 +408,17 @@ export function DiscoverView() {
   const handleOpenProjectPath = useCallback(
     async (projectPath: string) => {
       try {
+        if (isRemoteTarget) {
+          await navigator.clipboard.writeText(projectPath);
+          toast.success(t("targets.pathCopied"));
+          return;
+        }
         await invoke("open_in_file_manager", { path: projectPath });
       } catch (err) {
         toast.error(t("discover.openPathError", { error: String(err) }));
       }
     },
-    [t]
+    [isRemoteTarget, t]
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -431,7 +443,13 @@ export function DiscoverView() {
       <div className="flex flex-col h-full">
         <div className="border-b border-border px-6 py-4 flex items-center justify-between">
           <h1 className="text-xl font-semibold">{t("discover.resultsTitle")}</h1>
-          <Button variant="outline" size="sm" onClick={handleRescan}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isRemoteTarget}
+            title={isRemoteTarget ? t("targets.discoverUnsupported") : undefined}
+            onClick={handleRescan}
+          >
             <RefreshCw className="size-3.5 mr-1" />
             {t("discover.reScan")}
           </Button>
@@ -459,7 +477,13 @@ export function DiscoverView() {
             })}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleRescan}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isRemoteTarget}
+          title={isRemoteTarget ? t("targets.discoverUnsupported") : undefined}
+          onClick={handleRescan}
+        >
           <RefreshCw className="size-3.5 mr-1" />
           {t("discover.reScan")}
         </Button>

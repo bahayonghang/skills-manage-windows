@@ -104,6 +104,10 @@ function looksLikeGitHubAuthGuidance(message: string) {
   return /github|rate limit|personal access token|pat|settings/i.test(message);
 }
 
+function looksLikeConfiguredGitHubTokenFailure(message: string) {
+  return /configured github token was used/i.test(message);
+}
+
 function clampPercent(value: number) {
   return Math.max(0, Math.min(100, value));
 }
@@ -632,7 +636,9 @@ export function GitHubRepoImportWizard({
                 <span className="block">{normalizeMessage(previewError)}</span>
                 {looksLikeGitHubAuthGuidance(previewError) ? (
                   <span className="block text-xs text-destructive/90">
-                    {t("marketplace.githubPatSettingsHint")}
+                    {looksLikeConfiguredGitHubTokenFailure(previewError)
+                      ? t("marketplace.githubPatConfiguredFailureHint")
+                      : t("marketplace.githubPatSettingsHint")}
                   </span>
                 ) : null}
               </div>

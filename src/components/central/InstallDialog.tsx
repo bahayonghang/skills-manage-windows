@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
 import { AgentWithStatus, SkillWithLinks } from "@/types";
+import { useTargetStore } from "@/stores/targetStore";
 import {
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberIds,
@@ -46,6 +47,8 @@ export function InstallDialog({
   onInstall,
 }: InstallDialogProps) {
   const { t } = useTranslation();
+  const activeTarget = useTargetStore((s) => s.activeTarget);
+  const isRemoteTarget = activeTarget.kind === "ssh";
   // Only show non-central agents in the install dialog.
   const targetAgents = agents.filter((a) => a.id !== "central");
   const sharedRootAgentIds = new Set(skill?.shared_root_agents ?? []);
@@ -83,11 +86,11 @@ export function InstallDialog({
           .map((agent) => agent.id)
       );
       setSelectedAgentIds(initialSelection);
-      setInstallMethod("symlink");
+      setInstallMethod(isRemoteTarget ? "copy" : "symlink");
       setError(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, skill?.id]);
+  }, [open, skill?.id, isRemoteTarget]);
 
   function handleCheckboxChange(agentId: string, checked: boolean) {
     const target = targetAgents.find((agent) => agent.id === agentId);
@@ -225,10 +228,10 @@ export function InstallDialog({
               onValueChange={(v) => setInstallMethod(v as InstallMethod)}
             >
               <label className="flex items-center gap-2.5 cursor-pointer">
-                <RadioItem value="symlink" />
+                <RadioItem value="symlink" disabled={isRemoteTarget} />
                 <span className="text-sm">{t("installDialog.symlink")}</span>
                 <span className="text-xs text-muted-foreground">
-                  {t("installDialog.symlinkDesc")}
+                  {isRemoteTarget ? t("targets.symlinkDisabled") : t("installDialog.symlinkDesc")}
                 </span>
               </label>
               <label className="flex items-center gap-2.5 cursor-pointer">

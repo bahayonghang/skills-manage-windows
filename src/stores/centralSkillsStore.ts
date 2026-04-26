@@ -352,9 +352,12 @@ interface CentralSkillsState {
     json: string,
     resolutions: SkillportStateImportResolution[]
   ) => Promise<SkillportStateImportResult>;
+  resetForTargetChange: () => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
+
+let centralStoreGeneration = 0;
 
 export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
   skills: [],
@@ -381,6 +384,7 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
    * list of all registered agents. Called when navigating to /central.
    */
   loadCentralSkills: async () => {
+    const generation = centralStoreGeneration;
     set({ isLoading: true, error: null });
     if (!isTauriRuntime()) {
       set({
@@ -405,18 +409,22 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
         invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
         Promise.resolve(invoke<string | null>("get_setting", { key: "ai_api_key" })).catch(() => null),
       ]);
-      set({
-        skills: skills ?? [],
-        agents: agents ?? [],
-        repositories: repositories ?? [],
-        tags: tags ?? [],
-        aiTagReviews: reviews ?? [],
-        updateStatuses: indexUpdateStates(updateStates ?? []),
-        aiTaggingAvailable: !!aiApiKey,
-        isLoading: false,
-      });
+      if (generation === centralStoreGeneration) {
+        set({
+          skills: skills ?? [],
+          agents: agents ?? [],
+          repositories: repositories ?? [],
+          tags: tags ?? [],
+          aiTagReviews: reviews ?? [],
+          updateStatuses: indexUpdateStates(updateStates ?? []),
+          aiTaggingAvailable: !!aiApiKey,
+          isLoading: false,
+        });
+      }
     } catch (err) {
-      set({ error: String(err), isLoading: false });
+      if (generation === centralStoreGeneration) {
+        set({ error: String(err), isLoading: false });
+      }
     }
   },
 
@@ -874,5 +882,29 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
       updateStatuses: indexUpdateStates(updateStates ?? []),
     });
     return result;
+  },
+
+  resetForTargetChange: () => {
+    centralStoreGeneration += 1;
+    set({
+      skills: [],
+      agents: [],
+      repositories: [],
+      tags: [],
+      aiTagReviews: [],
+      aiTagJob: createIdleAiTagJob(),
+      updateStatuses: {},
+      updateJob: createIdleUpdateJob(),
+      aiTaggingAvailable: false,
+      isLoading: false,
+      isInstalling: false,
+      isDeleting: false,
+      isMetadataUpdating: false,
+      isSuggestingTags: false,
+      isCheckingUpdates: false,
+      updatingSkillIds: [],
+      togglingAgentId: null,
+      error: null,
+    });
   },
 }));

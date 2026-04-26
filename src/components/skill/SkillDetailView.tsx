@@ -17,6 +17,7 @@ import {
   FolderOpen,
   Lock,
   Download,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
@@ -25,6 +26,7 @@ import { parseFrontmatter } from "@/lib/frontmatter";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
+import { useTargetStore } from "@/stores/targetStore";
 import { CollectionPickerDialog } from "@/components/collection/CollectionPickerDialog";
 import { AgentWithStatus, ClaudeSourceKind, SkillDetailRequest, SkillInstallation } from "@/types";
 import { cn } from "@/lib/utils";
@@ -308,6 +310,7 @@ export function SkillDetailView({
   const agents = usePlatformStore((s) => s.agents);
   const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((s) => s.refreshCounts);
+  const activeTarget = useTargetStore((s) => s.activeTarget);
   const repositories = useCentralSkillsStore((s) => s.repositories);
   const tags = useCentralSkillsStore((s) => s.tags);
   const isMetadataUpdating = useCentralSkillsStore((s) => s.isMetadataUpdating);
@@ -340,6 +343,7 @@ export function SkillDetailView({
   const isLoading = isFileMode ? fileIsLoading : storeIsLoading;
   const explanation = isFileMode ? fileExplanation : storeExplanation;
   const isExplanationLoading = isFileMode ? fileIsExplaining : storeIsExplanationLoading;
+  const isRemoteTarget = activeTarget.kind === "ssh";
 
   // Local UI state
   const [activeTab, setActiveTab] = useState<PreviewTab>("markdown");
@@ -543,11 +547,16 @@ export function SkillDetailView({
   const handleOpenDiscoverPath = useCallback(async () => {
     if (!discoverMetadata) return;
     try {
+      if (isRemoteTarget) {
+        await navigator.clipboard.writeText(discoverMetadata.dirPath);
+        toast.success(t("targets.pathCopied"));
+        return;
+      }
       await invoke("open_in_file_manager", { path: discoverMetadata.dirPath });
     } catch {
       // silently ignore
     }
-  }, [discoverMetadata]);
+  }, [discoverMetadata, isRemoteTarget, t]);
 
   const { frontmatterRaw, frontmatterData, body: markdownContent } = content
     ? parseFrontmatter(content)
@@ -801,6 +810,7 @@ export function SkillDetailView({
                           onClick={handleOpenDiscoverPath}
                           className="font-mono text-xs text-foreground break-all leading-relaxed hover:text-primary hover:underline cursor-pointer text-left"
                         >
+                          {isRemoteTarget && <Copy className="mr-1 inline size-3 shrink-0" />}
                           {discoverMetadata.filePath}
                         </button>
                       </div>

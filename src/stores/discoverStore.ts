@@ -86,6 +86,7 @@ interface DiscoverState {
   toggleSkillSelection: (skillId: string) => void;
   selectAllVisible: (skillIds: string[]) => void;
   clearSelection: () => void;
+  resetForTargetChange: () => void;
   clearError: () => void;
 }
 
@@ -461,6 +462,24 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
   },
 
   clearSelection: () => set({ selectedSkillIds: new Set<string>() }),
+
+  resetForTargetChange: () => {
+    set({
+      scanRoots: [],
+      isLoadingRoots: false,
+      isScanning: false,
+      scanProgress: 0,
+      currentPath: "",
+      skillsFoundSoFar: 0,
+      projectsFoundSoFar: 0,
+      discoveredProjects: [],
+      totalSkillsFound: 0,
+      lastScanAt: null,
+      platformFilter: null,
+      selectedSkillIds: new Set<string>(),
+      error: null,
+    });
+  },
 
   // ── Error ──────────────────────────────────────────────────────────────────
 
