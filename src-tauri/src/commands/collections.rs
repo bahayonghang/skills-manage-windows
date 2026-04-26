@@ -2,9 +2,12 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::db::{self, Collection, DbPool, Skill};
+use crate::targets::ActiveTarget;
 use crate::AppState;
 
-use super::linker::{install_skill_to_agent_impl, BatchInstallResult, FailedInstall};
+use super::linker::{
+    install_skill_to_agent_impl, install_skill_to_agent_ssh_impl, BatchInstallResult, FailedInstall,
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -228,13 +231,15 @@ pub async fn create_collection(
     name: String,
     description: Option<String>,
 ) -> Result<Collection, String> {
-    create_collection_impl(&state.db, &name, description.as_deref()).await
+    let pool = state.active_db().await?;
+    create_collection_impl(&pool, &name, description.as_deref()).await
 }
 
 /// Tauri command: return all collections.
 #[tauri::command]
 pub async fn get_collections(state: State<'_, AppState>) -> Result<Vec<Collection>, String> {
-    get_collections_impl(&state.db).await
+    let pool = state.active_db().await?;
+    get_collections_impl(&pool).await
 }
 
 /// Tauri command: return a collection with its member skills.
@@ -243,7 +248,8 @@ pub async fn get_collection_detail(
     state: State<'_, AppState>,
     collection_id: String,
 ) -> Result<CollectionDetail, String> {
-    get_collection_detail_impl(&state.db, &collection_id).await
+    let pool = state.active_db().await?;
+    get_collection_detail_impl(&pool, &collection_id).await
 }
 
 /// Tauri command: add a skill to a collection.
@@ -253,7 +259,8 @@ pub async fn add_skill_to_collection(
     collection_id: String,
     skill_id: String,
 ) -> Result<(), String> {
-    add_skill_to_collection_impl(&state.db, &collection_id, &skill_id).await
+    let pool = state.active_db().await?;
+    add_skill_to_collection_impl(&pool, &collection_id, &skill_id).await
 }
 
 /// Tauri command: remove a skill from a collection.
@@ -263,7 +270,8 @@ pub async fn remove_skill_from_collection(
     collection_id: String,
     skill_id: String,
 ) -> Result<(), String> {
-    remove_skill_from_collection_impl(&state.db, &collection_id, &skill_id).await
+    let pool = state.active_db().await?;
+    remove_skill_from_collection_impl(&pool, &collection_id, &skill_id).await
 }
 
 /// Tauri command: delete a collection.
@@ -272,7 +280,8 @@ pub async fn delete_collection(
     state: State<'_, AppState>,
     collection_id: String,
 ) -> Result<(), String> {
-    delete_collection_impl(&state.db, &collection_id).await
+    let pool = state.active_db().await?;
+    delete_collection_impl(&pool, &collection_id).await
 }
 
 /// Tauri command: update a collection's name and description.
@@ -283,7 +292,8 @@ pub async fn update_collection(
     name: String,
     description: Option<String>,
 ) -> Result<Collection, String> {
-    update_collection_impl(&state.db, &collection_id, &name, description.as_deref()).await
+    let pool = state.active_db().await?;
+    update_collection_impl(&pool, &collection_id, &name, description.as_deref()).await
 }
 
 /// Tauri command: install all skills in a collection to the given agents.
@@ -293,7 +303,31 @@ pub async fn batch_install_collection(
     collection_id: String,
     agent_ids: Vec<String>,
 ) -> Result<BatchInstallResult, String> {
-    batch_install_collection_impl(&state.db, &collection_id, &agent_ids).await
+    let active_target = state.active_target().await?;
+    let pool = state.active_db().await?;
+    if let ActiveTarget::Ssh(target) = active_target {
+        db::get_collection_by_id(&pool, &collection_id)
+            .await?
+            .ok_or_else(|| format!("Collection '{}' not found", collection_id))?;
+        let skills = db::get_collection_skills(&pool, &collection_id).await?;
+        let mut succeeded = Vec::new();
+        let mut failed = Vec::new();
+        for skill in &skills {
+            for agent_id in &agent_ids {
+                match install_skill_to_agent_ssh_impl(&pool, &target, &skill.id, agent_id, "copy")
+                    .await
+                {
+                    Ok(_) => succeeded.push(format!("{}:{}", skill.id, agent_id)),
+                    Err(error) => failed.push(FailedInstall {
+                        agent_id: format!("{}:{}", skill.id, agent_id),
+                        error,
+                    }),
+                }
+            }
+        }
+        return Ok(BatchInstallResult { succeeded, failed });
+    }
+    batch_install_collection_impl(&pool, &collection_id, &agent_ids).await
 }
 
 /// Tauri command: export a collection to a JSON string.
@@ -302,7 +336,8 @@ pub async fn export_collection(
     state: State<'_, AppState>,
     collection_id: String,
 ) -> Result<String, String> {
-    export_collection_impl(&state.db, &collection_id).await
+    let pool = state.active_db().await?;
+    export_collection_impl(&pool, &collection_id).await
 }
 
 /// Tauri command: import a collection from a JSON string.
@@ -311,7 +346,8 @@ pub async fn import_collection(
     state: State<'_, AppState>,
     json: String,
 ) -> Result<Collection, String> {
-    import_collection_impl(&state.db, &json).await
+    let pool = state.active_db().await?;
+    import_collection_impl(&pool, &json).await
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

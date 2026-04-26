@@ -10,6 +10,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::{
     db::{self, DbPool, Skill},
+    targets::{connect_ssh_target, remote_join, ActiveTarget, RemoteTargetConfig},
     AppState,
 };
 
@@ -210,6 +211,7 @@ struct GitHubAccessDenial {
     operation: &'static str,
     status: reqwest::StatusCode,
     github_message: Option<String>,
+    used_auth: bool,
 }
 
 impl fmt::Display for GitHubAccessDenial {
@@ -240,11 +242,19 @@ impl fmt::Display for GitHubAccessDenial {
                 Ok(())
             }
             GitHubAccessDenialKind::AuthenticationOrPermission => {
-                write!(
-                    f,
-                    "GitHub denied access while {} (HTTP {}). The repository may require authentication, your API quota may need authenticated requests, or the token/permissions are insufficient. Verify repository access, sign in with a GitHub token that can read the repo, or retry later",
-                    self.operation, status
-                )?;
+                if self.used_auth {
+                    write!(
+                        f,
+                        "GitHub denied access while {} (HTTP {}). A configured GitHub token was used, but the repository may be private, the token/permissions are insufficient, or the token owner cannot read the repo. Verify repository access and token permissions, then retry",
+                        self.operation, status
+                    )?;
+                } else {
+                    write!(
+                        f,
+                        "GitHub denied access while {} (HTTP {}). The repository may require authentication, your API quota may need authenticated requests, or the token/permissions are insufficient. Verify repository access, sign in with a GitHub token that can read the repo, or retry later",
+                        self.operation, status
+                    )?;
+                }
                 if let Some(message) = &self.github_message {
                     write!(f, ". GitHub said: {}", message)?;
                 } else {
@@ -259,6 +269,15 @@ impl fmt::Display for GitHubAccessDenial {
 #[derive(Debug, Deserialize)]
 struct GitHubErrorResponse {
     message: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubPatTestResult {
+    pub configured: bool,
+    pub ok: bool,
+    pub status: Option<u16>,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -308,7 +327,9 @@ pub async fn preview_github_repo_import(
     state: State<'_, AppState>,
     repo_url: String,
 ) -> Result<GitHubRepoPreview, String> {
-    preview_github_repo_import_impl(&state.db, &repo_url).await
+    let pool = state.active_db().await?;
+    let auth = github_direct_auth_from_settings(&state.db).await?;
+    preview_github_repo_import_with_auth(&pool, &repo_url, auth.as_deref()).await
 }
 
 #[tauri::command]
@@ -318,7 +339,32 @@ pub async fn import_github_repo_skills(
     repo_url: String,
     selections: Vec<GitHubSkillImportSelection>,
 ) -> Result<GitHubRepoImportResult, String> {
-    import_github_repo_skills_impl(&state.db, &repo_url, selections, Some(&app)).await
+    let active_target = state.active_target().await?;
+    let pool = state.active_db().await?;
+    let auth = github_direct_auth_from_settings(&state.db).await?;
+    match active_target {
+        ActiveTarget::Local => {
+            import_github_repo_skills_with_auth(
+                &pool,
+                &repo_url,
+                selections,
+                Some(&app),
+                auth.as_deref(),
+            )
+            .await
+        }
+        ActiveTarget::Ssh(target) => {
+            import_github_repo_skills_ssh_with_auth(
+                &pool,
+                &target,
+                &repo_url,
+                selections,
+                Some(&app),
+                auth.as_deref(),
+            )
+            .await
+        }
+    }
 }
 
 #[tauri::command]
@@ -331,16 +377,80 @@ pub async fn fetch_github_skill_markdown(
     fetch_raw_text(&client, &download_url, auth.as_deref()).await
 }
 
+#[tauri::command]
+pub async fn get_github_pat(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    github_direct_auth_from_settings(&state.db).await
+}
+
+#[tauri::command]
+pub async fn set_github_pat(state: State<'_, AppState>, value: String) -> Result<(), String> {
+    db::set_setting(&state.db, GITHUB_PAT_SETTING_KEY, value.trim()).await
+}
+
+#[tauri::command]
+pub async fn clear_github_pat(state: State<'_, AppState>) -> Result<(), String> {
+    db::set_setting(&state.db, GITHUB_PAT_SETTING_KEY, "").await
+}
+
+#[tauri::command]
+pub async fn test_github_pat(state: State<'_, AppState>) -> Result<GitHubPatTestResult, String> {
+    let Some(token) = github_direct_auth_from_settings(&state.db).await? else {
+        return Ok(GitHubPatTestResult {
+            configured: false,
+            ok: false,
+            status: None,
+            message: "No GitHub token is configured.".to_string(),
+        });
+    };
+
+    let client = github_client()?;
+    let response = client
+        .get("https://api.github.com/rate_limit")
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to test GitHub token: {}", e))?;
+    let status = response.status();
+    if status.is_success() {
+        return Ok(GitHubPatTestResult {
+            configured: true,
+            ok: true,
+            status: Some(status.as_u16()),
+            message: "GitHub token is usable for authenticated GitHub requests.".to_string(),
+        });
+    }
+
+    let denial = parse_github_denial_response(response, "testing GitHub token", true)
+        .await
+        .map(|denial| denial.to_string())
+        .unwrap_or_else(|| format!("GitHub token test returned HTTP {}", status.as_u16()));
+
+    Ok(GitHubPatTestResult {
+        configured: true,
+        ok: false,
+        status: Some(status.as_u16()),
+        message: denial,
+    })
+}
+
 pub(crate) async fn preview_github_repo_import_impl(
     pool: &DbPool,
     repo_url: &str,
 ) -> Result<GitHubRepoPreview, String> {
     let auth = github_direct_auth_from_settings(pool).await?;
-    let resolved = resolve_repo_source(repo_url, auth.as_deref()).await?;
+    preview_github_repo_import_with_auth(pool, repo_url, auth.as_deref()).await
+}
+
+pub(crate) async fn preview_github_repo_import_with_auth(
+    pool: &DbPool,
+    repo_url: &str,
+    auth: Option<&str>,
+) -> Result<GitHubRepoPreview, String> {
+    let resolved = resolve_repo_source(repo_url, auth).await?;
     let candidates = fetch_repo_skill_candidates_from_source(
         &resolved.repo,
         resolved.source_path.as_deref(),
-        auth.as_deref(),
+        auth,
     )
     .await?;
     let skills = build_preview_skills(pool, &candidates).await?;
@@ -361,6 +471,17 @@ pub(crate) async fn import_github_repo_skills_impl(
     selections: Vec<GitHubSkillImportSelection>,
     app: Option<&AppHandle>,
 ) -> Result<GitHubRepoImportResult, String> {
+    let auth = github_direct_auth_from_settings(pool).await?;
+    import_github_repo_skills_with_auth(pool, repo_url, selections, app, auth.as_deref()).await
+}
+
+pub(crate) async fn import_github_repo_skills_with_auth(
+    pool: &DbPool,
+    repo_url: &str,
+    selections: Vec<GitHubSkillImportSelection>,
+    app: Option<&AppHandle>,
+    auth: Option<&str>,
+) -> Result<GitHubRepoImportResult, String> {
     emit_github_import_progress(
         app,
         GitHubImportProgressPayload {
@@ -374,10 +495,9 @@ pub(crate) async fn import_github_repo_skills_impl(
         },
     );
 
-    let auth = github_direct_auth_from_settings(pool).await?;
-    let resolved = resolve_repo_source(repo_url, auth.as_deref()).await?;
+    let resolved = resolve_repo_source(repo_url, auth).await?;
     let client = github_client()?;
-    let snapshot = download_repo_snapshot(&client, &resolved.repo, auth.as_deref()).await?;
+    let snapshot = download_repo_snapshot(&client, &resolved.repo, auth).await?;
     let candidates = build_repo_skill_candidates_from_snapshot_at_path(
         &resolved.repo,
         &snapshot,
@@ -589,6 +709,273 @@ pub(crate) async fn import_github_repo_skills_impl(
             imported_skill_id: op.final_skill_id.clone(),
             skill_name: frontmatter.name,
             target_directory: target_dir.to_string_lossy().into_owned(),
+            resolution: op.resolution.clone(),
+        });
+    }
+
+    emit_github_import_progress(
+        app,
+        GitHubImportProgressPayload {
+            phase: GitHubImportProgressPhase::Finalizing,
+            current_skill: None,
+            current_path: None,
+            completed_files: progress_state.completed_files,
+            total_files: progress_state.total_files,
+            completed_bytes: progress_state.completed_bytes,
+            total_bytes: progress_state.total_bytes,
+        },
+    );
+
+    Ok(GitHubRepoImportResult {
+        repo: resolved.repo,
+        imported_skills,
+        skipped_skills,
+    })
+}
+
+async fn import_github_repo_skills_ssh_with_auth(
+    pool: &DbPool,
+    target: &RemoteTargetConfig,
+    repo_url: &str,
+    selections: Vec<GitHubSkillImportSelection>,
+    app: Option<&AppHandle>,
+    auth: Option<&str>,
+) -> Result<GitHubRepoImportResult, String> {
+    emit_github_import_progress(
+        app,
+        GitHubImportProgressPayload {
+            phase: GitHubImportProgressPhase::Preparing,
+            current_skill: None,
+            current_path: None,
+            completed_files: 0,
+            total_files: 0,
+            completed_bytes: 0,
+            total_bytes: 0,
+        },
+    );
+
+    if selections.is_empty() {
+        return Err("Select at least one skill to import.".to_string());
+    }
+
+    let central = db::get_agent_by_id(pool, "central")
+        .await?
+        .ok_or_else(|| "Central agent not found in database".to_string())?;
+    let central_root = central.global_skills_dir;
+    let connection = connect_ssh_target(target).await?;
+    connection.mkdir_p(&central_root).await?;
+
+    let resolved = resolve_repo_source(repo_url, auth).await?;
+    let client = github_client()?;
+    let snapshot = download_repo_snapshot(&client, &resolved.repo, auth).await?;
+    let candidates = fetch_repo_skill_candidates_from_source(
+        &resolved.repo,
+        resolved.source_path.as_deref(),
+        auth,
+    )
+    .await?;
+
+    let mut selected_paths = HashSet::new();
+    let mut selected = Vec::new();
+    for selection in selections {
+        let candidate = candidates
+            .iter()
+            .find(|candidate| candidate.source_path == selection.source_path)
+            .ok_or_else(|| {
+                format!(
+                    "Selected skill '{}' is no longer available in the preview.",
+                    selection.source_path
+                )
+            })?
+            .clone();
+
+        if !selected_paths.insert(candidate.source_path.clone()) {
+            return Err(format!(
+                "Skill '{}' was selected more than once.",
+                candidate.source_path
+            ));
+        }
+
+        selected.push((candidate, selection));
+    }
+
+    let mut occupied_ids = current_central_skill_ids(pool).await?;
+    let mut staging_ops = Vec::new();
+    let mut skipped_skills = Vec::new();
+
+    for (candidate, selection) in &selected {
+        match selection.resolution {
+            DuplicateResolution::Skip => {
+                skipped_skills.push(candidate.source_path.clone());
+                continue;
+            }
+            DuplicateResolution::Overwrite => {
+                if let Some(existing) = db::get_skill_by_id(pool, &candidate.skill_id).await? {
+                    if !existing.is_central {
+                        return Err(format!(
+                            "Skill '{}' conflicts with a non-central record and cannot be overwritten safely.",
+                            candidate.skill_id
+                        ));
+                    }
+                }
+                occupied_ids.insert(candidate.skill_id.clone());
+                staging_ops.push(StagedImport {
+                    candidate: candidate.clone(),
+                    final_skill_id: candidate.skill_id.clone(),
+                    resolution: DuplicateResolution::Overwrite,
+                    source_files: Vec::new(),
+                });
+            }
+            DuplicateResolution::Rename => {
+                let requested_id =
+                    sanitize_skill_id(selection.renamed_skill_id.as_deref().ok_or_else(|| {
+                        format!(
+                            "Skill '{}' requires a renamed skill id for rename resolution.",
+                            candidate.source_path
+                        )
+                    })?)?;
+                if occupied_ids.contains(&requested_id) {
+                    return Err(format!(
+                        "Renamed skill id '{}' is already in use.",
+                        requested_id
+                    ));
+                }
+                occupied_ids.insert(requested_id.clone());
+                staging_ops.push(StagedImport {
+                    candidate: candidate.clone(),
+                    final_skill_id: requested_id,
+                    resolution: DuplicateResolution::Rename,
+                    source_files: Vec::new(),
+                });
+            }
+        }
+    }
+
+    if staging_ops.is_empty() && skipped_skills.is_empty() {
+        return Err("No valid import operations were requested.".to_string());
+    }
+
+    for op in &mut staging_ops {
+        op.source_files = collect_snapshot_source_files(&snapshot, &op.candidate.source_path)?;
+    }
+
+    let total_files = staging_ops
+        .iter()
+        .map(|op| op.source_files.len())
+        .sum::<usize>();
+    let total_bytes = staging_ops
+        .iter()
+        .flat_map(|op| op.source_files.iter())
+        .map(|file| file.byte_len as u64)
+        .sum::<u64>();
+    let mut progress_state = GitHubImportProgressState {
+        completed_files: 0,
+        total_files,
+        completed_bytes: 0,
+        total_bytes,
+    };
+
+    emit_github_import_progress(
+        app,
+        GitHubImportProgressPayload {
+            phase: GitHubImportProgressPhase::Writing,
+            current_skill: None,
+            current_path: None,
+            completed_files: 0,
+            total_files,
+            completed_bytes: 0,
+            total_bytes,
+        },
+    );
+
+    let mut imported_skills = Vec::new();
+    let mut created_paths: Vec<String> = Vec::new();
+
+    for op in &staging_ops {
+        let target_dir = remote_join(&central_root, &op.final_skill_id);
+        if connection.exists(&target_dir).await? {
+            if op.resolution == DuplicateResolution::Overwrite {
+                connection.remove_tree(&target_dir).await?;
+            } else {
+                for path in created_paths.iter().rev() {
+                    let _ = connection.remove_tree(path).await;
+                }
+                return Err(format!("Target directory '{}' already exists.", target_dir));
+            }
+        }
+
+        if let Err(error) = write_snapshot_source_to_remote_target(
+            &connection,
+            &snapshot,
+            &op.source_files,
+            &target_dir,
+            &op.candidate.source_path,
+            &mut progress_state,
+            app,
+        )
+        .await
+        {
+            for path in created_paths.iter().rev() {
+                let _ = connection.remove_tree(path).await;
+            }
+            let _ = connection.remove_tree(&target_dir).await;
+            return Err(error);
+        }
+
+        created_paths.push(target_dir.clone());
+
+        let skill_md_path = remote_join(&target_dir, "SKILL.md");
+        let raw = op
+            .source_files
+            .iter()
+            .find(|file| file.relative_path == "SKILL.md")
+            .and_then(|file| snapshot.files.get(&file.repo_path))
+            .and_then(|bytes| String::from_utf8(bytes.clone()).ok())
+            .ok_or_else(|| {
+                format!(
+                    "Imported skill '{}' is missing SKILL.md.",
+                    op.candidate.source_path
+                )
+            })?;
+        let frontmatter = parse_frontmatter(&raw).ok_or_else(|| {
+            format!(
+                "Imported skill '{}' is missing valid frontmatter.",
+                op.candidate.source_path
+            )
+        })?;
+
+        let db_skill = Skill {
+            id: op.final_skill_id.clone(),
+            name: frontmatter.name.clone(),
+            description: frontmatter.description.clone(),
+            file_path: skill_md_path,
+            canonical_path: Some(target_dir.clone()),
+            is_central: true,
+            source: Some(format!(
+                "github:{}/{}",
+                resolved.repo.owner, resolved.repo.repo
+            )),
+            content: None,
+            scanned_at: Utc::now().to_rfc3339(),
+        };
+        db::upsert_skill(pool, &db_skill).await?;
+        db::assign_github_repository_to_skill(
+            pool,
+            &resolved.repo.owner,
+            &resolved.repo.repo,
+            &resolved.repo.branch,
+            &resolved.repo.normalized_url,
+            &op.final_skill_id,
+            &op.candidate.source_path,
+        )
+        .await?;
+
+        imported_skills.push(ImportedGitHubSkillSummary {
+            source_path: op.candidate.source_path.clone(),
+            original_skill_id: op.candidate.skill_id.clone(),
+            imported_skill_id: op.final_skill_id.clone(),
+            skill_name: frontmatter.name,
+            target_directory: target_dir,
             resolution: op.resolution.clone(),
         });
     }
@@ -1381,6 +1768,53 @@ fn write_snapshot_source_to_target(
     Ok(())
 }
 
+async fn write_snapshot_source_to_remote_target(
+    connection: &crate::targets::ConnectedSshTarget,
+    snapshot: &GitHubRepoSnapshot,
+    files: &[SnapshotSourceFile],
+    target_dir: &str,
+    source_path: &str,
+    progress_state: &mut GitHubImportProgressState,
+    app: Option<&AppHandle>,
+) -> Result<(), String> {
+    connection.mkdir_p(target_dir).await?;
+
+    for file in files {
+        if !is_safe_repo_relative_path(&file.relative_path) {
+            return Err(format!(
+                "Repository contains an unsupported path '{}'.",
+                file.repo_path
+            ));
+        }
+
+        let bytes = snapshot.files.get(&file.repo_path).ok_or_else(|| {
+            format!(
+                "Repository file '{}' is no longer available in the archive.",
+                file.repo_path
+            )
+        })?;
+        let destination = remote_join(target_dir, &file.relative_path);
+        connection.write_file(&destination, bytes).await?;
+
+        progress_state.completed_files += 1;
+        progress_state.completed_bytes += file.byte_len as u64;
+        emit_github_import_progress(
+            app,
+            GitHubImportProgressPayload {
+                phase: GitHubImportProgressPhase::Writing,
+                current_skill: Some(source_path.to_string()),
+                current_path: Some(file.relative_path.clone()),
+                completed_files: progress_state.completed_files,
+                total_files: progress_state.total_files,
+                completed_bytes: progress_state.completed_bytes,
+                total_bytes: progress_state.total_bytes,
+            },
+        );
+    }
+
+    Ok(())
+}
+
 fn emit_github_import_progress(app: Option<&AppHandle>, payload: GitHubImportProgressPayload) {
     if let Some(app) = app {
         let _ = app.emit("github-import:progress", payload);
@@ -1519,7 +1953,12 @@ where
                         | reqwest::StatusCode::FORBIDDEN
                         | reqwest::StatusCode::TOO_MANY_REQUESTS
                 ) {
-                    let denial = parse_github_denial_response(response, "contacting GitHub").await;
+                    let denial = parse_github_denial_response(
+                        response,
+                        "contacting GitHub",
+                        auth_token.is_some(),
+                    )
+                    .await;
                     let can_retry_public_mirror = auth_token.is_none()
                         && denial.as_ref().is_some_and(|denial| {
                             matches!(denial.kind, GitHubAccessDenialKind::RateLimited { .. })
@@ -1644,7 +2083,7 @@ async fn classify_github_denial_response(
     response: reqwest::Response,
     operation: &'static str,
 ) -> Option<String> {
-    parse_github_denial_response(response, operation)
+    parse_github_denial_response(response, operation, false)
         .await
         .map(|denial| denial.to_string())
 }
@@ -1652,6 +2091,7 @@ async fn classify_github_denial_response(
 async fn parse_github_denial_response(
     response: reqwest::Response,
     operation: &'static str,
+    used_auth: bool,
 ) -> Option<GitHubAccessDenial> {
     let status = response.status();
     if status != reqwest::StatusCode::UNAUTHORIZED
@@ -1694,6 +2134,7 @@ async fn parse_github_denial_response(
         operation,
         status,
         github_message,
+        used_auth,
     })
 }
 
@@ -1978,6 +2419,7 @@ mod tests {
             operation: "inspecting the repository",
             status: reqwest::StatusCode::FORBIDDEN,
             github_message: Some("API rate limit exceeded for 1.2.3.4.".to_string()),
+            used_auth: false,
         };
 
         let message = denial.to_string();
@@ -1995,6 +2437,7 @@ mod tests {
             operation: "reading repository contents",
             status: reqwest::StatusCode::UNAUTHORIZED,
             github_message: Some("Requires authentication".to_string()),
+            used_auth: false,
         };
 
         let message = denial.to_string();

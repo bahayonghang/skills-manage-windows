@@ -170,7 +170,8 @@ struct RawAiTagSuggestionEnvelope {
 pub async fn get_skill_repositories(
     state: State<'_, AppState>,
 ) -> Result<Vec<SkillRepositoryWithStats>, String> {
-    db::get_skill_repositories_with_stats(&state.db).await
+    let pool = state.active_db().await?;
+    db::get_skill_repositories_with_stats(&pool).await
 }
 
 #[tauri::command]
@@ -186,8 +187,9 @@ pub async fn create_or_update_skill_repository(
     url: Option<String>,
     is_unknown: Option<bool>,
 ) -> Result<SkillRepository, String> {
+    let pool = state.active_db().await?;
     db::create_or_update_skill_repository(
-        &state.db,
+        &pool,
         id.as_deref(),
         &name,
         source_type.as_deref().unwrap_or("manual"),
@@ -206,12 +208,14 @@ pub async fn assign_skills_to_repository(
     repository_id: String,
     skill_ids: Vec<String>,
 ) -> Result<(), String> {
-    db::assign_skills_to_repository(&state.db, &repository_id, &skill_ids, None).await
+    let pool = state.active_db().await?;
+    db::assign_skills_to_repository(&pool, &repository_id, &skill_ids, None).await
 }
 
 #[tauri::command]
 pub async fn get_skill_tags(state: State<'_, AppState>) -> Result<Vec<SkillTag>, String> {
-    db::get_skill_tags(&state.db).await
+    let pool = state.active_db().await?;
+    db::get_skill_tags(&pool).await
 }
 
 #[tauri::command]
@@ -221,7 +225,8 @@ pub async fn create_skill_tag(
     description: Option<String>,
     color: Option<String>,
 ) -> Result<SkillTag, String> {
-    db::create_skill_tag(&state.db, &name, description.as_deref(), color.as_deref()).await
+    let pool = state.active_db().await?;
+    db::create_skill_tag(&pool, &name, description.as_deref(), color.as_deref()).await
 }
 
 #[tauri::command]
@@ -230,14 +235,16 @@ pub async fn assign_skill_tags(
     skill_ids: Vec<String>,
     tag_ids: Vec<String>,
 ) -> Result<(), String> {
-    db::assign_skill_tags(&state.db, &skill_ids, &tag_ids, "manual", None, None).await
+    let pool = state.active_db().await?;
+    db::assign_skill_tags(&pool, &skill_ids, &tag_ids, "manual", None, None).await
 }
 
 #[tauri::command]
 pub async fn get_pending_ai_tag_reviews(
     state: State<'_, AppState>,
 ) -> Result<Vec<SkillAiTagReview>, String> {
-    db::get_pending_ai_tag_reviews(&state.db).await
+    let pool = state.active_db().await?;
+    db::get_pending_ai_tag_reviews(&pool).await
 }
 
 #[tauri::command]
@@ -246,7 +253,8 @@ pub async fn accept_ai_tag_review(
     skill_id: String,
     tag_ids: Vec<String>,
 ) -> Result<(), String> {
-    db::accept_ai_tag_reviews(&state.db, &skill_id, &tag_ids).await
+    let pool = state.active_db().await?;
+    db::accept_ai_tag_reviews(&pool, &skill_id, &tag_ids).await
 }
 
 #[tauri::command]
@@ -254,7 +262,8 @@ pub async fn skip_ai_tag_review(
     state: State<'_, AppState>,
     skill_id: String,
 ) -> Result<(), String> {
-    db::skip_ai_tag_reviews(&state.db, &skill_id).await
+    let pool = state.active_db().await?;
+    db::skip_ai_tag_reviews(&pool, &skill_id).await
 }
 
 #[tauri::command]
@@ -262,7 +271,8 @@ pub async fn suggest_skill_tags(
     state: State<'_, AppState>,
     skill_id: String,
 ) -> Result<Vec<SkillTagSuggestion>, String> {
-    let context = Arc::new(prepare_ai_tagging_context(&state.db).await?);
+    let pool = state.active_db().await?;
+    let context = Arc::new(prepare_ai_tagging_context(&pool).await?);
     let result = process_skill_for_ai_tags(
         context,
         skill_id,
@@ -288,8 +298,9 @@ pub async fn bulk_suggest_skill_tags(
     let app = Arc::new(app);
     let job_id = Uuid::new_v4().to_string();
     let cancel_flag = state.ai_tag_jobs.register(&job_id);
+    let pool = state.active_db().await?;
     let result = bulk_suggest_skill_tags_impl(
-        &state.db,
+        &pool,
         skill_ids,
         job_id.clone(),
         cancel_flag,

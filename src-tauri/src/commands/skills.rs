@@ -6,6 +6,7 @@ use std::time::SystemTime;
 use tauri::State;
 
 use crate::db::{self, Collection, DbPool, SkillForAgent, SkillRepository, SkillTag};
+use crate::targets::{connect_ssh_target, ActiveTarget, ConnectedSshTarget, RemoteTargetConfig};
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -387,7 +388,8 @@ pub async fn get_skills_by_agent(
     state: State<'_, AppState>,
     agent_id: String,
 ) -> Result<Vec<SkillForAgent>, String> {
-    get_skills_by_agent_impl(&state.db, &agent_id).await
+    let pool = state.active_db().await?;
+    get_skills_by_agent_impl(&pool, &agent_id).await
 }
 
 /// Tauri command: return all Central Skills with per-platform link status.
@@ -397,7 +399,8 @@ pub async fn get_skills_by_agent(
 /// for that skill (regardless of whether the link type is symlink or copy).
 #[tauri::command]
 pub async fn get_central_skills(state: State<'_, AppState>) -> Result<Vec<SkillWithLinks>, String> {
-    get_central_skills_impl(&state.db).await
+    let pool = state.active_db().await?;
+    get_central_skills_impl(&pool).await
 }
 
 async fn get_central_skills_impl(pool: &DbPool) -> Result<Vec<SkillWithLinks>, String> {
@@ -557,6 +560,294 @@ fn remove_installation_path(installation: &db::SkillInstallation) -> Result<(), 
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(format!("Failed to inspect '{}': {}", path.display(), error)),
     }
+}
+
+fn remote_skill_delete_dir(skill: &db::Skill) -> Result<String, String> {
+    skill
+        .canonical_path
+        .as_deref()
+        .map(str::to_string)
+        .or_else(|| crate::targets::remote_parent(&skill.file_path))
+        .ok_or_else(|| format!("Skill '{}' has no canonical directory", skill.id))
+}
+
+fn normalize_remote_path(path: &str) -> Result<String, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() || !trimmed.starts_with('/') || trimmed.contains('\0') {
+        return Err(format!("Invalid remote path '{}'", path));
+    }
+
+    let mut segments = Vec::new();
+    for segment in trimmed.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => return Err(format!("Remote path '{}' contains traversal", path)),
+            value => segments.push(value),
+        }
+    }
+
+    if segments.is_empty() {
+        Ok("/".to_string())
+    } else {
+        Ok(format!("/{}", segments.join("/")))
+    }
+}
+
+fn ensure_remote_child_path(root: &str, child: &str, label: &str) -> Result<String, String> {
+    let root_cmp = normalize_remote_path(root)?;
+    let child_cmp = normalize_remote_path(child)?;
+
+    if root_cmp == "/" {
+        return Err(format!(
+            "Refusing to delete under remote root for {}",
+            label
+        ));
+    }
+
+    if root_cmp == child_cmp {
+        return Err(format!(
+            "Refusing to delete the remote root '{}' for {}",
+            root_cmp, label
+        ));
+    }
+
+    let prefix = format!("{}/", root_cmp.trim_end_matches('/'));
+    if !child_cmp.starts_with(&prefix) {
+        return Err(format!(
+            "Refusing to delete '{}' because it is outside remote root '{}'",
+            child, root
+        ));
+    }
+
+    Ok(child_cmp)
+}
+
+fn remote_shared_root_agent_ids(agents: &[db::Agent], central_root: &str) -> Vec<String> {
+    let Ok(central_root) = normalize_remote_path(central_root) else {
+        return Vec::new();
+    };
+
+    agents
+        .iter()
+        .filter(|agent| agent.id != "central")
+        .filter_map(|agent| {
+            normalize_remote_path(&agent.global_skills_dir)
+                .ok()
+                .filter(|path| *path == central_root)
+                .map(|_| agent.id.clone())
+        })
+        .collect()
+}
+
+async fn preview_delete_central_skill_ssh_impl(
+    pool: &DbPool,
+    skill_id: &str,
+) -> Result<DeleteCentralSkillPreview, String> {
+    let skill = db::get_skill_by_id(pool, skill_id)
+        .await?
+        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+    if !skill.is_central {
+        return Err(format!("Skill '{}' is not a Central skill", skill_id));
+    }
+
+    let central = db::get_agent_by_id(pool, "central")
+        .await?
+        .ok_or_else(|| "Central agent not found in database".to_string())?;
+    let central_skill_dir = remote_skill_delete_dir(&skill)?;
+    let central_path =
+        ensure_remote_child_path(&central.global_skills_dir, &central_skill_dir, skill_id)?;
+
+    let agents = db::get_all_agents(pool).await?;
+    let shared_root_agents = remote_shared_root_agent_ids(&agents, &central.global_skills_dir);
+    let installations = db::get_skill_installations(pool, skill_id).await?;
+    let copy_installations = installation_details(
+        installations
+            .iter()
+            .filter(|installation| installation.link_type == "copy")
+            .cloned()
+            .collect(),
+    );
+    let auto_removed_agent_ids = unique_agent_ids(
+        installations
+            .iter()
+            .filter(|installation| installation.link_type != "copy")
+            .map(|installation| installation.agent_id.clone())
+            .chain(shared_root_agents),
+    );
+
+    Ok(DeleteCentralSkillPreview {
+        skill_id: skill.id,
+        skill_name: skill.name,
+        central_path,
+        copy_installations,
+        auto_removed_agent_ids,
+    })
+}
+
+pub async fn preview_delete_central_skills_ssh_impl(
+    pool: &DbPool,
+    skill_ids: &[String],
+) -> Result<BatchDeleteCentralSkillPreviewResult, String> {
+    let mut previews = Vec::new();
+    let mut failed = Vec::new();
+    let mut seen = HashSet::new();
+
+    for skill_id in skill_ids {
+        if !seen.insert(skill_id.clone()) {
+            continue;
+        }
+
+        match preview_delete_central_skill_ssh_impl(pool, skill_id).await {
+            Ok(preview) => previews.push(preview),
+            Err(error) => failed.push(FailedCentralSkillDelete {
+                skill_id: skill_id.clone(),
+                error,
+            }),
+        }
+    }
+
+    Ok(BatchDeleteCentralSkillPreviewResult { previews, failed })
+}
+
+async fn remove_remote_installation_path(
+    connection: &ConnectedSshTarget,
+    installation: &db::SkillInstallation,
+    agents_by_id: &HashMap<String, db::Agent>,
+) -> Result<(), String> {
+    let agent = agents_by_id
+        .get(&installation.agent_id)
+        .ok_or_else(|| format!("Agent '{}' not found", installation.agent_id))?;
+    let path = ensure_remote_child_path(
+        &agent.global_skills_dir,
+        &installation.installed_path,
+        &installation.agent_id,
+    )?;
+    connection.remove_tree(&path).await
+}
+
+pub async fn delete_central_skill_ssh_impl(
+    pool: &DbPool,
+    target: &RemoteTargetConfig,
+    skill_id: &str,
+    remove_agent_ids: &[String],
+) -> Result<DeleteCentralSkillResult, String> {
+    let skill = db::get_skill_by_id(pool, skill_id)
+        .await?
+        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+    if !skill.is_central {
+        return Err(format!("Skill '{}' is not a Central skill", skill_id));
+    }
+
+    let central = db::get_agent_by_id(pool, "central")
+        .await?
+        .ok_or_else(|| "Central agent not found in database".to_string())?;
+    let central_skill_dir = remote_skill_delete_dir(&skill)?;
+    let central_path =
+        ensure_remote_child_path(&central.global_skills_dir, &central_skill_dir, skill_id)?;
+
+    let remove_agent_set: HashSet<String> = remove_agent_ids.iter().cloned().collect();
+    let installations = db::get_skill_installations(pool, skill_id).await?;
+    for agent_id in &remove_agent_set {
+        let installation = installations
+            .iter()
+            .find(|item| item.agent_id == *agent_id)
+            .ok_or_else(|| format!("Skill '{}' is not installed for '{}'", skill_id, agent_id))?;
+        if installation.link_type != "copy" {
+            return Err(format!(
+                "Only copy installations can be selected for platform deletion: {}",
+                agent_id
+            ));
+        }
+    }
+
+    let agents = db::get_all_agents(pool).await?;
+    let agents_by_id: HashMap<String, db::Agent> = agents
+        .into_iter()
+        .map(|agent| (agent.id.clone(), agent))
+        .collect();
+    let connection = connect_ssh_target(target).await?;
+
+    let mut removed_agent_ids = Vec::new();
+    let mut retained_agent_ids = Vec::new();
+    for installation in &installations {
+        match installation.link_type.as_str() {
+            "copy" if remove_agent_set.contains(&installation.agent_id) => {
+                remove_remote_installation_path(&connection, installation, &agents_by_id).await?;
+                removed_agent_ids.push(installation.agent_id.clone());
+            }
+            "copy" => retained_agent_ids.push(installation.agent_id.clone()),
+            "symlink" => {
+                remove_remote_installation_path(&connection, installation, &agents_by_id).await?;
+                removed_agent_ids.push(installation.agent_id.clone());
+            }
+            "native" => {
+                removed_agent_ids.push(installation.agent_id.clone());
+            }
+            _ => {
+                retained_agent_ids.push(installation.agent_id.clone());
+            }
+        }
+    }
+
+    connection.remove_tree(&central_path).await?;
+    db::delete_skill(pool, skill_id).await?;
+
+    Ok(DeleteCentralSkillResult {
+        removed_central_path: central_path,
+        removed_agent_ids,
+        retained_agent_ids,
+    })
+}
+
+pub async fn delete_central_skills_ssh_impl(
+    pool: &DbPool,
+    target: &RemoteTargetConfig,
+    requests: &[BatchDeleteCentralSkillRequest],
+) -> Result<BatchDeleteCentralSkillResult, String> {
+    let mut ordered_requests: Vec<BatchDeleteCentralSkillRequest> = Vec::new();
+    for request in requests {
+        if let Some(existing) = ordered_requests
+            .iter_mut()
+            .find(|existing| existing.skill_id == request.skill_id)
+        {
+            for agent_id in &request.remove_agent_ids {
+                if !existing.remove_agent_ids.contains(agent_id) {
+                    existing.remove_agent_ids.push(agent_id.clone());
+                }
+            }
+        } else {
+            ordered_requests.push(BatchDeleteCentralSkillRequest {
+                skill_id: request.skill_id.clone(),
+                remove_agent_ids: unique_agent_ids(request.remove_agent_ids.clone()),
+            });
+        }
+    }
+
+    let mut succeeded = Vec::new();
+    let mut failed = Vec::new();
+    for request in ordered_requests {
+        match delete_central_skill_ssh_impl(
+            pool,
+            target,
+            &request.skill_id,
+            &request.remove_agent_ids,
+        )
+        .await
+        {
+            Ok(result) => succeeded.push(BatchDeleteCentralSkillSuccess {
+                skill_id: request.skill_id,
+                removed_central_path: result.removed_central_path,
+                removed_agent_ids: result.removed_agent_ids,
+                retained_agent_ids: result.retained_agent_ids,
+            }),
+            Err(error) => failed.push(FailedCentralSkillDelete {
+                skill_id: request.skill_id,
+                error,
+            }),
+        }
+    }
+
+    Ok(BatchDeleteCentralSkillResult { succeeded, failed })
 }
 
 pub async fn preview_delete_central_skill_impl(
@@ -743,7 +1034,11 @@ pub async fn preview_delete_central_skills(
     state: State<'_, AppState>,
     skill_ids: Vec<String>,
 ) -> Result<BatchDeleteCentralSkillPreviewResult, String> {
-    preview_delete_central_skills_impl(&state.db, &skill_ids).await
+    let pool = state.active_db().await?;
+    match state.active_target().await? {
+        ActiveTarget::Local => preview_delete_central_skills_impl(&pool, &skill_ids).await,
+        ActiveTarget::Ssh(_) => preview_delete_central_skills_ssh_impl(&pool, &skill_ids).await,
+    }
 }
 
 #[tauri::command]
@@ -752,7 +1047,13 @@ pub async fn delete_central_skill(
     skill_id: String,
     remove_agent_ids: Vec<String>,
 ) -> Result<DeleteCentralSkillResult, String> {
-    delete_central_skill_impl(&state.db, &skill_id, &remove_agent_ids).await
+    let pool = state.active_db().await?;
+    match state.active_target().await? {
+        ActiveTarget::Local => delete_central_skill_impl(&pool, &skill_id, &remove_agent_ids).await,
+        ActiveTarget::Ssh(target) => {
+            delete_central_skill_ssh_impl(&pool, &target, &skill_id, &remove_agent_ids).await
+        }
+    }
 }
 
 #[tauri::command]
@@ -760,7 +1061,13 @@ pub async fn delete_central_skills(
     state: State<'_, AppState>,
     requests: Vec<BatchDeleteCentralSkillRequest>,
 ) -> Result<BatchDeleteCentralSkillResult, String> {
-    delete_central_skills_impl(&state.db, &requests).await
+    let pool = state.active_db().await?;
+    match state.active_target().await? {
+        ActiveTarget::Local => delete_central_skills_impl(&pool, &requests).await,
+        ActiveTarget::Ssh(target) => {
+            delete_central_skills_ssh_impl(&pool, &target, &requests).await
+        }
+    }
 }
 
 /// Tauri command: return detailed information about a skill, including all
@@ -773,8 +1080,8 @@ pub async fn get_skill_detail(
     agent_id: Option<String>,
     row_id: Option<String>,
 ) -> Result<SkillDetail, String> {
-    get_skill_detail_with_row_impl(&state.db, &skill_id, agent_id.as_deref(), row_id.as_deref())
-        .await
+    let pool = state.active_db().await?;
+    get_skill_detail_with_row_impl(&pool, &skill_id, agent_id.as_deref(), row_id.as_deref()).await
 }
 
 /// Tauri command: read and return the raw content of a skill's `SKILL.md` file.
@@ -783,26 +1090,58 @@ pub async fn read_skill_content(
     state: State<'_, AppState>,
     skill_id: String,
 ) -> Result<String, String> {
-    let skill = db::get_skill_by_id(&state.db, &skill_id)
+    let pool = state.active_db().await?;
+    let skill = db::get_skill_by_id(&pool, &skill_id)
         .await?
         .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
 
-    std::fs::read_to_string(&skill.file_path)
-        .map_err(|e| format!("Failed to read '{}': {}", skill.file_path, e))
+    match state.active_target().await? {
+        ActiveTarget::Local => std::fs::read_to_string(&skill.file_path)
+            .map_err(|e| format!("Failed to read '{}': {}", skill.file_path, e)),
+        ActiveTarget::Ssh(target) => {
+            let connection = connect_ssh_target(&target).await?;
+            let bytes = connection.read_file(&skill.file_path).await?;
+            String::from_utf8(bytes).map_err(|e| {
+                format!(
+                    "Remote file '{}' is not valid UTF-8: {}",
+                    skill.file_path, e
+                )
+            })
+        }
+    }
 }
 
 #[tauri::command]
-pub async fn read_file_by_path(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read '{}': {}", path, e))
+pub async fn read_file_by_path(state: State<'_, AppState>, path: String) -> Result<String, String> {
+    match state.active_target().await? {
+        ActiveTarget::Local => read_file_by_path_impl(&path),
+        ActiveTarget::Ssh(target) => {
+            let connection = connect_ssh_target(&target).await?;
+            let bytes = connection.read_file(&path).await?;
+            String::from_utf8(bytes)
+                .map_err(|e| format!("Remote file '{}' is not valid UTF-8: {}", path, e))
+        }
+    }
+}
+
+fn read_file_by_path_impl(path: &str) -> Result<String, String> {
+    std::fs::read_to_string(path).map_err(|e| format!("Failed to read '{}': {}", path, e))
 }
 
 #[tauri::command]
-pub async fn open_in_file_manager(path: String) -> Result<(), String> {
+pub async fn open_in_file_manager(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Err("Remote paths cannot be opened in the local file manager. Copy the remote path instead.".to_string());
+    }
+    open_in_file_manager_checked_impl(&path)
+}
+
+fn open_in_file_manager_checked_impl(path: &str) -> Result<(), String> {
     let p = std::path::Path::new(&path);
     if !p.exists() {
         return Err(format!("Path does not exist: {}", path));
     }
-    open_in_file_manager_impl(&path)
+    open_in_file_manager_impl(path)
 }
 
 fn open_in_file_manager_impl(path: &str) -> Result<(), String> {
@@ -921,6 +1260,36 @@ mod tests {
         }
     }
 
+    fn make_remote_central_skill(id: &str, dir: &str) -> Skill {
+        Skill {
+            id: id.to_string(),
+            name: id.to_string(),
+            description: Some(format!("Desc for {}", id)),
+            file_path: format!("{}/SKILL.md", dir.trim_end_matches('/')),
+            canonical_path: Some(dir.to_string()),
+            is_central: true,
+            source: Some("native".to_string()),
+            content: None,
+            scanned_at: Utc::now().to_rfc3339(),
+        }
+    }
+
+    fn make_remote_installation(
+        skill_id: &str,
+        agent_id: &str,
+        installed_path: &str,
+        link_type: &str,
+    ) -> SkillInstallation {
+        SkillInstallation {
+            skill_id: skill_id.to_string(),
+            agent_id: agent_id.to_string(),
+            installed_path: installed_path.to_string(),
+            link_type: link_type.to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        }
+    }
+
     fn make_observation(
         row_id: &str,
         skill_id: &str,
@@ -948,6 +1317,129 @@ mod tests {
             is_read_only: read_only,
             scanned_at: Utc::now().to_rfc3339(),
         }
+    }
+
+    #[test]
+    fn test_remote_child_path_guard_normalizes_and_rejects_unsafe_paths() {
+        assert_eq!(
+            ensure_remote_child_path(
+                "/home/alice/.skillsmanage/skills/",
+                "/home/alice/.skillsmanage/skills/demo",
+                "demo",
+            )
+            .unwrap(),
+            "/home/alice/.skillsmanage/skills/demo"
+        );
+
+        assert!(ensure_remote_child_path(
+            "/home/alice/.skillsmanage/skills",
+            "/home/alice/.skillsmanage/skills",
+            "root",
+        )
+        .is_err());
+        assert!(ensure_remote_child_path(
+            "/home/alice/.skillsmanage/skills",
+            "/home/alice/other/demo",
+            "outside",
+        )
+        .is_err());
+        assert!(ensure_remote_child_path(
+            "/home/alice/.skillsmanage/skills",
+            "/home/alice/.skillsmanage/skills/../other",
+            "traversal",
+        )
+        .is_err());
+    }
+
+    #[tokio::test]
+    async fn test_preview_remote_delete_uses_remote_paths_and_installations() {
+        let pool = setup_test_db().await;
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+            .bind("/home/alice/.skillsmanage/skills")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+            .bind("/home/alice/.agents/skills")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'claude-code'")
+            .bind("/home/alice/.claude/skills")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        db::upsert_skill(
+            &pool,
+            &make_remote_central_skill(
+                "remote-delete",
+                "/home/alice/.skillsmanage/skills/remote-delete",
+            ),
+        )
+        .await
+        .unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_remote_installation(
+                "remote-delete",
+                "cursor",
+                "/home/alice/.agents/skills/remote-delete",
+                "copy",
+            ),
+        )
+        .await
+        .unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_remote_installation(
+                "remote-delete",
+                "claude-code",
+                "/home/alice/.claude/skills/remote-delete",
+                "symlink",
+            ),
+        )
+        .await
+        .unwrap();
+
+        let result = preview_delete_central_skills_ssh_impl(&pool, &["remote-delete".to_string()])
+            .await
+            .unwrap();
+
+        assert!(result.failed.is_empty());
+        assert_eq!(
+            result.previews[0].central_path,
+            "/home/alice/.skillsmanage/skills/remote-delete"
+        );
+        assert_eq!(result.previews[0].copy_installations[0].agent_id, "cursor");
+        assert_eq!(
+            result.previews[0].auto_removed_agent_ids,
+            vec!["claude-code"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_preview_remote_delete_rejects_central_path_outside_remote_root() {
+        let pool = setup_test_db().await;
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+            .bind("/home/alice/.skillsmanage/skills")
+            .execute(&pool)
+            .await
+            .unwrap();
+        db::upsert_skill(
+            &pool,
+            &make_remote_central_skill("outside-remote", "/tmp/outside-remote"),
+        )
+        .await
+        .unwrap();
+
+        let result = preview_delete_central_skills_ssh_impl(&pool, &["outside-remote".to_string()])
+            .await
+            .unwrap();
+
+        assert!(result.previews.is_empty());
+        assert_eq!(result.failed[0].skill_id, "outside-remote");
+        assert!(result.failed[0].error.contains("outside remote root"));
     }
 
     // ── get_skills_by_agent ───────────────────────────────────────────────────
@@ -1947,14 +2439,14 @@ mod tests {
         let content = "---\nname: Test\n---\n\n# Test Skill";
         fs::write(&file_path, content).unwrap();
 
-        let result = read_file_by_path(file_path.to_string_lossy().into_owned()).await;
+        let result = read_file_by_path_impl(&file_path.to_string_lossy());
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), content);
     }
 
     #[tokio::test]
     async fn test_read_file_by_path_not_found() {
-        let result = read_file_by_path("/nonexistent/file.md".to_string()).await;
+        let result = read_file_by_path_impl("/nonexistent/file.md");
         assert!(result.is_err());
     }
 
@@ -1962,8 +2454,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_open_in_file_manager_nonexistent_path() {
-        let result =
-            open_in_file_manager("/nonexistent/path/that/does/not/exist".to_string()).await;
+        let result = open_in_file_manager_checked_impl("/nonexistent/path/that/does/not/exist");
         assert!(result.is_err());
     }
 }

@@ -75,14 +75,16 @@ async fn get_skill_counts_summary_impl(pool: &DbPool) -> Result<SkillCountsSumma
 pub async fn get_skill_counts_summary(
     state: State<'_, AppState>,
 ) -> Result<SkillCountsSummary, String> {
-    get_skill_counts_summary_impl(&state.db).await
+    let pool = state.active_db().await?;
+    get_skill_counts_summary_impl(&pool).await
 }
 
 #[tauri::command]
 pub async fn get_bootstrap_snapshot(
     state: State<'_, AppState>,
 ) -> Result<BootstrapSnapshot, String> {
-    get_bootstrap_snapshot_impl(&state.db).await
+    let pool = state.active_db().await?;
+    get_bootstrap_snapshot_impl(&pool).await
 }
 
 async fn get_bootstrap_snapshot_impl(pool: &DbPool) -> Result<BootstrapSnapshot, String> {

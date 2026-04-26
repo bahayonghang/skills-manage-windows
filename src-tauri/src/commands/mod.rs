@@ -11,5 +11,6 @@ pub mod portable_state;
 pub mod scanner;
 pub mod settings;
 pub mod skills;
+pub mod targets;
 
 pub const APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));

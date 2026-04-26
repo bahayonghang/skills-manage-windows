@@ -9,6 +9,7 @@ use tauri::{Emitter, State};
 
 use crate::db::{self, DbPool};
 use crate::paths;
+use crate::targets::ActiveTarget;
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -423,6 +424,9 @@ pub async fn discover_scan_roots() -> Result<Vec<ScanRoot>, String> {
 /// persisted enabled/disabled states from the settings table.
 #[tauri::command]
 pub async fn get_scan_roots(state: State<'_, AppState>) -> Result<Vec<ScanRoot>, String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Ok(Vec::new());
+    }
     let pool = &state.db;
     let mut roots = default_scan_roots();
 
@@ -452,6 +456,9 @@ pub async fn set_scan_root_enabled(
     path: String,
     enabled: bool,
 ) -> Result<(), String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Err("Remote Discover scanning is not supported in this version.".to_string());
+    }
     let pool = &state.db;
 
     // Load existing config or start fresh.
@@ -477,6 +484,9 @@ pub async fn start_project_scan(
     app: tauri::AppHandle,
     roots: Vec<ScanRoot>,
 ) -> Result<DiscoverResult, String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Err("Remote Discover scanning is not supported in this version.".to_string());
+    }
     // Reset cancel flag.
     SCAN_CANCEL.store(false, Ordering::Relaxed);
 
@@ -602,6 +612,12 @@ pub async fn stop_project_scan() -> Result<(), String> {
 pub async fn get_discovered_summary(
     state: State<'_, AppState>,
 ) -> Result<DiscoveredSummary, String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Ok(DiscoveredSummary {
+            total_skills_found: 0,
+            total_projects_found: 0,
+        });
+    }
     let pool = &state.db;
     let total_skills_found = db::get_discovered_skill_count(pool).await?;
     let total_projects_found = db::get_discovered_project_count(pool).await?.max(0) as usize;
@@ -617,6 +633,9 @@ pub async fn get_discovered_summary(
 pub async fn get_discovered_skills(
     state: State<'_, AppState>,
 ) -> Result<Vec<DiscoveredProject>, String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Ok(Vec::new());
+    }
     let pool = &state.db;
     let rows = db::get_all_discovered_skills(pool).await?;
 
@@ -691,6 +710,9 @@ pub async fn import_discovered_skill_to_central(
     state: State<'_, AppState>,
     discovered_skill_id: String,
 ) -> Result<ImportResult, String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Err("Remote Discover import is not supported in this version.".to_string());
+    }
     let pool = &state.db;
 
     // Look up the discovered skill.
@@ -761,6 +783,9 @@ pub async fn import_discovered_skill_to_platform(
     discovered_skill_id: String,
     agent_id: String,
 ) -> Result<ImportResult, String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Err("Remote Discover import is not supported in this version.".to_string());
+    }
     let pool = &state.db;
 
     // Look up the discovered skill.
@@ -847,6 +872,9 @@ pub async fn import_discovered_skill_to_platform(
 /// Clear all discovered skills from the database.
 #[tauri::command]
 pub async fn clear_discovered_skills(state: State<'_, AppState>) -> Result<(), String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Ok(());
+    }
     db::clear_all_discovered_skills(&state.db).await
 }
 

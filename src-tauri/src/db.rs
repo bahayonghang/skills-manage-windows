@@ -204,6 +204,17 @@ pub async fn create_pool(db_path: &str) -> Result<DbPool, String> {
 
 /// Initialize all database tables (idempotent) and seed built-in agents.
 pub async fn init_database(pool: &DbPool) -> Result<(), String> {
+    init_database_with_agents(pool, builtin_agents()).await
+}
+
+pub async fn init_database_for_remote_home(pool: &DbPool, remote_home: &str) -> Result<(), String> {
+    init_database_with_agents(pool, builtin_agents_for_posix_home(remote_home)).await
+}
+
+async fn init_database_with_agents(
+    pool: &DbPool,
+    builtin_agents: Vec<Agent>,
+) -> Result<(), String> {
     // Enable WAL mode (no-op for in-memory databases)
     sqlx::query("PRAGMA journal_mode=WAL")
         .execute(pool)
@@ -670,10 +681,10 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
     .await?;
 
     // Seed built-in agents (INSERT OR IGNORE so repeated init is safe)
-    seed_builtin_agents(pool).await?;
+    seed_builtin_agents(pool, &builtin_agents).await?;
 
     // Seed built-in scan directories from the built-in agent registry.
-    seed_builtin_scan_directories(pool).await?;
+    seed_builtin_scan_directories(pool, &builtin_agents).await?;
 
     // Seed built-in skill registries (marketplace sources)
     seed_builtin_registries(pool).await?;
@@ -683,11 +694,10 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
     Ok(())
 }
 
-async fn seed_builtin_agents(pool: &DbPool) -> Result<(), String> {
-    let agents = builtin_agents();
+async fn seed_builtin_agents(pool: &DbPool, agents: &[Agent]) -> Result<(), String> {
     let builtin_ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
 
-    for agent in &agents {
+    for agent in agents {
         sqlx::query(
             "INSERT INTO agents
              (id, display_name, category, global_skills_dir, project_skills_dir,
@@ -737,9 +747,9 @@ async fn seed_builtin_agents(pool: &DbPool) -> Result<(), String> {
 /// be removed by the user. `INSERT OR IGNORE` keeps the operation idempotent:
 /// Universal agents share `~/.agents/skills`, while Central uses the private
 /// `~/.skillsmanage/skills` store.
-async fn seed_builtin_scan_directories(pool: &DbPool) -> Result<(), String> {
+async fn seed_builtin_scan_directories(pool: &DbPool, agents: &[Agent]) -> Result<(), String> {
     let now = Utc::now().to_rfc3339();
-    for agent in builtin_agents() {
+    for agent in agents {
         sqlx::query(
             "INSERT OR IGNORE INTO scan_directories
              (path, label, is_active, is_builtin, added_at)
@@ -754,10 +764,8 @@ async fn seed_builtin_scan_directories(pool: &DbPool) -> Result<(), String> {
     }
 
     // Remove builtin scan directories that no longer exist in code
-    let builtin_paths: std::collections::HashSet<String> = builtin_agents()
-        .into_iter()
-        .map(|a| a.global_skills_dir)
-        .collect();
+    let builtin_paths: std::collections::HashSet<String> =
+        agents.iter().map(|a| a.global_skills_dir.clone()).collect();
     let all_db_dirs: Vec<(String,)> =
         sqlx::query_as("SELECT path FROM scan_directories WHERE is_builtin = 1")
             .fetch_all(pool)
@@ -951,6 +959,72 @@ async fn ensure_column(
 /// Returns the list of built-in agents using the current user's home directory.
 pub fn builtin_agents() -> Vec<Agent> {
     builtin_agents_for_home(&crate::paths::resolve_home_dir())
+}
+
+pub fn builtin_agents_for_posix_home(home: &str) -> Vec<Agent> {
+    let home = normalize_posix_home(home);
+    let central_skills_dir = posix_join(&home, &[".skillsmanage", "skills"]);
+    let universal_skills_dir = posix_join(&home, &[".agents", "skills"]);
+
+    let rewrite_path = |local_path: &str| -> String {
+        let normalized = local_path.replace('\\', "/");
+        if normalized.ends_with("/.skillsmanage/skills") {
+            return central_skills_dir.clone();
+        }
+        if normalized.ends_with("/.agents/skills") {
+            return universal_skills_dir.clone();
+        }
+
+        let Some(relative) = normalized
+            .rsplit("/.")
+            .next()
+            .map(|suffix| format!(".{suffix}"))
+        else {
+            return normalized;
+        };
+
+        posix_join(&home, &[relative.as_str()])
+    };
+
+    builtin_agents_for_home(Path::new("/__skillport_remote_home__"))
+        .into_iter()
+        .map(|mut agent| {
+            agent.global_skills_dir = rewrite_path(&agent.global_skills_dir);
+            if let Some(project_skills_dir) = agent.project_skills_dir.as_deref() {
+                agent.project_skills_dir = Some(project_skills_dir.replace('\\', "/"));
+            }
+            agent
+        })
+        .collect()
+}
+
+fn normalize_posix_home(home: &str) -> String {
+    let mut value = home.trim().replace('\\', "/");
+    while value.len() > 1 && value.ends_with('/') {
+        value.pop();
+    }
+    if value.is_empty() {
+        "/".to_string()
+    } else {
+        value
+    }
+}
+
+fn posix_join(home: &str, segments: &[&str]) -> String {
+    let mut value = normalize_posix_home(home);
+    for segment in segments {
+        let segment = segment.trim_matches('/');
+        if segment.is_empty() {
+            continue;
+        }
+        if value == "/" {
+            value.push_str(segment);
+        } else {
+            value.push('/');
+            value.push_str(segment);
+        }
+    }
+    value
 }
 
 fn is_builtin_agent_enabled_by_default(agent_id: &str, category: &str) -> bool {

@@ -7,13 +7,12 @@ use uuid::Uuid;
 
 use crate::{
     db::{self, DbPool, Skill, SkillRepositoryAssignment, SkillUpdateState},
+    targets::ActiveTarget,
     AppState,
 };
 
 use super::{
-    github_import::{
-        self, GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate,
-    },
+    github_import::{self, GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate},
     linker,
 };
 
@@ -99,7 +98,8 @@ struct UpdateCounters {
 pub async fn get_central_skill_update_states(
     state: State<'_, AppState>,
 ) -> Result<Vec<SkillUpdateState>, String> {
-    db::get_skill_update_states(&state.db).await
+    let pool = state.active_db().await?;
+    db::get_skill_update_states(&pool).await
 }
 
 #[tauri::command]
@@ -108,6 +108,9 @@ pub async fn check_central_skill_updates(
     state: State<'_, AppState>,
     skill_ids: Option<Vec<String>>,
 ) -> Result<Vec<SkillUpdateState>, String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Err("Remote Central update checks are not supported in this version.".to_string());
+    }
     let skills = load_selected_central_skills(&state.db, skill_ids.as_deref()).await?;
     let auth = github_import::github_direct_auth_from_settings(&state.db).await?;
     let client = github_import::github_client()?;
@@ -116,15 +119,7 @@ pub async fn check_central_skill_updates(
     let mut states = Vec::with_capacity(skills.len());
     let total = skills.len();
 
-    emit_update_progress(
-        &app,
-        "checking",
-        "started",
-        total,
-        &counters,
-        None,
-        None,
-    );
+    emit_update_progress(&app, "checking", "started", total, &counters, None, None);
 
     for skill in skills {
         emit_update_progress(
@@ -165,15 +160,7 @@ pub async fn check_central_skill_updates(
         states.push(state_result);
     }
 
-    emit_update_progress(
-        &app,
-        "checking",
-        "completed",
-        total,
-        &counters,
-        None,
-        None,
-    );
+    emit_update_progress(&app, "checking", "completed", total, &counters, None, None);
 
     Ok(states)
 }
@@ -187,6 +174,9 @@ pub async fn update_central_skills(
     if skill_ids.is_empty() {
         return Err("Select at least one Central skill to update.".to_string());
     }
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Err("Remote Central updates are not supported in this version.".to_string());
+    }
 
     let skills = load_selected_central_skills(&state.db, Some(&skill_ids)).await?;
     let auth = github_import::github_direct_auth_from_settings(&state.db).await?;
@@ -199,15 +189,7 @@ pub async fn update_central_skills(
     let mut skipped = Vec::new();
     let mut states = Vec::new();
 
-    emit_update_progress(
-        &app,
-        "updating",
-        "started",
-        total,
-        &counters,
-        None,
-        None,
-    );
+    emit_update_progress(&app, "updating", "started", total, &counters, None, None);
 
     for skill in skills {
         emit_update_progress(
@@ -220,14 +202,8 @@ pub async fn update_central_skills(
             None,
         );
 
-        match load_remote_skill_content(
-            &state.db,
-            &skill,
-            auth.as_deref(),
-            &client,
-            &mut snapshots,
-        )
-        .await
+        match load_remote_skill_content(&state.db, &skill, auth.as_deref(), &client, &mut snapshots)
+            .await
         {
             Ok(Some(remote)) if remote.remote_hash == remote.local_hash => {
                 let state_result = state_from_remote(&skill, &remote, false);
@@ -333,15 +309,7 @@ pub async fn update_central_skills(
         }
     }
 
-    emit_update_progress(
-        &app,
-        "updating",
-        "completed",
-        total,
-        &counters,
-        None,
-        None,
-    );
+    emit_update_progress(&app, "updating", "completed", total, &counters, None, None);
 
     Ok(CentralSkillUpdateResult {
         succeeded,
@@ -357,7 +325,10 @@ async fn load_selected_central_skills(
 ) -> Result<Vec<Skill>, String> {
     let mut skills = db::get_central_skills(pool).await?;
     if let Some(skill_ids) = skill_ids {
-        let requested = skill_ids.iter().cloned().collect::<std::collections::HashSet<_>>();
+        let requested = skill_ids
+            .iter()
+            .cloned()
+            .collect::<std::collections::HashSet<_>>();
         skills.retain(|skill| requested.contains(&skill.id));
     }
     Ok(skills)
@@ -469,14 +440,12 @@ async fn resolve_github_update_source(
 }
 
 fn repository_url(assignment: &SkillRepositoryAssignment) -> Option<String> {
-    assignment
-        .repository
-        .url
-        .clone()
-        .or_else(|| match (&assignment.repository.owner, &assignment.repository.repo) {
+    assignment.repository.url.clone().or_else(|| {
+        match (&assignment.repository.owner, &assignment.repository.repo) {
             (Some(owner), Some(repo)) => Some(format!("https://github.com/{owner}/{repo}")),
             _ => None,
-        })
+        }
+    })
 }
 
 async fn ensure_snapshot(
@@ -499,7 +468,11 @@ fn repo_cache_key(repo: &GitHubRepoRef) -> String {
     format!("{}/{}/{}", repo.owner, repo.repo, repo.branch)
 }
 
-fn state_from_remote(skill: &Skill, remote: &RemoteSkillContent, updated: bool) -> SkillUpdateState {
+fn state_from_remote(
+    skill: &Skill,
+    remote: &RemoteSkillContent,
+    updated: bool,
+) -> SkillUpdateState {
     let now = Utc::now().to_rfc3339();
     let status = if remote.remote_hash == remote.local_hash {
         STATUS_UP_TO_DATE
@@ -559,7 +532,11 @@ async fn unsupported_state(
     })
 }
 
-async fn error_state(pool: &DbPool, skill: &Skill, error: &str) -> Result<SkillUpdateState, String> {
+async fn error_state(
+    pool: &DbPool,
+    skill: &Skill,
+    error: &str,
+) -> Result<SkillUpdateState, String> {
     let assignment = db::get_skill_repository_assignment(pool, &skill.id).await?;
     let source_url = repository_url(&assignment);
     Ok(SkillUpdateState {
@@ -587,7 +564,13 @@ fn unsupported_reason(assignment: &SkillRepositoryAssignment) -> String {
             assignment.repository.source_type
         );
     }
-    if assignment.source_path.as_deref().unwrap_or("").trim().is_empty() {
+    if assignment
+        .source_path
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
         return "GitHub source path is missing.".to_string();
     }
     "Automatic update is not supported for this source.".to_string()
@@ -843,20 +826,33 @@ fn collect_local_hash_entries(
     current: &Path,
     entries: &mut Vec<(String, Vec<u8>)>,
 ) -> Result<(), String> {
-    for entry in std::fs::read_dir(current)
-        .map_err(|e| format!("Failed to read local skill directory '{}': {}", current.display(), e))?
-    {
+    for entry in std::fs::read_dir(current).map_err(|e| {
+        format!(
+            "Failed to read local skill directory '{}': {}",
+            current.display(),
+            e
+        )
+    })? {
         let entry = entry.map_err(|e| format!("Failed to read local skill entry: {}", e))?;
         let path = entry.path();
-        let file_type = entry
-            .file_type()
-            .map_err(|e| format!("Failed to inspect local skill entry '{}': {}", path.display(), e))?;
+        let file_type = entry.file_type().map_err(|e| {
+            format!(
+                "Failed to inspect local skill entry '{}': {}",
+                path.display(),
+                e
+            )
+        })?;
         if file_type.is_dir() {
             collect_local_hash_entries(root, &path, entries)?;
         } else if file_type.is_file() {
             let relative_path = relative_path_string(root, &path)?;
-            let bytes = std::fs::read(&path)
-                .map_err(|e| format!("Failed to read local skill file '{}': {}", path.display(), e))?;
+            let bytes = std::fs::read(&path).map_err(|e| {
+                format!(
+                    "Failed to read local skill file '{}': {}",
+                    path.display(),
+                    e
+                )
+            })?;
             entries.push((relative_path, bytes));
         }
     }

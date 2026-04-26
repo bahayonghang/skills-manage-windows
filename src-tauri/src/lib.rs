@@ -3,6 +3,7 @@ pub mod commands;
 pub mod db;
 pub mod path_utils;
 pub mod paths;
+pub mod targets;
 
 use db::DbPool;
 use std::collections::HashMap;
@@ -17,6 +18,17 @@ use tauri::Manager;
 pub struct AppState {
     pub db: DbPool,
     pub ai_tag_jobs: AiTagJobRegistry,
+    pub targets: targets::TargetRegistry,
+}
+
+impl AppState {
+    pub async fn active_db(&self) -> Result<DbPool, String> {
+        self.targets.active_db(&self.db).await
+    }
+
+    pub async fn active_target(&self) -> Result<targets::ActiveTarget, String> {
+        self.targets.active_target(&self.db).await
+    }
 }
 
 #[derive(Default)]
@@ -85,12 +97,21 @@ pub fn run() {
             app.manage(AppState {
                 db: pool,
                 ai_tag_jobs: AiTagJobRegistry::default(),
+                targets: targets::TargetRegistry::default(),
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap::get_bootstrap_snapshot,
             commands::bootstrap::get_skill_counts_summary,
+            // Targets
+            commands::targets::list_targets,
+            commands::targets::create_ssh_target,
+            commands::targets::test_ssh_target,
+            commands::targets::update_ssh_target_password,
+            commands::targets::delete_target,
+            commands::targets::set_active_target,
+            commands::targets::get_active_target,
             // Scanner
             commands::scanner::scan_all_skills,
             // Agents
@@ -150,6 +171,10 @@ pub fn run() {
             commands::settings::set_scan_directory_active,
             commands::settings::get_setting,
             commands::settings::set_setting,
+            commands::github_import::get_github_pat,
+            commands::github_import::set_github_pat,
+            commands::github_import::clear_github_pat,
+            commands::github_import::test_github_pat,
             // Discover
             commands::discover::discover_scan_roots,
             commands::discover::get_scan_roots,

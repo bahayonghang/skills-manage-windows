@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::db::{self, Agent, DbPool};
 use crate::path_utils::{expand_home_path, path_to_string};
+use crate::targets::ActiveTarget;
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -224,13 +225,19 @@ pub async fn set_agent_enabled_impl(
 /// Tauri command: return all registered agents with live detection status.
 #[tauri::command]
 pub async fn get_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatus>, String> {
-    get_agents_impl(&state.db).await
+    let pool = state.active_db().await?;
+    get_agents_impl(&pool).await
 }
 
 /// Tauri command: refresh detection status for all agents and return them.
 #[tauri::command]
 pub async fn detect_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatus>, String> {
-    detect_agents_impl(&state.db).await
+    let active_target = state.active_target().await?;
+    let pool = state.active_db().await?;
+    match active_target {
+        ActiveTarget::Local => detect_agents_impl(&pool).await,
+        ActiveTarget::Ssh(_) => get_agents_impl(&pool).await,
+    }
 }
 
 /// Tauri command: register a new user-defined agent.
@@ -239,7 +246,8 @@ pub async fn add_custom_agent(
     state: State<'_, AppState>,
     config: CustomAgentConfig,
 ) -> Result<AgentWithStatus, String> {
-    add_custom_agent_impl(&state.db, config).await
+    let pool = state.active_db().await?;
+    add_custom_agent_impl(&pool, config).await
 }
 
 /// Tauri command: update an existing user-defined agent.
@@ -249,7 +257,8 @@ pub async fn update_custom_agent(
     agent_id: String,
     config: UpdateCustomAgentConfig,
 ) -> Result<AgentWithStatus, String> {
-    update_custom_agent_impl(&state.db, &agent_id, config).await
+    let pool = state.active_db().await?;
+    update_custom_agent_impl(&pool, &agent_id, config).await
 }
 
 /// Tauri command: remove a user-defined (non-builtin) agent by ID.
@@ -258,7 +267,8 @@ pub async fn remove_custom_agent(
     state: State<'_, AppState>,
     agent_id: String,
 ) -> Result<(), String> {
-    remove_custom_agent_impl(&state.db, &agent_id).await
+    let pool = state.active_db().await?;
+    remove_custom_agent_impl(&pool, &agent_id).await
 }
 
 /// Tauri command: toggle whether an agent is visible across the app.
@@ -268,7 +278,8 @@ pub async fn set_agent_enabled(
     agent_id: String,
     is_enabled: bool,
 ) -> Result<AgentWithStatus, String> {
-    set_agent_enabled_impl(&state.db, &agent_id, is_enabled).await
+    let pool = state.active_db().await?;
+    set_agent_enabled_impl(&pool, &agent_id, is_enabled).await
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

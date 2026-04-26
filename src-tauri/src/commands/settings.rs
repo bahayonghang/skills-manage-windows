@@ -61,7 +61,8 @@ pub async fn set_setting_impl(pool: &DbPool, key: &str, value: &str) -> Result<(
 pub async fn get_scan_directories(
     state: State<'_, AppState>,
 ) -> Result<Vec<ScanDirectory>, String> {
-    get_scan_directories_impl(&state.db).await
+    let pool = state.active_db().await?;
+    get_scan_directories_impl(&pool).await
 }
 
 /// Tauri command: add a new custom scan directory.
@@ -71,13 +72,15 @@ pub async fn add_scan_directory(
     path: String,
     label: Option<String>,
 ) -> Result<ScanDirectory, String> {
-    add_scan_directory_impl(&state.db, &path, label.as_deref()).await
+    let pool = state.active_db().await?;
+    add_scan_directory_impl(&pool, &path, label.as_deref()).await
 }
 
 /// Tauri command: remove a custom scan directory by path.
 #[tauri::command]
 pub async fn remove_scan_directory(state: State<'_, AppState>, path: String) -> Result<(), String> {
-    remove_scan_directory_impl(&state.db, &path).await
+    let pool = state.active_db().await?;
+    remove_scan_directory_impl(&pool, &path).await
 }
 
 /// Tauri command: set the is_active flag on a scan directory.
@@ -87,7 +90,8 @@ pub async fn set_scan_directory_active(
     path: String,
     is_active: bool,
 ) -> Result<(), String> {
-    set_scan_directory_active_impl(&state.db, &path, is_active).await
+    let pool = state.active_db().await?;
+    set_scan_directory_active_impl(&pool, &path, is_active).await
 }
 
 /// Tauri command: get a settings value by key.
