@@ -8,7 +8,7 @@
 
 /* ─── Global hover color variable ─────────────────────────────────────────── */
 :root {
-    --hover-bg: #7E3EE6;
+    --hover-bg: var(--primary);
 }
 
 @theme inline {
@@ -297,7 +297,7 @@
     --popover: #e6e9ef;
     --popover-foreground: #4c4f69;
     --primary: #7287fd;
-    --primary-foreground: #eff1f5;
+    --primary-foreground: #11111b;
     --secondary: #ccd0da;
     --secondary-foreground: #4c4f69;
     --muted: #bcc0cc;
@@ -317,7 +317,7 @@
     --sidebar: #e6e9ef;
     --sidebar-foreground: #4c4f69;
     --sidebar-primary: #7287fd;
-    --sidebar-primary-foreground: #eff1f5;
+    --sidebar-primary-foreground: #11111b;
     --sidebar-accent: #ccd0da;
     --sidebar-accent-foreground: #4c4f69;
     --sidebar-border: #bcc0cc;
@@ -413,6 +413,13 @@
     --ring: var(--ctp-lavender);
     --sidebar-primary: var(--ctp-lavender);
     --sidebar-ring: var(--ctp-lavender);
+}
+
+[data-theme='latte'][data-accent='mauve'],
+[data-theme='latte'][data-accent='red'],
+[data-theme='latte'][data-accent='blue'] {
+    --primary-foreground: #fbfaff;
+    --sidebar-primary-foreground: #fbfaff;
 }
 
 @layer base {

@@ -53,8 +53,8 @@ function NavItem({
         aria-label={label}
         className={cn(
           "flex items-center w-full rounded-md transition-colors cursor-pointer",
-          !isActive && "hover:bg-primary/15 hover:text-primary",
-          isActive && "bg-hover-bg text-white",
+          !isActive && "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+          isActive && "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm",
           expanded ? "gap-2.5 px-2.5 py-1.5 text-sm" : "justify-center py-2 px-1.5"
         )}
       >
@@ -66,7 +66,7 @@ function NavItem({
               <span className={cn(
                 "text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded-full shrink-0",
                 isActive
-                  ? "bg-white/20 text-white"
+                  ? "bg-sidebar-primary-foreground/15 text-sidebar-primary-foreground"
                   : "bg-muted/60 text-muted-foreground"
               )}>
                 {count}
@@ -77,7 +77,7 @@ function NavItem({
       </button>
       {isActive && (
         <span
-          className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-white"
+          className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-sidebar-primary-foreground/80"
           aria-hidden="true"
         />
       )}
@@ -154,7 +154,7 @@ export function Sidebar() {
   return (
     <nav
       className={cn(
-        "relative flex flex-col shrink-0 h-full border-r border-border bg-sidebar text-sidebar-foreground transition-[width] duration-200"
+        "relative flex flex-col shrink-0 h-full border-r border-border bg-sidebar text-sidebar-foreground"
       )}
       style={{ width: resolvedSidebarWidth }}
       aria-label={t("sidebar.mainNav")}

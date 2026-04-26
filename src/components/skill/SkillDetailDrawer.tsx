@@ -62,7 +62,7 @@ export function SkillDetailDrawer({
       <DialogPortal keepMounted={false}>
         <DialogOverlay
           data-testid="skill-detail-drawer-overlay"
-          className="bg-black/30"
+          className="bg-foreground/30"
         />
         <DialogPrimitive.Popup
           role="dialog"

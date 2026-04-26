@@ -187,13 +187,13 @@ describe("Sidebar", () => {
   it("highlights the active route", () => {
     renderSidebar("/platform/claude-code");
     const claudeButton = screen.getByRole("button", { name: /Claude Code/ });
-    expect(claudeButton.className).toContain("bg-hover-bg");
+    expect(claudeButton.className).toContain("bg-sidebar-primary");
   });
 
   it("highlights Central Skills when on /central", () => {
     renderSidebar("/central");
     const centralButton = screen.getByRole("button", { name: /中央技能库/ });
-    expect(centralButton.className).toContain("bg-hover-bg");
+    expect(centralButton.className).toContain("bg-sidebar-primary");
   });
 
   it("routes Universal to its platform page", () => {
@@ -207,8 +207,8 @@ describe("Sidebar", () => {
     const universalButton = screen.getByRole("button", { name: /Universal/ });
     const centralButton = screen.getByRole("button", { name: /中央技能库/ });
 
-    expect(universalButton.className).toContain("bg-hover-bg");
-    expect(centralButton.className).not.toContain("bg-hover-bg");
+    expect(universalButton.className).toContain("bg-sidebar-primary");
+    expect(centralButton.className).not.toContain("bg-sidebar-primary");
   });
 
   it("uses the Universal representative count instead of the Central count", () => {

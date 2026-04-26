@@ -561,7 +561,7 @@ export function MarketplaceView() {
                             }}
                             disabled={isPreviewLoading}
                             aria-label={lang === "zh" ? "刷新预览" : "Refresh preview"}
-                            className="h-6 text-xs px-2"
+                            className="h-8 min-w-8 px-2 text-xs md:h-6 md:min-w-0"
                           >
                             <RefreshCw className={cn("size-3", isPreviewLoading && "animate-spin")} />
                           </Button>
@@ -615,7 +615,7 @@ export function MarketplaceView() {
                                         e.currentTarget
                                       );
                                     }}
-                                    className="h-6 text-[10px] px-2"
+                                    className="h-8 min-w-8 px-2 text-xs md:h-6 md:min-w-0 md:text-[10px]"
                                   >
                                     <FileText className="size-3" />
                                     <span>Detail</span>
@@ -625,7 +625,7 @@ export function MarketplaceView() {
                                     size="sm"
                                     onClick={(e) => { e.stopPropagation(); handleInstallPreviewSkill(skill); }}
                                     disabled={previewInstallingIds.has(skill.name)}
-                                    className="h-6 text-[10px] px-2"
+                                    className="h-8 min-w-8 px-2 text-xs md:h-6 md:min-w-0 md:text-[10px]"
                                   >
                                     {previewInstallingIds.has(skill.name)
                                       ? <Loader2 className="size-3 animate-spin" />

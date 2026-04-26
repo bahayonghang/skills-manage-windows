@@ -209,7 +209,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
         )}
         aria-label={t("platform.searchSkillLabel", { name })}
       >
-        <div className="h-full flex flex-col rounded-xl bg-card ring-1 ring-border shadow-sm p-3 gap-3 transition-all hover:ring-primary/25 hover:bg-accent/30 cursor-pointer">
+        <div className="h-full flex flex-col rounded-xl bg-card ring-1 ring-border shadow-sm p-3 gap-3 transition-colors duration-150 hover:ring-primary/25 hover:bg-accent/30 cursor-pointer">
           <div className="flex flex-1 items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="font-medium text-sm text-foreground truncate">{name}</div>

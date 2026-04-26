@@ -265,7 +265,7 @@ export function GitHubRepoImportWizard({
   const footerMode =
     step === "result" ? "result" : step === "confirm" ? "confirm" : "preview";
   const dialogContentClassName = cn(
-    "flex flex-col overflow-hidden p-0 transition-[width,max-width,height] duration-200 ease-out",
+    "flex flex-col overflow-hidden p-0",
     isInputStep
       ? "h-auto max-h-[min(92vh,32rem)] !w-[min(92vw,48rem)] !max-w-[min(92vw,48rem)]"
       : "h-[min(90vh,760px)] !w-[min(94vw,1180px)] !max-w-[min(94vw,1180px)] xl:!w-[min(95vw,1280px)] xl:!max-w-[min(95vw,1280px)]",
@@ -741,8 +741,8 @@ export function GitHubRepoImportWizard({
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-primary/10">
           {importProgressPercent > 0 ? (
             <div
-              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-              style={{ width: `${importProgressPercent}%` }}
+              className="h-full w-full origin-left rounded-full bg-primary transition-transform duration-300 ease-out"
+              style={{ transform: `scaleX(${importProgressPercent / 100})` }}
             />
           ) : (
             <div className="h-full w-1/3 rounded-full bg-primary/70 animate-pulse" />

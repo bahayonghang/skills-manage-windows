@@ -73,8 +73,8 @@ function ProgressView() {
       {/* Progress bar */}
       <div className="w-full bg-muted rounded-full h-2">
         <div
-          className="bg-primary h-2 rounded-full transition-all duration-300"
-          style={{ width: `${scanProgress}%` }}
+          className="bg-primary h-2 w-full origin-left rounded-full transition-transform duration-300 ease-out"
+          style={{ transform: `scaleX(${scanProgress / 100})` }}
         />
       </div>
 
@@ -543,11 +543,12 @@ export function DiscoverView() {
                     key={project.project_path}
                     onClick={() => handleSelectProject(project.project_path)}
                     title={project.project_path}
+                    aria-current={isActive ? "true" : undefined}
                     className={cn(
-                      "flex items-center gap-2 w-full px-3 py-2 text-left transition-colors cursor-pointer border-l-2 rounded-md",
+                      "flex items-center gap-2 w-full px-3 py-2 text-left transition-colors cursor-pointer border rounded-md",
                       isActive
-                        ? "bg-primary/15 border-primary text-foreground font-medium"
-                        : "hover:bg-muted/40 border-transparent text-muted-foreground"
+                        ? "bg-primary/10 border-primary/60 text-foreground font-medium shadow-sm"
+                        : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/40"
                     )}
                   >
                     <Folder className={cn("size-3.5 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
@@ -569,7 +570,8 @@ export function DiscoverView() {
                 <button
                   onClick={() => handleSelectProject(selectedProject.project_path)}
                   title={selectedProject.project_path}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-left transition-colors cursor-pointer border-l-2 rounded-md bg-primary/10 border-primary/60 text-foreground font-medium"
+                  aria-current="true"
+                  className="flex items-center gap-2 w-full px-3 py-2 text-left transition-colors cursor-pointer border rounded-md bg-primary/10 border-primary/60 text-foreground font-medium shadow-sm"
                 >
                   <Folder className="size-3.5 shrink-0 text-primary" />
                   <span className="text-sm truncate flex-1">{selectedProject.project_name}</span>

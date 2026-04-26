@@ -35,7 +35,7 @@ function DialogOverlay({
         // which is visible in WebKit/Tauri as a close-time flash: blur disappears,
         // reappears for one frame, then fades out. Keep the backdrop visually
         // stable and animate only on the transient transition attributes.
-        "fixed inset-0 isolate z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs supports-backdrop-filter:[-webkit-backdrop-filter:blur(4px)] will-change-[opacity,backdrop-filter] data-[starting-style]:animate-in data-[starting-style]:fade-in-0 data-[ending-style]:animate-out data-[ending-style]:fade-out-0 animation-duration-150",
+        "fixed inset-0 isolate z-50 bg-foreground/10 supports-backdrop-filter:backdrop-blur-xs supports-backdrop-filter:[-webkit-backdrop-filter:blur(4px)] will-change-[opacity,backdrop-filter] data-[starting-style]:animate-in data-[starting-style]:fade-in-0 data-[ending-style]:animate-out data-[ending-style]:fade-out-0 animation-duration-150",
         className
       )}
       {...props}

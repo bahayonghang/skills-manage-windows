@@ -1436,7 +1436,7 @@ export function CentralSkillsView() {
           </section>
         </div>
 
-        <div className="border-t border-border/80 bg-background p-4 shadow-[0_-8px_24px_rgba(15,23,42,0.04)]">
+        <div className="border-t border-border/80 bg-background p-4 shadow-lg">
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-foreground">
             <span className="grid size-5 place-items-center rounded-full bg-primary/15 text-[11px] font-bold text-primary ring-1 ring-primary/25">3</span>
             {t("central.categorizeApply")}
@@ -1839,9 +1839,9 @@ export function CentralSkillsView() {
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-primary transition-all"
+              className="h-full w-full origin-left rounded-full bg-primary transition-transform duration-300 ease-out"
               style={{
-                width: `${aiTagJob.total > 0 ? Math.round((aiTagJob.completed / aiTagJob.total) * 100) : 0}%`,
+                transform: `scaleX(${aiTagJob.total > 0 ? aiTagJob.completed / aiTagJob.total : 0})`,
               }}
             />
           </div>
@@ -1872,9 +1872,9 @@ export function CentralSkillsView() {
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-primary transition-all"
+              className="h-full w-full origin-left rounded-full bg-primary transition-transform duration-300 ease-out"
               style={{
-                width: `${updateJob.total > 0 ? Math.round((updateJob.completed / updateJob.total) * 100) : 0}%`,
+                transform: `scaleX(${updateJob.total > 0 ? updateJob.completed / updateJob.total : 0})`,
               }}
             />
           </div>

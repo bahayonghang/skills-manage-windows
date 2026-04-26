@@ -1167,7 +1167,7 @@ export function SkillDetailView({
                           ref={addToCollectionButtonRef}
                           variant="ghost"
                           size="sm"
-                          className="gap-1 text-muted-foreground hover:text-foreground h-6 px-2 text-xs"
+                          className="h-8 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground md:h-6"
                           aria-label={t("detail.addToCollection")}
                           onClick={() => setIsCollectionPickerOpen(true)}
                         >
