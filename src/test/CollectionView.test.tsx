@@ -149,6 +149,7 @@ function buildPlatformStoreState(overrides = {}) {
     refreshScanInBackground: vi.fn(),
     rescan: vi.fn(),
     refreshCounts: vi.fn(),
+    resetForTargetChange: vi.fn(),
     setCategoryVisibility: vi.fn(),
     setAgentEnabled: vi.fn(),
     applyScanSummary: vi.fn(),

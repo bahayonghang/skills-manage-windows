@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { SettingsView } from "../pages/SettingsView";
-import { ScanDirectory, AgentWithStatus } from "../types";
+import { ScanDirectory, AgentWithStatus, TargetSummary } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 
 // Mock stores
@@ -23,6 +23,22 @@ vi.mock("../stores/themeStore", () => ({
   ],
 }));
 
+vi.mock("../stores/targetStore", () => ({
+  useTargetStore: vi.fn(),
+}));
+
+vi.mock("../stores/centralSkillsStore", () => ({
+  useCentralSkillsStore: vi.fn(),
+}));
+
+vi.mock("../stores/discoverStore", () => ({
+  useDiscoverStore: vi.fn(),
+}));
+
+vi.mock("../stores/marketplaceStore", () => ({
+  useMarketplaceStore: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
@@ -30,6 +46,10 @@ vi.mock("@tauri-apps/api/core", () => ({
 import { useSettingsStore } from "../stores/settingsStore";
 import { usePlatformStore } from "../stores/platformStore";
 import { useThemeStore } from "../stores/themeStore";
+import { useTargetStore } from "../stores/targetStore";
+import { useCentralSkillsStore } from "../stores/centralSkillsStore";
+import { useDiscoverStore } from "../stores/discoverStore";
+import { useMarketplaceStore } from "../stores/marketplaceStore";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -117,14 +137,28 @@ function setupMocks({
   githubPat = "",
   isLoadingGitHubPat = false,
   isSavingGitHubPat = false,
+  isTestingGitHubPat = false,
   loadGitHubPat = vi.fn(),
   saveGitHubPat = vi.fn(),
   clearGitHubPat = vi.fn(),
+  testGitHubPat = vi.fn(),
   rescan = vi.fn(),
   refreshCounts = vi.fn(),
   categoryVisibility = { coding: true, lobster: false },
   setCategoryVisibility = vi.fn(),
   setAgentEnabled = vi.fn(),
+  targets = [{ id: "local", kind: "local" as const, label: "Local", isActive: true }] as TargetSummary[],
+  activeTarget = { id: "local", kind: "local" as const, label: "Local", isActive: true } as TargetSummary,
+  loadTargets = vi.fn(),
+  createSshTarget = vi.fn(),
+  testSshTarget = vi.fn(),
+  updateSshTargetPassword = vi.fn(),
+  deleteTarget = vi.fn(),
+  switchTarget = vi.fn(),
+  loadCentralSkills = vi.fn(),
+  refreshDiscoverCounts = vi.fn(),
+  loadMarketplaceRegistries = vi.fn(),
+  loadMarketplaceSkills = vi.fn(),
   flavor = "mocha" as const,
   setFlavor = vi.fn(),
   accent = "lavender" as const,
@@ -145,9 +179,12 @@ function setupMocks({
       githubPat,
       isLoadingGitHubPat,
       isSavingGitHubPat,
+      isTestingGitHubPat,
+      githubPatTestResult: null,
       loadGitHubPat,
       saveGitHubPat,
       clearGitHubPat,
+      testGitHubPat,
       clearError: vi.fn(),
     })
   );
@@ -169,12 +206,54 @@ function setupMocks({
       refreshScanInBackground: vi.fn(),
       rescan,
       refreshCounts,
+      resetForTargetChange: vi.fn(),
       setCategoryVisibility,
       setAgentEnabled,
       applyScanSummary: vi.fn(),
       setCollectionCount: vi.fn(),
       setDiscoveredCount: vi.fn(),
     })
+  );
+
+  vi.mocked(useTargetStore).mockImplementation((selector) =>
+    selector({
+      targets,
+      activeTarget,
+      isLoading: false,
+      isCreating: false,
+      testingTargetId: null,
+      updatingPasswordTargetId: null,
+      switchingTargetId: null,
+      deletingTargetId: null,
+      error: null,
+      loadTargets,
+      createSshTarget,
+      testSshTarget,
+      updateSshTargetPassword,
+      deleteTarget,
+      switchTarget,
+      clearError: vi.fn(),
+    })
+  );
+
+  vi.mocked(useCentralSkillsStore).mockImplementation((selector) =>
+    selector({
+      loadCentralSkills,
+    } as never)
+  );
+
+  vi.mocked(useDiscoverStore).mockImplementation((selector) =>
+    selector({
+      refreshCounts: refreshDiscoverCounts,
+    } as never)
+  );
+
+  vi.mocked(useMarketplaceStore).mockImplementation((selector) =>
+    selector({
+      selectedRegistryId: null,
+      loadRegistries: loadMarketplaceRegistries,
+      loadSkills: loadMarketplaceSkills,
+    } as never)
   );
 
   vi.mocked(useThemeStore).mockImplementation((selector) =>
@@ -299,6 +378,44 @@ describe("SettingsView", () => {
   });
 
   // ── Scan Directories section ──────────────────────────────────────────────
+
+  it("saves the password for an existing password ssh target", async () => {
+    const updateSshTargetPassword = vi.fn().mockResolvedValue({
+      ok: true,
+      remoteHome: "/home/alice",
+      remoteOs: "Linux",
+      message: "saved",
+    });
+    setupMocks({
+      targets: [
+        { id: "local", kind: "local" as const, label: "Local", isActive: true },
+        {
+          id: "ssh-demo",
+          kind: "ssh" as const,
+          label: "Lab",
+          host: "lab.local",
+          username: "alice",
+          port: 22,
+          authMethod: "password" as const,
+          remoteHome: "/home/alice",
+          remoteOs: "Linux",
+          isActive: false,
+        },
+      ],
+      updateSshTargetPassword,
+    });
+    renderSettingsView();
+
+    const passwordInput = screen.getByLabelText("Lab 的 SSH 密码");
+    fireEvent.change(passwordInput, {
+      target: { value: "secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存密码" }));
+
+    await waitFor(() => {
+      expect(updateSshTargetPassword).toHaveBeenCalledWith("ssh-demo", "secret");
+    });
+  });
 
   it("shows loading state for scan directories", () => {
     setupMocks({ isLoadingScanDirs: true });

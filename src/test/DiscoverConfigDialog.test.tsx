@@ -96,6 +96,7 @@ function buildPlatformStoreState(overrides = {}) {
     refreshScanInBackground: vi.fn(),
     rescan: vi.fn(),
     refreshCounts: vi.fn(),
+    resetForTargetChange: vi.fn(),
     applyScanSummary: vi.fn(),
     setCollectionCount: vi.fn(),
     setDiscoveredCount: vi.fn(),

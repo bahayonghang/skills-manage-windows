@@ -222,6 +222,39 @@ describe("platformStore", () => {
     expect(usePlatformStore.getState().isRefreshing).toBe(false);
   });
 
+  it("resetForTargetChange clears target-bound cached counts immediately", () => {
+    usePlatformStore.setState({
+      agents: mockAgents,
+      skillsByAgent: mockBootstrapSnapshot.cachedSkillCounts,
+      collectionCount: 2,
+      discoveredCount: 7,
+      categoryVisibility: {
+        coding: true,
+        lobster: false,
+      },
+      lastScanAt: mockBootstrapSnapshot.lastScanAt,
+      scanState: "refreshing",
+      isLoading: false,
+      isRefreshing: true,
+      scanGeneration: 1,
+      error: "stale",
+    });
+
+    usePlatformStore.getState().resetForTargetChange();
+
+    const state = usePlatformStore.getState();
+    expect(state.agents).toEqual([]);
+    expect(state.skillsByAgent).toEqual({});
+    expect(state.collectionCount).toBe(0);
+    expect(state.discoveredCount).toBe(0);
+    expect(state.lastScanAt).toBeNull();
+    expect(state.scanState).toBe("idle");
+    expect(state.isLoading).toBe(true);
+    expect(state.isRefreshing).toBe(false);
+    expect(state.scanGeneration).toBe(2);
+    expect(state.error).toBeNull();
+  });
+
   it("hydrateShell applies persisted category visibility", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce(mockBootstrapSnapshot)

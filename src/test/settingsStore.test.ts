@@ -53,6 +53,8 @@ describe("settingsStore", () => {
       githubPat: "",
       isLoadingGitHubPat: false,
       isSavingGitHubPat: false,
+      isTestingGitHubPat: false,
+      githubPatTestResult: null,
     });
     vi.clearAllMocks();
   });
@@ -341,12 +343,12 @@ describe("settingsStore", () => {
     expect(useSettingsStore.getState().error).toBeNull();
   });
 
-  it("loadGitHubPat reads the saved github_pat setting", async () => {
+  it("loadGitHubPat reads the app-wide github_pat setting", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(" github_pat_123 ");
 
     await useSettingsStore.getState().loadGitHubPat();
 
-    expect(invoke).toHaveBeenCalledWith("get_setting", { key: "github_pat" });
+    expect(invoke).toHaveBeenCalledWith("get_github_pat");
     expect(useSettingsStore.getState().githubPat).toBe(" github_pat_123 ");
     expect(useSettingsStore.getState().isLoadingGitHubPat).toBe(false);
   });
@@ -356,8 +358,7 @@ describe("settingsStore", () => {
 
     await useSettingsStore.getState().saveGitHubPat("  github_pat_abc  ");
 
-    expect(invoke).toHaveBeenCalledWith("set_setting", {
-      key: "github_pat",
+    expect(invoke).toHaveBeenCalledWith("set_github_pat", {
       value: "  github_pat_abc  ",
     });
     expect(useSettingsStore.getState().githubPat).toBe("github_pat_abc");
@@ -370,11 +371,24 @@ describe("settingsStore", () => {
 
     await useSettingsStore.getState().clearGitHubPat();
 
-    expect(invoke).toHaveBeenCalledWith("set_setting", {
-      key: "github_pat",
-      value: "",
-    });
+    expect(invoke).toHaveBeenCalledWith("clear_github_pat");
     expect(useSettingsStore.getState().githubPat).toBe("");
     expect(useSettingsStore.getState().isSavingGitHubPat).toBe(false);
+  });
+
+  it("testGitHubPat stores the app-wide token test result", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      configured: true,
+      ok: true,
+      status: 200,
+      message: "GitHub token is usable",
+    });
+
+    const result = await useSettingsStore.getState().testGitHubPat();
+
+    expect(invoke).toHaveBeenCalledWith("test_github_pat");
+    expect(result.ok).toBe(true);
+    expect(useSettingsStore.getState().githubPatTestResult?.status).toBe(200);
+    expect(useSettingsStore.getState().isTestingGitHubPat).toBe(false);
   });
 });

@@ -492,8 +492,11 @@ describe("CentralSkillsView", () => {
     renderCentralSkillsView();
 
     const sidebar = screen.getByTestId("central-filter-sidebar");
+    expect(sidebar).toHaveStyle({ width: "286px" });
     const scrollContainer = sidebar.firstElementChild as HTMLElement;
     expect(scrollContainer).toHaveClass("overflow-y-auto");
+    fireEvent.keyDown(within(sidebar).getByRole("separator"), { key: "ArrowRight" });
+    expect(sidebar).toHaveStyle({ width: "302px" });
     expect(
       within(sidebar).getByTestId("repository-filter-github-openai-skills-main")
     ).toHaveAttribute("data-source-kind", "github");

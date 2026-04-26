@@ -5,6 +5,10 @@ import { AppShell } from "@/components/layout/AppShell";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useDiscoverStore } from "@/stores/discoverStore";
+import { useTargetStore } from "@/stores/targetStore";
+import { useSkillStore } from "@/stores/skillStore";
+import { useMarketplaceStore } from "@/stores/marketplaceStore";
+import type { TargetSummary } from "@/types";
 
 let triggerRescanInMock = false;
 
@@ -18,6 +22,18 @@ vi.mock("@/stores/centralSkillsStore", () => ({
 
 vi.mock("@/stores/discoverStore", () => ({
   useDiscoverStore: vi.fn(),
+}));
+
+vi.mock("@/stores/targetStore", () => ({
+  useTargetStore: vi.fn(),
+}));
+
+vi.mock("@/stores/skillStore", () => ({
+  useSkillStore: vi.fn(),
+}));
+
+vi.mock("@/stores/marketplaceStore", () => ({
+  useMarketplaceStore: vi.fn(),
 }));
 
 vi.mock("@/components/layout/Sidebar", () => ({
@@ -54,25 +70,32 @@ vi.mock("@/components/layout/GlobalSearchDialog", () => ({
 const mockUsePlatformStore = vi.mocked(usePlatformStore);
 const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
 const mockUseDiscoverStore = vi.mocked(useDiscoverStore);
+const mockUseTargetStore = vi.mocked(useTargetStore);
+const mockUseSkillStore = vi.mocked(useSkillStore);
+const mockUseMarketplaceStore = vi.mocked(useMarketplaceStore);
 
 let testNavigate: ReturnType<typeof useNavigate> | null = null;
 
 function createPlatformState(overrides?: Partial<{
   initialize: ReturnType<typeof vi.fn>;
   rescan: ReturnType<typeof vi.fn>;
+  resetForTargetChange: ReturnType<typeof vi.fn>;
 }>) {
   return {
     initialize: vi.fn().mockResolvedValue(undefined),
     rescan: vi.fn().mockResolvedValue(undefined),
+    resetForTargetChange: vi.fn(),
     ...overrides,
   };
 }
 
 function createCentralSkillsState(overrides?: Partial<{
   loadCentralSkills: ReturnType<typeof vi.fn>;
+  resetForTargetChange: ReturnType<typeof vi.fn>;
 }>) {
   return {
     loadCentralSkills: vi.fn().mockResolvedValue(undefined),
+    resetForTargetChange: vi.fn(),
     ...overrides,
   };
 }
@@ -80,10 +103,46 @@ function createCentralSkillsState(overrides?: Partial<{
 function createDiscoverState(overrides?: Partial<{
   refreshCounts: ReturnType<typeof vi.fn>;
   rescanFromDisk: ReturnType<typeof vi.fn>;
+  resetForTargetChange: ReturnType<typeof vi.fn>;
 }>) {
   return {
     refreshCounts: vi.fn().mockResolvedValue(undefined),
     rescanFromDisk: vi.fn().mockResolvedValue(undefined),
+    resetForTargetChange: vi.fn(),
+    ...overrides,
+  };
+}
+
+function createSkillState(overrides?: Partial<{
+  resetForTargetChange: ReturnType<typeof vi.fn>;
+}>) {
+  return {
+    resetForTargetChange: vi.fn(),
+    ...overrides,
+  };
+}
+
+function createMarketplaceState(overrides?: Partial<{
+  resetForTargetChange: ReturnType<typeof vi.fn>;
+}>) {
+  return {
+    resetForTargetChange: vi.fn(),
+    ...overrides,
+  };
+}
+
+function createTargetState(overrides?: Partial<{
+  activeTarget: TargetSummary;
+  loadTargets: ReturnType<typeof vi.fn>;
+}>) {
+  return {
+    activeTarget: {
+      id: "local",
+      kind: "local" as const,
+      label: "Local",
+      isActive: true,
+    },
+    loadTargets: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -122,6 +181,21 @@ describe("AppShell", () => {
     });
     mockUseDiscoverStore.mockImplementation((selector?: unknown) => {
       const state = createDiscoverState();
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseTargetStore.mockImplementation((selector?: unknown) => {
+      const state = createTargetState();
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = createSkillState();
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseMarketplaceStore.mockImplementation((selector?: unknown) => {
+      const state = createMarketplaceState();
       if (typeof selector === "function") return selector(state);
       return state;
     });
@@ -279,5 +353,104 @@ describe("AppShell", () => {
     });
 
     expect(mockRefreshDiscoverCounts).not.toHaveBeenCalled();
+  });
+
+  it("clears stale counts and reloads target-bound data after active target changes", async () => {
+    const mockResetPlatformForTargetChange = vi.fn();
+    const mockResetCentralForTargetChange = vi.fn();
+    const mockResetDiscoverForTargetChange = vi.fn();
+    const mockResetSkillsForTargetChange = vi.fn();
+    const mockResetMarketplaceForTargetChange = vi.fn();
+    const mockRescan = vi.fn().mockResolvedValue(undefined);
+    const mockLoadCentralSkills = vi.fn().mockResolvedValue(undefined);
+    const mockRescanDiscoverFromDisk = vi.fn().mockResolvedValue(undefined);
+    let activeTarget: TargetSummary = {
+      id: "local",
+      kind: "local" as const,
+      label: "Local",
+      isActive: true,
+    };
+
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = createPlatformState({
+        rescan: mockRescan,
+        resetForTargetChange: mockResetPlatformForTargetChange,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
+      const state = createCentralSkillsState({
+        loadCentralSkills: mockLoadCentralSkills,
+        resetForTargetChange: mockResetCentralForTargetChange,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseDiscoverStore.mockImplementation((selector?: unknown) => {
+      const state = createDiscoverState({
+        rescanFromDisk: mockRescanDiscoverFromDisk,
+        resetForTargetChange: mockResetDiscoverForTargetChange,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = createSkillState({
+        resetForTargetChange: mockResetSkillsForTargetChange,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseMarketplaceStore.mockImplementation((selector?: unknown) => {
+      const state = createMarketplaceState({
+        resetForTargetChange: mockResetMarketplaceForTargetChange,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseTargetStore.mockImplementation((selector?: unknown) => {
+      const state = createTargetState({ activeTarget });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/a"]}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route path="a" element={<DummyPage label="page-a" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    activeTarget = {
+      id: "ssh-demo",
+      kind: "ssh" as const,
+      label: "Demo",
+      isActive: true,
+    };
+
+    rerender(
+      <MemoryRouter initialEntries={["/a"]}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route path="a" element={<DummyPage label="page-a" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockResetPlatformForTargetChange).toHaveBeenCalledTimes(1);
+      expect(mockResetCentralForTargetChange).toHaveBeenCalledTimes(1);
+      expect(mockResetDiscoverForTargetChange).toHaveBeenCalledTimes(1);
+      expect(mockResetSkillsForTargetChange).toHaveBeenCalledTimes(1);
+      expect(mockResetMarketplaceForTargetChange).toHaveBeenCalledTimes(1);
+      expect(mockRescan).toHaveBeenCalledTimes(1);
+      expect(mockLoadCentralSkills).toHaveBeenCalledTimes(1);
+      expect(mockRescanDiscoverFromDisk).toHaveBeenCalledTimes(1);
+    });
   });
 });

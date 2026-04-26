@@ -82,6 +82,7 @@ function buildPlatformStoreState(overrides = {}) {
     refreshScanInBackground: vi.fn(),
     rescan: vi.fn(),
     refreshCounts: vi.fn(),
+    resetForTargetChange: vi.fn(),
     setCategoryVisibility: vi.fn(),
     setAgentEnabled: vi.fn(),
     applyScanSummary: vi.fn(),
@@ -119,7 +120,16 @@ describe("Sidebar", () => {
   it("renders expanded sidebar by default", () => {
     const { container } = renderSidebar();
     const nav = container.querySelector("nav");
-    expect(nav?.className).toContain("w-52");
+    expect(nav).toHaveStyle({ width: "208px" });
+  });
+
+  it("supports keyboard resizing from the right edge", () => {
+    const { container } = renderSidebar();
+    const nav = container.querySelector("nav");
+
+    fireEvent.keyDown(screen.getByRole("separator"), { key: "ArrowRight" });
+
+    expect(nav).toHaveStyle({ width: "224px" });
   });
 
   it("renders central, discover, collections, and platform entries", () => {

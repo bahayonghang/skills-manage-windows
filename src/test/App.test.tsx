@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import App from "../App";
 
 // Mock platformStore to prevent real Tauri invoke calls during tests
-vi.mock("../stores/platformStore", () => ({
+vi.mock("@/stores/platformStore", () => ({
   usePlatformStore: vi.fn().mockImplementation((selector?: unknown) => {
     const state = {
       agents: [],
@@ -21,6 +21,7 @@ vi.mock("../stores/platformStore", () => ({
       refreshScanInBackground: vi.fn().mockResolvedValue(undefined),
       rescan: vi.fn().mockResolvedValue(undefined),
       refreshCounts: vi.fn().mockResolvedValue(undefined),
+      resetForTargetChange: vi.fn(),
       applyScanSummary: vi.fn(),
       setCollectionCount: vi.fn(),
       setDiscoveredCount: vi.fn(),
@@ -33,7 +34,7 @@ vi.mock("../stores/platformStore", () => ({
 }));
 
 // Mock collectionStore to prevent real Tauri invoke calls during tests
-vi.mock("../stores/collectionStore", () => ({
+vi.mock("@/stores/collectionStore", () => ({
   useCollectionStore: vi.fn().mockImplementation((selector?: unknown) => {
     const state = {
       collections: [],
@@ -60,7 +61,7 @@ vi.mock("../stores/collectionStore", () => ({
 }));
 
 // Mock centralSkillsStore to prevent async state updates that cause act() warnings
-vi.mock("../stores/centralSkillsStore", () => ({
+vi.mock("@/stores/centralSkillsStore", () => ({
   useCentralSkillsStore: vi.fn().mockImplementation((selector?: unknown) => {
     const state = {
       skills: [],
@@ -70,6 +71,74 @@ vi.mock("../stores/centralSkillsStore", () => ({
       error: null,
       loadCentralSkills: vi.fn().mockResolvedValue(undefined),
       installSkill: vi.fn(),
+      resetForTargetChange: vi.fn(),
+    };
+    if (typeof selector === "function") {
+      return selector(state);
+    }
+    return state;
+  }),
+}));
+
+vi.mock("@/stores/discoverStore", () => ({
+  useDiscoverStore: vi.fn().mockImplementation((selector?: unknown) => {
+    const state = {
+      rescanFromDisk: vi.fn().mockResolvedValue(undefined),
+      refreshCounts: vi.fn().mockResolvedValue(undefined),
+      resetForTargetChange: vi.fn(),
+    };
+    if (typeof selector === "function") {
+      return selector(state);
+    }
+    return state;
+  }),
+}));
+
+vi.mock("@/stores/targetStore", () => ({
+  useTargetStore: vi.fn().mockImplementation((selector?: unknown) => {
+    const state = {
+      activeTarget: {
+        id: "local",
+        kind: "local",
+        label: "Local",
+        isActive: true,
+      },
+      targets: [],
+      loadTargets: vi.fn().mockResolvedValue(undefined),
+    };
+    if (typeof selector === "function") {
+      return selector(state);
+    }
+    return state;
+  }),
+}));
+
+vi.mock("@/stores/skillStore", () => ({
+  useSkillStore: vi.fn().mockImplementation((selector?: unknown) => {
+    const state = {
+      getSkillsByAgent: vi.fn().mockResolvedValue(undefined),
+      resetForTargetChange: vi.fn(),
+    };
+    if (typeof selector === "function") {
+      return selector(state);
+    }
+    return state;
+  }),
+}));
+
+vi.mock("@/stores/marketplaceStore", () => ({
+  useMarketplaceStore: vi.fn().mockImplementation((selector?: unknown) => {
+    const state = {
+      githubImport: {
+        importProgress: null,
+        importStartedAt: null,
+        skillMarkdown: {},
+        aiSummaries: {},
+      },
+      resetForTargetChange: vi.fn(),
+      loadRegistries: vi.fn().mockResolvedValue(undefined),
+      fetchGitHubSkillMarkdown: vi.fn().mockResolvedValue(undefined),
+      generateGitHubImportAiSummary: vi.fn().mockResolvedValue(undefined),
     };
     if (typeof selector === "function") {
       return selector(state);
