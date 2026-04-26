@@ -62,6 +62,9 @@ const EMPTY_UPDATE_STATUSES: Record<string, CentralSkillUpdateState> = {};
 const CENTRAL_FILTER_DEFAULT_WIDTH = 286;
 const CENTRAL_FILTER_MIN_WIDTH = 220;
 const CENTRAL_FILTER_MAX_WIDTH = 460;
+const CENTRAL_CATEGORIZE_DEFAULT_WIDTH = 392;
+const CENTRAL_CATEGORIZE_MIN_WIDTH = 336;
+const CENTRAL_CATEGORIZE_MAX_WIDTH = 640;
 const IDLE_AI_TAG_JOB: AiTagJob = {
   jobId: null,
   status: "idle",
@@ -494,6 +497,16 @@ export function CentralSkillsView() {
     defaultWidth: CENTRAL_FILTER_DEFAULT_WIDTH,
     minWidth: CENTRAL_FILTER_MIN_WIDTH,
     maxWidth: CENTRAL_FILTER_MAX_WIDTH,
+  });
+  const {
+    width: categorizeSidebarWidth,
+    startResize: startCategorizeSidebarResize,
+    handleResizeKeyDown: handleCategorizeSidebarResizeKeyDown,
+  } = useResizableWidth({
+    defaultWidth: CENTRAL_CATEGORIZE_DEFAULT_WIDTH,
+    minWidth: CENTRAL_CATEGORIZE_MIN_WIDTH,
+    maxWidth: CENTRAL_CATEGORIZE_MAX_WIDTH,
+    resizeFrom: "left",
   });
   const [isDeletePreviewLoading, setIsDeletePreviewLoading] = useState(false);
   const [isBatchDeletePreviewLoading, setIsBatchDeletePreviewLoading] = useState(false);
@@ -1136,6 +1149,344 @@ export function CentralSkillsView() {
     );
   }
 
+  function getManualPrimaryLabel() {
+    if (selectedSkillIds.length === 0) return t("central.categorizeSelectSkillsFirst");
+    if (manualSelectedTagIds.length === 0) return t("central.categorizeSelectTagsFirst");
+    return t("central.applyToSelectedSkills", { count: selectedSkillIds.length });
+  }
+
+  function getManualDisabledReason() {
+    if (selectedSkillIds.length === 0) return t("central.categorizeSelectSkillsReason");
+    if (manualSelectedTagIds.length === 0) return t("central.categorizeSelectTagsReason");
+    if (isMetadataUpdating) return t("central.categorizeApplyingReason");
+    return null;
+  }
+
+  function getAiPrimaryLabel() {
+    if (selectedSkillIds.length === 0) return t("central.categorizeSelectSkillsFirst");
+    if (!aiTaggingAvailable) return t("central.aiTaggingConfigureFirst");
+    if (isSuggestingTags || aiTagJob.status === "running") return t("central.aiTaggingRunning");
+    return t("central.aiSuggestSelected", { count: selectedSkillIds.length });
+  }
+
+  function getAiDisabledReason() {
+    if (!aiTaggingAvailable) return t("central.aiTaggingConfigureReason");
+    if (selectedSkillIds.length === 0) return t("central.categorizeSelectSkillsReason");
+    if (isSuggestingTags || aiTagJob.status === "running") return t("central.aiTaggingRunningReason");
+    return null;
+  }
+
+  function renderCategorizeScope() {
+    return (
+      <section className="rounded-2xl border border-border/90 bg-background p-4 shadow-sm">
+        <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-foreground">
+          <span className="grid size-5 place-items-center rounded-full bg-primary/15 text-[11px] font-bold text-primary ring-1 ring-primary/25">1</span>
+          {t("central.categorizeRange")}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button size="sm" className="h-auto min-h-8 whitespace-normal px-2 leading-tight" onClick={handleSelectCurrentFilter}>
+            {t("central.selectCurrentFilter")}
+          </Button>
+          <Button variant="secondary" size="sm" className="h-auto min-h-8 whitespace-normal px-2 leading-tight" onClick={handleSelectUncategorized}>
+            {t("central.selectUncategorized")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="col-span-2 justify-start text-foreground/75 hover:text-foreground"
+            onClick={() => setSelectedSkillIds([])}
+          >
+            <X className="size-3.5" />
+            {t("central.clearSelection")}
+          </Button>
+        </div>
+        {selectedSkillIds.length > 0 && (
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/70 pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsBatchInstallDialogOpen(true)}
+              disabled={isInstalling}
+              data-testid="batch-install-central-skills"
+            >
+              <Download className="size-3.5" />
+              {t("central.batchInstallSelected", { count: selectedSkillIds.length })}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleBatchDeleteClick}
+              disabled={isDeleting}
+              data-testid="batch-delete-central-skills"
+            >
+              <Trash2 className="size-3.5" />
+              {t("central.batchDeleteSelected", { count: selectedSkillIds.length })}
+            </Button>
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  function renderManualCategorize() {
+    return (
+      <div className="space-y-3">
+        <Input
+          value={manualTagQuery}
+          onChange={(event) => setManualTagQuery(event.target.value)}
+          placeholder={t("central.searchTagsPlaceholder")}
+          aria-label={t("central.searchTagsPlaceholder")}
+          className="h-9 text-xs"
+        />
+        {canCreateManualTag && (
+          <Button variant="ghost" size="sm" onClick={handleCreateManualTag}>
+            <Plus className="size-3.5" />
+            {t("central.createTagInline", { name: manualTagQuery.trim() })}
+          </Button>
+        )}
+        <div className="flex max-h-52 flex-wrap gap-2 overflow-auto rounded-2xl border border-border/90 bg-muted/10 p-3 text-foreground">
+          {filteredManualTags.map((tag) => {
+            const selected = manualSelectedTagIds.includes(tag.id);
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => handleToggleManualTag(tag.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  selected
+                    ? "border-primary/70 bg-primary/15 text-primary shadow-sm ring-1 ring-primary/20"
+                    : "border-border bg-background text-foreground/75 hover:border-primary/40 hover:text-foreground"
+                )}
+              >
+                {selected && <Check className="size-3" />}
+                {tag.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  function renderAiCategorize() {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-border/90 bg-background p-3 text-xs shadow-sm">
+          <div className="mb-1 font-medium text-foreground">{t("central.aiScopeTitle")}</div>
+          <p className="leading-relaxed text-foreground/75">
+            {t("central.aiScopeDesc", {
+              selected: selectedSkillIds.length,
+              total: sortedSkills.length,
+            })}
+          </p>
+        </div>
+        {!aiTaggingAvailable && (
+          <div className="rounded-2xl border border-border/90 bg-muted/20 p-3 text-xs text-foreground/75">
+            {t("central.aiTaggingNeedsConfig")}
+          </div>
+        )}
+        <div className="rounded-2xl border border-border/90 bg-muted/10 p-3 text-xs text-foreground/75">
+          {t("central.aiPreview", { count: selectedSkillIds.length })}
+        </div>
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+          {t("central.aiTagRateHint")}
+        </div>
+      </div>
+    );
+  }
+
+  function renderReviewQueue() {
+    return (
+      <div className="space-y-3">
+        {aiTagReviews.length > 0 && manualSelectedTagIds.length === 0 && (
+          <div className="rounded-2xl border border-border/90 bg-muted/20 p-3 text-xs text-foreground/75">
+            {t("central.reviewReplaceNeedsTags")}
+          </div>
+        )}
+        {aiTagReviews.length === 0 ? (
+          <div className="rounded-2xl border border-border/90 bg-muted/20 p-4 text-center text-xs text-foreground/70">
+            {t("central.reviewEmpty")}
+          </div>
+        ) : (
+          aiTagReviews.map((review) => (
+            <div
+              key={`${review.skill_id}:${review.tag.id}`}
+              className="rounded-2xl border border-border/90 bg-background p-3 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{review.skill_name}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-foreground/70">
+                    <span className="rounded-full bg-muted px-2 py-0.5">
+                      {review.tag.name}
+                    </span>
+                    <span>{Math.round(review.confidence * 100)}%</span>
+                  </div>
+                </div>
+                <AlertTriangle className="size-4 shrink-0 text-amber-500" />
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-foreground/75">{review.reason}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => handleAcceptReview(review)}>
+                  {t("central.reviewAccept")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={manualSelectedTagIds.length === 0}
+                  onClick={() => handleApplyManualTagsToReview(review)}
+                >
+                  {t("central.reviewChange")}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => handleSkipReview(review)}>
+                  {t("central.reviewSkip")}
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    );
+  }
+
+  function renderCategorizePanel() {
+    const manualDisabledReason = getManualDisabledReason();
+    const aiDisabledReason = getAiDisabledReason();
+    const isManualActionDisabled = Boolean(manualDisabledReason);
+    const isAiActionDisabled = Boolean(aiDisabledReason);
+
+    return (
+      <aside data-testid="central-categorize-sidebar" className="relative hidden min-h-0 shrink-0 border-l border-border bg-background/95 xl:flex xl:flex-col" style={{ width: categorizeSidebarWidth }}>
+        <div
+          role="separator"
+          aria-label={t("central.resizeCategorizeSidebar")}
+          aria-orientation="vertical"
+          tabIndex={0}
+          onPointerDown={startCategorizeSidebarResize}
+          onKeyDown={handleCategorizeSidebarResizeKeyDown}
+          className="absolute left-0 top-0 z-20 h-full w-2 -translate-x-1/2 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-primary/30 focus:outline-none focus-visible:bg-primary/40"
+        />
+        <div className="border-b border-border/80 bg-background p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold tracking-tight text-foreground">{t("central.categorizePanelTitle")}</h2>
+              <p className="mt-1 text-[13px] leading-5 text-foreground/75">
+                {t("central.categorizePanelDesc")}
+              </p>
+            </div>
+            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20"><ListChecks className="size-4" /></span>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-border/90 bg-muted/10 px-3 py-2 text-xs shadow-sm">
+            <span
+              className={cn(
+                "font-medium",
+                selectedSkillIds.length > 0 ? "text-primary" : "text-foreground/70"
+              )}
+            >
+              {t("central.selectedSkillSummary", { count: selectedSkillIds.length })}
+            </span>
+            <span className="h-3 w-px bg-border" />
+            <span
+              className={cn(
+                "font-medium",
+                manualSelectedTagIds.length > 0 ? "text-primary" : "text-foreground/70"
+              )}
+            >
+              {t("central.pendingTagSummary", { count: manualSelectedTagIds.length })}
+            </span>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
+          {renderCategorizeScope()}
+
+          <section className="rounded-2xl border border-border/90 bg-background p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-foreground">
+              <span className="grid size-5 place-items-center rounded-full bg-primary/15 text-[11px] font-bold text-primary ring-1 ring-primary/25">2</span>
+              {t("central.categorizeIntent")}
+            </div>
+            <div
+              role="tablist"
+              aria-label={t("central.categorizeIntent")}
+              className="mb-3 grid grid-cols-3 rounded-xl border border-border/60 bg-muted/10 p-1"
+            >
+              {(["manual", "ai", "review"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={categorizeTab === tab}
+                  onClick={() => setCategorizeTab(tab)}
+                  className={cn(
+                    "h-8 rounded-lg text-xs font-medium transition-colors",
+                    categorizeTab === tab
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-foreground/70 hover:bg-background hover:text-foreground"
+                  )}
+                >
+                  {t(`central.categorizeTab.${tab}`)}
+                </button>
+              ))}
+            </div>
+            {categorizeTab === "manual" && renderManualCategorize()}
+            {categorizeTab === "ai" && renderAiCategorize()}
+            {categorizeTab === "review" && renderReviewQueue()}
+          </section>
+        </div>
+
+        <div className="border-t border-border/80 bg-background p-4 shadow-[0_-8px_24px_rgba(15,23,42,0.04)]">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-foreground">
+            <span className="grid size-5 place-items-center rounded-full bg-primary/15 text-[11px] font-bold text-primary ring-1 ring-primary/25">3</span>
+            {t("central.categorizeApply")}
+          </div>
+          {categorizeTab === "manual" && (
+            <>
+              <Button
+                className="w-full"
+                disabled={isManualActionDisabled}
+                onClick={handleApplyManualTags}
+                data-testid="categorize-primary-action"
+              >
+                <Check className="size-3.5" />
+                {getManualPrimaryLabel()}
+              </Button>
+              {manualDisabledReason && (
+                <p className="mt-2 text-xs leading-relaxed text-foreground/75" data-testid="categorize-action-reason">
+                  {manualDisabledReason}
+                </p>
+              )}
+            </>
+          )}
+          {categorizeTab === "ai" && (
+            <>
+              <Button
+                className="w-full"
+                disabled={isAiActionDisabled}
+                onClick={handleBulkSuggestTags}
+                data-testid="categorize-primary-action"
+              >
+                <Wand2 className="size-3.5" />
+                {getAiPrimaryLabel()}
+              </Button>
+              {aiDisabledReason && (
+                <p className="mt-2 text-xs leading-relaxed text-foreground/75" data-testid="categorize-action-reason">
+                  {aiDisabledReason}
+                </p>
+              )}
+            </>
+          )}
+          {categorizeTab === "review" && (
+            <p className="text-xs leading-relaxed text-foreground/70">
+              {t("central.reviewApplyHint")}
+            </p>
+          )}
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -1445,226 +1796,7 @@ export function CentralSkillsView() {
         )}
         </div>
 
-        {skills.length > 0 && (
-          <aside className="hidden w-[360px] shrink-0 border-l border-border bg-background/95 p-4 xl:block">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold">{t("central.categorizePanelTitle")}</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("central.categorizePanelDesc")}
-                </p>
-              </div>
-              <ListChecks className="size-5 text-muted-foreground" />
-            </div>
-
-            <div className="mb-4 rounded-2xl border border-border bg-muted/30 p-3">
-              <div className="mb-2 text-xs font-medium text-foreground">
-                {t("central.categorizeRange")}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={handleSelectCurrentFilter}>
-                  {t("central.selectCurrentFilter")}
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleSelectUncategorized}>
-                  {t("central.selectUncategorized")}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedSkillIds([])}>
-                  <X className="size-3.5" />
-                  {t("central.clearSelection")}
-                </Button>
-                {selectedSkillIds.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsBatchInstallDialogOpen(true)}
-                    disabled={isInstalling}
-                    data-testid="batch-install-central-skills"
-                  >
-                    <Download className="size-3.5" />
-                    {t("central.batchInstallSelected", { count: selectedSkillIds.length })}
-                  </Button>
-                )}
-                {selectedSkillIds.length > 0 && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleBatchDeleteClick}
-                    disabled={isDeleting}
-                    data-testid="batch-delete-central-skills"
-                  >
-                    <Trash2 className="size-3.5" />
-                    {t("central.batchDeleteSelected", { count: selectedSkillIds.length })}
-                  </Button>
-                )}
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-xl bg-background p-2">
-                  <div className="text-muted-foreground">{t("central.previewSelected")}</div>
-                  <div className="mt-1 font-semibold">
-                    {t("central.selectedCount", { count: selectedSkillIds.length })}
-                  </div>
-                </div>
-                <div className="rounded-xl bg-background p-2">
-                  <div className="text-muted-foreground">{t("central.previewTags")}</div>
-                  <div className="mt-1 font-semibold">
-                    {t("central.tagsWillBeAdded", { count: manualSelectedTagIds.length })}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div
-              role="tablist"
-              aria-label={t("central.categorizeIntent")}
-              className="mb-4 grid grid-cols-3 rounded-xl bg-muted/40 p-1"
-            >
-              {(["manual", "ai", "review"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  aria-selected={categorizeTab === tab}
-                  onClick={() => setCategorizeTab(tab)}
-                  className={cn(
-                    "h-8 rounded-lg text-xs font-medium transition-colors",
-                    categorizeTab === tab
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {t(`central.categorizeTab.${tab}`)}
-                </button>
-              ))}
-            </div>
-
-            {categorizeTab === "manual" && (
-              <div className="space-y-3">
-                <Input
-                  value={manualTagQuery}
-                  onChange={(event) => setManualTagQuery(event.target.value)}
-                  placeholder={t("central.searchTagsPlaceholder")}
-                  aria-label={t("central.searchTagsPlaceholder")}
-                  className="h-9 text-xs"
-                />
-                {canCreateManualTag && (
-                  <Button variant="ghost" size="sm" onClick={handleCreateManualTag}>
-                    <Plus className="size-3.5" />
-                    {t("central.createTagInline", { name: manualTagQuery.trim() })}
-                  </Button>
-                )}
-                <div className="flex max-h-48 flex-wrap gap-2 overflow-auto rounded-2xl border border-border bg-muted/20 p-3">
-                  {filteredManualTags.map((tag) => {
-                    const selected = manualSelectedTagIds.includes(tag.id);
-                    return (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => handleToggleManualTag(tag.id)}
-                        className={cn(
-                          "rounded-full border px-3 py-1 text-xs transition-colors",
-                          selected
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-background text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {tag.name}
-                      </button>
-                    );
-                  })}
-                </div>
-                <Button
-                  className="w-full"
-                  disabled={
-                    selectedSkillIds.length === 0 ||
-                    manualSelectedTagIds.length === 0 ||
-                    isMetadataUpdating
-                  }
-                  onClick={handleApplyManualTags}
-                >
-                  <Check className="size-3.5" />
-                  {t("central.applyManualTags")}
-                </Button>
-              </div>
-            )}
-
-            {categorizeTab === "ai" && (
-              <div className="space-y-3">
-                {!aiTaggingAvailable && (
-                  <div className="rounded-2xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                    {t("central.aiTaggingNeedsConfig")}
-                  </div>
-                )}
-                <Button
-                  className="w-full"
-                  disabled={
-                    !aiTaggingAvailable ||
-                    selectedSkillIds.length === 0 ||
-                    isSuggestingTags ||
-                    aiTagJob.status === "running"
-                  }
-                  onClick={handleBulkSuggestTags}
-                >
-                  <Wand2 className="size-3.5" />
-                  {t("central.aiSuggestTags")}
-                </Button>
-                <div className="rounded-2xl border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-                  {t("central.aiPreview", { count: selectedSkillIds.length })}
-                </div>
-                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-                  {t("central.aiTagRateHint")}
-                </div>
-              </div>
-            )}
-
-            {categorizeTab === "review" && (
-              <div className="space-y-3">
-                {aiTagReviews.length === 0 ? (
-                  <div className="rounded-2xl border border-border bg-muted/30 p-4 text-center text-xs text-muted-foreground">
-                    {t("central.reviewEmpty")}
-                  </div>
-                ) : (
-                  aiTagReviews.map((review) => (
-                    <div
-                      key={`${review.skill_id}:${review.tag.id}`}
-                      className="rounded-2xl border border-border bg-muted/20 p-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium">{review.skill_name}</div>
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            <span className="rounded-full bg-background px-2 py-0.5">
-                              {review.tag.name}
-                            </span>
-                            <span>{Math.round(review.confidence * 100)}%</span>
-                          </div>
-                        </div>
-                        <AlertTriangle className="size-4 shrink-0 text-amber-500" />
-                      </div>
-                      <p className="mt-2 text-xs text-muted-foreground">{review.reason}</p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" onClick={() => handleAcceptReview(review)}>
-                          {t("central.reviewAccept")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={manualSelectedTagIds.length === 0}
-                          onClick={() => handleApplyManualTagsToReview(review)}
-                        >
-                          {t("central.reviewChange")}
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleSkipReview(review)}>
-                          {t("central.reviewSkip")}
-                        </Button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </aside>
-        )}
+        {skills.length > 0 && renderCategorizePanel()}
       </div>
 
       {aiTagJob.status !== "idle" && (
