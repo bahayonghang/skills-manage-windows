@@ -27,6 +27,19 @@
 - Fast search for large skill libraries with deferred queries, lazy indexing, and virtualization.
 - Bilingual UI, Catppuccin themes, accent colors, onboarding, and responsive navigation.
 
+## SSH Remote Mode
+
+SkillPort can manage a remote Linux or macOS user's global skills through SSH. The desktop UI still runs locally, while the backend connects to the selected target and scans the remote user's Central and platform skill directories.
+
+- Add, test, delete, and switch SSH targets from Settings.
+- SSH targets support key-based and password-based OpenSSH login. Private key contents are never stored; password login stores the password in the system credential store instead of SQLite.
+- Remote HOME is detected after connection, then remote Central Skills use `~/.skillsmanage/skills/` and Universal Agents use `~/.agents/skills/` on that host.
+- Each SSH target has its own local cache database under `~/.skillsmanage/targets/<target_id>/db.sqlite`.
+- Remote installs use copy mode by default. Symlink install and remote Discover project scanning are not enabled in this version.
+- File-manager actions are replaced by copying the remote path, because the path exists on the remote host, not on the local machine.
+
+Remote mode manages the selected remote user's directories only. It does not modify local skills unless the active target is switched back to Local.
+
 ## Screenshots
 
 ### Central skills and platform installs
@@ -120,6 +133,7 @@ Custom platforms can be added through Settings.
 - **Local-first storage** — metadata, collections, scan results, settings, and cached AI explanations stay in `~/.skillsmanage/db.sqlite` or the local skill directories you manage. The `.skillsmanage` path is kept for compatibility with existing installations.
 - **No telemetry** — the app does not include analytics, crash reporting, or usage tracking.
 - **Network access is feature-driven** — outbound requests only happen when you explicitly use marketplace sync/download, GitHub import, or AI explanation generation.
+- **SSH is target-scoped** - SSH connections are made only for the active remote target, and remote file changes stay under that remote user's configured skills directories.
 - **Credentials are stored locally** — GitHub PAT and AI API keys are kept in the local SQLite settings table and are not encrypted at rest by the app.
 - Never post real secrets in issues, pull requests, screenshots, or logs.
 

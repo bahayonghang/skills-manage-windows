@@ -26,6 +26,19 @@
 - 通过延迟查询、懒加载索引和虚拟列表提升大规模 skill 库搜索体验。
 - 提供中英文界面、Catppuccin 主题、强调色、首次引导和响应式导航。
 
+## SSH 远程模式
+
+SkillPort 可以通过 SSH 管理远程 Linux 或 macOS 用户目录里的全局 skills。桌面界面仍在本机运行，后端会连接当前选中的远程目标，并扫描远程用户的 Central 与各平台 skills 目录。
+
+- 在 Settings 中新增、测试、删除和切换 SSH 目标。
+- SSH 目标支持 key 和账号密码两种 OpenSSH 登录方式。SkillPort 不保存私钥内容；密码登录会把密码存入系统凭据库，不写入 SQLite。
+- 连接成功后探测远程 HOME；远程 Central Skills 使用该主机上的 `~/.skillsmanage/skills/`，Universal Agents 使用 `~/.agents/skills/`。
+- 每个 SSH 目标都有独立的本机缓存数据库：`~/.skillsmanage/targets/<target_id>/db.sqlite`。
+- 远程安装默认使用 copy。首版不启用 symlink 安装，也不启用远程 Discover 项目扫描。
+- 文件管理器打开动作会改为复制远程路径，因为该路径存在于远程主机，不存在于本机。
+
+远程模式只管理当前远程用户目录。切回 Local 之前，不会修改本机 skills。
+
 ## 项目截图
 
 ### 中央技能库与平台安装
@@ -119,6 +132,7 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 - **本地优先** — 元数据、集合、扫描结果、设置和 AI explanation 缓存都保存在 `~/.skillsmanage/db.sqlite` 或你自己管理的本地 skill 目录中。`.skillsmanage` 路径会继续保留，用来兼容已有安装。
 - **无遥测** — 应用不包含分析、崩溃上报或使用追踪。
 - **网络访问由功能触发** — 只有在你显式使用 marketplace 同步/下载、GitHub 导入或 AI explanation 时才会发起外部请求。
+- **SSH 只作用于当前目标** - 只有当前远程目标会建立 SSH 连接；远程文件改动只发生在该远程用户的 skills 目录内。
 - **凭据仅本地存储** — GitHub PAT 和 AI API key 会保存在本地 SQLite settings 表中，应用本身不提供静态加密。
 - 不要在 issue、PR、截图或日志里公开真实密钥。
 
