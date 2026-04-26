@@ -306,6 +306,32 @@ describe("SettingsView", () => {
     expect(screen.getByLabelText(/AI Tag .*429/)).toBeTruthy();
   });
 
+  it("links SSH target form labels to inputs", () => {
+    setupMocks();
+    renderSettingsView();
+    expect(screen.getByLabelText("别名")).toBeTruthy();
+    expect(screen.getByLabelText("主机")).toBeTruthy();
+    expect(screen.getByLabelText("用户")).toBeTruthy();
+    expect(screen.getByLabelText("端口")).toBeTruthy();
+    expect(screen.getByLabelText("SSH 密钥路径")).toBeTruthy();
+  });
+
+  it("marks the selected SSH auth method", () => {
+    setupMocks();
+    renderSettingsView();
+    expect(screen.getByRole("button", { name: "SSH key" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "账号密码" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("links AI settings labels to inputs", () => {
+    setupMocks();
+    renderSettingsView();
+    expect(screen.getByLabelText("API Key")).toBeTruthy();
+    expect(screen.getByLabelText("模型")).toBeTruthy();
+    expect(screen.getByLabelText("并发数")).toBeTruthy();
+    expect(screen.getByLabelText("请求间隔 ms")).toBeTruthy();
+  });
+
   it("renders the existing settings sections", () => {
     setupMocks();
     renderSettingsView();

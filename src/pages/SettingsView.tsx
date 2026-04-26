@@ -1186,7 +1186,11 @@ export function SettingsView() {
               </div>
 
               <div className="grid gap-3 rounded-lg border border-border/70 bg-muted/20 p-4 md:grid-cols-5">
-                <div className="flex gap-2 md:col-span-5">
+                <div className="space-y-1 md:col-span-5">
+                  <div id="new-ssh-auth-method" className="text-xs text-muted-foreground">
+                    {t("targets.authMethodLabel")}
+                  </div>
+                  <div className="flex gap-2" role="group" aria-labelledby="new-ssh-auth-method">
                   {(["key", "password"] as const).map((method) => (
                     <Button
                       key={method}
@@ -1194,48 +1198,81 @@ export function SettingsView() {
                       variant={sshTargetForm.authMethod === method ? "default" : "outline"}
                       className="flex-1"
                       onClick={() => updateSshTargetForm("authMethod", method)}
+                      aria-pressed={sshTargetForm.authMethod === method}
                     >
                       {method === "key" ? t("targets.authKey") : t("targets.authPassword")}
                     </Button>
                   ))}
+                  </div>
                 </div>
-                <Input
-                  value={sshTargetForm.label}
-                  onChange={(event) => updateSshTargetForm("label", event.target.value)}
-                  placeholder={t("targets.labelPlaceholder")}
-                />
-                <Input
-                  value={sshTargetForm.host}
-                  onChange={(event) => updateSshTargetForm("host", event.target.value)}
-                  placeholder={t("targets.hostPlaceholder")}
-                />
-                <Input
-                  value={sshTargetForm.username}
-                  onChange={(event) => updateSshTargetForm("username", event.target.value)}
-                  placeholder={t("targets.usernamePlaceholder")}
-                />
-                <Input
-                  value={sshTargetForm.port}
-                  onChange={(event) => updateSshTargetForm("port", event.target.value)}
-                  placeholder="22"
-                />
-                <Input
-                  type={sshTargetForm.authMethod === "password" ? "password" : "text"}
-                  value={sshTargetForm.authMethod === "key" ? sshTargetForm.keyPath : sshTargetForm.password}
-                  onChange={(event) =>
-                    updateSshTargetForm(
-                      sshTargetForm.authMethod === "key" ? "keyPath" : "password",
-                      event.target.value
-                    )
-                  }
-                  placeholder={
-                    sshTargetForm.authMethod === "key"
+                <div className="space-y-1">
+                  <label htmlFor="new-ssh-label" className="text-xs text-muted-foreground">
+                    {t("targets.labelPlaceholder")}
+                  </label>
+                  <Input
+                    id="new-ssh-label"
+                    value={sshTargetForm.label}
+                    onChange={(event) => updateSshTargetForm("label", event.target.value)}
+                    placeholder={t("targets.labelPlaceholder")}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="new-ssh-host" className="text-xs text-muted-foreground">
+                    {t("targets.hostPlaceholder")}
+                  </label>
+                  <Input
+                    id="new-ssh-host"
+                    value={sshTargetForm.host}
+                    onChange={(event) => updateSshTargetForm("host", event.target.value)}
+                    placeholder={t("targets.hostPlaceholder")}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="new-ssh-username" className="text-xs text-muted-foreground">
+                    {t("targets.usernamePlaceholder")}
+                  </label>
+                  <Input
+                    id="new-ssh-username"
+                    value={sshTargetForm.username}
+                    onChange={(event) => updateSshTargetForm("username", event.target.value)}
+                    placeholder={t("targets.usernamePlaceholder")}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="new-ssh-port" className="text-xs text-muted-foreground">
+                    {t("targets.portLabel")}
+                  </label>
+                  <Input
+                    id="new-ssh-port"
+                    value={sshTargetForm.port}
+                    onChange={(event) => updateSshTargetForm("port", event.target.value)}
+                    placeholder="22"
+                  />
+                </div>
+                <div className="space-y-1 md:col-span-3">
+                  <label htmlFor="new-ssh-credential" className="text-xs text-muted-foreground">
+                    {sshTargetForm.authMethod === "key"
                       ? t("targets.keyPathPlaceholder")
-                      : t("targets.passwordPlaceholder")
-                  }
-                  className="md:col-span-3"
-                />
-                <div className="flex gap-2 md:col-span-2">
+                      : t("targets.passwordPlaceholder")}
+                  </label>
+                  <Input
+                    id="new-ssh-credential"
+                    type={sshTargetForm.authMethod === "password" ? "password" : "text"}
+                    value={sshTargetForm.authMethod === "key" ? sshTargetForm.keyPath : sshTargetForm.password}
+                    onChange={(event) =>
+                      updateSshTargetForm(
+                        sshTargetForm.authMethod === "key" ? "keyPath" : "password",
+                        event.target.value
+                      )
+                    }
+                    placeholder={
+                      sshTargetForm.authMethod === "key"
+                        ? t("targets.keyPathPlaceholder")
+                        : t("targets.passwordPlaceholder")
+                    }
+                  />
+                </div>
+                <div className="flex gap-2 md:col-span-2 md:items-end">
                   <Button
                     type="button"
                     variant="outline"
@@ -1464,9 +1501,9 @@ export function SettingsView() {
             <div className="flex items-center gap-2">
               <Bot className="size-5 text-muted-foreground" />
               <div>
-                <CardTitle>{lang === "zh" ? "AI 提供商" : "AI Provider"}</CardTitle>
+                <CardTitle>{t("settings.aiProviderTitle")}</CardTitle>
                 <CardDescription className="mt-1">
-                  {lang === "zh" ? "配置用于技能解释的 AI 服务。所有提供商兼容 Anthropic API 格式。" : "Configure AI service for skill explanation. All providers use Anthropic-compatible API."}
+                  {t("settings.aiProviderDesc")}
                 </CardDescription>
               </div>
             </div>
@@ -1474,10 +1511,18 @@ export function SettingsView() {
           <CardContent>
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-muted-foreground mb-2 block">{lang === "zh" ? "提供商" : "Provider"}</label>
-                <div className="flex flex-wrap gap-1.5">
+                <div id="settings-ai-provider-label" className="text-xs text-muted-foreground mb-2">
+                  {t("settings.aiProviderLabel")}
+                </div>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby="settings-ai-provider-label">
                   {AI_PROVIDERS.map((p) => (
-                    <button key={p.id} onClick={() => handleProviderChange(p.id)} className={`px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border ${aiProvider === p.id ? "bg-primary/15 border-primary text-foreground font-medium" : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-hover-bg/10"}`}>
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleProviderChange(p.id)}
+                      aria-pressed={aiProvider === p.id}
+                      className={`min-h-8 px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border md:min-h-7 ${aiProvider === p.id ? "bg-primary/15 border-primary text-foreground font-medium" : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-hover-bg/10"}`}
+                    >
                       {lang === "zh" ? p.name.zh : p.name.en}
                     </button>
                   ))}
@@ -1485,10 +1530,18 @@ export function SettingsView() {
               </div>
               {currentProvider && currentProvider.regions.length > 1 && (
                 <div>
-                  <label className="text-xs text-muted-foreground mb-2 block">{lang === "zh" ? "区域" : "Region"}</label>
-                  <div className="flex gap-1.5">
+                  <div id="settings-ai-region-label" className="text-xs text-muted-foreground mb-2">
+                    {t("settings.aiRegionLabel")}
+                  </div>
+                  <div className="flex gap-1.5" role="group" aria-labelledby="settings-ai-region-label">
                     {currentProvider.regions.map((r) => (
-                      <button key={r} onClick={() => setAiRegion(r)} className={`px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border ${aiRegion === r ? "bg-primary/15 border-primary text-foreground font-medium" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}>
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setAiRegion(r)}
+                        aria-pressed={aiRegion === r}
+                        className={`min-h-8 px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border md:min-h-7 ${aiRegion === r ? "bg-primary/15 border-primary text-foreground font-medium" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}
+                      >
                         {lang === "zh" ? REGION_LABELS[r].zh : REGION_LABELS[r].en}
                       </button>
                     ))}
@@ -1496,48 +1549,69 @@ export function SettingsView() {
                 </div>
               )}
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">API Key</label>
-                <Input type="password" placeholder="sk-..." value={aiApiKey} onChange={(e) => setAiApiKey(e.target.value)} />
+                <label htmlFor="settings-ai-api-key" className="text-xs text-muted-foreground mb-1 block">
+                  {t("settings.aiApiKeyLabel")}
+                </label>
+                <Input
+                  id="settings-ai-api-key"
+                  type="password"
+                  placeholder="sk-..."
+                  value={aiApiKey}
+                  onChange={(e) => setAiApiKey(e.target.value)}
+                />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">{lang === "zh" ? "模型" : "Model"}</label>
-                <Input placeholder={lang === "zh" ? "模型名称" : "Model name"} value={aiModel} onChange={(e) => setAiModel(e.target.value)} />
+                <label htmlFor="settings-ai-model" className="text-xs text-muted-foreground mb-1 block">
+                  {t("settings.aiModelLabel")}
+                </label>
+                <Input
+                  id="settings-ai-model"
+                  placeholder={t("settings.aiModelPlaceholder")}
+                  value={aiModel}
+                  onChange={(e) => setAiModel(e.target.value)}
+                />
               </div>
               {aiProvider === "custom" && (
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">API URL</label>
-                  <Input placeholder="https://..." value={aiCustomUrl} onChange={(e) => setAiCustomUrl(e.target.value)} />
+                  <label htmlFor="settings-ai-api-url" className="text-xs text-muted-foreground mb-1 block">
+                    {t("settings.aiApiUrlLabel")}
+                  </label>
+                  <Input
+                    id="settings-ai-api-url"
+                    placeholder={t("settings.aiApiUrlPlaceholder")}
+                    value={aiCustomUrl}
+                    onChange={(e) => setAiCustomUrl(e.target.value)}
+                  />
                 </div>
               )}
               <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-medium">
-                      {lang === "zh" ? "AI Tag 速率限制" : "AI Tag rate limit"}
+                    <div id="settings-ai-tag-rate-title" className="text-sm font-medium">
+                      {t("settings.aiTagRateTitle")}
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {lang === "zh"
-                        ? "免费模型建议并发 1，请求间隔 4000ms。遇到 429 时会自动中断剩余任务。"
-                        : "For free models, use concurrency 1 and a 4000ms interval. 429 responses stop the remaining job."}
+                      {t("settings.aiTagRateDesc")}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {lang === "zh" ? "429 中断" : "Stop on 429"}
+                    <span id="settings-ai-tag-stop-on-rate-limit-label" className="text-xs text-muted-foreground">
+                      {t("settings.aiTagStopOn429Label")}
                     </span>
                     <Switch
                       checked={aiTagStopOnRateLimit}
                       onCheckedChange={setAiTagStopOnRateLimit}
-                      aria-label={lang === "zh" ? "AI Tag 遇到 429 时中断" : "Stop AI Tag on 429"}
+                      aria-labelledby="settings-ai-tag-stop-on-rate-limit-label"
                     />
                   </div>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">
-                      {lang === "zh" ? "并发数" : "Concurrency"}
+                    <label htmlFor="settings-ai-tag-concurrency" className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.aiTagConcurrencyLabel")}
                     </label>
                     <Input
+                      id="settings-ai-tag-concurrency"
                       type="number"
                       min={1}
                       max={8}
@@ -1546,10 +1620,11 @@ export function SettingsView() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">
-                      {lang === "zh" ? "请求间隔 ms" : "Interval ms"}
+                    <label htmlFor="settings-ai-tag-interval" className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.aiTagIntervalLabel")}
                     </label>
                     <Input
+                      id="settings-ai-tag-interval"
                       type="number"
                       min={0}
                       max={60000}
@@ -1590,7 +1665,7 @@ export function SettingsView() {
                   finally { setAiTesting(false); }
                 }} className="shrink-0">
                   {aiTesting ? <Loader2 className="size-3.5 animate-spin" /> : <Bot className="size-3.5" />}
-                  <span>{lang === "zh" ? "测试连接" : "Test"}</span>
+                  <span>{t("settings.aiTestConnection")}</span>
                 </Button>
               </div>
               {aiTestResult && (
@@ -1599,11 +1674,13 @@ export function SettingsView() {
                   {!aiTestResult.ok && aiTestResult.details && (
                     <div>
                       <button
+                        type="button"
                         className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                         onClick={() => setShowAiTestDetails((v) => !v)}
+                        aria-expanded={showAiTestDetails}
                       >
                         {showAiTestDetails ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-                        {lang === "zh" ? "查看详情" : "Details"}
+                        {t("settings.aiTestDetails")}
                       </button>
                       {showAiTestDetails && (
                         <pre className="mt-1 text-[11px] leading-4 font-mono text-muted-foreground whitespace-pre-wrap break-all bg-muted/30 rounded-md p-2 max-h-32 overflow-auto">
@@ -1614,9 +1691,11 @@ export function SettingsView() {
                   )}
                   {!aiTestResult.ok && currentProvider && currentProvider.regions.length > 1 && (
                     <p className="text-muted-foreground">
-                      {lang === "zh"
-                        ? `提示：可在上方切换区域端点后重试（当前：${REGION_LABELS[aiRegion]?.zh ?? aiRegion}）`
-                        : `Tip: Try switching the region endpoint above (current: ${REGION_LABELS[aiRegion]?.en ?? aiRegion})`}
+                      {t("settings.aiTestRegionHint", {
+                        region: lang === "zh"
+                          ? REGION_LABELS[aiRegion]?.zh ?? aiRegion
+                          : REGION_LABELS[aiRegion]?.en ?? aiRegion,
+                      })}
                     </p>
                   )}
                 </div>
@@ -1768,7 +1847,7 @@ export function SettingsView() {
                           aria-label={t(`settings.accent.${name}`)}
                           title={t(`settings.accent.${name}`)}
                           onClick={() => setAccent(name)}
-                          className={`relative size-6 rounded-full transition-all cursor-pointer
+                          className={`relative size-8 rounded-full transition-colors cursor-pointer md:size-6
                             ${isActive
                               ? "ring-2 ring-ring ring-offset-2 ring-offset-background scale-110"
                               : "ring-1 ring-border hover:scale-105 hover:ring-2 hover:ring-ring/50"
