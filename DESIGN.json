@@ -1,0 +1,230 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-04-26T11:58:28.347092+00:00",
+  "title": "Design System: SkillPort",
+  "extensions": {
+    "colorMeta": {
+      "primary-lavender": {
+        "role": "primary",
+        "displayName": "Default Lavender Accent",
+        "canonical": "var(--primary)",
+        "tonalRamp": [
+          "#11111b",
+          "#313244",
+          "#585b70",
+          "#7f849c",
+          "#a6adc8",
+          "#b4befe",
+          "#cdd6f4",
+          "#f5f6ff"
+        ]
+      },
+      "latte-base": {
+        "role": "neutral",
+        "displayName": "Latte Paper Base",
+        "canonical": "var(--background)",
+        "tonalRamp": [
+          "#4c4f69",
+          "#6c6f85",
+          "#9ca0b0",
+          "#bcc0cc",
+          "#dce0e8",
+          "#e6e9ef",
+          "#eff1f5",
+          "#fafbff"
+        ]
+      },
+      "mocha-base": {
+        "role": "neutral",
+        "displayName": "Mocha Console Base",
+        "canonical": "var(--background)",
+        "tonalRamp": [
+          "#11111b",
+          "#181825",
+          "#1e1e2e",
+          "#313244",
+          "#45475a",
+          "#585b70",
+          "#7f849c",
+          "#cdd6f4"
+        ]
+      },
+      "destructive-red": {
+        "role": "destructive",
+        "displayName": "Semantic Red",
+        "canonical": "var(--destructive)",
+        "tonalRamp": [
+          "#2b1118",
+          "#5c1b2a",
+          "#8f2a42",
+          "#c84561",
+          "#f38ba8",
+          "#f7b1c2",
+          "#fbd6df",
+          "#fff1f5"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Compact Page Title",
+        "purpose": "Page titles and major settings headers."
+      },
+      "body": {
+        "displayName": "Console Body",
+        "purpose": "Dense operational copy and markdown preview."
+      },
+      "label": {
+        "displayName": "Metadata Label",
+        "purpose": "Controls, chips, counters, and path metadata."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-rest",
+        "value": "shadow-sm",
+        "purpose": "Subtle rest-state separation for cards."
+      },
+      {
+        "name": "panel-lift",
+        "value": "shadow-lg",
+        "purpose": "Sticky bars and raised panels."
+      },
+      {
+        "name": "drawer-lift",
+        "value": "shadow-2xl",
+        "purpose": "Full-height drawers above the shell."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-color",
+        "value": "transition-colors 150ms ease-out",
+        "purpose": "Default hover and state feedback."
+      },
+      {
+        "name": "progress-scale",
+        "value": "transform scaleX(...) 300ms ease-out",
+        "purpose": "Progress bar changes without layout animation."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Primary action for saves, imports, and confirmed operations.",
+      "html": "<button class=\"ds-btn-primary\">Save</button>",
+      "css": ".ds-btn-primary { height: 32px; padding: 6px 10px; border: 1px solid transparent; border-radius: 8px; background: var(--primary); color: var(--primary-foreground); font: 500 14px/1.4 'JetBrains Mono Variable', monospace; transition: background-color 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out; } .ds-btn-primary:hover { background: color-mix(in srgb, var(--primary) 80%, var(--background)); } .ds-btn-primary:focus-visible { outline: 3px solid color-mix(in srgb, var(--ring) 50%, transparent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary action for test, clear, and non-destructive branches.",
+      "html": "<button class=\"ds-btn-outline\">Test</button>",
+      "css": ".ds-btn-outline { height: 32px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--foreground); font: 500 14px/1.4 'JetBrains Mono Variable', monospace; transition: background-color 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out; } .ds-btn-outline:hover { background: var(--muted); color: var(--foreground); } .ds-btn-outline:focus-visible { outline: 3px solid color-mix(in srgb, var(--ring) 50%, transparent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Compact field for paths, tokens, model names, and search.",
+      "html": "<input class=\"ds-input\" placeholder=\"Search skills\" />",
+      "css": ".ds-input { height: 32px; width: 100%; min-width: 0; padding: 4px 10px; border: 1px solid var(--input); border-radius: 8px; background: transparent; color: var(--foreground); font: 400 14px/1.4 'JetBrains Mono Variable', monospace; transition: border-color 150ms ease-out, box-shadow 150ms ease-out; } .ds-input::placeholder { color: var(--muted-foreground); } .ds-input:focus-visible { border-color: var(--ring); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent); }"
+    },
+    {
+      "name": "Skill Card",
+      "kind": "card",
+      "refersTo": "card-default",
+      "description": "Reusable card for a skill row or grid item.",
+      "html": "<article class=\"ds-card\"><h3>api-designer</h3><p>Designs API contracts and review notes.</p></article>",
+      "css": ".ds-card { padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--card-foreground); box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 8%, transparent); transition: background-color 150ms ease-out, border-color 150ms ease-out; } .ds-card:hover { background: color-mix(in srgb, var(--accent) 30%, var(--card)); border-color: color-mix(in srgb, var(--primary) 25%, var(--border)); } .ds-card h3 { margin: 0 0 4px; font: 600 14px/1.4 'JetBrains Mono Variable', monospace; } .ds-card p { margin: 0; color: var(--muted-foreground); font: 400 12px/1.6 'JetBrains Mono Variable', monospace; }"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": "navigation-sidebar-active",
+      "description": "Main shell navigation with active target state.",
+      "html": "<button class=\"ds-nav-item ds-nav-item-active\"><span>Central Skills</span><span class=\"ds-nav-count\">12</span></button>",
+      "css": ".ds-nav-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--sidebar-foreground); font: 500 14px/1.4 'JetBrains Mono Variable', monospace; text-align: left; transition: background-color 150ms ease-out, color 150ms ease-out; } .ds-nav-item:hover { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); } .ds-nav-item-active { background: var(--sidebar-primary); color: var(--sidebar-primary-foreground); } .ds-nav-count { margin-left: auto; border-radius: 999px; padding: 2px 6px; background: color-mix(in srgb, var(--sidebar-primary-foreground) 15%, transparent); color: inherit; font-size: 10px; }"
+    },
+    {
+      "name": "Selected Chip",
+      "kind": "chip",
+      "refersTo": "chip-selected",
+      "description": "Selected filter or category state without relying on color alone.",
+      "html": "<span class=\"ds-chip-selected\">AI review</span>",
+      "css": ".ds-chip-selected { display: inline-flex; align-items: center; min-height: 32px; padding: 6px 12px; border: 1px solid color-mix(in srgb, var(--primary) 70%, var(--border)); border-radius: 999px; background: color-mix(in srgb, var(--primary) 15%, transparent); color: var(--primary); font: 600 12px/1.4 'JetBrains Mono Variable', monospace; } .ds-chip-selected:focus-visible { outline: 3px solid color-mix(in srgb, var(--ring) 50%, transparent); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Local Operations Console",
+    "overview": "SkillPort should feel like a calm control surface for local filesystem work. The interface is dense, explicit, and reviewable. Visual polish serves trust; it never hides where a skill lives, which target is active, or which action will touch disk or network.",
+    "keyCharacteristics": [
+      "Local-first and operational, not promotional.",
+      "Compact enough for daily expert workflows.",
+      "State-rich through tokens, not raw color patches.",
+      "Familiar desktop controls with clear focus and disabled states.",
+      "Windows-first, with local data boundaries made visible."
+    ],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "One chosen Catppuccin accent owns primary action, selection, focus, and progress. Do not add a second decorative accent to the same surface.",
+        "section": "colors"
+      },
+      {
+        "name": "The Contrast Before Preference Rule",
+        "body": "In Latte, every primary accent must meet WCAG AA text contrast before it can appear on a filled control.",
+        "section": "colors"
+      },
+      {
+        "name": "The Token Only Rule",
+        "body": "Use semantic tokens for UI color. Raw black, raw white, raw rgba overlays, and one-off stripe accents are forbidden.",
+        "section": "colors"
+      },
+      {
+        "name": "The Console Legibility Rule",
+        "body": "Use weight and spacing for hierarchy. Do not introduce display fonts or oversized marketing type.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat At Rest Rule",
+        "body": "Surfaces are flat at rest. Use borders and tonal layers first; shadows only explain stacking or interaction state.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep filesystem paths, targets, install destinations, and network side effects visible before action.",
+      "Do use Catppuccin semantic tokens for backgrounds, foregrounds, borders, rings, and actions.",
+      "Do keep expert density, but preserve touchable controls on narrow windows.",
+      "Do use full borders, background tint, icon state, or weight changes for selected list items.",
+      "Do keep animations short, stateful, and transform or opacity based.",
+      "Do use i18n for every user-visible string."
+    ],
+    "donts": [
+      "Don't look like a generic SaaS dashboard, a marketplace landing page, or a decorative AI-themed command center.",
+      "Don't use hero metrics, ornamental gradients, glass cards, vague empty states, or hidden background automation for reviewable operations.",
+      "Don't use side-stripe borders as card, list, callout, or alert accents.",
+      "Don't use raw black, raw white, or raw rgba overlays in product UI.",
+      "Don't animate width, height, max-width, left, right, top, or bottom.",
+      "Don't rely on color alone for status. Pair it with labels, icons, or structure."
+    ]
+  }
+}
