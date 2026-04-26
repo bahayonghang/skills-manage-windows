@@ -10,6 +10,7 @@ interface ResizableWidthOptions {
   minWidth: number;
   maxWidth: number;
   step?: number;
+  resizeFrom?: "left" | "right";
 }
 
 function clampWidth(width: number, minWidth: number, maxWidth: number) {
@@ -21,6 +22,7 @@ export function useResizableWidth({
   minWidth,
   maxWidth,
   step = 16,
+  resizeFrom = "right",
 }: ResizableWidthOptions) {
   const [width, setWidth] = useState(() =>
     clampWidth(defaultWidth, minWidth, maxWidth)
@@ -51,9 +53,11 @@ export function useResizableWidth({
       }
 
       function handlePointerMove(moveEvent: globalThis.PointerEvent) {
-        setWidth(
-          clampWidth(startWidth + moveEvent.clientX - startX, minWidth, maxWidth)
-        );
+        const delta =
+          resizeFrom === "left"
+            ? startX - moveEvent.clientX
+            : moveEvent.clientX - startX;
+        setWidth(clampWidth(startWidth + delta, minWidth, maxWidth));
       }
 
       document.body.style.cursor = "col-resize";
@@ -63,21 +67,21 @@ export function useResizableWidth({
       window.addEventListener("pointercancel", finishResize);
       event.preventDefault();
     },
-    [maxWidth, minWidth, width]
+    [maxWidth, minWidth, resizeFrom, width]
   );
 
   const handleResizeKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
       if (event.key === "ArrowLeft") {
         event.preventDefault();
-        resizeBy(-step);
+        resizeBy(resizeFrom === "left" ? step : -step);
       }
       if (event.key === "ArrowRight") {
         event.preventDefault();
-        resizeBy(step);
+        resizeBy(resizeFrom === "left" ? -step : step);
       }
     },
-    [resizeBy, step]
+    [resizeBy, resizeFrom, step]
   );
 
   return {
