@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { groupPlatformAgentIds } from "@/lib/platformCleanupGroups";
 import type {
   AgentWithStatus,
   BatchDeleteCentralSkillPreviewResult,
@@ -35,12 +36,22 @@ interface BatchDeleteCentralSkillsDialogProps {
   ) => Promise<BatchDeleteCentralSkillResult>;
 }
 
-function agentName(agents: AgentWithStatus[], agentId: string): string {
-  return agents.find((agent) => agent.id === agentId)?.display_name ?? agentId;
-}
-
 function uniqueIds(ids: string[]): string[] {
   return Array.from(new Set(ids));
+}
+
+function copyPathsForAgents(
+  preview: BatchDeleteCentralSkillPreviewResult | null,
+  agentIds: string[]
+): string {
+  const agentSet = new Set(agentIds);
+  return uniqueIds(
+    (preview?.previews ?? []).flatMap((item) =>
+      item.copy_installations
+        .filter((installation) => agentSet.has(installation.agent_id))
+        .map((installation) => installation.installed_path)
+    )
+  ).join(", ");
 }
 
 export function BatchDeleteCentralSkillsDialog({
@@ -77,20 +88,39 @@ export function BatchDeleteCentralSkillsDialog({
       (preview?.previews ?? []).flatMap((item) => item.auto_removed_agent_ids)
     );
   }, [preview]);
+  const copyAgentGroups = useMemo(
+    () =>
+      groupPlatformAgentIds(
+        agents,
+        copyAgentIds,
+        t("platformTargets.universalLabel")
+      ),
+    [agents, copyAgentIds, t]
+  );
+  const autoRemovedGroups = useMemo(
+    () =>
+      groupPlatformAgentIds(
+        agents,
+        autoRemovedAgentIds,
+        t("platformTargets.universalLabel")
+      ),
+    [agents, autoRemovedAgentIds, t]
+  );
 
-  function copyCountForAgent(agentId: string): number {
+  function copyCountForAgents(agentIds: string[]): number {
+    const agentSet = new Set(agentIds);
     return (preview?.previews ?? []).filter((item) =>
-      item.copy_installations.some((installation) => installation.agent_id === agentId)
+      item.copy_installations.some((installation) => agentSet.has(installation.agent_id))
     ).length;
   }
 
-  function handleToggleCopy(agentId: string, checked: boolean) {
+  function handleToggleCopy(agentIds: string[], checked: boolean) {
     setSelectedCopyAgentIds((current) => {
       const next = new Set(current);
       if (checked) {
-        next.add(agentId);
+        agentIds.forEach((agentId) => next.add(agentId));
       } else {
-        next.delete(agentId);
+        agentIds.forEach((agentId) => next.delete(agentId));
       }
       return next;
     });
@@ -155,53 +185,72 @@ export function BatchDeleteCentralSkillsDialog({
             </div>
           ) : (
             <>
-              {copyAgentIds.length > 0 ? (
+              {autoRemovedGroups.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("central.batchDeleteLinkedPlatformInstalls")}
+                  </div>
+                  <div className="space-y-2">
+                    {autoRemovedGroups.map((group) => (
+                      <div key={group.id} className="rounded-xl border border-border bg-muted/30 p-3">
+                        <div className="text-sm font-medium text-foreground">{group.label}</div>
+                        {group.detail && (
+                          <div className="mt-1 truncate text-xs text-muted-foreground">
+                            {group.detail}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {copyAgentGroups.length > 0 ? (
                 <div className="space-y-2">
                   <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     {t("central.batchDeletePlatformCopies")}
                   </div>
                   <div className="space-y-2">
-                    {copyAgentIds.map((agentId) => {
-                      const checked = selectedCopyAgentIds.has(agentId);
-                      const name = agentName(agents, agentId);
+                    {copyAgentGroups.map((group) => {
+                      const checked = group.agentIds.every((agentId) =>
+                        selectedCopyAgentIds.has(agentId)
+                      );
+                      const paths = copyPathsForAgents(preview, group.agentIds);
                       return (
                         <label
-                          key={agentId}
+                          key={group.id}
                           className="flex cursor-pointer items-start gap-2 rounded-xl border border-border p-3"
                         >
                           <Checkbox
                             checked={checked}
-                            onCheckedChange={(value) => handleToggleCopy(agentId, !!value)}
+                            onCheckedChange={(value) => handleToggleCopy(group.agentIds, !!value)}
                             aria-label={t("central.batchDeletePlatformCopyLabel", {
-                              platform: name,
+                              platform: group.label,
                             })}
                           />
                           <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-medium text-foreground">{name}</span>
+                            <span className="block text-sm font-medium text-foreground">{group.label}</span>
                             <span className="mt-1 block text-xs text-muted-foreground">
                               {t("central.batchDeletePlatformCopyCount", {
-                                count: copyCountForAgent(agentId),
+                                count: copyCountForAgents(group.agentIds),
                               })}
                             </span>
+                            {(paths || group.detail) && (
+                              <span className="mt-1 block truncate text-xs text-muted-foreground">
+                                {paths || group.detail}
+                              </span>
+                            )}
                           </span>
                         </label>
                       );
                     })}
                   </div>
                 </div>
-              ) : (
+              ) : autoRemovedGroups.length === 0 ? (
                 <div className="rounded-xl border border-border p-3 text-sm text-muted-foreground">
                   {t("central.batchDeleteNoPlatformCopies")}
                 </div>
-              )}
-
-              {autoRemovedAgentIds.length > 0 && (
-                <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  {t("central.batchDeleteAutoCleanup", {
-                    platforms: autoRemovedAgentIds.map((agentId) => agentName(agents, agentId)).join(", "),
-                  })}
-                </div>
-              )}
+              ) : null}
 
               {preview && preview.failed.length > 0 && (
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">

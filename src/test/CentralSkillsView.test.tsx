@@ -888,6 +888,78 @@ describe("CentralSkillsView", () => {
     expect(mockRescan).toHaveBeenCalled();
   });
 
+  it("shows auto-cleaned linked installs instead of an empty copy state", async () => {
+    mockLoadBatchDeletePreview.mockResolvedValueOnce({
+      previews: [
+        {
+          skill_id: "frontend-design",
+          skill_name: "frontend-design",
+          central_path: "~/.skillsmanage/skills/frontend-design",
+          copy_installations: [],
+          auto_removed_agent_ids: ["claude-code"],
+        },
+      ],
+      failed: [],
+    });
+    mockDeleteCentralSkills.mockResolvedValueOnce({
+      succeeded: [
+        {
+          skill_id: "frontend-design",
+          removed_central_path: "~/.skillsmanage/skills/frontend-design",
+          removed_agent_ids: ["claude-code"],
+          retained_agent_ids: [],
+        },
+      ],
+      failed: [],
+    });
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getByTestId("batch-delete-central-skills"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("已安装的平台链接会自动移除")).toBeInTheDocument();
+    expect(within(dialog).getByText("Claude Code")).toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("已选技能没有已安装的平台链接或独立平台副本。")
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByTestId("confirm-batch-delete-central-skills"));
+
+    await waitFor(() => {
+      expect(mockDeleteCentralSkills).toHaveBeenCalledWith([
+        {
+          skill_id: "frontend-design",
+          remove_agent_ids: [],
+        },
+      ]);
+    });
+  });
+
+  it("groups shared Universal linked installs and hides Central from cleanup preview", async () => {
+    mockLoadBatchDeletePreview.mockResolvedValueOnce({
+      previews: [
+        {
+          skill_id: "frontend-design",
+          skill_name: "frontend-design",
+          central_path: "~/.skillsmanage/skills/frontend-design",
+          copy_installations: [],
+          auto_removed_agent_ids: ["cursor", "codex", "central"],
+        },
+      ],
+      failed: [],
+    });
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getByTestId("batch-delete-central-skills"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Universal/)).toBeInTheDocument();
+    expect(within(dialog).getByText("Codex, Cursor")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Central Skills")).not.toBeInTheDocument();
+  });
+
   it("renders browser fixture skill card on the localhost validation surface without Tauri", async () => {
     const isTauriSpy = vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(false);
     mockUseCentralSkillsStore.mockRestore();

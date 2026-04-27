@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { groupPlatformAgentIds } from "@/lib/platformCleanupGroups";
 import type { AgentWithStatus, SkillDetail, SkillInstallation, SkillWithLinks } from "@/types";
 
 interface DeleteCentralSkillDialogProps {
@@ -28,12 +29,12 @@ interface DeleteCentralSkillDialogProps {
   onConfirm: (skillId: string, removeAgentIds: string[]) => Promise<void>;
 }
 
-function agentName(agents: AgentWithStatus[], agentId: string): string {
-  return agents.find((agent) => agent.id === agentId)?.display_name ?? agentId;
-}
-
 function uniqueAgentIds(ids: string[]): string[] {
   return Array.from(new Set(ids));
+}
+
+function installationPaths(installations: SkillInstallation[]): string {
+  return uniqueAgentIds(installations.map((installation) => installation.installed_path)).join(", ");
 }
 
 export function DeleteCentralSkillDialog({
@@ -66,14 +67,37 @@ export function DeleteCentralSkillDialog({
       .map((item) => item.agent_id);
     return uniqueAgentIds([...linkedAgentIds, ...(skill?.shared_root_agents ?? [])]);
   }, [detail?.installations, skill?.shared_root_agents]);
+  const copyInstallationGroups = useMemo(
+    () =>
+      groupPlatformAgentIds(
+        agents,
+        copyInstallations.map((installation) => installation.agent_id),
+        t("platformTargets.universalLabel")
+      ).map((group) => ({
+        ...group,
+        installations: copyInstallations.filter((installation) =>
+          group.agentIds.includes(installation.agent_id)
+        ),
+      })),
+    [agents, copyInstallations, t]
+  );
+  const autoRemovedGroups = useMemo(
+    () =>
+      groupPlatformAgentIds(
+        agents,
+        autoRemovedAgentIds,
+        t("platformTargets.universalLabel")
+      ),
+    [agents, autoRemovedAgentIds, t]
+  );
 
-  function handleToggleCopy(agentId: string, checked: boolean) {
+  function handleToggleCopy(agentIds: string[], checked: boolean) {
     setSelectedCopyAgentIds((current) => {
       const next = new Set(current);
       if (checked) {
-        next.add(agentId);
+        agentIds.forEach((agentId) => next.add(agentId));
       } else {
-        next.delete(agentId);
+        agentIds.forEach((agentId) => next.delete(agentId));
       }
       return next;
     });
@@ -118,32 +142,54 @@ export function DeleteCentralSkillDialog({
             </div>
           ) : (
             <>
-              {copyInstallations.length > 0 ? (
+              {autoRemovedGroups.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("central.deleteLinkedPlatformInstalls")}
+                  </div>
+                  <div className="space-y-2">
+                    {autoRemovedGroups.map((group) => (
+                      <div key={group.id} className="rounded-xl border border-border bg-muted/30 p-3">
+                        <div className="text-sm font-medium text-foreground">{group.label}</div>
+                        {group.detail && (
+                          <div className="mt-1 truncate text-xs text-muted-foreground">
+                            {group.detail}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {copyInstallationGroups.length > 0 ? (
                 <div className="space-y-2">
                   <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     {t("central.deletePlatformCopies")}
                   </div>
                   <div className="space-y-2">
-                    {copyInstallations.map((installation: SkillInstallation) => {
-                      const checked = selectedCopyAgentIds.has(installation.agent_id);
-                      const name = agentName(agents, installation.agent_id);
+                    {copyInstallationGroups.map((group) => {
+                      const checked = group.agentIds.every((agentId) =>
+                        selectedCopyAgentIds.has(agentId)
+                      );
+                      const paths = installationPaths(group.installations);
                       return (
                         <label
-                          key={installation.agent_id}
+                          key={group.id}
                           className="flex cursor-pointer items-start gap-2 rounded-xl border border-border p-3"
                         >
                           <Checkbox
                             checked={checked}
-                            onCheckedChange={(value) => handleToggleCopy(installation.agent_id, !!value)}
+                            onCheckedChange={(value) => handleToggleCopy(group.agentIds, !!value)}
                             aria-label={t("central.deletePlatformCopyLabel", {
-                              platform: name,
+                              platform: group.label,
                               skill: skill.name,
                             })}
                           />
                           <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-medium text-foreground">{name}</span>
+                            <span className="block text-sm font-medium text-foreground">{group.label}</span>
                             <span className="mt-1 block truncate text-xs text-muted-foreground">
-                              {installation.installed_path}
+                              {paths || group.detail}
                             </span>
                           </span>
                         </label>
@@ -151,19 +197,11 @@ export function DeleteCentralSkillDialog({
                     })}
                   </div>
                 </div>
-              ) : (
+              ) : autoRemovedGroups.length === 0 ? (
                 <div className="rounded-xl border border-border p-3 text-sm text-muted-foreground">
                   {t("central.deleteNoPlatformCopies")}
                 </div>
-              )}
-
-              {autoRemovedAgentIds.length > 0 && (
-                <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  {t("central.deleteAutoCleanup", {
-                    platforms: autoRemovedAgentIds.map((agentId) => agentName(agents, agentId)).join(", "),
-                  })}
-                </div>
-              )}
+              ) : null}
             </>
           )}
 
