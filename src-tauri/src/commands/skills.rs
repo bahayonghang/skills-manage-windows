@@ -670,6 +670,7 @@ async fn preview_delete_central_skill_ssh_impl(
     let auto_removed_agent_ids = unique_agent_ids(
         installations
             .iter()
+            .filter(|installation| installation.agent_id != "central")
             .filter(|installation| installation.link_type != "copy")
             .map(|installation| installation.agent_id.clone())
             .chain(shared_root_agents),
@@ -881,6 +882,7 @@ pub async fn preview_delete_central_skill_impl(
     let auto_removed_agent_ids = unique_agent_ids(
         installations
             .iter()
+            .filter(|installation| installation.agent_id != "central")
             .filter(|installation| installation.link_type != "copy")
             .map(|installation| installation.agent_id.clone())
             .chain(shared_root_agents),
@@ -1401,6 +1403,17 @@ mod tests {
         )
         .await
         .unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_remote_installation(
+                "remote-delete",
+                "central",
+                "/home/alice/.skillsmanage/skills/remote-delete",
+                "native",
+            ),
+        )
+        .await
+        .unwrap();
 
         let result = preview_delete_central_skills_ssh_impl(&pool, &["remote-delete".to_string()])
             .await
@@ -1758,6 +1771,49 @@ mod tests {
         assert_eq!(result.previews[0].auto_removed_agent_ids, vec!["codex"]);
         assert_eq!(result.failed.len(), 1);
         assert_eq!(result.failed[0].skill_id, "missing-delete");
+    }
+
+    #[tokio::test]
+    async fn test_preview_delete_central_skills_reports_auto_links_without_central_self() {
+        let pool = setup_test_db().await;
+        let temp = TempDir::new().unwrap();
+        let central_root = temp.path().join("central");
+        let central_dir = central_root.join("linked-delete");
+        let symlink_path = temp.path().join("codex").join("linked-delete");
+        fs::create_dir_all(&central_root).unwrap();
+        write_test_skill_dir(&central_dir);
+        set_test_central_root(&pool, &central_root).await;
+
+        let skill = make_central_skill_at("linked-delete", "Linked Delete", &central_dir);
+        db::upsert_skill(&pool, &skill).await.unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_installation_at("linked-delete", "central", &central_dir, "native", None),
+        )
+        .await
+        .unwrap();
+        db::upsert_skill_installation(
+            &pool,
+            &make_installation_at(
+                "linked-delete",
+                "codex",
+                &symlink_path,
+                "symlink",
+                Some(&central_dir),
+            ),
+        )
+        .await
+        .unwrap();
+
+        let result =
+            preview_delete_central_skills_impl(&pool, &["linked-delete".to_string()])
+                .await
+                .unwrap();
+
+        assert!(result.failed.is_empty());
+        assert_eq!(result.previews.len(), 1);
+        assert!(result.previews[0].copy_installations.is_empty());
+        assert_eq!(result.previews[0].auto_removed_agent_ids, vec!["codex"]);
     }
 
     #[tokio::test]
