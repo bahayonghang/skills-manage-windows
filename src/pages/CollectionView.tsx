@@ -177,11 +177,15 @@ export function CollectionView() {
       const result = await installCentralSkill(skillId, agentIds, method);
       await refreshCounts();
       if (result.failed.length > 0) {
-        const failedNames = result.failed.map((f) => f.agent_id).join(", ");
+        const failedNames = result.failed
+          .map((failure) => `${failure.agent_id}: ${failure.error}`)
+          .join("; ");
         toast.error(t("central.installPartialFail", { platforms: failedNames }));
       }
+      return result;
     } catch (err) {
       toast.error(t("central.installError", { error: String(err) }));
+      throw err;
     }
   }
 

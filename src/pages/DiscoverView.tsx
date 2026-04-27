@@ -22,7 +22,7 @@ import { InstallDialog } from "@/components/central/InstallDialog";
 import { useDiscoverStore } from "@/stores/discoverStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useTargetStore } from "@/stores/targetStore";
-import { DiscoveredSkill, SkillWithLinks } from "@/types";
+import { BatchInstallResult, DiscoveredSkill, SkillWithLinks } from "@/types";
 import { invoke } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { consumeScrollPosition } from "@/lib/scrollRestoration";
@@ -328,26 +328,44 @@ export function DiscoverView() {
   }, [selectedSkillIds, handleInstallToCentral]);
 
   const handleInstallFromDialog = useCallback(
-    async (_skillId: string, agentIds: string[], _method: string) => {
-      if (!installTargetSkill) return;
+    async (_skillId: string, agentIds: string[], _method: string): Promise<BatchInstallResult> => {
+      if (!installTargetSkill) {
+        return { succeeded: [], failed: [] };
+      }
       const targetId = installTargetSkill.id;
       setImportingIds((prev) => new Set(prev).add(targetId));
       try {
+        const succeeded: string[] = [];
+        const failed: BatchInstallResult["failed"] = [];
         for (const agentId of agentIds) {
-          await importToPlatform(targetId, agentId);
+          try {
+            await importToPlatform(targetId, agentId);
+            succeeded.push(agentId);
+          } catch (err) {
+            failed.push({ agent_id: agentId, error: String(err) });
+          }
         }
-        await Promise.all([refreshCounts(), refreshDiscoverCounts()]);
-        toast.success(t("discover.importSuccess"));
+        if (succeeded.length > 0) {
+          await Promise.all([refreshCounts(), refreshDiscoverCounts()]);
+        }
+        if (failed.length > 0) {
+          const failedNames = failed
+            .map((failure) => `${failure.agent_id}: ${failure.error}`)
+            .join("; ");
+          toast.error(t("central.installPartialFail", { platforms: failedNames }));
+        } else {
+          toast.success(t("discover.importSuccess"));
+        }
+        return { succeeded, failed };
       } catch (err) {
         toast.error(t("discover.importError", { error: String(err) }));
+        throw err;
       } finally {
         setImportingIds((prev) => {
           const next = new Set(prev);
           next.delete(targetId);
           return next;
         });
-        setIsInstallDialogOpen(false);
-        setInstallTargetSkill(null);
       }
     },
     [installTargetSkill, importToPlatform, refreshCounts, refreshDiscoverCounts, t]

@@ -231,6 +231,13 @@ export function MarketplaceView() {
       const preview = await invoke<GitHubRepoPreview>("preview_github_repo_import", {
         repoUrl,
       });
+      if (preview.previewWorkspaceId) {
+        void Promise.resolve(
+          invoke("discard_github_repo_preview_workspace", {
+            workspaceId: preview.previewWorkspaceId,
+          }),
+        ).catch(() => undefined);
+      }
       const nextPreviewSkills = preview.skills.map((skill) => ({
         id: skill.skillId,
         name: skill.skillName,
@@ -327,8 +334,9 @@ export function MarketplaceView() {
     agentIds: string[],
     method: "symlink" | "copy"
   ) {
-    await installCentralSkill(skillId, agentIds, method);
+    const result = await installCentralSkill(skillId, agentIds, method);
     await Promise.all([rescan(), loadCentralSkills(), ...agentIds.map((agentId) => getSkillsByAgent(agentId))]);
+    return result;
   }
 
   async function handleAfterImportSuccess() {
