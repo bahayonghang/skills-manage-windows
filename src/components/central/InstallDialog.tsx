@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
-import { AgentWithStatus, SkillWithLinks } from "@/types";
+import { AgentWithStatus, BatchInstallResult, SkillWithLinks } from "@/types";
 import { useTargetStore } from "@/stores/targetStore";
 import {
   getPlatformTargetInstallAgentIds,
@@ -34,7 +34,7 @@ interface InstallDialogProps {
   skill: SkillWithLinks | null;
   /** All agents (the 'central' agent will be filtered out). */
   agents: AgentWithStatus[];
-  onInstall: (skillId: string, agentIds: string[], method: InstallMethod) => Promise<void>;
+  onInstall: (skillId: string, agentIds: string[], method: InstallMethod) => Promise<BatchInstallResult>;
 }
 
 // ─── InstallDialog ────────────────────────────────────────────────────────────
@@ -49,6 +49,7 @@ export function InstallDialog({
   const { t } = useTranslation();
   const activeTarget = useTargetStore((s) => s.activeTarget);
   const isRemoteTarget = activeTarget.kind === "ssh";
+  const canUseSymlink = !isRemoteTarget || activeTarget.symlinkEnabled === true;
   // Only show non-central agents in the install dialog.
   const targetAgents = agents.filter((a) => a.id !== "central");
   const sharedRootAgentIds = new Set(skill?.shared_root_agents ?? []);
@@ -73,6 +74,7 @@ export function InstallDialog({
   const [installMethod, setInstallMethod] = useState<InstallMethod>("symlink");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<BatchInstallResult | null>(null);
 
   // When the dialog opens for a skill, pre-select currently unlinked agents.
   // Agents that already have this skill are checked by default too so the
@@ -86,11 +88,12 @@ export function InstallDialog({
           .map((agent) => agent.id)
       );
       setSelectedAgentIds(initialSelection);
-      setInstallMethod(isRemoteTarget ? "copy" : "symlink");
+      setInstallMethod(canUseSymlink ? "symlink" : "copy");
       setError(null);
+      setResult(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, skill?.id, isRemoteTarget]);
+  }, [open, skill?.id, canUseSymlink]);
 
   function handleCheckboxChange(agentId: string, checked: boolean) {
     const target = targetAgents.find((agent) => agent.id === agentId);
@@ -120,9 +123,13 @@ export function InstallDialog({
 
     setIsLoading(true);
     setError(null);
+    setResult(null);
     try {
-      await onInstall(skill.id, agentIds, installMethod);
-      onOpenChange(false);
+      const installResult = await onInstall(skill.id, agentIds, installMethod);
+      setResult(installResult);
+      if (installResult.failed.length === 0) {
+        onOpenChange(false);
+      }
     } catch (err) {
       setError(String(err));
     } finally {
@@ -228,10 +235,12 @@ export function InstallDialog({
               onValueChange={(v) => setInstallMethod(v as InstallMethod)}
             >
               <label className="flex items-center gap-2.5 cursor-pointer">
-                <RadioItem value="symlink" disabled={isRemoteTarget} />
+                <RadioItem value="symlink" disabled={!canUseSymlink} />
                 <span className="text-sm">{t("installDialog.symlink")}</span>
                 <span className="text-xs text-muted-foreground">
-                  {isRemoteTarget ? t("targets.symlinkDisabled") : t("installDialog.symlinkDesc")}
+                  {!canUseSymlink && isRemoteTarget
+                    ? t("targets.symlinkDisabled")
+                    : t("installDialog.symlinkDesc")}
                 </span>
               </label>
               <label className="flex items-center gap-2.5 cursor-pointer">
@@ -243,6 +252,23 @@ export function InstallDialog({
               </label>
             </RadioGroup>
           </div>
+
+          {result && result.failed.length > 0 && (
+            <div className="space-y-2" role="alert">
+              <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                {t("central.installPartialFail", {
+                  platforms: result.failed.map((failure) => failure.agent_id).join(", "),
+                })}
+              </p>
+              <ul className="max-h-32 space-y-0.5 overflow-auto text-xs text-destructive">
+                {result.failed.map((failure) => (
+                  <li key={failure.agent_id}>
+                    {failure.agent_id}: {failure.error}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Error message */}
           {error && (

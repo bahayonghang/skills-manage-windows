@@ -63,6 +63,7 @@ export function BatchInstallCentralSkillsDialog({
   const { t } = useTranslation();
   const activeTarget = useTargetStore((s) => s.activeTarget);
   const isRemoteTarget = activeTarget.kind === "ssh";
+  const canUseSymlink = !isRemoteTarget || activeTarget.symlinkEnabled === true;
   const targetAgents = useMemo(
     () => agents.filter((agent) => agent.id !== "central"),
     [agents]
@@ -104,22 +105,22 @@ export function BatchInstallCentralSkillsDialog({
     setResult(null);
     if (isRemoteTarget) {
       setTargetMode("platform");
-      setInstallMethod("copy");
+      setInstallMethod(canUseSymlink ? "symlink" : "copy");
       setProjectPath("");
     } else if (targetMode === "platform") {
-      setInstallMethod("symlink");
+      setInstallMethod(canUseSymlink ? "symlink" : "copy");
       setProjectPath("");
     } else {
       setInstallMethod("copy");
     }
-  }, [open, targetAgents, targetMode, isRemoteTarget]);
+  }, [open, targetAgents, targetMode, isRemoteTarget, canUseSymlink]);
 
   function handleModeChange(mode: TargetMode) {
     if (isRemoteTarget && mode === "project") {
       return;
     }
     setTargetMode(mode);
-    setInstallMethod(mode === "project" || isRemoteTarget ? "copy" : "symlink");
+    setInstallMethod(mode === "project" || !canUseSymlink ? "copy" : "symlink");
     setError(null);
     setResult(null);
   }
@@ -274,10 +275,12 @@ export function BatchInstallCentralSkillsDialog({
               onValueChange={(value) => setInstallMethod(value as InstallMethod)}
             >
               <label className="flex cursor-pointer items-center gap-2.5">
-                <RadioItem value="symlink" disabled={isRemoteTarget} />
+                <RadioItem value="symlink" disabled={!canUseSymlink} />
                 <span className="text-sm">{t("central.batchInstallSymlink")}</span>
                 <span className="text-xs text-muted-foreground">
-                  {isRemoteTarget ? t("targets.symlinkDisabled") : t("central.batchInstallSymlinkDesc")}
+                  {!canUseSymlink && isRemoteTarget
+                    ? t("targets.symlinkDisabled")
+                    : t("central.batchInstallSymlinkDesc")}
                 </span>
               </label>
               <label className="flex cursor-pointer items-center gap-2.5">

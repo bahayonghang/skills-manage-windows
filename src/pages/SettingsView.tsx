@@ -49,6 +49,24 @@ const APP_VERSION = __APP_VERSION__;
 const DB_PATH_FALLBACK = "~/.skillsmanage/db.sqlite";
 const REPO_URL = "https://github.com/bahayonghang/skills-manage-windows";
 
+function sshCredentialStatus(target: TargetSummary) {
+  if (target.authMethod !== "password") return null;
+  return target.credentialStatus ?? (target.hasStoredPassword ? "stored" : "missing");
+}
+
+function sshCredentialStatusClass(status: string | null) {
+  switch (status) {
+    case "stored":
+      return "border-primary/30 bg-primary/10 text-primary";
+    case "session":
+      return "border-amber-500/40 bg-amber-500/10 text-amber-600";
+    case "unreadable":
+      return "border-destructive/40 bg-destructive/10 text-destructive";
+    default:
+      return "border-muted-foreground/30 bg-muted text-muted-foreground";
+  }
+}
+
 /** Catppuccin Lavender hex per flavor — used for visual preview dots on flavor buttons (default accent). */
 const FLAVOR_COLORS: Record<CatppuccinFlavor, string> = {
   mocha: "#b4befe",
@@ -820,7 +838,9 @@ export function SettingsView() {
     try {
       const result = await updateSshTargetPassword(target.id, password);
       const text = result.ok
-        ? t("targets.passwordUpdated", { label: target.label })
+        ? result.credentialStatus === "session"
+          ? t("targets.passwordUpdatedSession", { label: target.label })
+          : t("targets.passwordUpdated", { label: target.label })
         : result.message;
       setTargetMessage({ type: result.ok ? "success" : "error", text });
       if (result.ok) {
@@ -1084,6 +1104,7 @@ export function SettingsView() {
                   const isLocal = target.kind === "local";
                   const isActive = target.id === activeTarget.id || target.isActive;
                   const passwordUpdateValue = sshTargetPasswordUpdates[target.id] ?? "";
+                  const credentialStatus = sshCredentialStatus(target);
                   return (
                     <div
                       key={target.id}
@@ -1112,31 +1133,45 @@ export function SettingsView() {
                           </div>
                         )}
                         {!isLocal && target.authMethod === "password" && (
-                          <div className="mt-2 flex max-w-xl flex-col gap-2 sm:flex-row">
-                            <Input
-                              type="password"
-                              value={passwordUpdateValue}
-                              onChange={(event) => updateExistingTargetPassword(target.id, event.target.value)}
-                              placeholder={t("targets.updatePasswordPlaceholder")}
-                              aria-label={t("targets.updatePasswordFor", { label: target.label })}
-                              className="h-8 text-xs"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={
-                                updatingPasswordTargetId === target.id ||
-                                testingTargetId === target.id ||
-                                !passwordUpdateValue.trim()
-                              }
-                              onClick={() => void handleUpdateTargetPassword(target)}
-                            >
-                              {updatingPasswordTargetId === target.id ? (
-                                <Loader2 className="size-3.5 animate-spin" />
+                          <div className="mt-2 max-w-xl space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`rounded-full border px-2 py-0.5 text-[11px] ${sshCredentialStatusClass(credentialStatus)}`}
+                              >
+                                {t(`targets.credentialStatus.${credentialStatus ?? "missing"}`)}
+                              </span>
+                              {target.credentialError ? (
+                                <span className="text-[11px] text-muted-foreground">
+                                  {target.credentialError}
+                                </span>
                               ) : null}
-                              {t("targets.updatePassword")}
-                            </Button>
+                            </div>
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                              <Input
+                                type="password"
+                                value={passwordUpdateValue}
+                                onChange={(event) => updateExistingTargetPassword(target.id, event.target.value)}
+                                placeholder={t("targets.updatePasswordPlaceholder")}
+                                aria-label={t("targets.updatePasswordFor", { label: target.label })}
+                                className="h-8 text-xs"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                  updatingPasswordTargetId === target.id ||
+                                  testingTargetId === target.id ||
+                                  !passwordUpdateValue.trim()
+                                }
+                                onClick={() => void handleUpdateTargetPassword(target)}
+                              >
+                                {updatingPasswordTargetId === target.id ? (
+                                  <Loader2 className="size-3.5 animate-spin" />
+                                ) : null}
+                                {t("targets.updatePassword")}
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>
