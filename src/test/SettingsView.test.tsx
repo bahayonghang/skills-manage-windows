@@ -410,6 +410,7 @@ describe("SettingsView", () => {
       ok: true,
       remoteHome: "/home/alice",
       remoteOs: "Linux",
+      credentialStatus: "session",
       message: "saved",
     });
     setupMocks({
@@ -425,6 +426,8 @@ describe("SettingsView", () => {
           authMethod: "password" as const,
           remoteHome: "/home/alice",
           remoteOs: "Linux",
+          hasStoredPassword: false,
+          credentialStatus: "missing",
           isActive: false,
         },
       ],
@@ -432,6 +435,7 @@ describe("SettingsView", () => {
     });
     renderSettingsView();
 
+    expect(screen.getByText(/需要密码|Password needed/i)).toBeTruthy();
     const passwordInput = screen.getByLabelText("Lab 的 SSH 密码");
     fireEvent.change(passwordInput, {
       target: { value: "secret" },
@@ -441,6 +445,7 @@ describe("SettingsView", () => {
     await waitFor(() => {
       expect(updateSshTargetPassword).toHaveBeenCalledWith("ssh-demo", "secret");
     });
+    expect(await screen.findByText(/本次会话|session/i)).toBeTruthy();
   });
 
   it("shows loading state for scan directories", () => {

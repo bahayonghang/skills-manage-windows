@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-li
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { CentralSkillsView } from "../pages/CentralSkillsView";
-import { AgentWithStatus, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
+import { AgentWithStatus, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks, TargetSummary } from "../types";
 
 // Mock stores
 vi.mock("../stores/centralSkillsStore", () => ({
@@ -61,6 +61,7 @@ import { useCentralSkillsStore } from "../stores/centralSkillsStore";
 import { usePlatformStore } from "../stores/platformStore";
 import { useSkillStore } from "../stores/skillStore";
 import { useMarketplaceStore } from "../stores/marketplaceStore";
+import { useTargetStore } from "../stores/targetStore";
 import * as tauriBridge from "@/lib/tauri";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -274,6 +275,12 @@ const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
 const mockUsePlatformStore = vi.mocked(usePlatformStore);
 const mockUseSkillStore = vi.mocked(useSkillStore);
 const mockUseMarketplaceStore = vi.mocked(useMarketplaceStore);
+const localTarget: TargetSummary = {
+  id: "local",
+  kind: "local",
+  label: "Local",
+  isActive: true,
+};
 
 function buildCentralStoreState(overrides = {}) {
   return {
@@ -406,6 +413,10 @@ function renderCentralSkillsView({
 describe("CentralSkillsView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useTargetStore.setState({
+      targets: [localTarget],
+      activeTarget: localTarget,
+    });
     mockExportSkillportState.mockResolvedValue(
       JSON.stringify({
         kind: "skillport/state-export",
@@ -638,6 +649,44 @@ describe("CentralSkillsView", () => {
     });
     expect(toast.success).toHaveBeenCalledWith("已将 2 个技能安装到 2 个平台");
     expect(mockRescan).toHaveBeenCalled();
+  });
+
+  it("defaults remote batch install to symlink when the target supports symlinks", async () => {
+    const remoteTarget: TargetSummary = {
+      id: "ssh-demo",
+      kind: "ssh",
+      label: "Demo",
+      remoteOs: "Linux",
+      symlinkEnabled: true,
+      isActive: true,
+    };
+    useTargetStore.setState({
+      targets: [localTarget, remoteTarget],
+      activeTarget: remoteTarget,
+    });
+    mockBatchInstallSkills.mockResolvedValueOnce({
+      succeeded: [
+        { skill_id: "code-reviewer", agent_id: "codex", target_path: "/home/test/.agents/skills/code-reviewer" },
+        { skill_id: "code-reviewer", agent_id: "claude-code", target_path: "/home/test/.claude/skills/code-reviewer" },
+      ],
+      failed: [],
+    });
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /将 1 个技能安装到 2 个平台/i }));
+
+    await waitFor(() => {
+      expect(mockBatchInstallSkills).toHaveBeenCalledWith(
+        ["code-reviewer"],
+        ["codex", "claude-code"],
+        "symlink",
+        null
+      );
+    });
   });
 
   it("reports seven skills installed in three platforms instead of twenty-one installs", async () => {
@@ -1347,6 +1396,70 @@ describe("CentralSkillsView", () => {
 
     expect(await screen.findByTestId("github-import-confirm-summary")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /返回预览修改/i })).toBeInTheDocument();
+  });
+
+  it("reports github import failures as import errors", async () => {
+    mockImportGitHubRepoSkills.mockRejectedValueOnce(
+      "SSH password for target 'dckj' is not available.",
+    );
+    mockUseMarketplaceStore.mockImplementation((selector?: unknown) => {
+      const state = {
+        githubImport: {
+          isPreviewLoading: false,
+          isImporting: false,
+          preview: {
+            repo: {
+              owner: "anthropics",
+              repo: "skills",
+              branch: "main",
+              normalizedUrl: "https://github.com/anthropics/skills",
+            },
+            skills: [
+              {
+                sourcePath: "skills/first/SKILL.md",
+                skillId: "frontend-design",
+                skillName: "frontend-design",
+                description: "First imported skill",
+                rootDirectory: "skills",
+                skillDirectoryName: "first",
+                downloadUrl: "https://example.com/first",
+                conflict: null,
+              },
+            ],
+            importResult: null,
+            previewedRepoUrl: "https://github.com/anthropics/skills",
+            error: null,
+          },
+          previewGitHubRepoImport: mockPreviewGitHubRepoImport,
+          importGitHubRepoSkills: mockImportGitHubRepoSkills,
+          resetGitHubImport: mockResetGitHubImport,
+        },
+        previewGitHubRepoImport: mockPreviewGitHubRepoImport,
+        importGitHubRepoSkills: mockImportGitHubRepoSkills,
+        resetGitHubImport: mockResetGitHubImport,
+      };
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    render(
+      <MemoryRouter>
+        <CentralSkillsView />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /从 GitHub 导入|GitHub/i }));
+    fireEvent.click(screen.getByRole("button", { name: /检查导入内容|Review import/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^导入$|^Import$/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("GitHub"),
+      );
+    });
+    expect(toast.error).not.toHaveBeenCalledWith(
+      expect.stringContaining("Install failed"),
+    );
   });
 
   it("preserves search and scroll state when closing the drawer and restores focus", async () => {

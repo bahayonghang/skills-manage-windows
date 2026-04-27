@@ -276,6 +276,7 @@ describe("marketplaceStore", () => {
           conflict: null,
         },
       ],
+      previewWorkspaceId: "github-preview-1",
     };
 
     mockInvoke.mockResolvedValueOnce(preview);
@@ -290,6 +291,9 @@ describe("marketplaceStore", () => {
       repoUrl: "https://github.com/anthropics/skills",
     });
     expect(useMarketplaceStore.getState().githubImport.preview).toEqual(preview);
+    expect(useMarketplaceStore.getState().githubImport.preview?.previewWorkspaceId).toBe(
+      "github-preview-1"
+    );
     expect(useMarketplaceStore.getState().githubImport.previewedRepoUrl).toBe(
       "https://github.com/anthropics/skills"
     );
@@ -357,6 +361,121 @@ describe("marketplaceStore", () => {
     });
     expect(useMarketplaceStore.getState().githubImport.importResult).toEqual(result);
     expect(useMarketplaceStore.getState().githubImport.isImporting).toBe(false);
+  });
+
+  it("passes the saved preview workspace id when importing ssh previews", async () => {
+    const result = {
+      repo: {
+        owner: "openai",
+        repo: "skills",
+        branch: "main",
+        normalizedUrl: "https://github.com/openai/skills",
+      },
+      importedSkills: [],
+      skippedSkills: [],
+    };
+    useMarketplaceStore.setState((state) => ({
+      githubImport: {
+        ...state.githubImport,
+        preview: {
+          repo: result.repo,
+          skills: [],
+          previewWorkspaceId: "github-preview-ssh",
+        },
+      },
+    }));
+    mockInvoke.mockResolvedValueOnce(result);
+
+    await useMarketplaceStore.getState().importGitHubRepoSkills(
+      "https://github.com/openai/skills",
+      [
+        {
+          sourcePath: "skills/openai-docs",
+          resolution: "overwrite",
+          renamedSkillId: null,
+        },
+      ],
+    );
+
+    expect(mockInvoke).toHaveBeenCalledWith("import_github_repo_skills", {
+      repoUrl: "https://github.com/openai/skills",
+      selections: [
+        {
+          sourcePath: "skills/openai-docs",
+          resolution: "overwrite",
+          renamedSkillId: null,
+        },
+      ],
+      previewWorkspaceId: "github-preview-ssh",
+    });
+  });
+
+  it("discards an old preview workspace before re-previewing", async () => {
+    const preview = {
+      repo: {
+        owner: "openai",
+        repo: "skills",
+        branch: "main",
+        normalizedUrl: "https://github.com/openai/skills",
+      },
+      skills: [],
+      previewWorkspaceId: "github-preview-new",
+    };
+    useMarketplaceStore.setState((state) => ({
+      githubImport: {
+        ...state.githubImport,
+        preview: {
+          repo: preview.repo,
+          skills: [],
+          previewWorkspaceId: "github-preview-old",
+        },
+      },
+    }));
+    mockInvoke.mockResolvedValueOnce(undefined).mockResolvedValueOnce(preview);
+
+    await useMarketplaceStore
+      .getState()
+      .previewGitHubRepoImport("https://github.com/openai/skills");
+
+    expect(mockInvoke).toHaveBeenNthCalledWith(
+      1,
+      "discard_github_repo_preview_workspace",
+      { workspaceId: "github-preview-old" },
+    );
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "preview_github_repo_import", {
+      repoUrl: "https://github.com/openai/skills",
+    });
+    expect(useMarketplaceStore.getState().githubImport.preview?.previewWorkspaceId).toBe(
+      "github-preview-new",
+    );
+  });
+
+  it("discards the preview workspace when resetting import state", async () => {
+    useMarketplaceStore.setState((state) => ({
+      githubImport: {
+        ...state.githubImport,
+        preview: {
+          repo: {
+            owner: "openai",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/openai/skills",
+          },
+          skills: [],
+          previewWorkspaceId: "github-preview-close",
+        },
+      },
+    }));
+
+    useMarketplaceStore.getState().resetGitHubImport();
+
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "discard_github_repo_preview_workspace",
+        { workspaceId: "github-preview-close" },
+      );
+    });
+    expect(useMarketplaceStore.getState().githubImport.preview).toBeNull();
   });
 
   it("reports a friendly desktop-only error when import is triggered outside Tauri", async () => {

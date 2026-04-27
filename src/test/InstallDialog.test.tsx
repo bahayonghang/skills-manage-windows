@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { InstallDialog } from "../components/central/InstallDialog";
-import { AgentWithStatus, SkillWithLinks } from "../types";
+import { AgentWithStatus, SkillWithLinks, TargetSummary } from "../types";
 import { getPlatformTargetGroups } from "../lib/platformTargetGroups";
+import { useTargetStore } from "../stores/targetStore";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -77,6 +78,17 @@ const mockSkill: SkillWithLinks = {
 
 const mockOnInstall = vi.fn();
 const mockOnOpenChange = vi.fn();
+const successInstallResult = {
+  succeeded: ["claude-code", "codex", "kiro"],
+  failed: [],
+};
+
+const localTarget: TargetSummary = {
+  id: "local",
+  kind: "local",
+  label: "Local",
+  isActive: true,
+};
 
 function renderDialog(props: {
   open?: boolean;
@@ -103,6 +115,11 @@ function renderDialog(props: {
 describe("InstallDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockOnInstall.mockResolvedValue(successInstallResult);
+    useTargetStore.setState({
+      targets: [localTarget],
+      activeTarget: localTarget,
+    });
   });
 
   // ── Rendering ─────────────────────────────────────────────────────────────
@@ -174,7 +191,7 @@ describe("InstallDialog", () => {
   });
 
   it("calls onInstall with selected agent IDs on confirm", async () => {
-    mockOnInstall.mockResolvedValueOnce(undefined);
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
 
     renderDialog();
     const confirmBtn = screen.getByRole("button", {
@@ -192,7 +209,7 @@ describe("InstallDialog", () => {
   });
 
   it("submits selected platform targets on confirm", async () => {
-    mockOnInstall.mockResolvedValueOnce(undefined);
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
 
     renderDialog();
     const confirmBtn = screen.getByRole("button", {
@@ -209,7 +226,7 @@ describe("InstallDialog", () => {
   });
 
   it("does not submit shared-root targets", async () => {
-    mockOnInstall.mockResolvedValueOnce(undefined);
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
 
     renderDialog({
       skill: {
@@ -230,7 +247,7 @@ describe("InstallDialog", () => {
   });
 
   it("passes 'symlink' method to onInstall by default", async () => {
-    mockOnInstall.mockResolvedValueOnce(undefined);
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
 
     renderDialog();
     const confirmBtn = screen.getByRole("button", {
@@ -248,7 +265,7 @@ describe("InstallDialog", () => {
   });
 
   it("passes 'copy' method to onInstall when copy is selected", async () => {
-    mockOnInstall.mockResolvedValueOnce(undefined);
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
 
     renderDialog();
 
@@ -271,8 +288,59 @@ describe("InstallDialog", () => {
     });
   });
 
+  it("defaults to symlink for remote targets that support symlinks", async () => {
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
+    const remoteTarget: TargetSummary = {
+      id: "ssh-demo",
+      kind: "ssh",
+      label: "Demo",
+      remoteOs: "Linux",
+      symlinkEnabled: true,
+      isActive: true,
+    };
+    useTargetStore.setState({
+      targets: [localTarget, remoteTarget],
+      activeTarget: remoteTarget,
+    });
+
+    renderDialog();
+
+    const confirmBtn = screen.getByRole("button", {
+      name: /安装到 .* 个平台/i,
+    });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockOnInstall).toHaveBeenCalledWith(
+        "frontend-design",
+        expect.any(Array),
+        "symlink"
+      );
+    });
+  });
+
+  it("keeps partial failures open with agent error details", async () => {
+    mockOnInstall.mockResolvedValueOnce({
+      succeeded: ["codex"],
+      failed: [
+        { agent_id: "claude-code", error: "A remote directory already exists" },
+      ],
+    });
+
+    renderDialog();
+    const confirmBtn = screen.getByRole("button", {
+      name: /安装到 .* 个平台/i,
+    });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/claude-code: A remote directory already exists/)).toBeInTheDocument();
+    });
+    expect(mockOnOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
   it("calls onOpenChange(false) after successful install", async () => {
-    mockOnInstall.mockResolvedValueOnce(undefined);
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
 
     renderDialog();
     const confirmBtn = screen.getByRole("button", {

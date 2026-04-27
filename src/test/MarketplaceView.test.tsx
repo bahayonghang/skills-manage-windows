@@ -101,7 +101,10 @@ function makeRegistry(id: string, url: string): SkillRegistry {
   };
 }
 
-function makePreview(skills: GitHubRepoPreview["skills"]): GitHubRepoPreview {
+function makePreview(
+  skills: GitHubRepoPreview["skills"],
+  previewWorkspaceId?: string | null,
+): GitHubRepoPreview {
   return {
     repo: {
       owner: "openai",
@@ -110,6 +113,7 @@ function makePreview(skills: GitHubRepoPreview["skills"]): GitHubRepoPreview {
       normalizedUrl: "https://github.com/openai/skills",
     },
     skills,
+    previewWorkspaceId,
   };
 }
 
@@ -187,6 +191,9 @@ vi.mock("@/stores/skillStore", () => ({
 
 import { MarketplaceView } from "@/pages/MarketplaceView";
 import * as tauriBridge from "@/lib/tauri";
+import { useTargetStore } from "@/stores/targetStore";
+
+const defaultUpdateSshTargetPassword = useTargetStore.getState().updateSshTargetPassword;
 
 describe("MarketplaceView", () => {
   beforeEach(() => {
@@ -226,6 +233,12 @@ describe("MarketplaceView", () => {
       previewedRepoUrl: null,
       error: null,
     };
+    useTargetStore.setState({
+      targets: [{ id: "local", kind: "local", label: "Local", isActive: true }],
+      activeTarget: { id: "local", kind: "local", label: "Local", isActive: true },
+      error: null,
+      updateSshTargetPassword: defaultUpdateSshTargetPassword,
+    });
   });
 
   function renderView() {
@@ -321,6 +334,62 @@ describe("MarketplaceView", () => {
     expect(screen.getByTestId("github-import-detail-pane")).toBeInTheDocument();
   });
 
+  it("shows the remote workspace hint for SSH previews", async () => {
+    useTargetStore.setState({
+      targets: [
+        { id: "local", kind: "local", label: "Local", isActive: false },
+        { id: "ssh-demo", kind: "ssh", label: "dckj", isActive: true },
+      ],
+      activeTarget: { id: "ssh-demo", kind: "ssh", label: "dckj", isActive: true },
+    });
+    storeState.githubImport.preview = makePreview(
+      [
+        {
+          sourcePath: "skills/.curated/openai-docs",
+          skillId: "openai-docs",
+          skillName: "OpenAI Docs",
+          description: "OpenAI docs skill description",
+          rootDirectory: "skills/.curated",
+          skillDirectoryName: "openai-docs",
+          downloadUrl: "https://example.com/openai-docs/SKILL.md",
+          conflict: null,
+        },
+      ],
+      "github-preview-ssh",
+    );
+
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /Import GitHub repo|导入 GitHub 仓库/i }));
+
+    expect(await screen.findByTestId("github-import-remote-workspace-hint")).toHaveTextContent(
+      /Preview workspace is on the active SSH target|预览工作区位于当前 SSH 目标/i,
+    );
+  });
+
+  it("does not show the remote workspace hint for local previews", async () => {
+    storeState.githubImport.preview = makePreview(
+      [
+        {
+          sourcePath: "skills/.curated/openai-docs",
+          skillId: "openai-docs",
+          skillName: "OpenAI Docs",
+          description: "OpenAI docs skill description",
+          rootDirectory: "skills/.curated",
+          skillDirectoryName: "openai-docs",
+          downloadUrl: "https://example.com/openai-docs/SKILL.md",
+          conflict: null,
+        },
+      ],
+      "github-preview-local-fixture",
+    );
+
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /Import GitHub repo|导入 GitHub 仓库/i }));
+
+    expect(await screen.findByTestId("github-import-preview-workspace")).toBeInTheDocument();
+    expect(screen.queryByTestId("github-import-remote-workspace-hint")).not.toBeInTheDocument();
+  });
+
   it("switches the selected preview skill inside the import wizard", async () => {
     storeState.githubImport.preview = makePreview([
       {
@@ -358,6 +427,115 @@ describe("MarketplaceView", () => {
       expect(within(detailPane).getByText("Skill Creator")).toBeInTheDocument();
     });
     expect(within(detailPane).queryByText("OpenAI Docs")).not.toBeInTheDocument();
+  });
+
+  it("bulk selects and deselects all preview skills", async () => {
+    storeState.githubImport.preview = makePreview([
+      {
+        sourcePath: "skills/.curated/openai-docs",
+        skillId: "openai-docs",
+        skillName: "OpenAI Docs",
+        description: "OpenAI docs skill description",
+        rootDirectory: "skills/.curated",
+        skillDirectoryName: "openai-docs",
+        downloadUrl: "https://example.com/openai-docs/SKILL.md",
+        conflict: null,
+      },
+      {
+        sourcePath: "skills/.system/skill-creator",
+        skillId: "skill-creator",
+        skillName: "Skill Creator",
+        description: "Create skills safely",
+        rootDirectory: "skills/.system",
+        skillDirectoryName: "skill-creator",
+        downloadUrl: "https://example.com/skill-creator/SKILL.md",
+        conflict: null,
+      },
+    ]);
+
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /GitHub/i }));
+
+    await screen.findByTestId("github-import-preview-workspace");
+    const summaryList = screen.getByTestId("github-import-summary-list");
+    const getSkillCheckboxes = () =>
+      within(summaryList).getAllByRole("checkbox") as HTMLInputElement[];
+    const bulkButtons = within(
+      screen.getByTestId("github-import-bulk-selection-controls"),
+    ).getAllByRole("button") as HTMLButtonElement[];
+    const [selectAllButton, deselectAllButton] = bulkButtons;
+    const getFooterActionButton = () => {
+      const buttons = screen
+        .getByTestId("github-import-shell-footer")
+        .querySelectorAll("button");
+      return buttons[buttons.length - 1] as HTMLButtonElement;
+    };
+
+    expect(getSkillCheckboxes()).toHaveLength(2);
+    expect(getSkillCheckboxes().every((checkbox) => checkbox.checked)).toBe(true);
+    expect(selectAllButton).toBeDisabled();
+    expect(deselectAllButton).toBeEnabled();
+    expect(getFooterActionButton()).toBeEnabled();
+
+    fireEvent.click(deselectAllButton);
+
+    await waitFor(() => {
+      expect(getSkillCheckboxes().every((checkbox) => !checkbox.checked)).toBe(true);
+    });
+    expect(screen.getByTestId("github-import-repo-toolbar").textContent).toContain("0");
+    expect(selectAllButton).toBeEnabled();
+    expect(deselectAllButton).toBeDisabled();
+    expect(getFooterActionButton()).toBeDisabled();
+
+    fireEvent.click(selectAllButton);
+
+    await waitFor(() => {
+      expect(getSkillCheckboxes().every((checkbox) => checkbox.checked)).toBe(true);
+    });
+    expect(getFooterActionButton()).toBeEnabled();
+  });
+
+  it("preserves conflict rename state while bulk toggling preview skills", async () => {
+    storeState.githubImport.preview = makePreview([
+      {
+        sourcePath: "skills/.system/skill-creator",
+        skillId: "skill-creator",
+        skillName: "Skill Creator",
+        description: "Create skills safely",
+        rootDirectory: "skills/.system",
+        skillDirectoryName: "skill-creator",
+        downloadUrl: "https://example.com/skill-creator/SKILL.md",
+        conflict: {
+          existingSkillId: "skill-creator",
+          existingName: "Skill Creator",
+          existingCanonicalPath: "/Users/test/.skillsmanage/skills/skill-creator",
+          proposedSkillId: "skill-creator",
+          proposedName: "Skill Creator",
+        },
+      },
+    ]);
+
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /GitHub/i }));
+
+    await screen.findByTestId("github-import-preview-workspace");
+    fireEvent.click(screen.getByRole("button", { name: /Rename|\u91cd\u547d\u540d/i }));
+    fireEvent.change(screen.getByPlaceholderText(/New skill id|\u65b0\u7684\u6280\u80fd ID/i), {
+      target: { value: "skill-creator-renamed" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirm|\u786e\u8ba4/i }));
+    const [selectAllButton, deselectAllButton] = within(
+      screen.getByTestId("github-import-bulk-selection-controls"),
+    ).getAllByRole("button") as HTMLButtonElement[];
+    fireEvent.click(deselectAllButton);
+    fireEvent.click(selectAllButton);
+    const footerButtons = screen
+      .getByTestId("github-import-shell-footer")
+      .querySelectorAll("button");
+    fireEvent.click(footerButtons[footerButtons.length - 1]);
+
+    const confirmSummary = await screen.findByTestId("github-import-confirm-summary");
+    expect(confirmSummary).toHaveTextContent("skill-creator-renamed");
   });
 
   it("turns conflict resolution into a confirm summary after renaming", async () => {
@@ -398,6 +576,174 @@ describe("MarketplaceView", () => {
       "data-footer-mode",
       "confirm",
     );
+  });
+
+  it("shows inline SSH password repair before remote github import", async () => {
+    const storedTarget = {
+      id: "ssh-demo",
+      kind: "ssh" as const,
+      label: "dckj",
+      authMethod: "password" as const,
+      hasStoredPassword: true,
+      credentialStatus: "stored" as const,
+      isActive: true,
+    };
+    const updateSshTargetPassword = vi.fn().mockImplementation(async () => {
+      useTargetStore.setState({
+        targets: [
+          { id: "local", kind: "local", label: "Local", isActive: false },
+          storedTarget,
+        ],
+        activeTarget: storedTarget,
+      });
+      return {
+        ok: true,
+        remoteHome: "/home/fixture",
+        remoteOs: "Linux",
+        credentialStatus: "stored",
+        message: "SSH password saved.",
+      };
+    });
+    useTargetStore.setState({
+      targets: [
+        { id: "local", kind: "local", label: "Local", isActive: false },
+        {
+          id: "ssh-demo",
+          kind: "ssh",
+          label: "dckj",
+          authMethod: "password",
+          hasStoredPassword: false,
+          isActive: true,
+        },
+      ],
+      activeTarget: {
+        id: "ssh-demo",
+        kind: "ssh",
+        label: "dckj",
+        authMethod: "password",
+        hasStoredPassword: false,
+        isActive: true,
+      },
+      updateSshTargetPassword,
+    });
+    storeState.githubImport.preview = makePreview([
+      {
+        sourcePath: "skills/.curated/openai-docs",
+        skillId: "openai-docs",
+        skillName: "OpenAI Docs",
+        description: "OpenAI docs skill description",
+        rootDirectory: "skills/.curated",
+        skillDirectoryName: "openai-docs",
+        downloadUrl: "https://example.com/openai-docs/SKILL.md",
+        conflict: null,
+      },
+    ]);
+
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /Import GitHub repo|导入 GitHub 仓库/i }));
+    await screen.findByTestId("github-import-preview-workspace");
+    fireEvent.click(screen.getByRole("button", { name: /Review import|检查导入内容/i }));
+
+    const repairPanel = await screen.findByTestId("github-import-ssh-password-repair");
+    expect(repairPanel).toHaveTextContent(/Save the active SSH password|保存当前 SSH 密码/i);
+    expect(screen.getByRole("button", { name: /^Import$|^导入$/i })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/SSH password for dckj|dckj 的 SSH 密码/i), {
+      target: { value: "secret" },
+    });
+    const savePasswordButton = screen.getByRole("button", { name: /Save password|保存密码/i });
+    await waitFor(() => {
+      expect(savePasswordButton).toBeEnabled();
+    });
+    fireEvent.click(savePasswordButton);
+    const footerButtons = screen
+      .getByTestId("github-import-shell-footer")
+      .querySelectorAll("button");
+    const importButton = footerButtons[footerButtons.length - 1] as HTMLButtonElement;
+
+    await waitFor(() => {
+      expect(updateSshTargetPassword).toHaveBeenCalledWith("ssh-demo", "secret");
+    });
+    await waitFor(() => {
+      expect(importButton).toBeEnabled();
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByText(/SSH password saved for dckj|已保存 dckj 的 SSH 密码/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("allows remote github import with a session-only SSH password", async () => {
+    const sessionTarget = {
+      id: "ssh-demo",
+      kind: "ssh" as const,
+      label: "dckj",
+      authMethod: "password" as const,
+      hasStoredPassword: true,
+      credentialStatus: "session" as const,
+      isActive: true,
+    };
+    const updateSshTargetPassword = vi.fn().mockImplementation(async () => {
+      useTargetStore.setState({
+        targets: [
+          { id: "local", kind: "local", label: "Local", isActive: false },
+          sessionTarget,
+        ],
+        activeTarget: sessionTarget,
+      });
+      return {
+        ok: true,
+        remoteHome: "/home/fixture",
+        remoteOs: "Linux",
+        credentialStatus: "session",
+        credentialError: "credential vault locked",
+        message: "session only",
+      };
+    });
+    useTargetStore.setState({
+      targets: [
+        { id: "local", kind: "local", label: "Local", isActive: false },
+        { ...sessionTarget, hasStoredPassword: false, credentialStatus: "missing" },
+      ],
+      activeTarget: {
+        ...sessionTarget,
+        hasStoredPassword: false,
+        credentialStatus: "missing",
+      },
+      updateSshTargetPassword,
+    });
+    storeState.githubImport.preview = makePreview([
+      {
+        sourcePath: "skills/.curated/openai-docs",
+        skillId: "openai-docs",
+        skillName: "OpenAI Docs",
+        description: "OpenAI docs skill description",
+        rootDirectory: "skills/.curated",
+        skillDirectoryName: "openai-docs",
+        downloadUrl: "https://example.com/openai-docs/SKILL.md",
+        conflict: null,
+      },
+    ]);
+
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /Import GitHub repo|导入 GitHub 仓库|å¯¼å…¥ GitHub ä»“åº“/i }));
+    await screen.findByTestId("github-import-preview-workspace");
+    fireEvent.click(screen.getByRole("button", { name: /Review import|检查导入内容|æ£€æŸ¥å¯¼å…¥å†…å®¹/i }));
+    fireEvent.change(screen.getByLabelText(/SSH password for dckj|dckj 的 SSH 密码|dckj çš„ SSH å¯†ç /i), {
+      target: { value: "secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Save password|保存密码|ä¿å­˜å¯†ç /i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("github-import-ssh-password-repair").textContent).toMatch(
+        /session|本次会话|ä¼šè¯/i,
+      );
+    });
+    const footerButtons = screen
+      .getByTestId("github-import-shell-footer")
+      .querySelectorAll("button");
+    expect(footerButtons[footerButtons.length - 1]).toBeEnabled();
   });
 
   it("renders the result hub when an import result already exists", async () => {

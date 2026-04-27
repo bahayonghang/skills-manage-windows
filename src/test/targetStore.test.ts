@@ -133,15 +133,21 @@ describe("targetStore", () => {
         ok: true,
         remoteHome: "/home/alice",
         remoteOs: "Linux",
+        credentialStatus: "stored",
         message: "saved",
       })
-      .mockResolvedValueOnce([localTarget, sshTarget]);
+      .mockResolvedValueOnce([
+        { ...localTarget, isActive: false },
+        { ...sshTarget, hasStoredPassword: true, credentialStatus: "stored", isActive: true },
+      ]);
 
     const result = await useTargetStore
       .getState()
       .updateSshTargetPassword("ssh-demo", "secret");
 
     expect(result.ok).toBe(true);
+    expect(result.credentialStatus).toBe("stored");
+    expect(useTargetStore.getState().activeTarget.credentialStatus).toBe("stored");
     expect(invoke).toHaveBeenCalledWith("update_ssh_target_password", {
       targetId: "ssh-demo",
       password: "secret",
