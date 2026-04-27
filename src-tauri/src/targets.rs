@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
+use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -13,6 +14,8 @@ use crate::db::{self, DbPool};
 const TARGETS_SETTING_KEY: &str = "ssh_targets_v1";
 const ACTIVE_TARGET_SETTING_KEY: &str = "active_target_id_v1";
 const SSH_PASSWORD_SERVICE: &str = "SkillPort SSH Targets";
+const SSH_ASKPASS_HELPER_ENV: &str = "SKILLPORT_SSH_ASKPASS_HELPER";
+const SSH_PASSWORD_ENV: &str = "SKILLPORT_SSH_PASSWORD";
 pub const LOCAL_TARGET_ID: &str = "local";
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -1220,6 +1223,27 @@ struct SshProbe {
     remote_os: String,
 }
 
+fn askpass_password_from_env(
+    marker: Option<OsString>,
+    password: Option<OsString>,
+) -> Option<String> {
+    marker?;
+    Some(password.unwrap_or_default().to_string_lossy().into_owned())
+}
+
+pub fn maybe_run_ssh_askpass_helper() -> bool {
+    let Some(password) = askpass_password_from_env(
+        env::var_os(SSH_ASKPASS_HELPER_ENV),
+        env::var_os(SSH_PASSWORD_ENV),
+    ) else {
+        return false;
+    };
+
+    print!("{}", password);
+    let _ = std::io::stdout().flush();
+    true
+}
+
 async fn probe_ssh_target(target: &RemoteTargetConfig) -> Result<SshProbe, String> {
     let connection = connect_ssh_target(target).await?;
     let output = connection
@@ -1272,7 +1296,14 @@ pub struct RemotePathInfo {
 pub struct ConnectedSshTarget {
     target: RemoteTargetConfig,
     password: Option<String>,
-    askpass_path: Option<PathBuf>,
+    askpass_helper: Option<AskpassHelper>,
+}
+
+#[derive(Debug, Clone)]
+struct AskpassHelper {
+    path: PathBuf,
+    remove_on_drop: bool,
+    use_app_helper_env: bool,
 }
 
 pub async fn connect_ssh_target(target: &RemoteTargetConfig) -> Result<ConnectedSshTarget, String> {
@@ -1280,14 +1311,14 @@ pub async fn connect_ssh_target(target: &RemoteTargetConfig) -> Result<Connected
         SshAuthMethod::Key => None,
         SshAuthMethod::Password => Some(load_target_password(target)?),
     };
-    let askpass_path = match password.as_deref() {
-        Some(_) => Some(create_askpass_script()?),
+    let askpass_helper = match password.as_deref() {
+        Some(_) => Some(create_askpass_helper()?),
         None => None,
     };
     let connection = ConnectedSshTarget {
         target: target.clone(),
         password,
-        askpass_path,
+        askpass_helper,
     };
     connection
         .run_command("printf '%s' connected >/dev/null")
@@ -1295,18 +1326,26 @@ pub async fn connect_ssh_target(target: &RemoteTargetConfig) -> Result<Connected
     Ok(connection)
 }
 
-fn create_askpass_script() -> Result<PathBuf, String> {
-    let extension = if cfg!(windows) { "cmd" } else { "sh" };
+#[cfg(windows)]
+fn create_askpass_helper() -> Result<AskpassHelper, String> {
+    let path = env::current_exe()
+        .map_err(|e| format!("Failed to resolve SkillPort SSH askpass helper path: {}", e))?;
+    Ok(AskpassHelper {
+        path,
+        remove_on_drop: false,
+        use_app_helper_env: true,
+    })
+}
+
+#[cfg(not(windows))]
+fn create_askpass_helper() -> Result<AskpassHelper, String> {
+    let extension = "sh";
     let path = env::temp_dir().join(format!(
         "skillport-ssh-askpass-{}.{}",
         Uuid::new_v4(),
         extension
     ));
-    let content = if cfg!(windows) {
-        "@echo off\r\n<nul set /p \"=%SKILLPORT_SSH_PASSWORD%\"\r\nexit /b 0\r\n"
-    } else {
-        "#!/bin/sh\nprintf '%s' \"$SKILLPORT_SSH_PASSWORD\"\n"
-    };
+    let content = format!("#!/bin/sh\nprintf '%s' \"${}\"\n", SSH_PASSWORD_ENV);
     fs::write(&path, content).map_err(|e| {
         format!(
             "Failed to create SSH askpass helper '{}': {}",
@@ -1315,7 +1354,11 @@ fn create_askpass_script() -> Result<PathBuf, String> {
         )
     })?;
     set_askpass_permissions(&path)?;
-    Ok(path)
+    Ok(AskpassHelper {
+        path,
+        remove_on_drop: true,
+        use_app_helper_env: false,
+    })
 }
 
 #[cfg(unix)]
@@ -1340,15 +1383,12 @@ fn set_askpass_permissions(path: &PathBuf) -> Result<(), String> {
     })
 }
 
-#[cfg(not(unix))]
-fn set_askpass_permissions(_path: &PathBuf) -> Result<(), String> {
-    Ok(())
-}
-
 impl Drop for ConnectedSshTarget {
     fn drop(&mut self) {
-        if let Some(path) = &self.askpass_path {
-            let _ = fs::remove_file(path);
+        if let Some(helper) = &self.askpass_helper {
+            if helper.remove_on_drop {
+                let _ = fs::remove_file(&helper.path);
+            }
         }
     }
 }
@@ -1403,12 +1443,15 @@ impl ConnectedSshTarget {
                     .arg("PubkeyAuthentication=no")
                     .arg("-o")
                     .arg("NumberOfPasswordPrompts=1");
-                if let (Some(path), Some(password)) = (&self.askpass_path, &self.password) {
+                if let (Some(helper), Some(password)) = (&self.askpass_helper, &self.password) {
                     command
-                        .env("SSH_ASKPASS", path)
+                        .env("SSH_ASKPASS", &helper.path)
                         .env("SSH_ASKPASS_REQUIRE", "force")
                         .env("DISPLAY", "skillport")
-                        .env("SKILLPORT_SSH_PASSWORD", password);
+                        .env(SSH_PASSWORD_ENV, password);
+                    if helper.use_app_helper_env {
+                        command.env(SSH_ASKPASS_HELPER_ENV, "1");
+                    }
                 }
             }
         }
@@ -1793,11 +1836,24 @@ mod tests {
             .collect()
     }
 
+    #[cfg(windows)]
+    fn command_env_strings(command: &Command) -> HashMap<String, Option<String>> {
+        command
+            .get_envs()
+            .map(|(key, value)| {
+                (
+                    key.to_string_lossy().into_owned(),
+                    value.map(|value| value.to_string_lossy().into_owned()),
+                )
+            })
+            .collect()
+    }
+
     fn ssh_connection_for(target: RemoteTargetConfig) -> ConnectedSshTarget {
         ConnectedSshTarget {
             password: target.password.clone(),
             target,
-            askpass_path: None,
+            askpass_helper: None,
         }
     }
 
@@ -1829,35 +1885,45 @@ mod tests {
     }
 
     #[test]
-    fn askpass_helper_avoids_powershell_on_windows() {
-        let path = create_askpass_script().expect("askpass");
-        let content = fs::read_to_string(&path).expect("read askpass");
-        let _ = fs::remove_file(&path);
-
-        assert!(!content.to_ascii_lowercase().contains("powershell"));
-        if cfg!(windows) {
-            assert!(content.contains("%SKILLPORT_SSH_PASSWORD%"));
-            assert!(content.contains("<nul set /p"));
-            assert!(content.contains("exit /b 0"));
-        } else {
-            assert!(content.contains("$SKILLPORT_SSH_PASSWORD"));
-        }
+    fn askpass_helper_mode_requires_marker_env() {
+        assert_eq!(
+            askpass_password_from_env(None, Some(OsString::from("secret"))),
+            None
+        );
+        assert_eq!(
+            askpass_password_from_env(Some(OsString::from("1")), Some(OsString::from("secret"))),
+            Some("secret".to_string())
+        );
+        assert_eq!(
+            askpass_password_from_env(Some(OsString::from("1")), None),
+            Some(String::new())
+        );
     }
 
     #[cfg(windows)]
     #[test]
-    fn windows_askpass_helper_outputs_password_with_success_status() {
-        let path = create_askpass_script().expect("askpass");
-        let output = Command::new("cmd")
-            .arg("/C")
-            .arg(&path)
-            .env("SKILLPORT_SSH_PASSWORD", "pa&ss")
-            .output()
-            .expect("run askpass");
-        let _ = fs::remove_file(&path);
+    fn windows_askpass_helper_uses_current_exe_without_temp_script() {
+        let helper = create_askpass_helper().expect("askpass");
 
-        assert!(output.status.success());
-        assert_eq!(String::from_utf8(output.stdout).unwrap(), "pa&ss");
+        assert_eq!(helper.path, env::current_exe().expect("current exe"));
+        assert!(!helper.remove_on_drop);
+        assert!(helper.use_app_helper_env);
+        assert_ne!(
+            helper.path.extension().and_then(|value| value.to_str()),
+            Some("cmd")
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn unix_askpass_helper_writes_shell_script() {
+        let helper = create_askpass_helper().expect("askpass");
+        let content = fs::read_to_string(&helper.path).expect("read askpass");
+        let _ = fs::remove_file(&helper.path);
+
+        assert!(helper.remove_on_drop);
+        assert!(!helper.use_app_helper_env);
+        assert!(content.contains("$SKILLPORT_SSH_PASSWORD"));
     }
 
     #[test]
@@ -1922,6 +1988,38 @@ mod tests {
         assert!(pubkey_disabled < destination);
         assert!(prompt_count < destination);
         assert_eq!(args.last().map(String::as_str), Some("alice@lab.local"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn ssh_base_command_uses_hidden_app_askpass_on_windows() {
+        let target = password_target();
+        let password = target.password.clone();
+        let helper = create_askpass_helper().expect("askpass");
+        let helper_path = helper.path.to_string_lossy().into_owned();
+        let connection = ConnectedSshTarget {
+            password,
+            target,
+            askpass_helper: Some(helper),
+        };
+
+        let command = connection.base_command();
+        let envs = command_env_strings(&command);
+
+        assert_eq!(
+            envs.get("SSH_ASKPASS").and_then(|value| value.as_deref()),
+            Some(helper_path.as_str())
+        );
+        assert_eq!(
+            envs.get(SSH_ASKPASS_HELPER_ENV)
+                .and_then(|value| value.as_deref()),
+            Some("1")
+        );
+        assert_eq!(
+            envs.get(SSH_PASSWORD_ENV)
+                .and_then(|value| value.as_deref()),
+            Some("secret")
+        );
     }
 
     #[test]
