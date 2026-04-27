@@ -5,6 +5,7 @@ import {
   SshTargetTestResult,
   TargetSummary,
   TestSshTargetRequest,
+  UpdateSshTargetRequest,
 } from "@/types";
 
 const LOCAL_TARGET: TargetSummary = {
@@ -19,6 +20,7 @@ interface TargetState {
   activeTarget: TargetSummary;
   isLoading: boolean;
   isCreating: boolean;
+  updatingTargetId: string | null;
   testingTargetId: string | null;
   updatingPasswordTargetId: string | null;
   switchingTargetId: string | null;
@@ -27,6 +29,7 @@ interface TargetState {
 
   loadTargets: () => Promise<void>;
   createSshTarget: (request: CreateSshTargetRequest) => Promise<TargetSummary>;
+  updateSshTarget: (request: UpdateSshTargetRequest) => Promise<TargetSummary>;
   testSshTarget: (request: TestSshTargetRequest) => Promise<SshTargetTestResult>;
   updateSshTargetPassword: (targetId: string, password: string) => Promise<SshTargetTestResult>;
   deleteTarget: (targetId: string) => Promise<void>;
@@ -50,6 +53,7 @@ export const useTargetStore = create<TargetState>((set, get) => ({
   activeTarget: LOCAL_TARGET,
   isLoading: false,
   isCreating: false,
+  updatingTargetId: null,
   testingTargetId: null,
   updatingPasswordTargetId: null,
   switchingTargetId: null,
@@ -97,6 +101,24 @@ export const useTargetStore = create<TargetState>((set, get) => ({
     } catch (err) {
       set({ error: String(err), isCreating: false });
       throw err;
+    }
+  },
+
+  updateSshTarget: async (request) => {
+    if (!isTauriRuntime()) {
+      throw new Error("Remote targets are available only in the Tauri app.");
+    }
+
+    set({ updatingTargetId: request.id, error: null });
+    try {
+      const target = await invoke<TargetSummary>("update_ssh_target", { request });
+      await get().loadTargets();
+      return target;
+    } catch (err) {
+      set({ error: String(err) });
+      throw err;
+    } finally {
+      set({ updatingTargetId: null });
     }
   },
 

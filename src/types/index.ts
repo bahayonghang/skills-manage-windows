@@ -405,6 +405,7 @@ export interface TargetSummary {
   username?: string | null;
   port?: number | null;
   authMethod?: SshAuthMethod | null;
+  keyPath?: string | null;
   remoteHome?: string | null;
   remoteOs?: string | null;
   cacheDbPath?: string | null;
@@ -416,6 +417,18 @@ export interface TargetSummary {
 }
 
 export interface CreateSshTargetRequest {
+  label: string;
+  host: string;
+  username: string;
+  port?: number | null;
+  authMethod?: SshAuthMethod | null;
+  keyPath?: string | null;
+  password?: string | null;
+  passphrase?: string | null;
+}
+
+export interface UpdateSshTargetRequest {
+  id: string;
   label: string;
   host: string;
   username: string;

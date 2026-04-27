@@ -49,6 +49,26 @@ const APP_VERSION = __APP_VERSION__;
 const DB_PATH_FALLBACK = "~/.skillsmanage/db.sqlite";
 const REPO_URL = "https://github.com/bahayonghang/skills-manage-windows";
 
+type SshTargetFormState = {
+  label: string;
+  host: string;
+  username: string;
+  port: string;
+  authMethod: SshAuthMethod;
+  keyPath: string;
+  password: string;
+};
+
+const EMPTY_SSH_TARGET_FORM: SshTargetFormState = {
+  label: "",
+  host: "",
+  username: "",
+  port: "22",
+  authMethod: "key",
+  keyPath: "",
+  password: "",
+};
+
 function sshCredentialStatus(target: TargetSummary) {
   if (target.authMethod !== "password") return null;
   return target.credentialStatus ?? (target.hasStoredPassword ? "stored" : "missing");
@@ -493,12 +513,14 @@ export function SettingsView() {
   const activeTarget = useTargetStore((s) => s.activeTarget);
   const isLoadingTargets = useTargetStore((s) => s.isLoading);
   const isCreatingTarget = useTargetStore((s) => s.isCreating);
+  const updatingTargetId = useTargetStore((s) => s.updatingTargetId);
   const testingTargetId = useTargetStore((s) => s.testingTargetId);
   const updatingPasswordTargetId = useTargetStore((s) => s.updatingPasswordTargetId);
   const switchingTargetId = useTargetStore((s) => s.switchingTargetId);
   const deletingTargetId = useTargetStore((s) => s.deletingTargetId);
   const loadTargets = useTargetStore((s) => s.loadTargets);
   const createSshTarget = useTargetStore((s) => s.createSshTarget);
+  const updateSshTarget = useTargetStore((s) => s.updateSshTarget);
   const testSshTarget = useTargetStore((s) => s.testSshTarget);
   const updateSshTargetPassword = useTargetStore((s) => s.updateSshTargetPassword);
   const deleteTarget = useTargetStore((s) => s.deleteTarget);
@@ -634,15 +656,10 @@ export function SettingsView() {
   const [platformError, setPlatformError] = useState<string | null>(null);
   const [githubPatInput, setGitHubPatInput] = useState("");
   const [githubPatMessage, setGitHubPatMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [sshTargetForm, setSshTargetForm] = useState({
-    label: "",
-    host: "",
-    username: "",
-    port: "22",
-    authMethod: "key" as SshAuthMethod,
-    keyPath: "",
-    password: "",
-  });
+  const [sshTargetForm, setSshTargetForm] = useState<SshTargetFormState>(EMPTY_SSH_TARGET_FORM);
+  const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
+  const [sshTargetEditForm, setSshTargetEditForm] =
+    useState<SshTargetFormState>(EMPTY_SSH_TARGET_FORM);
   const [sshTargetPasswordUpdates, setSshTargetPasswordUpdates] = useState<Record<string, string>>({});
   const [targetMessage, setTargetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const normalizedPlatformVisibilityQuery = useMemo(
@@ -731,41 +748,63 @@ export function SettingsView() {
     ]);
   }
 
-  function updateSshTargetForm(field: keyof typeof sshTargetForm, value: string) {
+  function updateSshTargetForm(field: keyof SshTargetFormState, value: string) {
     setSshTargetForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateSshTargetEditForm(field: keyof SshTargetFormState, value: string) {
+    setSshTargetEditForm((current) => ({ ...current, [field]: value }));
   }
 
   function updateExistingTargetPassword(targetId: string, value: string) {
     setSshTargetPasswordUpdates((current) => ({ ...current, [targetId]: value }));
   }
 
-  function sshTargetPayload() {
-    const port = Number(sshTargetForm.port.trim() || "22");
-    const authMethod = sshTargetForm.authMethod;
+  function targetToSshTargetForm(target: TargetSummary): SshTargetFormState {
     return {
-      label: sshTargetForm.label.trim(),
-      host: sshTargetForm.host.trim(),
-      username: sshTargetForm.username.trim(),
+      label: target.label,
+      host: target.host ?? "",
+      username: target.username ?? "",
+      port: String(target.port ?? 22),
+      authMethod: target.authMethod ?? "key",
+      keyPath: target.keyPath ?? "",
+      password: "",
+    };
+  }
+
+  function sshTargetPayload(form: SshTargetFormState, includeEmptyPassword: boolean) {
+    const port = Number(form.port.trim() || "22");
+    const authMethod = form.authMethod;
+    const password = form.password.trim();
+    return {
+      label: form.label.trim(),
+      host: form.host.trim(),
+      username: form.username.trim(),
       port: Number.isFinite(port) ? port : 22,
       authMethod,
-      keyPath: authMethod === "key" ? sshTargetForm.keyPath.trim() : null,
-      password: authMethod === "password" ? sshTargetForm.password : null,
+      keyPath: authMethod === "key" ? form.keyPath.trim() : null,
+      password: authMethod === "password" && (includeEmptyPassword || password)
+        ? form.password
+        : null,
     };
+  }
+
+  function handleStartEditTarget(target: TargetSummary) {
+    setTargetMessage(null);
+    setEditingTargetId(target.id);
+    setSshTargetEditForm(targetToSshTargetForm(target));
+  }
+
+  function handleCancelEditTarget() {
+    setEditingTargetId(null);
+    setSshTargetEditForm(EMPTY_SSH_TARGET_FORM);
   }
 
   async function handleCreateSshTarget() {
     setTargetMessage(null);
     try {
-      const target = await createSshTarget(sshTargetPayload());
-      setSshTargetForm({
-        label: "",
-        host: "",
-        username: "",
-        port: "22",
-        authMethod: "key",
-        keyPath: "",
-        password: "",
-      });
+      const target = await createSshTarget(sshTargetPayload(sshTargetForm, true));
+      setSshTargetForm(EMPTY_SSH_TARGET_FORM);
       setTargetMessage({ type: "success", text: t("targets.created", { label: target.label }) });
       toast.success(t("targets.created", { label: target.label }));
     } catch (err) {
@@ -778,7 +817,7 @@ export function SettingsView() {
   async function handleTestNewSshTarget() {
     setTargetMessage(null);
     try {
-      const result = await testSshTarget(sshTargetPayload());
+      const result = await testSshTarget(sshTargetPayload(sshTargetForm, true));
       const text = result.ok
         ? t("targets.testSucceeded", {
             home: result.remoteHome ?? "",
@@ -818,6 +857,27 @@ export function SettingsView() {
       } else {
         toast.error(text);
       }
+    } catch (err) {
+      const text = String(err);
+      setTargetMessage({ type: "error", text });
+      toast.error(text);
+    }
+  }
+
+  async function handleUpdateSshTarget(target: TargetSummary) {
+    setTargetMessage(null);
+    try {
+      const updatedTarget = await updateSshTarget({
+        id: target.id,
+        ...sshTargetPayload(sshTargetEditForm, false),
+      });
+      setEditingTargetId(null);
+      setSshTargetEditForm(EMPTY_SSH_TARGET_FORM);
+      updateExistingTargetPassword(target.id, "");
+      await refreshAfterTargetChange();
+      const text = t("targets.updated", { label: updatedTarget.label });
+      setTargetMessage({ type: "success", text });
+      toast.success(text);
     } catch (err) {
       const text = String(err);
       setTargetMessage({ type: "error", text });
@@ -1105,116 +1165,276 @@ export function SettingsView() {
                   const isActive = target.id === activeTarget.id || target.isActive;
                   const passwordUpdateValue = sshTargetPasswordUpdates[target.id] ?? "";
                   const credentialStatus = sshCredentialStatus(target);
+                  const isEditing = editingTargetId === target.id;
                   return (
                     <div
                       key={target.id}
-                      className="flex items-center gap-3 border-b border-border/50 px-4 py-3 last:border-0"
+                      className="border-b border-border/50 last:border-0"
                     >
-                      <Server className="size-4 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-medium">
-                            {isLocal ? t("targets.local") : target.label}
-                          </span>
-                          {isActive && (
-                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
-                              {t("targets.active")}
+                      <div className="flex items-center gap-3 px-4 py-3">
+                        <Server className="size-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-medium">
+                              {isLocal ? t("targets.local") : target.label}
                             </span>
+                            {isActive && (
+                              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                                {t("targets.active")}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {isLocal
+                              ? t("targets.localDescription")
+                              : `${target.authMethod === "password" ? t("targets.authPassword") : t("targets.authKey")} - ${target.username ?? ""}@${target.host ?? ""}:${target.port ?? 22} - ${target.remoteOs ?? "unknown"} - ${target.remoteHome ?? ""}`}
+                          </div>
+                          {!isLocal && target.cacheDbPath && (
+                            <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/80">
+                              {target.cacheDbPath}
+                            </div>
+                          )}
+                          {!isLocal && target.authMethod === "password" && (
+                            <div className="mt-2 max-w-xl space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                  className={`rounded-full border px-2 py-0.5 text-[11px] ${sshCredentialStatusClass(credentialStatus)}`}
+                                >
+                                  {t(`targets.credentialStatus.${credentialStatus ?? "missing"}`)}
+                                </span>
+                                {target.credentialError ? (
+                                  <span className="text-[11px] text-muted-foreground">
+                                    {target.credentialError}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="flex flex-col gap-2 sm:flex-row">
+                                <Input
+                                  type="password"
+                                  value={passwordUpdateValue}
+                                  onChange={(event) => updateExistingTargetPassword(target.id, event.target.value)}
+                                  placeholder={t("targets.updatePasswordPlaceholder")}
+                                  aria-label={t("targets.updatePasswordFor", { label: target.label })}
+                                  className="h-8 text-xs"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={
+                                    updatingPasswordTargetId === target.id ||
+                                    testingTargetId === target.id ||
+                                    !passwordUpdateValue.trim()
+                                  }
+                                  onClick={() => void handleUpdateTargetPassword(target)}
+                                >
+                                  {updatingPasswordTargetId === target.id ? (
+                                    <Loader2 className="size-3.5 animate-spin" />
+                                  ) : null}
+                                  {t("targets.updatePassword")}
+                                </Button>
+                              </div>
+                            </div>
                           )}
                         </div>
-                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {isLocal
-                            ? t("targets.localDescription")
-                            : `${target.authMethod === "password" ? t("targets.authPassword") : t("targets.authKey")} - ${target.username ?? ""}@${target.host ?? ""}:${target.port ?? 22} - ${target.remoteOs ?? "unknown"} - ${target.remoteHome ?? ""}`}
-                        </div>
-                        {!isLocal && target.cacheDbPath && (
-                          <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/80">
-                            {target.cacheDbPath}
-                          </div>
-                        )}
-                        {!isLocal && target.authMethod === "password" && (
-                          <div className="mt-2 max-w-xl space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span
-                                className={`rounded-full border px-2 py-0.5 text-[11px] ${sshCredentialStatusClass(credentialStatus)}`}
-                              >
-                                {t(`targets.credentialStatus.${credentialStatus ?? "missing"}`)}
-                              </span>
-                              {target.credentialError ? (
-                                <span className="text-[11px] text-muted-foreground">
-                                  {target.credentialError}
-                                </span>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {!isLocal && (
+                            <Button
+                              type="button"
+                              variant={isEditing ? "secondary" : "outline"}
+                              size="sm"
+                              disabled={updatingTargetId === target.id}
+                              onClick={() =>
+                                isEditing ? handleCancelEditTarget() : handleStartEditTarget(target)
+                              }
+                              aria-label={t("targets.editLabel", { label: target.label })}
+                            >
+                              <Pencil className="size-3.5" />
+                              {isEditing ? t("common.cancel") : t("common.edit")}
+                            </Button>
+                          )}
+                          {!isLocal && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={testingTargetId === target.id}
+                              onClick={() => void handleTestExistingTarget(target.id)}
+                            >
+                              {testingTargetId === target.id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
                               ) : null}
+                              {t("targets.test")}
+                            </Button>
+                          )}
+                          {!isActive && (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              disabled={switchingTargetId === target.id || isLoadingTargets}
+                              onClick={() => void handleSwitchTarget(target.id)}
+                            >
+                              {switchingTargetId === target.id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : null}
+                              {t("targets.activate")}
+                            </Button>
+                          )}
+                          {!isLocal && (
+                            <InlineConfirmAction
+                              onConfirm={() => handleDeleteTarget(target.id)}
+                              isLoading={deletingTargetId === target.id}
+                              idleAriaLabel={t("targets.deleteLabel", { label: target.label })}
+                              idleTitle={t("targets.deleteLabel", { label: target.label })}
+                              confirmLabel={t("common.confirmDelete")}
+                              icon={<Trash2 className="size-3.5" />}
+                            />
+                          )}
+                        </div>
+                      </div>
+                      {!isLocal && isEditing && (
+                        <div className="px-4 pb-4 pl-11">
+                          <div className="grid gap-3 rounded-lg border border-border/70 bg-muted/20 p-3 md:grid-cols-5">
+                            <div className="space-y-1 md:col-span-5">
+                              <div
+                                id={`edit-ssh-auth-method-${target.id}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {t("targets.authMethodLabel")}
+                              </div>
+                              <div
+                                className="flex gap-2"
+                                role="group"
+                                aria-labelledby={`edit-ssh-auth-method-${target.id}`}
+                              >
+                                {(["key", "password"] as const).map((method) => (
+                                  <Button
+                                    key={method}
+                                    type="button"
+                                    variant={sshTargetEditForm.authMethod === method ? "default" : "outline"}
+                                    className="flex-1"
+                                    onClick={() => updateSshTargetEditForm("authMethod", method)}
+                                    aria-pressed={sshTargetEditForm.authMethod === method}
+                                  >
+                                    {method === "key" ? t("targets.authKey") : t("targets.authPassword")}
+                                  </Button>
+                                ))}
+                              </div>
                             </div>
-                            <div className="flex flex-col gap-2 sm:flex-row">
+                            <div className="space-y-1">
+                              <label
+                                htmlFor={`edit-ssh-label-${target.id}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {t("targets.labelPlaceholder")}
+                              </label>
                               <Input
-                                type="password"
-                                value={passwordUpdateValue}
-                                onChange={(event) => updateExistingTargetPassword(target.id, event.target.value)}
-                                placeholder={t("targets.updatePasswordPlaceholder")}
-                                aria-label={t("targets.updatePasswordFor", { label: target.label })}
-                                className="h-8 text-xs"
+                                id={`edit-ssh-label-${target.id}`}
+                                value={sshTargetEditForm.label}
+                                onChange={(event) => updateSshTargetEditForm("label", event.target.value)}
+                                placeholder={t("targets.labelPlaceholder")}
                               />
+                            </div>
+                            <div className="space-y-1">
+                              <label
+                                htmlFor={`edit-ssh-host-${target.id}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {t("targets.hostPlaceholder")}
+                              </label>
+                              <Input
+                                id={`edit-ssh-host-${target.id}`}
+                                value={sshTargetEditForm.host}
+                                onChange={(event) => updateSshTargetEditForm("host", event.target.value)}
+                                placeholder={t("targets.hostPlaceholder")}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label
+                                htmlFor={`edit-ssh-username-${target.id}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {t("targets.usernamePlaceholder")}
+                              </label>
+                              <Input
+                                id={`edit-ssh-username-${target.id}`}
+                                value={sshTargetEditForm.username}
+                                onChange={(event) => updateSshTargetEditForm("username", event.target.value)}
+                                placeholder={t("targets.usernamePlaceholder")}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label
+                                htmlFor={`edit-ssh-port-${target.id}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {t("targets.portLabel")}
+                              </label>
+                              <Input
+                                id={`edit-ssh-port-${target.id}`}
+                                value={sshTargetEditForm.port}
+                                onChange={(event) => updateSshTargetEditForm("port", event.target.value)}
+                                placeholder="22"
+                              />
+                            </div>
+                            <div className="space-y-1 md:col-span-3">
+                              <label
+                                htmlFor={`edit-ssh-credential-${target.id}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {sshTargetEditForm.authMethod === "key"
+                                  ? t("targets.keyPathPlaceholder")
+                                  : t("targets.passwordPlaceholder")}
+                              </label>
+                              <Input
+                                id={`edit-ssh-credential-${target.id}`}
+                                type={sshTargetEditForm.authMethod === "password" ? "password" : "text"}
+                                value={
+                                  sshTargetEditForm.authMethod === "key"
+                                    ? sshTargetEditForm.keyPath
+                                    : sshTargetEditForm.password
+                                }
+                                onChange={(event) =>
+                                  updateSshTargetEditForm(
+                                    sshTargetEditForm.authMethod === "key" ? "keyPath" : "password",
+                                    event.target.value
+                                  )
+                                }
+                                placeholder={
+                                  sshTargetEditForm.authMethod === "key"
+                                    ? t("targets.keyPathPlaceholder")
+                                    : target.authMethod === "password"
+                                      ? t("targets.passwordOptionalPlaceholder")
+                                      : t("targets.passwordPlaceholder")
+                                }
+                              />
+                            </div>
+                            <div className="flex gap-2 md:col-span-2 md:items-end">
                               <Button
                                 type="button"
                                 variant="outline"
-                                size="sm"
-                                disabled={
-                                  updatingPasswordTargetId === target.id ||
-                                  testingTargetId === target.id ||
-                                  !passwordUpdateValue.trim()
-                                }
-                                onClick={() => void handleUpdateTargetPassword(target)}
+                                className="flex-1"
+                                disabled={updatingTargetId === target.id}
+                                onClick={handleCancelEditTarget}
                               >
-                                {updatingPasswordTargetId === target.id ? (
+                                {t("common.cancel")}
+                              </Button>
+                              <Button
+                                type="button"
+                                className="flex-1"
+                                disabled={updatingTargetId === target.id}
+                                onClick={() => void handleUpdateSshTarget(target)}
+                              >
+                                {updatingTargetId === target.id ? (
                                   <Loader2 className="size-3.5 animate-spin" />
                                 ) : null}
-                                {t("targets.updatePassword")}
+                                {t("targets.saveChanges")}
                               </Button>
                             </div>
                           </div>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        {!isLocal && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={testingTargetId === target.id}
-                            onClick={() => void handleTestExistingTarget(target.id)}
-                          >
-                            {testingTargetId === target.id ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : null}
-                            {t("targets.test")}
-                          </Button>
-                        )}
-                        {!isActive && (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            disabled={switchingTargetId === target.id || isLoadingTargets}
-                            onClick={() => void handleSwitchTarget(target.id)}
-                          >
-                            {switchingTargetId === target.id ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : null}
-                            {t("targets.activate")}
-                          </Button>
-                        )}
-                        {!isLocal && (
-                          <InlineConfirmAction
-                            onConfirm={() => handleDeleteTarget(target.id)}
-                            isLoading={deletingTargetId === target.id}
-                            idleAriaLabel={t("targets.deleteLabel", { label: target.label })}
-                            idleTitle={t("targets.deleteLabel", { label: target.label })}
-                            confirmLabel={t("common.confirmDelete")}
-                            icon={<Trash2 className="size-3.5" />}
-                          />
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
