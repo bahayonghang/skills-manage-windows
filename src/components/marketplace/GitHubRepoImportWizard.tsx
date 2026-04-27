@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
+  CheckSquare,
   CheckCircle2,
   ExternalLink,
   FileQuestion,
@@ -9,7 +10,9 @@ import {
   Loader2,
   PartyPopper,
   RefreshCw,
+  ShieldCheck,
   Sparkles,
+  XSquare,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -20,6 +23,7 @@ import {
   GitHubSkillImportSelection,
   GitHubSkillPreview,
   AgentWithStatus,
+  BatchInstallResult,
   SkillWithLinks,
 } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -40,6 +44,7 @@ import {
   type GitHubImportAiSummaryEntry,
   type SkillMarkdownEntry,
 } from "@/stores/marketplaceStore";
+import { useTargetStore } from "@/stores/targetStore";
 
 type WizardStep = "input" | "preview" | "confirm" | "result";
 
@@ -73,7 +78,7 @@ interface GitHubRepoImportWizardProps {
     skillId: string,
     agentIds: string[],
     method: "symlink" | "copy",
-  ) => Promise<void>;
+  ) => Promise<BatchInstallResult>;
   onAfterImportSuccess?: (
     result: GitHubRepoImportResult,
   ) => Promise<void> | void;
@@ -106,6 +111,10 @@ function looksLikeGitHubAuthGuidance(message: string) {
 
 function looksLikeConfiguredGitHubTokenFailure(message: string) {
   return /configured github token was used/i.test(message);
+}
+
+function looksLikeMissingSshPassword(message: string) {
+  return /ssh password for target .* is not available/i.test(message);
 }
 
 function clampPercent(value: number) {
@@ -164,9 +173,20 @@ export function GitHubRepoImportWizard({
   );
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const [isRenameEditing, setIsRenameEditing] = useState(false);
+  const [sshPasswordRepairValue, setSshPasswordRepairValue] = useState("");
+  const [sshPasswordRepairMessage, setSshPasswordRepairMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [isSavingSshPassword, setIsSavingSshPassword] = useState(false);
   const detailScrollRef = useRef<HTMLDivElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const browserMode = !isTauriRuntime();
+  const activeTarget = useTargetStore((state) => state.activeTarget);
+  const loadTargets = useTargetStore((state) => state.loadTargets);
+  const updateSshTargetPassword = useTargetStore(
+    (state) => state.updateSshTargetPassword,
+  );
   const skillMarkdown = useMarketplaceStore(
     (state) => state.githubImport.skillMarkdown,
   ) ?? EMPTY_SKILL_MARKDOWN;
@@ -194,6 +214,8 @@ export function GitHubRepoImportWizard({
       setPostImportTargetSkillId(null);
       setSelectedSkillPath(null);
       setDetailTab("overview");
+      setSshPasswordRepairValue("");
+      setSshPasswordRepairMessage(null);
       return;
     }
     if (importResult) {
@@ -214,6 +236,11 @@ export function GitHubRepoImportWizard({
     setStep("input");
   }, [open, preview, importResult]);
 
+  useEffect(() => {
+    setSshPasswordRepairValue("");
+    setSshPasswordRepairMessage(null);
+  }, [activeTarget.id]);
+
   const postImportSkill = useMemo(() => {
     if (!postImportTargetSkillId) return null;
     return (
@@ -228,6 +255,10 @@ export function GitHubRepoImportWizard({
       (skill) => selectionState[skill.sourcePath]?.selected,
     );
   }, [preview, selectionState]);
+  const allSkillsSelected = Boolean(
+    preview?.skills.length && selectedSkills.length === preview.skills.length,
+  );
+  const noSkillsSelected = selectedSkills.length === 0;
 
   const selectedPreviewSkill = useMemo(() => {
     if (!preview) return null;
@@ -450,8 +481,31 @@ export function GitHubRepoImportWizard({
     return counts;
   }, [selectedSkills, selectionState]);
 
+  const activePasswordCredentialStatus =
+    activeTarget.kind === "ssh" && activeTarget.authMethod === "password"
+      ? (activeTarget.credentialStatus ??
+        (activeTarget.hasStoredPassword ? "stored" : "missing"))
+      : null;
+  const activePasswordCredentialAvailable =
+    activePasswordCredentialStatus === "stored" ||
+    activePasswordCredentialStatus === "session";
+  const activePasswordTargetNeedsPassword =
+    activeTarget.kind === "ssh" &&
+    activeTarget.authMethod === "password" &&
+    !activePasswordCredentialAvailable;
+  const showSshPasswordRepairSuccess =
+    sshPasswordRepairMessage?.type === "success";
+  const missingSshPasswordError =
+    previewError && looksLikeMissingSshPassword(previewError);
+  const showSshPasswordRepair =
+    step === "confirm" &&
+    (activePasswordTargetNeedsPassword ||
+      showSshPasswordRepairSuccess ||
+      (Boolean(missingSshPasswordError) &&
+        sshPasswordRepairMessage?.type !== "success"));
   const canReview = selectedSkills.length > 0 && !blockingConflict;
-  const canConfirm = canReview && decisionCounts.write > 0;
+  const canConfirm =
+    canReview && decisionCounts.write > 0 && !activePasswordTargetNeedsPassword;
 
   const renamedSelections = useMemo(
     () =>
@@ -492,6 +546,24 @@ export function GitHubRepoImportWizard({
         ...next,
       },
     }));
+  }
+
+  function updateAllSelections(selected: boolean) {
+    if (!preview) return;
+
+    setSelectionState((current) => {
+      const next = { ...current };
+      preview.skills.forEach((skill) => {
+        const existing = current[skill.sourcePath];
+        next[skill.sourcePath] = {
+          selected,
+          resolution:
+            existing?.resolution ?? (skill.conflict ? "skip" : "overwrite"),
+          renamedSkillId: existing?.renamedSkillId ?? skill.skillId,
+        };
+      });
+      return next;
+    });
   }
 
   function startRenameEditing(skill: GitHubSkillPreview) {
@@ -550,11 +622,73 @@ export function GitHubRepoImportWizard({
   }
 
   async function handleImportConfirmClick() {
-    const result = await onImport(selectedImportPayload);
-    if (result) {
-      await onAfterImportSuccess?.(result);
-    } else if (importResult) {
-      await onAfterImportSuccess?.(importResult);
+    try {
+      const result = await onImport(selectedImportPayload);
+      if (result) {
+        await onAfterImportSuccess?.(result);
+      } else if (importResult) {
+        await onAfterImportSuccess?.(importResult);
+      }
+    } catch (err) {
+      if (looksLikeMissingSshPassword(String(err))) {
+        setSshPasswordRepairMessage(null);
+        await loadTargets().catch(() => undefined);
+      }
+    }
+  }
+
+  async function handleSaveSshPasswordForImport() {
+    if (activeTarget.kind !== "ssh") return;
+    const password = sshPasswordRepairValue.trim();
+    if (!password) {
+      setSshPasswordRepairMessage({
+        type: "error",
+        text: t("marketplace.githubImportSshPasswordRequired"),
+      });
+      return;
+    }
+
+    setIsSavingSshPassword(true);
+    setSshPasswordRepairMessage(null);
+    try {
+      const result = await updateSshTargetPassword(activeTarget.id, password);
+      if (!result.ok) {
+        setSshPasswordRepairMessage({
+          type: "error",
+          text: result.message,
+        });
+        return;
+      }
+      const credentialAvailable =
+        result.credentialStatus === "stored" ||
+        result.credentialStatus === "session" ||
+        (!result.credentialStatus && result.ok);
+      if (!credentialAvailable) {
+        setSshPasswordRepairMessage({
+          type: "error",
+          text: result.credentialError || result.message,
+        });
+        return;
+      }
+      setSshPasswordRepairValue("");
+      setSshPasswordRepairMessage({
+        type: "success",
+        text:
+          result.credentialStatus === "session"
+            ? t("marketplace.githubImportSshPasswordSession", {
+                label: activeTarget.label,
+              })
+            : t("marketplace.githubImportSshPasswordSaved", {
+                label: activeTarget.label,
+              }),
+      });
+    } catch (err) {
+      setSshPasswordRepairMessage({
+        type: "error",
+        text: String(err),
+      });
+    } finally {
+      setIsSavingSshPassword(false);
     }
   }
 
@@ -567,9 +701,14 @@ export function GitHubRepoImportWizard({
     agentIds: string[],
     method: "symlink" | "copy",
   ) {
-    if (!onInstallImportedSkill) return;
-    await onInstallImportedSkill(skillId, agentIds, method);
-    setPostImportTargetSkillId(null);
+    if (!onInstallImportedSkill) {
+      return { succeeded: [], failed: [] };
+    }
+    const result = await onInstallImportedSkill(skillId, agentIds, method);
+    if (result.failed.length === 0) {
+      setPostImportTargetSkillId(null);
+    }
+    return result;
   }
 
   function handleStartAnotherImport() {
@@ -685,6 +824,15 @@ export function GitHubRepoImportWizard({
                 {currentPreview.repo.normalizedUrl}
               </span>
             </div>
+            {activeTarget.kind === "ssh" &&
+            currentPreview.previewWorkspaceId ? (
+              <div
+                className="text-[11px] text-primary"
+                data-testid="github-import-remote-workspace-hint"
+              >
+                {t("marketplace.githubImportRemoteWorkspaceHint")}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center justify-start gap-2 lg:justify-end">
@@ -790,6 +938,75 @@ export function GitHubRepoImportWizard({
             ) : null}
           </div>
         ) : null}
+      </div>
+    );
+  }
+
+  function renderSshPasswordRepairPanel() {
+    if (!showSshPasswordRepair || activeTarget.kind !== "ssh") return null;
+
+    return (
+      <div
+        className="mb-3 rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3"
+        data-testid="github-import-ssh-password-repair"
+      >
+        <div className="flex flex-wrap items-start gap-3">
+          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-amber-500" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div>
+              <div className="text-sm font-semibold">
+                {t("marketplace.githubImportSshPasswordTitle")}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {t("marketplace.githubImportSshPasswordDesc", {
+                  label: activeTarget.label,
+                })}
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                type="password"
+                value={sshPasswordRepairValue}
+                onChange={(event) => {
+                  setSshPasswordRepairValue(event.target.value);
+                  if (sshPasswordRepairMessage?.type === "error") {
+                    setSshPasswordRepairMessage(null);
+                  }
+                }}
+                placeholder={t("marketplace.githubImportSshPasswordPlaceholder")}
+                aria-label={t("marketplace.githubImportSshPasswordLabel", {
+                  label: activeTarget.label,
+                })}
+                className="h-8 text-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSavingSshPassword || !sshPasswordRepairValue.trim()}
+                onClick={handleSaveSshPasswordForImport}
+              >
+                {isSavingSshPassword ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : null}
+                <span>{t("marketplace.githubImportSshPasswordSave")}</span>
+              </Button>
+            </div>
+            {sshPasswordRepairMessage ? (
+              <div
+                className={cn(
+                  "text-xs",
+                  sshPasswordRepairMessage.type === "success"
+                    ? "text-primary"
+                    : "text-destructive",
+                )}
+                role="status"
+              >
+                {sshPasswordRepairMessage.text}
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
     );
   }
@@ -1248,18 +1465,53 @@ export function GitHubRepoImportWizard({
                 >
                   <div className="flex min-h-[22rem] min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/70 shadow-sm">
                     <div className="border-b border-border/60 px-4 py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-semibold">
-                          {t("marketplace.githubImportSelectionTitle")}
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-semibold">
+                              {t("marketplace.githubImportSelectionTitle")}
+                            </div>
+                            <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              {preview.skills.length}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {t("marketplace.githubImportSelectionDesc", {
+                              count: preview.skills.length,
+                            })}
+                          </div>
                         </div>
-                        <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                          {preview.skills.length}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {t("marketplace.githubImportSelectionDesc", {
-                          count: preview.skills.length,
-                        })}
+                        <div
+                          className="flex shrink-0 items-center gap-1 rounded-lg border border-border/60 bg-background/70 p-0.5"
+                          data-testid="github-import-bulk-selection-controls"
+                        >
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 rounded-md px-2 text-[11px]"
+                            onClick={() => updateAllSelections(true)}
+                            disabled={allSkillsSelected}
+                          >
+                            <CheckSquare className="size-3.5" />
+                            <span>
+                              {t("marketplace.githubImportSelectAllSkills")}
+                            </span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 rounded-md px-2 text-[11px]"
+                            onClick={() => updateAllSelections(false)}
+                            disabled={noSkillsSelected}
+                          >
+                            <XSquare className="size-3.5" />
+                            <span>
+                              {t("marketplace.githubImportDeselectAllSkills")}
+                            </span>
+                          </Button>
+                        </div>
                       </div>
                     </div>
 
@@ -1844,6 +2096,7 @@ export function GitHubRepoImportWizard({
             data-footer-mode={footerMode}
           >
             {step === "confirm" ? renderImportProgressPanel() : null}
+            {step === "confirm" ? renderSshPasswordRepairPanel() : null}
             {step === "result" ? (
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={handleStartAnotherImport}>

@@ -62,7 +62,8 @@ interface MarketplaceState {
   previewGitHubRepoImport: (repoUrl: string) => Promise<GitHubRepoPreview>;
   importGitHubRepoSkills: (
     repoUrl: string,
-    selections: GitHubSkillImportSelection[]
+    selections: GitHubSkillImportSelection[],
+    previewWorkspaceId?: string | null,
   ) => Promise<GitHubRepoImportResult>;
   fetchGitHubSkillMarkdown: (sourcePath: string, downloadUrl: string) => Promise<void>;
   generateGitHubImportAiSummary: (
@@ -133,6 +134,19 @@ async function setupGitHubImportEventListeners(
       }));
     },
   );
+}
+
+async function discardGitHubRepoPreviewWorkspace(
+  previewWorkspaceId?: string | null,
+) {
+  if (!previewWorkspaceId || !isTauriRuntime()) {
+    return;
+  }
+  await Promise.resolve(
+    invoke("discard_github_repo_preview_workspace", {
+      workspaceId: previewWorkspaceId,
+    }),
+  ).catch(() => undefined);
 }
 
 export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
@@ -345,6 +359,10 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       throw new Error(error);
     }
 
+    await discardGitHubRepoPreviewWorkspace(
+      get().githubImport.preview?.previewWorkspaceId,
+    );
+
     set((state) => ({
       githubImport: {
         ...state.githubImport,
@@ -396,7 +414,11 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     }
   },
 
-  importGitHubRepoSkills: async (repoUrl: string, selections: GitHubSkillImportSelection[]) => {
+  importGitHubRepoSkills: async (
+    repoUrl: string,
+    selections: GitHubSkillImportSelection[],
+    previewWorkspaceId?: string | null,
+  ) => {
     const generation = marketplaceStoreGeneration;
     if (!isTauriRuntime()) {
       const error = "Desktop-only feature: GitHub repo import is available in the Tauri app.";
@@ -433,10 +455,24 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     try {
       await setupGitHubImportEventListeners(set, generation);
 
-      const importResult = await invoke<GitHubRepoImportResult>("import_github_repo_skills", {
+      const activePreviewWorkspaceId =
+        previewWorkspaceId ?? get().githubImport.preview?.previewWorkspaceId ?? null;
+      const payload: {
+        repoUrl: string;
+        selections: GitHubSkillImportSelection[];
+        previewWorkspaceId?: string;
+      } = {
         repoUrl,
         selections,
-      });
+      };
+      if (activePreviewWorkspaceId) {
+        payload.previewWorkspaceId = activePreviewWorkspaceId;
+      }
+
+      const importResult = await invoke<GitHubRepoImportResult>(
+        "import_github_repo_skills",
+        payload,
+      );
       if (generation === marketplaceStoreGeneration) {
         set((state) => ({
           githubImport: {
@@ -502,6 +538,9 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     try {
       const content = await invoke<string>("fetch_github_skill_markdown", {
         downloadUrl,
+        sourcePath,
+        previewWorkspaceId:
+          get().githubImport.preview?.previewWorkspaceId ?? null,
       });
       if (generation === marketplaceStoreGeneration) {
         set((state) => ({
@@ -690,6 +729,9 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   resetGitHubImport: () => {
+    void discardGitHubRepoPreviewWorkspace(
+      get().githubImport.preview?.previewWorkspaceId,
+    );
     if (unlistenGitHubImportProgress) {
       unlistenGitHubImportProgress();
       unlistenGitHubImportProgress = null;
@@ -700,6 +742,9 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
   resetForTargetChange: () => {
     marketplaceStoreGeneration += 1;
+    void discardGitHubRepoPreviewWorkspace(
+      get().githubImport.preview?.previewWorkspaceId,
+    );
     if (unlistenGitHubImportProgress) {
       unlistenGitHubImportProgress();
       unlistenGitHubImportProgress = null;

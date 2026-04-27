@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{DateTime, Duration, Utc};
 use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::{Cursor, Read};
 use std::path::{Component, Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{
@@ -59,6 +60,8 @@ pub struct GitHubSkillPreview {
 pub struct GitHubRepoPreview {
     pub repo: GitHubRepoRef,
     pub skills: Vec<GitHubSkillPreview>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_workspace_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -132,6 +135,7 @@ pub(crate) struct GitHubRepoSnapshot {
 
 const GITHUB_PAT_SETTING_KEY: &str = "github_pat";
 const NO_IMPORTABLE_SKILLS_ERROR: &str = "No importable skills found in this repository. Supported layouts include root SKILL.md, common skill directories such as skills/, .agents/skills/, .claude/skills/, direct repository subpaths, and bounded recursive SKILL.md discovery.";
+const REMOTE_PREVIEW_WORKSPACE_TTL_MINUTES: i64 = 30;
 const RECURSIVE_DISCOVERY_MAX_DEPTH: usize = 5;
 const SKIP_DISCOVERY_DIRS: &[&str] = &[
     ".git",
@@ -181,6 +185,39 @@ const PRIORITY_SKILL_ROOTS: &[&str] = &[
     ".windsurf/skills",
     ".zencoder/skills",
 ];
+
+static GITHUB_PREVIEW_WORKSPACES: OnceLock<Mutex<HashMap<String, GitHubPreviewWorkspace>>> =
+    OnceLock::new();
+
+#[derive(Debug, Clone)]
+struct GitHubPreviewWorkspace {
+    id: String,
+    target_id: String,
+    repo: GitHubRepoRef,
+    source_path: Option<String>,
+    remote_workspace_dir: String,
+    remote_repo_dir: String,
+    created_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+}
+
+impl GitHubPreviewWorkspace {
+    fn is_expired(&self, now: DateTime<Utc>) -> bool {
+        debug_assert!(self.expires_at >= self.created_at);
+        self.expires_at <= now
+    }
+
+    fn matches_source(
+        &self,
+        target_id: &str,
+        repo: &GitHubRepoRef,
+        source_path: Option<&str>,
+    ) -> bool {
+        self.target_id == target_id
+            && &self.repo == repo
+            && self.source_path.as_deref() == source_path
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ResolvedGitHubRepoSource {
@@ -322,14 +359,62 @@ const GITHUB_MIRROR_ENDPOINTS: &[GitHubMirrorEndpoint] = &[
     },
 ];
 
+fn preview_workspace_registry() -> &'static Mutex<HashMap<String, GitHubPreviewWorkspace>> {
+    GITHUB_PREVIEW_WORKSPACES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn register_preview_workspace(workspace: GitHubPreviewWorkspace) {
+    if let Ok(mut registry) = preview_workspace_registry().lock() {
+        registry.insert(workspace.id.clone(), workspace);
+    }
+}
+
+fn get_preview_workspace(workspace_id: &str) -> Option<GitHubPreviewWorkspace> {
+    preview_workspace_registry()
+        .lock()
+        .ok()
+        .and_then(|registry| registry.get(workspace_id).cloned())
+}
+
+fn take_preview_workspace(workspace_id: &str) -> Option<GitHubPreviewWorkspace> {
+    preview_workspace_registry()
+        .lock()
+        .ok()
+        .and_then(|mut registry| registry.remove(workspace_id))
+}
+
+fn prune_expired_preview_workspaces(now: DateTime<Utc>) -> Vec<GitHubPreviewWorkspace> {
+    let Ok(mut registry) = preview_workspace_registry().lock() else {
+        return Vec::new();
+    };
+    let expired_ids = registry
+        .iter()
+        .filter(|(_, workspace)| workspace.is_expired(now))
+        .map(|(id, _)| id.clone())
+        .collect::<Vec<_>>();
+    expired_ids
+        .into_iter()
+        .filter_map(|id| registry.remove(&id))
+        .collect()
+}
+
 #[tauri::command]
 pub async fn preview_github_repo_import(
     state: State<'_, AppState>,
     repo_url: String,
 ) -> Result<GitHubRepoPreview, String> {
+    let active_target = state.active_target().await?;
     let pool = state.active_db().await?;
     let auth = github_direct_auth_from_settings(&state.db).await?;
-    preview_github_repo_import_with_auth(&pool, &repo_url, auth.as_deref()).await
+    match active_target {
+        ActiveTarget::Local => {
+            preview_github_repo_import_with_auth(&pool, &repo_url, auth.as_deref()).await
+        }
+        ActiveTarget::Ssh(target) => {
+            preview_github_repo_import_ssh_with_auth(&pool, &target, &repo_url, auth.as_deref())
+                .await
+        }
+    }
 }
 
 #[tauri::command]
@@ -338,6 +423,7 @@ pub async fn import_github_repo_skills(
     state: State<'_, AppState>,
     repo_url: String,
     selections: Vec<GitHubSkillImportSelection>,
+    preview_workspace_id: Option<String>,
 ) -> Result<GitHubRepoImportResult, String> {
     let active_target = state.active_target().await?;
     let pool = state.active_db().await?;
@@ -359,6 +445,7 @@ pub async fn import_github_repo_skills(
                 &target,
                 &repo_url,
                 selections,
+                preview_workspace_id.as_deref(),
                 Some(&app),
                 auth.as_deref(),
             )
@@ -371,10 +458,30 @@ pub async fn import_github_repo_skills(
 pub async fn fetch_github_skill_markdown(
     state: State<'_, AppState>,
     download_url: String,
+    source_path: Option<String>,
+    preview_workspace_id: Option<String>,
 ) -> Result<String, String> {
+    if let Some(workspace_id) = preview_workspace_id.as_deref() {
+        return fetch_github_skill_markdown_from_remote_workspace(
+            &state,
+            workspace_id,
+            source_path.as_deref(),
+        )
+        .await;
+    }
+
     let client = github_client()?;
     let auth = github_direct_auth_from_settings(&state.db).await?;
     fetch_raw_text(&client, &download_url, auth.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn discard_github_repo_preview_workspace(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<(), String> {
+    discard_preview_workspace_for_active_target(&state, &workspace_id).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -462,7 +569,173 @@ pub(crate) async fn preview_github_repo_import_with_auth(
     Ok(GitHubRepoPreview {
         repo: resolved.repo,
         skills,
+        preview_workspace_id: None,
     })
+}
+
+async fn preview_github_repo_import_ssh_with_auth(
+    pool: &DbPool,
+    target: &RemoteTargetConfig,
+    repo_url: &str,
+    auth: Option<&str>,
+) -> Result<GitHubRepoPreview, String> {
+    let resolved = resolve_repo_source(repo_url, auth).await?;
+    let connection = connect_ssh_target(target).await?;
+    cleanup_expired_preview_workspaces_for_connection(&connection, target).await;
+
+    let workspace = create_remote_preview_workspace(&connection, target, &resolved, auth).await?;
+    let preview_result = async {
+        let candidates = build_remote_repo_skill_candidates_from_workspace(
+            &connection,
+            &resolved.repo,
+            &workspace.remote_repo_dir,
+            resolved.source_path.as_deref(),
+        )
+        .await?;
+        let skills = build_preview_skills(pool, &candidates).await?;
+        if skills.is_empty() {
+            return Err(NO_IMPORTABLE_SKILLS_ERROR.to_string());
+        }
+        Ok(skills)
+    }
+    .await;
+
+    match preview_result {
+        Ok(skills) => {
+            register_preview_workspace(workspace.clone());
+            Ok(GitHubRepoPreview {
+                repo: resolved.repo,
+                skills,
+                preview_workspace_id: Some(workspace.id),
+            })
+        }
+        Err(error) => {
+            let _ = connection
+                .remove_tree(&workspace.remote_workspace_dir)
+                .await;
+            Err(error)
+        }
+    }
+}
+
+async fn cleanup_expired_preview_workspaces_for_connection(
+    connection: &crate::targets::ConnectedSshTarget,
+    target: &RemoteTargetConfig,
+) {
+    for workspace in prune_expired_preview_workspaces(Utc::now()) {
+        if workspace.target_id == target.id {
+            let _ = connection
+                .remove_tree(&workspace.remote_workspace_dir)
+                .await;
+        }
+    }
+}
+
+async fn create_remote_preview_workspace(
+    connection: &crate::targets::ConnectedSshTarget,
+    target: &RemoteTargetConfig,
+    resolved: &ResolvedGitHubRepoSource,
+    auth: Option<&str>,
+) -> Result<GitHubPreviewWorkspace, String> {
+    let archive_url = github_archive_url(&resolved.repo);
+    let script = remote_workspace_download_script(auth)?;
+    let output = connection
+        .run_script(
+            &script,
+            &[archive_url.as_str(), crate::commands::APP_USER_AGENT],
+        )
+        .await?;
+    let remote_workspace_dir = output
+        .lines()
+        .last()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .ok_or_else(|| "Remote GitHub preview did not return a workspace path.".to_string())?
+        .to_string();
+    let remote_repo_dir = remote_join(&remote_workspace_dir, "repo");
+    let now = Utc::now();
+
+    Ok(GitHubPreviewWorkspace {
+        id: format!("github-preview-{}", uuid::Uuid::new_v4()),
+        target_id: target.id.clone(),
+        repo: resolved.repo.clone(),
+        source_path: resolved.source_path.clone(),
+        remote_workspace_dir,
+        remote_repo_dir,
+        created_at: now,
+        expires_at: now + Duration::minutes(REMOTE_PREVIEW_WORKSPACE_TTL_MINUTES),
+    })
+}
+
+fn github_archive_url(repo: &GitHubRepoRef) -> String {
+    format!(
+        "https://api.github.com/repos/{}/{}/tarball/{}",
+        repo.owner, repo.repo, repo.branch
+    )
+}
+
+fn remote_workspace_download_script(auth: Option<&str>) -> Result<String, String> {
+    let auth_block = match auth.filter(|token| !token.trim().is_empty()) {
+        Some(token) => {
+            let header = curl_auth_header_config_line(token)?;
+            format!(
+                r#"curl_conf="$workspace/curl.conf"
+umask 077
+cat > "$curl_conf" <<'SKILLPORT_CURL_CONF'
+{header}
+SKILLPORT_CURL_CONF
+"#
+            )
+        }
+        None => String::new(),
+    };
+
+    Ok(format!(
+        r#"set -eu
+archive_url=$1
+user_agent=$2
+workspace=""
+curl_conf=""
+cleanup() {{
+  status=$?
+  if [ -n "$curl_conf" ]; then
+    rm -f -- "$curl_conf" || true
+  fi
+  if [ "$status" -ne 0 ] && [ -n "$workspace" ]; then
+    rm -rf -- "$workspace" || true
+  fi
+  exit "$status"
+}}
+trap cleanup EXIT
+for tool in sh curl tar find mktemp; do
+  command -v "$tool" >/dev/null 2>&1 || {{
+    printf 'Missing required remote tool: %s\n' "$tool" >&2
+    exit 127
+  }}
+done
+workspace=$(mktemp -d "${{TMPDIR:-/tmp}}/skillport-github-preview.XXXXXX")
+repo_dir="$workspace/repo"
+archive_file="$workspace/repo.tar.gz"
+mkdir -p -- "$repo_dir"
+{auth_block}
+if [ -n "$curl_conf" ]; then
+  curl -fL --retry 2 --connect-timeout 30 -A "$user_agent" -K "$curl_conf" -o "$archive_file" "$archive_url"
+else
+  curl -fL --retry 2 --connect-timeout 30 -A "$user_agent" -o "$archive_file" "$archive_url"
+fi
+tar -xzf "$archive_file" -C "$repo_dir" --strip-components=1
+rm -f -- "$archive_file"
+printf '%s\n' "$workspace"
+"#
+    ))
+}
+
+fn curl_auth_header_config_line(token: &str) -> Result<String, String> {
+    if token.contains('\n') || token.contains('\r') {
+        return Err("GitHub token contains unsupported newline characters.".to_string());
+    }
+    let escaped = token.replace('\\', "\\\\").replace('"', "\\\"");
+    Ok(format!("header = \"Authorization: Bearer {escaped}\""))
 }
 
 pub(crate) async fn import_github_repo_skills_impl(
@@ -507,93 +780,12 @@ pub(crate) async fn import_github_repo_skills_with_auth(
         return Err(NO_IMPORTABLE_SKILLS_ERROR.to_string());
     }
 
-    if selections.is_empty() {
-        return Err("Select at least one skill to import.".to_string());
-    }
-
-    let mut selected_paths = HashSet::new();
-    let mut selected = Vec::new();
-    for selection in selections {
-        let candidate = candidates
-            .iter()
-            .find(|candidate| candidate.source_path == selection.source_path)
-            .ok_or_else(|| {
-                format!(
-                    "Selected skill '{}' is no longer available in the preview.",
-                    selection.source_path
-                )
-            })?
-            .clone();
-
-        if !selected_paths.insert(candidate.source_path.clone()) {
-            return Err(format!(
-                "Skill '{}' was selected more than once.",
-                candidate.source_path
-            ));
-        }
-
-        selected.push((candidate, selection));
-    }
-
     let central_root = central_skills_root(pool).await?;
     std::fs::create_dir_all(&central_root)
         .map_err(|e| format!("Failed to create central skills directory: {}", e))?;
 
-    let mut occupied_ids = current_central_skill_ids(pool).await?;
-    let mut staging_ops = Vec::new();
-    let mut skipped_skills = Vec::new();
-
-    for (candidate, selection) in &selected {
-        match selection.resolution {
-            DuplicateResolution::Skip => {
-                skipped_skills.push(candidate.source_path.clone());
-                continue;
-            }
-            DuplicateResolution::Overwrite => {
-                if let Some(existing) = db::get_skill_by_id(pool, &candidate.skill_id).await? {
-                    if !existing.is_central {
-                        return Err(format!(
-                            "Skill '{}' conflicts with a non-central record and cannot be overwritten safely.",
-                            candidate.skill_id
-                        ));
-                    }
-                }
-                occupied_ids.insert(candidate.skill_id.clone());
-                staging_ops.push(StagedImport {
-                    candidate: candidate.clone(),
-                    final_skill_id: candidate.skill_id.clone(),
-                    resolution: DuplicateResolution::Overwrite,
-                    source_files: Vec::new(),
-                });
-            }
-            DuplicateResolution::Rename => {
-                let requested_id =
-                    sanitize_skill_id(selection.renamed_skill_id.as_deref().ok_or_else(|| {
-                        format!(
-                            "Skill '{}' requires a renamed skill id for rename resolution.",
-                            candidate.source_path
-                        )
-                    })?)?;
-                if occupied_ids.contains(&requested_id) {
-                    return Err(format!(
-                        "Renamed skill id '{}' is already in use.",
-                        requested_id
-                    ));
-                }
-                occupied_ids.insert(requested_id.clone());
-                staging_ops.push(StagedImport {
-                    candidate: candidate.clone(),
-                    final_skill_id: requested_id,
-                    resolution: DuplicateResolution::Rename,
-                    source_files: Vec::new(),
-                });
-            }
-        }
-    }
-
-    if staging_ops.is_empty() && skipped_skills.is_empty() {
-        return Err("No valid import operations were requested.".to_string());
-    }
+    let (mut staging_ops, skipped_skills) =
+        plan_import_staging(pool, &candidates, selections).await?;
 
     for op in &mut staging_ops {
         op.source_files = collect_snapshot_source_files(&snapshot, &op.candidate.source_path)?;
@@ -738,6 +930,7 @@ async fn import_github_repo_skills_ssh_with_auth(
     target: &RemoteTargetConfig,
     repo_url: &str,
     selections: Vec<GitHubSkillImportSelection>,
+    preview_workspace_id: Option<&str>,
     app: Option<&AppHandle>,
     auth: Option<&str>,
 ) -> Result<GitHubRepoImportResult, String> {
@@ -766,108 +959,21 @@ async fn import_github_repo_skills_ssh_with_auth(
     connection.mkdir_p(&central_root).await?;
 
     let resolved = resolve_repo_source(repo_url, auth).await?;
-    let client = github_client()?;
-    let snapshot = download_repo_snapshot(&client, &resolved.repo, auth).await?;
-    let candidates = fetch_repo_skill_candidates_from_source(
+    let workspace =
+        resolve_ssh_import_workspace(&connection, target, &resolved, preview_workspace_id, auth)
+            .await?;
+    let candidates = build_remote_repo_skill_candidates_from_workspace(
+        &connection,
         &resolved.repo,
+        &workspace.remote_repo_dir,
         resolved.source_path.as_deref(),
-        auth,
     )
     .await?;
 
-    let mut selected_paths = HashSet::new();
-    let mut selected = Vec::new();
-    for selection in selections {
-        let candidate = candidates
-            .iter()
-            .find(|candidate| candidate.source_path == selection.source_path)
-            .ok_or_else(|| {
-                format!(
-                    "Selected skill '{}' is no longer available in the preview.",
-                    selection.source_path
-                )
-            })?
-            .clone();
+    let (staging_ops, skipped_skills) = plan_import_staging(pool, &candidates, selections).await?;
 
-        if !selected_paths.insert(candidate.source_path.clone()) {
-            return Err(format!(
-                "Skill '{}' was selected more than once.",
-                candidate.source_path
-            ));
-        }
-
-        selected.push((candidate, selection));
-    }
-
-    let mut occupied_ids = current_central_skill_ids(pool).await?;
-    let mut staging_ops = Vec::new();
-    let mut skipped_skills = Vec::new();
-
-    for (candidate, selection) in &selected {
-        match selection.resolution {
-            DuplicateResolution::Skip => {
-                skipped_skills.push(candidate.source_path.clone());
-                continue;
-            }
-            DuplicateResolution::Overwrite => {
-                if let Some(existing) = db::get_skill_by_id(pool, &candidate.skill_id).await? {
-                    if !existing.is_central {
-                        return Err(format!(
-                            "Skill '{}' conflicts with a non-central record and cannot be overwritten safely.",
-                            candidate.skill_id
-                        ));
-                    }
-                }
-                occupied_ids.insert(candidate.skill_id.clone());
-                staging_ops.push(StagedImport {
-                    candidate: candidate.clone(),
-                    final_skill_id: candidate.skill_id.clone(),
-                    resolution: DuplicateResolution::Overwrite,
-                    source_files: Vec::new(),
-                });
-            }
-            DuplicateResolution::Rename => {
-                let requested_id =
-                    sanitize_skill_id(selection.renamed_skill_id.as_deref().ok_or_else(|| {
-                        format!(
-                            "Skill '{}' requires a renamed skill id for rename resolution.",
-                            candidate.source_path
-                        )
-                    })?)?;
-                if occupied_ids.contains(&requested_id) {
-                    return Err(format!(
-                        "Renamed skill id '{}' is already in use.",
-                        requested_id
-                    ));
-                }
-                occupied_ids.insert(requested_id.clone());
-                staging_ops.push(StagedImport {
-                    candidate: candidate.clone(),
-                    final_skill_id: requested_id,
-                    resolution: DuplicateResolution::Rename,
-                    source_files: Vec::new(),
-                });
-            }
-        }
-    }
-
-    if staging_ops.is_empty() && skipped_skills.is_empty() {
-        return Err("No valid import operations were requested.".to_string());
-    }
-
-    for op in &mut staging_ops {
-        op.source_files = collect_snapshot_source_files(&snapshot, &op.candidate.source_path)?;
-    }
-
-    let total_files = staging_ops
-        .iter()
-        .map(|op| op.source_files.len())
-        .sum::<usize>();
-    let total_bytes = staging_ops
-        .iter()
-        .flat_map(|op| op.source_files.iter())
-        .map(|file| file.byte_len as u64)
-        .sum::<u64>();
+    let total_files = staging_ops.len();
+    let total_bytes = 0;
     let mut progress_state = GitHubImportProgressState {
         completed_files: 0,
         total_files,
@@ -890,59 +996,75 @@ async fn import_github_repo_skills_ssh_with_auth(
 
     let mut imported_skills = Vec::new();
     let mut created_paths: Vec<String> = Vec::new();
+    let mut created_stages: Vec<String> = Vec::new();
 
     for op in &staging_ops {
         let target_dir = remote_join(&central_root, &op.final_skill_id);
-        if connection.exists(&target_dir).await? {
-            if op.resolution == DuplicateResolution::Overwrite {
-                connection.remove_tree(&target_dir).await?;
-            } else {
-                for path in created_paths.iter().rev() {
-                    let _ = connection.remove_tree(path).await;
-                }
-                return Err(format!("Target directory '{}' already exists.", target_dir));
-            }
-        }
-
-        if let Err(error) = write_snapshot_source_to_remote_target(
-            &connection,
-            &snapshot,
-            &op.source_files,
-            &target_dir,
-            &op.candidate.source_path,
-            &mut progress_state,
-            app,
-        )
-        .await
+        let source_dir =
+            remote_skill_source_dir(&workspace.remote_repo_dir, &op.candidate.source_path)?;
+        let stage_dir = remote_join(
+            &central_root,
+            &format!(
+                ".skillport-import-{}-{}",
+                op.final_skill_id,
+                uuid::Uuid::new_v4()
+            ),
+        );
+        if connection.exists(&target_dir).await? && op.resolution != DuplicateResolution::Overwrite
         {
             for path in created_paths.iter().rev() {
                 let _ = connection.remove_tree(path).await;
             }
-            let _ = connection.remove_tree(&target_dir).await;
+            return Err(format!("Target directory '{}' already exists.", target_dir));
+        }
+
+        created_stages.push(stage_dir.clone());
+        let overwrite = if op.resolution == DuplicateResolution::Overwrite {
+            "1"
+        } else {
+            "0"
+        };
+        if let Err(error) = connection
+            .run_script(
+                remote_import_skill_script(),
+                &[
+                    source_dir.as_str(),
+                    stage_dir.as_str(),
+                    target_dir.as_str(),
+                    overwrite,
+                ],
+            )
+            .await
+        {
+            let _ = connection.remove_tree(&stage_dir).await;
+            for path in created_paths.iter().rev() {
+                let _ = connection.remove_tree(path).await;
+            }
             return Err(error);
         }
+        created_stages.pop();
 
         created_paths.push(target_dir.clone());
 
         let skill_md_path = remote_join(&target_dir, "SKILL.md");
-        let raw = op
-            .source_files
-            .iter()
-            .find(|file| file.relative_path == "SKILL.md")
-            .and_then(|file| snapshot.files.get(&file.repo_path))
-            .and_then(|bytes| String::from_utf8(bytes.clone()).ok())
-            .ok_or_else(|| {
-                format!(
-                    "Imported skill '{}' is missing SKILL.md.",
-                    op.candidate.source_path
-                )
-            })?;
-        let frontmatter = parse_frontmatter(&raw).ok_or_else(|| {
-            format!(
-                "Imported skill '{}' is missing valid frontmatter.",
-                op.candidate.source_path
-            )
-        })?;
+        let frontmatter = SkillFrontmatter {
+            name: op.candidate.skill_name.clone(),
+            description: op.candidate.description.clone(),
+        };
+
+        progress_state.completed_files += 1;
+        emit_github_import_progress(
+            app,
+            GitHubImportProgressPayload {
+                phase: GitHubImportProgressPhase::Writing,
+                current_skill: Some(op.candidate.source_path.clone()),
+                current_path: Some("SKILL.md".to_string()),
+                completed_files: progress_state.completed_files,
+                total_files: progress_state.total_files,
+                completed_bytes: progress_state.completed_bytes,
+                total_bytes: progress_state.total_bytes,
+            },
+        );
 
         let db_skill = Skill {
             id: op.final_skill_id.clone(),
@@ -980,6 +1102,10 @@ async fn import_github_repo_skills_ssh_with_auth(
         });
     }
 
+    for stage in created_stages.iter().rev() {
+        let _ = connection.remove_tree(stage).await;
+    }
+
     emit_github_import_progress(
         app,
         GitHubImportProgressPayload {
@@ -993,11 +1119,94 @@ async fn import_github_repo_skills_ssh_with_auth(
         },
     );
 
+    let _ = take_preview_workspace(&workspace.id);
+    let _ = connection
+        .remove_tree(&workspace.remote_workspace_dir)
+        .await;
+
     Ok(GitHubRepoImportResult {
         repo: resolved.repo,
         imported_skills,
         skipped_skills,
     })
+}
+
+async fn resolve_ssh_import_workspace(
+    connection: &crate::targets::ConnectedSshTarget,
+    target: &RemoteTargetConfig,
+    resolved: &ResolvedGitHubRepoSource,
+    preview_workspace_id: Option<&str>,
+    auth: Option<&str>,
+) -> Result<GitHubPreviewWorkspace, String> {
+    cleanup_expired_preview_workspaces_for_connection(connection, target).await;
+
+    if let Some(workspace_id) = preview_workspace_id {
+        if let Some(workspace) = get_preview_workspace(workspace_id) {
+            if !workspace.matches_source(
+                &target.id,
+                &resolved.repo,
+                resolved.source_path.as_deref(),
+            ) {
+                return Err(
+                    "GitHub preview workspace does not match the active target or repository. Preview the repository again."
+                        .to_string(),
+                );
+            }
+            if !workspace.is_expired(Utc::now()) {
+                return Ok(workspace);
+            }
+            let _ = take_preview_workspace(workspace_id);
+            let _ = connection
+                .remove_tree(&workspace.remote_workspace_dir)
+                .await;
+        }
+    }
+
+    let workspace = create_remote_preview_workspace(connection, target, resolved, auth).await?;
+    register_preview_workspace(workspace.clone());
+    Ok(workspace)
+}
+
+fn remote_skill_source_dir(remote_repo_dir: &str, source_path: &str) -> Result<String, String> {
+    if source_path == "." {
+        return Ok(remote_repo_dir.to_string());
+    }
+    Ok(remote_join(
+        remote_repo_dir,
+        &normalize_repo_path(source_path)?,
+    ))
+}
+
+fn remote_import_skill_script() -> &'static str {
+    r#"set -eu
+source_dir=$1
+stage_dir=$2
+target_dir=$3
+overwrite=$4
+backup_dir="${target_dir}.skillport-backup-$$"
+rm -rf -- "$stage_dir"
+mkdir -p -- "$stage_dir"
+cp -a "$source_dir/." "$stage_dir/"
+if [ -e "$target_dir" ]; then
+  if [ "$overwrite" != "1" ]; then
+    rm -rf -- "$stage_dir"
+    printf 'Target directory already exists: %s\n' "$target_dir" >&2
+    exit 23
+  fi
+  rm -rf -- "$backup_dir"
+  mv "$target_dir" "$backup_dir"
+fi
+if mv "$stage_dir" "$target_dir"; then
+  rm -rf -- "$backup_dir"
+else
+  status=$?
+  if [ -e "$backup_dir" ] && [ ! -e "$target_dir" ]; then
+    mv "$backup_dir" "$target_dir" || true
+  fi
+  rm -rf -- "$stage_dir"
+  exit "$status"
+fi
+"#
 }
 
 #[derive(Debug, Clone)]
@@ -1006,6 +1215,83 @@ struct StagedImport {
     final_skill_id: String,
     resolution: DuplicateResolution,
     source_files: Vec<SnapshotSourceFile>,
+}
+
+async fn plan_import_staging(
+    pool: &DbPool,
+    candidates: &[RemoteSkillCandidate],
+    selections: Vec<GitHubSkillImportSelection>,
+) -> Result<(Vec<StagedImport>, Vec<String>), String> {
+    if selections.is_empty() {
+        return Err("Select at least one skill to import.".to_string());
+    }
+
+    let mut selected_paths = HashSet::new();
+    let mut occupied_ids = current_central_skill_ids(pool).await?;
+    let mut staging_ops = Vec::new();
+    let mut skipped_skills = Vec::new();
+
+    for selection in selections {
+        let candidate = candidates
+            .iter()
+            .find(|candidate| candidate.source_path == selection.source_path)
+            .ok_or_else(|| {
+                format!(
+                    "Selected skill '{}' is no longer available in the preview.",
+                    selection.source_path
+                )
+            })?;
+
+        if !selected_paths.insert(candidate.source_path.clone()) {
+            return Err(format!(
+                "Skill '{}' was selected more than once.",
+                candidate.source_path
+            ));
+        }
+
+        match selection.resolution {
+            DuplicateResolution::Skip => {
+                skipped_skills.push(candidate.source_path.clone());
+            }
+            DuplicateResolution::Overwrite => {
+                occupied_ids.insert(candidate.skill_id.clone());
+                staging_ops.push(StagedImport {
+                    candidate: candidate.clone(),
+                    final_skill_id: candidate.skill_id.clone(),
+                    resolution: DuplicateResolution::Overwrite,
+                    source_files: Vec::new(),
+                });
+            }
+            DuplicateResolution::Rename => {
+                let requested_id =
+                    sanitize_skill_id(selection.renamed_skill_id.as_deref().ok_or_else(|| {
+                        format!(
+                            "Skill '{}' requires a renamed skill id for rename resolution.",
+                            candidate.source_path
+                        )
+                    })?)?;
+                if occupied_ids.contains(&requested_id) {
+                    return Err(format!(
+                        "Renamed skill id '{}' is already in use.",
+                        requested_id
+                    ));
+                }
+                occupied_ids.insert(requested_id.clone());
+                staging_ops.push(StagedImport {
+                    candidate: candidate.clone(),
+                    final_skill_id: requested_id,
+                    resolution: DuplicateResolution::Rename,
+                    source_files: Vec::new(),
+                });
+            }
+        }
+    }
+
+    if staging_ops.is_empty() && skipped_skills.is_empty() {
+        return Err("No valid import operations were requested.".to_string());
+    }
+
+    Ok((staging_ops, skipped_skills))
 }
 
 fn cleanup_created_directories(paths: &[PathBuf]) {
@@ -1329,6 +1615,96 @@ pub(crate) fn build_repo_skill_candidates_from_snapshot_at_path(
     Ok(candidates)
 }
 
+async fn build_remote_repo_skill_candidates_from_workspace(
+    connection: &crate::targets::ConnectedSshTarget,
+    repo: &GitHubRepoRef,
+    remote_repo_dir: &str,
+    source_path: Option<&str>,
+) -> Result<Vec<RemoteSkillCandidate>, String> {
+    let direct_endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
+    let manifest_paths = remote_skill_manifest_paths(connection, remote_repo_dir).await?;
+    let manifests = discover_skill_manifests_from_paths(
+        manifest_paths.iter().map(String::as_str),
+        source_path,
+    )?;
+
+    let mut candidates = Vec::with_capacity(manifests.len());
+    let mut seen_names = HashSet::new();
+    for manifest in manifests {
+        let skill_md_remote_path = remote_join(remote_repo_dir, &manifest.skill_md_path);
+        let raw = connection.read_file(&skill_md_remote_path).await?;
+        let content = String::from_utf8(raw)
+            .map_err(|_| format!("Skill '{}' is not valid UTF-8.", manifest.source_path))?;
+        let frontmatter = parse_frontmatter(&content).ok_or_else(|| {
+            if manifest.source_path == "." {
+                "Repository root SKILL.md is missing valid frontmatter.".to_string()
+            } else {
+                format!(
+                    "Skill '{}' is missing valid frontmatter.",
+                    manifest.source_path
+                )
+            }
+        })?;
+        if !seen_names.insert(frontmatter.name.clone()) {
+            continue;
+        }
+
+        let skill_id = if manifest.source_path == "." {
+            let repo_skill_id = sanitize_skill_id(&repo.repo)?;
+            repo_skill_id
+                .strip_suffix("-skill")
+                .unwrap_or(&repo_skill_id)
+                .to_string()
+        } else {
+            sanitize_skill_id(&manifest.skill_directory_name)?
+        };
+
+        candidates.push(RemoteSkillCandidate {
+            source_path: manifest.source_path.clone(),
+            skill_id,
+            skill_name: frontmatter.name,
+            description: frontmatter.description,
+            root_directory: manifest.root_directory,
+            skill_directory_name: if manifest.source_path == "." {
+                repo.repo.clone()
+            } else {
+                manifest.skill_directory_name
+            },
+            download_url: raw_file_url(direct_endpoint, repo, &manifest.skill_md_path),
+        });
+    }
+
+    Ok(candidates)
+}
+
+async fn remote_skill_manifest_paths(
+    connection: &crate::targets::ConnectedSshTarget,
+    remote_repo_dir: &str,
+) -> Result<Vec<String>, String> {
+    let output = connection
+        .run_script(
+            r#"set -eu
+repo_dir=$1
+cd "$repo_dir"
+find . -type f -iname 'SKILL.md' -print | sed 's#^\./##'
+"#,
+            &[remote_repo_dir],
+        )
+        .await?;
+
+    output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(normalize_repo_path)
+        .filter_map(|result| match result {
+            Ok(path) if is_skill_md_repo_path(&path) => Some(Ok(path)),
+            Ok(_) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone)]
 struct SnapshotSkillManifest {
     source_path: String,
@@ -1341,6 +1717,20 @@ fn discover_skill_manifests(
     snapshot: &GitHubRepoSnapshot,
     source_path: Option<&str>,
 ) -> Result<Vec<SnapshotSkillManifest>, String> {
+    discover_skill_manifests_from_paths(snapshot.files.keys().map(String::as_str), source_path)
+}
+
+fn discover_skill_manifests_from_paths<'a, I>(
+    paths: I,
+    source_path: Option<&str>,
+) -> Result<Vec<SnapshotSkillManifest>, String>
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let path_set = paths
+        .into_iter()
+        .map(normalize_repo_path)
+        .collect::<Result<HashSet<_>, _>>()?;
     let base_path = source_path
         .map(normalize_repo_path)
         .transpose()?
@@ -1348,19 +1738,19 @@ fn discover_skill_manifests(
     let mut manifests = Vec::new();
     let mut seen_source_paths = HashSet::new();
 
-    if let Some(manifest) = direct_skill_manifest(snapshot, &base_path) {
+    if let Some(manifest) = direct_skill_manifest(&path_set, &base_path) {
         insert_manifest(&mut manifests, &mut seen_source_paths, manifest);
     }
 
     for root in PRIORITY_SKILL_ROOTS {
         let search_root = join_repo_path(&base_path, root)?;
-        for manifest in immediate_skill_manifests(snapshot, &search_root)? {
+        for manifest in immediate_skill_manifests(&path_set, &search_root)? {
             insert_manifest(&mut manifests, &mut seen_source_paths, manifest);
         }
     }
 
     if manifests.is_empty() {
-        for manifest in recursive_skill_manifests(snapshot, &base_path)? {
+        for manifest in recursive_skill_manifests(&path_set, &base_path)? {
             insert_manifest(&mut manifests, &mut seen_source_paths, manifest);
         }
     }
@@ -1369,24 +1759,22 @@ fn discover_skill_manifests(
 }
 
 fn direct_skill_manifest(
-    snapshot: &GitHubRepoSnapshot,
+    paths: &HashSet<String>,
     base_path: &str,
 ) -> Option<SnapshotSkillManifest> {
     let skill_md_path = join_repo_path(base_path, "SKILL.md").ok()?;
-    snapshot
-        .files
-        .contains_key(&skill_md_path)
+    paths
+        .contains(&skill_md_path)
         .then(|| manifest_from_skill_md_path(&skill_md_path))
         .flatten()
 }
 
 fn immediate_skill_manifests(
-    snapshot: &GitHubRepoSnapshot,
+    paths: &HashSet<String>,
     search_root: &str,
 ) -> Result<Vec<SnapshotSkillManifest>, String> {
-    let mut manifests = snapshot
-        .files
-        .keys()
+    let mut manifests = paths
+        .iter()
         .filter(|path| is_immediate_skill_manifest(path, search_root))
         .filter_map(|path| manifest_from_skill_md_path(path))
         .collect::<Vec<_>>();
@@ -1395,12 +1783,11 @@ fn immediate_skill_manifests(
 }
 
 fn recursive_skill_manifests(
-    snapshot: &GitHubRepoSnapshot,
+    paths: &HashSet<String>,
     base_path: &str,
 ) -> Result<Vec<SnapshotSkillManifest>, String> {
-    let mut manifests = snapshot
-        .files
-        .keys()
+    let mut manifests = paths
+        .iter()
         .filter(|path| is_recursive_skill_manifest(path, base_path))
         .filter_map(|path| manifest_from_skill_md_path(path))
         .collect::<Vec<_>>();
@@ -1768,53 +2155,6 @@ fn write_snapshot_source_to_target(
     Ok(())
 }
 
-async fn write_snapshot_source_to_remote_target(
-    connection: &crate::targets::ConnectedSshTarget,
-    snapshot: &GitHubRepoSnapshot,
-    files: &[SnapshotSourceFile],
-    target_dir: &str,
-    source_path: &str,
-    progress_state: &mut GitHubImportProgressState,
-    app: Option<&AppHandle>,
-) -> Result<(), String> {
-    connection.mkdir_p(target_dir).await?;
-
-    for file in files {
-        if !is_safe_repo_relative_path(&file.relative_path) {
-            return Err(format!(
-                "Repository contains an unsupported path '{}'.",
-                file.repo_path
-            ));
-        }
-
-        let bytes = snapshot.files.get(&file.repo_path).ok_or_else(|| {
-            format!(
-                "Repository file '{}' is no longer available in the archive.",
-                file.repo_path
-            )
-        })?;
-        let destination = remote_join(target_dir, &file.relative_path);
-        connection.write_file(&destination, bytes).await?;
-
-        progress_state.completed_files += 1;
-        progress_state.completed_bytes += file.byte_len as u64;
-        emit_github_import_progress(
-            app,
-            GitHubImportProgressPayload {
-                phase: GitHubImportProgressPhase::Writing,
-                current_skill: Some(source_path.to_string()),
-                current_path: Some(file.relative_path.clone()),
-                completed_files: progress_state.completed_files,
-                total_files: progress_state.total_files,
-                completed_bytes: progress_state.completed_bytes,
-                total_bytes: progress_state.total_bytes,
-            },
-        );
-    }
-
-    Ok(())
-}
-
 fn emit_github_import_progress(app: Option<&AppHandle>, payload: GitHubImportProgressPayload) {
     if let Some(app) = app {
         let _ = app.emit("github-import:progress", payload);
@@ -1827,6 +2167,73 @@ fn is_safe_repo_relative_path(path: &str) -> bool {
         && relative
             .components()
             .all(|component| matches!(component, Component::Normal(_)))
+}
+
+async fn fetch_github_skill_markdown_from_remote_workspace(
+    state: &State<'_, AppState>,
+    workspace_id: &str,
+    source_path: Option<&str>,
+) -> Result<String, String> {
+    let workspace = get_preview_workspace(workspace_id).ok_or_else(|| {
+        "GitHub preview workspace has expired. Preview the repository again.".to_string()
+    })?;
+    if workspace.is_expired(Utc::now()) {
+        let _ = take_preview_workspace(workspace_id);
+        return Err(
+            "GitHub preview workspace has expired. Preview the repository again.".to_string(),
+        );
+    }
+    let source_path = source_path.ok_or_else(|| {
+        "A source path is required for remote GitHub markdown preview.".to_string()
+    })?;
+    let active_target = state.active_target().await?;
+    let target = match active_target {
+        ActiveTarget::Ssh(target) if target.id == workspace.target_id => target,
+        ActiveTarget::Ssh(_) => {
+            return Err(
+                "The active SSH target changed after preview. Preview the repository again."
+                    .to_string(),
+            )
+        }
+        ActiveTarget::Local => {
+            return Err(
+                "Remote GitHub preview workspace is only available on its SSH target.".to_string(),
+            )
+        }
+    };
+    let skill_md_path = if source_path == "." {
+        "SKILL.md".to_string()
+    } else {
+        join_repo_path(source_path, "SKILL.md")?
+    };
+    let connection = connect_ssh_target(&target).await?;
+    let bytes = connection
+        .read_file(&remote_join(&workspace.remote_repo_dir, &skill_md_path))
+        .await?;
+    String::from_utf8(bytes).map_err(|e| format!("Remote SKILL.md is not valid UTF-8: {}", e))
+}
+
+async fn discard_preview_workspace_for_active_target(
+    state: &State<'_, AppState>,
+    workspace_id: &str,
+) {
+    let Some(workspace) = take_preview_workspace(workspace_id) else {
+        return;
+    };
+    let Ok(active_target) = state.active_target().await else {
+        return;
+    };
+    let ActiveTarget::Ssh(target) = active_target else {
+        return;
+    };
+    if target.id != workspace.target_id {
+        return;
+    }
+    if let Ok(connection) = connect_ssh_target(&target).await {
+        let _ = connection
+            .remove_tree(&workspace.remote_workspace_dir)
+            .await;
+    }
 }
 
 async fn fetch_raw_text(
@@ -2563,6 +2970,7 @@ mod tests {
             skills: build_preview_skills(&pool, &candidates)
                 .await
                 .expect("preview skills"),
+            preview_workspace_id: None,
         };
 
         assert!(!preview.skills.is_empty());
@@ -2578,6 +2986,63 @@ mod tests {
             .expect("read dir")
             .count();
         assert_eq!(central_entries, 1, "preview should not write to central");
+    }
+
+    #[tokio::test]
+    async fn import_staging_allows_reclaiming_non_central_record_after_delete() {
+        let pool = setup_test_db().await;
+        let candidate = RemoteSkillCandidate {
+            source_path: "skills/web-access".to_string(),
+            skill_id: "web-access".to_string(),
+            skill_name: "web-access".to_string(),
+            description: Some("remote import".to_string()),
+            root_directory: "skills".to_string(),
+            skill_directory_name: "web-access".to_string(),
+            download_url: "https://raw.githubusercontent.com/eze-is/web-access/main/SKILL.md"
+                .to_string(),
+        };
+
+        db::upsert_skill(
+            &pool,
+            &Skill {
+                id: "web-access".to_string(),
+                name: "web-access".to_string(),
+                description: Some("platform copy left after central delete".to_string()),
+                file_path: "/tmp/codex/web-access/SKILL.md".to_string(),
+                canonical_path: None,
+                is_central: false,
+                source: Some("copy".to_string()),
+                content: None,
+                scanned_at: Utc::now().to_rfc3339(),
+            },
+        )
+        .await
+        .expect("seed non-central record");
+
+        let preview = build_preview_skills(&pool, std::slice::from_ref(&candidate))
+            .await
+            .expect("preview");
+        assert!(
+            preview[0].conflict.is_none(),
+            "non-central rows should not be presented as Central overwrite conflicts"
+        );
+
+        let (staging_ops, skipped_skills) = plan_import_staging(
+            &pool,
+            std::slice::from_ref(&candidate),
+            vec![GitHubSkillImportSelection {
+                source_path: candidate.source_path.clone(),
+                resolution: DuplicateResolution::Overwrite,
+                renamed_skill_id: None,
+            }],
+        )
+        .await
+        .expect("stage import");
+
+        assert!(skipped_skills.is_empty());
+        assert_eq!(staging_ops.len(), 1);
+        assert_eq!(staging_ops[0].final_skill_id, "web-access");
+        assert_eq!(staging_ops[0].resolution, DuplicateResolution::Overwrite);
     }
 
     #[tokio::test]
@@ -2779,6 +3244,7 @@ mod tests {
             skills: build_preview_skills(&pool, &candidates)
                 .await
                 .expect("skills"),
+            preview_workspace_id: None,
         };
 
         assert!(preview
@@ -2828,6 +3294,7 @@ mod tests {
             skills: build_preview_skills(&pool, &candidates)
                 .await
                 .expect("preview skills"),
+            preview_workspace_id: None,
         };
 
         assert!(preview
@@ -2942,6 +3409,102 @@ mod tests {
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].source_path, "skills/preferred");
         assert_eq!(candidates[0].description.as_deref(), Some("Preferred"));
+    }
+
+    #[test]
+    fn remote_manifest_discovery_preserves_snapshot_priority_order() {
+        let paths = [
+            "packages/fallback/skill/SKILL.md",
+            ".agents/skills/universal/SKILL.md",
+            "skills/agent-planner/SKILL.md",
+            "SKILL.md",
+        ];
+
+        let manifests =
+            discover_skill_manifests_from_paths(paths.iter().copied(), None).expect("manifests");
+
+        assert_eq!(manifests[0].source_path, ".");
+        assert!(manifests
+            .iter()
+            .any(|manifest| manifest.source_path == "skills/agent-planner"));
+        assert!(manifests
+            .iter()
+            .any(|manifest| manifest.source_path == ".agents/skills/universal"));
+        assert!(!manifests
+            .iter()
+            .any(|manifest| manifest.source_path == "packages/fallback/skill"));
+    }
+
+    #[test]
+    fn remote_manifest_discovery_honors_source_subpath() {
+        let paths = [
+            "content/skills/code/SKILL.md",
+            "content/skills/git/SKILL.md",
+            "other/skills/ignored/SKILL.md",
+        ];
+
+        let manifests =
+            discover_skill_manifests_from_paths(paths.iter().copied(), Some("content/skills"))
+                .expect("manifests");
+
+        assert_eq!(manifests.len(), 2);
+        assert!(manifests
+            .iter()
+            .all(|manifest| manifest.source_path.starts_with("content/skills/")));
+    }
+
+    #[test]
+    fn remote_import_script_uses_remote_copy_and_move_not_streamed_cat() {
+        let script = remote_import_skill_script();
+
+        assert!(script.contains("cp -a"));
+        assert!(script.contains("mv \"$stage_dir\" \"$target_dir\""));
+        assert!(!script.contains("cat >"));
+    }
+
+    #[test]
+    fn preview_workspace_reuse_requires_matching_target_repo_and_path() {
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+        let now = Utc::now();
+        let workspace = GitHubPreviewWorkspace {
+            id: "workspace-1".to_string(),
+            target_id: "ssh-demo".to_string(),
+            repo: repo.clone(),
+            source_path: Some("content/skills".to_string()),
+            remote_workspace_dir: "/tmp/skillport-github-preview.abc123".to_string(),
+            remote_repo_dir: "/tmp/skillport-github-preview.abc123/repo".to_string(),
+            created_at: now,
+            expires_at: now + Duration::minutes(30),
+        };
+
+        assert!(workspace.matches_source("ssh-demo", &repo, Some("content/skills")));
+        assert!(!workspace.matches_source("ssh-other", &repo, Some("content/skills")));
+        assert!(!workspace.matches_source("ssh-demo", &repo, Some("other")));
+
+        let other_repo = GitHubRepoRef {
+            repo: "other".to_string(),
+            ..repo
+        };
+        assert!(!workspace.matches_source("ssh-demo", &other_repo, Some("content/skills")));
+    }
+
+    #[test]
+    fn remote_workspace_download_script_puts_token_only_in_stdin_script() {
+        let token = "ghp_secret_for_test";
+        let script = remote_workspace_download_script(Some(token)).expect("script");
+        let command = crate::targets::shell_quote("sh -s --");
+
+        assert!(script.contains("curl.conf"));
+        assert!(script.contains("Authorization: Bearer ghp_secret_for_test"));
+        assert!(
+            !command.contains(token),
+            "ssh command string must not contain the GitHub token"
+        );
     }
 
     #[test]
