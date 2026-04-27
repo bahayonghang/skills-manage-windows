@@ -6,8 +6,8 @@ use tauri::State;
 
 use crate::db::{self, DbPool, SkillInstallation};
 use crate::targets::{
-    connect_ssh_target, remote_join, shell_quote, ActiveTarget, ConnectedSshTarget,
-    RemoteTargetConfig,
+    connect_ssh_target, remote_join, remote_symlink_allowed, shell_quote, ActiveTarget,
+    ConnectedSshTarget, RemotePathInfo, RemoteTargetConfig,
 };
 use crate::AppState;
 
@@ -535,6 +535,49 @@ async fn ensure_remote_centralized(
     Ok(())
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum RemoteExistingInstallAction {
+    UseEmptyPath,
+    RemoveSymlink,
+    RemoveManagedCopy,
+    Reject(String),
+}
+
+fn classify_remote_existing_install_target(
+    target_path: &str,
+    method: &str,
+    path_info: Option<&RemotePathInfo>,
+    installation: Option<&SkillInstallation>,
+) -> RemoteExistingInstallAction {
+    let Some(path_info) = path_info else {
+        return RemoteExistingInstallAction::UseEmptyPath;
+    };
+
+    if path_info.file_type == "symlink" {
+        return RemoteExistingInstallAction::RemoveSymlink;
+    }
+
+    if path_info.file_type == "dir"
+        && method == "symlink"
+        && installation.is_some_and(|record| {
+            record.link_type == "copy" && record.installed_path == target_path
+        })
+    {
+        return RemoteExistingInstallAction::RemoveManagedCopy;
+    }
+
+    let entry_type = match path_info.file_type.as_str() {
+        "dir" => "directory",
+        "file" => "file",
+        "symlink" => "symlink",
+        _ => "entry",
+    };
+    RemoteExistingInstallAction::Reject(format!(
+        "A remote {} already exists at '{}'. Uninstall the existing entry or delete it before installing with {}.",
+        entry_type, target_path, method
+    ))
+}
+
 pub async fn install_skill_to_agent_ssh_impl(
     pool: &DbPool,
     target: &RemoteTargetConfig,
@@ -570,19 +613,38 @@ pub async fn install_skill_to_agent_ssh_impl(
     }
 
     let target_path = remote_join(&agent.global_skills_dir, skill_id);
-    if connection.exists(&target_path).await? {
-        return Err(format!(
-            "A remote entry already exists at '{}'. Refusing to overwrite.",
-            target_path
-        ));
+    let method = if method == "symlink" {
+        "symlink"
+    } else {
+        "copy"
+    };
+    if method == "symlink" && !remote_symlink_allowed(target) {
+        return Err("Remote symlink install is disabled for this target.".to_string());
+    }
+    let installations = db::get_skill_installations(pool, skill_id).await?;
+    let installation = installations
+        .iter()
+        .find(|record| record.agent_id == agent_id);
+    let path_info = connection.inspect_path(&target_path).await?;
+    match classify_remote_existing_install_target(
+        &target_path,
+        method,
+        path_info.as_ref(),
+        installation,
+    ) {
+        RemoteExistingInstallAction::UseEmptyPath => {}
+        RemoteExistingInstallAction::RemoveSymlink => {
+            connection.remove_file(&target_path).await?;
+        }
+        RemoteExistingInstallAction::RemoveManagedCopy => {
+            connection.remove_tree(&target_path).await?;
+        }
+        RemoteExistingInstallAction::Reject(error) => return Err(error),
     }
 
     connection.mkdir_p(&agent.global_skills_dir).await?;
 
     if method == "symlink" {
-        if !target.symlink_enabled {
-            return Err("Remote symlink install is disabled for this target.".to_string());
-        }
         let command = format!(
             "ln -s {} {}",
             shell_quote(&canonical_dir),
@@ -1128,6 +1190,63 @@ mod tests {
         let to = Path::new("/a/x/y");
         let rel = make_relative_path(from, to);
         assert_eq!(rel, PathBuf::from("../../../x/y"));
+    }
+
+    #[test]
+    fn test_remote_symlink_install_replaces_existing_symlink() {
+        let info = RemotePathInfo {
+            file_type: "symlink".to_string(),
+            symlink_target: Some("/central/demo".to_string()),
+        };
+
+        let action =
+            classify_remote_existing_install_target("/agent/demo", "symlink", Some(&info), None);
+
+        assert_eq!(action, RemoteExistingInstallAction::RemoveSymlink);
+    }
+
+    #[test]
+    fn test_remote_symlink_install_replaces_managed_copy_dir() {
+        let info = RemotePathInfo {
+            file_type: "dir".to_string(),
+            symlink_target: None,
+        };
+        let installation = SkillInstallation {
+            skill_id: "demo".to_string(),
+            agent_id: "codex".to_string(),
+            installed_path: "/agent/demo".to_string(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: "2026-04-27T00:00:00Z".to_string(),
+        };
+
+        let action = classify_remote_existing_install_target(
+            "/agent/demo",
+            "symlink",
+            Some(&info),
+            Some(&installation),
+        );
+
+        assert_eq!(action, RemoteExistingInstallAction::RemoveManagedCopy);
+    }
+
+    #[test]
+    fn test_remote_symlink_install_rejects_unmanaged_dir() {
+        let info = RemotePathInfo {
+            file_type: "dir".to_string(),
+            symlink_target: None,
+        };
+
+        let action =
+            classify_remote_existing_install_target("/agent/demo", "symlink", Some(&info), None);
+
+        match action {
+            RemoteExistingInstallAction::Reject(error) => {
+                assert!(error.contains("remote directory"));
+                assert!(error.contains("/agent/demo"));
+            }
+            other => panic!("expected rejection, got {:?}", other),
+        }
     }
 
     // ── install_skill_to_agent_impl ───────────────────────────────────────────

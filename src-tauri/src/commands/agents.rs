@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::db::{self, Agent, DbPool};
 use crate::path_utils::{expand_home_path, path_to_string};
-use crate::targets::ActiveTarget;
+use crate::targets::{connect_ssh_target, remote_parent, ActiveTarget, RemoteTargetConfig};
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -74,6 +74,15 @@ pub fn is_agent_detected(global_skills_dir: &str) -> bool {
 /// Convert a `db::Agent` into `AgentWithStatus` using a live filesystem check.
 fn agent_to_with_status(agent: Agent) -> AgentWithStatus {
     let is_detected = is_agent_detected(&agent.global_skills_dir);
+    agent_to_with_status_with_detected(agent, is_detected)
+}
+
+fn agent_to_cached_status(agent: Agent) -> AgentWithStatus {
+    let is_detected = agent.is_detected;
+    agent_to_with_status_with_detected(agent, is_detected)
+}
+
+fn agent_to_with_status_with_detected(agent: Agent, is_detected: bool) -> AgentWithStatus {
     AgentWithStatus {
         id: agent.id,
         display_name: agent.display_name,
@@ -93,6 +102,11 @@ fn agent_to_with_status(agent: Agent) -> AgentWithStatus {
 pub async fn get_agents_impl(pool: &DbPool) -> Result<Vec<AgentWithStatus>, String> {
     let agents = db::get_all_agents(pool).await?;
     Ok(agents.into_iter().map(agent_to_with_status).collect())
+}
+
+pub async fn get_agents_cached_impl(pool: &DbPool) -> Result<Vec<AgentWithStatus>, String> {
+    let agents = db::get_all_agents(pool).await?;
+    Ok(agents.into_iter().map(agent_to_cached_status).collect())
 }
 
 /// Scan the filesystem to update each agent's `is_detected` flag, then return
@@ -117,6 +131,37 @@ pub async fn detect_agents_impl(pool: &DbPool) -> Result<Vec<AgentWithStatus>, S
             is_builtin: agent.is_builtin,
             is_enabled: agent.is_enabled,
         });
+    }
+
+    Ok(result)
+}
+
+async fn is_remote_agent_detected(
+    connection: &crate::targets::ConnectedSshTarget,
+    global_skills_dir: &str,
+) -> Result<bool, String> {
+    if connection.exists(global_skills_dir).await? {
+        return Ok(true);
+    }
+
+    let Some(parent) = remote_parent(global_skills_dir) else {
+        return Ok(false);
+    };
+    connection.exists(&parent).await
+}
+
+pub async fn detect_ssh_agents_impl(
+    pool: &DbPool,
+    target: &RemoteTargetConfig,
+) -> Result<Vec<AgentWithStatus>, String> {
+    let agents = db::get_all_agents(pool).await?;
+    let connection = connect_ssh_target(target).await?;
+    let mut result = Vec::with_capacity(agents.len());
+
+    for agent in agents {
+        let is_detected = is_remote_agent_detected(&connection, &agent.global_skills_dir).await?;
+        let _ = db::update_agent_detected(pool, &agent.id, is_detected).await;
+        result.push(agent_to_with_status_with_detected(agent, is_detected));
     }
 
     Ok(result)
@@ -225,8 +270,12 @@ pub async fn set_agent_enabled_impl(
 /// Tauri command: return all registered agents with live detection status.
 #[tauri::command]
 pub async fn get_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatus>, String> {
+    let active_target = state.active_target().await?;
     let pool = state.active_db().await?;
-    get_agents_impl(&pool).await
+    match active_target {
+        ActiveTarget::Local => get_agents_impl(&pool).await,
+        ActiveTarget::Ssh(_) => get_agents_cached_impl(&pool).await,
+    }
 }
 
 /// Tauri command: refresh detection status for all agents and return them.
@@ -236,7 +285,7 @@ pub async fn detect_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithSt
     let pool = state.active_db().await?;
     match active_target {
         ActiveTarget::Local => detect_agents_impl(&pool).await,
-        ActiveTarget::Ssh(_) => get_agents_impl(&pool).await,
+        ActiveTarget::Ssh(target) => detect_ssh_agents_impl(&pool, &target).await,
     }
 }
 
@@ -379,6 +428,26 @@ mod tests {
         assert!(
             !claude.is_detected,
             "claude-code should not be detected when dir and parent both missing"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_agents_cached_uses_persisted_detection_state() {
+        let pool = setup_test_db().await;
+
+        sqlx::query(
+            "UPDATE agents SET global_skills_dir = ?, is_detected = 1 WHERE id = 'claude-code'",
+        )
+        .bind("/nonexistent/deep/path/skills")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let agents = get_agents_cached_impl(&pool).await.unwrap();
+        let claude = agents.iter().find(|a| a.id == "claude-code").unwrap();
+        assert!(
+            claude.is_detected,
+            "cached agents should not re-check remote paths on the local filesystem"
         );
     }
 

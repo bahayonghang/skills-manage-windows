@@ -7,7 +7,8 @@ use tauri::State;
 
 use crate::db::{self, AgentSkillObservation, DbPool, Skill, SkillInstallation};
 use crate::targets::{
-    connect_ssh_target, remote_file_type_is_dir, remote_join, ActiveTarget, RemoteTargetConfig,
+    connect_ssh_target, remote_file_type_is_dir, remote_join, remote_parent, ActiveTarget,
+    RemoteTargetConfig,
 };
 use crate::AppState;
 
@@ -697,6 +698,16 @@ async fn scan_ssh_directory(
     Ok(skills)
 }
 
+async fn remote_agent_parent_detected(
+    connection: &crate::targets::ConnectedSshTarget,
+    global_skills_dir: &str,
+) -> Result<bool, String> {
+    let Some(parent) = remote_parent(global_skills_dir) else {
+        return Ok(false);
+    };
+    connection.exists(&parent).await
+}
+
 pub async fn scan_ssh_skills_impl(
     pool: &DbPool,
     target: &RemoteTargetConfig,
@@ -718,7 +729,7 @@ pub async fn scan_ssh_skills_impl(
     for agent in &agents {
         let root = agent.global_skills_dir.clone();
         let root_exists = connection.exists(&root).await?;
-        if !root_exists {
+        if !root_exists && !remote_agent_parent_detected(&connection, &root).await? {
             db::update_agent_detected(pool, &agent.id, false).await?;
             skills_by_agent.insert(agent.id.clone(), 0);
             db::delete_stale_skill_installations(pool, &agent.id, &[]).await?;
@@ -729,6 +740,15 @@ pub async fn scan_ssh_skills_impl(
         }
 
         db::update_agent_detected(pool, &agent.id, true).await?;
+        if !root_exists {
+            skills_by_agent.insert(agent.id.clone(), 0);
+            db::delete_stale_skill_installations(pool, &agent.id, &[]).await?;
+            if agent.id == "claude-code" {
+                db::delete_stale_agent_skill_observations(pool, &agent.id, &[]).await?;
+            }
+            continue;
+        }
+
         let root_uses_central_storage =
             agent.category == "central" || central_root.as_deref() == Some(root.as_str());
         let scanned = if let Some(cached) = scanned_root_cache.get(&root) {
