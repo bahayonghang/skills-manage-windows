@@ -383,6 +383,7 @@ export interface ScanDirectory {
 
 export type TargetKind = "local" | "ssh";
 export type SshAuthMethod = "key" | "password";
+export type TargetCredentialStatus = "stored" | "session" | "missing" | "unreadable";
 
 export interface TargetSummary {
   id: string;
@@ -395,6 +396,10 @@ export interface TargetSummary {
   remoteHome?: string | null;
   remoteOs?: string | null;
   cacheDbPath?: string | null;
+  hasStoredPassword?: boolean | null;
+  credentialStatus?: TargetCredentialStatus | null;
+  credentialError?: string | null;
+  symlinkEnabled?: boolean | null;
   isActive: boolean;
 }
 
@@ -425,6 +430,8 @@ export interface SshTargetTestResult {
   ok: boolean;
   remoteHome?: string | null;
   remoteOs?: string | null;
+  credentialStatus?: TargetCredentialStatus | null;
+  credentialError?: string | null;
   message: string;
 }
 
@@ -624,6 +631,7 @@ export interface GitHubSkillPreview {
 export interface GitHubRepoPreview {
   repo: GitHubRepoRef;
   skills: GitHubSkillPreview[];
+  previewWorkspaceId?: string | null;
 }
 
 export type DuplicateResolution = "overwrite" | "skip" | "rename";
