@@ -142,6 +142,34 @@ function applyBootstrapSnapshot(
   };
 }
 
+async function loadBootstrapState(): Promise<
+  Pick<
+    PlatformState,
+    | "agents"
+    | "skillsByAgent"
+    | "collectionCount"
+    | "discoveredCount"
+    | "lastScanAt"
+    | "scanState"
+    | "categoryVisibility"
+  >
+> {
+  const [snapshot, rawCategoryVisibility] = await Promise.all([
+    invoke<BootstrapSnapshot>("get_bootstrap_snapshot"),
+    invoke<string | null>("get_setting", {
+      key: PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY,
+    }),
+  ]);
+
+  return {
+    ...applyBootstrapSnapshot(snapshot),
+    categoryVisibility: resolvePlatformCategoryVisibility(
+      rawCategoryVisibility,
+      snapshot.agents
+    ),
+  };
+}
+
 // ─── State ────────────────────────────────────────────────────────────────────
 
 interface PlatformState {
@@ -209,19 +237,10 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     }
 
     try {
-      const [snapshot, rawCategoryVisibility] = await Promise.all([
-        invoke<BootstrapSnapshot>("get_bootstrap_snapshot"),
-        invoke<string | null>("get_setting", {
-          key: PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY,
-        }),
-      ]);
+      const bootstrapState = await loadBootstrapState();
       if (currentRefreshToken === refreshToken) {
         set((state) => ({
-          ...applyBootstrapSnapshot(snapshot),
-          categoryVisibility: resolvePlatformCategoryVisibility(
-            rawCategoryVisibility,
-            snapshot.agents
-          ),
+          ...bootstrapState,
           isLoading: false,
           scanGeneration: (state.scanGeneration ?? 0) + 1,
         }));
@@ -288,12 +307,24 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         }
         markAppPerformance("scan_finished");
       } catch (err) {
+        let fallbackState:
+          | Awaited<ReturnType<typeof loadBootstrapState>>
+          | null = null;
+        try {
+          fallbackState = await loadBootstrapState();
+        } catch {
+          fallbackState = null;
+        }
+
         if (currentRefreshToken === refreshToken) {
-          set({
+          set((state) => ({
+            ...(fallbackState ?? {}),
             isRefreshing: false,
             scanState: "error",
             error: String(err),
-          });
+            isLoading: state.isLoading,
+            scanGeneration: (state.scanGeneration ?? 0) + 1,
+          }));
         }
         throw err;
       } finally {
