@@ -91,6 +91,20 @@ pub struct CreateSshTargetRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UpdateSshTargetRequest {
+    pub id: String,
+    pub label: String,
+    pub host: String,
+    pub username: String,
+    pub port: Option<u16>,
+    pub auth_method: Option<SshAuthMethod>,
+    pub key_path: Option<String>,
+    pub password: Option<String>,
+    pub passphrase: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TestSshTargetRequest {
     pub id: Option<String>,
     pub label: Option<String>,
@@ -113,6 +127,7 @@ pub struct TargetSummary {
     pub username: Option<String>,
     pub port: Option<u16>,
     pub auth_method: Option<SshAuthMethod>,
+    pub key_path: Option<String>,
     pub remote_home: Option<String>,
     pub remote_os: Option<String>,
     pub cache_db_path: Option<String>,
@@ -652,6 +667,10 @@ impl TargetRegistry {
             username: Some(target.username.clone()),
             port: Some(target.port),
             auth_method: Some(target.auth_method),
+            key_path: match target.auth_method {
+                SshAuthMethod::Key => Some(target.key_path.clone()),
+                SshAuthMethod::Password => None,
+            },
             remote_home: Some(target.remote_home.clone()),
             remote_os: Some(target.remote_os.clone()),
             cache_db_path: remote_cache_db_path(&target.id)
@@ -677,6 +696,7 @@ impl TargetRegistry {
             username: None,
             port: None,
             auth_method: None,
+            key_path: None,
             remote_home: None,
             remote_os: None,
             cache_db_path: None,
@@ -796,6 +816,72 @@ pub async fn create_ssh_target_impl(
 
     let active_id = active_target_id(local_db).await?;
     let mut summary = registry.target_summary(&stored_target, active_id.as_str());
+    if let Some(state) = credential_state {
+        summary.credential_status = Some(state.status);
+        summary.credential_error = state.error;
+        summary.has_stored_password = Some(state.status.is_available());
+    }
+    Ok(summary)
+}
+
+pub async fn update_ssh_target_impl(
+    registry: &TargetRegistry,
+    local_db: &DbPool,
+    request: UpdateSshTargetRequest,
+) -> Result<TargetSummary, String> {
+    let mut targets = load_remote_targets(local_db).await?;
+    let index = targets
+        .iter()
+        .position(|target| target.id == request.id)
+        .ok_or_else(|| format!("Target '{}' not found", request.id))?;
+    let previous_target = targets[index].clone();
+    let mut updated_target = update_request_to_config(request, &previous_target)?;
+    let supplied_password = updated_target.auth_method == SshAuthMethod::Password
+        && updated_target
+            .password
+            .as_deref()
+            .is_some_and(|password| !password.is_empty());
+
+    if updated_target.auth_method == SshAuthMethod::Password && !supplied_password {
+        registry.attach_available_password(&mut updated_target);
+    }
+
+    let probe = probe_ssh_target(&updated_target).await?;
+    if !is_supported_remote_os(&probe.remote_os) {
+        return Err(format!(
+            "Remote OS '{}' is not supported in this version. Linux and macOS are supported.",
+            probe.remote_os
+        ));
+    }
+
+    updated_target.remote_home = probe.remote_home;
+    updated_target.remote_os = probe.remote_os;
+    let credential_state = if updated_target.auth_method == SshAuthMethod::Password {
+        if supplied_password {
+            Some(registry.save_target_password(&mut updated_target)?)
+        } else {
+            let state = registry.target_credential_state(&updated_target);
+            updated_target.password = None;
+            state
+        }
+    } else {
+        updated_target.password = None;
+        None
+    };
+
+    targets[index] = updated_target.clone();
+    save_remote_targets(local_db, &targets).await?;
+    if previous_target.auth_method == SshAuthMethod::Password
+        && updated_target.auth_method != SshAuthMethod::Password
+    {
+        let mut cleanup_target = previous_target.clone();
+        let _ = registry.delete_target_password(&mut cleanup_target);
+    }
+    registry.drop_remote_pool(&updated_target.id);
+    registry.remote_db(&updated_target).await?;
+
+    let active_id = active_target_id(local_db).await?;
+    let mut summary = registry.target_summary(&updated_target, active_id.as_str());
     if let Some(state) = credential_state {
         summary.credential_status = Some(state.status);
         summary.credential_error = state.error;
@@ -1076,6 +1162,77 @@ fn request_to_config(
         remote_home: String::new(),
         remote_os: String::new(),
         symlink_enabled: false,
+    })
+}
+
+fn update_request_to_config(
+    request: UpdateSshTargetRequest,
+    existing: &RemoteTargetConfig,
+) -> Result<RemoteTargetConfig, String> {
+    let requested_id = required_field("id", &request.id)?;
+    if requested_id != existing.id {
+        return Err("Target id cannot be changed.".to_string());
+    }
+
+    let auth_method = request.auth_method.unwrap_or(existing.auth_method);
+    if auth_method == SshAuthMethod::Key
+        && request
+            .passphrase
+            .as_deref()
+            .is_some_and(|value| !value.is_empty())
+    {
+        return Err(
+            "Passphrase-protected keys are not supported yet. Use ssh-agent or an unencrypted key."
+                .to_string(),
+        );
+    }
+
+    let key_path = match auth_method {
+        SshAuthMethod::Key => required_field("keyPath", request.key_path.as_deref().unwrap_or(""))?,
+        SshAuthMethod::Password => String::new(),
+    };
+    let supplied_password = request
+        .password
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let credential_key = match auth_method {
+        SshAuthMethod::Key => None,
+        SshAuthMethod::Password => Some(
+            existing
+                .credential_key
+                .clone()
+                .unwrap_or_else(|| credential_key_for_target(&existing.id)),
+        ),
+    };
+    let protected_password = if auth_method == SshAuthMethod::Password
+        && supplied_password.is_none()
+        && existing.auth_method == SshAuthMethod::Password
+    {
+        existing.protected_password.clone()
+    } else {
+        None
+    };
+    let password = match auth_method {
+        SshAuthMethod::Key => None,
+        SshAuthMethod::Password => supplied_password,
+    };
+
+    Ok(RemoteTargetConfig {
+        id: existing.id.clone(),
+        label: required_field("label", &request.label)?,
+        host: required_field("host", &request.host)?,
+        username: required_field("username", &request.username)?,
+        port: request.port.unwrap_or(existing.port),
+        auth_method,
+        key_path,
+        credential_key,
+        protected_password,
+        password,
+        remote_home: existing.remote_home.clone(),
+        remote_os: existing.remote_os.clone(),
+        symlink_enabled: existing.symlink_enabled,
     })
 }
 
@@ -2166,6 +2323,62 @@ mod tests {
 
         assert!(!changed);
         assert!(target.password.is_none());
+    }
+
+    #[test]
+    fn update_request_preserves_target_id_and_reuses_saved_password_when_blank() {
+        let mut existing = password_target();
+        existing.protected_password = Some("protected".to_string());
+        let request = UpdateSshTargetRequest {
+            id: "ssh-demo".to_string(),
+            label: "Prod".to_string(),
+            host: "prod.local".to_string(),
+            username: "bob".to_string(),
+            port: Some(2222),
+            auth_method: Some(SshAuthMethod::Password),
+            key_path: None,
+            password: Some("  ".to_string()),
+            passphrase: None,
+        };
+
+        let updated = update_request_to_config(request, &existing).unwrap();
+
+        assert_eq!(updated.id, "ssh-demo");
+        assert_eq!(updated.label, "Prod");
+        assert_eq!(updated.host, "prod.local");
+        assert_eq!(updated.username, "bob");
+        assert_eq!(updated.port, 2222);
+        assert_eq!(updated.auth_method, SshAuthMethod::Password);
+        assert_eq!(
+            updated.credential_key.as_deref(),
+            Some("ssh-demo:ssh-password")
+        );
+        assert_eq!(updated.protected_password.as_deref(), Some("protected"));
+        assert!(updated.password.is_none());
+    }
+
+    #[test]
+    fn update_request_switching_to_key_clears_password_metadata() {
+        let existing = password_target();
+        let request = UpdateSshTargetRequest {
+            id: "ssh-demo".to_string(),
+            label: "Lab".to_string(),
+            host: "lab.local".to_string(),
+            username: "alice".to_string(),
+            port: Some(22),
+            auth_method: Some(SshAuthMethod::Key),
+            key_path: Some("C:\\Users\\alice\\.ssh\\id_ed25519".to_string()),
+            password: Some("secret".to_string()),
+            passphrase: None,
+        };
+
+        let updated = update_request_to_config(request, &existing).unwrap();
+
+        assert_eq!(updated.auth_method, SshAuthMethod::Key);
+        assert_eq!(updated.key_path, "C:\\Users\\alice\\.ssh\\id_ed25519");
+        assert!(updated.credential_key.is_none());
+        assert!(updated.protected_password.is_none());
+        assert!(updated.password.is_none());
     }
 
     #[test]

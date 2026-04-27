@@ -2,8 +2,9 @@ use tauri::State;
 
 use crate::targets::{
     create_ssh_target_impl, delete_target_impl, get_active_target_impl, set_active_target_impl,
-    test_ssh_target_impl, update_ssh_target_password_impl, CreateSshTargetRequest,
-    SshTargetTestResult, TargetSummary, TestSshTargetRequest,
+    test_ssh_target_impl, update_ssh_target_impl, update_ssh_target_password_impl,
+    CreateSshTargetRequest, SshTargetTestResult, TargetSummary, TestSshTargetRequest,
+    UpdateSshTargetRequest,
 };
 use crate::AppState;
 
@@ -18,6 +19,14 @@ pub async fn create_ssh_target(
     request: CreateSshTargetRequest,
 ) -> Result<TargetSummary, String> {
     create_ssh_target_impl(&state.targets, &state.db, request).await
+}
+
+#[tauri::command]
+pub async fn update_ssh_target(
+    state: State<'_, AppState>,
+    request: UpdateSshTargetRequest,
+) -> Result<TargetSummary, String> {
+    update_ssh_target_impl(&state.targets, &state.db, request).await
 }
 
 #[tauri::command]

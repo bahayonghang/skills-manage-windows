@@ -107,6 +107,7 @@ pub fn run() {
             // Targets
             commands::targets::list_targets,
             commands::targets::create_ssh_target,
+            commands::targets::update_ssh_target,
             commands::targets::test_ssh_target,
             commands::targets::update_ssh_target_password,
             commands::targets::delete_target,

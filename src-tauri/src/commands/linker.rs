@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::db::{self, DbPool, SkillInstallation};
+#[cfg(test)]
+use crate::targets::RemotePathInfo;
 use crate::targets::{
-    connect_ssh_target, remote_join, remote_symlink_allowed, shell_quote, ActiveTarget,
-    ConnectedSshTarget, RemotePathInfo, RemoteTargetConfig,
+    connect_ssh_target, remote_join, remote_symlink_allowed, ActiveTarget, ConnectedSshTarget,
+    RemoteTargetConfig,
 };
 use crate::AppState;
 
@@ -55,6 +57,56 @@ pub struct CentralBatchInstallResult {
     pub succeeded: Vec<CentralBatchInstallSuccess>,
     pub failed: Vec<CentralBatchInstallFailure>,
 }
+
+const REMOTE_CENTRAL_INSTALL_SCRIPT: &str = r#"
+set -eu
+
+canonical_dir=$1
+source_dir=$2
+target_path=$3
+agent_dir=$4
+method=$5
+managed_copy=$6
+
+canonical_skill_md="$canonical_dir/SKILL.md"
+source_skill_md="$source_dir/SKILL.md"
+
+if [ ! -e "$canonical_skill_md" ]; then
+  if [ ! -e "$source_skill_md" ]; then
+    printf 'Skill source not found at %s\n' "$source_skill_md" >&2
+    exit 42
+  fi
+  mkdir -p "$canonical_dir"
+  cp -R "$source_dir/." "$canonical_dir/"
+fi
+
+if [ -L "$target_path" ]; then
+  rm -f -- "$target_path"
+elif [ -e "$target_path" ]; then
+  if [ -d "$target_path" ] && [ "$method" = "symlink" ] && [ "$managed_copy" = "1" ]; then
+    rm -rf -- "$target_path"
+  else
+    if [ -d "$target_path" ]; then
+      entry_type=directory
+    elif [ -f "$target_path" ]; then
+      entry_type=file
+    else
+      entry_type=entry
+    fi
+    printf 'A remote %s already exists at '\''%s'\''. Uninstall the existing entry or delete it before installing with %s.\n' "$entry_type" "$target_path" "$method" >&2
+    exit 43
+  fi
+fi
+
+mkdir -p "$agent_dir"
+
+if [ "$method" = "symlink" ]; then
+  ln -s "$canonical_dir" "$target_path"
+else
+  mkdir -p "$target_path"
+  cp -R "$canonical_dir/." "$target_path/"
+fi
+"#;
 
 // ─── Path Utilities ───────────────────────────────────────────────────────────
 
@@ -535,6 +587,50 @@ async fn ensure_remote_centralized(
     Ok(())
 }
 
+fn remote_skill_source_dir(skill: &db::Skill, skill_id: &str) -> Result<String, String> {
+    crate::targets::remote_parent(&skill.file_path)
+        .ok_or_else(|| format!("Invalid file_path for skill '{}'", skill_id))
+}
+
+async fn mark_remote_skill_centralized(
+    pool: &DbPool,
+    mut skill: db::Skill,
+    canonical_dir: &str,
+    canonical_skill_md: &str,
+) -> Result<(), String> {
+    skill.canonical_path = Some(canonical_dir.to_string());
+    skill.is_central = true;
+    skill.file_path = canonical_skill_md.to_string();
+    db::upsert_skill(pool, &skill).await
+}
+
+async fn run_remote_central_install_script(
+    connection: &ConnectedSshTarget,
+    source_dir: &str,
+    canonical_dir: &str,
+    target_path: &str,
+    agent_dir: &str,
+    method: &str,
+    managed_copy: bool,
+) -> Result<(), String> {
+    let managed_copy = if managed_copy { "1" } else { "0" };
+    connection
+        .run_script(
+            REMOTE_CENTRAL_INSTALL_SCRIPT,
+            &[
+                canonical_dir,
+                source_dir,
+                target_path,
+                agent_dir,
+                method,
+                managed_copy,
+            ],
+        )
+        .await
+        .map(|_| ())
+}
+
+#[cfg(test)]
 #[derive(Debug, PartialEq, Eq)]
 enum RemoteExistingInstallAction {
     UseEmptyPath,
@@ -543,6 +639,7 @@ enum RemoteExistingInstallAction {
     Reject(String),
 }
 
+#[cfg(test)]
 fn classify_remote_existing_install_target(
     target_path: &str,
     method: &str,
@@ -585,6 +682,26 @@ pub async fn install_skill_to_agent_ssh_impl(
     agent_id: &str,
     method: &str,
 ) -> Result<InstallResult, String> {
+    let connection = connect_ssh_target(target).await?;
+    install_skill_to_agent_ssh_with_connection(
+        pool,
+        &connection,
+        target,
+        skill_id,
+        agent_id,
+        method,
+    )
+    .await
+}
+
+async fn install_skill_to_agent_ssh_with_connection(
+    pool: &DbPool,
+    connection: &ConnectedSshTarget,
+    target: &RemoteTargetConfig,
+    skill_id: &str,
+    agent_id: &str,
+    method: &str,
+) -> Result<InstallResult, String> {
     if agent_id == "central" {
         return Err("Cannot install a skill to the central agent itself".to_string());
     }
@@ -596,11 +713,15 @@ pub async fn install_skill_to_agent_ssh_impl(
         .await?
         .ok_or_else(|| "Central agent not found in database".to_string())?;
     let canonical_dir = remote_join(&central.global_skills_dir, skill_id);
-    let connection = connect_ssh_target(target).await?;
-
-    ensure_remote_centralized(&connection, pool, skill_id, &canonical_dir).await?;
+    let canonical_skill_md = remote_join(&canonical_dir, "SKILL.md");
+    let skill = db::get_skill_by_id(pool, skill_id)
+        .await?
+        .ok_or_else(|| format!("Skill '{}' not found in database", skill_id))?;
+    let source_dir = remote_skill_source_dir(&skill, skill_id)?;
 
     if agent.global_skills_dir == central.global_skills_dir {
+        ensure_remote_centralized(connection, pool, skill_id, &canonical_dir).await?;
+
         return record_remote_installation(
             pool,
             skill_id,
@@ -625,32 +746,22 @@ pub async fn install_skill_to_agent_ssh_impl(
     let installation = installations
         .iter()
         .find(|record| record.agent_id == agent_id);
-    let path_info = connection.inspect_path(&target_path).await?;
-    match classify_remote_existing_install_target(
-        &target_path,
-        method,
-        path_info.as_ref(),
-        installation,
-    ) {
-        RemoteExistingInstallAction::UseEmptyPath => {}
-        RemoteExistingInstallAction::RemoveSymlink => {
-            connection.remove_file(&target_path).await?;
-        }
-        RemoteExistingInstallAction::RemoveManagedCopy => {
-            connection.remove_tree(&target_path).await?;
-        }
-        RemoteExistingInstallAction::Reject(error) => return Err(error),
-    }
+    let managed_copy = installation
+        .is_some_and(|record| record.link_type == "copy" && record.installed_path == target_path);
 
-    connection.mkdir_p(&agent.global_skills_dir).await?;
+    run_remote_central_install_script(
+        connection,
+        &source_dir,
+        &canonical_dir,
+        &target_path,
+        &agent.global_skills_dir,
+        method,
+        managed_copy,
+    )
+    .await?;
+    mark_remote_skill_centralized(pool, skill, &canonical_dir, &canonical_skill_md).await?;
 
     if method == "symlink" {
-        let command = format!(
-            "ln -s {} {}",
-            shell_quote(&canonical_dir),
-            shell_quote(&target_path)
-        );
-        connection.run_command(&command).await?;
         return record_remote_installation(
             pool,
             skill_id,
@@ -662,7 +773,6 @@ pub async fn install_skill_to_agent_ssh_impl(
         .await;
     }
 
-    connection.copy_dir(&canonical_dir, &target_path).await?;
     record_remote_installation(pool, skill_id, agent_id, &target_path, "copy", None).await
 }
 
@@ -1013,6 +1123,22 @@ pub async fn batch_install_to_agents(
     let pool = state.active_db().await?;
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
+    if agent_ids.is_empty() {
+        return Ok(BatchInstallResult { succeeded, failed });
+    }
+    let ssh_connection = match &active_target {
+        ActiveTarget::Ssh(target) => match connect_ssh_target(target).await {
+            Ok(connection) => Some(connection),
+            Err(error) => {
+                failed.extend(agent_ids.iter().map(|agent_id| FailedInstall {
+                    agent_id: agent_id.clone(),
+                    error: error.clone(),
+                }));
+                return Ok(BatchInstallResult { succeeded, failed });
+            }
+        },
+        ActiveTarget::Local => None,
+    };
 
     for agent_id in &agent_ids {
         let install_result = match &active_target {
@@ -1027,8 +1153,18 @@ pub async fn batch_install_to_agents(
                 } else {
                     "copy"
                 };
-                install_skill_to_agent_ssh_impl(&pool, target, &skill_id, agent_id, remote_method)
-                    .await
+                let connection = ssh_connection
+                    .as_ref()
+                    .ok_or_else(|| "SSH connection was not initialized".to_string())?;
+                install_skill_to_agent_ssh_with_connection(
+                    &pool,
+                    connection,
+                    target,
+                    &skill_id,
+                    agent_id,
+                    remote_method,
+                )
+                .await
             }
         };
         match install_result {
@@ -1066,25 +1202,46 @@ pub async fn batch_install_central_skills(
         };
         let mut succeeded = Vec::new();
         let mut failed = Vec::new();
-        for skill_id in dedupe_ordered(skill_ids) {
-            for agent_id in dedupe_ordered(agent_ids.clone()) {
-                match install_skill_to_agent_ssh_impl(
+        let skill_ids = dedupe_ordered(skill_ids);
+        let agent_ids = dedupe_ordered(agent_ids);
+        if skill_ids.is_empty() || agent_ids.is_empty() {
+            return Ok(CentralBatchInstallResult { succeeded, failed });
+        }
+        let connection = match connect_ssh_target(&target).await {
+            Ok(connection) => connection,
+            Err(error) => {
+                for skill_id in skill_ids {
+                    for agent_id in &agent_ids {
+                        failed.push(CentralBatchInstallFailure {
+                            skill_id: skill_id.clone(),
+                            agent_id: agent_id.clone(),
+                            error: error.clone(),
+                        });
+                    }
+                }
+                return Ok(CentralBatchInstallResult { succeeded, failed });
+            }
+        };
+        for skill_id in skill_ids {
+            for agent_id in &agent_ids {
+                match install_skill_to_agent_ssh_with_connection(
                     &pool,
+                    &connection,
                     &target,
                     &skill_id,
-                    &agent_id,
+                    agent_id,
                     remote_method,
                 )
                 .await
                 {
                     Ok(result) => succeeded.push(CentralBatchInstallSuccess {
                         skill_id: skill_id.clone(),
-                        agent_id,
+                        agent_id: agent_id.clone(),
                         target_path: result.symlink_path,
                     }),
                     Err(error) => failed.push(CentralBatchInstallFailure {
                         skill_id: skill_id.clone(),
-                        agent_id,
+                        agent_id: agent_id.clone(),
                         error,
                     }),
                 }
