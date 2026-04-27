@@ -30,18 +30,34 @@ export function AppShell() {
   const resetMarketplaceForTargetChange = useMarketplaceStore((s) => s.resetForTargetChange);
   const loadTargets = useTargetStore((s) => s.loadTargets);
   const activeTargetId = useTargetStore((s) => s.activeTarget.id);
+  const [hasLoadedTargets, setHasLoadedTargets] = useState(false);
   const lastTargetIdRef = useRef<string | null>(null);
+  const isInitialTargetLoadRef = useRef(true);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       await loadTargets().catch(() => undefined);
+      if (cancelled) return;
+      setHasLoadedTargets(true);
       await initialize().catch(() => undefined);
     })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!activeTargetId) return;
+
+    if (isInitialTargetLoadRef.current) {
+      lastTargetIdRef.current = activeTargetId;
+      if (hasLoadedTargets) {
+        isInitialTargetLoadRef.current = false;
+      }
+      return;
+    }
 
     if (lastTargetIdRef.current === null) {
       lastTargetIdRef.current = activeTargetId;
@@ -58,7 +74,7 @@ export function AppShell() {
     resetMarketplaceForTargetChange();
     void handleGlobalRescan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTargetId]);
+  }, [activeTargetId, hasLoadedTargets]);
 
   useEffect(() => {
     if (!mainRef.current) return;
