@@ -1754,8 +1754,9 @@ pub async fn delete_skill(pool: &DbPool, skill_id: &str) -> Result<(), String> {
         .bind(skill_id)
         .execute(pool)
         .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    prune_empty_skill_repositories(pool).await?;
+    Ok(())
 }
 
 // ─── Skill Installations ──────────────────────────────────────────────────────
@@ -1902,11 +1903,12 @@ pub async fn delete_skills_not_in_scope(
             .execute(pool)
             .await
             .map_err(|e| e.to_string())?;
-        return sqlx::query("DELETE FROM skills")
+        sqlx::query("DELETE FROM skills")
             .execute(pool)
             .await
-            .map(|_| ())
-            .map_err(|e| e.to_string());
+            .map_err(|e| e.to_string())?;
+        prune_empty_skill_repositories(pool).await?;
+        return Ok(());
     }
 
     let placeholders = found_skill_ids
@@ -1965,10 +1967,9 @@ pub async fn delete_skills_not_in_scope(
     for id in found_skill_ids {
         q2 = q2.bind(id.as_str());
     }
-    q2.execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    q2.execute(pool).await.map_err(|e| e.to_string())?;
+    prune_empty_skill_repositories(pool).await?;
+    Ok(())
 }
 
 /// Retrieve all installation records for a given skill.
@@ -2350,6 +2351,85 @@ pub async fn get_skill_repository_by_id(
         .fetch_optional(pool)
         .await
         .map_err(|e| e.to_string())
+}
+
+pub async fn get_central_skill_ids_by_repository(
+    pool: &DbPool,
+    repository_id: &str,
+) -> Result<Vec<String>, String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT s.id FROM skills s
+         JOIN skill_repository_members m ON s.id = m.skill_id
+         WHERE m.repository_id = ? AND s.is_central = 1
+         ORDER BY s.name, s.id",
+    )
+    .bind(repository_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+pub async fn detach_skill_remote_source(pool: &DbPool, skill_id: &str) -> Result<(), String> {
+    sqlx::query("DELETE FROM skill_update_states WHERE skill_id = ?")
+        .bind(skill_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM skill_repository_members WHERE skill_id = ?")
+        .bind(skill_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    prune_empty_skill_repositories(pool).await?;
+    Ok(())
+}
+
+pub async fn delete_empty_skill_repository(
+    pool: &DbPool,
+    repository_id: &str,
+) -> Result<bool, String> {
+    let repository = get_skill_repository_by_id(pool, repository_id)
+        .await?
+        .ok_or_else(|| format!("Repository '{}' not found", repository_id))?;
+    if repository.id == LOCAL_UNKNOWN_REPOSITORY_ID || repository.is_unknown {
+        return Err("The system unknown-source repository cannot be deleted".to_string());
+    }
+
+    let result = sqlx::query(
+        "DELETE FROM skill_repositories
+         WHERE id = ?
+           AND id <> ?
+           AND is_unknown = 0
+           AND NOT EXISTS (
+             SELECT 1 FROM skill_repository_members
+             WHERE repository_id = skill_repositories.id
+           )",
+    )
+    .bind(repository_id)
+    .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+pub async fn prune_empty_skill_repositories(pool: &DbPool) -> Result<u64, String> {
+    let result = sqlx::query(
+        "DELETE FROM skill_repositories
+         WHERE id <> ?
+           AND is_unknown = 0
+           AND NOT EXISTS (
+             SELECT 1 FROM skill_repository_members
+             WHERE repository_id = skill_repositories.id
+           )",
+    )
+    .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(result.rows_affected())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3966,6 +4046,85 @@ mod tests {
             Some("skills/.curated/github-skill")
         );
         assert!(!assignment.is_source_unknown);
+    }
+
+    #[tokio::test]
+    async fn test_delete_last_repository_skill_prunes_repository() {
+        let pool = setup_test_db().await;
+        let skill = make_skill("github-prune-skill", "GitHub Prune Skill", true);
+        upsert_skill(&pool, &skill).await.unwrap();
+        let repository = assign_github_repository_to_skill(
+            &pool,
+            "openai",
+            "skills",
+            "main",
+            "https://github.com/openai/skills",
+            "github-prune-skill",
+            "skills/github-prune-skill",
+        )
+        .await
+        .unwrap();
+
+        delete_skill(&pool, "github-prune-skill").await.unwrap();
+
+        assert!(get_skill_repository_by_id(&pool, &repository.id)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(
+            get_skill_repository_by_id(&pool, LOCAL_UNKNOWN_REPOSITORY_ID)
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delete_skills_not_in_scope_prunes_empty_repositories() {
+        let pool = setup_test_db().await;
+        let skill = make_skill("stale-github-skill", "Stale GitHub Skill", true);
+        upsert_skill(&pool, &skill).await.unwrap();
+        let repository = assign_github_repository_to_skill(
+            &pool,
+            "example",
+            "stale",
+            "main",
+            "https://github.com/example/stale",
+            "stale-github-skill",
+            "skills/stale-github-skill",
+        )
+        .await
+        .unwrap();
+
+        delete_skills_not_in_scope(&pool, &[]).await.unwrap();
+
+        assert!(get_skill_repository_by_id(&pool, &repository.id)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(
+            get_skill_repository_by_id(&pool, LOCAL_UNKNOWN_REPOSITORY_ID)
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delete_empty_skill_repository_rejects_unknown_repository() {
+        let pool = setup_test_db().await;
+
+        let error = delete_empty_skill_repository(&pool, LOCAL_UNKNOWN_REPOSITORY_ID)
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("cannot be deleted"));
+        assert!(
+            get_skill_repository_by_id(&pool, LOCAL_UNKNOWN_REPOSITORY_ID)
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]

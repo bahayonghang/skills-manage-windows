@@ -31,6 +31,11 @@ interface BatchDeleteCentralSkillsDialogProps {
   isPreviewLoading: boolean;
   isDeleting: boolean;
   error: string | null;
+  title?: string;
+  description?: string;
+  dangerTitle?: string;
+  confirmLabel?: string;
+  confirmTestId?: string;
   onConfirm: (
     requests: BatchDeleteCentralSkillRequest[]
   ) => Promise<BatchDeleteCentralSkillResult>;
@@ -63,6 +68,11 @@ export function BatchDeleteCentralSkillsDialog({
   isPreviewLoading,
   isDeleting,
   error,
+  title,
+  description,
+  dangerTitle,
+  confirmLabel,
+  confirmTestId,
   onConfirm,
 }: BatchDeleteCentralSkillsDialogProps) {
   const { t } = useTranslation();
@@ -147,13 +157,13 @@ export function BatchDeleteCentralSkillsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{t("central.batchDeleteTitle", { count: skillIds.length })}</DialogTitle>
+          <DialogTitle>{title ?? t("central.batchDeleteTitle", { count: skillIds.length })}</DialogTitle>
           <DialogClose />
         </DialogHeader>
 
         <DialogBody className="space-y-4">
           <DialogDescription>
-            {t("central.batchDeleteDesc", { count: skillIds.length })}
+            {description ?? t("central.batchDeleteDesc", { count: skillIds.length })}
           </DialogDescription>
 
           <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm">
@@ -161,9 +171,10 @@ export function BatchDeleteCentralSkillsDialog({
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
               <div className="min-w-0">
                 <div className="font-medium text-foreground">
-                  {t("central.batchDeleteCentralRequired", {
-                    count: preview?.previews.length ?? skillIds.length,
-                  })}
+                  {dangerTitle ??
+                    t("central.batchDeleteCentralRequired", {
+                      count: preview?.previews.length ?? skillIds.length,
+                    })}
                 </div>
                 {preview && preview.previews.length > 0 && (
                   <div className="mt-2 max-h-24 space-y-1 overflow-auto text-xs text-muted-foreground">
@@ -282,7 +293,7 @@ export function BatchDeleteCentralSkillsDialog({
             variant="destructive"
             onClick={handleConfirm}
             disabled={isPreviewLoading || isDeleting || !canConfirm}
-            data-testid="confirm-batch-delete-central-skills"
+            data-testid={confirmTestId ?? "confirm-batch-delete-central-skills"}
           >
             {isDeleting ? (
               <>
@@ -292,7 +303,7 @@ export function BatchDeleteCentralSkillsDialog({
             ) : (
               <>
                 <Trash2 className="size-3.5" />
-                {t("central.confirmBatchDelete")}
+                {confirmLabel ?? t("central.confirmBatchDelete")}
               </>
             )}
           </Button>

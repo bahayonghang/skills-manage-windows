@@ -13,6 +13,8 @@ import {
   CentralSkillUpdateProgressPayload,
   CentralSkillUpdateResult,
   CentralSkillUpdateState,
+  DeleteSkillRepositoryPreview,
+  DeleteSkillRepositoryResult,
   SkillportStateImportPreview,
   SkillportStateImportResolution,
   SkillportStateImportResult,
@@ -217,7 +219,7 @@ function mergeUpdateProgress(
   if (payload.skillId && (payload.status === "up_to_date" || payload.status === "update_available")) {
     items[payload.skillId] = "succeeded";
   }
-  if (payload.skillId && payload.status === "unsupported") {
+  if (payload.skillId && (payload.status === "unsupported" || payload.status === "remote_missing")) {
     items[payload.skillId] = "skipped";
   }
   if (payload.skillId && payload.status === "error") {
@@ -239,7 +241,10 @@ function mergeUpdateProgress(
     failed: payload.failed,
     skipped: payload.skipped,
     currentSkillName: payload.skillName ?? current.currentSkillName,
-    error: payload.error ?? current.error,
+    error:
+      payload.status === "completed" && payload.failed === 0
+        ? undefined
+        : payload.error ?? current.error,
     items,
   };
 }
@@ -328,10 +333,15 @@ interface CentralSkillsState {
   ) => Promise<CentralBatchInstallResult>;
   loadDeletePreview: (skillId: string) => Promise<SkillDetail>;
   loadBatchDeletePreview: (skillIds: string[]) => Promise<BatchDeleteCentralSkillPreviewResult>;
+  loadRepositoryDeletePreview: (repositoryId: string) => Promise<DeleteSkillRepositoryPreview>;
   deleteCentralSkill: (skillId: string, removeAgentIds: string[]) => Promise<void>;
   deleteCentralSkills: (
     requests: BatchDeleteCentralSkillRequest[]
   ) => Promise<BatchDeleteCentralSkillResult>;
+  deleteSkillRepository: (
+    repositoryId: string,
+    requests: BatchDeleteCentralSkillRequest[]
+  ) => Promise<DeleteSkillRepositoryResult>;
   togglePlatformLink: (skillId: string, agentId: string) => Promise<void>;
   createRepository: (name: string) => Promise<SkillRepository>;
   assignSkillsToRepository: (skillIds: string[], repositoryId: string) => Promise<void>;
@@ -340,6 +350,7 @@ interface CentralSkillsState {
   bulkSuggestSkillTags: (skillIds: string[]) => Promise<SkillTagSuggestionResult[]>;
   checkSkillUpdates: (skillIds?: string[]) => Promise<CentralSkillUpdateState[]>;
   updateSkills: (skillIds: string[]) => Promise<CentralSkillUpdateResult>;
+  keepRemoteMissingSkills: (skillIds: string[]) => Promise<string[]>;
   cancelAiTagJob: () => Promise<void>;
   loadAiTagReviews: () => Promise<void>;
   acceptAiTagReview: (skillId: string, tagIds: string[]) => Promise<void>;
@@ -492,6 +503,16 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
     });
   },
 
+  loadRepositoryDeletePreview: async (repositoryId) => {
+    if (!isTauriRuntime()) {
+      throw new Error("Desktop-only feature: repository deletion is available in the Tauri app.");
+    }
+
+    return invoke<DeleteSkillRepositoryPreview>("preview_delete_skill_repository", {
+      repositoryId,
+    });
+  },
+
   deleteCentralSkill: async (skillId, removeAgentIds) => {
     if (!isTauriRuntime()) {
       throw new Error("Desktop-only feature: Central skill deletion is available in the Tauri app.");
@@ -530,6 +551,39 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
     set({ isDeleting: true, error: null });
     try {
       const result = await invoke<BatchDeleteCentralSkillResult>("delete_central_skills", {
+        requests,
+      });
+      const [skills, repositories, tags, reviews, updateStates] = await Promise.all([
+        invoke<SkillWithLinks[]>("get_central_skills"),
+        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+        invoke<SkillTag[]>("get_skill_tags"),
+        invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+      ]);
+      set({
+        skills: skills ?? [],
+        repositories: repositories ?? [],
+        tags: tags ?? [],
+        aiTagReviews: reviews ?? [],
+        updateStatuses: indexUpdateStates(updateStates ?? []),
+        isDeleting: false,
+      });
+      return result;
+    } catch (err) {
+      set({ error: String(err), isDeleting: false });
+      throw err;
+    }
+  },
+
+  deleteSkillRepository: async (repositoryId, requests) => {
+    if (!isTauriRuntime()) {
+      throw new Error("Desktop-only feature: repository deletion is available in the Tauri app.");
+    }
+
+    set({ isDeleting: true, error: null });
+    try {
+      const result = await invoke<DeleteSkillRepositoryResult>("delete_skill_repository", {
+        repositoryId,
         requests,
       });
       const [skills, repositories, tags, reviews, updateStates] = await Promise.all([
@@ -812,6 +866,36 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
           error: String(err),
         },
       }));
+      throw err;
+    }
+  },
+
+  keepRemoteMissingSkills: async (skillIds) => {
+    if (skillIds.length === 0) {
+      return [];
+    }
+    if (!isTauriRuntime()) {
+      throw new Error("Desktop-only feature: remote-missing update decisions are available in the Tauri app.");
+    }
+
+    set({ error: null });
+    try {
+      const kept = await invoke<string[]>("keep_remote_missing_central_skills", {
+        skillIds,
+      });
+      const [skills, repositories, updateStates] = await Promise.all([
+        invoke<SkillWithLinks[]>("get_central_skills"),
+        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+      ]);
+      set((state) => ({
+        skills: skills ?? [],
+        repositories: repositories ?? state.repositories,
+        updateStatuses: indexUpdateStates(updateStates ?? []),
+      }));
+      return kept ?? [];
+    } catch (err) {
+      set({ error: String(err) });
       throw err;
     }
   },

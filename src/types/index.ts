@@ -193,6 +193,17 @@ export interface BatchDeleteCentralSkillResult {
   failed: FailedCentralSkillDelete[];
 }
 
+export interface DeleteSkillRepositoryPreview {
+  repository: SkillRepositoryWithStats;
+  delete_preview: BatchDeleteCentralSkillPreviewResult;
+}
+
+export interface DeleteSkillRepositoryResult {
+  repository: SkillRepository;
+  deleted_repository: boolean;
+  delete_result: BatchDeleteCentralSkillResult;
+}
+
 // ─── Collection Types ─────────────────────────────────────────────────────────
 
 export interface Collection {
@@ -310,6 +321,7 @@ export type CentralSkillUpdateStatus =
   | "up_to_date"
   | "update_available"
   | "unsupported"
+  | "remote_missing"
   | "error";
 
 export interface CentralSkillUpdateState {

@@ -393,6 +393,102 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
   });
 
+  it("loads repository delete preview", async () => {
+    const repository: SkillRepositoryWithStats = {
+      id: "github-openai-skills-main",
+      name: "openai/skills",
+      source_type: "github",
+      owner: "openai",
+      repo: "skills",
+      branch: "main",
+      url: "https://github.com/openai/skills",
+      is_unknown: false,
+      created_at: "2026-04-17T00:00:00.000Z",
+      updated_at: "2026-04-17T00:00:00.000Z",
+      skill_count: 1,
+      unknown_skill_count: 0,
+    };
+    const preview = {
+      repository,
+      delete_preview: {
+        previews: [
+          {
+            skill_id: "frontend-design",
+            skill_name: "frontend-design",
+            central_path: "~/.skillsmanage/skills/frontend-design",
+            copy_installations: mockDeletePreview.installations,
+            auto_removed_agent_ids: ["claude-code"],
+          },
+        ],
+        failed: [],
+      },
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(preview);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .loadRepositoryDeletePreview("github-openai-skills-main");
+
+    expect(result).toEqual(preview);
+    expect(invoke).toHaveBeenCalledWith("preview_delete_skill_repository", {
+      repositoryId: "github-openai-skills-main",
+    });
+  });
+
+  it("deletes a repository and refreshes central metadata", async () => {
+    const result = {
+      repository: {
+        id: "github-openai-skills-main",
+        name: "openai/skills",
+        source_type: "github",
+        owner: "openai",
+        repo: "skills",
+        branch: "main",
+        url: "https://github.com/openai/skills",
+        is_unknown: false,
+        created_at: "2026-04-17T00:00:00.000Z",
+        updated_at: "2026-04-17T00:00:00.000Z",
+      },
+      deleted_repository: true,
+      delete_result: {
+        succeeded: [
+          {
+            skill_id: "frontend-design",
+            removed_central_path: "~/.skillsmanage/skills/frontend-design",
+            removed_agent_ids: ["cursor"],
+            retained_agent_ids: [],
+          },
+        ],
+        failed: [],
+      },
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(result)
+      .mockResolvedValueOnce([mockSkills[1]])
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const actual = await useCentralSkillsStore.getState().deleteSkillRepository(
+      "github-openai-skills-main",
+      [{ skill_id: "frontend-design", remove_agent_ids: ["cursor"] }]
+    );
+
+    expect(actual).toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("delete_skill_repository", {
+      repositoryId: "github-openai-skills-main",
+      requests: [{ skill_id: "frontend-design", remove_agent_ids: ["cursor"] }],
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+    expect(invoke).toHaveBeenCalledWith("get_skill_tags");
+    expect(invoke).toHaveBeenCalledWith("get_pending_ai_tag_reviews");
+    expect(invoke).toHaveBeenCalledWith("get_central_skill_update_states");
+    expect(useCentralSkillsStore.getState().skills).toEqual([mockSkills[1]]);
+    expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
+  });
+
   it("sets error and clears deleting state when central deletion fails", async () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error("delete failed"));
 
@@ -668,6 +764,28 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().isCheckingUpdates).toBe(false);
   });
 
+  it("indexes remote-missing update states returned from checks", async () => {
+    const remoteMissingState: CentralSkillUpdateState = {
+      ...mockUpdateStates[0],
+      skill_id: "code-reviewer",
+      source_path: "skills/code-reviewer",
+      last_remote_hash: null,
+      latest_remote_hash: null,
+      status: "remote_missing",
+      error: "Skill source path 'skills/code-reviewer' no longer contains an importable skill.",
+    };
+    vi.mocked(invoke).mockResolvedValueOnce([remoteMissingState]);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .checkSkillUpdates(["code-reviewer"]);
+
+    expect(result).toEqual([remoteMissingState]);
+    expect(useCentralSkillsStore.getState().updateStatuses["code-reviewer"]).toEqual(
+      remoteMissingState
+    );
+  });
+
   it("updates central skills and refreshes skills plus update states", async () => {
     const updatedState: CentralSkillUpdateState = {
       ...mockUpdateStates[0],
@@ -702,6 +820,29 @@ describe("centralSkillsStore", () => {
       updatedState
     );
     expect(useCentralSkillsStore.getState().updatingSkillIds).toEqual([]);
+  });
+
+  it("keeps remote-missing skills and refreshes central metadata", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(["frontend-design"])
+      .mockResolvedValueOnce(mockSkills)
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce([]);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .keepRemoteMissingSkills(["frontend-design"]);
+
+    expect(result).toEqual(["frontend-design"]);
+    expect(invoke).toHaveBeenNthCalledWith(1, "keep_remote_missing_central_skills", {
+      skillIds: ["frontend-design"],
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+    expect(invoke).toHaveBeenCalledWith("get_central_skill_update_states");
+    expect(useCentralSkillsStore.getState().skills).toEqual(mockSkills);
+    expect(useCentralSkillsStore.getState().repositories).toEqual(mockRepositories);
+    expect(useCentralSkillsStore.getState().updateStatuses).toEqual({});
   });
 
   it("updates AI tag job state from progress events", async () => {
@@ -795,6 +936,42 @@ describe("centralSkillsStore", () => {
     state = useCentralSkillsStore.getState();
     expect(state.updateJob.completed).toBe(1);
     expect(state.updateJob.items["frontend-design"]).toBe("succeeded");
+
+    handler?.({
+      payload: {
+        phase: "checking",
+        skillId: "code-reviewer",
+        status: "remote_missing",
+        total: 2,
+        completed: 2,
+        succeeded: 1,
+        failed: 0,
+        skipped: 1,
+        error: "Skill source path no longer contains an importable skill.",
+      },
+    });
+
+    state = useCentralSkillsStore.getState();
+    expect(state.updateJob.completed).toBe(2);
+    expect(state.updateJob.skipped).toBe(1);
+    expect(state.updateJob.items["code-reviewer"]).toBe("skipped");
+    expect(state.updateJob.error).toBe("Skill source path no longer contains an importable skill.");
+
+    handler?.({
+      payload: {
+        phase: "checking",
+        status: "completed",
+        total: 2,
+        completed: 2,
+        succeeded: 1,
+        failed: 0,
+        skipped: 1,
+      },
+    });
+
+    state = useCentralSkillsStore.getState();
+    expect(state.updateJob.status).toBe("completed");
+    expect(state.updateJob.error).toBeUndefined();
   });
 
   it("exports the SkillPort portable state manifest", async () => {

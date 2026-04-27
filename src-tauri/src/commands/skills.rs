@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tauri::State;
 
-use crate::db::{self, Collection, DbPool, SkillForAgent, SkillRepository, SkillTag};
+use crate::db::{
+    self, Collection, DbPool, SkillForAgent, SkillRepository, SkillRepositoryWithStats, SkillTag,
+};
 use crate::targets::{connect_ssh_target, ActiveTarget, ConnectedSshTarget, RemoteTargetConfig};
 use crate::AppState;
 
@@ -124,6 +126,19 @@ pub struct BatchDeleteCentralSkillSuccess {
 pub struct BatchDeleteCentralSkillResult {
     pub succeeded: Vec<BatchDeleteCentralSkillSuccess>,
     pub failed: Vec<FailedCentralSkillDelete>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteSkillRepositoryPreview {
+    pub repository: SkillRepositoryWithStats,
+    pub delete_preview: BatchDeleteCentralSkillPreviewResult,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteSkillRepositoryResult {
+    pub repository: SkillRepository,
+    pub deleted_repository: bool,
+    pub delete_result: BatchDeleteCentralSkillResult,
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -474,6 +489,70 @@ fn unique_agent_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
         }
     }
     result
+}
+
+async fn get_deletable_repository_with_skill_ids(
+    pool: &DbPool,
+    repository_id: &str,
+) -> Result<(SkillRepository, Vec<String>), String> {
+    let repository = db::get_skill_repository_by_id(pool, repository_id)
+        .await?
+        .ok_or_else(|| format!("Repository '{}' not found", repository_id))?;
+    if repository.id == db::LOCAL_UNKNOWN_REPOSITORY_ID || repository.is_unknown {
+        return Err("The system unknown-source repository cannot be deleted".to_string());
+    }
+
+    let skill_ids = db::get_central_skill_ids_by_repository(pool, &repository.id).await?;
+    Ok((repository, skill_ids))
+}
+
+fn repository_with_stats(
+    repository: SkillRepository,
+    skill_count: usize,
+) -> SkillRepositoryWithStats {
+    SkillRepositoryWithStats {
+        repository,
+        skill_count: skill_count as i64,
+        unknown_skill_count: 0,
+    }
+}
+
+fn build_repository_delete_requests(
+    repository_id: &str,
+    skill_ids: &[String],
+    requests: &[BatchDeleteCentralSkillRequest],
+) -> Result<Vec<BatchDeleteCentralSkillRequest>, String> {
+    let valid_skill_ids: HashSet<&str> = skill_ids.iter().map(String::as_str).collect();
+    let mut remove_agents_by_skill: HashMap<String, Vec<String>> = HashMap::new();
+
+    for request in requests {
+        if !valid_skill_ids.contains(request.skill_id.as_str()) {
+            return Err(format!(
+                "Skill '{}' does not belong to repository '{}'",
+                request.skill_id, repository_id
+            ));
+        }
+
+        let entry = remove_agents_by_skill
+            .entry(request.skill_id.clone())
+            .or_default();
+        for agent_id in &request.remove_agent_ids {
+            if !entry.contains(agent_id) {
+                entry.push(agent_id.clone());
+            }
+        }
+    }
+
+    Ok(skill_ids
+        .iter()
+        .map(|skill_id| BatchDeleteCentralSkillRequest {
+            skill_id: skill_id.clone(),
+            remove_agent_ids: remove_agents_by_skill
+                .remove(skill_id)
+                .map(unique_agent_ids)
+                .unwrap_or_default(),
+        })
+        .collect())
 }
 
 #[cfg(windows)]
@@ -1031,6 +1110,93 @@ pub async fn delete_central_skills_impl(
     Ok(BatchDeleteCentralSkillResult { succeeded, failed })
 }
 
+pub async fn preview_delete_skill_repository_impl(
+    pool: &DbPool,
+    repository_id: &str,
+) -> Result<DeleteSkillRepositoryPreview, String> {
+    let (repository, skill_ids) =
+        get_deletable_repository_with_skill_ids(pool, repository_id).await?;
+    let delete_preview = preview_delete_central_skills_impl(pool, &skill_ids).await?;
+
+    Ok(DeleteSkillRepositoryPreview {
+        repository: repository_with_stats(repository, skill_ids.len()),
+        delete_preview,
+    })
+}
+
+pub async fn preview_delete_skill_repository_ssh_impl(
+    pool: &DbPool,
+    repository_id: &str,
+) -> Result<DeleteSkillRepositoryPreview, String> {
+    let (repository, skill_ids) =
+        get_deletable_repository_with_skill_ids(pool, repository_id).await?;
+    let delete_preview = preview_delete_central_skills_ssh_impl(pool, &skill_ids).await?;
+
+    Ok(DeleteSkillRepositoryPreview {
+        repository: repository_with_stats(repository, skill_ids.len()),
+        delete_preview,
+    })
+}
+
+pub async fn delete_skill_repository_impl(
+    pool: &DbPool,
+    repository_id: &str,
+    requests: &[BatchDeleteCentralSkillRequest],
+) -> Result<DeleteSkillRepositoryResult, String> {
+    let (repository, skill_ids) =
+        get_deletable_repository_with_skill_ids(pool, repository_id).await?;
+    let delete_requests = build_repository_delete_requests(&repository.id, &skill_ids, requests)?;
+    let delete_result = delete_central_skills_impl(pool, &delete_requests).await?;
+    let deleted_repository = if delete_result.failed.is_empty() {
+        if skill_ids.is_empty() {
+            db::delete_empty_skill_repository(pool, &repository.id).await?
+        } else {
+            db::prune_empty_skill_repositories(pool).await?;
+            db::get_skill_repository_by_id(pool, &repository.id)
+                .await?
+                .is_none()
+        }
+    } else {
+        false
+    };
+
+    Ok(DeleteSkillRepositoryResult {
+        repository,
+        deleted_repository,
+        delete_result,
+    })
+}
+
+pub async fn delete_skill_repository_ssh_impl(
+    pool: &DbPool,
+    target: &RemoteTargetConfig,
+    repository_id: &str,
+    requests: &[BatchDeleteCentralSkillRequest],
+) -> Result<DeleteSkillRepositoryResult, String> {
+    let (repository, skill_ids) =
+        get_deletable_repository_with_skill_ids(pool, repository_id).await?;
+    let delete_requests = build_repository_delete_requests(&repository.id, &skill_ids, requests)?;
+    let delete_result = delete_central_skills_ssh_impl(pool, target, &delete_requests).await?;
+    let deleted_repository = if delete_result.failed.is_empty() {
+        if skill_ids.is_empty() {
+            db::delete_empty_skill_repository(pool, &repository.id).await?
+        } else {
+            db::prune_empty_skill_repositories(pool).await?;
+            db::get_skill_repository_by_id(pool, &repository.id)
+                .await?
+                .is_none()
+        }
+    } else {
+        false
+    };
+
+    Ok(DeleteSkillRepositoryResult {
+        repository,
+        deleted_repository,
+        delete_result,
+    })
+}
+
 #[tauri::command]
 pub async fn preview_delete_central_skills(
     state: State<'_, AppState>,
@@ -1068,6 +1234,35 @@ pub async fn delete_central_skills(
         ActiveTarget::Local => delete_central_skills_impl(&pool, &requests).await,
         ActiveTarget::Ssh(target) => {
             delete_central_skills_ssh_impl(&pool, &target, &requests).await
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn preview_delete_skill_repository(
+    state: State<'_, AppState>,
+    repository_id: String,
+) -> Result<DeleteSkillRepositoryPreview, String> {
+    let pool = state.active_db().await?;
+    match state.active_target().await? {
+        ActiveTarget::Local => preview_delete_skill_repository_impl(&pool, &repository_id).await,
+        ActiveTarget::Ssh(_) => {
+            preview_delete_skill_repository_ssh_impl(&pool, &repository_id).await
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn delete_skill_repository(
+    state: State<'_, AppState>,
+    repository_id: String,
+    requests: Vec<BatchDeleteCentralSkillRequest>,
+) -> Result<DeleteSkillRepositoryResult, String> {
+    let pool = state.active_db().await?;
+    match state.active_target().await? {
+        ActiveTarget::Local => delete_skill_repository_impl(&pool, &repository_id, &requests).await,
+        ActiveTarget::Ssh(target) => {
+            delete_skill_repository_ssh_impl(&pool, &target, &repository_id, &requests).await
         }
     }
 }
@@ -1805,10 +2000,9 @@ mod tests {
         .await
         .unwrap();
 
-        let result =
-            preview_delete_central_skills_impl(&pool, &["linked-delete".to_string()])
-                .await
-                .unwrap();
+        let result = preview_delete_central_skills_impl(&pool, &["linked-delete".to_string()])
+            .await
+            .unwrap();
 
         assert!(result.failed.is_empty());
         assert_eq!(result.previews.len(), 1);
@@ -1939,6 +2133,149 @@ mod tests {
         assert!(!central_dir.exists());
         assert!(!cursor_copy_dir.exists());
         assert!(!claude_copy_dir.exists());
+    }
+
+    #[tokio::test]
+    async fn test_delete_skill_repository_removes_repository_skills_and_record() {
+        let pool = setup_test_db().await;
+        let temp = TempDir::new().unwrap();
+        let central_root = temp.path().join("central");
+        let central_dir = central_root.join("repo-delete");
+        fs::create_dir_all(&central_root).unwrap();
+        write_test_skill_dir(&central_dir);
+        set_test_central_root(&pool, &central_root).await;
+
+        db::upsert_skill(
+            &pool,
+            &make_central_skill_at("repo-delete", "Repo Delete", &central_dir),
+        )
+        .await
+        .unwrap();
+        let repository = db::create_or_update_skill_repository(
+            &pool,
+            Some("github-repo-delete"),
+            "owner/repo-delete",
+            "github",
+            Some("owner"),
+            Some("repo-delete"),
+            Some("main"),
+            Some("https://github.com/owner/repo-delete"),
+            false,
+        )
+        .await
+        .unwrap();
+        db::assign_skills_to_repository(
+            &pool,
+            &repository.id,
+            &["repo-delete".to_string()],
+            Some("skills/repo-delete"),
+        )
+        .await
+        .unwrap();
+
+        let preview = preview_delete_skill_repository_impl(&pool, &repository.id)
+            .await
+            .unwrap();
+        assert_eq!(preview.repository.skill_count, 1);
+        assert_eq!(preview.delete_preview.previews.len(), 1);
+
+        let result = delete_skill_repository_impl(&pool, &repository.id, &[])
+            .await
+            .unwrap();
+
+        assert!(result.deleted_repository);
+        assert!(result.delete_result.failed.is_empty());
+        assert_eq!(result.delete_result.succeeded.len(), 1);
+        assert!(!central_dir.exists());
+        assert!(db::get_skill_by_id(&pool, "repo-delete")
+            .await
+            .unwrap()
+            .is_none());
+        assert!(db::get_skill_repository_by_id(&pool, &repository.id)
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_skill_repository_rejects_unknown_repository() {
+        let pool = setup_test_db().await;
+
+        let error = delete_skill_repository_impl(&pool, db::LOCAL_UNKNOWN_REPOSITORY_ID, &[])
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("cannot be deleted"));
+        assert!(
+            db::get_skill_repository_by_id(&pool, db::LOCAL_UNKNOWN_REPOSITORY_ID)
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delete_skill_repository_keeps_record_on_partial_failure() {
+        let pool = setup_test_db().await;
+        let temp = TempDir::new().unwrap();
+        let central_root = temp.path().join("central");
+        let valid_dir = central_root.join("repo-valid-delete");
+        let outside_dir = temp.path().join("outside").join("repo-unsafe-delete");
+        fs::create_dir_all(&central_root).unwrap();
+        write_test_skill_dir(&valid_dir);
+        write_test_skill_dir(&outside_dir);
+        set_test_central_root(&pool, &central_root).await;
+
+        db::upsert_skill(
+            &pool,
+            &make_central_skill_at("repo-valid-delete", "Repo Valid Delete", &valid_dir),
+        )
+        .await
+        .unwrap();
+        db::upsert_skill(
+            &pool,
+            &make_central_skill_at("repo-unsafe-delete", "Repo Unsafe Delete", &outside_dir),
+        )
+        .await
+        .unwrap();
+        let repository = db::create_or_update_skill_repository(
+            &pool,
+            Some("github-repo-partial"),
+            "owner/repo-partial",
+            "github",
+            Some("owner"),
+            Some("repo-partial"),
+            Some("main"),
+            Some("https://github.com/owner/repo-partial"),
+            false,
+        )
+        .await
+        .unwrap();
+        db::assign_skills_to_repository(
+            &pool,
+            &repository.id,
+            &[
+                "repo-valid-delete".to_string(),
+                "repo-unsafe-delete".to_string(),
+            ],
+            Some("skills/repo-partial"),
+        )
+        .await
+        .unwrap();
+
+        let result = delete_skill_repository_impl(&pool, &repository.id, &[])
+            .await
+            .unwrap();
+
+        assert!(!result.deleted_repository);
+        assert_eq!(result.delete_result.succeeded.len(), 1);
+        assert_eq!(result.delete_result.failed.len(), 1);
+        assert!(!valid_dir.exists());
+        assert!(outside_dir.exists());
+        assert!(db::get_skill_repository_by_id(&pool, &repository.id)
+            .await
+            .unwrap()
+            .is_some());
     }
 
     #[tokio::test]

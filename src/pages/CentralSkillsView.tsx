@@ -13,10 +13,11 @@ import { InstallDialog } from "@/components/central/InstallDialog";
 import { BatchInstallCentralSkillsDialog } from "@/components/central/BatchInstallCentralSkillsDialog";
 import { DeleteCentralSkillDialog } from "@/components/central/DeleteCentralSkillDialog";
 import { BatchDeleteCentralSkillsDialog } from "@/components/central/BatchDeleteCentralSkillsDialog";
+import { RemoteMissingSkillsDialog } from "@/components/central/RemoteMissingSkillsDialog";
 import { CentralStatePortabilityDialog } from "@/components/central/CentralStatePortabilityDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AgentWithStatus, AiTagJob, BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult, CentralBatchInstallResult, CentralSkillUpdateJob, CentralSkillUpdateState, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks, SkillportStateImportPreview, SkillportStateImportResolution, SkillportStateImportResult } from "@/types";
+import { AgentWithStatus, AiTagJob, BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult, CentralBatchInstallResult, CentralSkillUpdateJob, CentralSkillUpdateState, DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks, SkillportStateImportPreview, SkillportStateImportResolution, SkillportStateImportResult } from "@/types";
 import { markAppPerformance } from "@/lib/performance";
 import { cn } from "@/lib/utils";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
@@ -155,6 +156,10 @@ async function noopLoadBatchDeletePreview(): Promise<BatchDeleteCentralSkillPrev
   throw new Error("Central skill deletion is unavailable");
 }
 
+async function noopLoadRepositoryDeletePreview(): Promise<DeleteSkillRepositoryPreview> {
+  throw new Error("Repository deletion is unavailable");
+}
+
 async function noopDeleteCentralSkill(): Promise<void> {}
 
 async function noopDeleteCentralSkills(): Promise<BatchDeleteCentralSkillResult> {
@@ -162,6 +167,10 @@ async function noopDeleteCentralSkills(): Promise<BatchDeleteCentralSkillResult>
     succeeded: [],
     failed: [],
   };
+}
+
+async function noopDeleteSkillRepository(): Promise<DeleteSkillRepositoryResult> {
+  throw new Error("Repository deletion is unavailable");
 }
 
 async function noopUnlisten() {
@@ -179,6 +188,10 @@ async function noopUpdateSkills() {
     skipped: [],
     states: [],
   };
+}
+
+async function noopKeepRemoteMissingSkills(): Promise<string[]> {
+  return [];
 }
 
 function noopResetGitHubImport() {}
@@ -291,6 +304,10 @@ function RepositoryFilterButton({
   label,
   sourceKind,
   onClick,
+  onDelete,
+  deleteLabel,
+  deleteDisabled,
+  isDeleteLoading,
   testId,
 }: {
   active: boolean;
@@ -298,16 +315,16 @@ function RepositoryFilterButton({
   label: string;
   sourceKind: "all" | "github" | "local";
   onClick: () => void;
+  onDelete?: () => void;
+  deleteLabel?: string;
+  deleteDisabled?: boolean;
+  isDeleteLoading?: boolean;
   testId: string;
 }) {
   const Icon = sourceKind === "github" ? FolderGit2 : FolderOpen;
 
   return (
-    <button
-      type="button"
-      data-testid={testId}
-      data-source-kind={sourceKind}
-      onClick={onClick}
+    <div
       className={cn(
         "group flex min-h-10 w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
         active
@@ -318,23 +335,47 @@ function RepositoryFilterButton({
           : null
       )}
     >
-      <span
-        className={cn(
-          "grid size-6 shrink-0 place-items-center rounded-md border",
-          sourceKind === "github"
-            ? "border-sky-500/20 bg-sky-500/10 text-sky-600 dark:text-sky-300"
-            : sourceKind === "local"
-              ? "border-dashed border-border bg-muted text-muted-foreground"
-              : "border-border bg-background text-muted-foreground"
-        )}
+      <button
+        type="button"
+        data-testid={testId}
+        data-source-kind={sourceKind}
+        onClick={onClick}
+        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
       >
-        <Icon className="size-3.5" />
-      </span>
-      <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+        <span
+          className={cn(
+            "grid size-6 shrink-0 place-items-center rounded-md border",
+            sourceKind === "github"
+              ? "border-sky-500/20 bg-sky-500/10 text-sky-600 dark:text-sky-300"
+              : sourceKind === "local"
+                ? "border-dashed border-border bg-muted text-muted-foreground"
+                : "border-border bg-background text-muted-foreground"
+          )}
+        >
+          <Icon className="size-3.5" />
+        </span>
+        <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+      </button>
       <span className="shrink-0 rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
         {count}
       </span>
-    </button>
+      {onDelete && (
+        <button
+          type="button"
+          data-testid={`${testId}-delete`}
+          aria-label={deleteLabel}
+          title={deleteLabel}
+          disabled={deleteDisabled || isDeleteLoading}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive focus:opacity-100 disabled:pointer-events-none disabled:opacity-40 group-hover:opacity-100"
+        >
+          <Trash2 className={cn("size-3.5", isDeleteLoading && "animate-pulse")} />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -425,8 +466,12 @@ export function CentralSkillsView() {
     useCentralSkillsStore((state) => state.batchInstallSkills) ?? noopBatchInstallSkills;
   const loadDeletePreview = useCentralSkillsStore((state) => state.loadDeletePreview) ?? noopLoadDeletePreview;
   const loadBatchDeletePreview = useCentralSkillsStore((state) => state.loadBatchDeletePreview) ?? noopLoadBatchDeletePreview;
+  const loadRepositoryDeletePreview =
+    useCentralSkillsStore((state) => state.loadRepositoryDeletePreview) ?? noopLoadRepositoryDeletePreview;
   const deleteCentralSkill = useCentralSkillsStore((state) => state.deleteCentralSkill) ?? noopDeleteCentralSkill;
   const deleteCentralSkills = useCentralSkillsStore((state) => state.deleteCentralSkills) ?? noopDeleteCentralSkills;
+  const deleteSkillRepository =
+    useCentralSkillsStore((state) => state.deleteSkillRepository) ?? noopDeleteSkillRepository;
   const togglePlatformLink = useCentralSkillsStore((state) => state.togglePlatformLink) ?? noopAsync;
   const createTag = useCentralSkillsStore((state) => state.createTag);
   const assignSkillTags = useCentralSkillsStore((state) => state.assignSkillTags);
@@ -436,6 +481,9 @@ export function CentralSkillsView() {
   const skipAiTagReview = useCentralSkillsStore((state) => state.skipAiTagReview);
   const checkSkillUpdates = useCentralSkillsStore((state) => state.checkSkillUpdates) ?? noopCheckUpdates;
   const updateSkills = useCentralSkillsStore((state) => state.updateSkills) ?? noopUpdateSkills;
+  const keepRemoteMissingSkills =
+    useCentralSkillsStore((state) => state.keepRemoteMissingSkills) ??
+    noopKeepRemoteMissingSkills;
   const subscribeAiTagProgress =
     useCentralSkillsStore((state) => state.subscribeAiTagProgress) ?? noopUnlisten;
   const subscribeUpdateProgress =
@@ -489,6 +537,13 @@ export function CentralSkillsView() {
   const [deletePreview, setDeletePreview] = useState<SkillDetail | null>(null);
   const [batchDeletePreview, setBatchDeletePreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
+  const [remoteMissingStates, setRemoteMissingStates] = useState<CentralSkillUpdateState[]>([]);
+  const [remoteMissingPreview, setRemoteMissingPreview] =
+    useState<BatchDeleteCentralSkillPreviewResult | null>(null);
+  const [repositoryDeleteTarget, setRepositoryDeleteTarget] =
+    useState<SkillRepositoryWithStats | null>(null);
+  const [repositoryDeletePreview, setRepositoryDeletePreview] =
+    useState<DeleteSkillRepositoryPreview | null>(null);
   const {
     width: filterSidebarWidth,
     startResize: startFilterSidebarResize,
@@ -510,16 +565,24 @@ export function CentralSkillsView() {
   });
   const [isDeletePreviewLoading, setIsDeletePreviewLoading] = useState(false);
   const [isBatchDeletePreviewLoading, setIsBatchDeletePreviewLoading] = useState(false);
+  const [isRemoteMissingPreviewLoading, setIsRemoteMissingPreviewLoading] = useState(false);
+  const [isResolvingRemoteMissing, setIsResolvingRemoteMissing] = useState(false);
+  const [isRepositoryDeletePreviewLoading, setIsRepositoryDeletePreviewLoading] = useState(false);
   const [deletePreviewError, setDeletePreviewError] = useState<string | null>(null);
   const [batchDeletePreviewError, setBatchDeletePreviewError] = useState<string | null>(null);
+  const [remoteMissingError, setRemoteMissingError] = useState<string | null>(null);
+  const [repositoryDeletePreviewError, setRepositoryDeletePreviewError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBatchInstallDialogOpen, setIsBatchInstallDialogOpen] = useState(false);
   const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
+  const [isRemoteMissingDialogOpen, setIsRemoteMissingDialogOpen] = useState(false);
+  const [isRepositoryDeleteDialogOpen, setIsRepositoryDeleteDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isGitHubImportOpen, setIsGitHubImportOpen] = useState(false);
   const [isPortabilityOpen, setIsPortabilityOpen] = useState(false);
+  const [dismissedUpdateProgressKey, setDismissedUpdateProgressKey] = useState<string | null>(null);
   const [githubRepoUrl, setGitHubRepoUrl] = useState("");
   const contentRef = useRef<HTMLDivElement | null>(null);
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -531,6 +594,36 @@ export function CentralSkillsView() {
     () => normalizeSearchQuery(effectiveSearchQuery),
     [effectiveSearchQuery]
   );
+  const updateProgressKey = useMemo(
+    () =>
+      [
+        updateJob.phase,
+        updateJob.status,
+        updateJob.total,
+        updateJob.completed,
+        updateJob.succeeded,
+        updateJob.skipped,
+        updateJob.failed,
+        updateJob.error ?? "",
+      ].join(":"),
+    [
+      updateJob.phase,
+      updateJob.status,
+      updateJob.total,
+      updateJob.completed,
+      updateJob.succeeded,
+      updateJob.skipped,
+      updateJob.failed,
+      updateJob.error,
+    ]
+  );
+  const isUpdateProgressDismissible =
+    updateJob.status === "completed" || updateJob.status === "failed";
+  const shouldShowUpdateProgress =
+    updateJob.status !== "idle" &&
+    (!isUpdateProgressDismissible || dismissedUpdateProgressKey !== updateProgressKey);
+  const updateProgressRatio =
+    updateJob.total > 0 ? Math.min(1, updateJob.completed / updateJob.total) : 0;
   const searchableSkills = useMemo(
     () =>
       skills.map((skill) => ({
@@ -687,6 +780,12 @@ export function CentralSkillsView() {
   }, [isSearchActive, normalizedSearchQuery]);
 
   useEffect(() => {
+    if (updateJob.status === "running") {
+      setDismissedUpdateProgressKey(null);
+    }
+  }, [updateJob.phase, updateJob.status]);
+
+  useEffect(() => {
     const visibleIds = new Set(skillIdsKey ? skillIdsKey.split("\0") : []);
     setSelectedSkillIds((current) => {
       const next = current.filter((skillId) => visibleIds.has(skillId));
@@ -725,6 +824,27 @@ export function CentralSkillsView() {
     }
   }
 
+  function handleRepositoryDeleteDialogOpenChange(open: boolean) {
+    setIsRepositoryDeleteDialogOpen(open);
+    if (!open) {
+      setRepositoryDeleteTarget(null);
+      setRepositoryDeletePreview(null);
+      setRepositoryDeletePreviewError(null);
+      setIsRepositoryDeletePreviewLoading(false);
+    }
+  }
+
+  function handleRemoteMissingDialogOpenChange(open: boolean) {
+    setIsRemoteMissingDialogOpen(open);
+    if (!open) {
+      setRemoteMissingStates([]);
+      setRemoteMissingPreview(null);
+      setRemoteMissingError(null);
+      setIsRemoteMissingPreviewLoading(false);
+      setIsResolvingRemoteMissing(false);
+    }
+  }
+
   async function handleDeleteClick(skill: SkillWithLinks) {
     setDeleteTargetSkill(skill);
     setDeletePreview(null);
@@ -758,6 +878,48 @@ export function CentralSkillsView() {
       toast.error(t("central.batchDeletePreviewError", { error: message }));
     } finally {
       setIsBatchDeletePreviewLoading(false);
+    }
+  }
+
+  async function handleRepositoryDeleteClick(repository: SkillRepositoryWithStats) {
+    if (repository.is_unknown) return;
+
+    setRepositoryDeleteTarget(repository);
+    setRepositoryDeletePreview(null);
+    setRepositoryDeletePreviewError(null);
+    setIsRepositoryDeletePreviewLoading(true);
+    try {
+      const preview = await loadRepositoryDeletePreview(repository.id);
+      const previewedSkillCount = preview.delete_preview.previews.length;
+      if (previewedSkillCount === 0 && preview.delete_preview.failed.length === 0) {
+        const confirmed = window.confirm(
+          t("central.deleteRepositoryEmptyConfirm", { name: repository.name })
+        );
+        if (confirmed) {
+          const result = await deleteSkillRepository(repository.id, []);
+          await refreshCounts();
+          if (repositoryFilter === repository.id) {
+            setRepositoryFilter("all");
+          }
+          toast.success(
+            t("central.deleteRepositorySuccess", {
+              name: result.repository.name,
+              count: result.delete_result.succeeded.length,
+            })
+          );
+        }
+        setRepositoryDeleteTarget(null);
+        return;
+      }
+
+      setRepositoryDeletePreview(preview);
+      setIsRepositoryDeleteDialogOpen(true);
+    } catch (err) {
+      const message = String(err);
+      setRepositoryDeletePreviewError(message);
+      toast.error(t("central.deleteRepositoryError", { error: message }));
+    } finally {
+      setIsRepositoryDeletePreviewLoading(false);
     }
   }
 
@@ -1011,8 +1173,34 @@ export function CentralSkillsView() {
       const states = await checkSkillUpdates();
       const available = states.filter((state) => state.status === "update_available").length;
       const unsupported = states.filter((state) => state.status === "unsupported").length;
+      const remoteMissing = states.filter((state) => state.status === "remote_missing");
       const failed = states.filter((state) => state.status === "error").length;
-      toast.success(t("central.updateCheckFinished", { available, unsupported, failed }));
+      toast.success(
+        t("central.updateCheckFinished", {
+          available,
+          unsupported,
+          remoteMissing: remoteMissing.length,
+          failed,
+        })
+      );
+      if (remoteMissing.length > 0) {
+        const missingSkillIds = remoteMissing.map((state) => state.skill_id);
+        setRemoteMissingStates(remoteMissing);
+        setRemoteMissingPreview(null);
+        setRemoteMissingError(null);
+        setIsRemoteMissingDialogOpen(true);
+        setIsRemoteMissingPreviewLoading(true);
+        try {
+          const preview = await loadBatchDeletePreview(missingSkillIds);
+          setRemoteMissingPreview(preview);
+        } catch (err) {
+          const message = String(err);
+          setRemoteMissingError(message);
+          toast.error(t("central.batchDeletePreviewError", { error: message }));
+        } finally {
+          setIsRemoteMissingPreviewLoading(false);
+        }
+      }
     } catch (err) {
       toast.error(t("central.updateCheckError", { error: String(err) }));
     }
@@ -1035,6 +1223,55 @@ export function CentralSkillsView() {
     }
   }
 
+  async function handleResolveRemoteMissing(
+    keepSkillIds: string[],
+    deleteRequests: BatchDeleteCentralSkillRequest[]
+  ) {
+    setIsResolvingRemoteMissing(true);
+    setRemoteMissingError(null);
+    try {
+      if (keepSkillIds.length > 0) {
+        await keepRemoteMissingSkills(keepSkillIds);
+      }
+
+      const deleteResult: BatchDeleteCentralSkillResult =
+        deleteRequests.length > 0
+          ? await deleteCentralSkills(deleteRequests)
+          : { succeeded: [], failed: [] };
+
+      await refreshCounts();
+      const succeededDeleteIds = new Set(deleteResult.succeeded.map((item) => item.skill_id));
+      setSelectedSkillIds((current) =>
+        current.filter((skillId) => !succeededDeleteIds.has(skillId))
+      );
+
+      if (deleteResult.failed.length > 0) {
+        toast.error(
+          t("central.remoteMissingResolvePartial", {
+            kept: keepSkillIds.length,
+            deleted: deleteResult.succeeded.length,
+            failed: deleteResult.failed.length,
+          })
+        );
+      } else {
+        toast.success(
+          t("central.remoteMissingResolveSuccess", {
+            kept: keepSkillIds.length,
+            deleted: deleteResult.succeeded.length,
+          })
+        );
+      }
+      handleRemoteMissingDialogOpenChange(false);
+    } catch (err) {
+      const message = String(err);
+      setRemoteMissingError(message);
+      toast.error(t("central.remoteMissingResolveError", { error: message }));
+      throw err;
+    } finally {
+      setIsResolvingRemoteMissing(false);
+    }
+  }
+
   async function handleGitHubPreview() {
     try {
       return await previewGitHubRepoImport(githubRepoUrl);
@@ -1053,6 +1290,47 @@ export function CentralSkillsView() {
       return result;
     } catch (err) {
       toast.error(t("marketplace.githubImportError", { error: String(err) }));
+      throw err;
+    }
+  }
+
+  async function handleDeleteSkillRepository(requests: BatchDeleteCentralSkillRequest[]) {
+    if (!repositoryDeleteTarget) {
+      throw new Error("Repository delete target is missing");
+    }
+
+    try {
+      const result = await deleteSkillRepository(repositoryDeleteTarget.id, requests);
+      await refreshCounts();
+      const succeededIds = new Set(result.delete_result.succeeded.map((item) => item.skill_id));
+      setSelectedSkillIds((current) => current.filter((skillId) => !succeededIds.has(skillId)));
+
+      if (repositoryFilter === repositoryDeleteTarget.id && result.deleted_repository) {
+        setRepositoryFilter("all");
+      }
+
+      if (result.delete_result.failed.length > 0) {
+        toast.error(
+          t("central.deleteRepositoryPartialError", {
+            name: result.repository.name,
+            succeeded: result.delete_result.succeeded.length,
+            failed: result.delete_result.failed.length,
+          })
+        );
+      } else {
+        toast.success(
+          t("central.deleteRepositorySuccess", {
+            name: result.repository.name,
+            count: result.delete_result.succeeded.length,
+          })
+        );
+      }
+      handleRepositoryDeleteDialogOpenChange(false);
+      return result.delete_result;
+    } catch (err) {
+      const message = String(err);
+      setRepositoryDeletePreviewError(message);
+      toast.error(t("central.deleteRepositoryError", { error: message }));
       throw err;
     }
   }
@@ -1687,6 +1965,21 @@ export function CentralSkillsView() {
                     label={repository.name}
                     sourceKind={sourceKind}
                     testId={`repository-filter-${repository.id}`}
+                    deleteLabel={t("central.deleteRepositoryLabel", {
+                      name: repository.name,
+                    })}
+                    deleteDisabled={isDeleting}
+                    isDeleteLoading={
+                      isRepositoryDeletePreviewLoading &&
+                      repositoryDeleteTarget?.id === repository.id
+                    }
+                    onDelete={
+                      repository.is_unknown
+                        ? undefined
+                        : () => {
+                            void handleRepositoryDeleteClick(repository);
+                          }
+                    }
                     onClick={() =>
                       setRepositoryFilter(repository.is_unknown ? "unassigned" : repository.id)
                     }
@@ -1856,35 +2149,110 @@ export function CentralSkillsView() {
         </div>
       )}
 
-      {updateJob.status !== "idle" && (
-        <div className="sticky bottom-0 z-10 border-t border-border bg-background/95 px-6 py-3 shadow-lg backdrop-blur">
+      {shouldShowUpdateProgress && (
+        <div
+          className={cn(
+            "sticky bottom-0 z-10 border-t bg-background/95 px-6 py-3 shadow-lg backdrop-blur",
+            updateJob.status === "failed" ? "border-destructive/30" : "border-border"
+          )}
+        >
           <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 font-medium text-foreground">
-              <Download className="size-3.5" />
-              <span>{t("central.updateProgressTitle")}</span>
-              {updateJob.currentSkillName && updateJob.status === "running" && (
-                <span className="text-muted-foreground">
-                  {t("central.updateCurrent", { name: updateJob.currentSkillName })}
-                </span>
-              )}
+            <div className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+              <span
+                className={cn(
+                  "grid size-6 shrink-0 place-items-center rounded-full ring-1",
+                  updateJob.status === "failed"
+                    ? "bg-destructive/10 text-destructive ring-destructive/20"
+                    : updateJob.status === "completed"
+                      ? "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-300"
+                      : "bg-primary/10 text-primary ring-primary/20"
+                )}
+              >
+                {updateJob.status === "failed" ? (
+                  <AlertTriangle className="size-3.5" />
+                ) : updateJob.status === "completed" ? (
+                  <Check className="size-3.5" />
+                ) : (
+                  <Download className="size-3.5" />
+                )}
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span>{t("central.updateProgressTitle")}</span>
+                  {updateJob.status === "completed" && (
+                    <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-300">
+                      {t("central.updateProgressFinished")}
+                    </span>
+                  )}
+                  {updateJob.status === "failed" && (
+                    <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] text-destructive">
+                      {t("central.updateProgressFailedStatus")}
+                    </span>
+                  )}
+                </div>
+                {updateJob.currentSkillName && updateJob.status === "running" && (
+                  <div className="mt-0.5 truncate text-muted-foreground">
+                    {t("central.updateCurrent", { name: updateJob.currentSkillName })}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
-              <span>{t("central.updateCompleted", { completed: updateJob.completed, total: updateJob.total })}</span>
-              <span>{t("central.updateSucceeded", { count: updateJob.succeeded })}</span>
-              <span>{t("central.updateSkipped", { count: updateJob.skipped })}</span>
-              <span>{t("central.updateFailed", { count: updateJob.failed })}</span>
+            <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+              <span className="rounded-full bg-muted/70 px-2 py-1">
+                {t("central.updateCompleted", { completed: updateJob.completed, total: updateJob.total })}
+              </span>
+              <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-emerald-700 dark:text-emerald-300">
+                {t("central.updateSucceeded", { count: updateJob.succeeded })}
+              </span>
+              <span className="rounded-full bg-amber-500/10 px-2 py-1 text-amber-700 dark:text-amber-300">
+                {t("central.updateSkipped", { count: updateJob.skipped })}
+              </span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-1",
+                  updateJob.failed > 0
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-muted/70 text-muted-foreground"
+                )}
+              >
+                {t("central.updateFailed", { count: updateJob.failed })}
+              </span>
+              {isUpdateProgressDismissible && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 rounded-full text-muted-foreground hover:text-foreground"
+                  aria-label={t("central.closeUpdateProgress")}
+                  title={t("central.closeUpdateProgress")}
+                  onClick={() => setDismissedUpdateProgressKey(updateProgressKey)}
+                >
+                  <X className="size-3.5" />
+                </Button>
+              )}
             </div>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full w-full origin-left rounded-full bg-primary transition-transform duration-300 ease-out"
+              className={cn(
+                "h-full w-full origin-left rounded-full transition-transform duration-300 ease-out",
+                updateJob.status === "failed" ? "bg-destructive" : "bg-primary"
+              )}
               style={{
-                transform: `scaleX(${updateJob.total > 0 ? updateJob.completed / updateJob.total : 0})`,
+                transform: `scaleX(${updateProgressRatio})`,
               }}
             />
           </div>
           {updateJob.error && (
-            <p className="mt-2 text-xs text-destructive">{updateJob.error}</p>
+            <p
+              className={cn(
+                "mt-2 text-xs",
+                updateJob.failed > 0 || updateJob.status === "failed"
+                  ? "text-destructive"
+                  : "text-amber-700 dark:text-amber-300"
+              )}
+            >
+              {updateJob.error}
+            </p>
           )}
         </div>
       )}
@@ -1929,6 +2297,42 @@ export function CentralSkillsView() {
         isDeleting={isDeleting}
         error={batchDeletePreviewError}
         onConfirm={handleBatchDeleteCentralSkills}
+      />
+
+      <RemoteMissingSkillsDialog
+        open={isRemoteMissingDialogOpen}
+        onOpenChange={handleRemoteMissingDialogOpenChange}
+        states={remoteMissingStates}
+        preview={remoteMissingPreview}
+        agents={agents}
+        isPreviewLoading={isRemoteMissingPreviewLoading}
+        isApplying={isResolvingRemoteMissing || isDeleting}
+        error={remoteMissingError}
+        onConfirm={handleResolveRemoteMissing}
+      />
+
+      <BatchDeleteCentralSkillsDialog
+        open={isRepositoryDeleteDialogOpen}
+        onOpenChange={handleRepositoryDeleteDialogOpenChange}
+        skillIds={(repositoryDeletePreview?.delete_preview.previews ?? []).map((item) => item.skill_id)}
+        preview={repositoryDeletePreview?.delete_preview ?? null}
+        agents={agents}
+        isPreviewLoading={isRepositoryDeletePreviewLoading}
+        isDeleting={isDeleting}
+        error={repositoryDeletePreviewError}
+        title={t("central.deleteRepositoryTitle", {
+          name: repositoryDeleteTarget?.name ?? "",
+        })}
+        description={t("central.deleteRepositoryDesc", {
+          name: repositoryDeleteTarget?.name ?? "",
+          count: repositoryDeletePreview?.delete_preview.previews.length ?? 0,
+        })}
+        dangerTitle={t("central.deleteRepositoryCentralRequired", {
+          count: repositoryDeletePreview?.delete_preview.previews.length ?? 0,
+        })}
+        confirmLabel={t("central.confirmDeleteRepository")}
+        confirmTestId="confirm-delete-skill-repository"
+        onConfirm={handleDeleteSkillRepository}
       />
 
       <SkillDetailDrawer

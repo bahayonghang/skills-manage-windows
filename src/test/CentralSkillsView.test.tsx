@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-li
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { CentralSkillsView } from "../pages/CentralSkillsView";
-import { AgentWithStatus, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks, TargetSummary } from "../types";
+import { AgentWithStatus, CentralSkillUpdateState, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks, TargetSummary } from "../types";
 
 // Mock stores
 vi.mock("../stores/centralSkillsStore", () => ({
@@ -251,18 +251,24 @@ const mockInstallSkill = vi.fn();
 const mockBatchInstallSkills = vi.fn();
 const mockLoadDeletePreview = vi.fn();
 const mockLoadBatchDeletePreview = vi.fn();
+const mockLoadRepositoryDeletePreview = vi.fn();
 const mockDeleteCentralSkill = vi.fn();
 const mockDeleteCentralSkills = vi.fn();
+const mockDeleteSkillRepository = vi.fn();
 const mockTogglePlatformLink = vi.fn();
 const mockCreateRepository = vi.fn();
 const mockAssignSkillsToRepository = vi.fn();
 const mockCreateTag = vi.fn();
 const mockAssignSkillTags = vi.fn();
 const mockBulkSuggestSkillTags = vi.fn();
+const mockCheckSkillUpdates = vi.fn();
+const mockUpdateSkills = vi.fn();
+const mockKeepRemoteMissingSkills = vi.fn();
 const mockCancelAiTagJob = vi.fn();
 const mockAcceptAiTagReview = vi.fn();
 const mockSkipAiTagReview = vi.fn();
 const mockSubscribeAiTagProgress = vi.fn();
+const mockSubscribeUpdateProgress = vi.fn();
 const mockRescan = vi.fn();
 const mockGetSkillsByAgent = vi.fn();
 const mockPreviewGitHubRepoImport = vi.fn();
@@ -299,12 +305,25 @@ function buildCentralStoreState(overrides = {}) {
       lowConfidenceCount: 0,
       items: {},
     },
+    updateStatuses: {},
+    updateJob: {
+      phase: null,
+      status: "idle",
+      total: 0,
+      completed: 0,
+      succeeded: 0,
+      failed: 0,
+      skipped: 0,
+      items: {},
+    },
     aiTaggingAvailable: true,
     isLoading: false,
     isInstalling: false,
     isDeleting: false,
     isMetadataUpdating: false,
     isSuggestingTags: false,
+    isCheckingUpdates: false,
+    updatingSkillIds: [],
     togglingAgentId: null,
     error: null,
     loadCentralSkills: mockLoadCentralSkills,
@@ -312,18 +331,24 @@ function buildCentralStoreState(overrides = {}) {
     batchInstallSkills: mockBatchInstallSkills,
     loadDeletePreview: mockLoadDeletePreview,
     loadBatchDeletePreview: mockLoadBatchDeletePreview,
+    loadRepositoryDeletePreview: mockLoadRepositoryDeletePreview,
     deleteCentralSkill: mockDeleteCentralSkill,
     deleteCentralSkills: mockDeleteCentralSkills,
+    deleteSkillRepository: mockDeleteSkillRepository,
     togglePlatformLink: mockTogglePlatformLink,
     createRepository: mockCreateRepository,
     assignSkillsToRepository: mockAssignSkillsToRepository,
     createTag: mockCreateTag,
     assignSkillTags: mockAssignSkillTags,
     bulkSuggestSkillTags: mockBulkSuggestSkillTags,
+    checkSkillUpdates: mockCheckSkillUpdates,
+    updateSkills: mockUpdateSkills,
+    keepRemoteMissingSkills: mockKeepRemoteMissingSkills,
     cancelAiTagJob: mockCancelAiTagJob,
     acceptAiTagReview: mockAcceptAiTagReview,
     skipAiTagReview: mockSkipAiTagReview,
     subscribeAiTagProgress: mockSubscribeAiTagProgress.mockResolvedValue(() => {}),
+    subscribeUpdateProgress: mockSubscribeUpdateProgress.mockResolvedValue(() => {}),
     exportSkillportState: mockExportSkillportState,
     previewSkillportStateImport: mockPreviewSkillportStateImport,
     importSkillportState: mockImportSkillportState,
@@ -417,6 +442,9 @@ describe("CentralSkillsView", () => {
       targets: [localTarget],
       activeTarget: localTarget,
     });
+    mockCheckSkillUpdates.mockResolvedValue([]);
+    mockUpdateSkills.mockResolvedValue({ succeeded: [], failed: [], skipped: [], states: [] });
+    mockKeepRemoteMissingSkills.mockResolvedValue([]);
     mockExportSkillportState.mockResolvedValue(
       JSON.stringify({
         kind: "skillport/state-export",
@@ -432,6 +460,7 @@ describe("CentralSkillsView", () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   // ── Header ────────────────────────────────────────────────────────────────
@@ -530,6 +559,107 @@ describe("CentralSkillsView", () => {
       expect(screen.getByText("frontend-design")).toBeInTheDocument();
       expect(screen.queryByText("code-reviewer")).not.toBeInTheDocument();
     });
+  });
+
+  it("does not show a repository delete action for the system unknown repository", () => {
+    renderCentralSkillsView();
+
+    const sidebar = screen.getByTestId("central-filter-sidebar");
+    expect(
+      within(sidebar).queryByTestId("repository-filter-local-unknown-delete")
+    ).not.toBeInTheDocument();
+    expect(
+      within(sidebar).getByTestId("repository-filter-github-openai-skills-main-delete")
+    ).toBeInTheDocument();
+  });
+
+  it("opens repository delete preview and deletes repository skills", async () => {
+    mockLoadRepositoryDeletePreview.mockResolvedValue({
+      repository: mockRepositories[1],
+      delete_preview: {
+        previews: [
+          {
+            skill_id: "frontend-design",
+            skill_name: "frontend-design",
+            central_path: "~/.skillsmanage/skills/frontend-design",
+            copy_installations: [],
+            auto_removed_agent_ids: ["claude-code"],
+          },
+        ],
+        failed: [],
+      },
+    });
+    mockDeleteSkillRepository.mockResolvedValue({
+      repository: mockRepositories[1],
+      deleted_repository: true,
+      delete_result: {
+        succeeded: [
+          {
+            skill_id: "frontend-design",
+            removed_central_path: "~/.skillsmanage/skills/frontend-design",
+            removed_agent_ids: ["claude-code"],
+            retained_agent_ids: [],
+          },
+        ],
+        failed: [],
+      },
+    });
+    renderCentralSkillsView();
+
+    const sidebar = screen.getByTestId("central-filter-sidebar");
+    fireEvent.click(within(sidebar).getByTestId("repository-filter-github-openai-skills-main"));
+    await waitFor(() => {
+      expect(screen.queryByText("code-reviewer")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(within(sidebar).getByTestId("repository-filter-github-openai-skills-main-delete"));
+
+    expect(await screen.findByText("删除仓库：openai/skills")).toBeInTheDocument();
+    expect(
+      screen.getByText("frontend-design - ~/.skillsmanage/skills/frontend-design")
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("confirm-delete-skill-repository"));
+
+    await waitFor(() => {
+      expect(mockDeleteSkillRepository).toHaveBeenCalledWith(
+        "github-openai-skills-main",
+        [{ skill_id: "frontend-design", remove_agent_ids: [] }]
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByText("code-reviewer")).toBeInTheDocument();
+    });
+  });
+
+  it("confirms and deletes an empty repository without opening the skill delete dialog", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockLoadRepositoryDeletePreview.mockResolvedValue({
+      repository: { ...mockRepositories[1], skill_count: 0 },
+      delete_preview: {
+        previews: [],
+        failed: [],
+      },
+    });
+    mockDeleteSkillRepository.mockResolvedValue({
+      repository: mockRepositories[1],
+      deleted_repository: true,
+      delete_result: {
+        succeeded: [],
+        failed: [],
+      },
+    });
+    renderCentralSkillsView();
+
+    const sidebar = screen.getByTestId("central-filter-sidebar");
+    fireEvent.click(within(sidebar).getByTestId("repository-filter-github-openai-skills-main-delete"));
+
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalledWith("删除空仓库“openai/skills”？");
+    });
+    expect(mockDeleteSkillRepository).toHaveBeenCalledWith("github-openai-skills-main", []);
+    expect(screen.queryByTestId("confirm-delete-skill-repository")).not.toBeInTheDocument();
+
+    confirmSpy.mockRestore();
   });
 
   it("renders all central skills", () => {
@@ -960,6 +1090,126 @@ describe("CentralSkillsView", () => {
     expect(within(dialog).queryByText("Central Skills")).not.toBeInTheDocument();
   });
 
+  it("opens remote-missing dialog after checking updates and keeps local skills by default", async () => {
+    const remoteMissingState: CentralSkillUpdateState = {
+      skill_id: "frontend-design",
+      source_type: "github",
+      source_url: "https://github.com/openai/skills",
+      ref: "main",
+      source_path: "skills/frontend-design",
+      last_remote_hash: null,
+      latest_remote_hash: null,
+      last_checked_at: "2026-04-27T00:00:00Z",
+      last_updated_at: null,
+      status: "remote_missing",
+      error: "Skill source path 'skills/frontend-design' no longer contains an importable skill.",
+    };
+    mockCheckSkillUpdates.mockResolvedValueOnce([remoteMissingState]);
+    mockLoadBatchDeletePreview.mockResolvedValueOnce({
+      previews: [
+        {
+          skill_id: "frontend-design",
+          skill_name: "frontend-design",
+          central_path: "~/.skillsmanage/skills/frontend-design",
+          copy_installations: [],
+          auto_removed_agent_ids: ["claude-code"],
+        },
+      ],
+      failed: [],
+    });
+    mockKeepRemoteMissingSkills.mockResolvedValueOnce(["frontend-design"]);
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByRole("button", { name: /检查更新/i }));
+
+    await waitFor(() => {
+      expect(mockCheckSkillUpdates).toHaveBeenCalled();
+      expect(mockLoadBatchDeletePreview).toHaveBeenCalledWith(["frontend-design"]);
+    });
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("远端已删除的技能")).toBeInTheDocument();
+    expect(within(dialog).getByText("保留本地")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByTestId("confirm-remote-missing-skills"));
+
+    await waitFor(() => {
+      expect(mockKeepRemoteMissingSkills).toHaveBeenCalledWith(["frontend-design"]);
+    });
+    expect(mockDeleteCentralSkills).not.toHaveBeenCalled();
+    expect(mockRescan).toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith(
+      "已处理远端缺失技能：保留 1 个，删除 0 个"
+    );
+  });
+
+  it("deletes remote-missing local skills through the existing batch delete path", async () => {
+    const remoteMissingState: CentralSkillUpdateState = {
+      skill_id: "frontend-design",
+      source_type: "github",
+      source_url: "https://github.com/openai/skills",
+      ref: "main",
+      source_path: "skills/frontend-design",
+      last_remote_hash: null,
+      latest_remote_hash: null,
+      last_checked_at: "2026-04-27T00:00:00Z",
+      last_updated_at: null,
+      status: "remote_missing",
+      error: "Repository path 'skills/frontend-design' is no longer available.",
+    };
+    mockCheckSkillUpdates.mockResolvedValueOnce([remoteMissingState]);
+    mockLoadBatchDeletePreview.mockResolvedValueOnce({
+      previews: [
+        {
+          skill_id: "frontend-design",
+          skill_name: "frontend-design",
+          central_path: "~/.skillsmanage/skills/frontend-design",
+          copy_installations: [
+            {
+              skill_id: "frontend-design",
+              agent_id: "cursor",
+              installed_path: "/Users/test/.cursor/skills/frontend-design",
+              link_type: "copy",
+              symlink_target: undefined,
+              installed_at: "2026-04-11T00:00:00Z",
+            },
+          ],
+          auto_removed_agent_ids: ["claude-code"],
+        },
+      ],
+      failed: [],
+    });
+    mockDeleteCentralSkills.mockResolvedValueOnce({
+      succeeded: [
+        {
+          skill_id: "frontend-design",
+          removed_central_path: "~/.skillsmanage/skills/frontend-design",
+          removed_agent_ids: ["cursor"],
+          retained_agent_ids: [],
+        },
+      ],
+      failed: [],
+    });
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByRole("button", { name: /检查更新/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /删除本地/i }));
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Cursor/i }));
+    fireEvent.click(within(dialog).getByTestId("confirm-remote-missing-skills"));
+
+    await waitFor(() => {
+      expect(mockDeleteCentralSkills).toHaveBeenCalledWith([
+        {
+          skill_id: "frontend-design",
+          remove_agent_ids: ["cursor"],
+        },
+      ]);
+    });
+    expect(mockKeepRemoteMissingSkills).not.toHaveBeenCalled();
+    expect(mockRescan).toHaveBeenCalled();
+  });
+
   it("renders browser fixture skill card on the localhost validation surface without Tauri", async () => {
     const isTauriSpy = vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(false);
     mockUseCentralSkillsStore.mockRestore();
@@ -1312,6 +1562,30 @@ describe("CentralSkillsView", () => {
     expect(screen.getByText("成功 1")).toBeInTheDocument();
     expect(screen.getByText("失败 1")).toBeInTheDocument();
     expect(screen.getAllByText("AI 待复核").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("allows dismissing completed Central update progress", () => {
+    renderCentralSkillsView({
+      centralOverrides: {
+        updateJob: {
+          phase: "checking",
+          status: "completed",
+          total: 91,
+          completed: 91,
+          succeeded: 87,
+          failed: 0,
+          skipped: 4,
+          items: {},
+        },
+      },
+    });
+
+    expect(screen.getByText("中央技能更新进度")).toBeInTheDocument();
+    expect(screen.getByText("已完成")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭更新进度" }));
+
+    expect(screen.queryByText("中央技能更新进度")).not.toBeInTheDocument();
   });
 
   it("shows a cancel button while AI tagging is running", async () => {

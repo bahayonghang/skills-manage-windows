@@ -132,6 +132,8 @@ pub fn run() {
             commands::skills::preview_delete_central_skills,
             commands::skills::delete_central_skill,
             commands::skills::delete_central_skills,
+            commands::skills::preview_delete_skill_repository,
+            commands::skills::delete_skill_repository,
             commands::skills::get_skill_detail,
             commands::skills::read_skill_content,
             commands::skills::read_file_by_path,
@@ -153,6 +155,7 @@ pub fn run() {
             commands::central_updates::get_central_skill_update_states,
             commands::central_updates::check_central_skill_updates,
             commands::central_updates::update_central_skills,
+            commands::central_updates::keep_remote_missing_central_skills,
             // Collections
             commands::collections::create_collection,
             commands::collections::get_collections,
