@@ -255,6 +255,33 @@ describe("platformStore", () => {
     expect(state.error).toBeNull();
   });
 
+  it("rescan restores cached bootstrap data when the scan fails after a target reset", async () => {
+    usePlatformStore.getState().resetForTargetChange();
+
+    vi.mocked(invoke)
+      .mockRejectedValueOnce(new Error("ssh scan failed"))
+      .mockResolvedValueOnce(mockBootstrapSnapshot)
+      .mockResolvedValueOnce(JSON.stringify(mockCategoryVisibility));
+
+    await usePlatformStore.getState().rescan();
+
+    const state = usePlatformStore.getState();
+    expect(invoke).toHaveBeenNthCalledWith(1, "scan_all_skills");
+    expect(invoke).toHaveBeenNthCalledWith(2, "get_bootstrap_snapshot");
+    expect(invoke).toHaveBeenNthCalledWith(3, "get_setting", {
+      key: "platform_category_visibility",
+    });
+    expect(state.agents).toEqual(mockAgents);
+    expect(state.skillsByAgent).toEqual(mockBootstrapSnapshot.cachedSkillCounts);
+    expect(state.collectionCount).toBe(mockBootstrapSnapshot.collectionCount);
+    expect(state.discoveredCount).toBe(mockBootstrapSnapshot.discoveredCount);
+    expect(state.categoryVisibility).toEqual(mockCategoryVisibility);
+    expect(state.scanState).toBe("error");
+    expect(state.error).toContain("ssh scan failed");
+    expect(state.isLoading).toBe(false);
+    expect(state.isRefreshing).toBe(false);
+  });
+
   it("hydrateShell applies persisted category visibility", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce(mockBootstrapSnapshot)

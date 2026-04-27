@@ -356,6 +356,7 @@ describe("AppShell", () => {
   });
 
   it("clears stale counts and reloads target-bound data after active target changes", async () => {
+    const mockInitialize = vi.fn().mockResolvedValue(undefined);
     const mockResetPlatformForTargetChange = vi.fn();
     const mockResetCentralForTargetChange = vi.fn();
     const mockResetDiscoverForTargetChange = vi.fn();
@@ -373,6 +374,7 @@ describe("AppShell", () => {
 
     mockUsePlatformStore.mockImplementation((selector?: unknown) => {
       const state = createPlatformState({
+        initialize: mockInitialize,
         rescan: mockRescan,
         resetForTargetChange: mockResetPlatformForTargetChange,
       });
@@ -425,6 +427,10 @@ describe("AppShell", () => {
       </MemoryRouter>
     );
 
+    await waitFor(() => {
+      expect(mockInitialize).toHaveBeenCalledTimes(1);
+    });
+
     activeTarget = {
       id: "ssh-demo",
       kind: "ssh" as const,
@@ -452,5 +458,98 @@ describe("AppShell", () => {
       expect(mockLoadCentralSkills).toHaveBeenCalledTimes(1);
       expect(mockRescanDiscoverFromDisk).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("does not reset target-bound stores when the saved SSH target loads during startup", async () => {
+    const mockInitialize = vi.fn().mockResolvedValue(undefined);
+    const mockResetPlatformForTargetChange = vi.fn();
+    const mockResetCentralForTargetChange = vi.fn();
+    const mockResetDiscoverForTargetChange = vi.fn();
+    const mockResetSkillsForTargetChange = vi.fn();
+    const mockResetMarketplaceForTargetChange = vi.fn();
+    const mockRescan = vi.fn().mockResolvedValue(undefined);
+    const sshTarget: TargetSummary = {
+      id: "ssh-demo",
+      kind: "ssh",
+      label: "Demo",
+      isActive: true,
+    };
+    let activeTarget: TargetSummary = {
+      id: "local",
+      kind: "local",
+      label: "Local",
+      isActive: true,
+    };
+    const mockLoadTargets = vi.fn().mockImplementation(async () => {
+      activeTarget = sshTarget;
+    });
+
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = createPlatformState({
+        initialize: mockInitialize,
+        rescan: mockRescan,
+        resetForTargetChange: mockResetPlatformForTargetChange,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
+      const state = createCentralSkillsState({
+        resetForTargetChange: mockResetCentralForTargetChange,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseDiscoverStore.mockImplementation((selector?: unknown) => {
+      const state = createDiscoverState({
+        resetForTargetChange: mockResetDiscoverForTargetChange,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = createSkillState({
+        resetForTargetChange: mockResetSkillsForTargetChange,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseMarketplaceStore.mockImplementation((selector?: unknown) => {
+      const state = createMarketplaceState({
+        resetForTargetChange: mockResetMarketplaceForTargetChange,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseTargetStore.mockImplementation((selector?: unknown) => {
+      const state = createTargetState({
+        activeTarget,
+        loadTargets: mockLoadTargets,
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/a"]}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route path="a" element={<DummyPage label="page-a" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockInitialize).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockLoadTargets).toHaveBeenCalledTimes(1);
+    expect(mockResetPlatformForTargetChange).not.toHaveBeenCalled();
+    expect(mockResetCentralForTargetChange).not.toHaveBeenCalled();
+    expect(mockResetDiscoverForTargetChange).not.toHaveBeenCalled();
+    expect(mockResetSkillsForTargetChange).not.toHaveBeenCalled();
+    expect(mockResetMarketplaceForTargetChange).not.toHaveBeenCalled();
+    expect(mockRescan).not.toHaveBeenCalled();
   });
 });

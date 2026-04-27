@@ -151,6 +151,7 @@ function setupMocks({
   activeTarget = { id: "local", kind: "local" as const, label: "Local", isActive: true } as TargetSummary,
   loadTargets = vi.fn(),
   createSshTarget = vi.fn(),
+  updateSshTarget = vi.fn(),
   testSshTarget = vi.fn(),
   updateSshTargetPassword = vi.fn(),
   deleteTarget = vi.fn(),
@@ -221,6 +222,7 @@ function setupMocks({
       activeTarget,
       isLoading: false,
       isCreating: false,
+      updatingTargetId: null,
       testingTargetId: null,
       updatingPasswordTargetId: null,
       switchingTargetId: null,
@@ -228,6 +230,7 @@ function setupMocks({
       error: null,
       loadTargets,
       createSshTarget,
+      updateSshTarget,
       testSshTarget,
       updateSshTargetPassword,
       deleteTarget,
@@ -446,6 +449,76 @@ describe("SettingsView", () => {
       expect(updateSshTargetPassword).toHaveBeenCalledWith("ssh-demo", "secret");
     });
     expect(await screen.findByText(/本次会话|session/i)).toBeTruthy();
+  });
+
+  it("updates an existing ssh target without recreating it", async () => {
+    const updateSshTarget = vi.fn().mockResolvedValue({
+      id: "ssh-demo",
+      kind: "ssh" as const,
+      label: "Lab",
+      host: "new.lab.local",
+      username: "alice",
+      port: 22,
+      authMethod: "password" as const,
+      remoteHome: "/home/alice",
+      remoteOs: "Linux",
+      credentialStatus: "stored",
+      isActive: true,
+    });
+    setupMocks({
+      targets: [
+        { id: "local", kind: "local" as const, label: "Local", isActive: false },
+        {
+          id: "ssh-demo",
+          kind: "ssh" as const,
+          label: "Lab",
+          host: "lab.local",
+          username: "alice",
+          port: 22,
+          authMethod: "password" as const,
+          remoteHome: "/home/alice",
+          remoteOs: "Linux",
+          hasStoredPassword: true,
+          credentialStatus: "stored",
+          isActive: true,
+        },
+      ],
+      activeTarget: {
+        id: "ssh-demo",
+        kind: "ssh" as const,
+        label: "Lab",
+        isActive: true,
+      },
+      updateSshTarget,
+      rescan: vi.fn().mockResolvedValue(undefined),
+      loadCentralSkills: vi.fn().mockResolvedValue(undefined),
+      refreshDiscoverCounts: vi.fn().mockResolvedValue(undefined),
+      loadMarketplaceRegistries: vi.fn().mockResolvedValue(undefined),
+    });
+    renderSettingsView();
+
+    fireEvent.click(screen.getByLabelText("编辑目标 Lab"));
+    fireEvent.change(screen.getByDisplayValue("lab.local"), {
+      target: { value: "new.lab.local" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("SSH 密码（留空则沿用已保存密码）"), {
+      target: { value: "new-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+
+    await waitFor(() => {
+      expect(updateSshTarget).toHaveBeenCalledWith({
+        id: "ssh-demo",
+        label: "Lab",
+        host: "new.lab.local",
+        username: "alice",
+        port: 22,
+        authMethod: "password",
+        keyPath: null,
+        password: "new-secret",
+      });
+    });
+    expect(await screen.findByText("已更新目标 Lab")).toBeTruthy();
   });
 
   it("shows loading state for scan directories", () => {

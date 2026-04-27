@@ -36,6 +36,7 @@ describe("targetStore", () => {
       activeTarget: localTarget,
       isLoading: false,
       isCreating: false,
+      updatingTargetId: null,
       testingTargetId: null,
       updatingPasswordTargetId: null,
       switchingTargetId: null,
@@ -108,6 +109,45 @@ describe("targetStore", () => {
         password: "secret",
       },
     });
+  });
+
+  it("updates an ssh target through the backend command", async () => {
+    const updatedTarget = {
+      ...sshTarget,
+      label: "New Lab",
+      host: "new.lab.local",
+      username: "bob",
+      port: 2222,
+      authMethod: "password" as const,
+      credentialStatus: "stored" as const,
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(updatedTarget)
+      .mockResolvedValueOnce([localTarget, updatedTarget]);
+
+    const result = await useTargetStore.getState().updateSshTarget({
+      id: "ssh-demo",
+      label: "New Lab",
+      host: "new.lab.local",
+      username: "bob",
+      port: 2222,
+      authMethod: "password",
+      password: "new-secret",
+    });
+
+    expect(result).toEqual(updatedTarget);
+    expect(invoke).toHaveBeenCalledWith("update_ssh_target", {
+      request: {
+        id: "ssh-demo",
+        label: "New Lab",
+        host: "new.lab.local",
+        username: "bob",
+        port: 2222,
+        authMethod: "password",
+        password: "new-secret",
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("list_targets");
   });
 
   it("switches active target and updates local state", async () => {
