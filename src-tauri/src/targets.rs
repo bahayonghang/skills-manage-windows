@@ -182,6 +182,7 @@ trait CredentialBackend: Send + Sync {
 
 struct SystemCredentialBackend;
 
+#[cfg(windows)]
 fn hex_encode(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut encoded = String::with_capacity(bytes.len() * 2);
@@ -192,6 +193,7 @@ fn hex_encode(bytes: &[u8]) -> String {
     encoded
 }
 
+#[cfg(windows)]
 fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
     if !value.len().is_multiple_of(2) {
         return Err("Protected password payload is not valid hex.".to_string());

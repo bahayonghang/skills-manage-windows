@@ -178,8 +178,8 @@ just install
 
 - `just ci` runs frontend `typecheck` + `lint`, plus Rust `cargo test` and `cargo clippy`.
 - `just dev` starts the Tauri development app directly.
-- `just build` builds the desktop app and copies the latest NSIS installer from `src-tauri/target/release/bundle/nsis/` to `outputs/`.
-- `just install` builds the desktop app, copies the latest NSIS installer to `outputs/`, and runs it in passive mode.
+- `just build` builds the desktop app for the current platform and copies the latest bundle artifact to `outputs/` (`.exe` on Windows, `.app` on macOS, `.AppImage`/`.deb` on Linux).
+- `just install` builds the Windows NSIS installer, copies it to `outputs/`, and runs it in passive mode. This command is Windows-only.
 
 ### Run in Development
 
