@@ -32,7 +32,16 @@ build: sync-version
     @$ErrorActionPreference = 'Stop'; function Run-Step { param([scriptblock]$Step) & $Step; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }; $outputDir = '{{output_dir}}'; $bundleDir = '{{nsis_bundle_dir}}'; $legacyExe = Join-Path $outputDir '{{app_exe}}'; Write-Host '[build] 准备输出目录'; New-Item -ItemType Directory -Path $outputDir -Force | Out-Null; Write-Host '[build] 开始 Tauri 构建'; Run-Step { pnpm tauri build --bundles nsis }; $installer = Get-ChildItem -Path $bundleDir -Filter '*.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($null -eq $installer) { throw ('未找到 NSIS 安装包: ' + $bundleDir) }; if (Test-Path $legacyExe) { Remove-Item -LiteralPath $legacyExe -Force }; $outputInstaller = Join-Path $outputDir $installer.Name; Copy-Item -LiteralPath $installer.FullName -Destination $outputInstaller -Force; Write-Host ('[build] 已复制安装包到 ' + $outputInstaller)
 
 # ========================================================================
-# 步骤4：启动开发模式
+# 步骤4：构建并安装桌面应用
+# ========================================================================
+# 目标：
+# 1) 复用 build 生成的 NSIS 安装包
+# 2) 以 passive 模式运行安装器，减少手动点击
+install: build
+    @$ErrorActionPreference = 'Stop'; $outputDir = '{{output_dir}}'; $installer = Get-ChildItem -Path $outputDir -Filter '*-setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($null -eq $installer) { throw ('未找到 NSIS 安装包: ' + $outputDir) }; Write-Host ('[install] 开始安装 ' + $installer.FullName); $process = Start-Process -FilePath $installer.FullName -ArgumentList '/P' -Wait -PassThru; if ($null -ne $process.ExitCode -and $process.ExitCode -ne 0) { exit $process.ExitCode }; Write-Host '[install] 安装完成'
+
+# ========================================================================
+# 步骤5：启动开发模式
 # ========================================================================
 # 目标：
 # 1) 启动 Tauri 开发环境
