@@ -1,10 +1,15 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use chrono::Utc;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::json;
 use tauri::State;
 
+use crate::commands::logs::{
+    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
+};
 use crate::db::{self, AgentSkillObservation, DbPool, Skill, SkillInstallation};
 use crate::targets::{
     connect_ssh_target, remote_file_type_is_dir, remote_join, remote_parent, ActiveTarget,
@@ -818,8 +823,10 @@ pub async fn scan_ssh_skills_impl(
 #[tauri::command]
 pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, String> {
     let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
     let _ = db::set_setting(&pool, "scan_state", "refreshing").await;
+    let started_at = Instant::now();
 
     let scan_result = match active_target {
         ActiveTarget::Local => scan_all_skills_impl(&pool).await,
@@ -831,10 +838,40 @@ pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, S
             let completed_at = Utc::now().to_rfc3339();
             let _ = db::set_setting(&pool, "scan_last_completed_at", &completed_at).await;
             let _ = db::set_setting(&pool, "scan_state", "idle").await;
+            record_operation_log_best_effort(
+                &state.db,
+                target_context,
+                OperationLogEvent::new(
+                    "scan",
+                    "scan.all",
+                    "succeeded",
+                    format!(
+                        "Scanned {} skills across {} agents",
+                        result.total_skills, result.agents_scanned
+                    ),
+                )
+                .subject("scan_root", "all", "All scan directories")
+                .details(json!({
+                    "totalSkills": result.total_skills,
+                    "agentsScanned": result.agents_scanned,
+                    "skillsByAgent": result.skills_by_agent,
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
             Ok(result)
         }
         Err(error) => {
             let _ = db::set_setting(&pool, "scan_state", "error").await;
+            record_operation_log_best_effort(
+                &state.db,
+                target_context,
+                OperationLogEvent::new("scan", "scan.all", "failed", "Failed to scan skills")
+                    .subject("scan_root", "all", "All scan directories")
+                    .error(&error)
+                    .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
             Err(error)
         }
     }

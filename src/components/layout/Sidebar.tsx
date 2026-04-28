@@ -5,6 +5,7 @@ import {
   Blocks,
   Layers,
   Radar,
+  ScrollText,
   Store,
   ChevronLeft,
   ChevronRight,
@@ -125,6 +126,7 @@ export function Sidebar() {
   const codingAgents = platformAgents.filter((a) => a.category !== "lobster");
 
   const isCollectionActive = pathname === "/collections";
+  const isLogsActive = pathname === "/logs";
 
   function platformRoute(agent: (typeof platformAgents)[number]) {
     return `/platform/${agent.id}`;
@@ -227,6 +229,15 @@ export function Sidebar() {
           icon={<Layers className="size-4" />}
           expanded={expanded}
           count={collectionCount}
+        />
+
+        {/* Operation Logs */}
+        <NavItem
+          label={t("logs.title")}
+          isActive={isLogsActive}
+          onClick={() => navigate("/logs")}
+          icon={<ScrollText className="size-4" />}
+          expanded={expanded}
         />
 
         {/* Divider */}

@@ -1,11 +1,16 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::Row;
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 use tauri::State;
 use uuid::Uuid;
 
 use super::github_import::{self, DuplicateResolution, GitHubSkillImportSelection};
+use crate::commands::logs::{
+    local_target_context, record_operation_log_best_effort, OperationLogEvent,
+};
 use crate::{
     db::{self, DbPool},
     AppState,
@@ -191,7 +196,48 @@ pub async fn export_skillport_state(
     state: State<'_, AppState>,
     _options: Option<SkillportStateExportOptions>,
 ) -> Result<String, String> {
-    export_skillport_state_impl(&state.db).await
+    let started_at = Instant::now();
+    let result = export_skillport_state_impl(&state.db).await;
+    match &result {
+        Ok(payload) => {
+            let manifest = serde_json::from_str::<SkillportStateManifest>(payload).ok();
+            record_operation_log_best_effort(
+                &state.db,
+                local_target_context(),
+                OperationLogEvent::new(
+                    "import_export",
+                    "state.export",
+                    "succeeded",
+                    "Exported portable SkillPort state",
+                )
+                .subject("state", "skillport", "SkillPort state")
+                .details(json!({
+                    "githubSources": manifest.as_ref().map(|item| item.github_sources.len()),
+                    "centralSkills": manifest.as_ref().map(|item| item.central_skills.len()),
+                    "unrestorableSkills": manifest.as_ref().map(|item| item.unrestorable_skills.len()),
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
+        Err(error) => {
+            record_operation_log_best_effort(
+                &state.db,
+                local_target_context(),
+                OperationLogEvent::new(
+                    "import_export",
+                    "state.export",
+                    "failed",
+                    "Failed to export portable SkillPort state",
+                )
+                .subject("state", "skillport", "SkillPort state")
+                .error(error)
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
+    }
+    result
 }
 
 #[tauri::command]
@@ -199,9 +245,54 @@ pub async fn preview_skillport_state_import(
     state: State<'_, AppState>,
     json: String,
 ) -> Result<SkillportStateImportPreview, String> {
-    let manifest = parse_manifest(&json)?;
-    let remote_catalog = build_remote_catalog(&state.db, &manifest).await?;
-    preview_skillport_state_import_impl(&state.db, &manifest, Some(&remote_catalog)).await
+    let started_at = Instant::now();
+    let result = match parse_manifest(&json) {
+        Ok(manifest) => match build_remote_catalog(&state.db, &manifest).await {
+            Ok(remote_catalog) => {
+                preview_skillport_state_import_impl(&state.db, &manifest, Some(&remote_catalog))
+                    .await
+            }
+            Err(error) => Err(error),
+        },
+        Err(error) => Err(error),
+    };
+    match &result {
+        Ok(preview) => {
+            record_operation_log_best_effort(
+                &state.db,
+                local_target_context(),
+                OperationLogEvent::new(
+                    "import_export",
+                    "state.preview_import",
+                    "succeeded",
+                    "Previewed portable SkillPort state import",
+                )
+                .subject("state", "skillport", "SkillPort state")
+                .details(json!({
+                    "summary": &preview.summary,
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
+        Err(error) => {
+            record_operation_log_best_effort(
+                &state.db,
+                local_target_context(),
+                OperationLogEvent::new(
+                    "import_export",
+                    "state.preview_import",
+                    "failed",
+                    "Failed to preview portable SkillPort state import",
+                )
+                .subject("state", "skillport", "SkillPort state")
+                .error(error)
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
+    }
+    result
 }
 
 #[tauri::command]
@@ -210,8 +301,65 @@ pub async fn import_skillport_state(
     json: String,
     resolutions: Vec<SkillportStateImportResolution>,
 ) -> Result<SkillportStateImportResult, String> {
-    let manifest = parse_manifest(&json)?;
-    import_skillport_state_impl(&state.db, &manifest, resolutions).await
+    let started_at = Instant::now();
+    let result = match parse_manifest(&json) {
+        Ok(manifest) => import_skillport_state_impl(&state.db, &manifest, resolutions).await,
+        Err(error) => Err(error),
+    };
+    match &result {
+        Ok(import_result) => {
+            let status = match (
+                import_result.imported_skills.len() + import_result.sources_added,
+                import_result.failed_skills.len(),
+            ) {
+                (_, 0) => "succeeded",
+                (0, _) => "failed",
+                _ => "partial",
+            };
+            record_operation_log_best_effort(
+                &state.db,
+                local_target_context(),
+                OperationLogEvent::new(
+                    "import_export",
+                    "state.import",
+                    status,
+                    format!(
+                        "Imported {} skill(s), {} failed",
+                        import_result.imported_skills.len(),
+                        import_result.failed_skills.len()
+                    ),
+                )
+                .subject("state", "skillport", "SkillPort state")
+                .details(json!({
+                    "sourcesAdded": import_result.sources_added,
+                    "sourcesSkipped": import_result.sources_skipped,
+                    "importedSkills": &import_result.imported_skills,
+                    "skippedSkills": &import_result.skipped_skills,
+                    "failedSkills": &import_result.failed_skills,
+                    "tagsRestored": import_result.tags_restored,
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
+        Err(error) => {
+            record_operation_log_best_effort(
+                &state.db,
+                local_target_context(),
+                OperationLogEvent::new(
+                    "import_export",
+                    "state.import",
+                    "failed",
+                    "Failed to import portable SkillPort state",
+                )
+                .subject("state", "skillport", "SkillPort state")
+                .error(error)
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
+    }
+    result
 }
 
 async fn export_skillport_state_impl(pool: &DbPool) -> Result<String, String> {

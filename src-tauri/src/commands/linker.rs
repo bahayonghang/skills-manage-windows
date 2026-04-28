@@ -1,9 +1,14 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tauri::State;
 
+use crate::commands::logs::{
+    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
+};
 use crate::db::{self, DbPool, SkillInstallation};
 #[cfg(test)]
 use crate::targets::RemotePathInfo;
@@ -12,6 +17,14 @@ use crate::targets::{
     RemoteTargetConfig,
 };
 use crate::AppState;
+
+fn batch_operation_status(success_count: usize, failure_count: usize) -> &'static str {
+    match (success_count, failure_count) {
+        (_, 0) => "succeeded",
+        (0, _) => "failed",
+        _ => "partial",
+    }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1068,9 +1081,11 @@ pub async fn install_skill_to_agent(
     method: Option<String>,
 ) -> Result<InstallResult, String> {
     let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
     let method = method.as_deref().unwrap_or("auto");
-    match active_target {
+    let started_at = Instant::now();
+    let result = match active_target {
         ActiveTarget::Local => match method {
             "copy" => install_skill_to_agent_copy_impl(&pool, &skill_id, &agent_id).await,
             "symlink" => install_skill_to_agent_impl(&pool, &skill_id, &agent_id).await,
@@ -1085,7 +1100,35 @@ pub async fn install_skill_to_agent(
             install_skill_to_agent_ssh_impl(&pool, &target, &skill_id, &agent_id, remote_method)
                 .await
         }
+    };
+    let status = if result.is_ok() {
+        "succeeded"
+    } else {
+        "failed"
+    };
+    let mut event = OperationLogEvent::new(
+        "install",
+        "skill.install",
+        status,
+        if result.is_ok() {
+            format!("Installed skill {} to {}", skill_id, agent_id)
+        } else {
+            format!("Failed to install skill {} to {}", skill_id, agent_id)
+        },
+    )
+    .subject("skill", &skill_id, &skill_id)
+    .details(json!({
+        "skillId": skill_id,
+        "agentId": agent_id,
+        "method": method,
+        "targetPath": result.as_ref().ok().map(|install| install.symlink_path.clone()),
+    }))
+    .duration_ms(started_at.elapsed().as_millis() as i64);
+    if let Err(error) = &result {
+        event = event.error(error);
     }
+    record_operation_log_best_effort(&state.db, target_context, event).await;
+    result
 }
 
 /// Tauri command: remove a skill's symlink from an agent.
@@ -1096,13 +1139,41 @@ pub async fn uninstall_skill_from_agent(
     agent_id: String,
 ) -> Result<(), String> {
     let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    match active_target {
+    let started_at = Instant::now();
+    let result = match active_target {
         ActiveTarget::Local => uninstall_skill_from_agent_impl(&pool, &skill_id, &agent_id).await,
         ActiveTarget::Ssh(target) => {
             uninstall_skill_from_agent_ssh_impl(&pool, &target, &skill_id, &agent_id).await
         }
+    };
+    let status = if result.is_ok() {
+        "succeeded"
+    } else {
+        "failed"
+    };
+    let mut event = OperationLogEvent::new(
+        "install",
+        "skill.uninstall",
+        status,
+        if result.is_ok() {
+            format!("Uninstalled skill {} from {}", skill_id, agent_id)
+        } else {
+            format!("Failed to uninstall skill {} from {}", skill_id, agent_id)
+        },
+    )
+    .subject("skill", &skill_id, &skill_id)
+    .details(json!({
+        "skillId": skill_id,
+        "agentId": agent_id,
+    }))
+    .duration_ms(started_at.elapsed().as_millis() as i64);
+    if let Err(error) = &result {
+        event = event.error(error);
     }
+    record_operation_log_best_effort(&state.db, target_context, event).await;
+    result
 }
 
 /// Tauri command: install a skill to multiple agents in one call.
@@ -1120,10 +1191,32 @@ pub async fn batch_install_to_agents(
 ) -> Result<BatchInstallResult, String> {
     let method = method.as_deref().unwrap_or("auto");
     let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
+    let started_at = Instant::now();
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
     if agent_ids.is_empty() {
+        record_operation_log_best_effort(
+            &state.db,
+            target_context,
+            OperationLogEvent::new(
+                "install",
+                "skill.batch_install",
+                "succeeded",
+                format!("No target agents selected for skill {}", skill_id),
+            )
+            .subject("skill", &skill_id, &skill_id)
+            .details(json!({
+                "skillId": skill_id,
+                "agentIds": agent_ids,
+                "method": method,
+                "succeeded": &succeeded,
+                "failed": &failed,
+            }))
+            .duration_ms(started_at.elapsed().as_millis() as i64),
+        )
+        .await;
         return Ok(BatchInstallResult { succeeded, failed });
     }
     let ssh_connection = match &active_target {
@@ -1134,6 +1227,27 @@ pub async fn batch_install_to_agents(
                     agent_id: agent_id.clone(),
                     error: error.clone(),
                 }));
+                record_operation_log_best_effort(
+                    &state.db,
+                    target_context,
+                    OperationLogEvent::new(
+                        "install",
+                        "skill.batch_install",
+                        "failed",
+                        format!("Failed to install skill {} to selected agents", skill_id),
+                    )
+                    .subject("skill", &skill_id, &skill_id)
+                    .error(&error)
+                    .details(json!({
+                        "skillId": skill_id,
+                        "agentIds": agent_ids,
+                        "method": method,
+                        "succeeded": &succeeded,
+                        "failed": &failed,
+                    }))
+                    .duration_ms(started_at.elapsed().as_millis() as i64),
+                )
+                .await;
                 return Ok(BatchInstallResult { succeeded, failed });
             }
         },
@@ -1176,6 +1290,33 @@ pub async fn batch_install_to_agents(
         }
     }
 
+    let status = batch_operation_status(succeeded.len(), failed.len());
+    record_operation_log_best_effort(
+        &state.db,
+        target_context,
+        OperationLogEvent::new(
+            "install",
+            "skill.batch_install",
+            status,
+            format!(
+                "Installed skill {} to {} agent(s), {} failed",
+                skill_id,
+                succeeded.len(),
+                failed.len()
+            ),
+        )
+        .subject("skill", &skill_id, &skill_id)
+        .details(json!({
+            "skillId": skill_id,
+            "agentIds": agent_ids,
+            "method": method,
+            "succeeded": &succeeded,
+            "failed": &failed,
+        }))
+        .duration_ms(started_at.elapsed().as_millis() as i64),
+    )
+    .await;
+
     Ok(BatchInstallResult { succeeded, failed })
 }
 
@@ -1190,8 +1331,31 @@ pub async fn batch_install_central_skills(
 ) -> Result<CentralBatchInstallResult, String> {
     let method = method.as_deref().unwrap_or("auto");
     let active_target = state.active_target().await?;
-    if matches!(active_target, ActiveTarget::Ssh(_)) && project_path.is_some() {
-        return Err("Remote project install is not supported in this version.".to_string());
+    let target_context = target_context_from_active_target(&active_target);
+    let started_at = Instant::now();
+    if matches!(&active_target, ActiveTarget::Ssh(_)) && project_path.is_some() {
+        let error = "Remote project install is not supported in this version.".to_string();
+        record_operation_log_best_effort(
+            &state.db,
+            target_context,
+            OperationLogEvent::new(
+                "install",
+                "central.batch_install",
+                "failed",
+                "Failed to batch install Central skills",
+            )
+            .subject("batch", "central.batch_install", "Central batch install")
+            .error(&error)
+            .details(json!({
+                "skillIds": &skill_ids,
+                "agentIds": &agent_ids,
+                "method": method,
+                "projectPath": &project_path,
+            }))
+            .duration_ms(started_at.elapsed().as_millis() as i64),
+        )
+        .await;
+        return Err(error);
     }
     let pool = state.active_db().await?;
     if let ActiveTarget::Ssh(target) = active_target {
@@ -1205,12 +1369,32 @@ pub async fn batch_install_central_skills(
         let skill_ids = dedupe_ordered(skill_ids);
         let agent_ids = dedupe_ordered(agent_ids);
         if skill_ids.is_empty() || agent_ids.is_empty() {
+            record_operation_log_best_effort(
+                &state.db,
+                target_context,
+                OperationLogEvent::new(
+                    "install",
+                    "central.batch_install",
+                    "succeeded",
+                    "No Central skills or target agents selected",
+                )
+                .subject("batch", "central.batch_install", "Central batch install")
+                .details(json!({
+                    "skillIds": &skill_ids,
+                    "agentIds": &agent_ids,
+                    "method": method,
+                    "succeeded": &succeeded,
+                    "failed": &failed,
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
             return Ok(CentralBatchInstallResult { succeeded, failed });
         }
         let connection = match connect_ssh_target(&target).await {
             Ok(connection) => connection,
             Err(error) => {
-                for skill_id in skill_ids {
+                for skill_id in &skill_ids {
                     for agent_id in &agent_ids {
                         failed.push(CentralBatchInstallFailure {
                             skill_id: skill_id.clone(),
@@ -1219,6 +1403,27 @@ pub async fn batch_install_central_skills(
                         });
                     }
                 }
+                record_operation_log_best_effort(
+                    &state.db,
+                    target_context,
+                    OperationLogEvent::new(
+                        "install",
+                        "central.batch_install",
+                        "failed",
+                        "Failed to batch install Central skills",
+                    )
+                    .subject("batch", "central.batch_install", "Central batch install")
+                    .error(&error)
+                    .details(json!({
+                        "skillIds": &skill_ids,
+                        "agentIds": &agent_ids,
+                        "method": method,
+                        "succeeded": &succeeded,
+                        "failed": &failed,
+                    }))
+                    .duration_ms(started_at.elapsed().as_millis() as i64),
+                )
+                .await;
                 return Ok(CentralBatchInstallResult { succeeded, failed });
             }
         };
@@ -1247,6 +1452,30 @@ pub async fn batch_install_central_skills(
                 }
             }
         }
+        let status = batch_operation_status(succeeded.len(), failed.len());
+        record_operation_log_best_effort(
+            &state.db,
+            target_context,
+            OperationLogEvent::new(
+                "install",
+                "central.batch_install",
+                status,
+                format!(
+                    "Installed {} Central skill target(s), {} failed",
+                    succeeded.len(),
+                    failed.len()
+                ),
+            )
+            .subject("batch", "central.batch_install", "Central batch install")
+            .details(json!({
+                "agentIds": &agent_ids,
+                "method": method,
+                "succeeded": &succeeded,
+                "failed": &failed,
+            }))
+            .duration_ms(started_at.elapsed().as_millis() as i64),
+        )
+        .await;
         return Ok(CentralBatchInstallResult { succeeded, failed });
     }
 
@@ -1256,14 +1485,39 @@ pub async fn batch_install_central_skills(
         .filter(|path| !path.is_empty())
         .map(PathBuf::from);
 
-    Ok(batch_install_central_skills_impl(
+    let batch_result = batch_install_central_skills_impl(
         &pool,
         skill_ids,
         agent_ids,
         method,
         project_path_buf.as_deref(),
     )
-    .await)
+    .await;
+    let status = batch_operation_status(batch_result.succeeded.len(), batch_result.failed.len());
+    record_operation_log_best_effort(
+        &state.db,
+        target_context,
+        OperationLogEvent::new(
+            "install",
+            "central.batch_install",
+            status,
+            format!(
+                "Installed {} Central skill target(s), {} failed",
+                batch_result.succeeded.len(),
+                batch_result.failed.len()
+            ),
+        )
+        .subject("batch", "central.batch_install", "Central batch install")
+        .details(json!({
+            "method": method,
+            "projectPath": project_path_buf.as_ref().map(|path| path.display().to_string()),
+            "succeeded": &batch_result.succeeded,
+            "failed": &batch_result.failed,
+        }))
+        .duration_ms(started_at.elapsed().as_millis() as i64),
+    )
+    .await;
+    Ok(batch_result)
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

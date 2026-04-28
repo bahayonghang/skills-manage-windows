@@ -88,6 +88,66 @@
     "categoryCoding": "编程类",
     "resizeSidebar": "调整侧边栏宽度"
   },
+  "logs": {
+    "title": "操作日志",
+    "description": "仅保存在本机的操作历史，覆盖扫描、目标、安装、删除、设置和导入导出。",
+    "detailTitle": "日志详情",
+    "searchPlaceholder": "搜索摘要、错误、对象或动作...",
+    "loading": "正在加载日志...",
+    "empty": "当前筛选条件下没有操作日志。",
+    "noDetail": "选择一条日志查看详情。",
+    "clear": "清空日志",
+    "confirmClear": "确认清空",
+    "resetFilters": "重置筛选",
+    "total": "共 {{count}} 条日志",
+    "exported": "操作日志已导出。",
+    "cleared": "已清空 {{count}} 条日志。",
+    "loadError": "加载日志失败：{{error}}",
+    "detailError": "加载日志详情失败：{{error}}",
+    "exportError": "导出日志失败：{{error}}",
+    "clearError": "清空日志失败：{{error}}",
+    "filters": {
+      "target": "目标",
+      "allTargets": "全部目标",
+      "level": "级别",
+      "allLevels": "全部级别",
+      "status": "结果",
+      "allStatuses": "全部结果",
+      "action": "动作",
+      "from": "开始日期",
+      "to": "结束日期"
+    },
+    "targets": {
+      "local": "本机",
+      "ssh": "SSH"
+    },
+    "status": {
+      "succeeded": "成功",
+      "failed": "失败",
+      "partial": "部分成功",
+      "cancelled": "已取消"
+    },
+    "columns": {
+      "time": "时间",
+      "level": "级别",
+      "target": "目标",
+      "action": "动作",
+      "result": "结果"
+    },
+    "fields": {
+      "createdAt": "创建时间",
+      "level": "级别",
+      "status": "结果",
+      "category": "分类",
+      "target": "目标",
+      "targetKind": "目标类型",
+      "subjectType": "对象类型",
+      "subject": "对象",
+      "duration": "耗时",
+      "batchId": "批次 ID",
+      "details": "详情 JSON"
+    }
+  },
   "platform": {
     "searchPlaceholder": "搜索技能...",
     "loading": "正在加载技能...",

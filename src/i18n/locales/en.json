@@ -88,6 +88,66 @@
     "categoryCoding": "Coding",
     "resizeSidebar": "Resize sidebar"
   },
+  "logs": {
+    "title": "Operation Logs",
+    "description": "Local-only operation history for scans, targets, installs, deletes, settings, and imports.",
+    "detailTitle": "Log details",
+    "searchPlaceholder": "Search summary, error, subject, or action...",
+    "loading": "Loading logs...",
+    "empty": "No operation logs match the current filters.",
+    "noDetail": "Select a log entry to view details.",
+    "clear": "Clear logs",
+    "confirmClear": "Confirm clear",
+    "resetFilters": "Reset filters",
+    "total": "{{count}} log(s)",
+    "exported": "Operation logs exported.",
+    "cleared": "Cleared {{count}} log(s).",
+    "loadError": "Failed to load logs: {{error}}",
+    "detailError": "Failed to load log detail: {{error}}",
+    "exportError": "Failed to export logs: {{error}}",
+    "clearError": "Failed to clear logs: {{error}}",
+    "filters": {
+      "target": "Target",
+      "allTargets": "All targets",
+      "level": "Level",
+      "allLevels": "All levels",
+      "status": "Status",
+      "allStatuses": "All statuses",
+      "action": "Action",
+      "from": "From date",
+      "to": "To date"
+    },
+    "targets": {
+      "local": "Local",
+      "ssh": "SSH"
+    },
+    "status": {
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "partial": "Partial",
+      "cancelled": "Cancelled"
+    },
+    "columns": {
+      "time": "Time",
+      "level": "Level",
+      "target": "Target",
+      "action": "Action",
+      "result": "Result"
+    },
+    "fields": {
+      "createdAt": "Created at",
+      "level": "Level",
+      "status": "Status",
+      "category": "Category",
+      "target": "Target",
+      "targetKind": "Target kind",
+      "subjectType": "Subject type",
+      "subject": "Subject",
+      "duration": "Duration",
+      "batchId": "Batch ID",
+      "details": "Details JSON"
+    }
+  },
   "platform": {
     "searchPlaceholder": "Search skills...",
     "loading": "Loading skills...",

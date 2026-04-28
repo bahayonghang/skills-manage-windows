@@ -137,6 +137,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: /中央技能库/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /项目技能库/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /技能集合/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /操作日志/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Claude Code/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Universal/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /OpenClaw/ })).toBeInTheDocument();

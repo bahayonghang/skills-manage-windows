@@ -38,6 +38,11 @@ const DiscoverView = lazy(() =>
     default: DiscoverView,
   }))
 );
+const OperationLogsView = lazy(() =>
+  import("@/pages/OperationLogsView").then(({ OperationLogsView }) => ({
+    default: OperationLogsView,
+  }))
+);
 
 function lazyPage(element: ReactNode) {
   return <Suspense fallback={null}>{element}</Suspense>;
@@ -83,6 +88,11 @@ function App() {
         <Route
           path="discover/:projectPath"
           element={lazyPage(<DiscoverView />)}
+        />
+        {/* Operation logs */}
+        <Route
+          path="logs"
+          element={lazyPage(<OperationLogsView />)}
         />
         {/* Settings */}
         <Route

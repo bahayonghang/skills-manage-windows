@@ -184,6 +184,73 @@ pub struct ScanDirectory {
     pub added_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationLogEntry {
+    pub id: String,
+    pub created_at: String,
+    pub level: String,
+    pub target_kind: String,
+    pub target_id: String,
+    pub target_label: Option<String>,
+    pub category: String,
+    pub action: String,
+    pub status: String,
+    pub subject_type: Option<String>,
+    pub subject_id: Option<String>,
+    pub subject_label: Option<String>,
+    pub summary: String,
+    pub error_summary: Option<String>,
+    pub details_json: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub batch_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationLogFilter {
+    pub query: Option<String>,
+    pub target_kind: Option<String>,
+    pub target_id: Option<String>,
+    pub level: Option<String>,
+    pub status: Option<String>,
+    pub category: Option<String>,
+    pub action: Option<String>,
+    pub created_after: Option<String>,
+    pub created_before: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationLogPage {
+    pub entries: Vec<OperationLogEntry>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewOperationLogEntry {
+    pub level: String,
+    pub target_kind: String,
+    pub target_id: String,
+    pub target_label: Option<String>,
+    pub category: String,
+    pub action: String,
+    pub status: String,
+    pub subject_type: Option<String>,
+    pub subject_id: Option<String>,
+    pub subject_label: Option<String>,
+    pub summary: String,
+    pub error_summary: Option<String>,
+    pub details_json: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub batch_id: Option<String>,
+}
+
 // ─── Pool Creation ────────────────────────────────────────────────────────────
 
 /// Create a production SQLite pool for the given file path with WAL mode enabled.
@@ -525,6 +592,80 @@ async fn init_database_with_agents(
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
         )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // operation_logs table — local-only structured operation history.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS operation_logs (
+            id             TEXT PRIMARY KEY,
+            created_at     TEXT NOT NULL,
+            level          TEXT NOT NULL,
+            target_kind    TEXT NOT NULL,
+            target_id      TEXT NOT NULL,
+            target_label   TEXT,
+            category       TEXT NOT NULL,
+            action         TEXT NOT NULL,
+            status         TEXT NOT NULL,
+            subject_type   TEXT,
+            subject_id     TEXT,
+            subject_label  TEXT,
+            summary        TEXT NOT NULL,
+            error_summary  TEXT,
+            details_json   TEXT,
+            duration_ms    INTEGER,
+            batch_id       TEXT
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_operation_logs_created_at
+         ON operation_logs(created_at)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_operation_logs_target
+         ON operation_logs(target_kind, target_id)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_operation_logs_level_status
+         ON operation_logs(level, status)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_operation_logs_action
+         ON operation_logs(action)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_operation_logs_category
+         ON operation_logs(category)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_operation_logs_batch_id
+         ON operation_logs(batch_id)",
     )
     .execute(pool)
     .await
@@ -3207,6 +3348,322 @@ pub async fn get_discovered_project_count(pool: &DbPool) -> Result<i64, String> 
     row.try_get::<i64, _>("cnt").map_err(|e| e.to_string())
 }
 
+// ─── Operation Logs ──────────────────────────────────────────────────────────
+
+const DEFAULT_OPERATION_LOG_LIMIT: i64 = 100;
+const MAX_OPERATION_LOG_LIMIT: i64 = 500;
+
+fn normalize_optional_filter(value: &Option<String>) -> Option<String> {
+    value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn normalize_required_log_value(value: &str, fallback: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        fallback.to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn operation_log_limit(limit: Option<i64>) -> i64 {
+    limit
+        .unwrap_or(DEFAULT_OPERATION_LOG_LIMIT)
+        .clamp(1, MAX_OPERATION_LOG_LIMIT)
+}
+
+fn operation_log_offset(offset: Option<i64>) -> i64 {
+    offset.unwrap_or(0).max(0)
+}
+
+pub async fn insert_operation_log(
+    pool: &DbPool,
+    entry: NewOperationLogEntry,
+) -> Result<OperationLogEntry, String> {
+    let id = Uuid::new_v4().to_string();
+    let created_at = Utc::now().to_rfc3339();
+    let level = normalize_required_log_value(&entry.level, "info");
+    let target_kind = normalize_required_log_value(&entry.target_kind, "local");
+    let target_id = normalize_required_log_value(&entry.target_id, "local");
+    let category = normalize_required_log_value(&entry.category, "general");
+    let action = normalize_required_log_value(&entry.action, "operation");
+    let status = normalize_required_log_value(&entry.status, "succeeded");
+    let summary = normalize_required_log_value(&entry.summary, "Operation completed.");
+
+    sqlx::query(
+        "INSERT INTO operation_logs (
+            id, created_at, level, target_kind, target_id, target_label,
+            category, action, status, subject_type, subject_id, subject_label,
+            summary, error_summary, details_json, duration_ms, batch_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(&created_at)
+    .bind(level)
+    .bind(target_kind)
+    .bind(target_id)
+    .bind(entry.target_label)
+    .bind(category)
+    .bind(action)
+    .bind(status)
+    .bind(entry.subject_type)
+    .bind(entry.subject_id)
+    .bind(entry.subject_label)
+    .bind(summary)
+    .bind(entry.error_summary)
+    .bind(entry.details_json)
+    .bind(entry.duration_ms)
+    .bind(entry.batch_id)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    get_operation_log(pool, &id)
+        .await?
+        .ok_or_else(|| "Inserted operation log was not found.".to_string())
+}
+
+pub async fn get_operation_log(
+    pool: &DbPool,
+    log_id: &str,
+) -> Result<Option<OperationLogEntry>, String> {
+    sqlx::query_as::<_, OperationLogEntry>(
+        "SELECT
+            id, created_at, level, target_kind, target_id, target_label,
+            category, action, status, subject_type, subject_id, subject_label,
+            summary, error_summary, details_json, duration_ms, batch_id
+         FROM operation_logs
+         WHERE id = ?",
+    )
+    .bind(log_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+pub async fn list_operation_logs(
+    pool: &DbPool,
+    filter: OperationLogFilter,
+) -> Result<OperationLogPage, String> {
+    let query = normalize_optional_filter(&filter.query).map(|value| format!("%{}%", value));
+    let target_kind = normalize_optional_filter(&filter.target_kind);
+    let target_id = normalize_optional_filter(&filter.target_id);
+    let level = normalize_optional_filter(&filter.level);
+    let status = normalize_optional_filter(&filter.status);
+    let category = normalize_optional_filter(&filter.category);
+    let action = normalize_optional_filter(&filter.action);
+    let created_after = normalize_optional_filter(&filter.created_after);
+    let created_before = normalize_optional_filter(&filter.created_before);
+    let limit = operation_log_limit(filter.limit);
+    let offset = operation_log_offset(filter.offset);
+
+    let count_row = sqlx::query(
+        "SELECT COUNT(*) AS cnt
+         FROM operation_logs
+         WHERE (? IS NULL OR target_kind = ?)
+           AND (? IS NULL OR target_id = ?)
+           AND (? IS NULL OR level = ?)
+           AND (? IS NULL OR status = ?)
+           AND (? IS NULL OR category = ?)
+           AND (? IS NULL OR action = ?)
+           AND (? IS NULL OR created_at >= ?)
+           AND (? IS NULL OR created_at <= ?)
+           AND (
+                ? IS NULL
+                OR summary LIKE ?
+                OR error_summary LIKE ?
+                OR subject_id LIKE ?
+                OR subject_label LIKE ?
+                OR action LIKE ?
+           )",
+    )
+    .bind(target_kind.clone())
+    .bind(target_kind.clone())
+    .bind(target_id.clone())
+    .bind(target_id.clone())
+    .bind(level.clone())
+    .bind(level.clone())
+    .bind(status.clone())
+    .bind(status.clone())
+    .bind(category.clone())
+    .bind(category.clone())
+    .bind(action.clone())
+    .bind(action.clone())
+    .bind(created_after.clone())
+    .bind(created_after.clone())
+    .bind(created_before.clone())
+    .bind(created_before.clone())
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query.clone())
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    let total = count_row
+        .try_get::<i64, _>("cnt")
+        .map_err(|e| e.to_string())?;
+
+    let entries = sqlx::query_as::<_, OperationLogEntry>(
+        "SELECT
+            id, created_at, level, target_kind, target_id, target_label,
+            category, action, status, subject_type, subject_id, subject_label,
+            summary, error_summary, details_json, duration_ms, batch_id
+         FROM operation_logs
+         WHERE (? IS NULL OR target_kind = ?)
+           AND (? IS NULL OR target_id = ?)
+           AND (? IS NULL OR level = ?)
+           AND (? IS NULL OR status = ?)
+           AND (? IS NULL OR category = ?)
+           AND (? IS NULL OR action = ?)
+           AND (? IS NULL OR created_at >= ?)
+           AND (? IS NULL OR created_at <= ?)
+           AND (
+                ? IS NULL
+                OR summary LIKE ?
+                OR error_summary LIKE ?
+                OR subject_id LIKE ?
+                OR subject_label LIKE ?
+                OR action LIKE ?
+           )
+         ORDER BY created_at DESC
+         LIMIT ? OFFSET ?",
+    )
+    .bind(target_kind.clone())
+    .bind(target_kind)
+    .bind(target_id.clone())
+    .bind(target_id)
+    .bind(level.clone())
+    .bind(level)
+    .bind(status.clone())
+    .bind(status)
+    .bind(category.clone())
+    .bind(category)
+    .bind(action.clone())
+    .bind(action)
+    .bind(created_after.clone())
+    .bind(created_after)
+    .bind(created_before.clone())
+    .bind(created_before)
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(OperationLogPage {
+        entries,
+        total,
+        limit,
+        offset,
+    })
+}
+
+pub async fn clear_operation_logs(
+    pool: &DbPool,
+    filter: OperationLogFilter,
+) -> Result<u64, String> {
+    let query = normalize_optional_filter(&filter.query).map(|value| format!("%{}%", value));
+    let target_kind = normalize_optional_filter(&filter.target_kind);
+    let target_id = normalize_optional_filter(&filter.target_id);
+    let level = normalize_optional_filter(&filter.level);
+    let status = normalize_optional_filter(&filter.status);
+    let category = normalize_optional_filter(&filter.category);
+    let action = normalize_optional_filter(&filter.action);
+    let created_after = normalize_optional_filter(&filter.created_after);
+    let created_before = normalize_optional_filter(&filter.created_before);
+
+    sqlx::query(
+        "DELETE FROM operation_logs
+         WHERE (? IS NULL OR target_kind = ?)
+           AND (? IS NULL OR target_id = ?)
+           AND (? IS NULL OR level = ?)
+           AND (? IS NULL OR status = ?)
+           AND (? IS NULL OR category = ?)
+           AND (? IS NULL OR action = ?)
+           AND (? IS NULL OR created_at >= ?)
+           AND (? IS NULL OR created_at <= ?)
+           AND (
+                ? IS NULL
+                OR summary LIKE ?
+                OR error_summary LIKE ?
+                OR subject_id LIKE ?
+                OR subject_label LIKE ?
+                OR action LIKE ?
+           )",
+    )
+    .bind(target_kind.clone())
+    .bind(target_kind)
+    .bind(target_id.clone())
+    .bind(target_id)
+    .bind(level.clone())
+    .bind(level)
+    .bind(status.clone())
+    .bind(status)
+    .bind(category.clone())
+    .bind(category)
+    .bind(action.clone())
+    .bind(action)
+    .bind(created_after.clone())
+    .bind(created_after)
+    .bind(created_before.clone())
+    .bind(created_before)
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query.clone())
+    .bind(query)
+    .execute(pool)
+    .await
+    .map(|result| result.rows_affected())
+    .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationLogsExport {
+    exported_at: String,
+    filter: OperationLogFilter,
+    total: i64,
+    entries: Vec<OperationLogEntry>,
+}
+
+pub async fn export_operation_logs_json(
+    pool: &DbPool,
+    filter: OperationLogFilter,
+) -> Result<String, String> {
+    let page = list_operation_logs(
+        pool,
+        OperationLogFilter {
+            limit: Some(MAX_OPERATION_LOG_LIMIT),
+            offset: Some(0),
+            ..filter.clone()
+        },
+    )
+    .await?;
+
+    serde_json::to_string_pretty(&OperationLogsExport {
+        exported_at: Utc::now().to_rfc3339(),
+        filter,
+        total: page.total,
+        entries: page.entries,
+    })
+    .map_err(|e| e.to_string())
+}
+
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
 /// Get a setting value by key.
@@ -3271,6 +3728,7 @@ mod tests {
             "skill_explanations",
             "scan_directories",
             "settings",
+            "operation_logs",
         ];
         for table in &tables {
             let result = sqlx::query(&format!("SELECT COUNT(*) as cnt FROM {}", table))
@@ -3286,6 +3744,245 @@ mod tests {
         // Calling init_database again should not fail
         let result = init_database(&pool).await;
         assert!(result.is_ok(), "Second init should be idempotent");
+    }
+
+    fn test_operation_log_entry(
+        action: &str,
+        level: &str,
+        status: &str,
+        target_kind: &str,
+        target_id: &str,
+        summary: &str,
+    ) -> NewOperationLogEntry {
+        NewOperationLogEntry {
+            level: level.to_string(),
+            target_kind: target_kind.to_string(),
+            target_id: target_id.to_string(),
+            target_label: Some(if target_kind == "ssh" {
+                "Remote VPS".to_string()
+            } else {
+                "Local".to_string()
+            }),
+            category: action.split('.').next().unwrap_or("general").to_string(),
+            action: action.to_string(),
+            status: status.to_string(),
+            subject_type: Some("skill".to_string()),
+            subject_id: Some("skill-one".to_string()),
+            subject_label: Some("Skill One".to_string()),
+            summary: summary.to_string(),
+            error_summary: (status != "succeeded").then(|| "Operation failed".to_string()),
+            details_json: Some(r#"{"safe":true}"#.to_string()),
+            duration_ms: Some(42),
+            batch_id: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn operation_logs_can_be_inserted_listed_and_filtered() {
+        let pool = setup_test_db().await;
+
+        let failed = insert_operation_log(
+            &pool,
+            test_operation_log_entry(
+                "skill.import",
+                "error",
+                "failed",
+                "ssh",
+                "ssh-1",
+                "Imported Repo One failed",
+            ),
+        )
+        .await
+        .unwrap();
+        let succeeded = insert_operation_log(
+            &pool,
+            test_operation_log_entry(
+                "scan.all",
+                "info",
+                "succeeded",
+                "local",
+                "local",
+                "Scan completed",
+            ),
+        )
+        .await
+        .unwrap();
+
+        sqlx::query("UPDATE operation_logs SET created_at = ? WHERE id = ?")
+            .bind("2026-04-27T09:00:00Z")
+            .bind(&failed.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE operation_logs SET created_at = ? WHERE id = ?")
+            .bind("2026-04-27T10:00:00Z")
+            .bind(&succeeded.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let page = list_operation_logs(&pool, OperationLogFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(page.total, 2);
+        assert_eq!(page.entries[0].id, succeeded.id);
+        assert_eq!(page.limit, DEFAULT_OPERATION_LOG_LIMIT);
+
+        let error_page = list_operation_logs(
+            &pool,
+            OperationLogFilter {
+                level: Some("error".to_string()),
+                ..OperationLogFilter::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(error_page.total, 1);
+        assert_eq!(error_page.entries[0].id, failed.id);
+
+        let search_page = list_operation_logs(
+            &pool,
+            OperationLogFilter {
+                query: Some("Repo One".to_string()),
+                ..OperationLogFilter::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(search_page.total, 1);
+        assert_eq!(search_page.entries[0].id, failed.id);
+
+        let target_page = list_operation_logs(
+            &pool,
+            OperationLogFilter {
+                target_id: Some("ssh-1".to_string()),
+                status: Some("failed".to_string()),
+                ..OperationLogFilter::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(target_page.total, 1);
+        assert_eq!(target_page.entries[0].target_kind, "ssh");
+
+        let time_page = list_operation_logs(
+            &pool,
+            OperationLogFilter {
+                created_after: Some("2026-04-27T09:30:00Z".to_string()),
+                ..OperationLogFilter::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(time_page.total, 1);
+        assert_eq!(time_page.entries[0].id, succeeded.id);
+
+        let capped_page = list_operation_logs(
+            &pool,
+            OperationLogFilter {
+                limit: Some(5_000),
+                ..OperationLogFilter::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(capped_page.limit, MAX_OPERATION_LOG_LIMIT);
+    }
+
+    #[tokio::test]
+    async fn operation_log_clear_is_scoped_to_logs() {
+        let pool = setup_test_db().await;
+
+        sqlx::query(
+            "INSERT INTO skills (id, name, file_path, is_central, scanned_at)
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind("skill-one")
+        .bind("Skill One")
+        .bind("/tmp/skill-one/SKILL.md")
+        .bind(true)
+        .bind("2026-04-27T00:00:00Z")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        insert_operation_log(
+            &pool,
+            test_operation_log_entry("scan.all", "info", "succeeded", "local", "local", "Scan"),
+        )
+        .await
+        .unwrap();
+        insert_operation_log(
+            &pool,
+            test_operation_log_entry(
+                "skill.import",
+                "error",
+                "failed",
+                "ssh",
+                "ssh-1",
+                "Import failed",
+            ),
+        )
+        .await
+        .unwrap();
+
+        let deleted = clear_operation_logs(
+            &pool,
+            OperationLogFilter {
+                level: Some("error".to_string()),
+                ..OperationLogFilter::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(deleted, 1);
+
+        let remaining = list_operation_logs(&pool, OperationLogFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(remaining.total, 1);
+
+        let skill_count: i64 = sqlx::query("SELECT COUNT(*) AS cnt FROM skills")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .get("cnt");
+        assert_eq!(skill_count, 1);
+    }
+
+    #[tokio::test]
+    async fn operation_log_export_contains_metadata_and_entries() {
+        let pool = setup_test_db().await;
+        insert_operation_log(
+            &pool,
+            test_operation_log_entry(
+                "scan.all",
+                "info",
+                "succeeded",
+                "local",
+                "local",
+                "Scan completed",
+            ),
+        )
+        .await
+        .unwrap();
+
+        let exported = export_operation_logs_json(
+            &pool,
+            OperationLogFilter {
+                action: Some("scan.all".to_string()),
+                ..OperationLogFilter::default()
+            },
+        )
+        .await
+        .unwrap();
+        let value: serde_json::Value = serde_json::from_str(&exported).unwrap();
+
+        assert!(value["exportedAt"].as_str().is_some());
+        assert_eq!(value["filter"]["action"], "scan.all");
+        assert_eq!(value["total"], 1);
+        assert_eq!(value["entries"].as_array().unwrap().len(), 1);
+        assert_eq!(value["entries"][0]["action"], "scan.all");
     }
 
     #[tokio::test]

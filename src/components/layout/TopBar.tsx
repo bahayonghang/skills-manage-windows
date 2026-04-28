@@ -62,6 +62,9 @@ export function TopBar({ onSearchClick }: TopBarProps) {
     if (pathname === "/collections") {
       return { label: t("sidebar.collections"), count: undefined };
     }
+    if (pathname === "/logs") {
+      return { label: t("logs.title"), count: undefined };
+    }
     if (pathname === "/settings") {
       return { label: t("sidebar.settings"), count: undefined };
     }

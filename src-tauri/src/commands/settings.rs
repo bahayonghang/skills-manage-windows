@@ -1,5 +1,10 @@
+use serde_json::json;
+use std::time::Instant;
 use tauri::State;
 
+use crate::commands::logs::{
+    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
+};
 use crate::db::{self, DbPool, ScanDirectory};
 use crate::path_utils::{expand_home_path, path_to_string};
 use crate::AppState;
@@ -72,15 +77,81 @@ pub async fn add_scan_directory(
     path: String,
     label: Option<String>,
 ) -> Result<ScanDirectory, String> {
+    let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    add_scan_directory_impl(&pool, &path, label.as_deref()).await
+    let started_at = Instant::now();
+    let result = add_scan_directory_impl(&pool, &path, label.as_deref()).await;
+    match &result {
+        Ok(directory) => {
+            record_operation_log_best_effort(
+                &state.db,
+                target_context,
+                OperationLogEvent::new(
+                    "settings",
+                    "scan_dir.add",
+                    "succeeded",
+                    format!("Added scan directory {}", directory.path),
+                )
+                .subject("scan_root", &directory.path, &directory.path)
+                .details(json!({
+                    "path": &directory.path,
+                    "label": &directory.label,
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
+        Err(error) => {
+            record_operation_log_best_effort(
+                &state.db,
+                target_context,
+                OperationLogEvent::new(
+                    "settings",
+                    "scan_dir.add",
+                    "failed",
+                    format!("Failed to add scan directory {}", path),
+                )
+                .subject("scan_root", &path, &path)
+                .error(error)
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
+    }
+    result
 }
 
 /// Tauri command: remove a custom scan directory by path.
 #[tauri::command]
 pub async fn remove_scan_directory(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    remove_scan_directory_impl(&pool, &path).await
+    let started_at = Instant::now();
+    let result = remove_scan_directory_impl(&pool, &path).await;
+    let status = if result.is_ok() {
+        "succeeded"
+    } else {
+        "failed"
+    };
+    let mut event = OperationLogEvent::new(
+        "settings",
+        "scan_dir.remove",
+        status,
+        if result.is_ok() {
+            format!("Removed scan directory {}", path)
+        } else {
+            format!("Failed to remove scan directory {}", path)
+        },
+    )
+    .subject("scan_root", &path, &path)
+    .duration_ms(started_at.elapsed().as_millis() as i64);
+    if let Err(error) = &result {
+        event = event.error(error);
+    }
+    record_operation_log_best_effort(&state.db, target_context, event).await;
+    result
 }
 
 /// Tauri command: set the is_active flag on a scan directory.
@@ -90,8 +161,37 @@ pub async fn set_scan_directory_active(
     path: String,
     is_active: bool,
 ) -> Result<(), String> {
+    let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    set_scan_directory_active_impl(&pool, &path, is_active).await
+    let started_at = Instant::now();
+    let result = set_scan_directory_active_impl(&pool, &path, is_active).await;
+    let status = if result.is_ok() {
+        "succeeded"
+    } else {
+        "failed"
+    };
+    let mut event = OperationLogEvent::new(
+        "settings",
+        "scan_dir.toggle",
+        status,
+        if result.is_ok() {
+            format!("Updated scan directory {} enabled={}", path, is_active)
+        } else {
+            format!("Failed to update scan directory {}", path)
+        },
+    )
+    .subject("scan_root", &path, &path)
+    .details(json!({
+        "path": path,
+        "isActive": is_active,
+    }))
+    .duration_ms(started_at.elapsed().as_millis() as i64);
+    if let Err(error) = &result {
+        event = event.error(error);
+    }
+    record_operation_log_best_effort(&state.db, target_context, event).await;
+    result
 }
 
 /// Tauri command: get a settings value by key.
@@ -110,7 +210,39 @@ pub async fn set_setting(
     key: String,
     value: String,
 ) -> Result<(), String> {
-    set_setting_impl(&state.db, &key, &value).await
+    let target_context = state
+        .active_target()
+        .await
+        .map(|target| target_context_from_active_target(&target))
+        .unwrap_or_else(|_| crate::commands::logs::local_target_context());
+    let started_at = Instant::now();
+    let result = set_setting_impl(&state.db, &key, &value).await;
+    let status = if result.is_ok() {
+        "succeeded"
+    } else {
+        "failed"
+    };
+    let mut event = OperationLogEvent::new(
+        "settings",
+        "settings.set",
+        status,
+        if result.is_ok() {
+            format!("Updated setting {}", key)
+        } else {
+            format!("Failed to update setting {}", key)
+        },
+    )
+    .subject("setting", &key, &key)
+    .details(json!({
+        "key": key,
+        "valueStored": result.is_ok(),
+    }))
+    .duration_ms(started_at.elapsed().as_millis() as i64);
+    if let Err(error) = &result {
+        event = event.error(error);
+    }
+    record_operation_log_best_effort(&state.db, target_context, event).await;
+    result
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

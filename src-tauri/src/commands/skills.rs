@@ -1,10 +1,14 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 use tauri::State;
 
+use crate::commands::logs::{
+    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
+};
 use crate::db::{
     self, Collection, DbPool, SkillForAgent, SkillRepository, SkillRepositoryWithStats, SkillTag,
 };
@@ -1215,13 +1219,44 @@ pub async fn delete_central_skill(
     skill_id: String,
     remove_agent_ids: Vec<String>,
 ) -> Result<DeleteCentralSkillResult, String> {
+    let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    match state.active_target().await? {
+    let started_at = Instant::now();
+    let result = match active_target {
         ActiveTarget::Local => delete_central_skill_impl(&pool, &skill_id, &remove_agent_ids).await,
         ActiveTarget::Ssh(target) => {
             delete_central_skill_ssh_impl(&pool, &target, &skill_id, &remove_agent_ids).await
         }
+    };
+    let status = if result.is_ok() {
+        "succeeded"
+    } else {
+        "failed"
+    };
+    let mut event = OperationLogEvent::new(
+        "delete",
+        "central.delete_skill",
+        status,
+        if result.is_ok() {
+            format!("Deleted Central skill {}", skill_id)
+        } else {
+            format!("Failed to delete Central skill {}", skill_id)
+        },
+    )
+    .subject("skill", &skill_id, &skill_id)
+    .details(json!({
+        "skillId": skill_id,
+        "removeAgentIds": &remove_agent_ids,
+        "removedAgentIds": result.as_ref().ok().map(|item| item.removed_agent_ids.clone()),
+        "retainedAgentIds": result.as_ref().ok().map(|item| item.retained_agent_ids.clone()),
+    }))
+    .duration_ms(started_at.elapsed().as_millis() as i64);
+    if let Err(error) = &result {
+        event = event.error(error);
     }
+    record_operation_log_best_effort(&state.db, target_context, event).await;
+    result
 }
 
 #[tauri::command]
@@ -1229,13 +1264,67 @@ pub async fn delete_central_skills(
     state: State<'_, AppState>,
     requests: Vec<BatchDeleteCentralSkillRequest>,
 ) -> Result<BatchDeleteCentralSkillResult, String> {
+    let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    match state.active_target().await? {
+    let started_at = Instant::now();
+    let result = match active_target {
         ActiveTarget::Local => delete_central_skills_impl(&pool, &requests).await,
         ActiveTarget::Ssh(target) => {
             delete_central_skills_ssh_impl(&pool, &target, &requests).await
         }
+    };
+    match &result {
+        Ok(batch_result) => {
+            let status = match (batch_result.succeeded.len(), batch_result.failed.len()) {
+                (_, 0) => "succeeded",
+                (0, _) => "failed",
+                _ => "partial",
+            };
+            record_operation_log_best_effort(
+                &state.db,
+                target_context,
+                OperationLogEvent::new(
+                    "delete",
+                    "central.batch_delete",
+                    status,
+                    format!(
+                        "Deleted {} Central skill(s), {} failed",
+                        batch_result.succeeded.len(),
+                        batch_result.failed.len()
+                    ),
+                )
+                .subject("batch", "central.batch_delete", "Central batch delete")
+                .details(json!({
+                    "requestCount": requests.len(),
+                    "succeeded": &batch_result.succeeded,
+                    "failed": &batch_result.failed,
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
+        Err(error) => {
+            record_operation_log_best_effort(
+                &state.db,
+                target_context,
+                OperationLogEvent::new(
+                    "delete",
+                    "central.batch_delete",
+                    "failed",
+                    "Failed to delete Central skills",
+                )
+                .subject("batch", "central.batch_delete", "Central batch delete")
+                .error(error)
+                .details(json!({
+                    "requestCount": requests.len(),
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
     }
+    result
 }
 
 #[tauri::command]
@@ -1258,13 +1347,76 @@ pub async fn delete_skill_repository(
     repository_id: String,
     requests: Vec<BatchDeleteCentralSkillRequest>,
 ) -> Result<DeleteSkillRepositoryResult, String> {
+    let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    match state.active_target().await? {
+    let started_at = Instant::now();
+    let result = match active_target {
         ActiveTarget::Local => delete_skill_repository_impl(&pool, &repository_id, &requests).await,
         ActiveTarget::Ssh(target) => {
             delete_skill_repository_ssh_impl(&pool, &target, &repository_id, &requests).await
         }
+    };
+    match &result {
+        Ok(delete_result) => {
+            let batch_result = &delete_result.delete_result;
+            let status = match (batch_result.succeeded.len(), batch_result.failed.len()) {
+                (_, 0) => "succeeded",
+                (0, _) => "failed",
+                _ => "partial",
+            };
+            record_operation_log_best_effort(
+                &state.db,
+                target_context,
+                OperationLogEvent::new(
+                    "delete",
+                    "central.delete_repository",
+                    status,
+                    format!(
+                        "Deleted repository {} with {} skill(s), {} failed",
+                        delete_result.repository.name,
+                        batch_result.succeeded.len(),
+                        batch_result.failed.len()
+                    ),
+                )
+                .subject(
+                    "repository",
+                    &delete_result.repository.id,
+                    &delete_result.repository.name,
+                )
+                .details(json!({
+                    "repositoryId": repository_id,
+                    "requestCount": requests.len(),
+                    "deletedRepository": delete_result.deleted_repository,
+                    "succeeded": &batch_result.succeeded,
+                    "failed": &batch_result.failed,
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
+        Err(error) => {
+            record_operation_log_best_effort(
+                &state.db,
+                target_context,
+                OperationLogEvent::new(
+                    "delete",
+                    "central.delete_repository",
+                    "failed",
+                    format!("Failed to delete repository {}", repository_id),
+                )
+                .subject("repository", &repository_id, &repository_id)
+                .error(error)
+                .details(json!({
+                    "repositoryId": repository_id,
+                    "requestCount": requests.len(),
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64),
+            )
+            .await;
+        }
     }
+    result
 }
 
 /// Tauri command: return detailed information about a skill, including all

@@ -113,6 +113,11 @@ pub fn run() {
             commands::targets::delete_target,
             commands::targets::set_active_target,
             commands::targets::get_active_target,
+            // Operation logs
+            commands::logs::list_operation_logs,
+            commands::logs::get_operation_log,
+            commands::logs::clear_operation_logs,
+            commands::logs::export_operation_logs,
             // Scanner
             commands::scanner::scan_all_skills,
             // Agents
