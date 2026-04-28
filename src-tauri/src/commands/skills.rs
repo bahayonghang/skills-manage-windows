@@ -426,15 +426,31 @@ async fn get_central_skills_impl(pool: &DbPool) -> Result<Vec<SkillWithLinks>, S
     let skills = db::get_central_skills(pool).await?;
     let agents = db::get_all_agents(pool).await?;
     let shared_root_agents = shared_root_agent_ids(&agents);
+    let skill_ids = skills
+        .iter()
+        .map(|skill| skill.id.clone())
+        .collect::<Vec<_>>();
+    let mut installations_by_skill =
+        db::get_skill_installations_for_skills(pool, &skill_ids).await?;
+    let mut repository_assignments =
+        db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
+    let mut tags_by_skill = db::get_skill_tags_for_skills(pool, &skill_ids).await?;
+    let unknown_repository = db::get_local_unknown_repository(pool).await?;
     let mut result = Vec::with_capacity(skills.len());
     for skill in skills {
-        let installations = db::get_skill_installations(pool, &skill.id).await?;
+        let installations = installations_by_skill.remove(&skill.id).unwrap_or_default();
         let mut linked_agents: Vec<String> =
             installations.into_iter().map(|i| i.agent_id).collect();
         append_missing_agents(&mut linked_agents, &shared_root_agents);
         let (created_at, updated_at) = skill_filesystem_timestamps(&skill);
-        let repository_assignment = db::get_skill_repository_assignment(pool, &skill.id).await?;
-        let tags = db::get_skill_tags_for_skill(pool, &skill.id).await?;
+        let repository_assignment = repository_assignments.remove(&skill.id).unwrap_or_else(|| {
+            db::SkillRepositoryAssignment {
+                repository: unknown_repository.clone(),
+                source_path: None,
+                is_source_unknown: true,
+            }
+        });
+        let tags = tags_by_skill.remove(&skill.id).unwrap_or_default();
 
         result.push(SkillWithLinks {
             id: skill.id,
@@ -2554,39 +2570,7 @@ mod tests {
     // ── Testable core implementations (without Tauri State) ───────────────────
 
     async fn get_central_skills_impl(pool: &SqlitePool) -> Result<Vec<SkillWithLinks>, String> {
-        let skills = db::get_central_skills(pool).await?;
-        let agents = db::get_all_agents(pool).await?;
-        let shared_root_agents = shared_root_agent_ids(&agents);
-        let mut result = Vec::with_capacity(skills.len());
-        for skill in skills {
-            let installations = db::get_skill_installations(pool, &skill.id).await?;
-            let mut linked_agents: Vec<String> =
-                installations.into_iter().map(|i| i.agent_id).collect();
-            append_missing_agents(&mut linked_agents, &shared_root_agents);
-            let (created_at, updated_at) = skill_filesystem_timestamps(&skill);
-            let repository_assignment =
-                db::get_skill_repository_assignment(pool, &skill.id).await?;
-            let tags = db::get_skill_tags_for_skill(pool, &skill.id).await?;
-            result.push(SkillWithLinks {
-                id: skill.id,
-                name: skill.name,
-                description: skill.description,
-                file_path: skill.file_path,
-                canonical_path: skill.canonical_path,
-                is_central: skill.is_central,
-                source: skill.source,
-                scanned_at: skill.scanned_at,
-                created_at,
-                updated_at,
-                linked_agents,
-                shared_root_agents: shared_root_agents.clone(),
-                repository: Some(repository_assignment.repository),
-                tags,
-                source_path: repository_assignment.source_path,
-                is_source_unknown: repository_assignment.is_source_unknown,
-            });
-        }
-        Ok(result)
+        super::get_central_skills_impl(pool).await
     }
 
     async fn get_skill_detail_impl(

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use tauri::State;
 
 use crate::commands::agents::AgentWithStatus;
@@ -26,10 +27,22 @@ pub struct SkillCountsSummary {
 pub struct BootstrapSnapshot {
     pub agents: Vec<AgentWithStatus>,
     pub cached_skill_counts: std::collections::HashMap<String, usize>,
+    pub dashboard_central_summary: DashboardCentralSummary,
     pub collection_count: usize,
     pub discovered_count: usize,
     pub last_scan_at: Option<String>,
     pub scan_state: ScanState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardCentralSummary {
+    pub central_skill_count: usize,
+    pub updates_available: usize,
+    pub ai_review_count: usize,
+    pub uncategorized_count: usize,
+    pub unassigned_source_count: usize,
+    pub source_repositories: Vec<db::SkillRepositoryWithStats>,
 }
 
 fn parse_scan_state(raw: Option<String>) -> ScanState {
@@ -90,16 +103,87 @@ pub async fn get_bootstrap_snapshot(
 async fn get_bootstrap_snapshot_impl(pool: &DbPool) -> Result<BootstrapSnapshot, String> {
     let agents = db::get_all_agents(pool).await?;
     let skill_counts = get_skill_counts_summary_impl(pool).await?;
+    let dashboard_central_summary = get_dashboard_central_summary_impl(pool).await?;
     let collection_count = db::get_collection_count(pool).await?;
     let discovered_count = db::get_discovered_skill_count(pool).await?;
 
     Ok(BootstrapSnapshot {
         agents: agents.into_iter().map(to_cached_agent).collect(),
         cached_skill_counts: skill_counts.cached_skill_counts,
+        dashboard_central_summary,
         collection_count,
         discovered_count,
         last_scan_at: skill_counts.last_scan_at,
         scan_state: skill_counts.scan_state,
+    })
+}
+
+async fn get_count(pool: &DbPool, sql: &str) -> Result<usize, String> {
+    let row = sqlx::query(sql)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    let count: i64 = row.try_get("cnt").map_err(|e| e.to_string())?;
+    Ok(count.max(0) as usize)
+}
+
+async fn get_dashboard_central_summary_impl(
+    pool: &DbPool,
+) -> Result<DashboardCentralSummary, String> {
+    let central_skill_count = get_count(
+        pool,
+        "SELECT COUNT(*) AS cnt FROM skills WHERE is_central = 1",
+    )
+    .await?;
+    let updates_available = get_count(
+        pool,
+        "SELECT COUNT(*) AS cnt
+         FROM skill_update_states
+         WHERE status = 'update_available'",
+    )
+    .await?;
+    let ai_review_count = get_count(
+        pool,
+        "SELECT COUNT(DISTINCT skill_id) AS cnt
+         FROM skill_ai_tag_reviews
+         WHERE status = 'pending'",
+    )
+    .await?;
+    let uncategorized_count = get_count(
+        pool,
+        "SELECT COUNT(*) AS cnt
+         FROM skills s
+         WHERE s.is_central = 1
+           AND (
+             NOT EXISTS (
+               SELECT 1 FROM skill_tag_links l WHERE l.skill_id = s.id
+             )
+             OR EXISTS (
+               SELECT 1 FROM skill_tag_links l
+               WHERE l.skill_id = s.id AND l.tag_id = 'uncategorized'
+             )
+           )",
+    )
+    .await?;
+    let unassigned_source_count = get_count(
+        pool,
+        "SELECT COUNT(*) AS cnt
+         FROM skills s
+         LEFT JOIN skill_repository_members m ON s.id = m.skill_id
+         LEFT JOIN skill_repositories r ON r.id = m.repository_id
+         WHERE s.is_central = 1
+           AND (m.skill_id IS NULL OR r.is_unknown = 1)",
+    )
+    .await?;
+    let source_repositories = db::get_skill_repositories_with_stats(pool).await?;
+
+    Ok(DashboardCentralSummary {
+        central_skill_count,
+        updates_available,
+        ai_review_count,
+        uncategorized_count,
+        unassigned_source_count,
+        source_repositories,
     })
 }
 

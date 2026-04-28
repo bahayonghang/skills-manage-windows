@@ -2,7 +2,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
-    FromRow, Row, SqlitePool,
+    FromRow, QueryBuilder, Row, Sqlite, SqlitePool,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -351,6 +351,14 @@ async fn init_database_with_agents(
     .await
     .map_err(|e| e.to_string())?;
 
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_agent_skill_observations_agent_id
+         ON agent_skill_observations(agent_id)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     // Migration: add created_at column to skill_installations for existing databases
     // that were created before this column was introduced. We check via PRAGMA table_info
     // and run a two-step migration only when the column is absent:
@@ -414,6 +422,14 @@ async fn init_database_with_agents(
     .await
     .map_err(|e| e.to_string())?;
 
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skills_is_central_name
+         ON skills(is_central, name)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     // collections table
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS collections (
@@ -436,6 +452,14 @@ async fn init_database_with_agents(
             added_at      TEXT NOT NULL,
             PRIMARY KEY (collection_id, skill_id)
         )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_collection_skills_skill_id
+         ON collection_skills(skill_id)",
     )
     .execute(pool)
     .await
@@ -2125,6 +2149,33 @@ pub async fn get_skill_installations(
         .map_err(|e| e.to_string())
 }
 
+/// Retrieve installation records for a batch of skills, grouped by skill ID.
+pub async fn get_skill_installations_for_skills(
+    pool: &DbPool,
+    skill_ids: &[String],
+) -> Result<HashMap<String, Vec<SkillInstallation>>, String> {
+    if skill_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = skill_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT * FROM skill_installations WHERE skill_id IN ({})",
+        placeholders
+    );
+    let mut query = sqlx::query_as::<_, SkillInstallation>(&sql);
+    for skill_id in skill_ids {
+        query = query.bind(skill_id);
+    }
+
+    let rows = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let mut grouped: HashMap<String, Vec<SkillInstallation>> = HashMap::new();
+    for row in rows {
+        grouped.entry(row.skill_id.clone()).or_default().push(row);
+    }
+    Ok(grouped)
+}
+
 /// Retrieve cached installation counts for every agent.
 pub async fn get_skill_counts_by_agent(pool: &DbPool) -> Result<HashMap<String, usize>, String> {
     let rows = sqlx::query(
@@ -2730,45 +2781,137 @@ pub async fn get_skill_repository_assignment(
     })
 }
 
+pub async fn get_skill_repository_assignments_for_skills(
+    pool: &DbPool,
+    skill_ids: &[String],
+) -> Result<HashMap<String, SkillRepositoryAssignment>, String> {
+    if skill_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = skill_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT
+            m.skill_id AS skill_id,
+            m.source_path AS source_path,
+            r.id AS repository_id,
+            r.name AS repository_name,
+            r.source_type AS repository_source_type,
+            r.owner AS repository_owner,
+            r.repo AS repository_repo,
+            r.branch AS repository_branch,
+            r.url AS repository_url,
+            r.is_unknown AS repository_is_unknown,
+            r.created_at AS repository_created_at,
+            r.updated_at AS repository_updated_at
+         FROM skill_repository_members m
+         JOIN skill_repositories r ON r.id = m.repository_id
+         WHERE m.skill_id IN ({})",
+        placeholders
+    );
+    let mut query = sqlx::query(&sql);
+    for skill_id in skill_ids {
+        query = query.bind(skill_id);
+    }
+
+    let rows = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let mut assignments = HashMap::with_capacity(rows.len());
+    for row in rows {
+        let skill_id: String = row.try_get("skill_id").map_err(|e| e.to_string())?;
+        let repository = SkillRepository {
+            id: row.try_get("repository_id").map_err(|e| e.to_string())?,
+            name: row.try_get("repository_name").map_err(|e| e.to_string())?,
+            source_type: row
+                .try_get("repository_source_type")
+                .map_err(|e| e.to_string())?,
+            owner: row.try_get("repository_owner").map_err(|e| e.to_string())?,
+            repo: row.try_get("repository_repo").map_err(|e| e.to_string())?,
+            branch: row
+                .try_get("repository_branch")
+                .map_err(|e| e.to_string())?,
+            url: row.try_get("repository_url").map_err(|e| e.to_string())?,
+            is_unknown: row
+                .try_get("repository_is_unknown")
+                .map_err(|e| e.to_string())?,
+            created_at: row
+                .try_get("repository_created_at")
+                .map_err(|e| e.to_string())?,
+            updated_at: row
+                .try_get("repository_updated_at")
+                .map_err(|e| e.to_string())?,
+        };
+        assignments.insert(
+            skill_id,
+            SkillRepositoryAssignment {
+                is_source_unknown: repository.is_unknown,
+                repository,
+                source_path: row.try_get("source_path").map_err(|e| e.to_string())?,
+            },
+        );
+    }
+
+    Ok(assignments)
+}
+
 pub async fn get_skill_repositories_with_stats(
     pool: &DbPool,
 ) -> Result<Vec<SkillRepositoryWithStats>, String> {
-    let repositories = sqlx::query_as::<_, SkillRepository>(
-        "SELECT * FROM skill_repositories ORDER BY is_unknown DESC, name",
+    let rows = sqlx::query(
+        "SELECT
+            r.id, r.name, r.source_type, r.owner, r.repo, r.branch, r.url,
+            r.is_unknown, r.created_at, r.updated_at,
+            CASE
+              WHEN r.id = ? THEN (
+                SELECT COUNT(*)
+                FROM skills s_unknown
+                LEFT JOIN skill_repository_members m_unknown
+                  ON s_unknown.id = m_unknown.skill_id
+                WHERE s_unknown.is_central = 1 AND m_unknown.skill_id IS NULL
+              )
+              ELSE COUNT(s.id)
+            END AS skill_count,
+            CASE
+              WHEN r.id = ? THEN (
+                SELECT COUNT(*)
+                FROM skills s_unknown
+                LEFT JOIN skill_repository_members m_unknown
+                  ON s_unknown.id = m_unknown.skill_id
+                WHERE s_unknown.is_central = 1 AND m_unknown.skill_id IS NULL
+              )
+              ELSE 0
+            END AS unknown_skill_count
+         FROM skill_repositories r
+         LEFT JOIN skill_repository_members m ON r.id = m.repository_id
+         LEFT JOIN skills s ON s.id = m.skill_id AND s.is_central = 1
+         GROUP BY r.id
+         ORDER BY r.is_unknown DESC, r.name",
     )
+    .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
+    .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())?;
-    let unknown_count = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM skills s
-         LEFT JOIN skill_repository_members m ON s.id = m.skill_id
-         WHERE s.is_central = 1 AND m.skill_id IS NULL",
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(|e| e.to_string())?;
 
-    let mut result = Vec::with_capacity(repositories.len());
-    for repository in repositories {
-        let member_count = if repository.id == LOCAL_UNKNOWN_REPOSITORY_ID {
-            unknown_count
-        } else {
-            sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM skill_repository_members WHERE repository_id = ?",
-            )
-            .bind(&repository.id)
-            .fetch_one(pool)
-            .await
-            .map_err(|e| e.to_string())?
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        let repository = SkillRepository {
+            id: row.try_get("id").map_err(|e| e.to_string())?,
+            name: row.try_get("name").map_err(|e| e.to_string())?,
+            source_type: row.try_get("source_type").map_err(|e| e.to_string())?,
+            owner: row.try_get("owner").map_err(|e| e.to_string())?,
+            repo: row.try_get("repo").map_err(|e| e.to_string())?,
+            branch: row.try_get("branch").map_err(|e| e.to_string())?,
+            url: row.try_get("url").map_err(|e| e.to_string())?,
+            is_unknown: row.try_get("is_unknown").map_err(|e| e.to_string())?,
+            created_at: row.try_get("created_at").map_err(|e| e.to_string())?,
+            updated_at: row.try_get("updated_at").map_err(|e| e.to_string())?,
         };
         result.push(SkillRepositoryWithStats {
-            unknown_skill_count: if repository.id == LOCAL_UNKNOWN_REPOSITORY_ID {
-                unknown_count
-            } else {
-                0
-            },
+            unknown_skill_count: row
+                .try_get("unknown_skill_count")
+                .map_err(|e| e.to_string())?,
             repository,
-            skill_count: member_count,
+            skill_count: row.try_get("skill_count").map_err(|e| e.to_string())?,
         });
     }
 
@@ -3170,6 +3313,54 @@ pub async fn get_skill_tags_for_skill(
     .map_err(|e| e.to_string())
 }
 
+pub async fn get_skill_tags_for_skills(
+    pool: &DbPool,
+    skill_ids: &[String],
+) -> Result<HashMap<String, Vec<SkillTag>>, String> {
+    if skill_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = skill_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT
+            l.skill_id AS skill_id,
+            t.id AS tag_id,
+            t.name AS tag_name,
+            t.description AS tag_description,
+            t.color AS tag_color,
+            t.is_builtin AS tag_is_builtin,
+            t.created_at AS tag_created_at,
+            t.updated_at AS tag_updated_at
+         FROM skill_tag_links l
+         JOIN skill_tags t ON t.id = l.tag_id
+         WHERE l.skill_id IN ({})
+         ORDER BY l.skill_id, t.is_builtin DESC, t.name",
+        placeholders
+    );
+    let mut query = sqlx::query(&sql);
+    for skill_id in skill_ids {
+        query = query.bind(skill_id);
+    }
+
+    let rows = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let mut grouped: HashMap<String, Vec<SkillTag>> = HashMap::new();
+    for row in rows {
+        let skill_id: String = row.try_get("skill_id").map_err(|e| e.to_string())?;
+        grouped.entry(skill_id).or_default().push(SkillTag {
+            id: row.try_get("tag_id").map_err(|e| e.to_string())?,
+            name: row.try_get("tag_name").map_err(|e| e.to_string())?,
+            description: row.try_get("tag_description").map_err(|e| e.to_string())?,
+            color: row.try_get("tag_color").map_err(|e| e.to_string())?,
+            is_builtin: row.try_get("tag_is_builtin").map_err(|e| e.to_string())?,
+            created_at: row.try_get("tag_created_at").map_err(|e| e.to_string())?,
+            updated_at: row.try_get("tag_updated_at").map_err(|e| e.to_string())?,
+        });
+    }
+
+    Ok(grouped)
+}
+
 // ─── Scan Directories ─────────────────────────────────────────────────────────
 
 /// Retrieve all scan directories.
@@ -3297,6 +3488,50 @@ pub async fn insert_discovered_skill(
     .map_err(|e| e.to_string())
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct DiscoveredSkillInsert<'a> {
+    pub id: &'a str,
+    pub name: &'a str,
+    pub description: Option<&'a str>,
+    pub file_path: &'a str,
+    pub dir_path: &'a str,
+    pub project_path: &'a str,
+    pub project_name: &'a str,
+    pub platform_id: &'a str,
+    pub discovered_at: &'a str,
+}
+
+pub async fn insert_discovered_skills(
+    pool: &DbPool,
+    skills: &[DiscoveredSkillInsert<'_>],
+) -> Result<(), String> {
+    if skills.is_empty() {
+        return Ok(());
+    }
+
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    for skill in skills {
+        sqlx::query(
+            "INSERT OR IGNORE INTO discovered_skills
+             (id, name, description, file_path, dir_path, project_path, project_name, platform_id, discovered_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(skill.id)
+        .bind(skill.name)
+        .bind(skill.description)
+        .bind(skill.file_path)
+        .bind(skill.dir_path)
+        .bind(skill.project_path)
+        .bind(skill.project_name)
+        .bind(skill.platform_id)
+        .bind(skill.discovered_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().await.map_err(|e| e.to_string())
+}
+
 /// Retrieve a discovered skill by its qualified ID.
 pub async fn get_discovered_skill_by_id(
     pool: &DbPool,
@@ -3380,6 +3615,85 @@ fn operation_log_offset(offset: Option<i64>) -> i64 {
     offset.unwrap_or(0).max(0)
 }
 
+#[derive(Debug, Clone)]
+struct NormalizedOperationLogFilter {
+    query: Option<String>,
+    target_kind: Option<String>,
+    target_id: Option<String>,
+    level: Option<String>,
+    status: Option<String>,
+    category: Option<String>,
+    action: Option<String>,
+    created_after: Option<String>,
+    created_before: Option<String>,
+}
+
+impl From<&OperationLogFilter> for NormalizedOperationLogFilter {
+    fn from(filter: &OperationLogFilter) -> Self {
+        Self {
+            query: normalize_optional_filter(&filter.query).map(|value| format!("%{}%", value)),
+            target_kind: normalize_optional_filter(&filter.target_kind),
+            target_id: normalize_optional_filter(&filter.target_id),
+            level: normalize_optional_filter(&filter.level),
+            status: normalize_optional_filter(&filter.status),
+            category: normalize_optional_filter(&filter.category),
+            action: normalize_optional_filter(&filter.action),
+            created_after: normalize_optional_filter(&filter.created_after),
+            created_before: normalize_optional_filter(&filter.created_before),
+        }
+    }
+}
+
+fn push_operation_log_filters(
+    builder: &mut QueryBuilder<'_, Sqlite>,
+    filter: &NormalizedOperationLogFilter,
+) {
+    builder.push(" WHERE 1 = 1");
+
+    if let Some(value) = &filter.target_kind {
+        builder.push(" AND target_kind = ").push_bind(value.clone());
+    }
+    if let Some(value) = &filter.target_id {
+        builder.push(" AND target_id = ").push_bind(value.clone());
+    }
+    if let Some(value) = &filter.level {
+        builder.push(" AND level = ").push_bind(value.clone());
+    }
+    if let Some(value) = &filter.status {
+        builder.push(" AND status = ").push_bind(value.clone());
+    }
+    if let Some(value) = &filter.category {
+        builder.push(" AND category = ").push_bind(value.clone());
+    }
+    if let Some(value) = &filter.action {
+        builder.push(" AND action = ").push_bind(value.clone());
+    }
+    if let Some(value) = &filter.created_after {
+        builder.push(" AND created_at >= ").push_bind(value.clone());
+    }
+    if let Some(value) = &filter.created_before {
+        builder.push(" AND created_at <= ").push_bind(value.clone());
+    }
+    if let Some(value) = &filter.query {
+        builder.push(
+            " AND (
+                summary LIKE ",
+        );
+        builder.push_bind(value.clone());
+        builder
+            .push(" OR error_summary LIKE ")
+            .push_bind(value.clone());
+        builder
+            .push(" OR subject_id LIKE ")
+            .push_bind(value.clone());
+        builder
+            .push(" OR subject_label LIKE ")
+            .push_bind(value.clone());
+        builder.push(" OR action LIKE ").push_bind(value.clone());
+        builder.push(")");
+    }
+}
+
 pub async fn insert_operation_log(
     pool: &DbPool,
     entry: NewOperationLogEntry,
@@ -3449,119 +3763,41 @@ pub async fn list_operation_logs(
     pool: &DbPool,
     filter: OperationLogFilter,
 ) -> Result<OperationLogPage, String> {
-    let query = normalize_optional_filter(&filter.query).map(|value| format!("%{}%", value));
-    let target_kind = normalize_optional_filter(&filter.target_kind);
-    let target_id = normalize_optional_filter(&filter.target_id);
-    let level = normalize_optional_filter(&filter.level);
-    let status = normalize_optional_filter(&filter.status);
-    let category = normalize_optional_filter(&filter.category);
-    let action = normalize_optional_filter(&filter.action);
-    let created_after = normalize_optional_filter(&filter.created_after);
-    let created_before = normalize_optional_filter(&filter.created_before);
+    let normalized = NormalizedOperationLogFilter::from(&filter);
     let limit = operation_log_limit(filter.limit);
     let offset = operation_log_offset(filter.offset);
 
-    let count_row = sqlx::query(
-        "SELECT COUNT(*) AS cnt
-         FROM operation_logs
-         WHERE (? IS NULL OR target_kind = ?)
-           AND (? IS NULL OR target_id = ?)
-           AND (? IS NULL OR level = ?)
-           AND (? IS NULL OR status = ?)
-           AND (? IS NULL OR category = ?)
-           AND (? IS NULL OR action = ?)
-           AND (? IS NULL OR created_at >= ?)
-           AND (? IS NULL OR created_at <= ?)
-           AND (
-                ? IS NULL
-                OR summary LIKE ?
-                OR error_summary LIKE ?
-                OR subject_id LIKE ?
-                OR subject_label LIKE ?
-                OR action LIKE ?
-           )",
-    )
-    .bind(target_kind.clone())
-    .bind(target_kind.clone())
-    .bind(target_id.clone())
-    .bind(target_id.clone())
-    .bind(level.clone())
-    .bind(level.clone())
-    .bind(status.clone())
-    .bind(status.clone())
-    .bind(category.clone())
-    .bind(category.clone())
-    .bind(action.clone())
-    .bind(action.clone())
-    .bind(created_after.clone())
-    .bind(created_after.clone())
-    .bind(created_before.clone())
-    .bind(created_before.clone())
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query.clone())
-    .fetch_one(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let mut count_builder =
+        QueryBuilder::<Sqlite>::new("SELECT COUNT(*) AS cnt FROM operation_logs");
+    push_operation_log_filters(&mut count_builder, &normalized);
+    let count_row = count_builder
+        .build()
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let total = count_row
         .try_get::<i64, _>("cnt")
         .map_err(|e| e.to_string())?;
 
-    let entries = sqlx::query_as::<_, OperationLogEntry>(
+    let mut entries_builder = QueryBuilder::<Sqlite>::new(
         "SELECT
             id, created_at, level, target_kind, target_id, target_label,
             category, action, status, subject_type, subject_id, subject_label,
             summary, error_summary, details_json, duration_ms, batch_id
-         FROM operation_logs
-         WHERE (? IS NULL OR target_kind = ?)
-           AND (? IS NULL OR target_id = ?)
-           AND (? IS NULL OR level = ?)
-           AND (? IS NULL OR status = ?)
-           AND (? IS NULL OR category = ?)
-           AND (? IS NULL OR action = ?)
-           AND (? IS NULL OR created_at >= ?)
-           AND (? IS NULL OR created_at <= ?)
-           AND (
-                ? IS NULL
-                OR summary LIKE ?
-                OR error_summary LIKE ?
-                OR subject_id LIKE ?
-                OR subject_label LIKE ?
-                OR action LIKE ?
-           )
-         ORDER BY created_at DESC
-         LIMIT ? OFFSET ?",
-    )
-    .bind(target_kind.clone())
-    .bind(target_kind)
-    .bind(target_id.clone())
-    .bind(target_id)
-    .bind(level.clone())
-    .bind(level)
-    .bind(status.clone())
-    .bind(status)
-    .bind(category.clone())
-    .bind(category)
-    .bind(action.clone())
-    .bind(action)
-    .bind(created_after.clone())
-    .bind(created_after)
-    .bind(created_before.clone())
-    .bind(created_before)
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+         FROM operation_logs",
+    );
+    push_operation_log_filters(&mut entries_builder, &normalized);
+    entries_builder
+        .push(" ORDER BY created_at DESC LIMIT ")
+        .push_bind(limit)
+        .push(" OFFSET ")
+        .push_bind(offset);
+
+    let entries = entries_builder
+        .build_query_as::<OperationLogEntry>()
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(OperationLogPage {
         entries,
@@ -3575,61 +3811,16 @@ pub async fn clear_operation_logs(
     pool: &DbPool,
     filter: OperationLogFilter,
 ) -> Result<u64, String> {
-    let query = normalize_optional_filter(&filter.query).map(|value| format!("%{}%", value));
-    let target_kind = normalize_optional_filter(&filter.target_kind);
-    let target_id = normalize_optional_filter(&filter.target_id);
-    let level = normalize_optional_filter(&filter.level);
-    let status = normalize_optional_filter(&filter.status);
-    let category = normalize_optional_filter(&filter.category);
-    let action = normalize_optional_filter(&filter.action);
-    let created_after = normalize_optional_filter(&filter.created_after);
-    let created_before = normalize_optional_filter(&filter.created_before);
+    let normalized = NormalizedOperationLogFilter::from(&filter);
+    let mut builder = QueryBuilder::<Sqlite>::new("DELETE FROM operation_logs");
+    push_operation_log_filters(&mut builder, &normalized);
 
-    sqlx::query(
-        "DELETE FROM operation_logs
-         WHERE (? IS NULL OR target_kind = ?)
-           AND (? IS NULL OR target_id = ?)
-           AND (? IS NULL OR level = ?)
-           AND (? IS NULL OR status = ?)
-           AND (? IS NULL OR category = ?)
-           AND (? IS NULL OR action = ?)
-           AND (? IS NULL OR created_at >= ?)
-           AND (? IS NULL OR created_at <= ?)
-           AND (
-                ? IS NULL
-                OR summary LIKE ?
-                OR error_summary LIKE ?
-                OR subject_id LIKE ?
-                OR subject_label LIKE ?
-                OR action LIKE ?
-           )",
-    )
-    .bind(target_kind.clone())
-    .bind(target_kind)
-    .bind(target_id.clone())
-    .bind(target_id)
-    .bind(level.clone())
-    .bind(level)
-    .bind(status.clone())
-    .bind(status)
-    .bind(category.clone())
-    .bind(category)
-    .bind(action.clone())
-    .bind(action)
-    .bind(created_after.clone())
-    .bind(created_after)
-    .bind(created_before.clone())
-    .bind(created_before)
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query.clone())
-    .bind(query)
-    .execute(pool)
-    .await
-    .map(|result| result.rows_affected())
-    .map_err(|e| e.to_string())
+    builder
+        .build()
+        .execute(pool)
+        .await
+        .map(|result| result.rows_affected())
+        .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Serialize)]
@@ -3677,6 +3868,40 @@ pub async fn get_setting(pool: &DbPool, key: &str) -> Result<Option<String>, Str
     Ok(row.map(|r| r.get::<String, _>("value")))
 }
 
+/// Get a batch of setting values by key. Missing keys are present with `None`.
+pub async fn get_settings(
+    pool: &DbPool,
+    keys: &[String],
+) -> Result<HashMap<String, Option<String>>, String> {
+    let mut result = keys
+        .iter()
+        .map(|key| (key.clone(), None))
+        .collect::<HashMap<_, _>>();
+
+    if keys.is_empty() {
+        return Ok(result);
+    }
+
+    let placeholders = keys.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT key, value FROM settings WHERE key IN ({})",
+        placeholders
+    );
+    let mut query = sqlx::query(&sql);
+    for key in keys {
+        query = query.bind(key);
+    }
+
+    let rows = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    for row in rows {
+        let key: String = row.try_get("key").map_err(|e| e.to_string())?;
+        let value: String = row.try_get("value").map_err(|e| e.to_string())?;
+        result.insert(key, Some(value));
+    }
+
+    Ok(result)
+}
+
 /// Set (upsert) a setting value.
 pub async fn set_setting(pool: &DbPool, key: &str, value: &str) -> Result<(), String> {
     sqlx::query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)")
@@ -3686,6 +3911,22 @@ pub async fn set_setting(pool: &DbPool, key: &str, value: &str) -> Result<(), St
         .await
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// Set (upsert) a batch of settings in a single transaction.
+pub async fn set_settings(pool: &DbPool, values: &HashMap<String, String>) -> Result<(), String> {
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    for (key, value) in values {
+        sqlx::query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)")
+            .bind(key)
+            .bind(value)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -5198,6 +5439,36 @@ mod tests {
             get_setting(&pool, "key3").await.unwrap().as_deref(),
             Some("val3")
         );
+    }
+
+    #[tokio::test]
+    async fn test_batch_settings_preserves_missing_keys() {
+        let pool = setup_test_db().await;
+        let mut values = HashMap::new();
+        values.insert("ai_provider".to_string(), "glm".to_string());
+        values.insert("ai_model".to_string(), "glm-5".to_string());
+        set_settings(&pool, &values).await.unwrap();
+
+        let loaded = get_settings(
+            &pool,
+            &[
+                "ai_provider".to_string(),
+                "ai_model".to_string(),
+                "ai_api_key".to_string(),
+            ],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            loaded.get("ai_provider").and_then(|value| value.as_deref()),
+            Some("glm")
+        );
+        assert_eq!(
+            loaded.get("ai_model").and_then(|value| value.as_deref()),
+            Some("glm-5")
+        );
+        assert!(loaded.get("ai_api_key").unwrap().is_none());
     }
 
     // ── Migration: created_at ─────────────────────────────────────────────────

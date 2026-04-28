@@ -235,6 +235,18 @@ fn scan_root_for_projects(
     projects
 }
 
+async fn scan_root_for_projects_blocking(
+    root: PathBuf,
+    patterns: Vec<(String, String, PathBuf)>,
+    central_dir: PathBuf,
+) -> Result<Vec<DiscoveredProject>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        scan_root_for_projects(&root, &patterns, &central_dir)
+    })
+    .await
+    .map_err(|e| format!("Failed to join Discover scan task: {}", e))
+}
+
 /// Inner recursive walker. Accumulates found projects into `projects`.
 /// `seen_project_paths` prevents duplicates when the same project dir
 /// is reached via different scan roots.
@@ -511,8 +523,10 @@ pub async fn start_project_scan(
             break;
         }
 
-        let root_path = Path::new(&root.path);
-        let found_projects = scan_root_for_projects(root_path, &patterns, &central_dir);
+        let root_path = PathBuf::from(&root.path);
+        let found_projects =
+            scan_root_for_projects_blocking(root_path, patterns.clone(), central_dir.clone())
+                .await?;
 
         roots_scanned += 1;
         let percent = if total_roots > 0 {
@@ -552,30 +566,25 @@ pub async fn start_project_scan(
 
     // Collect all discovered skill IDs found in this scan for reconciliation.
     let mut found_skill_ids: Vec<String> = Vec::new();
+    let mut discovered_inserts: Vec<db::DiscoveredSkillInsert<'_>> = Vec::new();
 
     for project in &all_projects {
         for skill in &project.skills {
             found_skill_ids.push(skill.id.clone());
-
-            // Check if already persisted (by qualified ID).
-            let existing = db::get_discovered_skill_by_id(pool, &skill.id).await?;
-            if existing.is_none() {
-                db::insert_discovered_skill(
-                    pool,
-                    &skill.id,
-                    &skill.name,
-                    skill.description.as_deref(),
-                    &skill.file_path,
-                    &skill.dir_path,
-                    &skill.project_path,
-                    &skill.project_name,
-                    &skill.platform_id,
-                    &now,
-                )
-                .await?;
-            }
+            discovered_inserts.push(db::DiscoveredSkillInsert {
+                id: &skill.id,
+                name: &skill.name,
+                description: skill.description.as_deref(),
+                file_path: &skill.file_path,
+                dir_path: &skill.dir_path,
+                project_path: &skill.project_path,
+                project_name: &skill.project_name,
+                platform_id: &skill.platform_id,
+                discovered_at: &now,
+            });
         }
     }
+    db::insert_discovered_skills(pool, &discovered_inserts).await?;
 
     // ── Cache reconciliation ──────────────────────────────────────────────────
     // Remove stale discovered_skills rows whose dir_path no longer exists on disk

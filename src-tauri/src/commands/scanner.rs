@@ -455,6 +455,15 @@ pub fn scan_directory(dir: &Path, is_central: bool) -> Vec<ScannedSkill> {
         .collect()
 }
 
+async fn scan_directory_blocking(
+    dir: PathBuf,
+    is_central: bool,
+) -> Result<Vec<ScannedSkill>, String> {
+    tauri::async_runtime::spawn_blocking(move || scan_directory(&dir, is_central))
+        .await
+        .map_err(|e| format!("Failed to join directory scan task: {}", e))
+}
+
 // ─── Tauri Command ────────────────────────────────────────────────────────────
 
 /// Core scanning logic, separated from the Tauri command layer so it can be
@@ -514,7 +523,8 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
             let root_scanned = if let Some(cached) = scanned_root_cache.get(&scan_key) {
                 cached.clone()
             } else {
-                let scanned = scan_directory(&root.path, root_uses_central_storage);
+                let scanned =
+                    scan_directory_blocking(root.path.clone(), root_uses_central_storage).await?;
                 scanned_root_cache.insert(scan_key.clone(), scanned.clone());
                 scanned
             };
@@ -606,7 +616,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
         let scanned_skills = if let Some(cached) = scanned_root_cache.get(&scan_key) {
             cached.clone()
         } else {
-            let scanned = scan_directory(dir, false);
+            let scanned = scan_directory_blocking(dir.to_path_buf(), false).await?;
             scanned_root_cache.insert(scan_key.clone(), scanned.clone());
             scanned
         };

@@ -1,4 +1,5 @@
 use serde_json::json;
+use std::collections::HashMap;
 use std::time::Instant;
 use tauri::State;
 
@@ -51,12 +52,31 @@ pub async fn get_setting_impl(pool: &DbPool, key: &str) -> Result<Option<String>
     db::get_setting(pool, key).await
 }
 
+/// Get multiple settings values by key. Missing keys map to `None`.
+pub async fn get_settings_impl(
+    pool: &DbPool,
+    keys: &[String],
+) -> Result<HashMap<String, Option<String>>, String> {
+    db::get_settings(pool, keys).await
+}
+
 /// Set (upsert) a settings value.
 pub async fn set_setting_impl(pool: &DbPool, key: &str, value: &str) -> Result<(), String> {
     if key.trim().is_empty() {
         return Err("Settings key cannot be empty".to_string());
     }
     db::set_setting(pool, key, value).await
+}
+
+/// Set (upsert) multiple settings values in one batch.
+pub async fn set_settings_impl(
+    pool: &DbPool,
+    values: &HashMap<String, String>,
+) -> Result<(), String> {
+    if values.keys().any(|key| key.trim().is_empty()) {
+        return Err("Settings key cannot be empty".to_string());
+    }
+    db::set_settings(pool, values).await
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -203,6 +223,15 @@ pub async fn get_setting(
     get_setting_impl(&state.db, &key).await
 }
 
+/// Tauri command: get multiple settings values by key.
+#[tauri::command]
+pub async fn get_settings(
+    state: State<'_, AppState>,
+    keys: Vec<String>,
+) -> Result<HashMap<String, Option<String>>, String> {
+    get_settings_impl(&state.db, &keys).await
+}
+
 /// Tauri command: set (upsert) a settings value.
 #[tauri::command]
 pub async fn set_setting(
@@ -235,6 +264,48 @@ pub async fn set_setting(
     .subject("setting", &key, &key)
     .details(json!({
         "key": key,
+        "valueStored": result.is_ok(),
+    }))
+    .duration_ms(started_at.elapsed().as_millis() as i64);
+    if let Err(error) = &result {
+        event = event.error(error);
+    }
+    record_operation_log_best_effort(&state.db, target_context, event).await;
+    result
+}
+
+/// Tauri command: set (upsert) multiple settings values in one batch.
+#[tauri::command]
+pub async fn set_settings(
+    state: State<'_, AppState>,
+    values: HashMap<String, String>,
+) -> Result<(), String> {
+    let target_context = state
+        .active_target()
+        .await
+        .map(|target| target_context_from_active_target(&target))
+        .unwrap_or_else(|_| crate::commands::logs::local_target_context());
+    let started_at = Instant::now();
+    let result = set_settings_impl(&state.db, &values).await;
+    let status = if result.is_ok() {
+        "succeeded"
+    } else {
+        "failed"
+    };
+    let mut keys = values.keys().cloned().collect::<Vec<_>>();
+    keys.sort();
+    let mut event = OperationLogEvent::new(
+        "settings",
+        "settings.set_batch",
+        status,
+        if result.is_ok() {
+            format!("Updated {} settings", keys.len())
+        } else {
+            "Failed to update settings batch".to_string()
+        },
+    )
+    .details(json!({
+        "keys": keys,
         "valueStored": result.is_ok(),
     }))
     .duration_ms(started_at.elapsed().as_millis() as i64);
