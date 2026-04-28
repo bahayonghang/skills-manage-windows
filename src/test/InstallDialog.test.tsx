@@ -93,8 +93,9 @@ const localTarget: TargetSummary = {
 function renderDialog(props: {
   open?: boolean;
   skill?: SkillWithLinks | null;
+  agents?: AgentWithStatus[];
 } = {}) {
-  const targetAgents = getPlatformTargetGroups(mockAgents, {
+  const targetAgents = getPlatformTargetGroups(props.agents ?? mockAgents, {
     coding: true,
     lobster: true,
   });
@@ -154,10 +155,32 @@ describe("InstallDialog", () => {
     expect(screen.queryByLabelText("Central Skills")).not.toBeInTheDocument();
   });
 
-  it("shows 'already linked' badge for linked agents", () => {
+  it("shows a compact linked status icon for linked agents", () => {
     renderDialog();
     // Claude Code is in linked_agents
-    expect(screen.getAllByText("已链接").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("已链接")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Claude Code 已链接")).toBeInTheDocument();
+  });
+
+  it("shows project target mode for Central skills", () => {
+    renderDialog();
+
+    expect(screen.getByText("目标")).toBeInTheDocument();
+    expect(screen.getByText("全局平台目录")).toBeInTheDocument();
+    expect(screen.getByText("项目目录")).toBeInTheDocument();
+  });
+
+  it("does not show project target mode for non-Central skills", () => {
+    renderDialog({
+      skill: {
+        ...mockSkill,
+        is_central: false,
+        linked_agents: [],
+      },
+    });
+
+    expect(screen.queryByText("目标")).not.toBeInTheDocument();
+    expect(screen.queryByText("项目目录")).not.toBeInTheDocument();
   });
 
   it("shows 'not detected' badge for undetected agents", () => {
@@ -203,7 +226,8 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalledWith(
         "frontend-design",
         expect.any(Array),
-        expect.any(String)
+        expect.any(String),
+        null
       );
     });
   });
@@ -259,7 +283,8 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalledWith(
         "frontend-design",
         expect.any(Array),
-        "symlink"
+        "symlink",
+        null
       );
     });
   });
@@ -283,7 +308,64 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalledWith(
         "frontend-design",
         expect.any(Array),
-        "copy"
+        "copy",
+        null
+      );
+    });
+  });
+
+  it("requires a project path when project target mode is selected", async () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+    fireEvent.click(screen.getByRole("button", {
+      name: /安装到 .* 个平台/i,
+    }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("请输入项目路径");
+    expect(mockOnInstall).not.toHaveBeenCalled();
+  });
+
+  it("disables platforms without a project pattern in project target mode", () => {
+    renderDialog({
+      agents: [
+        ...mockAgents,
+        {
+          id: "custom-tool",
+          display_name: "Custom Tool",
+          category: "coding",
+          global_skills_dir: "D:\\Tools\\skills",
+          is_detected: true,
+          is_builtin: false,
+          is_enabled: true,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+
+    expect(screen.getByLabelText("Custom Tool")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("无项目模式")).toBeInTheDocument();
+  });
+
+  it("passes project path to onInstall in project target mode", async () => {
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+    fireEvent.change(screen.getByPlaceholderText("D:\\Projects\\example 或 /Users/me/project"), {
+      target: { value: "D:\\work\\demo" },
+    });
+    fireEvent.click(screen.getByRole("button", {
+      name: /安装到 .* 个平台/i,
+    }));
+
+    await waitFor(() => {
+      expect(mockOnInstall).toHaveBeenCalledWith(
+        "frontend-design",
+        expect.any(Array),
+        "copy",
+        "D:\\work\\demo"
       );
     });
   });
@@ -314,7 +396,8 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalledWith(
         "frontend-design",
         expect.any(Array),
-        "symlink"
+        "symlink",
+        null
       );
     });
   });

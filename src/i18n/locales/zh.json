@@ -497,6 +497,7 @@
   "installDialog": {
     "title": "安装 {{name}}",
     "choosePlatforms": "选择要安装此技能的平台。",
+    "chooseTarget": "选择此技能的安装位置。",
     "noPlatforms": "未检测到平台。请在设置中添加平台。",
     "installMethod": "安装方式",
     "symlink": "符号链接",
@@ -504,6 +505,7 @@
     "copy": "复制安装",
     "copyDesc": "(独立副本)",
     "alreadyLinked": "已链接",
+    "alreadyLinkedLabel": "{{platform}} 已链接",
     "sharedCentralPath": "共享中央目录",
     "notDetected": "(未检测到)",
     "confirmInstall": "安装到 {{count}} 个平台",

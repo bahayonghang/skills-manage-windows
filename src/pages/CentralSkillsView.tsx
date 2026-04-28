@@ -952,9 +952,14 @@ export function CentralSkillsView() {
     }
   }
 
-  async function handleInstall(skillId: string, agentIds: string[], method: string) {
+  async function handleInstall(
+    skillId: string,
+    agentIds: string[],
+    method: string,
+    projectPath?: string | null
+  ) {
     try {
-      const result = await installSkill(skillId, agentIds, method);
+      const result = await installSkill(skillId, agentIds, method, projectPath);
       // Refresh sidebar counts after install.
       await refreshCounts();
       if (result.failed.length > 0) {
@@ -1338,9 +1343,10 @@ export function CentralSkillsView() {
   async function handleInstallImportedSkill(
     skillId: string,
     agentIds: string[],
-    method: "symlink" | "copy"
+    method: "symlink" | "copy",
+    projectPath?: string | null
   ) {
-    const result = await handleInstall(skillId, agentIds, method);
+    const result = await handleInstall(skillId, agentIds, method, projectPath);
     await Promise.all(agentIds.map((agentId) => getSkillsByAgent(agentId)));
     return result;
   }

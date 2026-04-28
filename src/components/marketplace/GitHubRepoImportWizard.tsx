@@ -78,6 +78,7 @@ interface GitHubRepoImportWizardProps {
     skillId: string,
     agentIds: string[],
     method: "symlink" | "copy",
+    projectPath?: string | null,
   ) => Promise<BatchInstallResult>;
   onAfterImportSuccess?: (
     result: GitHubRepoImportResult,
@@ -700,11 +701,12 @@ export function GitHubRepoImportWizard({
     skillId: string,
     agentIds: string[],
     method: "symlink" | "copy",
+    projectPath?: string | null,
   ) {
     if (!onInstallImportedSkill) {
       return { succeeded: [], failed: [] };
     }
-    const result = await onInstallImportedSkill(skillId, agentIds, method);
+    const result = await onInstallImportedSkill(skillId, agentIds, method, projectPath);
     if (result.failed.length === 0) {
       setPostImportTargetSkillId(null);
     }

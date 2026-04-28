@@ -22,6 +22,7 @@ import { useTargetStore } from "@/stores/targetStore";
 import {
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberNames,
+  hasProjectSkillPattern,
   isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
 
@@ -38,18 +39,6 @@ interface BatchInstallCentralSkillsDialogProps {
     method: InstallMethod,
     projectPath?: string | null
   ) => Promise<CentralBatchInstallResult>;
-}
-
-function hasProjectPattern(agent: AgentWithStatus): boolean {
-  if (agent.project_skills_dir?.trim()) {
-    return true;
-  }
-  if (agent.is_builtin) {
-    return true;
-  }
-
-  const normalized = agent.global_skills_dir.replace(/\\/g, "/");
-  return normalized.startsWith("~/") || /\/\.[^/]+\/skills\/?$/.test(normalized);
 }
 
 export function BatchInstallCentralSkillsDialog({
@@ -76,7 +65,7 @@ export function BatchInstallCentralSkillsDialog({
   const [result, setResult] = useState<CentralBatchInstallResult | null>(null);
 
   const isProjectTargetDisabled = (agent: AgentWithStatus) =>
-    targetMode === "project" && !hasProjectPattern(agent);
+    targetMode === "project" && !hasProjectSkillPattern(agent);
 
   const selectedInstallAgentIds = useMemo(
     () =>
@@ -84,7 +73,7 @@ export function BatchInstallCentralSkillsDialog({
         new Set(
           targetAgents
             .filter((agent) => selectedAgentIds.has(agent.id))
-            .filter((agent) => targetMode !== "project" || hasProjectPattern(agent))
+            .filter((agent) => targetMode !== "project" || hasProjectSkillPattern(agent))
             .flatMap((agent) => getPlatformTargetInstallAgentIds(agent))
         )
       ),
@@ -97,7 +86,7 @@ export function BatchInstallCentralSkillsDialog({
 
     const initialSelection = new Set(
       targetAgents
-        .filter((agent) => targetMode === "platform" || hasProjectPattern(agent))
+        .filter((agent) => targetMode === "platform" || hasProjectSkillPattern(agent))
         .map((agent) => agent.id)
     );
     setSelectedAgentIds(initialSelection);

@@ -497,6 +497,7 @@
   "installDialog": {
     "title": "Install {{name}}",
     "choosePlatforms": "Choose which platforms to install this skill to.",
+    "chooseTarget": "Choose where to install this skill.",
     "noPlatforms": "No platforms detected. Add platforms in Settings.",
     "installMethod": "Install method",
     "symlink": "Symlink",
@@ -504,6 +505,7 @@
     "copy": "Copy",
     "copyDesc": "(independent copy)",
     "alreadyLinked": "already linked",
+    "alreadyLinkedLabel": "{{platform}} is already linked",
     "sharedCentralPath": "Uses Central path",
     "notDetected": "(not detected)",
     "confirmInstall": "Install to {{count}} platform{{count, select, 1 {} other {s}}}",

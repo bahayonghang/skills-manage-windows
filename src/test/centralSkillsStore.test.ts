@@ -563,6 +563,46 @@ describe("centralSkillsStore", () => {
     expect(result).toEqual(batchResult);
   });
 
+  it("uses batch_install_central_skills for single-skill project installs", async () => {
+    const batchResult = {
+      succeeded: [
+        {
+          skill_id: "frontend-design",
+          agent_id: "cursor",
+          target_path: "D:\\work\\demo\\.cursor\\skills\\frontend-design",
+        },
+      ],
+      failed: [
+        {
+          skill_id: "frontend-design",
+          agent_id: "kiro",
+          error: "No project pattern",
+        },
+      ],
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(batchResult)
+      .mockResolvedValueOnce(mockSkills)
+      .mockResolvedValueOnce(mockRepositories);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .installSkill("frontend-design", ["cursor", "kiro"], "copy", "D:\\work\\demo");
+
+    expect(result).toEqual({
+      succeeded: ["cursor"],
+      failed: [{ agent_id: "kiro", error: "No project pattern" }],
+    });
+    expect(invoke).toHaveBeenCalledWith("batch_install_central_skills", {
+      skillIds: ["frontend-design"],
+      agentIds: ["cursor", "kiro"],
+      method: "copy",
+      projectPath: "D:\\work\\demo",
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+  });
+
   it("calls batch_install_central_skills then refreshes skills", async () => {
     const batchResult = {
       succeeded: [

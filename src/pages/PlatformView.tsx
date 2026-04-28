@@ -130,9 +130,14 @@ export function PlatformView() {
     setIsDialogOpen(true);
   }
 
-  async function handleInstall(skillId: string, agentIds: string[], method: string) {
+  async function handleInstall(
+    skillId: string,
+    agentIds: string[],
+    method: string,
+    projectPath?: string | null
+  ) {
     try {
-      const result = await installSkill(skillId, agentIds, method);
+      const result = await installSkill(skillId, agentIds, method, projectPath);
       await refreshCounts();
       if (resolvedAgentId) {
         await getSkillsByAgent(resolvedAgentId);

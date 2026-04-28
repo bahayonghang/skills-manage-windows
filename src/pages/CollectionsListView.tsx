@@ -250,9 +250,14 @@ export function CollectionsListView() {
     setIsSingleInstallOpen(true);
   }
 
-  async function handleInstallSingleSkill(skillId: string, agentIds: string[], method: string) {
+  async function handleInstallSingleSkill(
+    skillId: string,
+    agentIds: string[],
+    method: string,
+    projectPath?: string | null
+  ) {
     try {
-      const result = await installCentralSkill(skillId, agentIds, method);
+      const result = await installCentralSkill(skillId, agentIds, method, projectPath);
       await refreshCounts();
       if (result.failed.length > 0) {
         const failedNames = result.failed

@@ -323,7 +323,8 @@ interface CentralSkillsState {
   installSkill: (
     skillId: string,
     agentIds: string[],
-    method: string
+    method: string,
+    projectPath?: string | null
   ) => Promise<BatchInstallResult>;
   batchInstallSkills: (
     skillIds: string[],
@@ -443,14 +444,28 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
    * Install a skill to one or more agents. Refreshes the skill list after
    * a successful (or partial) install so link status icons update.
    */
-  installSkill: async (skillId, agentIds, method) => {
+  installSkill: async (skillId, agentIds, method, projectPath) => {
     set({ isInstalling: true, error: null });
     try {
-      const result = await invoke<BatchInstallResult>("batch_install_to_agents", {
-        skillId,
-        agentIds,
-        method,
-      });
+      const trimmedProjectPath = projectPath?.trim() ? projectPath.trim() : null;
+      const result = trimmedProjectPath
+        ? await invoke<CentralBatchInstallResult>("batch_install_central_skills", {
+            skillIds: [skillId],
+            agentIds,
+            method,
+            projectPath: trimmedProjectPath,
+          }).then((batchResult) => ({
+            succeeded: batchResult.succeeded.map((success) => success.agent_id),
+            failed: batchResult.failed.map((failure) => ({
+              agent_id: failure.agent_id,
+              error: failure.error,
+            })),
+          }))
+        : await invoke<BatchInstallResult>("batch_install_to_agents", {
+            skillId,
+            agentIds,
+            method,
+          });
 
       // Refresh central skills to get updated link status.
       const skills = await invoke<SkillWithLinks[]>("get_central_skills");
