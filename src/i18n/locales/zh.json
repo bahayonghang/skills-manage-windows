@@ -755,7 +755,10 @@
     },
     "language": "语言",
     "chinese": "中文",
-    "english": "English"
+    "english": "English",
+    "aiSaveSaving": "AI 设置保存中...",
+    "aiSaveSaved": "AI 设置已保存",
+    "aiSaveError": "AI 设置保存失败：{{error}}"
   },
   "addDir": {
     "title": "添加项目目录",

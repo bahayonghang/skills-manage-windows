@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Pencil, Loader2, FolderOpen, Cpu, Info, Database, Globe, Palette, Droplets, Bot, ChevronDown, ChevronRight, KeyRound, Search, Server } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
@@ -33,7 +32,7 @@ import { PlatformDialog } from "@/components/settings/PlatformDialog";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { Input } from "@/components/ui/input";
 import { AgentWithStatus, ScanDirectory, SshAuthMethod, TargetSummary } from "@/types";
-import { AI_PROVIDERS, REGION_LABELS, RegionId } from "@/data/aiProviders";
+import { AI_PROVIDERS, REGION_LABELS } from "@/data/aiProviders";
 import { deriveHomeDir, formatPathForDisplay, joinPathForDisplay } from "@/lib/path";
 import {
   createPlatformTargetGroups,
@@ -557,86 +556,41 @@ export function SettingsView() {
 
   const [platformVisibilityQuery, setPlatformVisibilityQuery] = useState("");
 
-  // AI Provider state
-  const [aiProvider, setAiProvider] = useState("claude");
-  const [aiRegion, setAiRegion] = useState<RegionId>("intl");
-  const [aiApiKey, setAiApiKey] = useState("");
-  const [aiModel, setAiModel] = useState("");
-  const [aiCustomUrl, setAiCustomUrl] = useState("");
-  const [aiTagConcurrency, setAiTagConcurrency] = useState("1");
-  const [aiTagIntervalMs, setAiTagIntervalMs] = useState("4000");
-  const [aiTagStopOnRateLimit, setAiTagStopOnRateLimit] = useState(true);
-  const [aiLoaded, setAiLoaded] = useState(false);
+  // AI Provider state is centralized in settingsStore so the page does not
+  // perform direct Tauri IPC and rapid edits can be saved as one debounced batch.
+  const aiSettings = useSettingsStore((s) => s.aiSettings);
+  const aiSettingsLoaded = useSettingsStore((s) => s.aiSettingsLoaded);
+  const isLoadingAiSettings = useSettingsStore((s) => s.isLoadingAiSettings);
+  const aiSaveStatus = useSettingsStore((s) => s.aiSaveStatus);
+  const aiSaveError = useSettingsStore((s) => s.aiSaveError);
+  const aiTesting = useSettingsStore((s) => s.aiTesting);
+  const aiTestResult = useSettingsStore((s) => s.aiTestResult);
+  const loadAiSettings = useSettingsStore((s) => s.loadAiSettings);
+  const updateAiSettings = useSettingsStore((s) => s.updateAiSettings);
+  const testAiConnection = useSettingsStore((s) => s.testAiConnection);
+  const aiProvider = aiSettings.provider;
+  const aiRegion = aiSettings.region;
+  const aiApiKey = aiSettings.apiKey;
+  const aiModel = aiSettings.model;
+  const aiCustomUrl = aiSettings.customUrl;
+  const aiTagConcurrency = aiSettings.tagConcurrency;
+  const aiTagIntervalMs = aiSettings.tagIntervalMs;
+  const aiTagStopOnRateLimit = aiSettings.tagStopOnRateLimit;
 
-  // Load AI settings on mount
   useEffect(() => {
-    (async () => {
-      try {
-        const provider = await invoke<string | null>("get_setting", { key: "ai_provider" });
-        const region = await invoke<string | null>("get_setting", { key: "ai_region" });
-        const key = await invoke<string | null>("get_setting", { key: "ai_api_key" });
-        const model = await invoke<string | null>("get_setting", { key: "ai_model" });
-        const url = await invoke<string | null>("get_setting", { key: "ai_api_url" });
-        const tagConcurrency = await invoke<string | null>("get_setting", { key: "ai_tag_concurrency" });
-        const tagIntervalMs = await invoke<string | null>("get_setting", { key: "ai_tag_interval_ms" });
-        const tagStopOnRateLimit = await invoke<string | null>("get_setting", { key: "ai_tag_stop_on_rate_limit" });
-        if (provider) setAiProvider(provider);
-        if (region) setAiRegion(region as RegionId);
-        if (key) setAiApiKey(key);
-        if (model) setAiModel(model);
-        if (url) setAiCustomUrl(url);
-        if (tagConcurrency) setAiTagConcurrency(tagConcurrency);
-        if (tagIntervalMs) setAiTagIntervalMs(tagIntervalMs);
-        if (tagStopOnRateLimit) {
-          setAiTagStopOnRateLimit(tagStopOnRateLimit !== "false" && tagStopOnRateLimit !== "0");
-        }
-      } catch { /* first run, no settings yet */ }
-      setAiLoaded(true);
-    })();
-  }, []);
-
-  // Save AI settings when changed
-  useEffect(() => {
-    if (!aiLoaded) return;
-    const save = async () => {
-      try {
-        await invoke("set_setting", { key: "ai_provider", value: aiProvider });
-        await invoke("set_setting", { key: "ai_region", value: aiRegion });
-        await invoke("set_setting", { key: "ai_api_key", value: aiApiKey });
-        await invoke("set_setting", { key: "ai_model", value: aiModel });
-        // Compute and save the actual API URL
-        const p = AI_PROVIDERS.find((x) => x.id === aiProvider);
-        const url = aiProvider === "custom" ? aiCustomUrl : (p?.endpoints[aiRegion] ?? "");
-        await invoke("set_setting", { key: "ai_api_url", value: url });
-        await invoke("set_setting", { key: "ai_tag_concurrency", value: aiTagConcurrency });
-        await invoke("set_setting", { key: "ai_tag_interval_ms", value: aiTagIntervalMs });
-        await invoke("set_setting", { key: "ai_tag_stop_on_rate_limit", value: aiTagStopOnRateLimit ? "true" : "false" });
-      } catch { /* ignore */ }
-    };
-    save();
-  }, [
-    aiProvider,
-    aiRegion,
-    aiApiKey,
-    aiModel,
-    aiCustomUrl,
-    aiTagConcurrency,
-    aiTagIntervalMs,
-    aiTagStopOnRateLimit,
-    aiLoaded,
-  ]);
+    if (!aiSettingsLoaded && !isLoadingAiSettings) {
+      void loadAiSettings();
+    }
+  }, [aiSettingsLoaded, isLoadingAiSettings, loadAiSettings]);
 
   // When provider or region changes, update model to default
   function handleProviderChange(id: string) {
-    setAiProvider(id);
     const p = AI_PROVIDERS.find((x) => x.id === id);
-    if (p) {
-      setAiModel(p.defaultModel);
-      // Auto-select first available region
-      if (!p.regions.includes(aiRegion)) {
-        setAiRegion(p.regions[0]);
-      }
-    }
+    updateAiSettings({
+      provider: id,
+      model: p?.defaultModel ?? aiModel,
+      region: p && !p.regions.includes(aiRegion) ? p.regions[0] : aiRegion,
+    });
   }
 
   const currentProvider = AI_PROVIDERS.find((p) => p.id === aiProvider);
@@ -644,8 +598,6 @@ export function SettingsView() {
     ? aiCustomUrl
     : (currentProvider?.endpoints[aiRegion] ?? "");
   const lang = i18n.language;
-  const [aiTesting, setAiTesting] = useState(false);
-  const [aiTestResult, setAiTestResult] = useState<{ ok: boolean; msg: string; details?: string } | null>(null);
   const [showAiTestDetails, setShowAiTestDetails] = useState(false);
 
   const [isAddDirOpen, setIsAddDirOpen] = useState(false);
@@ -1795,7 +1747,7 @@ export function SettingsView() {
                       <button
                         key={r}
                         type="button"
-                        onClick={() => setAiRegion(r)}
+                        onClick={() => updateAiSettings({ region: r })}
                         aria-pressed={aiRegion === r}
                         className={`min-h-8 px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border md:min-h-7 ${aiRegion === r ? "bg-primary/15 border-primary text-foreground font-medium" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}
                       >
@@ -1814,8 +1766,22 @@ export function SettingsView() {
                   type="password"
                   placeholder="sk-..."
                   value={aiApiKey}
-                  onChange={(e) => setAiApiKey(e.target.value)}
+                  onChange={(e) => updateAiSettings({ apiKey: e.target.value })}
                 />
+              </div>
+              <div className="flex items-center gap-2 text-xs" role="status">
+                {aiSaveStatus === "saving" || isLoadingAiSettings ? (
+                  <>
+                    <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                    <span className="text-muted-foreground">{t("settings.aiSaveSaving")}</span>
+                  </>
+                ) : aiSaveStatus === "saved" ? (
+                  <span className="text-emerald-600 dark:text-emerald-400">{t("settings.aiSaveSaved")}</span>
+                ) : aiSaveStatus === "error" ? (
+                  <span className="text-destructive">
+                    {t("settings.aiSaveError", { error: aiSaveError ?? "" })}
+                  </span>
+                ) : null}
               </div>
               <div>
                 <label htmlFor="settings-ai-model" className="text-xs text-muted-foreground mb-1 block">
@@ -1825,7 +1791,7 @@ export function SettingsView() {
                   id="settings-ai-model"
                   placeholder={t("settings.aiModelPlaceholder")}
                   value={aiModel}
-                  onChange={(e) => setAiModel(e.target.value)}
+                  onChange={(e) => updateAiSettings({ model: e.target.value })}
                 />
               </div>
               {aiProvider === "custom" && (
@@ -1837,7 +1803,7 @@ export function SettingsView() {
                     id="settings-ai-api-url"
                     placeholder={t("settings.aiApiUrlPlaceholder")}
                     value={aiCustomUrl}
-                    onChange={(e) => setAiCustomUrl(e.target.value)}
+                    onChange={(e) => updateAiSettings({ customUrl: e.target.value })}
                   />
                 </div>
               )}
@@ -1857,7 +1823,7 @@ export function SettingsView() {
                     </span>
                     <Switch
                       checked={aiTagStopOnRateLimit}
-                      onCheckedChange={setAiTagStopOnRateLimit}
+                      onCheckedChange={(checked) => updateAiSettings({ tagStopOnRateLimit: checked })}
                       aria-labelledby="settings-ai-tag-stop-on-rate-limit-label"
                     />
                   </div>
@@ -1873,7 +1839,7 @@ export function SettingsView() {
                       min={1}
                       max={8}
                       value={aiTagConcurrency}
-                      onChange={(event) => setAiTagConcurrency(event.target.value)}
+                      onChange={(event) => updateAiSettings({ tagConcurrency: event.target.value })}
                     />
                   </div>
                   <div>
@@ -1887,7 +1853,7 @@ export function SettingsView() {
                       max={60000}
                       step={500}
                       value={aiTagIntervalMs}
-                      onChange={(event) => setAiTagIntervalMs(event.target.value)}
+                      onChange={(event) => updateAiSettings({ tagIntervalMs: event.target.value })}
                     />
                   </div>
                 </div>
@@ -1897,29 +1863,8 @@ export function SettingsView() {
                   <div className="text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2 font-mono truncate flex-1 min-w-0">{resolvedUrl}</div>
                 )}
                 <Button variant="outline" size="sm" disabled={aiTesting || !aiApiKey || !resolvedUrl} onClick={async () => {
-                  setAiTesting(true); setAiTestResult(null); setShowAiTestDetails(false);
-                  try {
-                    const result = await invoke<string>("explain_skill", { content: "Test connection. Reply with: OK" });
-                    setAiTestResult({ ok: true, msg: result.slice(0, 60) });
-                  } catch (err) {
-                    const raw = String(err);
-                    // Try to extract structured error from JSON-like error strings
-                    let msg = raw;
-                    let details: string | undefined;
-                    const prefix = "API 请求失败: ";
-                    if (raw.startsWith(prefix)) {
-                      const after = raw.slice(prefix.length);
-                      const nlIdx = after.indexOf("\n");
-                      if (nlIdx > 0) {
-                        msg = after.slice(nlIdx + 1);
-                        details = after.slice(0, nlIdx);
-                      } else {
-                        msg = after;
-                      }
-                    }
-                    setAiTestResult({ ok: false, msg, details });
-                  }
-                  finally { setAiTesting(false); }
+                  setShowAiTestDetails(false);
+                  await testAiConnection();
                 }} className="shrink-0">
                   {aiTesting ? <Loader2 className="size-3.5 animate-spin" /> : <Bot className="size-3.5" />}
                   <span>{t("settings.aiTestConnection")}</span>

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ScanDirectory, AgentWithStatus } from "../types";
 
 // Mock Tauri core before importing the store
@@ -55,8 +55,29 @@ describe("settingsStore", () => {
       isSavingGitHubPat: false,
       isTestingGitHubPat: false,
       githubPatTestResult: null,
+      aiSettings: {
+        provider: "claude",
+        region: "intl",
+        apiKey: "",
+        model: "",
+        customUrl: "",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+      aiSettingsLoaded: false,
+      isLoadingAiSettings: false,
+      aiSaveStatus: "idle",
+      aiSaveError: null,
+      aiTesting: false,
+      aiTestResult: null,
     });
+    vi.useRealTimers();
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   // ── Initial State ─────────────────────────────────────────────────────────
@@ -390,5 +411,106 @@ describe("settingsStore", () => {
     expect(result.ok).toBe(true);
     expect(useSettingsStore.getState().githubPatTestResult?.status).toBe(200);
     expect(useSettingsStore.getState().isTestingGitHubPat).toBe(false);
+  });
+
+  it("loadAiSettings reads AI settings with one batch command", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      ai_provider: "glm",
+      ai_region: "cn",
+      ai_api_key: "key-1",
+      ai_model: "glm-5",
+      ai_api_url: "https://open.bigmodel.cn/api/anthropic/v1/messages",
+      ai_tag_concurrency: "2",
+      ai_tag_interval_ms: "5000",
+      ai_tag_stop_on_rate_limit: "false",
+    });
+
+    await useSettingsStore.getState().loadAiSettings();
+
+    expect(invoke).toHaveBeenCalledWith("get_settings", {
+      keys: [
+        "ai_provider",
+        "ai_region",
+        "ai_api_key",
+        "ai_model",
+        "ai_api_url",
+        "ai_tag_concurrency",
+        "ai_tag_interval_ms",
+        "ai_tag_stop_on_rate_limit",
+      ],
+    });
+    expect(useSettingsStore.getState().aiSettings).toMatchObject({
+      provider: "glm",
+      region: "cn",
+      apiKey: "key-1",
+      model: "glm-5",
+      tagConcurrency: "2",
+      tagIntervalMs: "5000",
+      tagStopOnRateLimit: false,
+    });
+  });
+
+  it("debounces rapid AI setting edits into one batch save", async () => {
+    vi.useFakeTimers();
+    vi.mocked(invoke).mockResolvedValue(undefined);
+    useSettingsStore.setState({
+      aiSettingsLoaded: true,
+      aiSettings: {
+        provider: "claude",
+        region: "intl",
+        apiKey: "",
+        model: "",
+        customUrl: "",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+    });
+
+    useSettingsStore.getState().updateAiSettings({ apiKey: "a" });
+    useSettingsStore.getState().updateAiSettings({ apiKey: "ab" });
+    useSettingsStore.getState().updateAiSettings({ apiKey: "abc" });
+
+    expect(invoke).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("set_settings", {
+      values: expect.objectContaining({
+        ai_api_key: "abc",
+        ai_tag_concurrency: "1",
+        ai_tag_interval_ms: "4000",
+        ai_tag_stop_on_rate_limit: "true",
+      }),
+    });
+  });
+
+  it("flushes AI settings before testing the connection", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce("OK");
+    useSettingsStore.setState({
+      aiSettingsLoaded: true,
+      aiSettings: {
+        provider: "claude",
+        region: "intl",
+        apiKey: "key",
+        model: "claude-sonnet-4-20250514",
+        customUrl: "",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+    });
+
+    const result = await useSettingsStore.getState().testAiConnection();
+
+    expect(result.ok).toBe(true);
+    expect(invoke).toHaveBeenNthCalledWith(1, "set_settings", {
+      values: expect.objectContaining({ ai_api_key: "key" }),
+    });
+    expect(invoke).toHaveBeenNthCalledWith(2, "explain_skill", {
+      content: "Test connection. Reply with: OK",
+    });
   });
 });

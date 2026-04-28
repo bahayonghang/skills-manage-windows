@@ -755,7 +755,10 @@
     },
     "language": "Language",
     "chinese": "中文",
-    "english": "English"
+    "english": "English",
+    "aiSaveSaving": "Saving AI settings...",
+    "aiSaveSaved": "AI settings saved",
+    "aiSaveError": "AI settings failed to save: {{error}}"
   },
   "addDir": {
     "title": "Add Project Directory",
