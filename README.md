@@ -173,11 +173,13 @@ pnpm install
 just ci
 just dev
 just build
+just install
 ```
 
 - `just ci` runs frontend `typecheck` + `lint`, plus Rust `cargo test` and `cargo clippy`.
 - `just dev` starts the Tauri development app directly.
 - `just build` builds the desktop app and copies the latest NSIS installer from `src-tauri/target/release/bundle/nsis/` to `outputs/`.
+- `just install` builds the desktop app, copies the latest NSIS installer to `outputs/`, and runs it in passive mode.
 
 ### Run in Development
 

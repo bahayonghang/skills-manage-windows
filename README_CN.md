@@ -172,11 +172,13 @@ pnpm install
 just ci
 just dev
 just build
+just install
 ```
 
 - `just ci` 会运行前端 `typecheck`、`lint`，以及 Rust 的 `cargo test` 和 `cargo clippy`。
 - `just dev` 会直接启动 Tauri 开发应用。
 - `just build` 会构建桌面应用，并把 `src-tauri/target/release/bundle/nsis/` 里最新的 NSIS 安装包复制到 `outputs/`。
+- `just install` 会构建桌面应用、把最新 NSIS 安装包复制到 `outputs/`，并以 passive 模式运行安装器。
 
 ### 启动开发环境
 

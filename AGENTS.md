@@ -22,6 +22,7 @@ pnpm install
 just ci
 just dev
 just build
+just install
 pnpm tauri dev
 pnpm build
 pnpm test
@@ -37,6 +38,7 @@ pnpm tauri build
 - `just ci`：跑前端 `typecheck`、`lint`，以及 Rust `cargo clippy`。
 - `just dev`：直接启动 Tauri 开发模式。
 - `just build`：跑 `pnpm tauri build`，然后把 `src-tauri/target/release/bundle/nsis/` 里最新的 Windows 安装包复制到根目录 `outputs/`。
+- `just install`：跑 `just build`，然后以 passive 模式运行根目录 `outputs/` 里的最新 NSIS 安装包。
 - 改 CI 或发布流程时，优先保持 `just ci` 和 GitHub Actions 的检查项一致，避免本地和远端两套标准。
 
 ## 修改约束
