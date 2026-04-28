@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import {
   Loader2,
   Blocks,
+  LayoutDashboard,
   Layers,
   Radar,
   ScrollText,
@@ -103,7 +104,9 @@ export function Sidebar() {
   } = usePlatformStore();
   const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
 
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(() =>
+    typeof window === "undefined" ? true : window.innerWidth >= 768
+  );
   const {
     width: sidebarWidth,
     startResize,
@@ -125,6 +128,7 @@ export function Sidebar() {
   const lobsterAgents = platformAgents.filter((a) => a.category === "lobster");
   const codingAgents = platformAgents.filter((a) => a.category !== "lobster");
 
+  const isDashboardActive = pathname === "/dashboard" || pathname === "/";
   const isCollectionActive = pathname === "/collections";
   const isLogsActive = pathname === "/logs";
 
@@ -192,10 +196,19 @@ export function Sidebar() {
 
       {/* Scrollable nav items */}
       <div className="flex-1 overflow-y-auto py-2 px-1.5 space-y-0.5">
+        {/* Dashboard */}
+        <NavItem
+          label={t("sidebar.dashboard")}
+          isActive={isDashboardActive}
+          onClick={() => navigate("/dashboard")}
+          icon={<LayoutDashboard className="size-4" />}
+          expanded={expanded}
+        />
+
         {/* Central Skills */}
         <NavItem
           label={t("sidebar.centralSkills")}
-          isActive={pathname === "/central" || pathname === "/"}
+          isActive={pathname === "/central"}
           onClick={() => navigate("/central")}
           icon={<Blocks className="size-4" />}
           expanded={expanded}

@@ -43,6 +43,11 @@ const OperationLogsView = lazy(() =>
     default: OperationLogsView,
   }))
 );
+const DashboardView = lazy(() =>
+  import("@/pages/DashboardView").then(({ DashboardView }) => ({
+    default: DashboardView,
+  }))
+);
 
 function lazyPage(element: ReactNode) {
   return <Suspense fallback={null}>{element}</Suspense>;
@@ -52,8 +57,13 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<AppShell />}>
-        {/* Default redirect to Central Skills */}
-        <Route index element={<Navigate to="/central" replace />} />
+        {/* Default redirect to Dashboard */}
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        {/* Dashboard: local-first operations overview */}
+        <Route
+          path="dashboard"
+          element={lazyPage(<DashboardView />)}
+        />
         {/* Platform view: lists skills for a specific agent */}
         <Route
           path="platform/:agentId"

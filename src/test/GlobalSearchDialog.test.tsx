@@ -163,4 +163,13 @@ describe("GlobalSearchDialog", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/platform/universal-agents");
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  it("routes Dashboard action results to the Dashboard page", () => {
+    const { onOpenChange } = renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/i }));
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/dashboard");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });

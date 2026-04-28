@@ -123,6 +123,26 @@ describe("Sidebar", () => {
     expect(nav).toHaveStyle({ width: "208px" });
   });
 
+  it("defaults to collapsed sidebar on narrow viewports", () => {
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+
+    try {
+      const { container } = renderSidebar();
+      const nav = container.querySelector("nav");
+      expect(nav).toHaveStyle({ width: "56px" });
+      expect(screen.getByRole("button", { name: /Dashboard/ })).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: originalInnerWidth,
+      });
+    }
+  });
+
   it("supports keyboard resizing from the right edge", () => {
     const { container } = renderSidebar();
     const nav = container.querySelector("nav");
@@ -240,6 +260,34 @@ describe("Sidebar", () => {
 
     expect(screen.getByRole("button", { name: /Claude Code/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /OpenClaw/ })).not.toBeInTheDocument();
+  });
+
+  it("renders Dashboard as the first top-level destination", () => {
+    renderSidebar();
+    const dashboardButton = screen.getByRole("button", { name: /Dashboard/ });
+    const centralButton = screen.getByRole("button", { name: /中央技能库/ });
+
+    expect(dashboardButton).toBeInTheDocument();
+    expect(
+      dashboardButton.compareDocumentPosition(centralButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("highlights Dashboard when on /dashboard", () => {
+    renderSidebar("/dashboard");
+    const dashboardButton = screen.getByRole("button", { name: /Dashboard/ });
+    const centralButton = screen.getByRole("button", { name: /中央技能库/ });
+
+    expect(dashboardButton.className).toContain("bg-sidebar-primary");
+    expect(centralButton.className).not.toContain("bg-sidebar-primary");
+  });
+
+  it("keeps Dashboard accessible when collapsed", () => {
+    renderSidebar("/dashboard");
+    fireEvent.click(screen.getByRole("button", { name: /折叠侧边栏/ }));
+
+    expect(screen.getByRole("button", { name: /Dashboard/ })).toBeInTheDocument();
   });
 
   it("central and platform entries remain clickable", () => {

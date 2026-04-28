@@ -5,6 +5,7 @@ import {
   Blocks,
   Radar,
   Layers,
+  LayoutDashboard,
   RefreshCw,
   Plus,
   ArrowUpRight,
@@ -211,6 +212,23 @@ export function GlobalSearchDialog({
 
     // Actions
     result.push(
+      {
+        id: "action-dashboard",
+        label: t("globalSearch.actionDashboard"),
+        groupKey: "actions",
+        groupLabel: t("globalSearch.actions"),
+        icon: <LayoutDashboard className="size-4 shrink-0 text-primary/70" />,
+        searchText: buildSearchText([
+          t("globalSearch.actionDashboard"),
+          t("sidebar.dashboard"),
+        ]),
+        labelText: t("globalSearch.actionDashboard").toLowerCase(),
+        descriptionText: "",
+        onSelect: () => {
+          close();
+          navigate("/dashboard");
+        },
+      },
       {
         id: "action-rescan",
         label: t("globalSearch.actionRescan"),

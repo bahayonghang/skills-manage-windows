@@ -147,6 +147,14 @@ vi.mock("@/stores/marketplaceStore", () => ({
   }),
 }));
 
+vi.mock("@/pages/DashboardView", () => ({
+  DashboardView: () => <div>dashboard-page</div>,
+}));
+
+vi.mock("@/pages/CentralSkillsView", () => ({
+  CentralSkillsView: () => <div>central-page</div>,
+}));
+
 describe("App", () => {
   it("renders the app shell with top bar", async () => {
     await act(async () => {
@@ -172,5 +180,29 @@ describe("App", () => {
     expect(screen.getAllByText("中央技能库").length).toBeGreaterThanOrEqual(1);
     // Icon-only sidebar has no "By Tool" section header
     expect(screen.queryByText("按工具")).not.toBeInTheDocument();
+  });
+
+  it("redirects / to the Dashboard route", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <App />
+        </MemoryRouter>
+      );
+    });
+
+    expect(await screen.findByText("dashboard-page")).toBeInTheDocument();
+  });
+
+  it("keeps /central routed to Central Skills", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/central"]}>
+          <App />
+        </MemoryRouter>
+      );
+    });
+
+    expect(await screen.findByText("central-page")).toBeInTheDocument();
   });
 });

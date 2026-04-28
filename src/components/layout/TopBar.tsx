@@ -34,7 +34,10 @@ export function TopBar({ onSearchClick }: TopBarProps) {
 
   // Determine current view label and count
   const viewInfo = (() => {
-    if (pathname === "/central" || pathname === "/") {
+    if (pathname === "/dashboard" || pathname === "/") {
+      return { label: t("sidebar.dashboard"), count: undefined };
+    }
+    if (pathname === "/central") {
       const count = skillsByAgent["central"] ?? 0;
       return { label: t("sidebar.centralSkills"), count };
     }
@@ -82,7 +85,7 @@ export function TopBar({ onSearchClick }: TopBarProps) {
     <header className="relative flex items-center h-12 px-4 border-b border-border bg-sidebar text-sidebar-foreground shrink-0">
       {/* App icon */}
       <button
-        onClick={() => navigate("/central")}
+        onClick={() => navigate("/dashboard")}
         className="z-10 p-1.5 rounded-md transition-colors cursor-pointer text-sidebar-primary hover:bg-muted/60 shrink-0"
         aria-label={t("app.name")}
         title={t("app.name")}
@@ -90,7 +93,7 @@ export function TopBar({ onSearchClick }: TopBarProps) {
         <Blocks className="size-4" />
       </button>
 
-      <div className="flex-1" />
+      <div className="hidden flex-1 lg:block" />
 
       <div className="pointer-events-none absolute inset-0 hidden items-center justify-center px-16 lg:flex">
         <div className="pointer-events-auto flex items-center gap-3 max-w-[min(56rem,calc(100vw-14rem))]">
@@ -128,7 +131,7 @@ export function TopBar({ onSearchClick }: TopBarProps) {
           </span>
         </button>
         {viewInfo.label && (
-          <span className="truncate text-sm text-muted-foreground">
+          <span className="hidden truncate text-sm text-muted-foreground sm:inline">
             {viewInfo.label}
           </span>
         )}
