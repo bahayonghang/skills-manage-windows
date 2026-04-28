@@ -55,9 +55,15 @@ jobs:
         shell: pwsh
         run: ./scripts/sync-version.ps1
 
-      - name: Run just ci
+      - name: Run repository CI checks
         shell: pwsh
-        run: just ci
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          pnpm typecheck
+          pnpm exec eslint "src/**/*.{ts,tsx}" --report-unused-disable-directives
+          cargo test --manifest-path src-tauri/Cargo.toml
+          cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
   windows-package:
     name: Windows x64 smoke package

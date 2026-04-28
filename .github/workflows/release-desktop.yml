@@ -152,12 +152,25 @@ jobs:
       - name: Prepare release notes
         id: release_meta
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           NOTES_PATH="release-notes/${VERSION}.md"
-          [ -f "$NOTES_PATH" ] || { echo "Release notes file not found: $NOTES_PATH" >&2; exit 1; }
-          cp "$NOTES_PATH" release-body.md
+          if [ -f "$NOTES_PATH" ]; then
+            cp "$NOTES_PATH" release-body.md
+          elif gh release view "$GITHUB_REF_NAME" --json body --jq .body > release-body.md 2>/dev/null && [ -s release-body.md ]; then
+            echo "Using existing GitHub Release body because $NOTES_PATH is not present."
+          else
+            {
+              echo "# SkillPort ${VERSION}"
+              echo
+              echo "Desktop packages for SkillPort ${VERSION}."
+              echo
+              echo "No release notes file was found at ${NOTES_PATH}."
+            } > release-body.md
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Download release artifacts
