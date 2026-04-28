@@ -79,6 +79,7 @@ interface DiscoverState {
   rescanFromDisk: () => Promise<void>;
   importToCentral: (skillId: string) => Promise<DiscoverImportResult>;
   importToPlatform: (skillId: string, agentId: string) => Promise<DiscoverImportResult>;
+  openPathInFileManager?: (path: string) => Promise<void>;
   clearResults: () => Promise<void>;
   setGroupBy: (groupBy: "project" | "platform" | "skill") => void;
   setPlatformFilter: (platformId: string | null) => void;
@@ -412,6 +413,10 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
       set({ error: String(err) });
       throw err;
     }
+  },
+
+  openPathInFileManager: async (path: string) => {
+    await invoke("open_in_file_manager", { path });
   },
 
   // ── Clear ──────────────────────────────────────────────────────────────────

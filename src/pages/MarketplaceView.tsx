@@ -30,9 +30,8 @@ import {
 } from "@/data/officialSources";
 import { MarketplaceSkillDetailDrawer, type MarketplaceSkillDetail } from "@/components/marketplace/MarketplaceSkillDetailDrawer";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
-import type { GitHubRepoPreview } from "@/types";
 
 type TabId = "recommended" | "official";
 
@@ -87,6 +86,7 @@ export function MarketplaceView() {
   const loadPreviewSkills = useMarketplaceStore((s) => s.loadPreviewSkills);
   const installSkill = useMarketplaceStore((s) => s.installSkill);
   const getNormalizedRegistryIdentity = useMarketplaceStore((s) => s.getNormalizedRegistryIdentity);
+  const previewGitHubRepoSkills = useMarketplaceStore((s) => s.previewGitHubRepoSkills);
   const githubImport = useMarketplaceStore((s) => s.githubImport);
   const previewGitHubRepoImport = useMarketplaceStore((s) => s.previewGitHubRepoImport);
   const importGitHubRepoSkills = useMarketplaceStore((s) => s.importGitHubRepoSkills);
@@ -228,16 +228,7 @@ export function MarketplaceView() {
         }
       }
 
-      const preview = await invoke<GitHubRepoPreview>("preview_github_repo_import", {
-        repoUrl,
-      });
-      if (preview.previewWorkspaceId) {
-        void Promise.resolve(
-          invoke("discard_github_repo_preview_workspace", {
-            workspaceId: preview.previewWorkspaceId,
-          }),
-        ).catch(() => undefined);
-      }
+      const preview = await previewGitHubRepoSkills(repoUrl);
       const nextPreviewSkills = preview.skills.map((skill) => ({
         id: skill.skillId,
         name: skill.skillName,

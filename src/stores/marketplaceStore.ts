@@ -59,6 +59,7 @@ interface MarketplaceState {
   removeRegistry: (registryId: string) => Promise<void>;
   getNormalizedRegistryIdentity: (url: string) => string | null;
   findDuplicateRegistry: (url: string) => SkillRegistry | null;
+  previewGitHubRepoSkills: (repoUrl: string) => Promise<GitHubRepoPreview>;
   previewGitHubRepoImport: (repoUrl: string) => Promise<GitHubRepoPreview>;
   importGitHubRepoSkills: (
     repoUrl: string,
@@ -338,6 +339,18 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
         selectedRegistryId: s.selectedRegistryId === registryId ? null : s.selectedRegistryId,
       }));
     }
+  },
+
+  previewGitHubRepoSkills: async (repoUrl: string) => {
+    if (!isTauriRuntime()) {
+      throw new Error("Desktop-only feature: GitHub repo preview is available in the Tauri app.");
+    }
+
+    const preview = await invoke<GitHubRepoPreview>("preview_github_repo_import", {
+      repoUrl,
+    });
+    await discardGitHubRepoPreviewWorkspace(preview.previewWorkspaceId);
+    return preview;
   },
 
   previewGitHubRepoImport: async (repoUrl: string) => {

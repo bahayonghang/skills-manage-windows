@@ -80,6 +80,9 @@ const storeState: StoreState = {
 const mockLoadRegistries = vi.fn();
 const mockLoadPreviewSkills = vi.fn<() => Promise<MarketplaceSkill[]>>();
 const mockInstallSkill = vi.fn();
+const mockPreviewGitHubRepoSkills = vi.fn((repoUrl: string) =>
+  mockInvoke("preview_github_repo_import", { repoUrl })
+);
 const mockPreviewGitHubRepoImport = vi.fn();
 const mockImportGitHubRepoSkills = vi.fn();
 const mockResetGitHubImport = vi.fn();
@@ -98,6 +101,7 @@ vi.mock("@/stores/marketplaceStore", () => ({
       loadPreviewSkills: mockLoadPreviewSkills,
       installSkill: mockInstallSkill,
       getNormalizedRegistryIdentity: normalizeRegistryIdentity,
+      previewGitHubRepoSkills: mockPreviewGitHubRepoSkills,
       previewGitHubRepoImport: mockPreviewGitHubRepoImport,
       importGitHubRepoSkills: mockImportGitHubRepoSkills,
       resetGitHubImport: mockResetGitHubImport,
@@ -206,6 +210,7 @@ describe("Marketplace official preview", () => {
     mockLoadRegistries.mockReset();
     mockLoadPreviewSkills.mockReset();
     mockInstallSkill.mockReset();
+    mockPreviewGitHubRepoSkills.mockClear();
     mockPreviewGitHubRepoImport.mockReset();
     mockImportGitHubRepoSkills.mockReset();
     mockResetGitHubImport.mockReset();

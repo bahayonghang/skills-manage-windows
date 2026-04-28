@@ -23,7 +23,6 @@ import { useDiscoverStore } from "@/stores/discoverStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { BatchInstallResult, DiscoveredSkill, SkillWithLinks } from "@/types";
-import { invoke } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { consumeScrollPosition } from "@/lib/scrollRestoration";
 import {
@@ -117,6 +116,7 @@ export function DiscoverView() {
   const refreshDiscoverCounts = useDiscoverStore((s) => s.refreshCounts);
   const importToCentral = useDiscoverStore((s) => s.importToCentral);
   const importToPlatform = useDiscoverStore((s) => s.importToPlatform);
+  const openPathInFileManager = useDiscoverStore((s) => s.openPathInFileManager);
   const toggleSkillSelection = useDiscoverStore((s) => s.toggleSkillSelection);
   const clearSelection = useDiscoverStore((s) => s.clearSelection);
   const loadScanRoots = useDiscoverStore((s) => s.loadScanRoots);
@@ -431,12 +431,12 @@ export function DiscoverView() {
           toast.success(t("targets.pathCopied"));
           return;
         }
-        await invoke("open_in_file_manager", { path: projectPath });
+        await openPathInFileManager?.(projectPath);
       } catch (err) {
         toast.error(t("discover.openPathError", { error: String(err) }));
       }
     },
-    [isRemoteTarget, t]
+    [isRemoteTarget, openPathInFileManager, t]
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────
