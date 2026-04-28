@@ -4,7 +4,7 @@
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/jetbrains-mono";
 
-@custom-variant dark (&:is([data-theme='mocha'] *, [data-theme='macchiato'] *, [data-theme='frappe'] *));
+@custom-variant dark (&:is([data-theme='mocha'] *, [data-theme='macchiato'] *, [data-theme='frappe'] *, [data-theme='claude-dark'] *));
 
 /* ─── Global hover color variable ─────────────────────────────────────────── */
 :root {
@@ -324,6 +324,130 @@
     --sidebar-ring: #7287fd;
 }
 
+/* Claude Light (Anthropic cream canvas + coral accent from getdesign slug `claude`) */
+[data-theme='claude-light'] {
+    --ctp-rosewater: #e6dfd8;
+    --ctp-flamingo: #d99a8b;
+    --ctp-pink: #d88a96;
+    --ctp-mauve: #9c7f94;
+    --ctp-red: #c64545;
+    --ctp-maroon: #a9583e;
+    --ctp-peach: #e8a55a;
+    --ctp-yellow: #d4a017;
+    --ctp-green: #5db872;
+    --ctp-teal: #5db8a6;
+    --ctp-sky: #7bb7ba;
+    --ctp-sapphire: #6f96a8;
+    --ctp-blue: #6f96a8;
+    --ctp-lavender: #cc785c;
+    --ctp-text: #141413;
+    --ctp-subtext1: #3d3d3a;
+    --ctp-subtext0: #6c6a64;
+    --ctp-overlay2: #8e8b82;
+    --ctp-overlay1: #a09d96;
+    --ctp-overlay0: #c9c0b5;
+    --ctp-surface2: #e8e0d2;
+    --ctp-surface1: #efe9de;
+    --ctp-surface0: #f5f0e8;
+    --ctp-base: #faf9f5;
+    --ctp-mantle: #f5f0e8;
+    --ctp-crust: #e6dfd8;
+    --background: #faf9f5;
+    --foreground: #141413;
+    --card: #efe9de;
+    --card-foreground: #141413;
+    --popover: #f5f0e8;
+    --popover-foreground: #141413;
+    --primary: #cc785c;
+    --primary-foreground: #141413;
+    --secondary: #f5f0e8;
+    --secondary-foreground: #252523;
+    --muted: #efe9de;
+    --muted-foreground: #6c6a64;
+    --accent: #e8e0d2;
+    --accent-foreground: #141413;
+    --destructive: #c64545;
+    --border: #e6dfd8;
+    --input: #e6dfd8;
+    --ring: #cc785c;
+    --chart-1: #5db872;
+    --chart-2: #5db8a6;
+    --chart-3: #cc785c;
+    --chart-4: #e8a55a;
+    --chart-5: #c64545;
+    --radius: 0.625rem;
+    --sidebar: #f5f0e8;
+    --sidebar-foreground: #141413;
+    --sidebar-primary: #cc785c;
+    --sidebar-primary-foreground: #141413;
+    --sidebar-accent: #efe9de;
+    --sidebar-accent-foreground: #141413;
+    --sidebar-border: #e6dfd8;
+    --sidebar-ring: #cc785c;
+}
+
+/* Claude Dark (Anthropic dark product surface + coral accent from getdesign slug `claude`) */
+[data-theme='claude-dark'] {
+    --ctp-rosewater: #e6dfd8;
+    --ctp-flamingo: #d99a8b;
+    --ctp-pink: #d88a96;
+    --ctp-mauve: #9c7f94;
+    --ctp-red: #c64545;
+    --ctp-maroon: #a9583e;
+    --ctp-peach: #e8a55a;
+    --ctp-yellow: #d4a017;
+    --ctp-green: #5db872;
+    --ctp-teal: #5db8a6;
+    --ctp-sky: #7bb7ba;
+    --ctp-sapphire: #6f96a8;
+    --ctp-blue: #6f96a8;
+    --ctp-lavender: #cc785c;
+    --ctp-text: #faf9f5;
+    --ctp-subtext1: #d6d0c7;
+    --ctp-subtext0: #a09d96;
+    --ctp-overlay2: #8e8b82;
+    --ctp-overlay1: #6c6a64;
+    --ctp-overlay0: #3d3d3a;
+    --ctp-surface2: #3d3d3a;
+    --ctp-surface1: #252320;
+    --ctp-surface0: #1f1e1b;
+    --ctp-base: #181715;
+    --ctp-mantle: #1f1e1b;
+    --ctp-crust: #141413;
+    --background: #181715;
+    --foreground: #faf9f5;
+    --card: #252320;
+    --card-foreground: #faf9f5;
+    --popover: #252320;
+    --popover-foreground: #faf9f5;
+    --primary: #cc785c;
+    --primary-foreground: #181715;
+    --secondary: #1f1e1b;
+    --secondary-foreground: #faf9f5;
+    --muted: #1f1e1b;
+    --muted-foreground: #a09d96;
+    --accent: #3d3d3a;
+    --accent-foreground: #faf9f5;
+    --destructive: #c64545;
+    --border: #3d3d3a;
+    --input: #3d3d3a;
+    --ring: #cc785c;
+    --chart-1: #5db872;
+    --chart-2: #5db8a6;
+    --chart-3: #cc785c;
+    --chart-4: #e8a55a;
+    --chart-5: #c64545;
+    --radius: 0.625rem;
+    --sidebar: #141413;
+    --sidebar-foreground: #faf9f5;
+    --sidebar-primary: #cc785c;
+    --sidebar-primary-foreground: #181715;
+    --sidebar-accent: #252320;
+    --sidebar-accent-foreground: #faf9f5;
+    --sidebar-border: #3d3d3a;
+    --sidebar-ring: #cc785c;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Accent color overrides — [data-accent='...'] on <html>
    Default accent is Lavender (applied via the flavor blocks above).
@@ -420,6 +544,14 @@
 [data-theme='latte'][data-accent='blue'] {
     --primary-foreground: #fbfaff;
     --sidebar-primary-foreground: #fbfaff;
+}
+
+[data-theme='claude-light'][data-accent='red'],
+[data-theme='claude-light'][data-accent='maroon'],
+[data-theme='claude-dark'][data-accent='red'],
+[data-theme='claude-dark'][data-accent='maroon'] {
+    --primary-foreground: #faf9f5;
+    --sidebar-primary-foreground: #faf9f5;
 }
 
 @layer base {

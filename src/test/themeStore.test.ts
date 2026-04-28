@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { useThemeStore, CatppuccinFlavor, ACCENT_NAMES } from "../stores/themeStore";
+import { useThemeStore, ThemeFlavor, ACCENT_NAMES, THEME_FLAVORS } from "../stores/themeStore";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,8 +64,8 @@ describe("themeStore", () => {
     expect(localStorage.getItem("catppuccin-flavor")).toBe("macchiato");
   });
 
-  it("setFlavor works for all four flavors", () => {
-    const flavors: CatppuccinFlavor[] = ["mocha", "macchiato", "frappe", "latte"];
+  it("setFlavor works for all themes", () => {
+    const flavors: ThemeFlavor[] = THEME_FLAVORS;
     for (const flavor of flavors) {
       useThemeStore.getState().setFlavor(flavor);
       expect(useThemeStore.getState().flavor).toBe(flavor);
@@ -107,6 +107,13 @@ describe("themeStore", () => {
     useThemeStore.getState().init();
     expect(useThemeStore.getState().flavor).toBe("macchiato");
     expect(document.documentElement.dataset.theme).toBe("macchiato");
+  });
+
+  it("init accepts stored Claude themes", () => {
+    localStorage.setItem("catppuccin-flavor", "claude-dark");
+    useThemeStore.getState().init();
+    expect(useThemeStore.getState().flavor).toBe("claude-dark");
+    expect(document.documentElement.dataset.theme).toBe("claude-dark");
   });
 
   it("init applies stored accent from localStorage", () => {
@@ -157,7 +164,7 @@ describe("themeStore", () => {
     useThemeStore.getState().init();
     const stored = localStorage.getItem("catppuccin-flavor");
     expect(stored).toBeTruthy();
-    expect(["mocha", "macchiato", "frappe", "latte"]).toContain(stored);
+    expect(THEME_FLAVORS).toContain(stored as ThemeFlavor);
 
     spy.mockRestore();
   });

@@ -2,7 +2,22 @@ import { create } from "zustand";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type CatppuccinFlavor = "mocha" | "macchiato" | "frappe" | "latte";
+export type ThemeFlavor =
+  | "mocha"
+  | "macchiato"
+  | "frappe"
+  | "latte"
+  | "claude-light"
+  | "claude-dark";
+
+export const THEME_FLAVORS: ThemeFlavor[] = [
+  "mocha",
+  "macchiato",
+  "frappe",
+  "latte",
+  "claude-light",
+  "claude-dark",
+];
 
 /** The 14 Catppuccin accent color names (same order as the Obsidian theme). */
 export type CatppuccinAccent =
@@ -45,23 +60,22 @@ const ACCENT_STORAGE_KEY = "catppuccin-accent";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Detect system color-scheme preference. Returns "latte" for light, "mocha" for dark. */
-function systemFlavor(): CatppuccinFlavor {
+function systemFlavor(): ThemeFlavor {
   if (typeof window === "undefined") return "mocha";
   return window.matchMedia("(prefers-color-scheme: light)").matches
     ? "latte"
     : "mocha";
 }
 
+function isThemeFlavor(value: string | null): value is ThemeFlavor {
+  return THEME_FLAVORS.includes(value as ThemeFlavor);
+}
+
 /** Read persisted flavor from localStorage (returns null if not set). */
-function readStoredFlavor(): CatppuccinFlavor | null {
+function readStoredFlavor(): ThemeFlavor | null {
   try {
     const stored = localStorage.getItem(FLAVOR_STORAGE_KEY);
-    if (
-      stored === "mocha" ||
-      stored === "macchiato" ||
-      stored === "frappe" ||
-      stored === "latte"
-    ) {
+    if (isThemeFlavor(stored)) {
       return stored;
     }
   } catch {
@@ -84,7 +98,7 @@ function readStoredAccent(): CatppuccinAccent | null {
 }
 
 /** Apply flavor to the DOM — sets data-theme on <html> and persists to localStorage. */
-function applyFlavor(flavor: CatppuccinFlavor): void {
+function applyFlavor(flavor: ThemeFlavor): void {
   if (typeof document !== "undefined") {
     document.documentElement.dataset.theme = flavor;
   }
@@ -110,11 +124,11 @@ function applyAccent(accent: CatppuccinAccent): void {
 // ─── State ────────────────────────────────────────────────────────────────────
 
 interface ThemeState {
-  flavor: CatppuccinFlavor;
+  flavor: ThemeFlavor;
   accent: CatppuccinAccent;
 
   // Actions
-  setFlavor: (flavor: CatppuccinFlavor) => void;
+  setFlavor: (flavor: ThemeFlavor) => void;
   setAccent: (accent: CatppuccinAccent) => void;
   /** Initialize theme — call once before React renders to prevent flash. */
   init: () => void;

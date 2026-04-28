@@ -16,7 +16,7 @@ import {
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { Switch } from "@/components/ui/switch";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { useThemeStore, CatppuccinFlavor, CatppuccinAccent, ACCENT_NAMES } from "@/stores/themeStore";
+import { useThemeStore, ThemeFlavor, CatppuccinAccent, ACCENT_NAMES, THEME_FLAVORS } from "@/stores/themeStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useDiscoverStore } from "@/stores/discoverStore";
@@ -87,12 +87,14 @@ function sshCredentialStatusClass(status: string | null) {
   }
 }
 
-/** Catppuccin Lavender hex per flavor — used for visual preview dots on flavor buttons (default accent). */
-const FLAVOR_COLORS: Record<CatppuccinFlavor, string> = {
+/** Default accent hex per theme, used for visual preview dots on theme buttons. */
+const FLAVOR_COLORS: Record<ThemeFlavor, string> = {
   mocha: "#b4befe",
   macchiato: "#b7bdf8",
   frappe: "#babbf1",
   latte: "#7287fd",
+  "claude-light": "#cc785c",
+  "claude-dark": "#cc785c",
 };
 
 /**
@@ -117,7 +119,7 @@ const CTP_VAR_MAP: Record<CatppuccinAccent, string> = {
   lavender: "--ctp-lavender",
 };
 
-const FLAVOR_ORDER: CatppuccinFlavor[] = ["mocha", "macchiato", "frappe", "latte"];
+const FLAVOR_ORDER: ThemeFlavor[] = THEME_FLAVORS;
 
 // ─── ScanDirectoryRow ─────────────────────────────────────────────────────────
 

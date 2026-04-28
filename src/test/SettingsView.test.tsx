@@ -21,6 +21,7 @@ vi.mock("../stores/themeStore", () => ({
     "peach", "yellow", "green", "teal", "sky", "sapphire",
     "blue", "lavender",
   ],
+  THEME_FLAVORS: ["mocha", "macchiato", "frappe", "latte", "claude-light", "claude-dark"],
 }));
 
 vi.mock("../stores/targetStore", () => ({
@@ -779,13 +780,15 @@ describe("SettingsView", () => {
     expect(screen.getByText("主题风格")).toBeTruthy();
   });
 
-  it("renders all 4 flavor buttons", () => {
+  it("renders all flavor buttons", () => {
     setupMocks();
     renderSettingsView();
     expect(screen.getByRole("button", { name: /Mocha/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Macchiato/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Frappé/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Latte/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Claude 浅色/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Claude 深色/ })).toBeTruthy();
   });
 
   it("active flavor button has aria-pressed=true", () => {
@@ -819,6 +822,8 @@ describe("SettingsView", () => {
       screen.getByRole("button", { name: /Macchiato/ }),
       screen.getByRole("button", { name: /Frappé/ }),
       screen.getByRole("button", { name: /Latte/ }),
+      screen.getByRole("button", { name: /Claude 浅色/ }),
+      screen.getByRole("button", { name: /Claude 深色/ }),
     ];
     for (const btn of buttons) {
       const dot = btn.querySelector(".rounded-full");
