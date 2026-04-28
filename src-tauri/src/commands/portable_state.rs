@@ -403,25 +403,60 @@ async fn export_skillport_state_impl(pool: &DbPool) -> Result<String, String> {
 }
 
 async fn export_github_sources(pool: &DbPool) -> Result<Vec<PortableGithubSource>, String> {
-    let rows = sqlx::query(
-        "SELECT name, source_type, url, is_enabled
+    let registry_rows = sqlx::query(
+        "SELECT url, is_enabled
          FROM skill_registries
-         WHERE source_type = 'github'
-         ORDER BY is_builtin DESC, name",
+         WHERE source_type = 'github'",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    let registry_enabled_by_identity = registry_rows
+        .iter()
+        .map(|row| {
+            (
+                normalize_registry_identity(row.get::<String, _>("url").as_str()),
+                row.get::<bool, _>("is_enabled"),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+
+    let rows = sqlx::query(
+        "SELECT DISTINCT r.name, r.source_type, r.url
+         FROM skill_repositories r
+         JOIN skill_repository_members m ON m.repository_id = r.id
+         JOIN skills s ON s.id = m.skill_id
+         WHERE s.is_central = 1
+           AND r.source_type = 'github'
+           AND r.is_unknown = 0
+           AND r.url IS NOT NULL
+           AND TRIM(r.url) <> ''
+         ORDER BY lower(r.name)",
     )
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    Ok(rows
-        .iter()
-        .map(|row| PortableGithubSource {
+    let mut seen = HashSet::new();
+    let mut sources = Vec::with_capacity(rows.len());
+    for row in rows {
+        let url: String = row.get("url");
+        let identity = normalize_registry_identity(&url);
+        if !seen.insert(identity.clone()) {
+            continue;
+        }
+        sources.push(PortableGithubSource {
             name: row.get("name"),
             source_type: row.get("source_type"),
-            url: row.get("url"),
-            is_enabled: row.get("is_enabled"),
-        })
-        .collect())
+            url,
+            is_enabled: registry_enabled_by_identity
+                .get(&identity)
+                .copied()
+                .unwrap_or(true),
+        });
+    }
+
+    Ok(sources)
 }
 
 fn exportable_skill_source(
@@ -956,6 +991,7 @@ mod tests {
         let manifest = parse_manifest(&json).unwrap();
         assert_eq!(manifest.kind, EXPORT_KIND);
         assert_eq!(manifest.version, EXPORT_VERSION);
+        assert!(manifest.github_sources.is_empty());
     }
 
     #[tokio::test]
@@ -1013,12 +1049,94 @@ mod tests {
         let manifest = parse_manifest(&export_skillport_state_impl(&pool).await.unwrap()).unwrap();
 
         assert_eq!(manifest.central_skills.len(), 1);
+        assert_eq!(manifest.github_sources.len(), 1);
+        assert_eq!(manifest.github_sources[0].name, "openai/skills");
+        assert_eq!(
+            manifest.github_sources[0].url,
+            "https://github.com/openai/skills"
+        );
         assert_eq!(
             manifest.central_skills[0].source.source_path,
             "skills/openai-docs/SKILL.md"
         );
         assert_eq!(manifest.central_skills[0].tags[0].name, "Docs");
         assert_eq!(manifest.unrestorable_skills.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn export_counts_distinct_github_repositories_backing_central_skills() {
+        let pool = setup_test_db().await;
+        for (id, name) in [
+            ("alpha-one", "Alpha One"),
+            ("alpha-two", "Alpha Two"),
+            ("beta-one", "Beta One"),
+        ] {
+            db::upsert_skill(
+                &pool,
+                &Skill {
+                    id: id.to_string(),
+                    name: name.to_string(),
+                    description: None,
+                    file_path: format!("/tmp/{id}/SKILL.md"),
+                    canonical_path: Some(format!("/tmp/{id}")),
+                    is_central: true,
+                    source: Some("github:test/source".to_string()),
+                    content: None,
+                    scanned_at: "2026-04-25T00:00:00Z".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+        }
+        db::assign_github_repository_to_skill(
+            &pool,
+            "example",
+            "alpha-skills",
+            "main",
+            "https://github.com/example/alpha-skills",
+            "alpha-one",
+            "skills/alpha-one",
+        )
+        .await
+        .unwrap();
+        db::assign_github_repository_to_skill(
+            &pool,
+            "example",
+            "alpha-skills",
+            "main",
+            "https://github.com/example/alpha-skills",
+            "alpha-two",
+            "skills/alpha-two",
+        )
+        .await
+        .unwrap();
+        db::assign_github_repository_to_skill(
+            &pool,
+            "example",
+            "beta-skills",
+            "main",
+            "https://github.com/example/beta-skills",
+            "beta-one",
+            "skills/beta-one",
+        )
+        .await
+        .unwrap();
+
+        let manifest = parse_manifest(&export_skillport_state_impl(&pool).await.unwrap()).unwrap();
+        let urls = manifest
+            .github_sources
+            .iter()
+            .map(|source| source.url.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            urls,
+            vec![
+                "https://github.com/example/alpha-skills",
+                "https://github.com/example/beta-skills",
+            ]
+        );
+        assert_eq!(manifest.central_skills.len(), 3);
     }
 
     #[test]

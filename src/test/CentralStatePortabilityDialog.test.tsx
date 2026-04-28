@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
+import defaultCapability from "../../src-tauri/capabilities/default.json";
 import { CentralStatePortabilityDialog } from "../components/central/CentralStatePortabilityDialog";
 import type { SkillportStateImportPreview } from "../types";
 
@@ -63,6 +64,14 @@ const preview: SkillportStateImportPreview = {
 describe("CentralStatePortabilityDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("keeps Tauri FS permissions for user-selected JSON files", () => {
+    const capability = defaultCapability as { permissions: string[] };
+
+    expect(capability.permissions).toContain("dialog:default");
+    expect(capability.permissions).toContain("fs:allow-read-text-file");
+    expect(capability.permissions).toContain("fs:allow-write-text-file");
   });
 
   it("saves the exported state JSON", async () => {
