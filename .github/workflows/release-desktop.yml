@@ -157,9 +157,14 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
+          MAJOR_MINOR="$(printf '%s' "$VERSION" | cut -d. -f1,2)"
           NOTES_PATH="release-notes/${VERSION}.md"
+          SERIES_NOTES_PATH="release-notes/${MAJOR_MINOR}.md"
           if [ -f "$NOTES_PATH" ]; then
             cp "$NOTES_PATH" release-body.md
+          elif [ -f "$SERIES_NOTES_PATH" ]; then
+            cp "$SERIES_NOTES_PATH" release-body.md
+            echo "Using merged release notes from ${SERIES_NOTES_PATH}."
           elif gh release view "$GITHUB_REF_NAME" --json body --jq .body > release-body.md 2>/dev/null && [ -s release-body.md ]; then
             echo "Using existing GitHub Release body because $NOTES_PATH is not present."
           else
@@ -168,7 +173,7 @@ jobs:
               echo
               echo "Desktop packages for SkillPort ${VERSION}."
               echo
-              echo "No release notes file was found at ${NOTES_PATH}."
+              echo "No release notes file was found at ${NOTES_PATH} or ${SERIES_NOTES_PATH}."
             } > release-body.md
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
