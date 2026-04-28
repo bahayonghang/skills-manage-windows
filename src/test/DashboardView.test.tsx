@@ -368,6 +368,14 @@ describe("DashboardView", () => {
       },
       collectionCount: collections.length,
       discoveredCount: 4,
+      dashboardCentralSummary: {
+        centralSkillCount: 3,
+        updatesAvailable: 1,
+        aiReviewCount: 1,
+        uncategorizedCount: 2,
+        unassignedSourceCount: 1,
+        sourceRepositories: repositories,
+      },
       categoryVisibility: {
         coding: true,
         lobster: true,
@@ -413,11 +421,11 @@ describe("DashboardView", () => {
     renderDashboard();
 
     await waitFor(() => {
-      expect(mockLoadCentralSkills).toHaveBeenCalledTimes(1);
       expect(mockLoadCollections).toHaveBeenCalledTimes(1);
       expect(mockLoadRegistries).toHaveBeenCalledTimes(1);
       expect(mockLoadLogs).toHaveBeenCalledWith({ limit: 5, offset: 0 });
     });
+    expect(mockLoadCentralSkills).not.toHaveBeenCalled();
     expect(mockSubscribeAiTagProgress).toHaveBeenCalledTimes(1);
     expect(mockSubscribeUpdateProgress).toHaveBeenCalledTimes(1);
     expect(mockSyncRegistry).not.toHaveBeenCalled();
@@ -443,6 +451,17 @@ describe("DashboardView", () => {
       error: "central offline",
     };
     operationLogState = { ...operationLogState, entries: [], total: 0 };
+    platformState = {
+      ...platformState,
+      dashboardCentralSummary: {
+        centralSkillCount: 0,
+        updatesAvailable: 0,
+        aiReviewCount: 0,
+        uncategorizedCount: 0,
+        unassignedSourceCount: 0,
+        sourceRepositories: [],
+      },
+    };
 
     renderDashboard();
 

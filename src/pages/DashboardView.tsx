@@ -52,6 +52,15 @@ import type {
 
 const RECENT_LOG_LIMIT = 5;
 
+const EMPTY_DASHBOARD_CENTRAL_SUMMARY = {
+  centralSkillCount: 0,
+  updatesAvailable: 0,
+  aiReviewCount: 0,
+  uncategorizedCount: 0,
+  unassignedSourceCount: 0,
+  sourceRepositories: [],
+};
+
 function formatDateTime(value: string | null | undefined, fallback: string) {
   if (!value) return fallback;
   const date = new Date(value);
@@ -232,6 +241,9 @@ export function DashboardView() {
   const skillsByAgent = usePlatformStore((s) => s.skillsByAgent);
   const collectionCount = usePlatformStore((s) => s.collectionCount);
   const discoveredCount = usePlatformStore((s) => s.discoveredCount);
+  const dashboardCentralSummary =
+    usePlatformStore((s) => s.dashboardCentralSummary) ??
+    EMPTY_DASHBOARD_CENTRAL_SUMMARY;
   const categoryVisibility =
     usePlatformStore((s) => s.categoryVisibility) ??
     DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
@@ -242,14 +254,12 @@ export function DashboardView() {
 
   const centralSkills = useCentralSkillsStore((s) => s.skills);
   const repositories = useCentralSkillsStore((s) => s.repositories);
-  const tags = useCentralSkillsStore((s) => s.tags);
   const aiTagReviews = useCentralSkillsStore((s) => s.aiTagReviews);
   const aiTagJob = useCentralSkillsStore((s) => s.aiTagJob);
   const updateStatuses = useCentralSkillsStore((s) => s.updateStatuses);
   const updateJob = useCentralSkillsStore((s) => s.updateJob);
   const isCentralLoading = useCentralSkillsStore((s) => s.isLoading);
   const centralError = useCentralSkillsStore((s) => s.error);
-  const loadCentralSkills = useCentralSkillsStore((s) => s.loadCentralSkills);
   const subscribeAiTagProgress = useCentralSkillsStore(
     (s) => s.subscribeAiTagProgress
   );
@@ -275,32 +285,9 @@ export function DashboardView() {
 
   const activeTarget = useTargetStore((s) => s.activeTarget);
 
-  const requestedCentralRef = useRef(false);
   const requestedCollectionsRef = useRef(false);
   const requestedRegistriesRef = useRef(false);
   const requestedLogsRef = useRef(false);
-
-  useEffect(() => {
-    if (requestedCentralRef.current || isCentralLoading) return;
-    const hasCentralData =
-      centralSkills.length > 0 ||
-      repositories.length > 0 ||
-      tags.length > 0 ||
-      aiTagReviews.length > 0 ||
-      Object.keys(updateStatuses).length > 0;
-    if (hasCentralData) return;
-
-    requestedCentralRef.current = true;
-    void loadCentralSkills();
-  }, [
-    aiTagReviews.length,
-    centralSkills.length,
-    isCentralLoading,
-    loadCentralSkills,
-    repositories.length,
-    tags.length,
-    updateStatuses,
-  ]);
 
   useEffect(() => {
     if (
@@ -374,35 +361,50 @@ export function DashboardView() {
   const centralTotal =
     centralSkills.length > 0
       ? centralSkills.length
-      : skillsByAgent.central ?? 0;
+      : dashboardCentralSummary.centralSkillCount || skillsByAgent.central || 0;
   const resolvedCollectionCount =
     collections.length > 0 ? collections.length : collectionCount;
   const enabledTargets = visiblePlatformTargets.filter(
     (agent) => agent.is_enabled
   );
-  const updatesAvailable = centralSkills.filter(
-    (skill) => updateStatuses[skill.id]?.status === "update_available"
-  ).length;
-  const uncategorizedCount = centralSkills.filter((skill) => {
-    const skillTags = skill.tags ?? [];
-    return (
-      skillTags.length === 0 ||
-      skillTags.some((tag) => tag.id === "uncategorized")
-    );
-  }).length;
-  const unassignedSourceCount = centralSkills.filter(
-    (skill) => skill.is_source_unknown || skill.repository?.is_unknown
-  ).length;
+  const hasCentralSkillData = centralSkills.length > 0;
+  const updatesAvailable = hasCentralSkillData
+    ? centralSkills.filter(
+        (skill) => updateStatuses[skill.id]?.status === "update_available"
+      ).length
+    : dashboardCentralSummary.updatesAvailable;
+  const aiReviewCount =
+    aiTagReviews.length > 0
+      ? aiTagReviews.length
+      : dashboardCentralSummary.aiReviewCount;
+  const uncategorizedCount = hasCentralSkillData
+    ? centralSkills.filter((skill) => {
+        const skillTags = skill.tags ?? [];
+        return (
+          skillTags.length === 0 ||
+          skillTags.some((tag) => tag.id === "uncategorized")
+        );
+      }).length
+    : dashboardCentralSummary.uncategorizedCount;
+  const unassignedSourceCount = hasCentralSkillData
+    ? centralSkills.filter(
+        (skill) => skill.is_source_unknown || skill.repository?.is_unknown
+      ).length
+    : dashboardCentralSummary.unassignedSourceCount;
 
   const sortedRepositories = useMemo(
     () =>
-      [...repositories]
+      [
+        ...(repositories.length > 0
+          ? repositories
+          : dashboardCentralSummary.sourceRepositories),
+      ]
         .sort(
           (left, right) =>
             getRepositorySkillCount(right) - getRepositorySkillCount(left)
         )
         .slice(0, 5),
-    [repositories]
+    [dashboardCentralSummary.sourceRepositories, repositories]
   );
 
   const targetDescription =
@@ -437,7 +439,7 @@ export function DashboardView() {
     {
       key: "ai",
       label: t("dashboard.queue.aiReviews"),
-      count: aiTagReviews.length,
+      count: aiReviewCount,
       description: t("dashboard.queue.aiReviewsDesc"),
     },
     {
@@ -587,7 +589,7 @@ export function DashboardView() {
             testId="dashboard-metric-ai"
             icon={<ListChecks className="size-4" />}
             label={t("dashboard.metrics.aiReviews")}
-            value={aiTagReviews.length}
+            value={aiReviewCount}
             description={t("dashboard.metrics.aiReviewsDesc")}
             onClick={() => navigate("/central")}
           />

@@ -44,10 +44,19 @@ export interface SkillCountsSummary {
 export interface BootstrapSnapshot {
   agents: AgentWithStatus[];
   cachedSkillCounts: Record<string, number>;
+  dashboardCentralSummary?: DashboardCentralSummary;
   collectionCount: number;
   discoveredCount: number;
   lastScanAt: string | null;
   scanState: ScanState;
+}
+export interface DashboardCentralSummary {
+  centralSkillCount: number;
+  updatesAvailable: number;
+  aiReviewCount: number;
+  uncategorizedCount: number;
+  unassignedSourceCount: number;
+  sourceRepositories: SkillRepositoryWithStats[];
 }
 export type ClaudeSourceKind = "user" | "plugin";
 

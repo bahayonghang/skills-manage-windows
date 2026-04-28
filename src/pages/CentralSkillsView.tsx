@@ -653,6 +653,7 @@ export function CentralSkillsView() {
     () => selectedSkillIds.filter((skillId) => updateStatuses[skillId]?.status === "update_available"),
     [selectedSkillIds, updateStatuses]
   );
+  const selectedSkillIdSet = useMemo(() => new Set(selectedSkillIds), [selectedSkillIds]);
   const updateTargetSkillIds =
     selectedSkillIds.length > 0 ? selectedUpdatableSkillIds : updateAvailableSkillIds;
   const uncategorizedCount = useMemo(
@@ -664,11 +665,18 @@ export function CentralSkillsView() {
     [skills]
   );
   const tagCounts = useMemo(
-    () =>
-      tags.map((tag) => ({
+    () => {
+      const counts = new Map<string, number>();
+      for (const skill of skills) {
+        for (const tag of skill.tags ?? []) {
+          counts.set(tag.id, (counts.get(tag.id) ?? 0) + 1);
+        }
+      }
+      return tags.map((tag) => ({
         tag,
-        count: skills.filter((skill) => (skill.tags ?? []).some((item) => item.id === tag.id)).length,
-      })),
+        count: counts.get(tag.id) ?? 0,
+      }));
+    },
     [skills, tags]
   );
   const filteredManualTags = useMemo(() => {
@@ -1377,7 +1385,7 @@ export function CentralSkillsView() {
         name={skill.name}
         description={skill.description}
         checkbox={{
-          checked: selectedSkillIds.includes(skill.id),
+          checked: selectedSkillIdSet.has(skill.id),
           onChange: () => handleToggleSelection(skill.id),
         }}
         tags={(skill.tags ?? []).map((tag) => ({ key: tag.id, label: tag.name }))}
@@ -1407,7 +1415,7 @@ export function CentralSkillsView() {
         name={skill.name}
         description={skill.description}
         checkbox={{
-          checked: selectedSkillIds.includes(skill.id),
+          checked: selectedSkillIdSet.has(skill.id),
           onChange: () => handleToggleSelection(skill.id),
         }}
         tags={(skill.tags ?? []).map((tag) => ({ key: tag.id, label: tag.name }))}
