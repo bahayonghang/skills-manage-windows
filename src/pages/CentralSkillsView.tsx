@@ -1696,7 +1696,7 @@ export function CentralSkillsView() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
+        <div className="scrollbar-subtle min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {renderCategorizeScope()}
 
           <section className="rounded-2xl border border-border/90 bg-background p-4 shadow-sm">
@@ -1950,7 +1950,7 @@ export function CentralSkillsView() {
           className="relative hidden min-h-0 shrink-0 border-r border-border/80 bg-muted/15 md:flex md:flex-col"
           style={{ width: filterSidebarWidth }}
         >
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4 pr-2 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
+          <div className="scrollbar-subtle min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4 pr-2">
             <FilterSection
               icon={<FolderOpen className="size-3.5" />}
               title={t("central.repositories")}
@@ -2065,7 +2065,7 @@ export function CentralSkillsView() {
           />
         </aside>
 
-        <div ref={contentRef} className="flex-1 overflow-auto p-6">
+        <div ref={contentRef} className="scrollbar-subtle flex-1 overflow-auto p-6">
         {isLoading ? (
           <EmptyState message={t("central.loading")} />
         ) : skills.length === 0 ? (

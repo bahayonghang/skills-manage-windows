@@ -288,10 +288,15 @@ describe("SkillDetailDrawer", () => {
     expect(drawer.className).toContain("w-screen");
     expect(drawer.className).toContain("md:w-[min(900px,90vw)]");
     expect(layout.className).toContain("flex-col");
-    expect(layout.className).toContain("md:flex-row");
+    expect(layout.className).toContain("lg:flex-row");
+    expect(layout.className).not.toContain("md:flex-row");
     expect(sidebar.className).toContain("border-t");
-    expect(sidebar.className).toContain("md:border-l");
-    expect(sidebar.className).toContain("md:border-t-0");
+    expect(sidebar.className).toContain("overflow-x-hidden");
+    expect(sidebar.className).toContain("lg:w-72");
+    expect(sidebar.className).toContain("xl:w-80");
+    expect(sidebar.className).toContain("lg:border-l");
+    expect(sidebar.className).toContain("lg:border-t-0");
+    expect(sidebar.className).not.toContain("md:w-64");
   });
 
   it("does not unmount the parent container during open/close", async () => {

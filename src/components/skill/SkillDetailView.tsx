@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   Tag,
   Plus,
@@ -22,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { SkillFrontmatterCard } from "@/components/skill/SkillFrontmatterCard";
+import { SkillMarkdownRenderer } from "@/components/skill/SkillMarkdownRenderer";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { usePlatformStore } from "@/stores/platformStore";
@@ -208,21 +207,13 @@ function TabToggle({ activeTab, onChange }: TabToggleProps) {
   );
 }
 
-const detailTypographyClassName = cn(
-  "text-[13px] leading-6 text-foreground/90",
-  "[&_p]:text-[13px] [&_p]:leading-6",
-  "[&_li]:text-[13px] [&_li]:leading-6",
-  "[&_blockquote]:text-[13px] [&_blockquote]:leading-6",
-  "[&_h1]:text-lg [&_h1]:leading-7 [&_h1]:font-semibold",
-  "[&_h2]:text-base [&_h2]:leading-6 [&_h2]:font-semibold",
-  "[&_h3]:text-sm [&_h3]:leading-6 [&_h3]:font-semibold",
-  "[&_h4]:text-[13px] [&_h4]:leading-6 [&_h4]:font-semibold",
-  "[&_th]:text-xs [&_th]:leading-5",
-  "[&_td]:text-xs [&_td]:leading-5",
-  "[&_code]:text-[12px]",
-  "[&_pre]:text-[12px] [&_pre]:leading-5",
-  "[&_pre_code]:text-[12px] [&_pre_code]:leading-5"
-);
+const inspectorCardClassName =
+  "min-w-0 space-y-3 overflow-x-hidden rounded-lg border border-border/70 bg-muted/20 p-3";
+const inspectorFieldLabelClassName =
+  "text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70";
+const inspectorSelectClassName =
+  "w-full min-w-0 rounded-md border border-border bg-background px-2 py-1.5 text-xs";
+const inspectorActionButtonClassName = "w-full justify-center";
 
 // ─── SkillDetailView ──────────────────────────────────────────────────────────
 
@@ -569,6 +560,9 @@ export function SkillDetailView({
     ? discoverMetadata?.description
     : detail?.description;
   const hasData = isFileMode ? content !== null : !!detail;
+  const previewStackClassName = variant === "page"
+    ? "mx-auto w-full max-w-5xl space-y-5"
+    : "mx-auto w-full max-w-4xl space-y-5";
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -633,13 +627,13 @@ export function SkillDetailView({
         {/* ── TwoColumnLayout: LeftPreview + RightSidebar ────────────────── */}
         {!isLoading && !error && hasData && (
           <div
-            className="flex h-full flex-col md:flex-row"
+            className="flex h-full min-w-0 flex-col lg:flex-row"
             data-testid="skill-detail-two-column-layout"
           >
             {/* ── Left: SKILL.md Preview ─────────────────────────────── */}
             <div
               ref={scrollContainerRef}
-              className="flex-1 min-w-0 overflow-auto"
+              className="scrollbar-subtle flex-1 min-w-0 overflow-auto"
             >
               {activeTab === "markdown" ? (
                 <div
@@ -647,18 +641,19 @@ export function SkillDetailView({
                   role="tabpanel"
                   aria-label={t("detail.markdown")}
                 >
-                  <SkillFrontmatterCard data={frontmatterData} raw={frontmatterRaw} />
-                  {content ? (
-                    <div className={cn("markdown-body", detailTypographyClassName)}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {markdownContent}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">
-                      {t("detail.noContent")}
-                    </p>
-                  )}
+                  <div className={previewStackClassName}>
+                    <SkillFrontmatterCard data={frontmatterData} raw={frontmatterRaw} />
+                    {content ? (
+                      <SkillMarkdownRenderer
+                        content={markdownContent}
+                        variant="detail"
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">
+                        {t("detail.noContent")}
+                      </p>
+                    )}
+                  </div>
                 </div>
               ) : activeTab === "raw" ? (
                 <pre
@@ -674,100 +669,103 @@ export function SkillDetailView({
                   role="tabpanel"
                   aria-label={t("detail.aiExplanation")}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-sm font-semibold flex items-center gap-2">
-                        <Bot className="size-4 text-primary" />
-                        {t("detail.aiExplanation")}
-                      </h2>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {t("detail.aiExplanationDesc")}
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={explanation ? handleRefreshExplanation : handleGenerateExplanation}
-                      disabled={!content || isExplanationLoading || isExplanationStreaming}
-                      className="gap-1.5"
-                    >
-                      {isExplanationLoading || isExplanationStreaming ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : explanation ? (
-                        <RefreshCw className="size-3.5" />
-                      ) : (
-                        <Bot className="size-3.5" />
-                      )}
-                      {explanation ? t("detail.regenerateExplanation") : t("detail.generateExplanation")}
-                    </Button>
-                  </div>
-
-                  {explanationError && (
-                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
-                      <p className="text-sm text-destructive">
-                        {explanationErrorInfo?.message || explanationError}
-                      </p>
-                      {(explanationErrorInfo?.details || explanationError !== explanationErrorInfo?.message) && (
-                        <div>
-                          <button
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                            onClick={() => setShowErrorDetails((v) => !v)}
-                          >
-                            {showErrorDetails ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-                            {t("detail.showDetails")}
-                          </button>
-                          {showErrorDetails && (
-                            <pre className="mt-1.5 text-[11px] leading-4 font-mono text-muted-foreground whitespace-pre-wrap break-all bg-muted/30 rounded-md p-2 max-h-40 overflow-auto">
-                              {explanationErrorInfo?.details || explanationError}
-                            </pre>
-                          )}
-                        </div>
-                      )}
-                      {explanationErrorInfo?.fallbackTried && (
-                        <p className="text-xs text-muted-foreground">
-                          {t("detail.fallbackTried")}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {isExplanationLoading && !explanation ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="size-4 animate-spin" />
-                      {t("detail.explanationLoading")}
-                    </div>
-                  ) : explanation ? (
-                    <div className={cn("markdown-body rounded-lg border border-border bg-card p-4", detailTypographyClassName)}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {explanation}
-                      </ReactMarkdown>
-                      {isExplanationStreaming && (
-                        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                          <Loader2 className="size-3.5 animate-spin" />
-                          {t("detail.explanationStreaming")}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
-                      <Bot className="size-8 mx-auto text-muted-foreground/60" />
+                  <div className={previewStackClassName}>
+                    <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-medium">{t("detail.noExplanationTitle")}</p>
+                        <h2 className="text-sm font-semibold flex items-center gap-2">
+                          <Bot className="size-4 text-primary" />
+                          {t("detail.aiExplanation")}
+                        </h2>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {t("detail.noExplanationDesc")}
+                          {t("detail.aiExplanationDesc")}
                         </p>
                       </div>
                       <Button
+                        variant="outline"
                         size="sm"
-                        onClick={handleGenerateExplanation}
+                        onClick={explanation ? handleRefreshExplanation : handleGenerateExplanation}
                         disabled={!content || isExplanationLoading || isExplanationStreaming}
                         className="gap-1.5"
                       >
-                        <Bot className="size-3.5" />
-                        {t("detail.generateExplanation")}
+                        {isExplanationLoading || isExplanationStreaming ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : explanation ? (
+                          <RefreshCw className="size-3.5" />
+                        ) : (
+                          <Bot className="size-3.5" />
+                        )}
+                        {explanation ? t("detail.regenerateExplanation") : t("detail.generateExplanation")}
                       </Button>
                     </div>
-                  )}
+
+                    {explanationError && (
+                      <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                        <p className="text-sm text-destructive">
+                          {explanationErrorInfo?.message || explanationError}
+                        </p>
+                        {(explanationErrorInfo?.details || explanationError !== explanationErrorInfo?.message) && (
+                          <div>
+                            <button
+                              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                              onClick={() => setShowErrorDetails((v) => !v)}
+                            >
+                              {showErrorDetails ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                              {t("detail.showDetails")}
+                            </button>
+                            {showErrorDetails && (
+                              <pre className="scrollbar-subtle mt-1.5 text-[11px] leading-4 font-mono text-muted-foreground whitespace-pre-wrap break-all bg-muted/30 rounded-md p-2 max-h-40 overflow-auto">
+                                {explanationErrorInfo?.details || explanationError}
+                              </pre>
+                            )}
+                          </div>
+                        )}
+                        {explanationErrorInfo?.fallbackTried && (
+                          <p className="text-xs text-muted-foreground">
+                            {t("detail.fallbackTried")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {isExplanationLoading && !explanation ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="size-4 animate-spin" />
+                        {t("detail.explanationLoading")}
+                      </div>
+                    ) : explanation ? (
+                      <div className="space-y-3">
+                        <SkillMarkdownRenderer
+                          content={explanation}
+                          variant="compact"
+                        />
+                        {isExplanationStreaming && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Loader2 className="size-3.5 animate-spin" />
+                            {t("detail.explanationStreaming")}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
+                        <Bot className="size-8 mx-auto text-muted-foreground/60" />
+                        <div>
+                          <p className="text-sm font-medium">{t("detail.noExplanationTitle")}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {t("detail.noExplanationDesc")}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={handleGenerateExplanation}
+                          disabled={!content || isExplanationLoading || isExplanationStreaming}
+                          className="gap-1.5"
+                        >
+                          <Bot className="size-3.5" />
+                          {t("detail.generateExplanation")}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -775,7 +773,7 @@ export function SkillDetailView({
             {/* ── Right: Sidebar ─────────────────────────────────────── */}
             <aside
               data-testid="skill-detail-right-sidebar"
-              className="w-full shrink-0 border-t border-border overflow-y-auto p-4 space-y-5 md:w-64 md:border-t-0 md:border-l"
+              className="scrollbar-subtle w-full min-w-0 shrink-0 overflow-x-hidden overflow-y-auto border-t border-border p-4 space-y-5 lg:w-72 lg:border-t-0 lg:border-l xl:w-80"
             >
               {isFileMode && discoverMetadata ? (
                 <>
@@ -911,43 +909,51 @@ export function SkillDetailView({
                   {detail.is_central && !detail.is_read_only && (
                     <section aria-label={t("detail.updateStatusRegion")}>
                       <SectionLabel>{t("detail.updateStatus")}</SectionLabel>
-                      <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70">
+                      <div
+                        data-testid="detail-update-status-card"
+                        className={inspectorCardClassName}
+                      >
+                        <div className="min-w-0 space-y-2">
+                          <span className="inline-flex rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70">
                             {updateStatus
                               ? t(`central.updateStatus.${updateStatus.status}`)
                               : t("central.updateStatus.not_checked")}
                           </span>
-                          <div className="flex gap-1">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={isCheckingUpdates || isUpdatingThisSkill}
-                              onClick={handleCheckSkillUpdate}
-                            >
-                              {isCheckingUpdates ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <RefreshCw className="size-3.5" />
-                              )}
-                              {t("central.checkUpdatesShort")}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
-                              disabled={updateStatus?.status !== "update_available" || isUpdatingThisSkill}
-                              onClick={handleUpdateSkill}
-                            >
-                              {isUpdatingThisSkill ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <Download className="size-3.5" />
-                              )}
-                              {t("central.updateShort")}
-                            </Button>
-                          </div>
+                        </div>
+                        <div
+                          data-testid="detail-update-actions"
+                          className="grid grid-cols-2 gap-2"
+                        >
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isCheckingUpdates || isUpdatingThisSkill}
+                            onClick={handleCheckSkillUpdate}
+                            className={inspectorActionButtonClassName}
+                          >
+                            {isCheckingUpdates ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="size-3.5" />
+                            )}
+                            {t("central.checkUpdatesShort")}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={updateStatus?.status !== "update_available" || isUpdatingThisSkill}
+                            onClick={handleUpdateSkill}
+                            className={inspectorActionButtonClassName}
+                          >
+                            {isUpdatingThisSkill ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <Download className="size-3.5" />
+                            )}
+                            {t("central.updateShort")}
+                          </Button>
                         </div>
                         {updateStatus?.source_url && (
                           <MetadataRow label={t("detail.updateSource")} value={updateStatus.source_url} />
@@ -998,10 +1004,20 @@ export function SkillDetailView({
                   {detail.is_central && !detail.is_read_only && (
                     <section aria-label={t("detail.metadataManagementRegion")}>
                       <SectionLabel>{t("detail.metadataManagement")}</SectionLabel>
-                      <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
-                        <div className="flex gap-2">
+                      <div className={cn(inspectorCardClassName, "space-y-4")}>
+                        <div
+                          data-testid="detail-repository-management"
+                          className="space-y-2"
+                        >
+                          <label
+                            htmlFor="detail-repository-select"
+                            className={inspectorFieldLabelClassName}
+                          >
+                            {t("central.repositorySelectLabel")}
+                          </label>
                           <select
-                            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                            id="detail-repository-select"
+                            className={inspectorSelectClassName}
                             value={selectedRepositoryId}
                             aria-label={t("central.repositorySelectLabel")}
                             onChange={(event) => setSelectedRepositoryId(event.target.value)}
@@ -1019,13 +1035,24 @@ export function SkillDetailView({
                             variant="secondary"
                             disabled={!selectedRepositoryId || isMetadataUpdating}
                             onClick={handleAssignRepository}
+                            className={inspectorActionButtonClassName}
                           >
                             {t("central.assignRepository")}
                           </Button>
                         </div>
-                        <div className="flex gap-2">
+                        <div
+                          data-testid="detail-tag-management"
+                          className="space-y-2"
+                        >
+                          <label
+                            htmlFor="detail-tag-select"
+                            className={inspectorFieldLabelClassName}
+                          >
+                            {t("central.tagSelectLabel")}
+                          </label>
                           <select
-                            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                            id="detail-tag-select"
+                            className={inspectorSelectClassName}
                             value={selectedTagId}
                             aria-label={t("central.tagSelectLabel")}
                             onChange={(event) => setSelectedTagId(event.target.value)}
@@ -1043,6 +1070,7 @@ export function SkillDetailView({
                             variant="secondary"
                             disabled={!selectedTagId || isMetadataUpdating}
                             onClick={handleAssignTag}
+                            className={inspectorActionButtonClassName}
                           >
                             {t("central.assignTag")}
                           </Button>
