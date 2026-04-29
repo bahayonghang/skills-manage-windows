@@ -9,9 +9,8 @@ import {
   Sparkles,
   Store,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
+import { SkillMarkdownRenderer } from "@/components/skill/SkillMarkdownRenderer";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { SkillFrontmatterCard } from "@/components/skill/SkillFrontmatterCard";
 import { Button } from "@/components/ui/button";
@@ -217,7 +216,7 @@ export function MarketplaceSkillDetailDrawer({
 
           <div className="flex-1 min-h-0 overflow-hidden">
             <div className="flex h-full flex-col md:flex-row" data-testid="skill-detail-two-column-layout">
-              <div className="flex-1 min-w-0 overflow-auto p-6 space-y-4">
+              <div className="scrollbar-subtle flex-1 min-w-0 overflow-auto p-6 space-y-4">
                 <section className="grid gap-3 rounded-xl border border-border/70 bg-muted/15 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                   <div className="space-y-1">
                     <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
@@ -280,16 +279,15 @@ export function MarketplaceSkillDetailDrawer({
                     {t("common.loading")}
                   </div>
                 ) : viewMode === "markdown" ? (
-                  <div className="space-y-4">
+                  <div className="mx-auto w-full max-w-4xl space-y-4">
                     <SkillFrontmatterCard
                       data={displayContent.frontmatterData}
                       raw={displayContent.frontmatterRaw}
                     />
-                    <div className="prose prose-sm dark:prose-invert max-w-none rounded-xl border border-border/70 bg-background/60 p-4 markdown-body">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {displayContent.body}
-                      </ReactMarkdown>
-                    </div>
+                    <SkillMarkdownRenderer
+                      content={displayContent.body}
+                      variant="detail"
+                    />
                   </div>
                 ) : (
                   <pre className="overflow-auto whitespace-pre-wrap rounded-xl border border-border/70 bg-muted/30 p-4 text-xs">

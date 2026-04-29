@@ -61,7 +61,7 @@ describe("MarketplaceSkillDetailDrawer", () => {
   });
 
   it("renders frontmatter card in markdown preview", async () => {
-    render(
+    const { container } = render(
       <MarketplaceSkillDetailDrawer
         open
         skill={skill}
@@ -82,6 +82,9 @@ describe("MarketplaceSkillDetailDrawer", () => {
     expect(within(frontmatter as HTMLElement).getByText("bun")).toBeInTheDocument();
     expect(within(frontmatter as HTMLElement).getByText("npx")).toBeInTheDocument();
     expect(screen.getByTestId("react-markdown")).toHaveTextContent("# Image Generation");
+    expect(
+      container.querySelector('[data-skill-markdown-variant="detail"]')
+    ).not.toBeNull();
   });
 
   it("keeps raw source tab showing original frontmatter fences", async () => {

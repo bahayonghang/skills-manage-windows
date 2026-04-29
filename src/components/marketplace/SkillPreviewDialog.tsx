@@ -11,9 +11,8 @@ import {
   Sparkles,
   ShieldCheck,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
+import { SkillMarkdownRenderer } from "@/components/skill/SkillMarkdownRenderer";
 
 import {
   Dialog,
@@ -300,11 +299,7 @@ export function SkillPreviewDialog({
               {t("common.loading")}
             </div>
           ) : viewMode === "markdown" ? (
-            <div className="prose prose-sm dark:prose-invert max-w-none rounded-xl border border-border/70 bg-background/60 p-4 markdown-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {displayContent}
-              </ReactMarkdown>
-            </div>
+            <SkillMarkdownRenderer content={displayContent} variant="detail" />
           ) : (
             <pre className="overflow-auto whitespace-pre-wrap rounded-xl border border-border/70 bg-muted/30 p-4 text-xs">
               {content}
