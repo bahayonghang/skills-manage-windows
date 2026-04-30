@@ -92,6 +92,7 @@
   "dashboard": {
     "eyebrow": "Local operations console",
     "title": "Dashboard",
+    "localScope": "local",
     "description": "Review the active target, Central library health, pending queues, and recent local activity without starting background network operations.",
     "target": "Target",
     "centralPath": "Central path",
@@ -103,6 +104,20 @@
       "refreshing": "Refreshing",
       "error": "Needs attention",
       "loading": "Loading"
+    },
+    "scanStateDetail": {
+      "idle": "No background operations",
+      "refreshing": "Refreshing local indexes"
+    },
+    "health": {
+      "title": "Central library health",
+      "description": "Composition of the private skills under your Central store.",
+      "openCentral": "Open library",
+      "centralUnit": "skills · central",
+      "summary": "Of {{centralTotal}} total, {{aiReviewCount}} await AI tag review, {{uncategorizedCount}} need categorization, and {{sourceRepositoryCount}} source record(s) are known.",
+      "emptySummary": "Central has no indexed skills yet. Run a scan or import skills before reviewing health.",
+      "sources": "Sources",
+      "sourcesDesc": "{{count}} Marketplace registry source(s) configured."
     },
     "metrics": {
       "central": "Central library",
@@ -121,6 +136,15 @@
       "uncategorizedDesc": "Central skills without a concrete tag.",
       "unassigned": "Unassigned source",
       "unassignedDesc": "Skills still attached to unknown source metadata."
+    },
+    "platforms": {
+      "title": "Enabled platforms · {{enabled}} of {{total}}",
+      "description": "Where Central skills can be installed from this target.",
+      "manage": "Manage",
+      "enabled": "enabled",
+      "hidden": "hidden",
+      "noPath": "No path configured",
+      "openLabel": "Open platform {{name}}"
     },
     "loadWarning": "Some dashboard data could not be loaded.",
     "workQueues": "Work queues",
@@ -151,7 +175,17 @@
     "platformCoverageDesc": "Current visible targets and their cached skill counts.",
     "quickActions": "Quick actions",
     "quickActionsDesc": "Shortcuts into existing reviewable workflows.",
-    "quickActionsNote": "Dashboard shortcuts only navigate; they do not import, sync, update, tag, or delete."
+    "quickActionsNote": "Dashboard shortcuts only navigate; they do not import, sync, update, tag, or delete.",
+    "activity": {
+      "title": "Activity · last 14 days",
+      "description": "Install, uninstall, scan, and review operations from recent local logs.",
+      "logs": "Logs",
+      "ops": "ops",
+      "less": "less",
+      "more": "more",
+      "topTags": "Top tags · central",
+      "noTags": "No Central tags yet."
+    }
   },
   "logs": {
     "title": "Operation Logs",

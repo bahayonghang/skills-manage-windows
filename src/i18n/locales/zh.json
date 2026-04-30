@@ -92,6 +92,7 @@
   "dashboard": {
     "eyebrow": "本地操作控制台",
     "title": "Dashboard",
+    "localScope": "本机",
     "description": "查看当前目标、中央库状态、待处理队列和最近本地操作，不在后台启动网络任务。",
     "target": "目标",
     "centralPath": "中央库路径",
@@ -103,6 +104,20 @@
       "refreshing": "刷新中",
       "error": "需要处理",
       "loading": "加载中"
+    },
+    "scanStateDetail": {
+      "idle": "没有后台任务",
+      "refreshing": "正在刷新本地索引"
+    },
+    "health": {
+      "title": "中央库健康度",
+      "description": "当前 Central 私有技能库的组成状态。",
+      "openCentral": "打开中央库",
+      "centralUnit": "skills · central",
+      "summary": "共 {{centralTotal}} 个技能，其中 {{aiReviewCount}} 个等待 AI 标签复核，{{uncategorizedCount}} 个需要分类，已记录 {{sourceRepositoryCount}} 个来源。",
+      "emptySummary": "Central 尚未索引任何技能。请先扫描或导入技能，再查看健康状态。",
+      "sources": "来源",
+      "sourcesDesc": "已配置 {{count}} 个 Marketplace 注册表来源。"
     },
     "metrics": {
       "central": "中央库",
@@ -121,6 +136,15 @@
       "uncategorizedDesc": "尚未分配具体标签的中央技能。",
       "unassigned": "未知来源",
       "unassignedDesc": "仍挂在未知来源元数据下的技能。"
+    },
+    "platforms": {
+      "title": "启用平台 · {{enabled}} / {{total}}",
+      "description": "当前目标下 Central 技能可安装到的位置。",
+      "manage": "管理",
+      "enabled": "启用",
+      "hidden": "隐藏",
+      "noPath": "尚未配置路径",
+      "openLabel": "打开平台 {{name}}"
     },
     "loadWarning": "部分 Dashboard 数据加载失败。",
     "workQueues": "待处理队列",
@@ -151,7 +175,17 @@
     "platformCoverageDesc": "当前可见目标及缓存技能数量。",
     "quickActions": "快捷入口",
     "quickActionsDesc": "跳转到现有可复核工作流。",
-    "quickActionsNote": "Dashboard 快捷入口只负责跳转，不会导入、同步、更新、打标签或删除。"
+    "quickActionsNote": "Dashboard 快捷入口只负责跳转，不会导入、同步、更新、打标签或删除。",
+    "activity": {
+      "title": "最近 14 天活动",
+      "description": "来自最近本地日志的安装、卸载、扫描和复核操作。",
+      "logs": "日志",
+      "ops": "次操作",
+      "less": "少",
+      "more": "多",
+      "topTags": "热门标签 · central",
+      "noTags": "暂无 Central 标签。"
+    }
   },
   "logs": {
     "title": "操作日志",

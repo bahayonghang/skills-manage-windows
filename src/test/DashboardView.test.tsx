@@ -394,7 +394,7 @@ describe("DashboardView", () => {
   it("renders dashboard summaries from existing stores", () => {
     renderDashboard();
 
-    expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Dashboard/ })).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-metric-central")).toHaveTextContent("3");
     expect(screen.getByTestId("dashboard-metric-discovered")).toHaveTextContent("4");
     expect(screen.getByTestId("dashboard-metric-collections")).toHaveTextContent("1");
@@ -402,6 +402,8 @@ describe("DashboardView", () => {
     expect(screen.getByTestId("dashboard-metric-ai")).toHaveTextContent("1");
     expect(screen.getByTestId("dashboard-metric-uncategorized")).toHaveTextContent("2");
     expect(screen.getByTestId("dashboard-metric-unassigned")).toHaveTextContent("1");
+    expect(screen.getByTestId("dashboard-metric-targets")).toHaveTextContent("2");
+    expect(screen.getByText(/Enabled platforms|启用平台/)).toBeInTheDocument();
     expect(screen.getByText("Scanned 3 skills")).toBeInTheDocument();
   });
 
@@ -469,6 +471,6 @@ describe("DashboardView", () => {
       screen.getByText(/Some dashboard data could not be loaded|部分 Dashboard 数据加载失败/)
     ).toHaveAttribute("title", "central offline");
     expect(screen.getByText(/No recent operation logs|暂无最近操作日志/)).toBeInTheDocument();
-    expect(screen.getByText(/No repository metadata yet|暂无仓库元数据/)).toBeInTheDocument();
+    expect(screen.getByText(/No Central tags yet|暂无 Central 标签/)).toBeInTheDocument();
   });
 });
