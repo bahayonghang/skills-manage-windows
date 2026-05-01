@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
-import { ScannedSkill } from "@/types";
+import { ScannedSkill, SkillWithLinks } from "@/types";
 
 const BROWSER_FIXTURE_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {
   "claude-code": [
@@ -51,6 +51,8 @@ interface SkillState {
   // Actions
   getSkillsByAgent: (agentId: string) => Promise<void>;
   uninstallSkillFromAgent: (skillId: string, agentId: string) => Promise<void>;
+  /** Fetch central skills as a one-shot read (no internal caching). */
+  fetchCentralSkillsList: () => Promise<SkillWithLinks[]>;
   resetForTargetChange: () => void;
 }
 
@@ -168,5 +170,12 @@ export const useSkillStore = create<SkillState>((set) => ({
       pendingSkillActionKeys: {},
       error: null,
     });
+  },
+
+  fetchCentralSkillsList: async () => {
+    if (!isTauriRuntime()) {
+      return [];
+    }
+    return invoke<SkillWithLinks[]>("get_central_skills");
   },
 }));

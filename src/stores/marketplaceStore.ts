@@ -55,6 +55,8 @@ interface MarketplaceState {
   loadSkills: (registryId: string, query?: string) => Promise<void>;
   loadPreviewSkills: (registryId: string) => Promise<MarketplaceSkill[]>;
   installSkill: (skillId: string) => Promise<void>;
+  /** Re-run AI explanation for a marketplace preview. Used by preview dialogs/drawers. */
+  triggerSkillExplanation: (skillId: string, content: string, lang: string) => Promise<void>;
   addRegistry: (name: string, sourceType: string, url: string) => Promise<SkillRegistry>;
   removeRegistry: (registryId: string) => Promise<void>;
   getNormalizedRegistryIdentity: (url: string) => string | null;
@@ -306,6 +308,13 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       }
       throw err;
     }
+  },
+
+  triggerSkillExplanation: async (skillId: string, content: string, lang: string) => {
+    if (!isTauriRuntime()) {
+      throw new Error("AI explanation requires the Tauri desktop runtime.");
+    }
+    await invoke("refresh_skill_explanation", { skillId, content, lang });
   },
 
   addRegistry: async (name: string, sourceType: string, url: string) => {

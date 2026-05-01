@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Loader2, Search, CheckSquare, XSquare } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -16,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useSkillStore } from "@/stores/skillStore";
 import { SkillWithLinks } from "@/types";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -44,6 +44,8 @@ export function SkillPickerDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(new Set());
 
+  const fetchCentralSkillsList = useSkillStore((s) => s.fetchCentralSkillsList);
+
   // Load central skills when dialog opens.
   useEffect(() => {
     if (open) {
@@ -57,7 +59,7 @@ export function SkillPickerDialog({
   async function loadSkills() {
     setIsLoading(true);
     try {
-      const data = await invoke<SkillWithLinks[]>("get_central_skills");
+      const data = await fetchCentralSkillsList();
       setSkills(data ?? []);
     } catch (err) {
       setError(String(err));

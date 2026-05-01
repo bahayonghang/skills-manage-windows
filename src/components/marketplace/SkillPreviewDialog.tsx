@@ -26,7 +26,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { setupExplanationStreamListeners } from "@/lib/explanationStream";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/tauri";
+import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import { cn } from "@/lib/utils";
 import i18n from "@/i18n";
 
@@ -60,6 +61,7 @@ export function SkillPreviewDialog({
   onAfterCloseFocus,
 }: SkillPreviewDialogProps) {
   const { t } = useTranslation();
+  const triggerSkillExplanation = useMarketplaceStore((s) => s.triggerSkillExplanation);
   const [content, setContent] = useState("");
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [viewMode, setViewMode] = useState<"markdown" | "raw">("markdown");
@@ -144,11 +146,7 @@ export function SkillPreviewDialog({
           setIsExplaining(false);
         },
       });
-      await invoke("refresh_skill_explanation", {
-        skillId,
-        content,
-        lang: i18n.language,
-      });
+      await triggerSkillExplanation(skillId, content, i18n.language);
     } catch (err) {
       cleanupExplanation();
       setExplanation(null);

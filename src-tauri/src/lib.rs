@@ -6,13 +6,34 @@ pub mod paths;
 pub mod targets;
 
 use db::DbPool;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+
+/// Event name emitted on the main webview when the legacy central skills
+/// migration progresses through start → completed/failed states. Front-end
+/// subscribers can `listen("system://migration-progress", ...)` to react.
+/// The migration is best-effort and never blocks IPC availability.
+const MIGRATION_PROGRESS_EVENT: &str = "system://migration-progress";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "phase", rename_all = "snake_case")]
+enum MigrationProgress {
+    Started,
+    Completed {
+        copied: usize,
+        skipped: usize,
+        failed: usize,
+    },
+    Failed {
+        error: String,
+    },
+}
 
 /// Application state shared across Tauri commands.
 pub struct AppState {
@@ -75,7 +96,10 @@ pub fn run() {
             fs::create_dir_all(&db_dir).expect("Failed to create ~/.skillsmanage directory");
             let db_path = path_utils::path_to_string(&db_dir.join("db.sqlite"));
 
-            // Create pool and initialize schema
+            // Synchronously open the SQLite pool and initialize schema. These
+            // are required before any IPC command can run, so they stay in
+            // the setup block. Legacy migration is deferred to the background
+            // (spawned below) to keep cold-start latency small.
             let pool = tauri::async_runtime::block_on(async {
                 db::create_pool(&db_path)
                     .await
@@ -86,18 +110,45 @@ pub fn run() {
                     .await
                     .expect("Failed to initialize database schema")
             });
-            tauri::async_runtime::block_on(async {
-                if let Err(error) =
-                    central_migration::migrate_legacy_central_skills_to_private_store(&pool).await
-                {
-                    eprintln!("Failed to migrate legacy Central Skills store: {}", error);
-                }
-            });
 
             app.manage(AppState {
-                db: pool,
+                db: pool.clone(),
                 ai_tag_jobs: AiTagJobRegistry::default(),
                 targets: targets::TargetRegistry::default(),
+            });
+
+            // Legacy central-skills migration runs after the IPC handlers are
+            // wired up, so the UI never waits on disk copies during startup.
+            // Progress is broadcast via MIGRATION_PROGRESS_EVENT.
+            let migration_handle = app.handle().clone();
+            let migration_pool = pool;
+            tauri::async_runtime::spawn(async move {
+                let _ = migration_handle.emit(MIGRATION_PROGRESS_EVENT, MigrationProgress::Started);
+                match central_migration::migrate_legacy_central_skills_to_private_store(
+                    &migration_pool,
+                )
+                .await
+                {
+                    Ok(summary) => {
+                        let _ = migration_handle.emit(
+                            MIGRATION_PROGRESS_EVENT,
+                            MigrationProgress::Completed {
+                                copied: summary.copied,
+                                skipped: summary.skipped_existing,
+                                failed: summary.failed,
+                            },
+                        );
+                    }
+                    Err(error) => {
+                        eprintln!("Failed to migrate legacy Central Skills store: {}", error);
+                        let _ = migration_handle.emit(
+                            MIGRATION_PROGRESS_EVENT,
+                            MigrationProgress::Failed {
+                                error: error.clone(),
+                            },
+                        );
+                    }
+                }
             });
             Ok(())
         })

@@ -29,7 +29,7 @@ import { useTargetStore } from "@/stores/targetStore";
 import { CollectionPickerDialog } from "@/components/collection/CollectionPickerDialog";
 import { AgentWithStatus, ClaudeSourceKind, SkillDetailRequest, SkillInstallation } from "@/types";
 import { cn } from "@/lib/utils";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/tauri";
 import { arePathsEquivalent } from "@/lib/path";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
@@ -314,10 +314,14 @@ export function SkillDetailView({
   const assignSkillTags = useCentralSkillsStore((s) => s.assignSkillTags);
 
   // Local state for filePath mode
-  const [fileContent, setFileContent] = useState<string | null>(null);
-  const [fileIsLoading, setFileIsLoading] = useState(false);
-  const [fileExplanation, setFileExplanation] = useState<string | null>(null);
-  const [fileIsExplaining, setFileIsExplaining] = useState(false);
+  const fileContent = useSkillDetailStore((s) => s.fileContent);
+  const fileIsLoading = useSkillDetailStore((s) => s.fileIsLoading);
+  const fileExplanation = useSkillDetailStore((s) => s.fileExplanation);
+  const fileIsExplaining = useSkillDetailStore((s) => s.fileIsExplaining);
+  const loadFileContent = useSkillDetailStore((s) => s.loadFileContent);
+  const explainFileContent = useSkillDetailStore((s) => s.explainFileContent);
+  const openInFileManager = useSkillDetailStore((s) => s.openInFileManager);
+  const resetFileMode = useSkillDetailStore((s) => s.resetFileMode);
   const detailRequest = useMemo<SkillDetailRequest | null>(
     () => (skillId ? { skillId, agentId, rowId } : null),
     [skillId, agentId, rowId]
@@ -357,25 +361,16 @@ export function SkillDetailView({
   // ── File mode: load content from path ─────────────────────────────────
   const fetchFileContent = useCallback(async () => {
     if (!filePath) return;
-    setFileIsLoading(true);
-    try {
-      const text = await invoke<string>("read_file_by_path", { path: filePath });
-      setFileContent(text);
-    } catch {
-      setFileContent(null);
-    } finally {
-      setFileIsLoading(false);
-    }
-  }, [filePath]);
+    await loadFileContent(filePath);
+  }, [filePath, loadFileContent]);
 
   useEffect(() => {
     if (isFileMode) {
-      setFileContent(null);
-      setFileExplanation(null);
+      resetFileMode();
       setActiveTab("markdown");
       void fetchFileContent();
     }
-  }, [isFileMode, fetchFileContent]);
+  }, [isFileMode, fetchFileContent, resetFileMode]);
 
   // ── Store mode: load detail by skillId ────────────────────────────────
   useEffect(() => {
@@ -512,12 +507,7 @@ export function SkillDetailView({
 
   function handleGenerateExplanation() {
     if (isFileMode && content) {
-      setFileIsExplaining(true);
-      setFileExplanation(null);
-      invoke<string>("explain_skill", { content })
-        .then(setFileExplanation)
-        .catch((err) => setFileExplanation(`Error: ${String(err)}`))
-        .finally(() => setFileIsExplaining(false));
+      void explainFileContent(content);
       return;
     }
     if (explanationRequestKey && content) {
@@ -543,11 +533,11 @@ export function SkillDetailView({
         toast.success(t("targets.pathCopied"));
         return;
       }
-      await invoke("open_in_file_manager", { path: discoverMetadata.dirPath });
+      await openInFileManager(discoverMetadata.dirPath);
     } catch {
       // silently ignore
     }
-  }, [discoverMetadata, isRemoteTarget, t]);
+  }, [discoverMetadata, isRemoteTarget, openInFileManager, t]);
 
   const { frontmatterRaw, frontmatterData, body: markdownContent } = content
     ? parseFrontmatter(content)
