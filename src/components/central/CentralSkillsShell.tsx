@@ -1,0 +1,272 @@
+import type { ComponentProps } from "react";
+import { ArrowUpDown, Download, FileJson, RefreshCw, Search } from "lucide-react";
+import type { TFunction } from "i18next";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { AiTagProgressBar, CentralUpdateProgressBar } from "@/components/central/CentralSkillProgressBars";
+import { CentralSkillCategorizePanel } from "@/components/central/CentralSkillCategorizePanel";
+import { CentralSkillDialogs } from "@/components/central/CentralSkillDialogs";
+import { CentralSkillFilterSidebar } from "@/components/central/CentralSkillFilterSidebar";
+import { CentralSkillListContent } from "@/components/central/CentralSkillListContent";
+import { cn } from "@/lib/utils";
+import type {
+  CentralSortDirection,
+  CentralSortField,
+} from "@/pages/centralSkillsViewModel";
+
+type FilterSidebarProps = Omit<ComponentProps<typeof CentralSkillFilterSidebar>, "t">;
+type ListContentProps = Omit<ComponentProps<typeof CentralSkillListContent>, "t">;
+type CategorizePanelProps = Omit<ComponentProps<typeof CentralSkillCategorizePanel>, "t">;
+type AiProgressProps = Omit<ComponentProps<typeof AiTagProgressBar>, "t">;
+type UpdateProgressProps = Omit<ComponentProps<typeof CentralUpdateProgressBar>, "t">;
+type DialogProps = Omit<ComponentProps<typeof CentralSkillDialogs>, "t">;
+
+export function CentralSkillsShell({
+  centralSkillsDir,
+  dialogs,
+  filterSidebar,
+  isCheckingUpdates,
+  isLoading,
+  isRemoteTarget,
+  listContent,
+  searchQuery,
+  setIsGitHubImportOpen,
+  setIsPortabilityOpen,
+  setRepositoryFilter,
+  setSearchQuery,
+  setSortDirection,
+  setSortField,
+  setTagFilter,
+  shouldShowCategorizePanel,
+  shouldShowUpdateProgress,
+  sortDirection,
+  sortDirectionOptions,
+  sortField,
+  sortFieldOptions,
+  tagFilter,
+  tags,
+  t,
+  updateAvailableSkillCount,
+  updateButton,
+  updateJobStatus,
+  aiProgress,
+  categorizePanel,
+  updateProgress,
+  onCheckUpdates,
+  onRefresh,
+  onUpdateSkills,
+}: {
+  centralSkillsDir: string;
+  dialogs: DialogProps;
+  filterSidebar: FilterSidebarProps;
+  isCheckingUpdates: boolean;
+  isLoading: boolean;
+  isRemoteTarget: boolean;
+  listContent: ListContentProps;
+  searchQuery: string;
+  setIsGitHubImportOpen: (open: boolean) => void;
+  setIsPortabilityOpen: (open: boolean) => void;
+  setRepositoryFilter: (filter: string) => void;
+  setSearchQuery: (query: string) => void;
+  setSortDirection: (direction: CentralSortDirection) => void;
+  setSortField: (field: CentralSortField) => void;
+  setTagFilter: (filter: string) => void;
+  shouldShowCategorizePanel: boolean;
+  shouldShowUpdateProgress: boolean;
+  sortDirection: CentralSortDirection;
+  sortDirectionOptions: Array<{ value: CentralSortDirection; label: string }>;
+  sortField: CentralSortField;
+  sortFieldOptions: Array<{ value: CentralSortField; label: string }>;
+  tagFilter: string;
+  tags: Array<{ id: string; name: string }>;
+  t: TFunction;
+  updateAvailableSkillCount: number;
+  updateButton: {
+    disabled: boolean;
+    label: string;
+    targetSkillIds: string[];
+  };
+  updateJobStatus: string | null;
+  aiProgress: AiProgressProps;
+  categorizePanel: CategorizePanelProps;
+  updateProgress: UpdateProgressProps;
+  onCheckUpdates: () => void;
+  onRefresh: () => void;
+  onUpdateSkills: (skillIds: string[]) => void;
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="border-b border-border px-6 py-4 flex items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold">{t("central.title")}</h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onRefresh}
+              disabled={isLoading}
+              aria-label={t("central.refresh")}
+            >
+              <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("central.scope")}
+          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {centralSkillsDir}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={onCheckUpdates}
+            disabled={isRemoteTarget || isCheckingUpdates || updateJobStatus === "running"}
+            title={isRemoteTarget ? t("targets.centralUpdatesUnsupported") : undefined}
+          >
+            <RefreshCw className={`size-3.5 ${isCheckingUpdates ? "animate-spin" : ""}`} />
+            {t("central.checkUpdates")}
+          </Button>
+          {updateAvailableSkillCount > 0 && (
+            <Button
+              variant="default"
+              onClick={() => onUpdateSkills(updateButton.targetSkillIds)}
+              disabled={updateButton.disabled}
+              title={isRemoteTarget ? t("targets.centralUpdatesUnsupported") : undefined}
+            >
+              <Download className="size-3.5" />
+              {updateButton.label}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            data-testid="central-portability-open"
+            onClick={() => setIsPortabilityOpen(true)}
+          >
+            <FileJson className="size-3.5" />
+            {t("central.portabilityOpen")}
+          </Button>
+          <Button variant="outline" onClick={() => setIsGitHubImportOpen(true)}>
+            {t("marketplace.githubImportSecondaryCta")}
+          </Button>
+        </div>
+      </div>
+
+      <div className="px-6 py-3 border-b border-border">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder={t("central.searchPlaceholder")}
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="pl-8 bg-muted/40"
+              aria-label={t("central.searchPlaceholder")}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <ArrowUpDown className="size-3.5" />
+              <span>{t("central.sortLabel")}</span>
+            </div>
+            <div
+              role="group"
+              aria-label={t("central.sortFieldLabel")}
+              className="flex rounded-xl bg-muted/40 p-1"
+            >
+              {sortFieldOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={sortField === option.value}
+                  onClick={() => setSortField(option.value)}
+                  className={cn(
+                    "h-7 rounded-lg px-3 text-xs font-medium transition-colors cursor-pointer",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                    sortField === option.value
+                      ? "bg-background/95 text-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <div
+              role="group"
+              aria-label={t("central.sortDirectionLabel")}
+              className="flex rounded-xl bg-muted/40 p-1"
+            >
+              {sortDirectionOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={sortDirection === option.value}
+                  onClick={() => setSortDirection(option.value)}
+                  className={cn(
+                    "h-7 rounded-lg px-3 text-xs font-medium transition-colors cursor-pointer",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                    sortDirection === option.value
+                      ? "bg-background/95 text-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <select
+              value={tagFilter}
+              onChange={(event) => setTagFilter(event.target.value)}
+              aria-label={t("central.tagFilterLabel")}
+              className="h-9 rounded-xl border border-border bg-background px-3 text-xs text-foreground"
+            >
+              <option value="all">{t("central.allTags")}</option>
+              <option value="updates">{t("central.updatesAvailableOnly")}</option>
+              <option value="uncategorized">{t("central.uncategorizedOnly")}</option>
+              <option value="ai-review">{t("central.aiReviewOnly")}</option>
+              {tags.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant={filterSidebar.repositoryFilter === "unassigned" ? "default" : "outline"}
+              size="sm"
+              onClick={() =>
+                setRepositoryFilter(
+                  filterSidebar.repositoryFilter === "unassigned" ? "all" : "unassigned"
+                )
+              }
+            >
+              {t("central.unassignedOnly")}
+            </Button>
+            <Button
+              variant={tagFilter === "uncategorized" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setTagFilter(tagFilter === "uncategorized" ? "all" : "uncategorized")}
+            >
+              {t("central.uncategorizedOnly")}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
+        <CentralSkillFilterSidebar {...filterSidebar} t={t} />
+        <CentralSkillListContent {...listContent} t={t} />
+        {shouldShowCategorizePanel && (
+          <CentralSkillCategorizePanel {...categorizePanel} t={t} />
+        )}
+      </div>
+
+      <AiTagProgressBar {...aiProgress} t={t} />
+      {shouldShowUpdateProgress && (
+        <CentralUpdateProgressBar {...updateProgress} t={t} />
+      )}
+      <CentralSkillDialogs {...dialogs} t={t} />
+    </div>
+  );
+}
