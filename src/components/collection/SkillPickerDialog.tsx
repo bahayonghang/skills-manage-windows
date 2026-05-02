@@ -46,17 +46,7 @@ export function SkillPickerDialog({
 
   const fetchCentralSkillsList = useSkillStore((s) => s.fetchCentralSkillsList);
 
-  // Load central skills when dialog opens.
-  useEffect(() => {
-    if (open) {
-      setSearchQuery("");
-      setSelectedSkillIds(new Set());
-      setError(null);
-      loadSkills();
-    }
-  }, [open]);
-
-  async function loadSkills() {
+  const loadSkills = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await fetchCentralSkillsList();
@@ -66,7 +56,17 @@ export function SkillPickerDialog({
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [fetchCentralSkillsList]);
+
+  // Load central skills when dialog opens.
+  useEffect(() => {
+    if (open) {
+      setSearchQuery("");
+      setSelectedSkillIds(new Set());
+      setError(null);
+      void loadSkills();
+    }
+  }, [open, loadSkills]);
 
   // Filter skills by search and exclude skills already in collection.
   const filteredSkills = useMemo(() => {
