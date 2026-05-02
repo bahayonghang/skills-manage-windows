@@ -1074,21 +1074,23 @@ mod tests {
         assert!(max_seen.load(Ordering::SeqCst) <= 4);
         assert!(max_seen.load(Ordering::SeqCst) > 1);
 
-        let captured = events.lock().expect("events");
-        assert_eq!(
-            captured.first().map(|event| event.status),
-            Some(AiTagProgressStatus::Started)
-        );
-        assert_eq!(
-            captured.last().map(|event| event.status),
-            Some(AiTagProgressStatus::Completed)
-        );
-        assert!(captured
-            .iter()
-            .any(|event| event.status == AiTagProgressStatus::Running));
-        assert!(captured
-            .iter()
-            .any(|event| event.status == AiTagProgressStatus::Failed));
+        {
+            let captured = events.lock().expect("events");
+            assert_eq!(
+                captured.first().map(|event| event.status),
+                Some(AiTagProgressStatus::Started)
+            );
+            assert_eq!(
+                captured.last().map(|event| event.status),
+                Some(AiTagProgressStatus::Completed)
+            );
+            assert!(captured
+                .iter()
+                .any(|event| event.status == AiTagProgressStatus::Running));
+            assert!(captured
+                .iter()
+                .any(|event| event.status == AiTagProgressStatus::Failed));
+        }
 
         let tags = db::get_skill_tags_for_skill(&pool, "skill-1")
             .await

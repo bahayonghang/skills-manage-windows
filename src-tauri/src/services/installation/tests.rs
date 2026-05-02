@@ -1,0 +1,1071 @@
+#![cfg(test)]
+#![allow(unused_imports)]
+
+//! Integration tests for `services::installation`.
+//!
+//! Mirrors the original `commands::linker` test module after the Phase 3c
+//! split: helpers spin up an in-memory SQLite pool, point Central / Claude /
+//! Cursor / Codex agent rows at temporary directories, and then drive the
+//! install / uninstall paths.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use sqlx::SqlitePool;
+use tempfile::TempDir;
+
+use crate::db::{self, DbPool, SkillInstallation};
+use crate::targets::RemotePathInfo;
+
+use super::batch::batch_install_central_skills_impl;
+use super::fs_util::make_relative_path;
+use super::native::{
+    install_skill_to_agent_copy_impl, install_skill_to_agent_impl, uninstall_skill_from_agent_impl,
+};
+use super::project::install_central_skill_to_project_impl;
+use super::remote::{classify_remote_existing_install_target, RemoteExistingInstallAction};
+use super::types::{BatchInstallResult, FailedInstall};
+
+// ── Test helpers ──────────────────────────────────────────────────────────
+
+/// Create an in-memory SQLite pool with the full schema initialised and
+/// the central/claude-code agent directories redirected to `central_dir`
+/// and `agent_dir` respectively.
+async fn setup_db(central_dir: &Path, agent_dir: &Path) -> DbPool {
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    db::init_database(&pool).await.unwrap();
+
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+        .bind(central_dir.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'claude-code'")
+        .bind(agent_dir.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    pool
+}
+
+/// Create a minimal skill directory containing a valid `SKILL.md`.
+fn create_central_skill(central_dir: &Path, skill_id: &str) -> PathBuf {
+    let skill_dir = central_dir.join(skill_id);
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        format!(
+            "---\nname: {}\ndescription: Test skill\n---\n\n# {}\n",
+            skill_id, skill_id
+        ),
+    )
+    .unwrap();
+    skill_dir
+}
+
+async fn point_codex_to_dir(pool: &DbPool, skills_dir: &Path) {
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'codex'")
+        .bind(skills_dir.to_str().unwrap())
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+// ── make_relative_path ────────────────────────────────────────────────────
+
+#[test]
+fn test_make_relative_path_sibling_dirs() {
+    let from = Path::new("/home/user/claude/skills");
+    let to = Path::new("/home/user/.agents/skills/my-skill");
+    let rel = make_relative_path(from, to);
+    assert_eq!(rel, PathBuf::from("../../.agents/skills/my-skill"));
+}
+
+#[test]
+fn test_make_relative_path_same_parent() {
+    let from = Path::new("/tmp/test/agent");
+    let to = Path::new("/tmp/test/central/skill-x");
+    let rel = make_relative_path(from, to);
+    assert_eq!(rel, PathBuf::from("../central/skill-x"));
+}
+
+#[test]
+fn test_make_relative_path_deep_nesting() {
+    let from = Path::new("/a/b/c/d");
+    let to = Path::new("/a/x/y");
+    let rel = make_relative_path(from, to);
+    assert_eq!(rel, PathBuf::from("../../../x/y"));
+}
+
+#[test]
+fn test_remote_symlink_install_replaces_existing_symlink() {
+    let info = RemotePathInfo {
+        file_type: "symlink".to_string(),
+        symlink_target: Some("/central/demo".to_string()),
+    };
+
+    let action =
+        classify_remote_existing_install_target("/agent/demo", "symlink", Some(&info), None);
+
+    assert_eq!(action, RemoteExistingInstallAction::RemoveSymlink);
+}
+
+#[test]
+fn test_remote_symlink_install_replaces_managed_copy_dir() {
+    let info = RemotePathInfo {
+        file_type: "dir".to_string(),
+        symlink_target: None,
+    };
+    let installation = SkillInstallation {
+        skill_id: "demo".to_string(),
+        agent_id: "codex".to_string(),
+        installed_path: "/agent/demo".to_string(),
+        link_type: "copy".to_string(),
+        symlink_target: None,
+        created_at: "2026-04-27T00:00:00Z".to_string(),
+    };
+
+    let action = classify_remote_existing_install_target(
+        "/agent/demo",
+        "symlink",
+        Some(&info),
+        Some(&installation),
+    );
+
+    assert_eq!(action, RemoteExistingInstallAction::RemoveManagedCopy);
+}
+
+#[test]
+fn test_remote_symlink_install_rejects_unmanaged_dir() {
+    let info = RemotePathInfo {
+        file_type: "dir".to_string(),
+        symlink_target: None,
+    };
+
+    let action =
+        classify_remote_existing_install_target("/agent/demo", "symlink", Some(&info), None);
+
+    match action {
+        RemoteExistingInstallAction::Reject(error) => {
+            assert!(error.contains("remote directory"));
+            assert!(error.contains("/agent/demo"));
+        }
+        other => panic!("expected rejection, got {:?}", other),
+    }
+}
+
+// ── install_skill_to_agent_impl ───────────────────────────────────────────
+
+#[tokio::test]
+async fn test_install_creates_symlink() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+
+    create_central_skill(&central_dir, "my-skill");
+
+    let result = install_skill_to_agent_impl(&pool, "my-skill", "claude-code").await;
+    assert!(result.is_ok(), "install should succeed: {:?}", result);
+
+    let symlink_path = agent_dir.join("my-skill");
+    let meta = fs::symlink_metadata(&symlink_path).unwrap();
+    assert!(meta.file_type().is_symlink(), "entry should be a symlink");
+}
+
+#[tokio::test]
+async fn test_install_symlink_is_relative() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "rel-skill");
+
+    install_skill_to_agent_impl(&pool, "rel-skill", "claude-code")
+        .await
+        .unwrap();
+
+    let symlink_path = agent_dir.join("rel-skill");
+    let link_target = fs::read_link(&symlink_path).unwrap();
+    assert!(
+        link_target.is_relative(),
+        "symlink target should be relative, got {:?}",
+        link_target
+    );
+}
+
+#[tokio::test]
+async fn test_install_symlink_resolves_correctly() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "resolve-skill");
+
+    install_skill_to_agent_impl(&pool, "resolve-skill", "claude-code")
+        .await
+        .unwrap();
+
+    let symlink_path = agent_dir.join("resolve-skill");
+    // Following the symlink should give access to SKILL.md in the central dir.
+    let skill_md = symlink_path.join("SKILL.md");
+    assert!(
+        skill_md.exists(),
+        "SKILL.md should be accessible via symlink"
+    );
+}
+
+#[tokio::test]
+async fn test_install_creates_agent_dir_if_missing() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    // Do NOT pre-create agent_dir — install should create it.
+    let agent_dir = tmp.path().join("new-agent-dir");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "dir-skill");
+
+    let result = install_skill_to_agent_impl(&pool, "dir-skill", "claude-code").await;
+    assert!(result.is_ok(), "install should create missing agent dir");
+    assert!(agent_dir.exists(), "agent dir should have been created");
+}
+
+#[tokio::test]
+async fn test_install_updates_db_record() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "db-skill");
+
+    install_skill_to_agent_impl(&pool, "db-skill", "claude-code")
+        .await
+        .unwrap();
+
+    let installations = db::get_skill_installations(&pool, "db-skill")
+        .await
+        .unwrap();
+    assert_eq!(installations.len(), 1);
+    assert_eq!(installations[0].agent_id, "claude-code");
+    assert_eq!(installations[0].link_type, "symlink");
+}
+
+#[tokio::test]
+async fn test_install_same_root_agent_records_native_without_symlink() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    point_codex_to_dir(&pool, &central_dir).await;
+    let skill_dir = create_central_skill(&central_dir, "shared-root-skill");
+
+    let result = install_skill_to_agent_impl(&pool, "shared-root-skill", "codex").await;
+    assert!(
+        result.is_ok(),
+        "same-root install should succeed: {:?}",
+        result
+    );
+
+    let meta = fs::symlink_metadata(&skill_dir).unwrap();
+    assert!(
+        meta.is_dir() && !meta.file_type().is_symlink(),
+        "same-root install must use the existing native directory"
+    );
+
+    let installations = db::get_skill_installations(&pool, "shared-root-skill")
+        .await
+        .unwrap();
+    assert_eq!(installations.len(), 1);
+    assert_eq!(installations[0].agent_id, "codex");
+    assert_eq!(installations[0].link_type, "native");
+    assert_eq!(
+        installations[0].installed_path,
+        skill_dir.to_string_lossy().into_owned()
+    );
+    assert!(installations[0].symlink_target.is_none());
+}
+
+#[tokio::test]
+async fn test_install_fails_when_canonical_missing() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    // Do NOT create the skill in central_dir.
+
+    let result = install_skill_to_agent_impl(&pool, "nonexistent-skill", "claude-code").await;
+    assert!(
+        result.is_err(),
+        "install should fail if canonical skill missing"
+    );
+}
+
+#[tokio::test]
+async fn test_install_fails_for_unknown_agent() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "some-skill");
+
+    let result = install_skill_to_agent_impl(&pool, "some-skill", "nonexistent-agent").await;
+    assert!(result.is_err(), "install should fail for unknown agent");
+}
+
+#[tokio::test]
+async fn test_install_to_central_agent_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &tmp.path().join("claude")).await;
+    create_central_skill(&central_dir, "self-skill");
+
+    let result = install_skill_to_agent_impl(&pool, "self-skill", "central").await;
+    assert!(
+        result.is_err(),
+        "installing to 'central' should be rejected"
+    );
+}
+
+#[tokio::test]
+async fn test_install_replaces_existing_symlink() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&agent_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "re-link-skill");
+
+    // Install once.
+    install_skill_to_agent_impl(&pool, "re-link-skill", "claude-code")
+        .await
+        .unwrap();
+
+    // Install again — should replace the existing symlink without error.
+    let result = install_skill_to_agent_impl(&pool, "re-link-skill", "claude-code").await;
+    assert!(result.is_ok(), "re-install should succeed: {:?}", result);
+}
+
+#[tokio::test]
+async fn test_install_refuses_to_overwrite_real_dir() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&agent_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "real-dir-skill");
+
+    // Create a real (non-symlink) directory at the install location.
+    fs::create_dir_all(agent_dir.join("real-dir-skill")).unwrap();
+
+    let result = install_skill_to_agent_impl(&pool, "real-dir-skill", "claude-code").await;
+    assert!(
+        result.is_err(),
+        "install should refuse to overwrite a real directory"
+    );
+}
+
+// ── uninstall_skill_from_agent_impl ───────────────────────────────────────
+
+#[tokio::test]
+async fn test_uninstall_removes_symlink() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "uninstall-skill");
+
+    install_skill_to_agent_impl(&pool, "uninstall-skill", "claude-code")
+        .await
+        .unwrap();
+
+    let symlink_path = agent_dir.join("uninstall-skill");
+    assert!(symlink_path.exists() || fs::symlink_metadata(&symlink_path).is_ok());
+
+    uninstall_skill_from_agent_impl(&pool, "uninstall-skill", "claude-code")
+        .await
+        .unwrap();
+
+    assert!(
+        fs::symlink_metadata(&symlink_path).is_err(),
+        "symlink should have been removed"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_removes_db_record() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "db-uninstall-skill");
+
+    install_skill_to_agent_impl(&pool, "db-uninstall-skill", "claude-code")
+        .await
+        .unwrap();
+
+    uninstall_skill_from_agent_impl(&pool, "db-uninstall-skill", "claude-code")
+        .await
+        .unwrap();
+
+    let installations = db::get_skill_installations(&pool, "db-uninstall-skill")
+        .await
+        .unwrap();
+    assert!(installations.is_empty(), "DB record should be removed");
+}
+
+#[tokio::test]
+async fn test_uninstall_refuses_real_dir() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&agent_dir).unwrap();
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+
+    // Place a real directory where the symlink would be.
+    fs::create_dir_all(agent_dir.join("protected-skill")).unwrap();
+
+    let result = uninstall_skill_from_agent_impl(&pool, "protected-skill", "claude-code").await;
+    assert!(
+        result.is_err(),
+        "uninstall should refuse to delete a real directory"
+    );
+
+    // Ensure the directory still exists.
+    assert!(
+        agent_dir.join("protected-skill").is_dir(),
+        "real directory should NOT have been deleted"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_nonexistent_path_still_cleans_db() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&agent_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+
+    // Manually insert an installation record without creating the symlink.
+    let installation = SkillInstallation {
+        skill_id: "ghost-skill".to_string(),
+        agent_id: "claude-code".to_string(),
+        installed_path: agent_dir.join("ghost-skill").to_string_lossy().into_owned(),
+        link_type: "symlink".to_string(),
+        symlink_target: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    db::upsert_skill_installation(&pool, &installation)
+        .await
+        .unwrap();
+
+    let result = uninstall_skill_from_agent_impl(&pool, "ghost-skill", "claude-code").await;
+    assert!(result.is_ok(), "uninstall of missing path should succeed");
+
+    let installations = db::get_skill_installations(&pool, "ghost-skill")
+        .await
+        .unwrap();
+    assert!(installations.is_empty(), "DB record should be cleaned up");
+}
+
+#[tokio::test]
+async fn test_uninstall_same_root_agent_is_rejected_without_deleting_central_dir() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    point_codex_to_dir(&pool, &central_dir).await;
+    let skill_dir = create_central_skill(&central_dir, "shared-root-uninstall-skill");
+
+    install_skill_to_agent_impl(&pool, "shared-root-uninstall-skill", "codex")
+        .await
+        .unwrap();
+
+    let result =
+        uninstall_skill_from_agent_impl(&pool, "shared-root-uninstall-skill", "codex").await;
+    assert!(
+        result
+            .as_ref()
+            .is_err_and(|error| error.contains("cannot be uninstalled independently")),
+        "same-root uninstall should be rejected: {:?}",
+        result
+    );
+    assert!(
+        skill_dir.join("SKILL.md").exists(),
+        "Central skill directory must not be deleted"
+    );
+
+    let installations = db::get_skill_installations(&pool, "shared-root-uninstall-skill")
+        .await
+        .unwrap();
+    assert_eq!(installations.len(), 1);
+    assert_eq!(installations[0].agent_id, "codex");
+}
+
+// ── batch install ─────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_batch_install_multiple_agents() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    let cursor_dir = tmp.path().join("cursor");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &claude_dir).await;
+
+    // Override cursor's dir too.
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+        .bind(cursor_dir.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    create_central_skill(&central_dir, "batch-skill");
+
+    let result = batch_install_impl(
+        &pool,
+        "batch-skill",
+        &["claude-code".to_string(), "cursor".to_string()],
+    )
+    .await;
+
+    assert_eq!(result.succeeded.len(), 2);
+    assert!(result.failed.is_empty());
+
+    assert!(fs::symlink_metadata(claude_dir.join("batch-skill")).is_ok());
+    assert!(fs::symlink_metadata(cursor_dir.join("batch-skill")).is_ok());
+}
+
+#[tokio::test]
+async fn test_batch_install_partial_failure() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &claude_dir).await;
+    create_central_skill(&central_dir, "partial-skill");
+
+    let result = batch_install_impl(
+        &pool,
+        "partial-skill",
+        &[
+            "claude-code".to_string(),
+            "nonexistent-agent".to_string(), // will fail
+        ],
+    )
+    .await;
+
+    assert_eq!(result.succeeded.len(), 1);
+    assert_eq!(result.failed.len(), 1);
+    assert_eq!(result.failed[0].agent_id, "nonexistent-agent");
+}
+
+#[tokio::test]
+async fn test_central_batch_install_multiple_skills_to_multiple_agents() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    let cursor_dir = tmp.path().join("cursor");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &claude_dir).await;
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+        .bind(cursor_dir.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    create_central_skill(&central_dir, "batch-one");
+    create_central_skill(&central_dir, "batch-two");
+
+    let result = batch_install_central_skills_impl(
+        &pool,
+        vec!["batch-one".to_string(), "batch-two".to_string()],
+        vec!["claude-code".to_string(), "cursor".to_string()],
+        "copy",
+        None,
+    )
+    .await;
+
+    assert_eq!(result.succeeded.len(), 4);
+    assert!(result.failed.is_empty());
+    assert!(claude_dir.join("batch-one").join("SKILL.md").exists());
+    assert!(claude_dir.join("batch-two").join("SKILL.md").exists());
+    assert!(cursor_dir.join("batch-one").join("SKILL.md").exists());
+    assert!(cursor_dir.join("batch-two").join("SKILL.md").exists());
+}
+
+#[tokio::test]
+async fn test_project_install_creates_project_relative_skill_dir() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "project-skill");
+
+    let result = install_central_skill_to_project_impl(
+        &pool,
+        "project-skill",
+        "claude-code",
+        &project_dir,
+        "copy",
+    )
+    .await
+    .unwrap();
+
+    let target = project_dir
+        .join(".claude")
+        .join("skills")
+        .join("project-skill");
+    assert_eq!(PathBuf::from(result.symlink_path), target);
+    assert!(target.join("SKILL.md").exists());
+}
+
+#[tokio::test]
+async fn test_project_install_refuses_existing_real_dir() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    let existing_dir = project_dir
+        .join(".claude")
+        .join("skills")
+        .join("existing-project-skill");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&existing_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "existing-project-skill");
+
+    let result = install_central_skill_to_project_impl(
+        &pool,
+        "existing-project-skill",
+        "claude-code",
+        &project_dir,
+        "copy",
+    )
+    .await;
+
+    assert!(
+        result
+            .as_ref()
+            .is_err_and(|error| error.contains("Refusing to overwrite")),
+        "project install should refuse existing real dir: {:?}",
+        result
+    );
+    assert!(existing_dir.is_dir());
+}
+
+#[tokio::test]
+async fn test_project_install_does_not_overwrite_global_installation_record() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "db-project-skill");
+    let global_path = agent_dir.join("db-project-skill");
+    let installation = SkillInstallation {
+        skill_id: "db-project-skill".to_string(),
+        agent_id: "claude-code".to_string(),
+        installed_path: global_path.to_string_lossy().into_owned(),
+        link_type: "copy".to_string(),
+        symlink_target: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    db::upsert_skill_installation(&pool, &installation)
+        .await
+        .unwrap();
+
+    install_central_skill_to_project_impl(
+        &pool,
+        "db-project-skill",
+        "claude-code",
+        &project_dir,
+        "copy",
+    )
+    .await
+    .unwrap();
+
+    let installations = db::get_skill_installations(&pool, "db-project-skill")
+        .await
+        .unwrap();
+    assert_eq!(installations.len(), 1);
+    assert_eq!(installations[0].agent_id, "claude-code");
+    assert_eq!(
+        installations[0].installed_path,
+        global_path.to_string_lossy()
+    );
+}
+
+/// Helper that mirrors `batch_install_to_agents` but works with a raw pool
+/// (no Tauri State).
+async fn batch_install_impl(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_ids: &[String],
+) -> BatchInstallResult {
+    let mut succeeded = Vec::new();
+    let mut failed = Vec::new();
+
+    for agent_id in agent_ids {
+        match install_skill_to_agent_impl(pool, skill_id, agent_id).await {
+            Ok(_) => succeeded.push(agent_id.clone()),
+            Err(e) => failed.push(FailedInstall {
+                agent_id: agent_id.clone(),
+                error: e,
+            }),
+        }
+    }
+
+    BatchInstallResult { succeeded, failed }
+}
+
+// ── install_skill_to_agent_copy_impl ──────────────────────────────────────
+
+#[tokio::test]
+async fn test_copy_install_creates_real_directory() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "copy-skill");
+
+    let result = install_skill_to_agent_copy_impl(&pool, "copy-skill", "claude-code").await;
+    assert!(result.is_ok(), "copy install should succeed: {:?}", result);
+
+    let target = agent_dir.join("copy-skill");
+    let meta = fs::symlink_metadata(&target).unwrap();
+    // Must be a real directory — NOT a symlink.
+    assert!(
+        meta.is_dir() && !meta.file_type().is_symlink(),
+        "installed path should be a real directory, not a symlink"
+    );
+}
+
+#[tokio::test]
+async fn test_copy_install_files_are_copied() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+
+    // Create skill with multiple files to verify all are copied.
+    let skill_dir = central_dir.join("multi-file-skill");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\nname: multi-file-skill\ndescription: Test\n---\n",
+    )
+    .unwrap();
+    fs::write(skill_dir.join("extra.txt"), "extra content").unwrap();
+
+    install_skill_to_agent_copy_impl(&pool, "multi-file-skill", "claude-code")
+        .await
+        .unwrap();
+
+    let installed_skill_dir = agent_dir.join("multi-file-skill");
+
+    // Verify SKILL.md was copied.
+    let skill_md = installed_skill_dir.join("SKILL.md");
+    assert!(skill_md.exists(), "SKILL.md should be copied to agent dir");
+
+    // Verify extra file was copied.
+    let extra = installed_skill_dir.join("extra.txt");
+    assert!(extra.exists(), "extra.txt should be copied to agent dir");
+    assert_eq!(
+        fs::read_to_string(&extra).unwrap(),
+        "extra content",
+        "copied file contents should match"
+    );
+
+    // Confirm that the installed path is NOT a symlink.
+    let meta = fs::symlink_metadata(&installed_skill_dir).unwrap();
+    assert!(
+        !meta.file_type().is_symlink(),
+        "installed directory must NOT be a symlink"
+    );
+}
+
+#[tokio::test]
+async fn test_copy_install_updates_db_with_copy_type() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "db-copy-skill");
+
+    install_skill_to_agent_copy_impl(&pool, "db-copy-skill", "claude-code")
+        .await
+        .unwrap();
+
+    let installations = db::get_skill_installations(&pool, "db-copy-skill")
+        .await
+        .unwrap();
+    assert_eq!(installations.len(), 1);
+    assert_eq!(installations[0].agent_id, "claude-code");
+    assert_eq!(
+        installations[0].link_type, "copy",
+        "DB should record link_type as 'copy'"
+    );
+}
+
+#[tokio::test]
+async fn test_copy_install_same_root_agent_records_native_without_copying() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    point_codex_to_dir(&pool, &central_dir).await;
+    let skill_dir = create_central_skill(&central_dir, "shared-root-copy-skill");
+
+    let result = install_skill_to_agent_copy_impl(&pool, "shared-root-copy-skill", "codex").await;
+    assert!(
+        result.is_ok(),
+        "same-root copy install should succeed: {:?}",
+        result
+    );
+
+    let meta = fs::symlink_metadata(&skill_dir).unwrap();
+    assert!(
+        meta.is_dir() && !meta.file_type().is_symlink(),
+        "same-root copy install must keep the native Central directory"
+    );
+
+    let installations = db::get_skill_installations(&pool, "shared-root-copy-skill")
+        .await
+        .unwrap();
+    assert_eq!(installations.len(), 1);
+    assert_eq!(installations[0].agent_id, "codex");
+    assert_eq!(installations[0].link_type, "native");
+    assert!(installations[0].symlink_target.is_none());
+}
+
+#[tokio::test]
+async fn test_copy_install_to_central_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &tmp.path().join("claude")).await;
+    create_central_skill(&central_dir, "self-copy-skill");
+
+    let result = install_skill_to_agent_copy_impl(&pool, "self-copy-skill", "central").await;
+    assert!(
+        result.is_err(),
+        "copy install to 'central' should be rejected"
+    );
+}
+
+#[tokio::test]
+async fn test_copy_install_fails_when_canonical_missing() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    // Deliberately do NOT create the skill in central_dir.
+
+    let result = install_skill_to_agent_copy_impl(&pool, "missing-skill", "claude-code").await;
+    assert!(
+        result.is_err(),
+        "copy install should fail when canonical skill is missing"
+    );
+}
+
+#[tokio::test]
+async fn test_copy_install_refuses_to_overwrite_real_dir() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&agent_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "existing-dir-skill");
+
+    // Create a real directory at the target location.
+    fs::create_dir_all(agent_dir.join("existing-dir-skill")).unwrap();
+
+    let result = install_skill_to_agent_copy_impl(&pool, "existing-dir-skill", "claude-code").await;
+    assert!(
+        result.is_err(),
+        "copy install should refuse to overwrite an existing real directory"
+    );
+}
+
+// ── uninstall (copy) ──────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_uninstall_removes_copied_directory() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "uninstall-copy-skill");
+
+    // First, install via copy.
+    install_skill_to_agent_copy_impl(&pool, "uninstall-copy-skill", "claude-code")
+        .await
+        .unwrap();
+
+    let target = agent_dir.join("uninstall-copy-skill");
+    assert!(
+        target.is_dir(),
+        "copied directory should exist before uninstall"
+    );
+
+    // Now uninstall.
+    uninstall_skill_from_agent_impl(&pool, "uninstall-copy-skill", "claude-code")
+        .await
+        .unwrap();
+
+    assert!(
+        fs::symlink_metadata(&target).is_err(),
+        "copied directory should have been removed after uninstall"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_copy_removes_db_record() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "db-copy-uninstall-skill");
+
+    install_skill_to_agent_copy_impl(&pool, "db-copy-uninstall-skill", "claude-code")
+        .await
+        .unwrap();
+
+    uninstall_skill_from_agent_impl(&pool, "db-copy-uninstall-skill", "claude-code")
+        .await
+        .unwrap();
+
+    let installations = db::get_skill_installations(&pool, "db-copy-uninstall-skill")
+        .await
+        .unwrap();
+    assert!(
+        installations.is_empty(),
+        "DB record should be removed after uninstall"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_refuses_real_dir_without_copy_record() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&agent_dir).unwrap();
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+
+    // Place a real directory with NO DB record as 'copy' type.
+    fs::create_dir_all(agent_dir.join("protected-skill")).unwrap();
+
+    let result = uninstall_skill_from_agent_impl(&pool, "protected-skill", "claude-code").await;
+    assert!(
+        result.is_err(),
+        "uninstall should refuse to delete a real directory without a copy record"
+    );
+
+    // Ensure the directory still exists.
+    assert!(
+        agent_dir.join("protected-skill").is_dir(),
+        "real directory should NOT have been deleted"
+    );
+}
+
+#[tokio::test]
+async fn test_batch_install_uses_copy_method() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "batch-copy-skill");
+
+    let mut succeeded = Vec::new();
+    let mut failed = Vec::new();
+    for agent_id in &["claude-code".to_string()] {
+        match install_skill_to_agent_copy_impl(&pool, "batch-copy-skill", agent_id).await {
+            Ok(_) => succeeded.push(agent_id.clone()),
+            Err(e) => failed.push(FailedInstall {
+                agent_id: agent_id.clone(),
+                error: e,
+            }),
+        }
+    }
+
+    assert_eq!(succeeded.len(), 1);
+    assert!(failed.is_empty());
+
+    // The installed directory must NOT be a symlink.
+    let target = agent_dir.join("batch-copy-skill");
+    let meta = fs::symlink_metadata(&target).unwrap();
+    assert!(
+        !meta.file_type().is_symlink(),
+        "batch copy install should create a real directory"
+    );
+}

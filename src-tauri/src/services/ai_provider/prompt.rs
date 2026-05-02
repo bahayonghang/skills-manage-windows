@@ -1,0 +1,71 @@
+//! Prompt construction and protocol detection for AI explanation requests.
+//!
+//! `ExplanationApiProtocol` distinguishes Anthropic-style (`/v1/messages`)
+//! and OpenAI-style (`/v1/chat/completions`) endpoints so the streaming and
+//! non-streaming paths can pick the right header/body shape.
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExplanationApiProtocol {
+    AnthropicCompatible,
+    OpenAiCompatible,
+    Unknown,
+}
+
+pub(crate) fn detect_explanation_api_protocol(api_url: &str) -> ExplanationApiProtocol {
+    let path = reqwest::Url::parse(api_url)
+        .ok()
+        .map(|url| url.path().trim_end_matches('/').to_ascii_lowercase())
+        .unwrap_or_else(|| api_url.trim_end_matches('/').to_ascii_lowercase());
+
+    if path.ends_with("/v1/messages") || path.contains("/anthropic/v1/messages") {
+        return ExplanationApiProtocol::AnthropicCompatible;
+    }
+
+    if path.ends_with("/v1/chat/completions") {
+        return ExplanationApiProtocol::OpenAiCompatible;
+    }
+
+    ExplanationApiProtocol::Unknown
+}
+
+/// Truncate skill content to 8000 chars to keep prompts within typical context limits.
+pub(crate) fn truncate_content(content: &str) -> String {
+    if content.len() > 8000 {
+        format!("{}...\n\n(内容已截断)", &content[..8000])
+    } else {
+        content.to_string()
+    }
+}
+
+/// Build the explanation prompt based on language. Returns ZH by default.
+pub(crate) fn build_explanation_prompt(truncated: &str, lang: &str) -> String {
+    match lang {
+        "en" => format!(
+            "Please explain in English concisely the purpose, use cases, and key features \
+            of the following AI Agent Skill (SKILL.md). \
+            Divide into three parts: 1) One-sentence summary 2) Applicable scenarios 3) Key features. \
+            Keep it under 200 words.\n\n---\n\n{}",
+            truncated
+        ),
+        _ => format!(
+            "请用中文简洁地解释以下 AI Agent Skill（SKILL.md）的用途、使用场景和关键功能。\
+            分为三部分：1) 一句话总结 2) 适用场景 3) 关键功能点。\
+            控制在 200 字以内。\n\n---\n\n{}",
+            truncated
+        ),
+    }
+}
+
+/// Build the streaming request body as serde_json::Value.
+/// Both Anthropic and OpenAI use the same messages format with `stream: true`.
+pub(crate) fn build_stream_request_body(model: &str, prompt: &str) -> serde_json::Value {
+    serde_json::json!({
+        "model": model,
+        "max_tokens": 1024,
+        "stream": true,
+        "messages": [{
+            "role": "user",
+            "content": prompt
+        }]
+    })
+}

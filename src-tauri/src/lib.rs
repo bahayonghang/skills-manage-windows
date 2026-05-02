@@ -3,6 +3,7 @@ pub mod commands;
 pub mod db;
 pub mod path_utils;
 pub mod paths;
+pub mod services;
 pub mod targets;
 
 use db::DbPool;
