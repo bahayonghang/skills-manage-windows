@@ -2,6 +2,27 @@
 
 本文件记录该项目的重要变更。
 
+## 0.10.0 - 2026-05-03
+
+这是一次围绕上游 0.10.0 对齐、Linux 桌面打包补齐，以及 Discover 安装链路修正的版本升级，同时继续保持当前 SkillPort fork 的 Windows-first 发布契约。
+
+### 新功能
+
+- 新增 Linux 桌面打包 metadata、模板和 GitHub Actions 任务，可在 SkillPort 身份下产出 `.deb`、`.rpm`、`.AppImage`。
+- Discover 安装平台时，现有安装弹窗里的 `symlink` / `copy` 选项会一路透传到 Rust 后端。
+- 恢复 Windows release 产物矩阵，发布时同时准备 NSIS `.exe`、MSI 和便携 ZIP。
+
+### 改进
+
+- 为 Tauri bundle 配置补齐 publisher、homepage、licenseFile、description 和 AppStream 集成等跨平台元数据。
+- 对 Discover 共享目录模式（如 `.agents/skills`）做去重，减少同一项目被重复映射成多个平台来源。
+- 新增 0.10.0 release notes，并同步 README 下载说明以覆盖新的桌面包矩阵。
+
+### 修复
+
+- 删除已跟踪的 `.factory/` 工厂产物，并忽略后续 `.factory/` 输出，同时继续保留 `AGENTS.md`。
+- Linux 打包全程保持 `SkillPort` / `skillport` / `com.bahayonghang.skillport` 身份，不回退到上游品牌。
+
 ## 0.9.1 - 2026-04-23
 
 这是一次以完整路径显示一致性和 README 细节补充为主的小型维护版本。

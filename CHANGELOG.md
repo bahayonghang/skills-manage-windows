@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.10.0 - 2026-05-03
+
+Alignment release focused on upstream 0.10.0 packaging parity, Linux desktop bundles, and safer Discover installs for this Windows-first SkillPort fork.
+
+### Features
+
+- Add Linux desktop bundle metadata, templates, and GitHub Actions jobs for `.deb`, `.rpm`, and `.AppImage` artifacts under the SkillPort identity.
+- Extend Discover platform installs so the existing install dialog now forwards `symlink` or `copy` mode all the way to the Rust backend.
+- Restore Windows release artifacts to include NSIS `.exe`, MSI, and portable ZIP assets alongside macOS and Linux bundles.
+
+### Improvements
+
+- Add cross-platform bundle metadata such as publisher, homepage, license file, descriptions, and AppStream integration to the Tauri config.
+- Deduplicate shared Discover platform directory patterns like `.agents/skills` so scans stop producing repeated platform matches for the same project path.
+- Add release notes for the 0.10.0 line and refresh README download guidance for the expanded desktop package matrix.
+
+### Fixes
+
+- Delete tracked `.factory/` factory artifacts and ignore future `.factory/` output without hiding `AGENTS.md`.
+- Keep Linux packaging branded as `SkillPort` / `skillport` / `com.bahayonghang.skillport` instead of reverting to upstream identifiers.
+
 ## 0.9.1 - 2026-04-23
 
 Maintenance release focused on full-path display consistency and small README polish.
