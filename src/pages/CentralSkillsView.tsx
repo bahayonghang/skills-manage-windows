@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { BatchDeleteCentralSkillPreviewResult, CentralSkillUpdateState, DeleteSkillRepositoryPreview, SkillDetail, SkillRepositoryWithStats, SkillWithLinks } from "@/types";
 import { markAppPerformance } from "@/lib/performance";
 import { useResizableWidth } from "@/hooks/useResizableWidth";
+import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { CentralSkillsShell } from "@/components/central/CentralSkillsShell";
 import { useCentralSkillsActions } from "@/pages/centralSkillsActions";
 import {
@@ -13,6 +14,8 @@ import {
   type CentralSortDirection,
   type CentralSortField,
 } from "@/pages/centralSkillsViewModel";
+import { useSettingsStore } from "@/stores/settingsStore";
+import { usePlatformStore } from "@/stores/platformStore";
 
 const CENTRAL_FILTER_DEFAULT_WIDTH = 286;
 const CENTRAL_FILTER_MIN_WIDTH = 220;
@@ -137,6 +140,7 @@ export function CentralSkillsView() {
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isGitHubImportOpen, setIsGitHubImportOpen] = useState(false);
+  const [isPlatformManageOpen, setIsPlatformManageOpen] = useState(false);
   const [isPortabilityOpen, setIsPortabilityOpen] = useState(false);
   const [dismissedUpdateProgressKey, setDismissedUpdateProgressKey] = useState<string | null>(null);
   const [githubRepoUrl, setGitHubRepoUrl] = useState("");
@@ -144,6 +148,13 @@ export function CentralSkillsView() {
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const hasMarkedCentralListReady = useRef(false);
   const deferredSearchQuery = useDeferredValue(searchQuery);
+  const categoryVisibility =
+    usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+  const setCategoryVisibility = usePlatformStore((state) => state.setCategoryVisibility);
+  const setAgentEnabled = usePlatformStore((state) => state.setAgentEnabled);
+  const addCustomAgent = useSettingsStore((state) => state.addCustomAgent);
+  const updateCustomAgent = useSettingsStore((state) => state.updateCustomAgent);
+  const removeCustomAgent = useSettingsStore((state) => state.removeCustomAgent);
   const effectiveSearchQuery =
     skills.length > 80 ? deferredSearchQuery : searchQuery;
   const {
@@ -415,6 +426,7 @@ export function CentralSkillsView() {
         isDialogOpen,
         isDrawerOpen,
         isGitHubImportOpen,
+        isPlatformManageOpen,
         isInstalling,
         isPortabilityOpen,
         isRemoteMissingDialogOpen,
@@ -437,8 +449,25 @@ export function CentralSkillsView() {
         setIsDialogOpen,
         setIsDrawerOpen,
         setIsGitHubImportOpen,
+        setIsPlatformManageOpen,
         setIsPortabilityOpen,
         exportSkillportState,
+        platformManagement: {
+          agents,
+          categoryVisibility,
+          addCustomAgent,
+          updateCustomAgent,
+          removeCustomAgent,
+          setCategoryVisibility,
+          setAgentEnabled,
+          rescan: async () => {
+            await loadCentralSkills();
+            await refreshCounts();
+          },
+          refreshCounts,
+          loadCentralSkills,
+          refreshDiscoverCounts: async () => undefined,
+        },
         onAfterImportSuccess: handleAfterImportSuccess,
         onBatchDeleteCentralSkills: handleBatchDeleteCentralSkills,
         onBatchDeleteDialogOpenChange: handleBatchDeleteDialogOpenChange,
@@ -508,6 +537,7 @@ export function CentralSkillsView() {
       }}
       searchQuery={searchQuery}
       setIsGitHubImportOpen={setIsGitHubImportOpen}
+      setIsPlatformManageOpen={setIsPlatformManageOpen}
       setIsPortabilityOpen={setIsPortabilityOpen}
       setRepositoryFilter={setRepositoryFilter}
       setSearchQuery={setSearchQuery}

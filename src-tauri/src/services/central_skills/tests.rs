@@ -33,6 +33,13 @@ fn write_test_skill_dir(dir: &Path) {
     .unwrap();
 }
 
+fn make_directory_tree_fixture(root: &Path) {
+    fs::create_dir_all(root.join("examples").join("nested")).unwrap();
+    fs::write(root.join("SKILL.md"), "# Demo").unwrap();
+    fs::write(root.join("examples").join("demo.md"), "demo").unwrap();
+    fs::write(root.join("examples").join("nested").join("deep.txt"), "deep").unwrap();
+}
+
 fn make_central_skill_at(id: &str, name: &str, dir: &Path) -> Skill {
     Skill {
         id: id.to_string(),
@@ -1432,6 +1439,27 @@ async fn test_read_file_by_path_success() {
 #[tokio::test]
 async fn test_read_file_by_path_not_found() {
     let result = read_file_by_path_impl("/nonexistent/file.md");
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_list_directory_tree_reads_nested_local_structure() {
+    let tmp = TempDir::new().unwrap();
+    make_directory_tree_fixture(tmp.path());
+
+    let result = super::files::list_directory_tree_impl(&tmp.path().to_string_lossy()).unwrap();
+
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0].name, "examples");
+    assert_eq!(result[0].file_type, "dir");
+    assert_eq!(result[0].children.len(), 2);
+    assert_eq!(result[1].name, "SKILL.md");
+    assert_eq!(result[1].file_type, "file");
+}
+
+#[tokio::test]
+async fn test_list_directory_tree_rejects_missing_path() {
+    let result = super::files::list_directory_tree_impl("/definitely/missing/path");
     assert!(result.is_err());
 }
 

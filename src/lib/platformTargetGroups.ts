@@ -181,9 +181,6 @@ export function hasProjectSkillPattern(agent: PlatformTarget): boolean {
   if (agent.project_skills_dir?.trim()) {
     return true;
   }
-  if (agent.is_builtin) {
-    return true;
-  }
 
   const normalized = agent.global_skills_dir.replace(/\\/g, "/");
   return normalized.startsWith("~/") || /\/\.[^/]+\/skills\/?$/.test(normalized);

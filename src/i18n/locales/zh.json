@@ -19,7 +19,9 @@
     "retry": "重试",
     "loading": "加载中...",
     "search": "搜索",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "expand": "展开",
+    "collapse": "折叠"
   },
   "targets": {
     "title": "远程目标",
@@ -87,7 +89,8 @@
     "rescan": "重新扫描...",
     "categoryLobster": "龙虾类",
     "categoryCoding": "编程类",
-    "resizeSidebar": "调整侧边栏宽度"
+    "resizeSidebar": "调整侧边栏宽度",
+    "obsidian": "Obsidian 仓库"
   },
   "dashboard": {
     "eyebrow": "本地操作控制台",
@@ -528,7 +531,10 @@
       "missing": "缺失",
       "unrestorable": "不可恢复"
     },
-    "platformTargetsLabel": "安装目标"
+    "platformTargetsLabel": "安装目标",
+    "platformManageButton": "管理平台",
+    "platformManageTitle": "管理安装目标",
+    "platformManageDesc": "无需离开中央技能库即可调整平台可见性和自定义安装目标。"
   },
   "installDialog": {
     "title": "安装 {{name}}",
@@ -616,7 +622,10 @@
     "readOnlyDesc": "插件安装的副本仅供查看，不能在这里安装、卸载或调整技能集。",
     "userManagedDesc": "此 Claude 用户副本会保留正常的安装状态与技能集管理能力。",
     "readOnlyInstallBlocked": "插件来源的只读副本不可安装或卸载。",
-    "readOnlyCollectionsBlocked": "插件来源的只读副本不可调整技能集。"
+    "readOnlyCollectionsBlocked": "插件来源的只读副本不可调整技能集。",
+    "fileTreeTitle": "文件树",
+    "fileTreeLoading": "正在加载文件树...",
+    "fileTreeEmpty": "当前技能没有可展示的文件。"
   },
   "collection": {
     "edit": "编辑",
@@ -1055,5 +1064,16 @@
     "githubImportResultSkippedNone": "没有跳过任何技能。",
     "githubPatSettingsHint": "请前往设置并保存 GitHub Personal Access Token，让该导入流程改用经过认证的直连 GitHub 请求。",
     "githubPatConfiguredFailureHint": "当前请求已经使用已配置的 GitHub 令牌。请检查令牌所属账号是否能读取该仓库，以及令牌是否有足够的仓库访问权限。"
+  },
+  "obsidian": {
+    "title": "Obsidian 仓库技能",
+    "desc": "浏览本地 Obsidian vault 中仅作为来源的技能，并导入到中央库或平台。",
+    "searchPlaceholder": "搜索 vault 技能...",
+    "loadingVaults": "正在加载 vault 列表...",
+    "loadingSkills": "正在加载 vault 技能...",
+    "empty": "未找到包含受支持技能目录的 Obsidian vault。",
+    "emptySkills": "当前 vault 还没有受支持的技能。",
+    "importSuccess": "技能导入成功。",
+    "importError": "技能导入失败：{{error}}"
   }
 }

@@ -44,14 +44,34 @@ pub fn default_scan_roots() -> Vec<ScanRoot> {
 /// relative pattern like `.claude/skills` from `/home/user/.claude/skills`.
 pub fn platform_skill_patterns(_pool: &DbPool) -> Vec<(String, String, PathBuf)> {
     let home = paths::resolve_home_dir();
+    let mut seen = std::collections::HashSet::new();
 
     db::builtin_agents()
         .iter()
         .filter(|a| a.id != "central")
         .filter_map(|a| {
-            let full = PathBuf::from(&a.global_skills_dir);
-            let rel = full.strip_prefix(&home).ok()?;
-            Some((a.id.clone(), a.display_name.clone(), rel.to_path_buf()))
+            let rel = match a.project_skills_dir.as_deref() {
+                Some(project_skills_dir) if !project_skills_dir.trim().is_empty() => {
+                    let trimmed = project_skills_dir.trim();
+                    let relative = trimmed
+                        .strip_prefix("~/")
+                        .or_else(|| trimmed.strip_prefix("~\\"))
+                        .unwrap_or(trimmed);
+                    let path = PathBuf::from(relative);
+                    if path.is_absolute() {
+                        return None;
+                    }
+                    path
+                }
+                _ => {
+                    let full = PathBuf::from(&a.global_skills_dir);
+                    full.strip_prefix(&home).ok()?.to_path_buf()
+                }
+            };
+            if !seen.insert(rel.clone()) {
+                return None;
+            }
+            Some((a.id.clone(), a.display_name.clone(), rel))
         })
         .collect()
 }

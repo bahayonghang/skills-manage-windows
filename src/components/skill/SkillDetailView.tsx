@@ -34,6 +34,10 @@ import type { DiscoverMetadata, PreviewTab } from "@/components/skill/skillDetai
 
 export type { DiscoverMetadata } from "@/components/skill/skillDetailViewTypes";
 
+const NOOP_ASYNC = async () => undefined;
+const NOOP = () => undefined;
+const EMPTY_DIRECTORY_TREE: never[] = [];
+
 /**
  * Shared presentation component for skill detail. Rendered by both the
  * full-page route wrapper (`SkillDetailPage`) and the list-entry drawer
@@ -108,8 +112,11 @@ export function SkillDetailView({
   const fileIsExplaining = useSkillDetailStore((s) => s.fileIsExplaining);
   const loadFileContent = useSkillDetailStore((s) => s.loadFileContent);
   const explainFileContent = useSkillDetailStore((s) => s.explainFileContent);
-  const openInFileManager = useSkillDetailStore((s) => s.openInFileManager);
-  const resetFileMode = useSkillDetailStore((s) => s.resetFileMode);
+  const openInFileManager = useSkillDetailStore((s) => s.openInFileManager) ?? NOOP_ASYNC;
+  const directoryTree = useSkillDetailStore((s) => s.directoryTree) ?? EMPTY_DIRECTORY_TREE;
+  const isDirectoryLoading = useSkillDetailStore((s) => s.isDirectoryLoading) ?? false;
+  const loadDirectoryTree = useSkillDetailStore((s) => s.loadDirectoryTree) ?? NOOP_ASYNC;
+  const resetFileMode = useSkillDetailStore((s) => s.resetFileMode) ?? NOOP;
 
   const agents = usePlatformStore((s) => s.agents);
   const categoryVisibility =
@@ -184,6 +191,21 @@ export function SkillDetailView({
       reset();
     };
   }, [detailRequest, loadDetail, reset]);
+
+  const directoryPath = useMemo(() => {
+    if (isFileMode) {
+      return discoverMetadata?.dirPath ?? null;
+    }
+    return detail?.dir_path ?? null;
+  }, [detail?.dir_path, discoverMetadata?.dirPath, isFileMode]);
+
+  useEffect(() => {
+    if (!directoryPath) {
+      void loadDirectoryTree("");
+      return;
+    }
+    void loadDirectoryTree(directoryPath);
+  }, [directoryPath, loadDirectoryTree]);
 
   useLayoutEffect(() => {
     if (explanationRequestKey && storeContent) {
@@ -362,6 +384,22 @@ export function SkillDetailView({
     }
   }, [discoverMetadata, isRemoteTarget, openInFileManager, t]);
 
+  const handleOpenFileTreePath = useCallback(async (path: string) => {
+    if (!path) {
+      return;
+    }
+    try {
+      if (isRemoteTarget) {
+        await navigator.clipboard.writeText(path);
+        toast.success(t("targets.pathCopied"));
+        return;
+      }
+      await openInFileManager(path);
+    } catch {
+      // ignore opener errors inside the inspector
+    }
+  }, [isRemoteTarget, openInFileManager, t]);
+
   const { frontmatterRaw, frontmatterData, body: markdownContent } = content
     ? parseFrontmatter(content)
     : { frontmatterRaw: "", frontmatterData: {}, body: "" };
@@ -450,6 +488,9 @@ export function SkillDetailView({
               detail={detail}
               isRemoteTarget={isRemoteTarget}
               onOpenDiscoverPath={handleOpenDiscoverPath}
+              directoryTree={directoryTree}
+              isDirectoryLoading={isDirectoryLoading}
+              onOpenFileTreePath={handleOpenFileTreePath}
               updateStatus={updateStatus}
               isCheckingUpdates={isCheckingUpdates}
               isUpdatingThisSkill={isUpdatingThisSkill}

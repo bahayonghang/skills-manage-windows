@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+pub const OBSIDIAN_PLATFORM_ID: &str = "obsidian";
+pub const OBSIDIAN_PLATFORM_NAME: &str = "Obsidian";
+
 /// A candidate scan root (e.g. ~/projects, ~/Developer).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanRoot {
@@ -7,6 +10,14 @@ pub struct ScanRoot {
     pub label: String,
     pub exists: bool,
     pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObsidianVault {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub skill_count: usize,
 }
 
 /// A project-level skill discovered during a full-disk scan.

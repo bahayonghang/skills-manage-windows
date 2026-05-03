@@ -20,6 +20,7 @@ pub use delete::{
     preview_delete_skill_repository_impl, preview_delete_skill_repository_ssh_impl,
 };
 pub use files::{
+    list_directory_tree_for_target_impl,
     open_in_file_manager_for_target_impl, read_file_by_path_for_target_impl,
     read_skill_content_for_target_impl,
 };
@@ -30,5 +31,6 @@ pub use types::{
     BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest,
     BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, DeleteCentralSkillPreview,
     DeleteCentralSkillResult, DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult,
+    DirectoryTreeEntry,
     FailedCentralSkillDelete, SkillDetail, SkillInstallationDetail, SkillWithLinks,
 };

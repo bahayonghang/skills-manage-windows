@@ -29,6 +29,27 @@ pub async fn get_scan_roots(state: State<'_, AppState>) -> Result<Vec<ScanRoot>,
 }
 
 #[tauri::command]
+pub async fn get_obsidian_vaults(
+    state: State<'_, AppState>,
+) -> Result<Vec<ObsidianVault>, String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Ok(Vec::new());
+    }
+    discovery::get_obsidian_vaults_impl(&state.db).await
+}
+
+#[tauri::command]
+pub async fn get_obsidian_vault_skills(
+    state: State<'_, AppState>,
+    vault_id: String,
+) -> Result<Vec<DiscoveredSkill>, String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Ok(Vec::new());
+    }
+    discovery::get_obsidian_vault_skills_impl(&state.db, &vault_id).await
+}
+
+#[tauri::command]
 pub async fn set_scan_root_enabled(
     state: State<'_, AppState>,
     path: String,
@@ -92,16 +113,55 @@ pub async fn import_discovered_skill_to_central(
 }
 
 #[tauri::command]
-pub async fn import_discovered_skill_to_platform(
+pub async fn import_source_skill_to_central(
     state: State<'_, AppState>,
-    discovered_skill_id: String,
-    agent_id: String,
+    file_path: String,
+    dir_path: String,
 ) -> Result<ImportResult, String> {
     if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
         return Err("Remote Discover import is not supported in this version.".to_string());
     }
-    discovery::import_discovered_skill_to_platform_impl(&state.db, &discovered_skill_id, &agent_id)
-        .await
+    discovery::import_source_skill_to_central_impl(&state.db, &file_path, &dir_path).await
+}
+
+#[tauri::command]
+pub async fn import_discovered_skill_to_platform(
+    state: State<'_, AppState>,
+    discovered_skill_id: String,
+    agent_id: String,
+    method: Option<String>,
+) -> Result<ImportResult, String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Err("Remote Discover import is not supported in this version.".to_string());
+    }
+    discovery::import_discovered_skill_to_platform_with_method_impl(
+        &state.db,
+        &discovered_skill_id,
+        &agent_id,
+        method.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn import_source_skill_to_platform(
+    state: State<'_, AppState>,
+    file_path: String,
+    dir_path: String,
+    agent_id: String,
+    method: Option<String>,
+) -> Result<ImportResult, String> {
+    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
+        return Err("Remote Discover import is not supported in this version.".to_string());
+    }
+    discovery::import_source_skill_to_platform_with_method_impl(
+        &state.db,
+        &file_path,
+        &dir_path,
+        &agent_id,
+        method.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]

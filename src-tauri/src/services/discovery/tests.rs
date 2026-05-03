@@ -45,6 +45,20 @@ async fn test_platform_skill_patterns_excludes_central() {
         patterns.iter().any(|(id, _, _)| id == "claude-code"),
         "claude-code should appear in platform skill patterns"
     );
+    let mut seen_paths = std::collections::HashSet::new();
+    for (_, _, rel_path) in &patterns {
+        assert!(
+            seen_paths.insert(rel_path.clone()),
+            "duplicate platform pattern path {:?}",
+            rel_path
+        );
+    }
+    assert!(
+        patterns
+            .iter()
+            .any(|(_, _, rel_path)| rel_path == &PathBuf::from(".agents/skills")),
+        "the shared .agents/skills pattern should be discoverable once"
+    );
 }
 
 #[tokio::test]
@@ -332,6 +346,114 @@ async fn test_import_discovered_skill_to_platform_creates_symlink() {
     assert!(
         record.is_some(),
         "discovered skill record should be kept after platform install"
+    );
+}
+
+#[tokio::test]
+async fn test_import_discovered_skill_to_platform_copy_creates_real_dir() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let agent_dir = tmp.path().join("agent-skills");
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+        .bind(agent_dir.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    std::fs::create_dir_all(&agent_dir).unwrap();
+
+    let skill_dir = tmp.path().join("project/.cursor/skills/my-skill");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\nname: my-skill\ndescription: A test skill\n---\n\n# My Skill\n",
+    )
+    .unwrap();
+    std::fs::write(skill_dir.join("extra.txt"), "copy me").unwrap();
+
+    let now = Utc::now().to_rfc3339();
+    db::insert_discovered_skill(
+        &pool,
+        "cursor__project__my-skill",
+        "my-skill",
+        Some("A test skill"),
+        &skill_dir.join("SKILL.md").to_string_lossy(),
+        &skill_dir.to_string_lossy(),
+        &tmp.path().join("project").to_string_lossy(),
+        "project",
+        "cursor",
+        &now,
+    )
+    .await
+    .unwrap();
+
+    let result = import_discovered_skill_to_platform_with_method_at(
+        &pool,
+        "cursor__project__my-skill",
+        "cursor",
+        &agent_dir,
+        Some("copy"),
+    )
+    .await;
+
+    assert!(result.is_ok(), "copy import should succeed: {:?}", result);
+
+    let target_path = agent_dir.join("my-skill");
+    assert!(target_path.exists(), "copied target should exist");
+    let meta = std::fs::symlink_metadata(&target_path).unwrap();
+    assert!(meta.is_dir(), "copy install should create a real directory");
+    assert!(
+        !meta.file_type().is_symlink(),
+        "copy install must not create a symlink"
+    );
+    assert!(target_path.join("SKILL.md").exists());
+    assert!(target_path.join("extra.txt").exists());
+
+    let installations = db::get_skill_installations(&pool, "my-skill")
+        .await
+        .unwrap();
+    let installation = installations
+        .iter()
+        .find(|installation| installation.agent_id == "cursor")
+        .expect("cursor install record should exist");
+    assert_eq!(installation.link_type, "copy");
+    assert!(installation.symlink_target.is_none());
+}
+
+#[tokio::test]
+async fn test_import_source_skill_to_central_copies_without_discovered_row() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let central_dir = tmp.path().join("central");
+    std::fs::create_dir_all(&central_dir).unwrap();
+
+    let skill_dir = tmp.path().join("vault/.skills/obsidian-demo");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\nname: obsidian-demo\ndescription: Vault sourced\n---\n\n# Demo\n",
+    )
+    .unwrap();
+
+    let result =
+        import_source_skill_to_central_at(&pool, &skill_dir.to_string_lossy(), &central_dir).await;
+
+    assert!(result.is_ok(), "source import should succeed: {:?}", result);
+    assert!(central_dir.join("obsidian-demo").join("SKILL.md").exists());
+
+    let stored = db::get_skill_by_id(&pool, "obsidian-demo")
+        .await
+        .unwrap()
+        .expect("central skill should be stored");
+    assert!(stored.is_central);
+    assert_eq!(
+        stored.file_path,
+        central_dir
+            .join("obsidian-demo")
+            .join("SKILL.md")
+            .to_string_lossy()
     );
 }
 
@@ -770,22 +892,31 @@ async fn test_import_to_platform_refuses_existing_installation() {
 }
 
 #[tokio::test]
-async fn test_platform_skill_patterns_includes_all_non_central_agents() {
+async fn test_platform_skill_patterns_include_unique_non_central_paths() {
     let pool = setup_test_db().await;
     let patterns = platform_skill_patterns(&pool);
 
-    // Should have entries for all non-central agents.
-    let central_agents: Vec<_> = db::builtin_agents()
-        .iter()
-        .filter(|a| a.id != "central")
-        .map(|a| a.id.clone())
-        .collect();
+    assert!(
+        !patterns.is_empty(),
+        "platform skill patterns should not be empty"
+    );
+    assert!(
+        patterns.iter().any(|(id, _, _)| id == "claude-code"),
+        "claude-code should still expose its dedicated project pattern"
+    );
+    assert!(
+        patterns
+            .iter()
+            .any(|(_, _, rel_path)| rel_path == &PathBuf::from(".agents/skills")),
+        "shared .agents/skills should still be discoverable"
+    );
 
-    for agent_id in &central_agents {
+    let mut seen_paths = std::collections::HashSet::new();
+    for (_, _, rel_path) in &patterns {
         assert!(
-            patterns.iter().any(|(id, _, _)| id == agent_id),
-            "agent '{}' should appear in platform skill patterns",
-            agent_id
+            seen_paths.insert(rel_path.clone()),
+            "duplicate platform pattern path {:?}",
+            rel_path
         );
     }
 }

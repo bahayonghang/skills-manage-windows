@@ -195,6 +195,7 @@ pub fn run() {
             commands::skills::get_skill_detail,
             commands::skills::read_skill_content,
             commands::skills::read_file_by_path,
+            commands::skills::list_directory_tree,
             commands::skills::open_in_file_manager,
             // Central metadata
             commands::central_metadata::get_skill_repositories,
@@ -241,6 +242,8 @@ pub fn run() {
             // Discover
             commands::discover::discover_scan_roots,
             commands::discover::get_scan_roots,
+            commands::discover::get_obsidian_vaults,
+            commands::discover::get_obsidian_vault_skills,
             commands::discover::get_discovered_summary,
             commands::discover::set_scan_root_enabled,
             commands::discover::start_project_scan,
@@ -248,6 +251,8 @@ pub fn run() {
             commands::discover::get_discovered_skills,
             commands::discover::import_discovered_skill_to_central,
             commands::discover::import_discovered_skill_to_platform,
+            commands::discover::import_source_skill_to_central,
+            commands::discover::import_source_skill_to_platform,
             commands::discover::clear_discovered_skills,
             commands::github_import::preview_github_repo_import,
             commands::github_import::import_github_repo_skills,

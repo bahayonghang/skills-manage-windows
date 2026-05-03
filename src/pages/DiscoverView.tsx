@@ -321,14 +321,13 @@ export function DiscoverView() {
   }, []);
 
   const handleBatchInstallCentral = useCallback(async () => {
-    const ids = Array.from(selectedSkillIds);
-    for (const id of ids) {
+    for (const id of Array.from(selectedSkillIds)) {
       await handleInstallToCentral(id);
     }
   }, [selectedSkillIds, handleInstallToCentral]);
 
   const handleInstallFromDialog = useCallback(
-    async (_skillId: string, agentIds: string[], _method: string): Promise<BatchInstallResult> => {
+    async (_skillId: string, agentIds: string[], method: string): Promise<BatchInstallResult> => {
       if (!installTargetSkill) {
         return { succeeded: [], failed: [] };
       }
@@ -339,7 +338,7 @@ export function DiscoverView() {
         const failed: BatchInstallResult["failed"] = [];
         for (const agentId of agentIds) {
           try {
-            await importToPlatform(targetId, agentId);
+            await importToPlatform(targetId, agentId, method === "copy" ? "copy" : "symlink");
             succeeded.push(agentId);
           } catch (err) {
             failed.push({ agent_id: agentId, error: String(err) });
@@ -775,10 +774,7 @@ export function DiscoverView() {
       )}
 
       {/* Config Dialog */}
-      <DiscoverConfigDialog
-        open={isConfigOpen}
-        onOpenChange={setIsConfigOpen}
-      />
+      <DiscoverConfigDialog open={isConfigOpen} onOpenChange={setIsConfigOpen} />
 
       {/* Install Dialog */}
       {installTargetSkill && (

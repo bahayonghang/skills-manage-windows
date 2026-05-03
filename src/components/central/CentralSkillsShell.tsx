@@ -32,6 +32,7 @@ export function CentralSkillsShell({
   listContent,
   searchQuery,
   setIsGitHubImportOpen,
+  setIsPlatformManageOpen,
   setIsPortabilityOpen,
   setRepositoryFilter,
   setSearchQuery,
@@ -66,6 +67,7 @@ export function CentralSkillsShell({
   listContent: ListContentProps;
   searchQuery: string;
   setIsGitHubImportOpen: (open: boolean) => void;
+  setIsPlatformManageOpen: (open: boolean) => void;
   setIsPortabilityOpen: (open: boolean) => void;
   setRepositoryFilter: (filter: string) => void;
   setSearchQuery: (query: string) => void;
@@ -139,6 +141,12 @@ export function CentralSkillsShell({
               {updateButton.label}
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => setIsPlatformManageOpen(true)}
+          >
+            {t("central.platformManageButton")}
+          </Button>
           <Button
             variant="outline"
             data-testid="central-portability-open"

@@ -5,6 +5,7 @@ import {
   getPlatformTargetGroups,
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberIds,
+  hasProjectSkillPattern,
   isUniversalPlatformTarget,
 } from "../lib/platformTargetGroups";
 
@@ -29,6 +30,7 @@ function agent(
     id,
     display_name: displayName,
     global_skills_dir: path,
+    project_skills_dir: undefined,
     is_enabled: enabled,
   };
 }
@@ -90,5 +92,22 @@ describe("platformTargetGroups", () => {
     });
 
     expect(groups.map((group) => group.id)).toEqual(["claude-code"]);
+  });
+
+  it("requires an explicit project pattern before reporting project install support", () => {
+    const builtinWithoutProjectPattern: AgentWithStatus = {
+      ...agent("claude-code", "Claude Code", "~/.claude/skills"),
+      project_skills_dir: undefined,
+    };
+
+    expect(hasProjectSkillPattern(builtinWithoutProjectPattern)).toBe(true);
+
+    const absoluteCustomAgent: AgentWithStatus = {
+      ...agent("custom-app", "Custom App", "D:\\Tools\\CustomApp\\skills"),
+      is_builtin: false,
+      project_skills_dir: undefined,
+    };
+
+    expect(hasProjectSkillPattern(absoluteCustomAgent)).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { lazy, Suspense, type RefObject } from "react";
+import { lazy, Suspense, type ComponentProps, type RefObject } from "react";
 import type { TFunction } from "i18next";
 
 import { BatchDeleteCentralSkillsDialog } from "@/components/central/BatchDeleteCentralSkillsDialog";
@@ -46,6 +46,16 @@ const GitHubRepoImportWizard = lazy(async () => {
   return { default: module.GitHubRepoImportWizard };
 });
 
+const CentralPlatformManageDrawer = lazy(async () => {
+  const module = await import("@/components/central/CentralPlatformManageDrawer");
+  return { default: module.CentralPlatformManageDrawer };
+});
+
+type PlatformManagementProps = Omit<
+  ComponentProps<typeof import("@/components/central/CentralPlatformManageDrawer").CentralPlatformManageDrawer>,
+  "open" | "onOpenChange"
+>;
+
 export function CentralSkillDialogs({
   agents,
   availableInstallAgents,
@@ -70,6 +80,7 @@ export function CentralSkillDialogs({
   isDialogOpen,
   isDrawerOpen,
   isGitHubImportOpen,
+  isPlatformManageOpen,
   isInstalling,
   isPortabilityOpen,
   isRemoteMissingDialogOpen,
@@ -92,9 +103,11 @@ export function CentralSkillDialogs({
   setIsDialogOpen,
   setIsDrawerOpen,
   setIsGitHubImportOpen,
+  setIsPlatformManageOpen,
   setIsPortabilityOpen,
   t,
   exportSkillportState,
+  platformManagement,
   onAfterImportSuccess,
   onBatchDeleteCentralSkills,
   onBatchDeleteDialogOpenChange,
@@ -138,6 +151,7 @@ export function CentralSkillDialogs({
   isDialogOpen: boolean;
   isDrawerOpen: boolean;
   isGitHubImportOpen: boolean;
+  isPlatformManageOpen: boolean;
   isInstalling: boolean;
   isPortabilityOpen: boolean;
   isRemoteMissingDialogOpen: boolean;
@@ -160,9 +174,11 @@ export function CentralSkillDialogs({
   setIsDialogOpen: (open: boolean) => void;
   setIsDrawerOpen: (open: boolean) => void;
   setIsGitHubImportOpen: (open: boolean) => void;
+  setIsPlatformManageOpen: (open: boolean) => void;
   setIsPortabilityOpen: (open: boolean) => void;
   t: TFunction;
   exportSkillportState: () => Promise<string>;
+  platformManagement: PlatformManagementProps;
   onAfterImportSuccess: () => Promise<void>;
   onBatchDeleteCentralSkills: (
     requests: BatchDeleteCentralSkillRequest[]
@@ -297,6 +313,14 @@ export function CentralSkillDialogs({
             : undefined
         }
       />
+
+      <Suspense fallback={null}>
+        <CentralPlatformManageDrawer
+          open={isPlatformManageOpen}
+          onOpenChange={setIsPlatformManageOpen}
+          {...platformManagement}
+        />
+      </Suspense>
 
       {isGitHubImportOpen && (
         <Suspense

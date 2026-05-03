@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import type { UnlistenFn } from "@tauri-apps/api/event";
-import { SkillDetail, SkillDetailRequest } from "@/types";
+import { DirectoryTreeEntry, SkillDetail, SkillDetailRequest } from "@/types";
 import {
   ExplanationErrorInfo,
   setupExplanationStreamListeners,
@@ -26,6 +26,8 @@ interface SkillDetailState {
   fileIsLoading: boolean;
   fileExplanation: string | null;
   fileIsExplaining: boolean;
+  directoryTree: DirectoryTreeEntry[];
+  isDirectoryLoading: boolean;
 
   // Actions
   loadDetail: (request: SkillDetailRequest | string) => Promise<void>;
@@ -41,6 +43,7 @@ interface SkillDetailState {
   explainFileContent: (content: string) => Promise<void>;
   /** Open the host file manager at `path`. No-op outside the Tauri runtime. */
   openInFileManager: (path: string) => Promise<void>;
+  loadDirectoryTree: (path: string) => Promise<void>;
   /** Reset only the file-mode buffers (used when SkillDetailView toggles modes). */
   resetFileMode: () => void;
   cleanupExplanationListeners: () => void;
@@ -204,6 +207,8 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
   fileIsLoading: false,
   fileExplanation: null,
   fileIsExplaining: false,
+  directoryTree: [],
+  isDirectoryLoading: false,
 
   /**
    * Load skill detail metadata, then read raw SKILL.md content from the
@@ -406,6 +411,24 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
     }
   },
 
+  loadDirectoryTree: async (path: string) => {
+    if (!path) {
+      set({ directoryTree: [], isDirectoryLoading: false });
+      return;
+    }
+    set({ isDirectoryLoading: true });
+    if (!isTauriRuntime()) {
+      set({ directoryTree: [], isDirectoryLoading: false });
+      return;
+    }
+    try {
+      const directoryTree = await invoke<DirectoryTreeEntry[]>("list_directory_tree", { path });
+      set({ directoryTree: directoryTree ?? [], isDirectoryLoading: false });
+    } catch {
+      set({ directoryTree: [], isDirectoryLoading: false });
+    }
+  },
+
   explainFileContent: async (content: string) => {
     if (!content) {
       set({ fileExplanation: null, fileIsExplaining: false });
@@ -447,6 +470,8 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
       fileIsLoading: false,
       fileExplanation: null,
       fileIsExplaining: false,
+      directoryTree: [],
+      isDirectoryLoading: false,
     });
   },
 
@@ -471,6 +496,8 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
       fileIsLoading: false,
       fileExplanation: null,
       fileIsExplaining: false,
+      directoryTree: [],
+      isDirectoryLoading: false,
     });
   },
 }));

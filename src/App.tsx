@@ -38,6 +38,11 @@ const DiscoverView = lazy(() =>
     default: DiscoverView,
   }))
 );
+const ObsidianVaultView = lazy(() =>
+  import("@/pages/ObsidianVaultView").then(({ ObsidianVaultView }) => ({
+    default: ObsidianVaultView,
+  }))
+);
 const OperationLogsView = lazy(() =>
   import("@/pages/OperationLogsView").then(({ OperationLogsView }) => ({
     default: OperationLogsView,
@@ -98,6 +103,14 @@ function App() {
         <Route
           path="discover/:projectPath"
           element={lazyPage(<DiscoverView />)}
+        />
+        <Route
+          path="obsidian"
+          element={lazyPage(<ObsidianVaultView />)}
+        />
+        <Route
+          path="obsidian/:vaultId"
+          element={lazyPage(<ObsidianVaultView />)}
         />
         {/* Operation logs */}
         <Route

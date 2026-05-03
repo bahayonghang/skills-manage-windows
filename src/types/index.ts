@@ -124,6 +124,14 @@ export interface SkillDetailRequest {
   rowId?: string;
 }
 
+export interface DirectoryTreeEntry {
+  name: string;
+  path: string;
+  file_type: string;
+  symlink_target?: string | null;
+  children: DirectoryTreeEntry[];
+}
+
 export interface SkillWithLinks {
   id: string;
   name: string;
@@ -530,6 +538,13 @@ export interface ScanRoot {
   label: string;
   exists: boolean;
   enabled: boolean;
+}
+
+export interface ObsidianVault {
+  id: string;
+  name: string;
+  path: string;
+  skill_count: number;
 }
 
 export interface DiscoveredSkill {

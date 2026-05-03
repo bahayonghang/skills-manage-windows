@@ -24,11 +24,13 @@ pub use crate::services::central_skills::{
     delete_central_skill_impl, delete_central_skill_ssh_impl, delete_central_skills_impl,
     delete_central_skills_ssh_impl, delete_skill_repository_impl, delete_skill_repository_ssh_impl,
     get_central_skills_impl, get_skill_detail_with_row_impl, get_skills_by_agent_impl,
+    list_directory_tree_for_target_impl,
     preview_delete_central_skills_impl, preview_delete_central_skills_ssh_impl,
     preview_delete_skill_repository_impl, preview_delete_skill_repository_ssh_impl,
     BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest,
     BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, DeleteCentralSkillPreview,
     DeleteCentralSkillResult, DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult,
+    DirectoryTreeEntry,
     FailedCentralSkillDelete, SkillDetail, SkillInstallationDetail, SkillWithLinks,
 };
 
@@ -331,4 +333,13 @@ pub async fn read_file_by_path(state: State<'_, AppState>, path: String) -> Resu
 pub async fn open_in_file_manager(state: State<'_, AppState>, path: String) -> Result<(), String> {
     let active_target = state.active_target().await?;
     central_skills::open_in_file_manager_for_target_impl(active_target, &path)
+}
+
+#[tauri::command]
+pub async fn list_directory_tree(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<Vec<DirectoryTreeEntry>, String> {
+    let active_target = state.active_target().await?;
+    central_skills::list_directory_tree_for_target_impl(active_target, &path).await
 }

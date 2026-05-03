@@ -19,7 +19,9 @@
     "retry": "Retry",
     "loading": "Loading...",
     "search": "Search",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "expand": "Expand",
+    "collapse": "Collapse"
   },
   "targets": {
     "title": "Remote Targets",
@@ -87,7 +89,8 @@
     "rescan": "Re-scan...",
     "categoryLobster": "Lobster",
     "categoryCoding": "Coding",
-    "resizeSidebar": "Resize sidebar"
+    "resizeSidebar": "Resize sidebar",
+    "obsidian": "Obsidian Vaults"
   },
   "dashboard": {
     "eyebrow": "Local operations console",
@@ -528,7 +531,10 @@
       "missing": "Missing",
       "unrestorable": "Unrestorable"
     },
-    "platformTargetsLabel": "Targets"
+    "platformTargetsLabel": "Targets",
+    "platformManageButton": "Manage platforms",
+    "platformManageTitle": "Manage install targets",
+    "platformManageDesc": "Adjust platform visibility and custom install targets without leaving Central Skills."
   },
   "installDialog": {
     "title": "Install {{name}}",
@@ -616,7 +622,10 @@
     "readOnlyDesc": "Plugin-installed copies are display-only here, so install, uninstall, and collection changes are unavailable.",
     "userManagedDesc": "This Claude user copy keeps the normal install-state and collection-management controls.",
     "readOnlyInstallBlocked": "Install and uninstall are unavailable for read-only plugin copies.",
-    "readOnlyCollectionsBlocked": "Collection management is unavailable for read-only plugin copies."
+    "readOnlyCollectionsBlocked": "Collection management is unavailable for read-only plugin copies.",
+    "fileTreeTitle": "File tree",
+    "fileTreeLoading": "Loading file tree...",
+    "fileTreeEmpty": "No files available for this skill."
   },
   "collection": {
     "edit": "Edit",
@@ -1055,5 +1064,16 @@
     "githubImportResultSkippedNone": "No skills were skipped.",
     "githubPatSettingsHint": "Open Settings and save a GitHub Personal Access Token to use authenticated direct GitHub requests for this import flow.",
     "githubPatConfiguredFailureHint": "A configured GitHub token was already used. Check that the token owner can read this repo and that the token has sufficient repository access."
+  },
+  "obsidian": {
+    "title": "Obsidian Vault Skills",
+    "desc": "Browse source-only skills discovered inside local Obsidian vaults and import them into Central or a platform.",
+    "searchPlaceholder": "Search vault skills...",
+    "loadingVaults": "Loading vaults...",
+    "loadingSkills": "Loading vault skills...",
+    "empty": "No Obsidian vaults with supported skill folders were found.",
+    "emptySkills": "This vault has no supported skills yet.",
+    "importSuccess": "Skill imported successfully.",
+    "importError": "Failed to import skill: {{error}}"
   }
 }

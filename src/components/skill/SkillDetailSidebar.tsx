@@ -27,7 +27,9 @@ import {
   SectionLabel,
   SourceOriginBadge,
 } from "./SkillDetailViewShared";
+import { SkillDetailFileTree } from "./SkillDetailFileTree";
 import type { DiscoverMetadata } from "./skillDetailViewTypes";
+import type { DirectoryTreeEntry } from "@/types";
 
 interface SkillDetailSidebarProps {
   isFileMode: boolean;
@@ -35,6 +37,9 @@ interface SkillDetailSidebarProps {
   detail: SkillDetail | null;
   isRemoteTarget: boolean;
   onOpenDiscoverPath: () => void;
+  directoryTree: DirectoryTreeEntry[];
+  isDirectoryLoading: boolean;
+  onOpenFileTreePath: (path: string) => void;
   updateStatus?: CentralSkillUpdateState;
   isCheckingUpdates: boolean;
   isUpdatingThisSkill: boolean;
@@ -186,6 +191,9 @@ export function SkillDetailSidebar({
   detail,
   isRemoteTarget,
   onOpenDiscoverPath,
+  directoryTree,
+  isDirectoryLoading,
+  onOpenFileTreePath,
   updateStatus,
   isCheckingUpdates,
   isUpdatingThisSkill,
@@ -311,6 +319,12 @@ export function SkillDetailSidebar({
               />
             </div>
           </section>
+
+          <SkillDetailFileTree
+            entries={directoryTree}
+            isLoading={isDirectoryLoading}
+            onOpenPath={onOpenFileTreePath}
+          />
 
           {detail.is_central && !detail.is_read_only && (
             <section aria-label={t("detail.updateStatusRegion")}>

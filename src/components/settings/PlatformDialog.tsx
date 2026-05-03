@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { AgentWithStatus } from "@/types";
 import { deriveHomeDir, formatPathForDisplay, joinPathForDisplay } from "@/lib/path";
 import { usePlatformStore } from "@/stores/platformStore";
+
+const EMPTY_AGENTS: AgentWithStatus[] = [];
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface PlatformDialogProps {
@@ -38,7 +40,8 @@ export function PlatformDialog({
   onEdit,
 }: PlatformDialogProps) {
   const { t } = useTranslation();
-  const agents = usePlatformStore((state) => state.agents);
+  const platformAgents = usePlatformStore((state) => state.agents);
+  const agents = platformAgents ?? EMPTY_AGENTS;
   const isEditMode = platform !== null;
   const homeDir = useMemo(() => {
     const candidates = [

@@ -791,4 +791,43 @@ describe("skillDetailStore", () => {
     expect(state.isExplanationLoading).toBe(false);
     expect(state.isExplanationStreaming).toBe(false);
   });
+
+  it("loads a directory tree through the Tauri command", async () => {
+    const directoryTree = [
+      {
+        name: "SKILL.md",
+        path: "/tmp/frontend-design/SKILL.md",
+        file_type: "file",
+        children: [],
+      },
+    ];
+    vi.mocked(invoke).mockResolvedValueOnce(directoryTree);
+
+    await useSkillDetailStore.getState().loadDirectoryTree("/tmp/frontend-design");
+
+    expect(invoke).toHaveBeenCalledWith("list_directory_tree", {
+      path: "/tmp/frontend-design",
+    });
+    expect(useSkillDetailStore.getState().directoryTree).toEqual(directoryTree);
+    expect(useSkillDetailStore.getState().isDirectoryLoading).toBe(false);
+  });
+
+  it("clears the directory tree when no path is provided", async () => {
+    useSkillDetailStore.setState({
+      directoryTree: [
+        {
+          name: "old",
+          path: "/old",
+          file_type: "file",
+          children: [],
+        },
+      ],
+      isDirectoryLoading: true,
+    });
+
+    await useSkillDetailStore.getState().loadDirectoryTree("");
+
+    expect(useSkillDetailStore.getState().directoryTree).toEqual([]);
+    expect(useSkillDetailStore.getState().isDirectoryLoading).toBe(false);
+  });
 });

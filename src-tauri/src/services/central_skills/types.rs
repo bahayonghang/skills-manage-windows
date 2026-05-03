@@ -69,6 +69,15 @@ pub struct SkillDetail {
     pub is_source_unknown: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DirectoryTreeEntry {
+    pub name: String,
+    pub path: String,
+    pub file_type: String,
+    pub symlink_target: Option<String>,
+    pub children: Vec<DirectoryTreeEntry>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteCentralSkillResult {
     pub removed_central_path: String,
