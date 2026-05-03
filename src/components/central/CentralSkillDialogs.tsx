@@ -1,14 +1,13 @@
-import type { RefObject } from "react";
+import { lazy, Suspense, type RefObject } from "react";
 import type { TFunction } from "i18next";
 
 import { BatchDeleteCentralSkillsDialog } from "@/components/central/BatchDeleteCentralSkillsDialog";
 import { BatchInstallCentralSkillsDialog } from "@/components/central/BatchInstallCentralSkillsDialog";
-import { CentralStatePortabilityDialog } from "@/components/central/CentralStatePortabilityDialog";
 import { DeleteCentralSkillDialog } from "@/components/central/DeleteCentralSkillDialog";
 import { InstallDialog, type InstallMethod } from "@/components/central/InstallDialog";
 import { RemoteMissingSkillsDialog } from "@/components/central/RemoteMissingSkillsDialog";
-import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
+import type { GitHubRepoImportWizardProps } from "@/components/marketplace/githubImportWizardUtils";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type {
   AgentWithStatus,
@@ -36,6 +35,16 @@ type GitHubImportState = {
   importResult: GitHubRepoImportResult | null;
   error: string | null;
 };
+
+const CentralStatePortabilityDialog = lazy(async () => {
+  const module = await import("@/components/central/CentralStatePortabilityDialog");
+  return { default: module.CentralStatePortabilityDialog };
+});
+
+const GitHubRepoImportWizard = lazy(async () => {
+  const module = await import("@/components/marketplace/GitHubRepoImportWizard");
+  return { default: module.GitHubRepoImportWizard };
+});
 
 export function CentralSkillDialogs({
   agents,
@@ -169,7 +178,7 @@ export function CentralSkillDialogs({
   onDeleteSkillRepository: (
     requests: BatchDeleteCentralSkillRequest[]
   ) => Promise<BatchDeleteCentralSkillResult>;
-  onGitHubImport: Parameters<typeof GitHubRepoImportWizard>[0]["onImport"];
+  onGitHubImport: GitHubRepoImportWizardProps["onImport"];
   onGitHubPreview: () => Promise<GitHubRepoPreview | null>;
   onInstall: (
     skillId: string,
@@ -289,39 +298,69 @@ export function CentralSkillDialogs({
         }
       />
 
-      <GitHubRepoImportWizard
-        open={isGitHubImportOpen}
-        onOpenChange={setIsGitHubImportOpen}
-        repoUrl={githubRepoUrl}
-        onRepoUrlChange={setGithubRepoUrl}
-        preview={githubImport.preview}
-        previewError={githubImport.error}
-        isPreviewLoading={githubImport.isPreviewLoading}
-        isImporting={githubImport.isImporting}
-        importResult={githubImport.importResult}
-        onPreview={onGitHubPreview}
-        onImport={onGitHubImport}
-        availableAgents={availableInstallAgents}
-        installableSkills={installableImportedSkills}
-        onInstallImportedSkill={onInstallImportedSkill}
-        onAfterImportSuccess={onAfterImportSuccess}
-        onReset={() => {
-          onResetGitHubImport();
-          setGithubRepoUrl("");
-        }}
-        launcherLabel={t("central.title")}
-      />
+      {isGitHubImportOpen && (
+        <Suspense
+          fallback={
+            <div
+              role="status"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 text-sm text-muted-foreground"
+            >
+              <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+                {t("central.loading")}
+              </div>
+            </div>
+          }
+        >
+          <GitHubRepoImportWizard
+            open={isGitHubImportOpen}
+            onOpenChange={setIsGitHubImportOpen}
+            repoUrl={githubRepoUrl}
+            onRepoUrlChange={setGithubRepoUrl}
+            preview={githubImport.preview}
+            previewError={githubImport.error}
+            isPreviewLoading={githubImport.isPreviewLoading}
+            isImporting={githubImport.isImporting}
+            importResult={githubImport.importResult}
+            onPreview={onGitHubPreview}
+            onImport={onGitHubImport}
+            availableAgents={availableInstallAgents}
+            installableSkills={installableImportedSkills}
+            onInstallImportedSkill={onInstallImportedSkill}
+            onAfterImportSuccess={onAfterImportSuccess}
+            onReset={() => {
+              onResetGitHubImport();
+              setGithubRepoUrl("");
+            }}
+            launcherLabel={t("central.title")}
+          />
+        </Suspense>
+      )}
 
-      <CentralStatePortabilityDialog
-        open={isPortabilityOpen}
-        onOpenChange={setIsPortabilityOpen}
-        exportState={exportSkillportState}
-        previewImport={previewSkillportStateImport}
-        importState={importSkillportState}
-        onAfterImport={async () => {
-          await Promise.all([onRefreshCounts(), loadCentralSkills()]);
-        }}
-      />
+      {isPortabilityOpen && (
+        <Suspense
+          fallback={
+            <div
+              role="status"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 text-sm text-muted-foreground"
+            >
+              <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+                {t("central.loading")}
+              </div>
+            </div>
+          }
+        >
+          <CentralStatePortabilityDialog
+            open={isPortabilityOpen}
+            onOpenChange={setIsPortabilityOpen}
+            exportState={exportSkillportState}
+            previewImport={previewSkillportStateImport}
+            importState={importSkillportState}
+            onAfterImport={async () => {
+              await Promise.all([onRefreshCounts(), loadCentralSkills()]);
+            }}
+          />
+        </Suspense>
+      )}
     </>
   );
 }

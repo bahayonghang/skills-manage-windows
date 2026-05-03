@@ -357,6 +357,8 @@
     "linked": "linked",
     "notLinked": "not linked",
     "sharedCentralPath": "Uses Central path",
+    "migrationCompleted": "Legacy Central migration finished: copied {{copied}}, skipped {{skipped}}, failed {{failed}}",
+    "migrationFailed": "Legacy Central migration failed: {{error}}",
     "toggleInstallLabel": "Toggle {{platform}} link for {{skill}}",
     "sortLabel": "Sort",
     "sortFieldLabel": "Sort field",

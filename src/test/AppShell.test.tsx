@@ -9,6 +9,8 @@ import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import type { TargetSummary } from "@/types";
+import { listen, isTauriRuntime } from "@/lib/tauri";
+import { toast } from "sonner";
 
 let triggerRescanInMock = false;
 
@@ -34,6 +36,18 @@ vi.mock("@/stores/skillStore", () => ({
 
 vi.mock("@/stores/marketplaceStore", () => ({
   useMarketplaceStore: vi.fn(),
+}));
+
+vi.mock("@/lib/tauri", () => ({
+  listen: vi.fn(),
+  isTauriRuntime: vi.fn(() => true),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 vi.mock("@/components/layout/Sidebar", () => ({
@@ -73,6 +87,8 @@ const mockUseDiscoverStore = vi.mocked(useDiscoverStore);
 const mockUseTargetStore = vi.mocked(useTargetStore);
 const mockUseSkillStore = vi.mocked(useSkillStore);
 const mockUseMarketplaceStore = vi.mocked(useMarketplaceStore);
+const mockListen = vi.mocked(listen);
+const mockIsTauriRuntime = vi.mocked(isTauriRuntime);
 
 let testNavigate: ReturnType<typeof useNavigate> | null = null;
 
@@ -168,6 +184,8 @@ describe("AppShell", () => {
     vi.clearAllMocks();
     testNavigate = null;
     triggerRescanInMock = false;
+    mockIsTauriRuntime.mockReturnValue(true);
+    mockListen.mockResolvedValue(vi.fn());
 
     mockUsePlatformStore.mockImplementation((selector?: unknown) => {
       const state = createPlatformState();
@@ -551,5 +569,73 @@ describe("AppShell", () => {
     expect(mockResetSkillsForTargetChange).not.toHaveBeenCalled();
     expect(mockResetMarketplaceForTargetChange).not.toHaveBeenCalled();
     expect(mockRescan).not.toHaveBeenCalled();
+  });
+
+  it("shows a toast when legacy Central migration completes with copied or failed items", async () => {
+    let migrationHandler: ((event: { payload: { phase: "completed"; copied: number; skipped: number; failed: number } }) => void) | undefined;
+    mockListen.mockImplementation(async (eventName, handler) => {
+      if (eventName === "system://migration-progress") {
+        migrationHandler = handler as typeof migrationHandler;
+      }
+      return () => {};
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/a"]}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route path="a" element={<DummyPage label="page-a" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockListen).toHaveBeenCalled();
+    });
+
+    act(() => {
+      migrationHandler?.({
+        payload: { phase: "completed", copied: 2, skipped: 1, failed: 0 },
+      });
+    });
+
+    expect(toast.success).toHaveBeenCalledWith(
+      "旧 Central 仓库迁移完成：复制 2 个，跳过 1 个，失败 0 个"
+    );
+  });
+
+  it("shows an error toast when legacy Central migration fails", async () => {
+    let migrationHandler: ((event: { payload: { phase: "failed"; error: string } }) => void) | undefined;
+    mockListen.mockImplementation(async (eventName, handler) => {
+      if (eventName === "system://migration-progress") {
+        migrationHandler = handler as typeof migrationHandler;
+      }
+      return () => {};
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/a"]}>
+        <Routes>
+          <Route path="/" element={<AppShell />}>
+            <Route path="a" element={<DummyPage label="page-a" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockListen).toHaveBeenCalled();
+    });
+
+    act(() => {
+      migrationHandler?.({
+        payload: { phase: "failed", error: "copy failed" },
+      });
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "旧 Central 仓库迁移失败：copy failed"
+    );
   });
 });
