@@ -8,10 +8,14 @@ pub(crate) async fn github_direct_auth_from_settings(
 }
 
 pub(crate) fn github_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .user_agent(crate::commands::APP_USER_AGENT)
-        .build()
-        .map_err(|e| e.to_string())
+    GITHUB_SHARED_CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .user_agent(crate::commands::APP_USER_AGENT)
+                .build()
+                .map_err(|e| e.to_string())
+        })
+        .clone()
 }
 pub(crate) async fn set_github_pat_impl(pool: &DbPool, value: String) -> Result<(), String> {
     db::set_setting(pool, GITHUB_PAT_SETTING_KEY, value.trim()).await

@@ -63,8 +63,9 @@ pub async fn get_central_skill_ids_by_repository(
     repository_id: &str,
 ) -> Result<Vec<String>, String> {
     sqlx::query_scalar::<_, String>(
-        "SELECT s.id FROM skills s
-         JOIN skill_repository_members m ON s.id = m.skill_id
+        "SELECT s.id
+         FROM skill_repository_members m
+         JOIN skills s ON s.id = m.skill_id
          WHERE m.repository_id = ? AND s.is_central = 1
          ORDER BY s.name, s.id",
     )

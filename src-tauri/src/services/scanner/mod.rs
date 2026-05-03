@@ -4,9 +4,12 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use chrono::Utc;
+use futures_util::future::join_all;
 use serde::{Deserialize, Serialize};
+use tokio::sync::Semaphore;
 
 use crate::db::{self, AgentSkillObservation, DbPool, Skill, SkillInstallation};
 use crate::targets::{
@@ -226,6 +229,12 @@ fn normalize_scan_key(dir: &Path) -> String {
     }
 }
 
+fn scan_parallelism_limit() -> usize {
+    std::thread::available_parallelism()
+        .map(|parallelism| parallelism.get().clamp(1, 8))
+        .unwrap_or(4)
+}
+
 async fn delete_skills_not_in_scope(
     pool: &DbPool,
     found_skill_ids: &[String],
@@ -294,6 +303,20 @@ async fn scan_directory_blocking(
         .map_err(|e| format!("Failed to join directory scan task: {}", e))
 }
 
+async fn scan_directory_with_limit(
+    dir: PathBuf,
+    is_central: bool,
+    semaphore: Arc<Semaphore>,
+) -> Result<Vec<ScannedSkill>, String> {
+    let permit = semaphore
+        .acquire_owned()
+        .await
+        .map_err(|_| "Directory scan semaphore was closed.".to_string())?;
+    let result = scan_directory_blocking(dir, is_central).await;
+    drop(permit);
+    result
+}
+
 // ─── Tauri Command ────────────────────────────────────────────────────────────
 
 /// Core scanning logic, separated from the Tauri command layer so it can be
@@ -312,6 +335,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
     let mut all_found_skill_ids: HashSet<String> = HashSet::new();
     let mut scanned_root_cache: HashMap<String, Vec<ScannedSkill>> = HashMap::new();
     let mut counted_scan_roots: HashSet<String> = HashSet::new();
+    let scan_semaphore = Arc::new(Semaphore::new(scan_parallelism_limit()));
 
     for agent in &agents {
         let is_central = agent.category == "central";
@@ -336,8 +360,45 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
         let mut scanned = Vec::new();
         let mut found_install_ids = Vec::new();
         let mut found_observation_row_ids = Vec::new();
+        let mut root_results: Vec<Option<Vec<ScannedSkill>>> = vec![None; existing_roots.len()];
+        let mut pending_root_scans = Vec::new();
 
-        for root in &existing_roots {
+        for (index, root) in existing_roots.iter().enumerate() {
+            let root_uses_central_storage = is_central
+                || central_root
+                    .as_ref()
+                    .map(|central| crate::paths::paths_equivalent(&root.path, central))
+                    .unwrap_or(false);
+            let scan_key = normalize_scan_key(&root.path);
+            if let Some(cached) = scanned_root_cache.get(&scan_key) {
+                root_results[index] = Some(cached.clone());
+            } else {
+                pending_root_scans.push((
+                    index,
+                    scan_key,
+                    root.path.clone(),
+                    root_uses_central_storage,
+                ));
+            }
+        }
+
+        for (index, scan_key, scanned) in join_all(pending_root_scans.into_iter().map(
+            |(index, scan_key, path, is_central_root)| {
+                let semaphore = Arc::clone(&scan_semaphore);
+                async move {
+                    let scanned = scan_directory_with_limit(path, is_central_root, semaphore).await;
+                    (index, scan_key, scanned)
+                }
+            },
+        ))
+        .await
+        {
+            let scanned = scanned?;
+            scanned_root_cache.insert(scan_key, scanned.clone());
+            root_results[index] = Some(scanned);
+        }
+
+        for (root, root_scanned) in existing_roots.iter().zip(root_results) {
             let source_root = root
                 .source_root
                 .as_ref()
@@ -349,15 +410,8 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                     .as_ref()
                     .map(|central| crate::paths::paths_equivalent(&root.path, central))
                     .unwrap_or(false);
+            let root_scanned = root_scanned.unwrap_or_default();
             let scan_key = normalize_scan_key(&root.path);
-            let root_scanned = if let Some(cached) = scanned_root_cache.get(&scan_key) {
-                cached.clone()
-            } else {
-                let scanned =
-                    scan_directory_blocking(root.path.clone(), root_uses_central_storage).await?;
-                scanned_root_cache.insert(scan_key.clone(), scanned.clone());
-                scanned
-            };
             if counted_scan_roots.insert(scan_key) {
                 total_skills += root_scanned.len();
             }
@@ -446,7 +500,9 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
         let scanned_skills = if let Some(cached) = scanned_root_cache.get(&scan_key) {
             cached.clone()
         } else {
-            let scanned = scan_directory_blocking(dir.to_path_buf(), false).await?;
+            let scanned =
+                scan_directory_with_limit(dir.to_path_buf(), false, Arc::clone(&scan_semaphore))
+                    .await?;
             scanned_root_cache.insert(scan_key.clone(), scanned.clone());
             scanned
         };

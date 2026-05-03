@@ -41,9 +41,16 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    // Phase 7: `(repository_id, skill_id)` makes repository → member scans
+    // covering and replaces the older single-column index.
+    sqlx::query("DROP INDEX IF EXISTS idx_skill_repository_members_repository_id")
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_skill_repository_members_repository_id
-         ON skill_repository_members(repository_id)",
+        "CREATE INDEX IF NOT EXISTS idx_skill_repository_members_repository_skill_id
+         ON skill_repository_members(repository_id, skill_id)",
     )
     .execute(pool)
     .await
@@ -68,9 +75,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    sqlx::query("DROP INDEX IF EXISTS idx_skill_update_states_status")
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_skill_update_states_status
-         ON skill_update_states(status)",
+        "CREATE INDEX IF NOT EXISTS idx_skill_update_states_checked_skill
+         ON skill_update_states(last_checked_at DESC, skill_id)",
     )
     .execute(pool)
     .await
@@ -131,9 +143,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    sqlx::query("DROP INDEX IF EXISTS idx_skill_ai_tag_reviews_status")
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_skill_ai_tag_reviews_status
-         ON skill_ai_tag_reviews(status)",
+        "CREATE INDEX IF NOT EXISTS idx_skill_ai_tag_reviews_status_updated_skill_tag
+         ON skill_ai_tag_reviews(status, updated_at DESC, skill_id, tag_id)",
     )
     .execute(pool)
     .await

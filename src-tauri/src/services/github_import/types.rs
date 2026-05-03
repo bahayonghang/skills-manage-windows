@@ -171,6 +171,11 @@ const PRIORITY_SKILL_ROOTS: &[&str] = &[
 
 static GITHUB_PREVIEW_WORKSPACES: OnceLock<Mutex<HashMap<String, GitHubPreviewWorkspace>>> =
     OnceLock::new();
+static GITHUB_SHARED_CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
+static GITHUB_HOST_RATE_LIMITERS: OnceLock<tokio::sync::Mutex<HashMap<String, tokio::time::Instant>>> =
+    OnceLock::new();
+
+const DEFAULT_GITHUB_HOST_QPS: f64 = 10.0;
 
 #[derive(Debug, Clone)]
 struct GitHubPreviewWorkspace {

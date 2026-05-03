@@ -46,9 +46,18 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    // Phase 7: `(agent_id, skill_id)` covers the hot
+    // `WHERE agent_id = ?` lookup plus the subsequent join back to `skills`.
+    // Drop the older single-column index on upgrade because the composite
+    // prefix subsumes it.
+    sqlx::query("DROP INDEX IF EXISTS idx_skill_installations_agent_id")
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_skill_installations_agent_id
-         ON skill_installations(agent_id)",
+        "CREATE INDEX IF NOT EXISTS idx_skill_installations_agent_skill_id
+         ON skill_installations(agent_id, skill_id)",
     )
     .execute(pool)
     .await

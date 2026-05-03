@@ -103,6 +103,7 @@ where
 
     for endpoint in GITHUB_MIRROR_ENDPOINTS {
         let url = build_url(endpoint);
+        wait_for_github_host_slot(&url).await?;
         let mut request = client.get(&url);
         let mirrors_share_same_url = GITHUB_MIRROR_ENDPOINTS
             .iter()
