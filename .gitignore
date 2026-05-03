@@ -24,6 +24,7 @@ Thumbs.db
 
 .omx/
 .omc/
+.factory/
 
 # planning with files
 task_plan.md
