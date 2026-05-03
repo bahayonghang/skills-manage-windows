@@ -28,7 +28,8 @@ import {
   OfficialPublisher,
   SkillTag,
 } from "@/data/officialSources";
-import { MarketplaceSkillDetailDrawer, type MarketplaceSkillDetail } from "@/components/marketplace/MarketplaceSkillDetailDrawer";
+import { MarketplaceSkillDetailDrawer } from "@/components/marketplace/MarketplaceSkillDetailDrawer";
+import type { MarketplaceSkillDetail } from "@/components/marketplace/marketplaceSkillDetailTypes";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
 import { isTauriRuntime } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
@@ -665,6 +666,7 @@ export function MarketplaceView() {
             detailTriggerRef.current?.focus();
             detailTriggerRef.current = null;
           }}
+          returnFocusRef={detailTriggerRef}
         />
       )}
 

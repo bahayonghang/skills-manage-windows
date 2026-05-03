@@ -1,9 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MarketplaceSkillDetailDrawer } from "@/components/marketplace/MarketplaceSkillDetailDrawer";
+import { SkillPreviewDialog } from "@/components/marketplace/SkillPreviewDialog";
 
-vi.mock("@/components/skill/SkillDetailPanelShell", () => ({
-  SkillDetailPanelShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: ({
+    children,
+    open,
+  }: {
+    children: React.ReactNode;
+    open: boolean;
+  }) => (open ? <div>{children}</div> : null),
+  DialogContent: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div className={className}>{children}</div>
+  ),
+  DialogHeader: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div className={className}>{children}</div>
+  ),
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <h1>{children}</h1>,
+  DialogBody: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div className={className}>{children}</div>
+  ),
+  DialogFooter: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div className={className}>{children}</div>
+  ),
+  DialogClose: () => <button type="button">Close</button>,
 }));
 
 vi.mock("react-markdown", () => ({
@@ -23,16 +43,6 @@ vi.mock("react-markdown", () => ({
   ),
 }));
 
-const skill = {
-  id: "skill-1",
-  name: "baoyu-imagine",
-  downloadUrl: "https://example.com/skills/baoyu-imagine/SKILL.md",
-  description: "AI image generation skill",
-  sourceLabel: "Repo One",
-  sourceUrl: "https://github.com/acme/repo-one",
-  installed: false,
-};
-
 const mockContent = `---
 name: baoyu-imagine
 version: 1.57.0
@@ -48,7 +58,7 @@ metadata:
 
 Body content.`;
 
-describe("MarketplaceSkillDetailDrawer", () => {
+describe("SkillPreviewDialog", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.stubGlobal(
@@ -62,10 +72,14 @@ describe("MarketplaceSkillDetailDrawer", () => {
 
   it("renders frontmatter card in markdown preview", async () => {
     const { container } = render(
-      <MarketplaceSkillDetailDrawer
+      <SkillPreviewDialog
         open
-        skill={skill}
         onOpenChange={vi.fn()}
+        skillName="baoyu-imagine"
+        downloadUrl="https://example.com/skills/baoyu-imagine/SKILL.md"
+        description="AI image generation skill"
+        sourceLabel="Repo One"
+        sourceUrl="https://github.com/acme/repo-one"
         onInstall={vi.fn()}
         isInstalling={false}
       />
@@ -89,10 +103,14 @@ describe("MarketplaceSkillDetailDrawer", () => {
 
   it("keeps raw source tab showing original frontmatter fences", async () => {
     render(
-      <MarketplaceSkillDetailDrawer
+      <SkillPreviewDialog
         open
-        skill={skill}
         onOpenChange={vi.fn()}
+        skillName="baoyu-imagine"
+        downloadUrl="https://example.com/skills/baoyu-imagine/SKILL.md"
+        description="AI image generation skill"
+        sourceLabel="Repo One"
+        sourceUrl="https://github.com/acme/repo-one"
         onInstall={vi.fn()}
         isInstalling={false}
       />
