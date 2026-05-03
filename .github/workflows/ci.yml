@@ -110,6 +110,77 @@ jobs:
         shell: pwsh
         run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles msi --no-sign --ci
 
+  linux-package:
+    name: Linux ${{ matrix.asset-arch }} smoke packages
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.continue_on_error }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            asset-arch: x86_64
+            continue_on_error: false
+          - runner: ubuntu-22.04-arm
+            asset-arch: arm64
+            continue_on_error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.12.3
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            curl \
+            file \
+            libfuse2 \
+            libssl-dev \
+            libgtk-3-dev \
+            libxdo-dev \
+            librsvg2-dev \
+            libayatana-appindicator3-dev \
+            pkg-config \
+            rpm \
+            wget
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev \
+            || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
+          sudo apt-get install -y --no-install-recommends libsoup-3.0-dev \
+            || sudo apt-get install -y --no-install-recommends libsoup2.4-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: node scripts/sync-version.mjs
+
+      - name: Build Linux smoke packages
+        run: pnpm tauri build --bundles deb,rpm,appimage --no-sign --ci
+
   macos-package:
     name: macOS universal smoke packages
     runs-on: macos-14

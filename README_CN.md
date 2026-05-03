@@ -68,8 +68,8 @@ SkillPort 可以通过 SSH 管理远程 Linux 或 macOS 用户目录里的全局
 ## 下载
 
 - 最新发布：<https://github.com/bahayonghang/skills-manage-windows/releases/latest>
-- 当前已提供的预编译安装包：Windows x64（`.exe`、`.msi`、`.zip`）和 macOS Universal（`.dmg`、`.zip`、`.tar.gz`）
-- 其他平台：当前请从源码运行
+- 当前桌面发布目标：Windows x64（`.exe`、`.msi`、`.zip`）、macOS Universal（`.dmg`、`.zip`、`.tar.gz`），以及 Linux x86_64 / arm64（`.deb`、`.rpm`、`.AppImage`）
+- 当前桌面构建仍未签名；Linux arm64 产物是否可用取决于 GitHub Actions runner 矩阵
 
 ### macOS 未签名构建说明
 

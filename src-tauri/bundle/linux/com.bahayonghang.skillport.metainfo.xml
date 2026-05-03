@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.bahayonghang.skillport</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>SkillPort</name>
+  <summary>AI Agent Skills Manager</summary>
+  <description>
+    <p>Manage, discover, and install AI agent skills across local platforms from a SkillPort desktop app.</p>
+  </description>
+  <launchable type="desktop-id">skillport.desktop</launchable>
+  <url type="homepage">https://github.com/bahayonghang/skills-manage-windows</url>
+  <developer id="com.bahayonghang">
+    <name>bahayonghang</name>
+  </developer>
+  <categories>
+    <category>Development</category>
+    <category>Utility</category>
+  </categories>
+  <provides>
+    <binary>skillport</binary>
+  </provides>
+  <releases>
+    <release version="0.10.0" date="2026-05-03"/>
+  </releases>
+</component>
