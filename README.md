@@ -176,7 +176,7 @@ just build
 just install
 ```
 
-- `just ci` runs frontend `typecheck` + `lint`, plus Rust `cargo test` and `cargo clippy`.
+- `just ci` runs frontend `typecheck` + `lint` + `test` + `sizecheck`, plus Rust `cargo test` and `cargo clippy`.
 - `just dev` starts the Tauri development app directly.
 - `just build` builds the desktop app for the current platform and copies the latest bundle artifact to `outputs/` (`.exe` on Windows, `.app` on macOS, `.AppImage`/`.deb` on Linux).
 - `just install` builds the Windows NSIS installer, copies it to `outputs/`, and runs it in passive mode. This command is Windows-only.
@@ -193,6 +193,7 @@ The Vite dev server runs on port `24200`.
 
 ```bash
 pnpm test
+pnpm sizecheck
 pnpm typecheck
 pnpm lint
 cd src-tauri && cargo test

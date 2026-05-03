@@ -175,7 +175,7 @@ just build
 just install
 ```
 
-- `just ci` 会运行前端 `typecheck`、`lint`，以及 Rust 的 `cargo test` 和 `cargo clippy`。
+- `just ci` 会运行前端 `typecheck`、`lint`、`test`、`sizecheck`，以及 Rust 的 `cargo test` 和 `cargo clippy`。
 - `just dev` 会直接启动 Tauri 开发应用。
 - `just build` 会按当前平台构建桌面应用，并把最新打包产物复制到 `outputs/`（Windows 为 `.exe`，macOS 为 `.app`，Linux 为 `.AppImage`/`.deb`）。
 - `just install` 会构建 Windows NSIS 安装包、复制到 `outputs/`，并以 passive 模式运行安装器；该命令仅支持 Windows。
@@ -192,6 +192,7 @@ Vite 开发服务器默认使用 `24200` 端口。
 
 ```bash
 pnpm test
+pnpm sizecheck
 pnpm typecheck
 pnpm lint
 cd src-tauri && cargo test

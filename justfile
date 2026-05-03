@@ -12,10 +12,13 @@ sync-version:
 # ========================================================================
 # 目标：
 # 1) 运行前端类型检查、ESLint
-# 2) 运行 Rust 单元测试与 clippy 静态检查
+# 2) 运行前端测试与源码体积预算检查
+# 3) 运行 Rust 单元测试与 clippy 静态检查
 ci: sync-version
     pnpm typecheck
     pnpm lint
+    pnpm test
+    pnpm sizecheck
     cargo test --manifest-path src-tauri/Cargo.toml
     cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 

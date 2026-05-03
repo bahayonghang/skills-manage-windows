@@ -36,11 +36,16 @@ Run the relevant checks locally before you submit a PR:
 
 ```bash
 pnpm test
+pnpm sizecheck
 pnpm typecheck
 pnpm lint
 cd src-tauri && cargo test
 cd src-tauri && cargo clippy -- -D warnings
 ```
+
+- Keep production source files under `src/` and `src-tauri/src/` at or below 800 lines whenever practical.
+- The repository currently carries a small frozen allowlist of oversized production files; `pnpm sizecheck` fails if a new file crosses 800 lines or if an allowlisted file grows further.
+- Components must not call Tauri `invoke()` directly. Route IPC through stores or service-layer helpers so UI code stays testable and platform boundaries remain explicit.
 
 If your change touches UI behavior, include screenshots or a short screen recording in the pull request.
 

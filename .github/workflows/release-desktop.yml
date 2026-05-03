@@ -50,6 +50,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Sync version metadata
+        shell: pwsh
+        run: node scripts/sync-version.mjs
+
       - name: Build Windows bundles
         run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles msi --no-sign --ci
 
@@ -112,6 +116,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Sync version metadata
+        shell: pwsh
+        run: node scripts/sync-version.mjs
 
       - name: Build macOS bundles
         run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg --no-sign --ci

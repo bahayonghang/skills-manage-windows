@@ -52,13 +52,15 @@ jobs:
 
       - name: Sync version metadata
         shell: pwsh
-        run: ./scripts/sync-version.ps1
+        run: node scripts/sync-version.mjs
 
       - name: Run frontend checks
         shell: pwsh
         run: |
           pnpm typecheck
-          pnpm exec eslint "src/**/*.{ts,tsx}" --report-unused-disable-directives
+          pnpm lint
+          pnpm test
+          pnpm sizecheck
 
       - name: Run Rust checks
         shell: pwsh
@@ -106,7 +108,7 @@ jobs:
 
       - name: Sync version metadata
         shell: pwsh
-        run: ./scripts/sync-version.ps1
+        run: node scripts/sync-version.mjs
 
       - name: Build Windows bundles
         shell: pwsh
@@ -189,7 +191,7 @@ jobs:
 
       - name: Sync version metadata
         shell: pwsh
-        run: ./scripts/sync-version.ps1
+        run: node scripts/sync-version.mjs
 
       - name: Build macOS bundles
         run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg --no-sign --ci
