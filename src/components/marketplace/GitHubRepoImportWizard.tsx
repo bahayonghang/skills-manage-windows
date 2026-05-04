@@ -152,7 +152,6 @@ export function GitHubRepoImportWizard({
     handleInstallImported,
     handleInstallDialogConfirm,
     handleStartAnotherImport,
-    resetSelectionStateFromPreview,
   } = createGitHubImportWizardActions({
     t,
     preview,
@@ -198,7 +197,7 @@ export function GitHubRepoImportWizard({
     }
 
     if (preview) {
-      resetSelectionStateFromPreview(preview);
+      setSelectionState(buildInitialSelections(preview));
       setSelectedSkillPath((current) =>
         current && preview.skills.some((skill) => skill.sourcePath === current)
           ? current
@@ -210,7 +209,7 @@ export function GitHubRepoImportWizard({
 
     setSelectedSkillPath(null);
     setStep("input");
-  }, [open, preview, importResult, resetSelectionStateFromPreview]);
+  }, [open, preview, importResult]);
 
   useEffect(() => {
     setSshPasswordRepairValue("");

@@ -11,7 +11,6 @@ import type {
   TargetSummary,
 } from "@/types";
 import {
-  buildInitialSelections,
   looksLikeMissingSshPassword,
   type SelectionState,
   type WizardStep,
@@ -274,10 +273,6 @@ export function createGitHubImportWizardActions({
     setStep("input");
   }
 
-  function resetSelectionStateFromPreview(nextPreview: GitHubRepoPreview | null) {
-    setSelectionState(buildInitialSelections(nextPreview));
-  }
-
   return {
     updateSelection,
     updateAllSelections,
@@ -291,6 +286,5 @@ export function createGitHubImportWizardActions({
     handleInstallImported,
     handleInstallDialogConfirm,
     handleStartAnotherImport,
-    resetSelectionStateFromPreview,
   };
 }
