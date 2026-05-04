@@ -486,26 +486,26 @@ export function CentralSkillsView() {
         onResolveRemoteMissing: handleResolveRemoteMissing,
       }}
       filterSidebar={{
-        aiTagReviews,
         filterSidebarWidth,
         isDeleting,
         isRepositoryDeletePreviewLoading,
         repositoryDeleteTargetId: repositoryDeleteTarget?.id,
         repositoryFilter,
         repositories,
-        setCategorizeTab,
         setRepositoryFilter,
-        setTagFilter,
         skillsCount: skills.length,
         startFilterSidebarResize,
-        tagCounts,
-        tagFilter,
-        uncategorizedCount,
-        updateAvailableSkillCount: updateAvailableSkillIds.length,
         handleFilterSidebarResizeKeyDown,
         onRepositoryDelete: (repository) => {
           void handleRepositoryDeleteClick(repository);
         },
+      }}
+      tagSearch={{
+        setCategorizeTab,
+        tagCounts,
+        uncategorizedCount,
+        aiReviewCount: aiTagReviews.length,
+        totalSkillCount: skills.length,
       }}
       isCheckingUpdates={isCheckingUpdates}
       isLoading={isLoading}

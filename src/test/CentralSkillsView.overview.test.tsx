@@ -74,13 +74,12 @@ describe("CentralSkillsView", () => {
 
     expect(screen.getByText("仓库来源")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /未归仓/i })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "分类筛选" })).toBeInTheDocument();
+    expect(screen.getByTestId("tag-search-trigger")).toBeInTheDocument();
     expect(screen.getAllByText("openai/skills").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("前端与视觉设计").length).toBeGreaterThanOrEqual(1);
   });
 
 
-  it("renders repositories and tags with distinct sidebar semantics", async () => {
+  it("renders repositories in the sidebar and tags via the search panel", async () => {
     renderCentralSkillsView();
 
     const sidebar = screen.getByTestId("central-filter-sidebar");
@@ -95,9 +94,6 @@ describe("CentralSkillsView", () => {
     expect(
       within(sidebar).getByTestId("repository-filter-local-unknown")
     ).toHaveAttribute("data-source-kind", "local");
-    expect(
-      within(sidebar).getByTestId("tag-filter-frontend-visual-design")
-    ).toHaveAttribute("data-filter-kind", "tag");
 
     fireEvent.click(within(sidebar).getByTestId("repository-filter-github-openai-skills-main"));
     await waitFor(() => {
@@ -106,7 +102,8 @@ describe("CentralSkillsView", () => {
     });
 
     fireEvent.click(within(sidebar).getByTestId("repository-filter-all"));
-    fireEvent.click(within(sidebar).getByTestId("tag-filter-frontend-visual-design"));
+    fireEvent.click(screen.getByTestId("tag-search-trigger"));
+    fireEvent.click(await screen.findByTestId("tag-search-item-frontend-visual-design"));
     await waitFor(() => {
       expect(screen.getByText("frontend-design")).toBeInTheDocument();
       expect(screen.queryByText("code-reviewer")).not.toBeInTheDocument();

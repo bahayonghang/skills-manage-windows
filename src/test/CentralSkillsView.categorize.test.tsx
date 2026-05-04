@@ -106,9 +106,8 @@ describe("CentralSkillsView", () => {
   it("filters skills by tag", async () => {
     renderCentralSkillsView();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "分类筛选" }), {
-      target: { value: "frontend-visual-design" },
-    });
+    fireEvent.click(screen.getByTestId("tag-search-trigger"));
+    fireEvent.click(await screen.findByTestId("tag-search-item-frontend-visual-design"));
 
     await waitFor(() => {
       expect(screen.getByText("frontend-design")).toBeInTheDocument();

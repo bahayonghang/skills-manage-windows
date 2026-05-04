@@ -73,7 +73,7 @@ describe("CentralSkillsView", () => {
     expect(screen.getByText("AI 标注进度")).toBeInTheDocument();
     expect(screen.getByText("成功 1")).toBeInTheDocument();
     expect(screen.getByText("失败 1")).toBeInTheDocument();
-    expect(screen.getAllByText("AI 待复核").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("查看失败 / 待复核")).toBeInTheDocument();
   });
 
 

@@ -1,18 +1,9 @@
 import type { ReactNode } from "react";
-import { FolderGit2, FolderOpen, Tag, Trash2 } from "lucide-react";
+import { FolderGit2, FolderOpen, Trash2 } from "lucide-react";
 import type { TFunction } from "i18next";
 
 import { cn } from "@/lib/utils";
-import type {
-  SkillAiTagReview,
-  SkillRepositoryWithStats,
-  SkillTag,
-} from "@/types";
-
-type TagCount = {
-  tag: SkillTag;
-  count: number;
-};
+import type { SkillRepositoryWithStats } from "@/types";
 
 function isGithubRepository(repository: SkillRepositoryWithStats): boolean {
   return (
@@ -37,12 +28,12 @@ function FilterSection({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-2.5">
-      <div className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+    <section>
+      <div className="sticky top-0 z-10 -mx-3 flex items-center gap-2 border-b border-border/50 bg-background/90 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-md">
         {icon}
         <span>{title}</span>
       </div>
-      <div className="space-y-1.5">{children}</div>
+      <div className="space-y-1.5 pt-3">{children}</div>
     </section>
   );
 }
@@ -128,92 +119,30 @@ function RepositoryFilterButton({
   );
 }
 
-function TagFilterButton({
-  active,
-  count,
-  label,
-  tone,
-  onClick,
-  testId,
-}: {
-  active: boolean;
-  count: number;
-  label: string;
-  tone: "all" | "tag" | "uncategorized" | "updates" | "ai";
-  onClick: () => void;
-  testId: string;
-}) {
-  const dotClassName =
-    tone === "updates"
-      ? "bg-amber-500"
-      : tone === "ai"
-        ? "bg-violet-500"
-        : tone === "uncategorized"
-          ? "bg-slate-400"
-          : tone === "tag"
-            ? "bg-emerald-500"
-            : "bg-muted-foreground/60";
-
-  return (
-    <button
-      type="button"
-      data-testid={testId}
-      data-filter-kind="tag"
-      onClick={onClick}
-      className={cn(
-        "flex min-h-9 w-full items-center gap-2 rounded-full border px-2.5 py-1.5 text-left text-xs transition-colors",
-        active
-          ? "border-primary/30 bg-primary/10 text-primary ring-1 ring-primary/10"
-          : "border-border/70 bg-background/35 text-muted-foreground hover:bg-background hover:text-foreground"
-      )}
-    >
-      <span className={cn("size-2 shrink-0 rounded-full", dotClassName)} />
-      <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
-      <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-        {count}
-      </span>
-    </button>
-  );
-}
-
 export function CentralSkillFilterSidebar({
-  aiTagReviews,
   filterSidebarWidth,
   isDeleting,
   isRepositoryDeletePreviewLoading,
   repositoryDeleteTargetId,
   repositoryFilter,
   repositories,
-  setCategorizeTab,
   setRepositoryFilter,
-  setTagFilter,
   skillsCount,
   startFilterSidebarResize,
-  tagCounts,
-  tagFilter,
   t,
-  uncategorizedCount,
-  updateAvailableSkillCount,
   handleFilterSidebarResizeKeyDown,
   onRepositoryDelete,
 }: {
-  aiTagReviews: SkillAiTagReview[];
   filterSidebarWidth: number;
   isDeleting: boolean;
   isRepositoryDeletePreviewLoading: boolean;
   repositoryDeleteTargetId?: string;
   repositoryFilter: string;
   repositories: SkillRepositoryWithStats[];
-  setCategorizeTab: (tab: "manual" | "ai" | "review") => void;
   setRepositoryFilter: (filter: string) => void;
-  setTagFilter: (filter: string) => void;
   skillsCount: number;
   startFilterSidebarResize: (event: React.PointerEvent<HTMLElement>) => void;
-  tagCounts: TagCount[];
-  tagFilter: string;
   t: TFunction;
-  uncategorizedCount: number;
-  updateAvailableSkillCount: number;
   handleFilterSidebarResizeKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   onRepositoryDelete: (repository: SkillRepositoryWithStats) => void;
 }) {
@@ -223,7 +152,7 @@ export function CentralSkillFilterSidebar({
       className="relative hidden min-h-0 shrink-0 border-r border-border/80 bg-muted/15 md:flex md:flex-col"
       style={{ width: filterSidebarWidth }}
     >
-      <div className="scrollbar-subtle min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4 pr-2">
+      <div className="scrollbar-subtle min-h-0 flex-1 overflow-y-auto px-3 pb-6 pr-2">
         <FilterSection
           icon={<FolderOpen className="size-3.5" />}
           title={t("central.repositories")}
@@ -271,58 +200,6 @@ export function CentralSkillFilterSidebar({
               />
             );
           })}
-        </FilterSection>
-
-        <FilterSection
-          icon={<Tag className="size-3.5" />}
-          title={t("central.categoryNav")}
-        >
-          <TagFilterButton
-            active={tagFilter === "all"}
-            count={skillsCount}
-            label={t("central.allTags")}
-            tone="all"
-            testId="tag-filter-all"
-            onClick={() => setTagFilter("all")}
-          />
-          <TagFilterButton
-            active={tagFilter === "uncategorized"}
-            count={uncategorizedCount}
-            label={t("central.uncategorizedOnly")}
-            tone="uncategorized"
-            testId="tag-filter-uncategorized"
-            onClick={() => setTagFilter("uncategorized")}
-          />
-          <TagFilterButton
-            active={tagFilter === "updates"}
-            count={updateAvailableSkillCount}
-            label={t("central.updatesAvailableOnly")}
-            tone="updates"
-            testId="tag-filter-updates"
-            onClick={() => setTagFilter("updates")}
-          />
-          <TagFilterButton
-            active={tagFilter === "ai-review"}
-            count={aiTagReviews.length}
-            label={t("central.aiReviewOnly")}
-            tone="ai"
-            testId="tag-filter-ai-review"
-            onClick={() => {
-              setTagFilter("ai-review");
-              setCategorizeTab("review");
-            }}
-          />
-          {tagCounts.map(({ tag, count }) => (
-            <TagFilterButton
-              key={tag.id}
-              active={tagFilter === tag.id}
-              count={count}
-              label={tag.name}
-              tone="tag"
-              testId={`tag-filter-${tag.id}`}
-              onClick={() => setTagFilter(tag.id)}
-            />
-          ))}
         </FilterSection>
       </div>
       <div

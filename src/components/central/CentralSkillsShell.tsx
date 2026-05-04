@@ -9,11 +9,13 @@ import { CentralSkillCategorizePanel } from "@/components/central/CentralSkillCa
 import { CentralSkillDialogs } from "@/components/central/CentralSkillDialogs";
 import { CentralSkillFilterSidebar } from "@/components/central/CentralSkillFilterSidebar";
 import { CentralSkillListContent } from "@/components/central/CentralSkillListContent";
+import { CentralSkillTagSearch } from "@/components/central/CentralSkillTagSearch";
 import { cn } from "@/lib/utils";
 import type {
   CentralSortDirection,
   CentralSortField,
 } from "@/pages/centralSkillsViewModel";
+import type { SkillTag } from "@/types";
 
 type FilterSidebarProps = Omit<ComponentProps<typeof CentralSkillFilterSidebar>, "t">;
 type ListContentProps = Omit<ComponentProps<typeof CentralSkillListContent>, "t">;
@@ -21,6 +23,10 @@ type CategorizePanelProps = Omit<ComponentProps<typeof CentralSkillCategorizePan
 type AiProgressProps = Omit<ComponentProps<typeof AiTagProgressBar>, "t">;
 type UpdateProgressProps = Omit<ComponentProps<typeof CentralUpdateProgressBar>, "t">;
 type DialogProps = Omit<ComponentProps<typeof CentralSkillDialogs>, "t">;
+type TagSearchProps = Omit<
+  ComponentProps<typeof CentralSkillTagSearch>,
+  "t" | "tagFilter" | "setTagFilter" | "tags" | "updateAvailableSkillCount"
+>;
 
 export function CentralSkillsShell({
   centralSkillsDir,
@@ -46,6 +52,7 @@ export function CentralSkillsShell({
   sortField,
   sortFieldOptions,
   tagFilter,
+  tagSearch,
   tags,
   t,
   updateAvailableSkillCount,
@@ -81,7 +88,8 @@ export function CentralSkillsShell({
   sortField: CentralSortField;
   sortFieldOptions: Array<{ value: CentralSortField; label: string }>;
   tagFilter: string;
-  tags: Array<{ id: string; name: string }>;
+  tagSearch: TagSearchProps;
+  tags: SkillTag[];
   t: TFunction;
   updateAvailableSkillCount: number;
   updateButton: {
@@ -162,8 +170,8 @@ export function CentralSkillsShell({
       </div>
 
       <div className="px-6 py-3 border-b border-border">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-          <div className="relative flex-1">
+        <div className="flex flex-col gap-3">
+          <div className="relative w-full">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
             <Input
               placeholder={t("central.searchPlaceholder")}
@@ -224,22 +232,18 @@ export function CentralSkillsShell({
                 </button>
               ))}
             </div>
-            <select
-              value={tagFilter}
-              onChange={(event) => setTagFilter(event.target.value)}
-              aria-label={t("central.tagFilterLabel")}
-              className="h-9 rounded-xl border border-border bg-background px-3 text-xs text-foreground"
-            >
-              <option value="all">{t("central.allTags")}</option>
-              <option value="updates">{t("central.updatesAvailableOnly")}</option>
-              <option value="uncategorized">{t("central.uncategorizedOnly")}</option>
-              <option value="ai-review">{t("central.aiReviewOnly")}</option>
-              {tags.map((tag) => (
-                <option key={tag.id} value={tag.id}>
-                  {tag.name}
-                </option>
-              ))}
-            </select>
+            <CentralSkillTagSearch
+              tagFilter={tagFilter}
+              setTagFilter={setTagFilter}
+              setCategorizeTab={tagSearch.setCategorizeTab}
+              tags={tags}
+              tagCounts={tagSearch.tagCounts}
+              uncategorizedCount={tagSearch.uncategorizedCount}
+              updateAvailableSkillCount={updateAvailableSkillCount}
+              aiReviewCount={tagSearch.aiReviewCount}
+              totalSkillCount={tagSearch.totalSkillCount}
+              t={t}
+            />
             <Button
               variant={filterSidebar.repositoryFilter === "unassigned" ? "default" : "outline"}
               size="sm"
@@ -250,13 +254,6 @@ export function CentralSkillsShell({
               }
             >
               {t("central.unassignedOnly")}
-            </Button>
-            <Button
-              variant={tagFilter === "uncategorized" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setTagFilter(tagFilter === "uncategorized" ? "all" : "uncategorized")}
-            >
-              {t("central.uncategorizedOnly")}
             </Button>
           </div>
         </div>
