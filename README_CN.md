@@ -244,6 +244,18 @@ SQLite 数据库位于 `~/.skillsmanage/db.sqlite`，首次启动时会自动初
 
 [![Star History Chart](https://api.star-history.com/svg?repos=bahayonghang/skills-manage-windows&type=Date)](https://www.star-history.com/#bahayonghang/skills-manage-windows&Date)
 
+## 文档站点
+
+`docs/` 下提供基于 VitePress 的中英双语文档站点。本地预览：
+
+```bash
+pnpm docs:dev
+pnpm docs:build
+pnpm docs:preview
+```
+
+英文入口为 `/`，中文镜像为 `/zh/`。构建产物输出到仓库根的 `dist-docs/`。
+
 ## 许可证
 
 本项目使用 Apache License 2.0，详见 [LICENSE](LICENSE)。

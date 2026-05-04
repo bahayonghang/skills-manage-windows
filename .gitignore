@@ -4,7 +4,9 @@ build/
 out/
 target/
 src-tauri/target/
-reference/
+/dist-docs/
+/docs/.vitepress/cache/
+
 .vscode/
 *.db
 *.db-shm

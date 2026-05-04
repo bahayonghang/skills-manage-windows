@@ -245,6 +245,18 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting and data-handling not
 
 [![Star History Chart](https://api.star-history.com/svg?repos=bahayonghang/skills-manage-windows&type=Date)](https://www.star-history.com/#bahayonghang/skills-manage-windows&Date)
 
+## Documentation
+
+A bilingual VitePress documentation site lives under `docs/`. To preview locally:
+
+```bash
+pnpm docs:dev
+pnpm docs:build
+pnpm docs:preview
+```
+
+The English entry point is `/`, and the Chinese mirror is `/zh/`. Build output is written to `dist-docs/` at the repository root.
+
 ## License
 
 This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
