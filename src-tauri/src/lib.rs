@@ -40,6 +40,11 @@ enum MigrationProgress {
 pub struct AppState {
     pub db: DbPool,
     pub ai_tag_jobs: AiTagJobRegistry,
+    /// Cooperative cancel flag for the at-most-one Central update job.
+    /// Producers (`check_central_skill_updates`, `update_central_skills`)
+    /// reset to false on entry and poll between iterations; the
+    /// `cancel_central_skill_updates` command stores true to request stop.
+    pub central_update_cancel: Arc<AtomicBool>,
     pub targets: targets::TargetRegistry,
 }
 
@@ -115,6 +120,7 @@ pub fn run() {
             app.manage(AppState {
                 db: pool.clone(),
                 ai_tag_jobs: AiTagJobRegistry::default(),
+                central_update_cancel: Arc::new(AtomicBool::new(false)),
                 targets: targets::TargetRegistry::default(),
             });
 
@@ -214,6 +220,7 @@ pub fn run() {
             commands::central_updates::get_central_skill_update_states,
             commands::central_updates::check_central_skill_updates,
             commands::central_updates::update_central_skills,
+            commands::central_updates::cancel_central_skill_updates,
             commands::central_updates::keep_remote_missing_central_skills,
             // Collections
             commands::collections::create_collection,

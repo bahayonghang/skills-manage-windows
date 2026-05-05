@@ -270,6 +270,7 @@ export function useCentralSkillsStoreBindings(t: TFunction) {
     assignSkillTags: useCentralSkillsStore((state) => state.assignSkillTags),
     bulkSuggestSkillTags: useCentralSkillsStore((state) => state.bulkSuggestSkillTags),
     cancelAiTagJob: useCentralSkillsStore((state) => state.cancelAiTagJob),
+    cancelCentralUpdates: useCentralSkillsStore((state) => state.cancelCentralUpdates),
     acceptAiTagReview: useCentralSkillsStore((state) => state.acceptAiTagReview),
     skipAiTagReview: useCentralSkillsStore((state) => state.skipAiTagReview),
     checkSkillUpdates:

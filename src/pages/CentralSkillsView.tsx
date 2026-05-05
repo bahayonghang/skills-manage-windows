@@ -52,6 +52,7 @@ export function CentralSkillsView() {
     assignSkillTags,
     bulkSuggestSkillTags,
     cancelAiTagJob,
+    cancelCentralUpdates,
     acceptAiTagReview,
     skipAiTagReview,
     checkSkillUpdates,
@@ -207,7 +208,42 @@ export function CentralSkillsView() {
     ]
   );
   const isUpdateProgressDismissible =
-    updateJob.status === "completed" || updateJob.status === "failed";
+    updateJob.status === "completed" ||
+    updateJob.status === "failed" ||
+    updateJob.status === "cancelled";
+  const repositoryFilterName = useMemo(() => {
+    if (repositoryFilter === "all") return null;
+    return repositories.find((repo) => repo.id === repositoryFilter)?.name ?? null;
+  }, [repositoryFilter, repositories]);
+  const repositorySkillIds = useMemo(() => {
+    if (repositoryFilter === "all") return [];
+    return sortedSkills
+      .filter((skill) => (skill.repository?.id ?? null) === repositoryFilter)
+      .map((skill) => skill.id);
+  }, [repositoryFilter, sortedSkills]);
+  const checkButtonScope: "selected" | "repository" | "all" =
+    selectedSkillIds.length > 0
+      ? "selected"
+      : repositoryFilter !== "all"
+        ? "repository"
+        : "all";
+  const checkButtonTargetSkillIds =
+    checkButtonScope === "selected"
+      ? selectedSkillIds
+      : checkButtonScope === "repository"
+        ? repositorySkillIds
+        : sortedSkills.map((skill) => skill.id);
+  const checkButtonScopedSkillIds: string[] | undefined =
+    checkButtonScope === "all" ? undefined : checkButtonTargetSkillIds;
+  const checkButtonLabel =
+    checkButtonScope === "selected"
+      ? t("central.checkUpdatesSelected", { count: checkButtonTargetSkillIds.length })
+      : checkButtonScope === "repository"
+        ? t("central.checkUpdatesRepository", {
+            repo: repositoryFilterName ?? "",
+            count: checkButtonTargetSkillIds.length,
+          })
+        : t("central.checkUpdatesAll", { count: skills.length });
   const shouldShowUpdateProgress =
     updateJob.status !== "idle" &&
     (!isUpdateProgressDismissible || dismissedUpdateProgressKey !== updateProgressKey);
@@ -308,6 +344,7 @@ export function CentralSkillsView() {
     handleBatchInstallCentralSkills,
     handleBulkSuggestTags,
     handleCancelAiTagJob,
+    handleCancelCentralUpdates,
     handleCheckUpdates,
     handleCreateManualTag,
     handleDeleteCentralSkill,
@@ -339,6 +376,7 @@ export function CentralSkillsView() {
     batchInstallSkills,
     bulkSuggestSkillTags,
     cancelAiTagJob,
+    cancelCentralUpdates,
     checkSkillUpdates,
     createTag,
     deleteCentralSkill,
@@ -560,7 +598,6 @@ export function CentralSkillsView() {
             : t("central.updateAvailable", { count: updateTargetSkillIds.length }),
         targetSkillIds: updateTargetSkillIds,
       }}
-      updateJobStatus={updateJob.status}
       aiProgress={{
         aiTagJob,
         onCancel: () => {
@@ -623,10 +660,21 @@ export function CentralSkillsView() {
         updateJob,
         updateProgressKey,
         updateProgressRatio,
+        onCancel: () => {
+          void handleCancelCentralUpdates();
+        },
         onDismiss: setDismissedUpdateProgressKey,
       }}
-      onCheckUpdates={() => {
-        void handleCheckUpdates();
+      checkButton={{
+        label: checkButtonLabel,
+        disabled:
+          isCheckingUpdates ||
+          updateJob.status === "running" ||
+          updateJob.status === "cancelling" ||
+          checkButtonTargetSkillIds.length === 0,
+        onClick: () => {
+          void handleCheckUpdates(checkButtonScopedSkillIds);
+        },
       }}
       onRefresh={() => {
         void handleRefresh();

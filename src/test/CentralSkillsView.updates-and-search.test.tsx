@@ -374,7 +374,7 @@ describe("CentralSkillsView", () => {
     mockKeepRemoteMissingSkills.mockResolvedValueOnce(["frontend-design"]);
     renderCentralSkillsView();
 
-    fireEvent.click(screen.getByRole("button", { name: /检查更新/i }));
+    fireEvent.click(screen.getByRole("button", { name: /检查/i }));
 
     await waitFor(() => {
       expect(mockCheckSkillUpdates).toHaveBeenCalled();
@@ -446,7 +446,7 @@ describe("CentralSkillsView", () => {
     });
     renderCentralSkillsView();
 
-    fireEvent.click(screen.getByRole("button", { name: /检查更新/i }));
+    fireEvent.click(screen.getByRole("button", { name: /检查/i }));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /删除本地/i }));
@@ -499,7 +499,7 @@ describe("CentralSkillsView", () => {
     mockCheckSkillUpdates.mockResolvedValueOnce([]);
     renderCentralSkillsView();
 
-    const checkButton = screen.getByRole("button", { name: /检查更新/i });
+    const checkButton = screen.getByRole("button", { name: /检查/i });
     expect(checkButton).not.toBeDisabled();
 
     fireEvent.click(checkButton);

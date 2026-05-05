@@ -29,6 +29,7 @@ export function useCentralSkillsActions({
   batchInstallSkills,
   bulkSuggestSkillTags,
   cancelAiTagJob,
+  cancelCentralUpdates,
   checkSkillUpdates,
   createTag,
   deleteCentralSkill,
@@ -101,7 +102,8 @@ export function useCentralSkillsActions({
     low_confidence_count?: number | null;
   }>>;
   cancelAiTagJob?: () => Promise<void>;
-  checkSkillUpdates: () => Promise<CentralSkillUpdateState[]>;
+  cancelCentralUpdates: () => Promise<void>;
+  checkSkillUpdates: (skillIds?: string[]) => Promise<CentralSkillUpdateState[]>;
   createTag?: (name: string) => Promise<{ id: string }>;
   deleteCentralSkill: (skillId: string, removeAgentIds: string[]) => Promise<void>;
   deleteCentralSkills: (
@@ -535,9 +537,18 @@ export function useCentralSkillsActions({
     }
   }
 
-  async function handleCheckUpdates() {
+  async function handleCancelCentralUpdates() {
     try {
-      const states = await checkSkillUpdates();
+      await cancelCentralUpdates();
+      toast.info(t("central.updateCancelRequested"));
+    } catch (err) {
+      toast.error(t("central.updateError", { error: String(err) }));
+    }
+  }
+
+  async function handleCheckUpdates(skillIds?: string[]) {
+    try {
+      const states = await checkSkillUpdates(skillIds);
       const available = states.filter((state) => state.status === "update_available").length;
       const unsupported = states.filter((state) => state.status === "unsupported").length;
       const remoteMissing = states.filter((state) => state.status === "remote_missing");
@@ -728,6 +739,7 @@ export function useCentralSkillsActions({
     handleBatchInstallCentralSkills,
     handleBulkSuggestTags,
     handleCancelAiTagJob,
+    handleCancelCentralUpdates,
     handleCheckUpdates,
     handleCreateManualTag,
     handleDeleteCentralSkill,

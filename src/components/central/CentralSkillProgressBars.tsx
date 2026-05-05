@@ -74,6 +74,7 @@ export function CentralUpdateProgressBar({
   updateJob,
   updateProgressKey,
   updateProgressRatio,
+  onCancel,
   onDismiss,
 }: {
   isDismissible: boolean;
@@ -81,6 +82,7 @@ export function CentralUpdateProgressBar({
   updateJob: CentralSkillUpdateJob;
   updateProgressKey: string;
   updateProgressRatio: number;
+  onCancel?: () => void;
   onDismiss: (key: string) => void;
 }) {
   return (
@@ -123,6 +125,11 @@ export function CentralUpdateProgressBar({
                   {t("central.updateProgressFailedStatus")}
                 </span>
               )}
+              {updateJob.status === "cancelled" && (
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">
+                  {t("central.updateProgressCancelledStatus")}
+                </span>
+              )}
             </div>
             {updateJob.currentSkillName && updateJob.status === "running" && (
               <div className="mt-0.5 truncate text-muted-foreground">
@@ -151,6 +158,19 @@ export function CentralUpdateProgressBar({
           >
             {t("central.updateFailed", { count: updateJob.failed })}
           </span>
+          {onCancel && (updateJob.status === "running" || updateJob.status === "cancelling") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCancel}
+              disabled={updateJob.status === "cancelling"}
+            >
+              <X className="size-3.5" />
+              {updateJob.status === "cancelling"
+                ? t("central.cancellingUpdateJob")
+                : t("central.cancelUpdateJob")}
+            </Button>
+          )}
           {isDismissible && (
             <Button
               variant="ghost"

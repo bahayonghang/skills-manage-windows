@@ -362,7 +362,13 @@ export type CentralSkillUpdateItemStatus =
   | "failed"
   | "skipped";
 
-export type CentralSkillUpdateJobStatus = "idle" | "running" | "completed" | "failed";
+export type CentralSkillUpdateJobStatus =
+  | "idle"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelling"
+  | "cancelled";
 
 export interface CentralSkillUpdateJob {
   phase: "checking" | "updating" | null;
@@ -385,6 +391,7 @@ export interface CentralSkillUpdateProgressPayload {
     | "started"
     | "running"
     | "completed"
+    | "cancelled"
     | CentralSkillUpdateStatus;
   total: number;
   completed: number;

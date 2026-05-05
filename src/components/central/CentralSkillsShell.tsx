@@ -56,11 +56,10 @@ export function CentralSkillsShell({
   t,
   updateAvailableSkillCount,
   updateButton,
-  updateJobStatus,
+  checkButton,
   aiProgress,
   categorizePanel,
   updateProgress,
-  onCheckUpdates,
   onRefresh,
   onUpdateSkills,
 }: {
@@ -95,11 +94,14 @@ export function CentralSkillsShell({
     label: string;
     targetSkillIds: string[];
   };
-  updateJobStatus: string | null;
+  checkButton: {
+    label: string;
+    disabled: boolean;
+    onClick: () => void;
+  };
   aiProgress: AiProgressProps;
   categorizePanel: CategorizePanelProps;
   updateProgress: UpdateProgressProps;
-  onCheckUpdates: () => void;
   onRefresh: () => void;
   onUpdateSkills: (skillIds: string[]) => void;
 }) {
@@ -129,11 +131,11 @@ export function CentralSkillsShell({
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={onCheckUpdates}
-            disabled={isCheckingUpdates || updateJobStatus === "running"}
+            onClick={checkButton.onClick}
+            disabled={checkButton.disabled}
           >
             <RefreshCw className={`size-3.5 ${isCheckingUpdates ? "animate-spin" : ""}`} />
-            {t("central.checkUpdates")}
+            {checkButton.label}
           </Button>
           {updateAvailableSkillCount > 0 && (
             <Button

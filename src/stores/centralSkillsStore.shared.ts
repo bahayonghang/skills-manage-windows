@@ -210,15 +210,21 @@ export function mergeUpdateProgress(
     items[payload.skillId] = "failed";
   }
 
-  return {
-    ...current,
-    phase: payload.phase,
-    status:
-      payload.status === "completed"
+  const nextStatus: CentralSkillUpdateJob["status"] =
+    payload.status === "cancelled"
+      ? "cancelled"
+      : payload.status === "completed"
         ? payload.failed > 0
           ? "failed"
           : "completed"
-        : "running",
+        : current.status === "cancelling"
+          ? "cancelling"
+          : "running";
+
+  return {
+    ...current,
+    phase: payload.phase,
+    status: nextStatus,
     total: payload.total,
     completed: payload.completed,
     succeeded: payload.succeeded,

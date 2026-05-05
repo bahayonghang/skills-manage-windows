@@ -77,6 +77,7 @@ export interface CentralSkillsState {
   bulkSuggestSkillTags: (skillIds: string[]) => Promise<SkillTagSuggestionResult[]>;
   checkSkillUpdates: (skillIds?: string[]) => Promise<CentralSkillUpdateState[]>;
   updateSkills: (skillIds: string[]) => Promise<CentralSkillUpdateResult>;
+  cancelCentralUpdates: () => Promise<void>;
   keepRemoteMissingSkills: (skillIds: string[]) => Promise<string[]>;
   cancelAiTagJob: () => Promise<void>;
   loadAiTagReviews: () => Promise<void>;

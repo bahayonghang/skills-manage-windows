@@ -2,6 +2,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{
@@ -21,6 +22,7 @@ const STATUS_UPDATE_AVAILABLE: &str = "update_available";
 const STATUS_UNSUPPORTED: &str = "unsupported";
 const STATUS_REMOTE_MISSING: &str = "remote_missing";
 const STATUS_ERROR: &str = "error";
+const STATUS_CANCELLED: &str = "cancelled";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -133,9 +135,24 @@ pub async fn check_central_skill_updates(
     let mut states = Vec::with_capacity(skills.len());
     let total = skills.len();
 
+    state.central_update_cancel.store(false, Ordering::SeqCst);
+
     emit_update_progress(&app, "checking", "started", total, &counters, None, None);
 
     for skill in skills {
+        if state.central_update_cancel.load(Ordering::SeqCst) {
+            emit_update_progress(
+                &app,
+                "checking",
+                STATUS_CANCELLED,
+                total,
+                &counters,
+                None,
+                None,
+            );
+            return Ok(states);
+        }
+
         emit_update_progress(
             &app,
             "checking",
@@ -207,9 +224,29 @@ pub async fn update_central_skills(
     let mut skipped = Vec::new();
     let mut states = Vec::new();
 
+    state.central_update_cancel.store(false, Ordering::SeqCst);
+
     emit_update_progress(&app, "updating", "started", total, &counters, None, None);
 
     for skill in skills {
+        if state.central_update_cancel.load(Ordering::SeqCst) {
+            emit_update_progress(
+                &app,
+                "updating",
+                STATUS_CANCELLED,
+                total,
+                &counters,
+                None,
+                None,
+            );
+            return Ok(CentralSkillUpdateResult {
+                succeeded,
+                failed,
+                skipped,
+                states,
+            });
+        }
+
         emit_update_progress(
             &app,
             "updating",
@@ -355,6 +392,12 @@ pub async fn update_central_skills(
         skipped,
         states,
     })
+}
+
+#[tauri::command]
+pub async fn cancel_central_skill_updates(state: State<'_, AppState>) -> Result<(), String> {
+    state.central_update_cancel.store(true, Ordering::SeqCst);
+    Ok(())
 }
 
 pub async fn keep_remote_missing_central_skills_impl(

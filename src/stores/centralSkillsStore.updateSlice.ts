@@ -26,6 +26,7 @@ import type { CentralSkillsState, CentralStoreContext } from "./centralSkillsSto
 export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralStoreContext): Pick<CentralSkillsState,
   | "checkSkillUpdates"
   | "updateSkills"
+  | "cancelCentralUpdates"
   | "keepRemoteMissingSkills"
   | "cancelAiTagJob"
   | "subscribeAiTagProgress"
@@ -128,6 +129,23 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
           error: String(err),
         },
       }));
+      throw err;
+    }
+  },
+
+  cancelCentralUpdates: async () => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    set((state) =>
+      state.updateJob.status === "running"
+        ? { updateJob: { ...state.updateJob, status: "cancelling" } }
+        : {}
+    );
+    try {
+      await invoke("cancel_central_skill_updates");
+    } catch (err) {
+      set({ error: String(err) });
       throw err;
     }
   },
