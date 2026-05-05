@@ -2,6 +2,7 @@ pub mod agents;
 pub mod bootstrap;
 pub mod central_metadata;
 pub mod central_updates;
+pub mod central_updates_fs;
 pub mod collections;
 pub mod discover;
 pub mod github_import;

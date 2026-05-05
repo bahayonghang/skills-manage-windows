@@ -66,7 +66,6 @@ export function CentralSkillsView() {
     isInstalling,
     isDeleting,
     togglingAgentId,
-    isRemoteTarget,
     refreshCounts,
     availableInstallAgents,
     skillsByAgent,
@@ -509,7 +508,6 @@ export function CentralSkillsView() {
       }}
       isCheckingUpdates={isCheckingUpdates}
       isLoading={isLoading}
-      isRemoteTarget={isRemoteTarget}
       listContent={{
         availableInstallAgents,
         contentRef,
@@ -555,7 +553,7 @@ export function CentralSkillsView() {
       t={t}
       updateAvailableSkillCount={updateAvailableSkillIds.length}
       updateButton={{
-        disabled: isRemoteTarget || updateTargetSkillIds.length === 0 || updatingSkillIds.length > 0,
+        disabled: updateTargetSkillIds.length === 0 || updatingSkillIds.length > 0,
         label:
           selectedSkillIds.length > 0
             ? t("central.updateSelected", { count: updateTargetSkillIds.length })

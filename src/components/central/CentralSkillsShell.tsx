@@ -34,7 +34,6 @@ export function CentralSkillsShell({
   filterSidebar,
   isCheckingUpdates,
   isLoading,
-  isRemoteTarget,
   listContent,
   searchQuery,
   setIsGitHubImportOpen,
@@ -70,7 +69,6 @@ export function CentralSkillsShell({
   filterSidebar: FilterSidebarProps;
   isCheckingUpdates: boolean;
   isLoading: boolean;
-  isRemoteTarget: boolean;
   listContent: ListContentProps;
   searchQuery: string;
   setIsGitHubImportOpen: (open: boolean) => void;
@@ -132,8 +130,7 @@ export function CentralSkillsShell({
           <Button
             variant="outline"
             onClick={onCheckUpdates}
-            disabled={isRemoteTarget || isCheckingUpdates || updateJobStatus === "running"}
-            title={isRemoteTarget ? t("targets.centralUpdatesUnsupported") : undefined}
+            disabled={isCheckingUpdates || updateJobStatus === "running"}
           >
             <RefreshCw className={`size-3.5 ${isCheckingUpdates ? "animate-spin" : ""}`} />
             {t("central.checkUpdates")}
@@ -143,7 +140,6 @@ export function CentralSkillsShell({
               variant="default"
               onClick={() => onUpdateSkills(updateButton.targetSkillIds)}
               disabled={updateButton.disabled}
-              title={isRemoteTarget ? t("targets.centralUpdatesUnsupported") : undefined}
             >
               <Download className="size-3.5" />
               {updateButton.label}

@@ -481,4 +481,31 @@ describe("CentralSkillsView", () => {
 
     isTauriSpy.mockRestore();
   });
+
+
+  it("keeps the check-updates button enabled and triggers the backend on SSH targets", async () => {
+    const remoteTarget: TargetSummary = {
+      id: "ssh-demo",
+      kind: "ssh",
+      label: "Demo",
+      remoteOs: "Linux",
+      symlinkEnabled: true,
+      isActive: true,
+    };
+    useTargetStore.setState({
+      targets: [localTarget, remoteTarget],
+      activeTarget: remoteTarget,
+    });
+    mockCheckSkillUpdates.mockResolvedValueOnce([]);
+    renderCentralSkillsView();
+
+    const checkButton = screen.getByRole("button", { name: /检查更新/i });
+    expect(checkButton).not.toBeDisabled();
+
+    fireEvent.click(checkButton);
+
+    await waitFor(() => {
+      expect(mockCheckSkillUpdates).toHaveBeenCalled();
+    });
+  });
 });

@@ -32,9 +32,6 @@ include!("archive.rs");
 include!("raw_http.rs");
 include!("pat.rs");
 
-#[cfg(test)]
-include!("tests.rs");
-
 type Duration = ChronoDuration;
 
 fn github_host_rate_limiters() -> &'static tokio::sync::Mutex<HashMap<String, Instant>> {
@@ -69,3 +66,6 @@ async fn wait_for_github_host_slot(url: &str) -> Result<(), String> {
         }
     }
 }
+
+#[cfg(test)]
+include!("tests.rs");
