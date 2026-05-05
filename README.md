@@ -218,7 +218,9 @@ skillport/
 │       ├── db.rs               # SQLite schema, migrations, queries
 │       ├── lib.rs              # Tauri app setup
 │       └── main.rs             # Desktop entry point
+├── docs/                       # VitePress docs, product notes, design assets
 ├── public/                     # Static assets
+├── scripts/                    # Build and maintenance helpers
 ├── CHANGELOG.md                # English changelog
 ├── CHANGELOG.zh.md             # Chinese changelog
 └── release-notes/              # GitHub release notes

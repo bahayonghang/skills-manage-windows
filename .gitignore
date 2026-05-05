@@ -6,6 +6,7 @@ target/
 src-tauri/target/
 /dist-docs/
 /docs/.vitepress/cache/
+.tmp/
 
 .vscode/
 *.db

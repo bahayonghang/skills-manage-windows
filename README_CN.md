@@ -217,7 +217,9 @@ skillport/
 │       ├── db.rs               # SQLite schema、迁移、查询
 │       ├── lib.rs              # Tauri 应用初始化
 │       └── main.rs             # 桌面入口
+├── docs/                       # VitePress 文档、产品说明和设计资源
 ├── public/                     # 静态资源
+├── scripts/                    # 构建和维护脚本
 ├── CHANGELOG.md                # 英文更新日志
 ├── CHANGELOG.zh.md             # 中文更新日志
 └── release-notes/              # GitHub release notes
