@@ -3,11 +3,12 @@ use std::collections::HashMap;
 use std::time::Instant;
 use tauri::State;
 
-use crate::commands::logs::{
+use crate::operation_log::{
     record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
 };
 use crate::db::{self, DbPool, ScanDirectory};
-use crate::path_utils::{expand_home_path, path_to_string};
+use crate::paths::{expand_home_path, expand_remote_home_path, path_to_string};
+use crate::targets::ActiveTarget;
 use crate::AppState;
 
 // ─── Core Implementations (testable without Tauri State) ──────────────────────
@@ -24,12 +25,28 @@ pub async fn add_scan_directory_impl(
     path: &str,
     label: Option<&str>,
 ) -> Result<ScanDirectory, String> {
+    add_scan_directory_impl_for_home(pool, path, label, None).await
+}
+
+async fn add_scan_directory_impl_for_home(
+    pool: &DbPool,
+    path: &str,
+    label: Option<&str>,
+    remote_home: Option<&str>,
+) -> Result<ScanDirectory, String> {
     let path = path.trim();
     if path.is_empty() {
         return Err("Scan directory path cannot be empty".to_string());
     }
-    let expanded_path = path_to_string(&expand_home_path(path));
+    let expanded_path = expand_scan_directory_path(path, remote_home);
     db::add_scan_directory(pool, &expanded_path, label).await
+}
+
+fn expand_scan_directory_path(path: &str, remote_home: Option<&str>) -> String {
+    match remote_home {
+        Some(home) => expand_remote_home_path(path, home),
+        None => path_to_string(&expand_home_path(path)),
+    }
 }
 
 /// Remove a custom (non-builtin) scan directory by path.
@@ -100,8 +117,13 @@ pub async fn add_scan_directory(
     let active_target = state.active_target().await?;
     let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
+    let remote_home = match &active_target {
+        ActiveTarget::Ssh(target) => Some(target.remote_home.as_str()),
+        ActiveTarget::Local => None,
+    };
     let started_at = Instant::now();
-    let result = add_scan_directory_impl(&pool, &path, label.as_deref()).await;
+    let result =
+        add_scan_directory_impl_for_home(&pool, &path, label.as_deref(), remote_home).await;
     match &result {
         Ok(directory) => {
             record_operation_log_best_effort(
@@ -243,7 +265,7 @@ pub async fn set_setting(
         .active_target()
         .await
         .map(|target| target_context_from_active_target(&target))
-        .unwrap_or_else(|_| crate::commands::logs::local_target_context());
+        .unwrap_or_else(|_| crate::operation_log::local_target_context());
     let started_at = Instant::now();
     let result = set_setting_impl(&state.db, &key, &value).await;
     let status = if result.is_ok() {
@@ -284,7 +306,7 @@ pub async fn set_settings(
         .active_target()
         .await
         .map(|target| target_context_from_active_target(&target))
-        .unwrap_or_else(|_| crate::commands::logs::local_target_context());
+        .unwrap_or_else(|_| crate::operation_log::local_target_context());
     let started_at = Instant::now();
     let result = set_settings_impl(&state.db, &values).await;
     let status = if result.is_ok() {
@@ -422,6 +444,21 @@ mod tests {
             "tilde paths must be expanded before persistence"
         );
         assert!(dir.path.contains(".skillsmanage"));
+    }
+
+    #[tokio::test]
+    async fn test_add_scan_directory_expands_tilde_with_remote_home() {
+        let pool = setup_test_db().await;
+        let dir = add_scan_directory_impl_for_home(
+            &pool,
+            "~/.skillsmanage/remote-scan",
+            None,
+            Some("/home/alice"),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(dir.path, "/home/alice/.skillsmanage/remote-scan");
     }
 
     #[tokio::test]

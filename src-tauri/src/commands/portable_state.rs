@@ -8,7 +8,7 @@ use tauri::State;
 use uuid::Uuid;
 
 use super::github_import::{self, DuplicateResolution, GitHubSkillImportSelection};
-use crate::commands::logs::{
+use crate::operation_log::{
     local_target_context, record_operation_log_best_effort, OperationLogEvent,
 };
 use crate::{

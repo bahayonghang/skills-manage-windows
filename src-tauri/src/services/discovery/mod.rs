@@ -8,6 +8,7 @@ mod import;
 mod query;
 mod roots;
 mod scan;
+mod scan_core;
 mod types;
 
 #[cfg(test)]
@@ -28,10 +29,8 @@ pub use query::{
 pub use roots::{
     default_scan_roots, get_scan_roots_impl, platform_skill_patterns, set_scan_root_enabled_impl,
 };
-pub use scan::{
-    reconcile_discovered_skills, scan_root_for_projects, should_skip_dir, start_project_scan_impl,
-    stop_project_scan_impl,
-};
+pub use scan::{reconcile_discovered_skills, start_project_scan_impl, stop_project_scan_impl};
+pub use scan_core::{scan_root_for_projects, should_skip_dir};
 pub use types::{
     CompletePayload, DiscoverResult, DiscoveredProject, DiscoveredSkill, DiscoveredSummary,
     FoundPayload, ImportResult, ImportTarget, ObsidianVault, ProgressPayload, ScanRoot,

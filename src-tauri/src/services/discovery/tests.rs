@@ -5,6 +5,7 @@ use chrono::Utc;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
 #[test]
 fn test_default_scan_roots_returns_candidates() {
@@ -84,7 +85,7 @@ async fn test_scan_root_for_projects_finds_nested_skills() {
         PathBuf::from(".claude/skills"),
     )];
 
-    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir);
+    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir, &AtomicBool::new(false));
 
     assert_eq!(projects.len(), 1, "should find 1 project");
     assert_eq!(projects[0].project_name, "my-project");
@@ -109,7 +110,7 @@ async fn test_scan_root_for_projects_skips_dirs_without_skills() {
         PathBuf::from(".claude/skills"),
     )];
 
-    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir);
+    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir, &AtomicBool::new(false));
     assert!(
         projects.is_empty(),
         "should not find projects without skills"
@@ -153,7 +154,7 @@ async fn test_scan_root_for_projects_handles_multiple_platforms() {
         ),
     ];
 
-    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir);
+    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir, &AtomicBool::new(false));
 
     assert_eq!(projects.len(), 1);
     assert_eq!(projects[0].skills.len(), 2);
@@ -190,7 +191,7 @@ async fn test_scan_root_for_projects_detects_already_central() {
         PathBuf::from(".claude/skills"),
     )];
 
-    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir);
+    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir, &AtomicBool::new(false));
 
     assert_eq!(projects.len(), 1);
     assert_eq!(projects[0].skills.len(), 1);
@@ -659,17 +660,15 @@ async fn test_scan_cancellation_stops_early() {
         PathBuf::from(".claude/skills"),
     )];
 
-    // Set cancel flag before scanning.
-    set_scan_cancel_for_test(true);
+    // Pre-cancelled flag drives the core's early-return path directly,
+    // without depending on the orchestration layer's global SCAN_CANCEL.
+    let cancel = AtomicBool::new(true);
 
-    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir);
+    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir, &cancel);
     assert!(
         projects.is_empty(),
         "should find no projects when cancel flag is set"
     );
-
-    // Reset for other tests.
-    set_scan_cancel_for_test(false);
 }
 
 #[tokio::test]
@@ -972,7 +971,7 @@ async fn test_recursive_scan_finds_deeply_nested_project() {
         PathBuf::from(".claude/skills"),
     )];
 
-    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir);
+    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir, &AtomicBool::new(false));
 
     assert_eq!(projects.len(), 1, "should find 1 project at depth 3");
     assert_eq!(projects[0].project_name, "my-project");
@@ -1019,7 +1018,7 @@ async fn test_recursive_scan_skips_hidden_dirs_at_root() {
         PathBuf::from(".claude/skills"),
     )];
 
-    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir);
+    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir, &AtomicBool::new(false));
 
     // Should only find the project in the visible directory.
     assert_eq!(projects.len(), 1, "should only find the visible project");
@@ -1068,7 +1067,7 @@ async fn test_recursive_scan_skips_node_modules_and_git() {
         PathBuf::from(".claude/skills"),
     )];
 
-    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir);
+    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir, &AtomicBool::new(false));
 
     assert_eq!(projects.len(), 1, "should only find the good project");
     assert_eq!(projects[0].skills[0].name, "good-skill");
@@ -1113,7 +1112,7 @@ async fn test_recursive_scan_finds_multiple_projects_at_different_depths() {
         ),
     ];
 
-    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir);
+    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir, &AtomicBool::new(false));
 
     assert_eq!(
         projects.len(),
@@ -1151,7 +1150,7 @@ async fn test_recursive_scan_respects_max_depth() {
         PathBuf::from(".claude/skills"),
     )];
 
-    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir);
+    let projects = scan_root_for_projects(tmp.path(), &patterns, &central_dir, &AtomicBool::new(false));
 
     assert!(
         projects.is_empty(),

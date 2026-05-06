@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 /*
@@ -9,33 +10,55 @@ use std::path::{Path, PathBuf};
  * 2) 在 Windows 下优先兼容 USERPROFILE 与 HOMEDRIVE/HOMEPATH
  */
 pub fn resolve_home_dir() -> PathBuf {
-    resolve_home_dir_with(|key| std::env::var(key).ok())
+    resolve_home_dir_from_env_vars(
+        std::env::var_os("HOME"),
+        std::env::var_os("USERPROFILE"),
+        std::env::var_os("HOMEDRIVE"),
+        std::env::var_os("HOMEPATH"),
+    )
+}
+
+fn resolve_home_dir_from_env_vars(
+    home: Option<OsString>,
+    userprofile: Option<OsString>,
+    homedrive: Option<OsString>,
+    homepath: Option<OsString>,
+) -> PathBuf {
+    // 1.1 优先使用 HOME
+    if let Some(home) = non_empty_os_env(home) {
+        return PathBuf::from(home);
+    }
+
+    // 1.2 Windows 环境优先回退到 USERPROFILE
+    if let Some(user_profile) = non_empty_os_env(userprofile) {
+        return PathBuf::from(user_profile);
+    }
+
+    // 1.3 最后尝试 HOMEDRIVE + HOMEPATH
+    if let (Some(home_drive), Some(home_path)) =
+        (non_empty_os_env(homedrive), non_empty_os_env(homepath))
+    {
+        return PathBuf::from(format!(
+            "{}{}",
+            home_drive.to_string_lossy(),
+            home_path.to_string_lossy()
+        ));
+    }
+
+    // 1.4 全部缺失时保底回退到当前平台临时目录
+    std::env::temp_dir()
 }
 
 pub fn resolve_home_dir_with<F>(mut get_var: F) -> PathBuf
 where
     F: FnMut(&str) -> Option<String>,
 {
-    // 1.1 优先使用 HOME
-    if let Some(home) = non_empty_env(&mut get_var, "HOME") {
-        return PathBuf::from(home);
-    }
-
-    // 1.2 Windows 环境优先回退到 USERPROFILE
-    if let Some(user_profile) = non_empty_env(&mut get_var, "USERPROFILE") {
-        return PathBuf::from(user_profile);
-    }
-
-    // 1.3 最后尝试 HOMEDRIVE + HOMEPATH
-    if let (Some(home_drive), Some(home_path)) = (
-        non_empty_env(&mut get_var, "HOMEDRIVE"),
-        non_empty_env(&mut get_var, "HOMEPATH"),
-    ) {
-        return PathBuf::from(format!("{}{}", home_drive, home_path));
-    }
-
-    // 1.4 全部缺失时保底回退到 /tmp
-    PathBuf::from("/tmp")
+    resolve_home_dir_from_env_vars(
+        get_var("HOME").map(OsString::from),
+        get_var("USERPROFILE").map(OsString::from),
+        get_var("HOMEDRIVE").map(OsString::from),
+        get_var("HOMEPATH").map(OsString::from),
+    )
 }
 
 /*
@@ -81,6 +104,26 @@ pub fn expand_home_path(path: &str) -> PathBuf {
     expand_home_path_with_home(path, &resolve_home_dir())
 }
 
+pub fn expand_remote_home_path(path: &str, remote_home: &str) -> String {
+    let trimmed = path.trim();
+    if trimmed == "~" {
+        let home = remote_home.trim_end_matches('/');
+        if home.is_empty() && remote_home.starts_with('/') {
+            return "/".to_string();
+        }
+        return home.to_string();
+    }
+
+    if let Some(rest) = trimmed
+        .strip_prefix("~/")
+        .or_else(|| trimmed.strip_prefix("~\\"))
+    {
+        return remote_join_home(remote_home, rest);
+    }
+
+    trimmed.to_string()
+}
+
 pub fn path_to_string(path: &Path) -> String {
     // 3.2 用 lossy 规则统一路径序列化
     path.to_string_lossy().into_owned()
@@ -119,12 +162,9 @@ fn expand_home_path_with_home(path: &str, home_dir: &Path) -> PathBuf {
     PathBuf::from(trimmed)
 }
 
-fn non_empty_env<F>(get_var: &mut F, key: &str) -> Option<String>
-where
-    F: FnMut(&str) -> Option<String>,
-{
-    get_var(key).and_then(|value| {
-        if value.trim().is_empty() {
+fn non_empty_os_env(value: Option<OsString>) -> Option<OsString> {
+    value.and_then(|value| {
+        if value.to_string_lossy().trim().is_empty() {
             None
         } else {
             Some(value)
@@ -132,9 +172,25 @@ where
     })
 }
 
+fn remote_join_home(remote_home: &str, child: &str) -> String {
+    let home = remote_home.trim_end_matches('/');
+    let child = child.trim_start_matches(['/', '\\']).replace('\\', "/");
+
+    if child.is_empty() {
+        return home.to_string();
+    }
+
+    if home.is_empty() || home == "/" {
+        format!("/{}", child)
+    } else {
+        format!("{}/{}", home, child)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
 
     #[test]
     fn resolve_home_dir_prefers_home() {
@@ -176,9 +232,21 @@ mod tests {
     }
 
     #[test]
-    fn resolve_home_dir_uses_tmp_as_last_resort() {
+    fn resolve_home_dir_uses_platform_temp_dir_as_last_resort() {
         let home = resolve_home_dir_with(|_| None);
-        assert_eq!(home, PathBuf::from("/tmp"));
+        assert_eq!(home, std::env::temp_dir());
+    }
+
+    #[test]
+    fn resolve_home_dir_accepts_os_string_env_values() {
+        let home = resolve_home_dir_from_env_vars(
+            None,
+            Some(OsString::from(r"C:\Users\alice")),
+            None,
+            None,
+        );
+
+        assert_eq!(home, PathBuf::from(r"C:\Users\alice"));
     }
 
     #[test]
@@ -220,6 +288,31 @@ mod tests {
         let expanded =
             expand_home_path_with_home("~\\.claude\\skills", Path::new("C:\\Users\\alice"));
         assert_eq!(expanded, PathBuf::from("C:\\Users\\alice/.claude\\skills"));
+    }
+
+    #[test]
+    fn expand_home_path_leaves_absolute_paths_unchanged() {
+        let expanded =
+            expand_home_path_with_home("/opt/skills/custom", Path::new("/tmp/ignored-home"));
+        assert_eq!(expanded, PathBuf::from("/opt/skills/custom"));
+    }
+
+    #[test]
+    fn expand_remote_home_path_uses_posix_separators() {
+        let expanded = expand_remote_home_path("~/.agents/skills", "/home/alice");
+        assert_eq!(expanded, "/home/alice/.agents/skills");
+    }
+
+    #[test]
+    fn expand_remote_home_path_preserves_root_home() {
+        let expanded = expand_remote_home_path("~", "/");
+        assert_eq!(expanded, "/");
+    }
+
+    #[test]
+    fn expand_remote_home_path_leaves_absolute_paths_unchanged() {
+        let expanded = expand_remote_home_path("/opt/skills/custom", "/home/alice");
+        assert_eq!(expanded, "/opt/skills/custom");
     }
 
     #[test]

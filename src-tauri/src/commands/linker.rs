@@ -19,7 +19,7 @@ use std::time::Instant;
 use serde_json::json;
 use tauri::State;
 
-use crate::commands::logs::{
+use crate::operation_log::{
     record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
 };
 use crate::services::installation;

@@ -1,7 +1,7 @@
 pub mod central_migration;
 pub mod commands;
 pub mod db;
-pub mod path_utils;
+pub mod operation_log;
 pub mod paths;
 pub mod services;
 pub mod targets;
@@ -98,9 +98,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
-            let db_dir = path_utils::app_data_dir();
+            let db_dir = paths::app_data_dir();
             fs::create_dir_all(&db_dir).expect("Failed to create ~/.skillsmanage directory");
-            let db_path = path_utils::path_to_string(&db_dir.join("db.sqlite"));
+            let db_path = paths::path_to_string(&db_dir.join("db.sqlite"));
 
             // Synchronously open the SQLite pool and initialize schema. These
             // are required before any IPC command can run, so they stay in
