@@ -68,7 +68,13 @@
     "symlinkDisabled": "远程目标默认使用 copy 安装。",
     "discoverUnsupported": "首版远程目标不支持 Discover 扫描。",
     "centralUpdatesUnsupported": "首版远程目标不支持中央库更新检查。",
-    "pathCopied": "远程路径已复制"
+    "pathCopied": "远程路径已复制",
+    "quickSwitch": {
+      "trigger": "切换当前目标",
+      "manage": "管理目标…",
+      "useThis": "切到这里",
+      "empty": "尚未配置远程目标。"
+    }
   },
   "sidebar": {
     "byTool": "按工具",

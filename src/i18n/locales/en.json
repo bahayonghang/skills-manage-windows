@@ -68,7 +68,13 @@
     "symlinkDisabled": "This remote target does not support symlink install.",
     "discoverUnsupported": "Remote Discover scanning is not available in this version.",
     "centralUpdatesUnsupported": "Remote Central update checks are not available in this version.",
-    "pathCopied": "Remote path copied"
+    "pathCopied": "Remote path copied",
+    "quickSwitch": {
+      "trigger": "Switch active target",
+      "manage": "Manage targets…",
+      "useThis": "Use",
+      "empty": "No remote targets configured."
+    }
   },
   "sidebar": {
     "byTool": "By Tool",
