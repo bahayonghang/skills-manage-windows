@@ -497,13 +497,10 @@ export function CentralSkillsView() {
           removeCustomAgent,
           setCategoryVisibility,
           setAgentEnabled,
-          rescan: async () => {
+          refreshAfterPlatformChange: async () => {
             await loadCentralSkills();
             await refreshCounts();
           },
-          refreshCounts,
-          loadCentralSkills,
-          refreshDiscoverCounts: async () => undefined,
         },
         onAfterImportSuccess: handleAfterImportSuccess,
         onBatchDeleteCentralSkills: handleBatchDeleteCentralSkills,

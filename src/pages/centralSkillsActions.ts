@@ -2,6 +2,9 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { TFunction } from "i18next";
 import { toast } from "sonner";
 
+import { createCentralSkillsDeleteWorkflow } from "@/pages/centralSkillsDeleteWorkflow";
+import { createCentralSkillsImportWorkflow } from "@/pages/centralSkillsImportWorkflow";
+import { createCentralSkillsUpdateWorkflow } from "@/pages/centralSkillsUpdateWorkflow";
 import type {
   BatchDeleteCentralSkillPreviewResult,
   BatchDeleteCentralSkillRequest,
@@ -178,127 +181,70 @@ export function useCentralSkillsActions({
   setRepositoryFilter: StateSetter<string>;
   setSelectedSkillIds: StateSetter<string[]>;
 }) {
+  const deleteWorkflow = createCentralSkillsDeleteWorkflow({
+    t,
+    deleteTargetSkill,
+    repositoryDeleteTarget,
+    repositoryFilter,
+    selectedSkillIds,
+    loadDeletePreview,
+    loadBatchDeletePreview,
+    loadRepositoryDeletePreview,
+    deleteCentralSkill,
+    deleteCentralSkills,
+    deleteSkillRepository,
+    refreshCounts,
+    setBatchDeletePreview,
+    setBatchDeletePreviewError,
+    setDeletePreview,
+    setDeletePreviewError,
+    setDeleteTargetSkill,
+    setIsBatchDeleteDialogOpen,
+    setIsBatchDeletePreviewLoading,
+    setIsDeleteDialogOpen,
+    setIsDeletePreviewLoading,
+    setIsRepositoryDeleteDialogOpen,
+    setIsRepositoryDeletePreviewLoading,
+    setRepositoryDeletePreview,
+    setRepositoryDeletePreviewError,
+    setRepositoryDeleteTarget,
+    setRepositoryFilter,
+    setSelectedSkillIds,
+  });
+
+  const updateWorkflow = createCentralSkillsUpdateWorkflow({
+    t,
+    cancelCentralUpdates,
+    checkSkillUpdates,
+    deleteCentralSkills,
+    keepRemoteMissingSkills,
+    loadBatchDeletePreview,
+    refreshCounts,
+    updateSkills,
+    setIsRemoteMissingDialogOpen,
+    setIsRemoteMissingPreviewLoading,
+    setIsResolvingRemoteMissing,
+    setRemoteMissingError,
+    setRemoteMissingPreview,
+    setRemoteMissingStates,
+    setSelectedSkillIds,
+  });
+
+  const importWorkflow = createCentralSkillsImportWorkflow({
+    t,
+    githubRepoUrl,
+    skillsByAgent,
+    getSkillsByAgent,
+    importGitHubRepoSkills,
+    installSkill,
+    loadCentralSkills,
+    previewGitHubRepoImport,
+    refreshCounts,
+  });
+
   function handleInstallClick(skill: SkillWithLinks) {
     setInstallTargetSkill(skill);
     setIsDialogOpen(true);
-  }
-
-  function handleDeleteDialogOpenChange(open: boolean) {
-    setIsDeleteDialogOpen(open);
-    if (!open) {
-      setDeleteTargetSkill(null);
-      setDeletePreview(null);
-      setDeletePreviewError(null);
-      setIsDeletePreviewLoading(false);
-    }
-  }
-
-  function handleBatchDeleteDialogOpenChange(open: boolean) {
-    setIsBatchDeleteDialogOpen(open);
-    if (!open) {
-      setBatchDeletePreview(null);
-      setBatchDeletePreviewError(null);
-      setIsBatchDeletePreviewLoading(false);
-    }
-  }
-
-  function handleRepositoryDeleteDialogOpenChange(open: boolean) {
-    setIsRepositoryDeleteDialogOpen(open);
-    if (!open) {
-      setRepositoryDeleteTarget(null);
-      setRepositoryDeletePreview(null);
-      setRepositoryDeletePreviewError(null);
-      setIsRepositoryDeletePreviewLoading(false);
-    }
-  }
-
-  function handleRemoteMissingDialogOpenChange(open: boolean) {
-    setIsRemoteMissingDialogOpen(open);
-    if (!open) {
-      setRemoteMissingStates([]);
-      setRemoteMissingPreview(null);
-      setRemoteMissingError(null);
-      setIsRemoteMissingPreviewLoading(false);
-      setIsResolvingRemoteMissing(false);
-    }
-  }
-
-  async function handleDeleteClick(skill: SkillWithLinks) {
-    setDeleteTargetSkill(skill);
-    setDeletePreview(null);
-    setDeletePreviewError(null);
-    setIsDeleteDialogOpen(true);
-    setIsDeletePreviewLoading(true);
-    try {
-      const preview = await loadDeletePreview(skill.id);
-      setDeletePreview(preview);
-    } catch (err) {
-      const message = String(err);
-      setDeletePreviewError(message);
-      toast.error(t("central.deletePreviewError", { error: message }));
-    } finally {
-      setIsDeletePreviewLoading(false);
-    }
-  }
-
-  async function handleBatchDeleteClick() {
-    if (selectedSkillIds.length === 0) return;
-    setBatchDeletePreview(null);
-    setBatchDeletePreviewError(null);
-    setIsBatchDeleteDialogOpen(true);
-    setIsBatchDeletePreviewLoading(true);
-    try {
-      const preview = await loadBatchDeletePreview(selectedSkillIds);
-      setBatchDeletePreview(preview);
-    } catch (err) {
-      const message = String(err);
-      setBatchDeletePreviewError(message);
-      toast.error(t("central.batchDeletePreviewError", { error: message }));
-    } finally {
-      setIsBatchDeletePreviewLoading(false);
-    }
-  }
-
-  async function handleRepositoryDeleteClick(repository: SkillRepositoryWithStats) {
-    if (repository.is_unknown) return;
-
-    setRepositoryDeleteTarget(repository);
-    setRepositoryDeletePreview(null);
-    setRepositoryDeletePreviewError(null);
-    setIsRepositoryDeletePreviewLoading(true);
-    try {
-      const preview = await loadRepositoryDeletePreview(repository.id);
-      const previewedSkillCount = preview.delete_preview.previews.length;
-      if (previewedSkillCount === 0 && preview.delete_preview.failed.length === 0) {
-        const confirmed = window.confirm(
-          t("central.deleteRepositoryEmptyConfirm", { name: repository.name })
-        );
-        if (confirmed) {
-          const result = await deleteSkillRepository(repository.id, []);
-          await refreshCounts();
-          if (repositoryFilter === repository.id) {
-            setRepositoryFilter("all");
-          }
-          toast.success(
-            t("central.deleteRepositorySuccess", {
-              name: result.repository.name,
-              count: result.delete_result.succeeded.length,
-            })
-          );
-        }
-        setRepositoryDeleteTarget(null);
-        return;
-      }
-
-      setRepositoryDeletePreview(preview);
-      setIsRepositoryDeleteDialogOpen(true);
-    } catch (err) {
-      const message = String(err);
-      setRepositoryDeletePreviewError(message);
-      toast.error(t("central.deleteRepositoryError", { error: message }));
-    } finally {
-      setIsRepositoryDeletePreviewLoading(false);
-    }
   }
 
   function setDetailButtonRef(skillId: string, node: HTMLButtonElement | null) {
@@ -373,47 +319,6 @@ export function useCentralSkillsActions({
       return result;
     } catch (err) {
       toast.error(t("central.installError", { error: String(err) }));
-      throw err;
-    }
-  }
-
-  async function handleDeleteCentralSkill(skillId: string, removeAgentIds: string[]) {
-    try {
-      await deleteCentralSkill(skillId, removeAgentIds);
-      await refreshCounts();
-      toast.success(t("central.deleteSkillSuccess", { name: deleteTargetSkill?.name ?? skillId }));
-      handleDeleteDialogOpenChange(false);
-    } catch (err) {
-      const message = String(err);
-      setDeletePreviewError(message);
-      toast.error(t("central.deleteSkillError", { error: message }));
-      throw err;
-    }
-  }
-
-  async function handleBatchDeleteCentralSkills(requests: BatchDeleteCentralSkillRequest[]) {
-    try {
-      const result = await deleteCentralSkills(requests);
-      await refreshCounts();
-      const succeededIds = new Set(result.succeeded.map((item) => item.skill_id));
-      setSelectedSkillIds((current) => current.filter((skillId) => !succeededIds.has(skillId)));
-
-      if (result.failed.length > 0) {
-        toast.error(
-          t("central.batchDeletePartialError", {
-            succeeded: result.succeeded.length,
-            failed: result.failed.length,
-          })
-        );
-      } else {
-        toast.success(t("central.batchDeleteSuccess", { count: result.succeeded.length }));
-      }
-      handleBatchDeleteDialogOpenChange(false);
-      return result;
-    } catch (err) {
-      const message = String(err);
-      setBatchDeletePreviewError(message);
-      toast.error(t("central.deleteSkillError", { error: message }));
       throw err;
     }
   }
@@ -537,233 +442,27 @@ export function useCentralSkillsActions({
     }
   }
 
-  async function handleCancelCentralUpdates() {
-    try {
-      await cancelCentralUpdates();
-      toast.info(t("central.updateCancelRequested"));
-    } catch (err) {
-      toast.error(t("central.updateError", { error: String(err) }));
-    }
-  }
-
-  async function handleCheckUpdates(skillIds?: string[]) {
-    try {
-      const states = await checkSkillUpdates(skillIds);
-      const available = states.filter((state) => state.status === "update_available").length;
-      const unsupported = states.filter((state) => state.status === "unsupported").length;
-      const remoteMissing = states.filter((state) => state.status === "remote_missing");
-      const failed = states.filter((state) => state.status === "error").length;
-      toast.success(
-        t("central.updateCheckFinished", {
-          available,
-          unsupported,
-          remoteMissing: remoteMissing.length,
-          failed,
-        })
-      );
-      if (remoteMissing.length > 0) {
-        const missingSkillIds = remoteMissing.map((state) => state.skill_id);
-        setRemoteMissingStates(remoteMissing);
-        setRemoteMissingPreview(null);
-        setRemoteMissingError(null);
-        setIsRemoteMissingDialogOpen(true);
-        setIsRemoteMissingPreviewLoading(true);
-        try {
-          const preview = await loadBatchDeletePreview(missingSkillIds);
-          setRemoteMissingPreview(preview);
-        } catch (err) {
-          const message = String(err);
-          setRemoteMissingError(message);
-          toast.error(t("central.batchDeletePreviewError", { error: message }));
-        } finally {
-          setIsRemoteMissingPreviewLoading(false);
-        }
-      }
-    } catch (err) {
-      toast.error(t("central.updateCheckError", { error: String(err) }));
-    }
-  }
-
-  async function handleUpdateSkills(skillIds: string[]) {
-    if (skillIds.length === 0) return;
-    try {
-      const result = await updateSkills(skillIds);
-      await refreshCounts();
-      toast.success(
-        t("central.updateFinished", {
-          succeeded: result.succeeded.length,
-          failed: result.failed.length,
-          skipped: result.skipped.length,
-        })
-      );
-    } catch (err) {
-      toast.error(t("central.updateError", { error: String(err) }));
-    }
-  }
-
-  async function handleResolveRemoteMissing(
-    keepSkillIds: string[],
-    deleteRequests: BatchDeleteCentralSkillRequest[]
-  ) {
-    setIsResolvingRemoteMissing(true);
-    setRemoteMissingError(null);
-    try {
-      if (keepSkillIds.length > 0) {
-        await keepRemoteMissingSkills(keepSkillIds);
-      }
-
-      const deleteResult: BatchDeleteCentralSkillResult =
-        deleteRequests.length > 0
-          ? await deleteCentralSkills(deleteRequests)
-          : { succeeded: [], failed: [] };
-
-      await refreshCounts();
-      const succeededDeleteIds = new Set(deleteResult.succeeded.map((item) => item.skill_id));
-      setSelectedSkillIds((current) =>
-        current.filter((skillId) => !succeededDeleteIds.has(skillId))
-      );
-
-      if (deleteResult.failed.length > 0) {
-        toast.error(
-          t("central.remoteMissingResolvePartial", {
-            kept: keepSkillIds.length,
-            deleted: deleteResult.succeeded.length,
-            failed: deleteResult.failed.length,
-          })
-        );
-      } else {
-        toast.success(
-          t("central.remoteMissingResolveSuccess", {
-            kept: keepSkillIds.length,
-            deleted: deleteResult.succeeded.length,
-          })
-        );
-      }
-      handleRemoteMissingDialogOpenChange(false);
-    } catch (err) {
-      const message = String(err);
-      setRemoteMissingError(message);
-      toast.error(t("central.remoteMissingResolveError", { error: message }));
-      throw err;
-    } finally {
-      setIsResolvingRemoteMissing(false);
-    }
-  }
-
-  async function handleGitHubPreview() {
-    try {
-      return await previewGitHubRepoImport(githubRepoUrl);
-    } catch {
-      return null;
-    }
-  }
-
-  async function handleGitHubImport(selections: GitHubSkillImportSelection[]) {
-    try {
-      const result = await importGitHubRepoSkills(githubRepoUrl, selections);
-      await Promise.all([refreshCounts(), loadCentralSkills()]);
-      toast.success(t("marketplace.githubImportCentralSuccess"));
-      return result;
-    } catch (err) {
-      toast.error(t("marketplace.githubImportError", { error: String(err) }));
-      throw err;
-    }
-  }
-
-  async function handleDeleteSkillRepository(requests: BatchDeleteCentralSkillRequest[]) {
-    if (!repositoryDeleteTarget) {
-      throw new Error("Repository delete target is missing");
-    }
-
-    try {
-      const result = await deleteSkillRepository(repositoryDeleteTarget.id, requests);
-      await refreshCounts();
-      const succeededIds = new Set(result.delete_result.succeeded.map((item) => item.skill_id));
-      setSelectedSkillIds((current) => current.filter((skillId) => !succeededIds.has(skillId)));
-
-      if (repositoryFilter === repositoryDeleteTarget.id && result.deleted_repository) {
-        setRepositoryFilter("all");
-      }
-
-      if (result.delete_result.failed.length > 0) {
-        toast.error(
-          t("central.deleteRepositoryPartialError", {
-            name: result.repository.name,
-            succeeded: result.delete_result.succeeded.length,
-            failed: result.delete_result.failed.length,
-          })
-        );
-      } else {
-        toast.success(
-          t("central.deleteRepositorySuccess", {
-            name: result.repository.name,
-            count: result.delete_result.succeeded.length,
-          })
-        );
-      }
-      handleRepositoryDeleteDialogOpenChange(false);
-      return result.delete_result;
-    } catch (err) {
-      const message = String(err);
-      setRepositoryDeletePreviewError(message);
-      toast.error(t("central.deleteRepositoryError", { error: message }));
-      throw err;
-    }
-  }
-
-  async function handleInstallImportedSkill(
-    skillId: string,
-    agentIds: string[],
-    method: "symlink" | "copy",
-    projectPath?: string | null
-  ) {
-    const result = await handleInstall(skillId, agentIds, method, projectPath);
-    await Promise.all(agentIds.map((agentId) => getSkillsByAgent(agentId)));
-    return result;
-  }
-
-  async function handleAfterImportSuccess() {
-    const agentIds = Object.keys(skillsByAgent);
-    if (agentIds.length === 0) return;
-    await Promise.all(agentIds.map((agentId) => getSkillsByAgent(agentId)));
-  }
-
   return {
-    handleAfterImportSuccess,
+    ...deleteWorkflow,
+    ...updateWorkflow,
+    ...importWorkflow,
     handleApplyManualTags,
     handleApplyManualTagsToReview,
     handleAcceptReview,
-    handleBatchDeleteCentralSkills,
-    handleBatchDeleteClick,
-    handleBatchDeleteDialogOpenChange,
     handleBatchInstallCentralSkills,
     handleBulkSuggestTags,
     handleCancelAiTagJob,
-    handleCancelCentralUpdates,
-    handleCheckUpdates,
     handleCreateManualTag,
-    handleDeleteCentralSkill,
-    handleDeleteClick,
-    handleDeleteDialogOpenChange,
-    handleDeleteSkillRepository,
-    handleGitHubImport,
-    handleGitHubPreview,
     handleInstall,
     handleInstallClick,
-    handleInstallImportedSkill,
     handleOpenDrawer,
     handleRefresh,
-    handleRemoteMissingDialogOpenChange,
-    handleRepositoryDeleteClick,
-    handleRepositoryDeleteDialogOpenChange,
-    handleResolveRemoteMissing,
     handleSelectCurrentFilter,
     handleSelectUncategorized,
     handleSkipReview,
     handleToggleManualTag,
     handleTogglePlatform,
     handleToggleSelection,
-    handleUpdateSkills,
     setDetailButtonRef,
   };
 }

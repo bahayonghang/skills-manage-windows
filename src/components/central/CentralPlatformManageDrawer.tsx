@@ -16,7 +16,7 @@ import { CustomPlatformsSettingsSection } from "@/components/settings/CustomPlat
 import { PlatformDialog } from "@/components/settings/PlatformDialog";
 import { PlatformVisibilitySettingsSection } from "@/components/settings/PlatformVisibilitySettingsSection";
 import { getNormalizedPlatformVisibilityQuery, getPlatformVisibilityGroups } from "@/pages/settingsViewModel";
-import { createSettingsViewActions } from "@/pages/settingsViewActions";
+import { createPlatformManagementActions } from "@/pages/platformManagementActions";
 import type { PlatformCategoryVisibility } from "@/lib/platformVisibility";
 import type { AgentWithStatus } from "@/types";
 
@@ -41,14 +41,7 @@ interface CentralPlatformManageDrawerProps {
   removeCustomAgent: (agentId: string) => Promise<void>;
   setCategoryVisibility: (category: "coding" | "lobster", visible: boolean) => Promise<void>;
   setAgentEnabled: (agentId: string, enabled: boolean) => Promise<void>;
-  rescan: () => Promise<void>;
-  refreshCounts: () => Promise<void>;
-  loadCentralSkills: () => Promise<void>;
-  refreshDiscoverCounts: () => Promise<void>;
-}
-
-async function noopAsync() {
-  return undefined;
+  refreshAfterPlatformChange: () => Promise<void>;
 }
 
 const DEFAULT_PLATFORM_CATEGORIES: PlatformCategoryVisibility = {
@@ -66,10 +59,7 @@ export function CentralPlatformManageDrawer({
   removeCustomAgent,
   setCategoryVisibility,
   setAgentEnabled,
-  rescan,
-  refreshCounts,
-  loadCentralSkills,
-  refreshDiscoverCounts,
+  refreshAfterPlatformChange,
 }: CentralPlatformManageDrawerProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -100,72 +90,19 @@ export function CentralPlatformManageDrawer({
     handleRemovePlatform,
     handleToggleCategory,
     handleTogglePlatformVisibility,
-  } = createSettingsViewActions({
+  } = createPlatformManagementActions({
     t,
-    githubPatInput: "",
-    sshTargetForm: {
-      label: "",
-      host: "",
-      username: "",
-      port: "22",
-      authMethod: "key",
-      keyPath: "",
-      password: "",
-    },
-    sshTargetEditForm: {
-      label: "",
-      host: "",
-      username: "",
-      port: "22",
-      authMethod: "key",
-      keyPath: "",
-      password: "",
-    },
-    sshTargetPasswordUpdates: {},
     editingPlatform,
-    selectedMarketplaceRegistryId: null,
-    addScanDirectory: noopAsync,
-    removeScanDirectory: async () => undefined,
-    toggleScanDirectory: async () => undefined,
     addCustomAgent,
     updateCustomAgent,
     removeCustomAgent,
-    saveGitHubPat: async () => undefined,
-    clearGitHubPat: async () => undefined,
-    testGitHubPat: async () => ({ ok: true, message: "" }),
-    rescan,
-    refreshCounts,
-    loadCentralSkills,
-    refreshDiscoverCounts,
-    loadMarketplaceRegistries: async () => undefined,
-    loadMarketplaceSkills: async () => undefined,
-    createSshTarget: async () => {
-      throw new Error("unsupported");
-    },
-    updateSshTarget: async () => {
-      throw new Error("unsupported");
-    },
-    testSshTarget: async () => ({ ok: true, message: "" }),
-    updateSshTargetPassword: async () => ({ ok: true, message: "" }),
-    deleteTarget: async () => undefined,
-    switchTarget: async () => {
-      throw new Error("unsupported");
-    },
+    refreshAfterPlatformChange,
     setCategoryVisibility,
     setAgentEnabled,
     setEditingPlatform,
     setPlatformError,
     setIsPlatformDialogOpen,
     setRemovingAgent,
-    setScanDirError: () => undefined,
-    setRemovingDir: () => undefined,
-    setGitHubPatInput: () => undefined,
-    setGitHubPatMessage: () => undefined,
-    setTargetMessage: () => undefined,
-    setSshTargetForm: () => undefined,
-    setEditingTargetId: () => undefined,
-    setSshTargetEditForm: () => undefined,
-    setSshTargetPasswordUpdates: () => undefined,
   });
 
   return (

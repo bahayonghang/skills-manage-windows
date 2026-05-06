@@ -7,7 +7,11 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { invoke } from "@tauri-apps/api/core";
-import { useSettingsStore } from "../stores/settingsStore";
+import {
+  createSettingsStoreInitialState,
+  useSettingsStore,
+} from "../stores/settingsStore";
+import { resetAiSettingsSliceForTests } from "../stores/settingsStore.aiSlice";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -41,37 +45,16 @@ const mockAgent: AgentWithStatus = {
   is_enabled: true,
 };
 
+function resetSettingsStoreState() {
+  useSettingsStore.setState(createSettingsStoreInitialState());
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("settingsStore", () => {
   beforeEach(() => {
-    // Reset store to initial state before each test
-    useSettingsStore.setState({
-      scanDirectories: [],
-      isLoadingScanDirs: false,
-      error: null,
-      githubPat: "",
-      isLoadingGitHubPat: false,
-      isSavingGitHubPat: false,
-      isTestingGitHubPat: false,
-      githubPatTestResult: null,
-      aiSettings: {
-        provider: "claude",
-        region: "intl",
-        apiKey: "",
-        model: "",
-        customUrl: "",
-        tagConcurrency: "1",
-        tagIntervalMs: "4000",
-        tagStopOnRateLimit: true,
-      },
-      aiSettingsLoaded: false,
-      isLoadingAiSettings: false,
-      aiSaveStatus: "idle",
-      aiSaveError: null,
-      aiTesting: false,
-      aiTestResult: null,
-    });
+    resetAiSettingsSliceForTests();
+    resetSettingsStoreState();
     vi.useRealTimers();
     vi.clearAllMocks();
   });
