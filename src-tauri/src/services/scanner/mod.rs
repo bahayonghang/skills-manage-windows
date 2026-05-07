@@ -12,14 +12,17 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
 use crate::db::{self, AgentSkillObservation, DbPool, Skill, SkillInstallation};
-use crate::targets::{
-    connect_ssh_target, remote_file_type_is_dir, remote_join, remote_parent, RemoteTargetConfig,
-};
+use crate::targets::{connect_ssh_target, RemoteTargetConfig};
 
 mod claude_plugin;
+mod ssh_batch;
 
 use claude_plugin::{
     claude_observation_row_id, scan_roots_for_agent, AgentScanRoot, ClaudeSourceKind,
+};
+use ssh_batch::{
+    build_batch_read_script, build_probe_script, build_scanned_skills_from_contents,
+    parse_batch_read_output, parse_probe_output, unique_skill_paths, RemoteScanItem,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -537,78 +540,6 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
     })
 }
 
-async fn scan_ssh_directory(
-    connection: &crate::targets::ConnectedSshTarget,
-    dir: &str,
-    is_central: bool,
-) -> Result<Vec<ScannedSkill>, String> {
-    if !connection.exists(dir).await? {
-        return Ok(Vec::new());
-    }
-
-    let entries = connection.list_dir(dir).await?;
-    let mut skills = Vec::new();
-
-    for entry in entries {
-        let is_symlink = entry.file_type == "symlink";
-        if !remote_file_type_is_dir(&entry.file_type) && !is_symlink {
-            continue;
-        }
-
-        let dir_path = remote_join(dir, &entry.name);
-        let skill_md_path = remote_join(&dir_path, "SKILL.md");
-        if !connection.exists(&skill_md_path).await? {
-            continue;
-        }
-
-        let content = connection.read_file(&skill_md_path).await?;
-        let content = match String::from_utf8(content) {
-            Ok(content) => content,
-            Err(_) => continue,
-        };
-        let Some(info) = parse_skill_md_content(&content) else {
-            continue;
-        };
-
-        let id = entry.name.to_lowercase().replace(' ', "-");
-        let symlink_target = if is_symlink {
-            entry.symlink_target.clone()
-        } else {
-            None
-        };
-        let link_type = if symlink_target.is_some() {
-            "symlink".to_string()
-        } else if is_central {
-            "native".to_string()
-        } else {
-            "copy".to_string()
-        };
-
-        skills.push(ScannedSkill {
-            id,
-            name: info.name,
-            description: info.description,
-            file_path: skill_md_path,
-            dir_path,
-            link_type,
-            symlink_target,
-            is_central,
-        });
-    }
-
-    Ok(skills)
-}
-
-async fn remote_agent_parent_detected(
-    connection: &crate::targets::ConnectedSshTarget,
-    global_skills_dir: &str,
-) -> Result<bool, String> {
-    let Some(parent) = remote_parent(global_skills_dir) else {
-        return Ok(false);
-    };
-    connection.exists(&parent).await
-}
-
 pub async fn scan_ssh_skills_impl(
     pool: &DbPool,
     target: &RemoteTargetConfig,
@@ -620,6 +551,68 @@ pub async fn scan_ssh_skills_impl(
         .iter()
         .find(|agent| agent.id == "central")
         .map(|agent| agent.global_skills_dir.clone());
+    let scan_roots_by_agent: Vec<(crate::db::Agent, Vec<AgentScanRoot>)> = agents
+        .iter()
+        .cloned()
+        .map(|agent| {
+            let scan_roots = if agent.id == "claude-code" {
+                scan_roots_for_agent(&agent)
+            } else {
+                vec![AgentScanRoot {
+                    path: PathBuf::from(&agent.global_skills_dir),
+                    source_root: None,
+                    claude_source: None,
+                }]
+            };
+            (agent, scan_roots)
+        })
+        .collect();
+
+    let mut unique_roots = Vec::new();
+    let mut seen_roots = HashSet::new();
+    for (_, roots) in &scan_roots_by_agent {
+        for root in roots {
+            let root_str = root.path.to_string_lossy().into_owned();
+            if seen_roots.insert(root_str.clone()) {
+                unique_roots.push(root_str);
+            }
+        }
+    }
+
+    let probe_output = connection
+        .run_script(&build_probe_script(&unique_roots), &[])
+        .await?;
+    let probe_items = parse_probe_output(&probe_output);
+    let mut root_exists = HashSet::new();
+    let mut root_parent_exists = HashSet::new();
+    let mut skill_items_by_root: HashMap<String, Vec<RemoteScanItem>> = HashMap::new();
+    for item in &probe_items {
+        match item {
+            RemoteScanItem::RootOk { root } => {
+                root_exists.insert(root.clone());
+            }
+            RemoteScanItem::RootParentOk { root } => {
+                root_parent_exists.insert(root.clone());
+            }
+            RemoteScanItem::RootMiss { .. } => {}
+            RemoteScanItem::Skill { root, .. } => {
+                skill_items_by_root
+                    .entry(root.clone())
+                    .or_default()
+                    .push(item.clone());
+            }
+        }
+    }
+
+    let unique_skill_paths = unique_skill_paths(&probe_items);
+    let content_by_path = if unique_skill_paths.is_empty() {
+        HashMap::new()
+    } else {
+        let read_output = connection
+            .run_script(&build_batch_read_script(&unique_skill_paths), &[])
+            .await?;
+        parse_batch_read_output(&read_output)
+    };
 
     let mut total_skills: usize = 0;
     let mut skills_by_agent: HashMap<String, usize> = HashMap::new();
@@ -627,10 +620,17 @@ pub async fn scan_ssh_skills_impl(
     let mut scanned_root_cache: HashMap<String, Vec<ScannedSkill>> = HashMap::new();
     let mut counted_scan_roots: HashSet<String> = HashSet::new();
 
-    for agent in &agents {
-        let root = agent.global_skills_dir.clone();
-        let root_exists = connection.exists(&root).await?;
-        if !root_exists && !remote_agent_parent_detected(&connection, &root).await? {
+    for (agent, scan_roots) in &scan_roots_by_agent {
+        let existing_roots: Vec<AgentScanRoot> = scan_roots
+            .iter()
+            .filter(|root| root_exists.contains(&root.path.to_string_lossy().into_owned()))
+            .cloned()
+            .collect();
+        let parent_visible = scan_roots
+            .iter()
+            .any(|root| root_parent_exists.contains(&root.path.to_string_lossy().into_owned()));
+
+        if existing_roots.is_empty() && !parent_visible {
             db::update_agent_detected(pool, &agent.id, false).await?;
             skills_by_agent.insert(agent.id.clone(), 0);
             db::delete_stale_skill_installations(pool, &agent.id, &[]).await?;
@@ -641,7 +641,7 @@ pub async fn scan_ssh_skills_impl(
         }
 
         db::update_agent_detected(pool, &agent.id, true).await?;
-        if !root_exists {
+        if existing_roots.is_empty() {
             skills_by_agent.insert(agent.id.clone(), 0);
             db::delete_stale_skill_installations(pool, &agent.id, &[]).await?;
             if agent.id == "claude-code" {
@@ -650,58 +650,107 @@ pub async fn scan_ssh_skills_impl(
             continue;
         }
 
-        let root_uses_central_storage =
-            agent.category == "central" || central_root.as_deref() == Some(root.as_str());
-        let scanned = if let Some(cached) = scanned_root_cache.get(&root) {
-            cached.clone()
-        } else {
-            let scanned = scan_ssh_directory(&connection, &root, root_uses_central_storage).await?;
-            scanned_root_cache.insert(root.clone(), scanned.clone());
-            scanned
-        };
-
-        if counted_scan_roots.insert(root.clone()) {
-            total_skills += scanned.len();
-        }
-
+        let mut scanned = Vec::new();
         let mut found_install_ids = Vec::new();
-        for skill in &scanned {
-            all_found_skill_ids.insert(skill.id.clone());
-            found_install_ids.push(skill.id.clone());
+        let mut found_observation_row_ids = Vec::new();
 
-            let db_skill = Skill {
-                id: skill.id.clone(),
-                name: skill.name.clone(),
-                description: skill.description.clone(),
-                file_path: skill.file_path.clone(),
-                canonical_path: if root_uses_central_storage {
-                    Some(skill.dir_path.clone())
-                } else {
-                    None
-                },
-                is_central: root_uses_central_storage,
-                source: Some(skill.link_type.clone()),
-                content: None,
-                scanned_at: scan_started_at.clone(),
+        for root in &existing_roots {
+            let root_str = root.path.to_string_lossy().into_owned();
+            let root_uses_central_storage =
+                agent.category == "central" || central_root.as_deref() == Some(root_str.as_str());
+            let root_scanned = if let Some(cached) = scanned_root_cache.get(&root_str) {
+                cached.clone()
+            } else {
+                let root_items = skill_items_by_root
+                    .get(&root_str)
+                    .cloned()
+                    .unwrap_or_default();
+                let scanned_for_root = build_scanned_skills_from_contents(
+                    &root_items,
+                    &content_by_path,
+                    root_uses_central_storage,
+                );
+                scanned_root_cache.insert(root_str.clone(), scanned_for_root.clone());
+                scanned_for_root
             };
-            db::upsert_skill(pool, &db_skill).await?;
 
-            let installation = SkillInstallation {
-                skill_id: skill.id.clone(),
-                agent_id: agent.id.clone(),
-                installed_path: skill.dir_path.clone(),
-                link_type: skill.link_type.clone(),
-                symlink_target: skill.symlink_target.clone(),
-                created_at: scan_started_at.clone(),
-            };
-            db::upsert_skill_installation(pool, &installation).await?;
+            if counted_scan_roots.insert(root_str.clone()) {
+                total_skills += root_scanned.len();
+            }
+
+            let source_root = root
+                .source_root
+                .as_ref()
+                .unwrap_or(&root.path)
+                .to_string_lossy()
+                .into_owned();
+
+            for skill in &root_scanned {
+                if let Some(source_kind) = root.claude_source {
+                    let observation = AgentSkillObservation {
+                        row_id: claude_observation_row_id(&agent.id, &skill.dir_path),
+                        agent_id: agent.id.clone(),
+                        skill_id: skill.id.clone(),
+                        name: skill.name.clone(),
+                        description: skill.description.clone(),
+                        file_path: skill.file_path.clone(),
+                        dir_path: skill.dir_path.clone(),
+                        source_kind: source_kind.as_str().to_string(),
+                        source_root: source_root.clone(),
+                        link_type: skill.link_type.clone(),
+                        symlink_target: skill.symlink_target.clone(),
+                        is_read_only: source_kind.is_read_only(),
+                        scanned_at: scan_started_at.clone(),
+                    };
+                    db::upsert_agent_skill_observation(pool, &observation).await?;
+                    found_observation_row_ids.push(observation.row_id);
+                }
+
+                let should_persist_manageable_state =
+                    root.claude_source != Some(ClaudeSourceKind::Plugin);
+                if should_persist_manageable_state {
+                    all_found_skill_ids.insert(skill.id.clone());
+                    found_install_ids.push(skill.id.clone());
+
+                    let db_skill = Skill {
+                        id: skill.id.clone(),
+                        name: skill.name.clone(),
+                        description: skill.description.clone(),
+                        file_path: skill.file_path.clone(),
+                        canonical_path: if root_uses_central_storage {
+                            Some(skill.dir_path.clone())
+                        } else {
+                            None
+                        },
+                        is_central: root_uses_central_storage,
+                        source: Some(skill.link_type.clone()),
+                        content: None,
+                        scanned_at: scan_started_at.clone(),
+                    };
+                    db::upsert_skill(pool, &db_skill).await?;
+
+                    let installation = SkillInstallation {
+                        skill_id: skill.id.clone(),
+                        agent_id: agent.id.clone(),
+                        installed_path: skill.dir_path.clone(),
+                        link_type: skill.link_type.clone(),
+                        symlink_target: skill.symlink_target.clone(),
+                        created_at: scan_started_at.clone(),
+                    };
+                    db::upsert_skill_installation(pool, &installation).await?;
+                }
+            }
+
+            scanned.extend(root_scanned);
         }
 
         db::delete_stale_skill_installations(pool, &agent.id, &found_install_ids).await?;
         if agent.id == "claude-code" {
-            db::delete_stale_agent_skill_observations(pool, &agent.id, &[]).await?;
+            db::delete_stale_agent_skill_observations(pool, &agent.id, &found_observation_row_ids)
+                .await?;
         }
-        skills_by_agent.insert(agent.id.clone(), scanned.len());
+        let count = scanned.len();
+        skills_by_agent.insert(agent.id.clone(), count);
     }
 
     let found_ids_vec: Vec<String> = all_found_skill_ids.into_iter().collect();
