@@ -145,6 +145,23 @@ mod tests {
     }
 
     #[test]
+    fn parse_ssh_probe_output_reads_home_os_and_mkdir_status() {
+        let probe = parse_ssh_probe_output("HOME\t/home/alice\nOS\tLinux\nMKDIR_OK\n").unwrap();
+
+        assert_eq!(probe.remote_home, "/home/alice");
+        assert_eq!(probe.remote_os, "Linux");
+    }
+
+    #[test]
+    fn parse_ssh_probe_output_rejects_missing_home_or_mkdir_confirmation() {
+        let missing_home = parse_ssh_probe_output("OS\tLinux\nMKDIR_OK\n");
+        let missing_mkdir = parse_ssh_probe_output("HOME\t/home/alice\nOS\tLinux\n");
+
+        assert!(missing_home.is_err());
+        assert!(missing_mkdir.is_err());
+    }
+
+    #[test]
     fn askpass_helper_mode_requires_marker_env() {
         assert_eq!(
             askpass_password_from_env(None, Some(OsString::from("secret"))),
@@ -186,6 +203,18 @@ mod tests {
         assert!(content.contains("$SKILLPORT_SSH_PASSWORD"));
     }
 
+    #[cfg(not(windows))]
+    #[test]
+    fn unix_askpass_helper_drop_removes_temp_file() {
+        let helper = create_askpass_helper().expect("askpass");
+        let helper_path = helper.path.clone();
+        assert!(helper_path.exists());
+
+        drop(helper);
+
+        assert!(!helper_path.exists());
+    }
+
     #[test]
     fn ssh_base_command_places_key_options_before_destination() {
         let mut target = password_target();
@@ -211,11 +240,26 @@ mod tests {
             .iter()
             .position(|arg| arg == "PreferredAuthentications=publickey")
             .expect("preferred auth");
+        let connect_timeout = args
+            .iter()
+            .position(|arg| arg == "ConnectTimeout=10")
+            .expect("connect timeout");
+        let keepalive_interval = args
+            .iter()
+            .position(|arg| arg == "ServerAliveInterval=15")
+            .expect("keepalive interval");
+        let keepalive_count = args
+            .iter()
+            .position(|arg| arg == "ServerAliveCountMax=3")
+            .expect("keepalive count");
 
         assert!(key_option < destination);
         assert!(key_path < destination);
         assert!(batch_mode < destination);
         assert!(preferred < destination);
+        assert!(connect_timeout < destination);
+        assert!(keepalive_interval < destination);
+        assert!(keepalive_count < destination);
         assert_eq!(args.last().map(String::as_str), Some("alice@lab.local"));
     }
 
@@ -242,11 +286,26 @@ mod tests {
             .iter()
             .position(|arg| arg == "NumberOfPasswordPrompts=1")
             .expect("prompt count");
+        let connect_timeout = args
+            .iter()
+            .position(|arg| arg == "ConnectTimeout=10")
+            .expect("connect timeout");
+        let keepalive_interval = args
+            .iter()
+            .position(|arg| arg == "ServerAliveInterval=15")
+            .expect("keepalive interval");
+        let keepalive_count = args
+            .iter()
+            .position(|arg| arg == "ServerAliveCountMax=3")
+            .expect("keepalive count");
 
         assert!(batch_mode < destination);
         assert!(preferred < destination);
         assert!(pubkey_disabled < destination);
         assert!(prompt_count < destination);
+        assert!(connect_timeout < destination);
+        assert!(keepalive_interval < destination);
+        assert!(keepalive_count < destination);
         assert_eq!(args.last().map(String::as_str), Some("alice@lab.local"));
     }
 

@@ -3,6 +3,10 @@ struct SshProbe {
     remote_os: String,
 }
 
+const SSH_CONNECT_TIMEOUT_SECS: u64 = 10;
+const SSH_SERVER_ALIVE_INTERVAL_SECS: u64 = 15;
+const SSH_SERVER_ALIVE_COUNT_MAX: u64 = 3;
+
 fn askpass_password_from_env(
     marker: Option<OsString>,
     password: Option<OsString>,
@@ -27,29 +31,16 @@ pub fn maybe_run_ssh_askpass_helper() -> bool {
 async fn probe_ssh_target(target: &RemoteTargetConfig) -> Result<SshProbe, String> {
     let connection = connect_ssh_target(target).await?;
     let output = connection
-        .run_command("printf '%s\\n' \"$HOME\"; uname -s 2>/dev/null || printf '%s\\n' unknown")
+        .run_script(
+            r#"printf 'HOME\t%s\n' "$HOME"
+printf 'OS\t%s\n' "$(uname -s 2>/dev/null || printf '%s' unknown)"
+mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#,
+            &[],
+        )
         .await?;
-    let mut lines = output.lines();
-    let remote_home = lines
-        .next()
-        .map(str::trim)
-        .filter(|line| line.starts_with('/'))
-        .ok_or_else(|| "Remote HOME probe did not return an absolute POSIX path.".to_string())?
-        .to_string();
-    let remote_os = lines.next().map(str::trim).unwrap_or("unknown").to_string();
+    let probe = parse_ssh_probe_output(&output)?;
 
-    connection.ensure_dir(&remote_home).await?;
-    connection
-        .mkdir_p(&remote_join(&remote_home, ".skillsmanage"))
-        .await?;
-    connection
-        .mkdir_p(&remote_join(&remote_home, ".skillsmanage/skills"))
-        .await?;
-
-    Ok(SshProbe {
-        remote_home,
-        remote_os,
-    })
+    Ok(probe)
 }
 
 fn is_supported_remote_os(remote_os: &str) -> bool {
@@ -100,6 +91,18 @@ impl ConnectedSshTarget {
         command
             .arg("-p")
             .arg(self.target.port.to_string())
+            .arg("-o")
+            .arg(format!("ConnectTimeout={}", SSH_CONNECT_TIMEOUT_SECS))
+            .arg("-o")
+            .arg(format!(
+                "ServerAliveInterval={}",
+                SSH_SERVER_ALIVE_INTERVAL_SECS
+            ))
+            .arg("-o")
+            .arg(format!(
+                "ServerAliveCountMax={}",
+                SSH_SERVER_ALIVE_COUNT_MAX
+            ))
             .arg("-o")
             .arg("StrictHostKeyChecking=accept-new");
 
@@ -416,4 +419,38 @@ pub fn shell_quote(value: &str) -> String {
 
 pub fn remote_file_type_is_dir(debug_value: &str) -> bool {
     matches!(debug_value, "dir" | "Directory") || debug_value.contains("Directory")
+}
+
+fn parse_ssh_probe_output(output: &str) -> Result<SshProbe, String> {
+    let mut remote_home = None;
+    let mut remote_os = None;
+    let mut mkdir_ok = false;
+
+    for line in output.lines() {
+        if let Some(value) = line.strip_prefix("HOME\t") {
+            let trimmed = value.trim();
+            if trimmed.starts_with('/') {
+                remote_home = Some(trimmed.to_string());
+            }
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("OS\t") {
+            remote_os = Some(value.trim().to_string());
+            continue;
+        }
+        if line.trim() == "MKDIR_OK" {
+            mkdir_ok = true;
+        }
+    }
+
+    let remote_home = remote_home
+        .ok_or_else(|| "Remote HOME probe did not return an absolute POSIX path.".to_string())?;
+    if !mkdir_ok {
+        return Err("Remote probe did not confirm ~/.skillsmanage/skills creation.".to_string());
+    }
+
+    Ok(SshProbe {
+        remote_home,
+        remote_os: remote_os.unwrap_or_else(|| "unknown".to_string()),
+    })
 }

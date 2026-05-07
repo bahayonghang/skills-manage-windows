@@ -11,6 +11,11 @@ struct AskpassHelper {
     use_app_helper_env: bool,
 }
 
+#[cfg(not(windows))]
+const ASKPASS_HELPER_FILE_PREFIX: &str = "skillport-ssh-askpass-";
+#[cfg(not(windows))]
+const ASKPASS_HELPER_MAX_AGE_SECS: u64 = 60 * 60;
+
 pub async fn connect_ssh_target(target: &RemoteTargetConfig) -> Result<ConnectedSshTarget, String> {
     let password = match target.auth_method {
         SshAuthMethod::Key => None,
@@ -44,9 +49,15 @@ fn create_askpass_helper() -> Result<AskpassHelper, String> {
 
 #[cfg(not(windows))]
 fn create_askpass_helper() -> Result<AskpassHelper, String> {
+    sweep_stale_askpass_helpers()?;
     let extension = "sh";
+    let pid = std::process::id();
+    let timestamp = current_unix_timestamp_secs();
     let path = env::temp_dir().join(format!(
-        "skillport-ssh-askpass-{}.{}",
+        "{}{}-{}-{}.{}",
+        ASKPASS_HELPER_FILE_PREFIX,
+        pid,
+        timestamp,
         Uuid::new_v4(),
         extension
     ));
@@ -64,6 +75,68 @@ fn create_askpass_helper() -> Result<AskpassHelper, String> {
         remove_on_drop: true,
         use_app_helper_env: false,
     })
+}
+
+#[cfg(not(windows))]
+fn current_unix_timestamp_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
+#[cfg(not(windows))]
+fn sweep_stale_askpass_helpers() -> Result<(), String> {
+    sweep_stale_askpass_helpers_in(&env::temp_dir(), std::time::SystemTime::now())
+}
+
+#[cfg(not(windows))]
+fn sweep_stale_askpass_helpers_in(
+    temp_dir: &PathBuf,
+    now: std::time::SystemTime,
+) -> Result<(), String> {
+    let entries = match fs::read_dir(temp_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "Failed to inspect SSH askpass temp directory '{}': {}",
+                temp_dir.display(),
+                error
+            ))
+        }
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !should_remove_stale_askpass_helper(&path, now) {
+            continue;
+        }
+        let _ = fs::remove_file(path);
+    }
+
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn should_remove_stale_askpass_helper(path: &std::path::Path, now: std::time::SystemTime) -> bool {
+    let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+        return false;
+    };
+    if !file_name.starts_with(ASKPASS_HELPER_FILE_PREFIX) {
+        return false;
+    }
+
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+    let Ok(modified_at) = metadata.modified() else {
+        return false;
+    };
+    let Ok(age) = now.duration_since(modified_at) else {
+        return false;
+    };
+    age.as_secs() > ASKPASS_HELPER_MAX_AGE_SECS
 }
 
 #[cfg(unix)]
@@ -88,12 +161,10 @@ fn set_askpass_permissions(path: &PathBuf) -> Result<(), String> {
     })
 }
 
-impl Drop for ConnectedSshTarget {
+impl Drop for AskpassHelper {
     fn drop(&mut self) {
-        if let Some(helper) = &self.askpass_helper {
-            if helper.remove_on_drop {
-                let _ = fs::remove_file(&helper.path);
-            }
+        if self.remove_on_drop {
+            let _ = fs::remove_file(&self.path);
         }
     }
 }
