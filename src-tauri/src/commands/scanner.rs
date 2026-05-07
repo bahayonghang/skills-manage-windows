@@ -2,16 +2,18 @@
 //! `crate::services::scanner`; this file translates IPC arguments + state into
 //! pool/target inputs and records operation logs.
 
+use std::future::Future;
+use std::time::Duration;
 use std::time::Instant;
 
 use chrono::Utc;
 use serde_json::json;
 use tauri::State;
 
+use crate::db;
 use crate::operation_log::{
     record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
 };
-use crate::db;
 use crate::services::scanner::{scan_all_skills_impl, scan_ssh_skills_impl};
 use crate::targets::ActiveTarget;
 use crate::AppState;
@@ -23,6 +25,22 @@ pub use crate::services::scanner::{
     detect_link_type, parse_skill_md, parse_skill_md_content, scan_directory, ScanResult,
     ScannedSkill, SkillInfo,
 };
+
+async fn run_ssh_scan_with_timeout<F>(
+    future: F,
+    timeout: Duration,
+) -> Result<ScanResult, String>
+where
+    F: Future<Output = Result<ScanResult, String>>,
+{
+    match tokio::time::timeout(timeout, future).await {
+        Ok(result) => result,
+        Err(_) => Err(format!(
+            "SSH skill scan timed out after {}s.",
+            timeout.as_secs()
+        )),
+    }
+}
 
 /// Tauri command: scan all agent skill directories and persist the results to
 /// SQLite. Returns a `ScanResult` with per-agent skill counts.
@@ -36,7 +54,10 @@ pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, S
 
     let scan_result = match active_target {
         ActiveTarget::Local => scan_all_skills_impl(&pool).await,
-        ActiveTarget::Ssh(target) => scan_ssh_skills_impl(&pool, &target).await,
+        ActiveTarget::Ssh(target) => {
+            run_ssh_scan_with_timeout(scan_ssh_skills_impl(&pool, &target), Duration::from_secs(90))
+                .await
+        }
     };
 
     match scan_result {
@@ -75,10 +96,37 @@ pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, S
                 OperationLogEvent::new("scan", "scan.all", "failed", "Failed to scan skills")
                     .subject("scan_root", "all", "All scan directories")
                     .error(&error)
+                    .details(json!({
+                        "reason": if error.contains("timed out") { "timeout" } else { "error" },
+                    }))
                     .duration_ms(started_at.elapsed().as_millis() as i64),
             )
             .await;
             Err(error)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn ssh_scan_timeout_returns_timeout_error() {
+        let result = run_ssh_scan_with_timeout(
+            async {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                Ok(ScanResult {
+                    total_skills: 0,
+                    agents_scanned: 0,
+                    skills_by_agent: Default::default(),
+                })
+            },
+            Duration::from_millis(5),
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("timed out"));
     }
 }
