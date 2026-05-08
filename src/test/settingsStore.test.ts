@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ScanDirectory, AgentWithStatus } from "../types";
+import { ScanDirectory } from "../types";
 
 // Mock Tauri core before importing the store
 vi.mock("@tauri-apps/api/core", () => ({
@@ -34,16 +34,6 @@ const mockCustomDir: ScanDirectory = {
 };
 
 const mockScanDirectories: ScanDirectory[] = [mockBuiltinDir, mockCustomDir];
-
-const mockAgent: AgentWithStatus = {
-  id: "custom-qclaw",
-  display_name: "QClaw",
-  category: "other",
-  global_skills_dir: "~/.qclaw/skills/",
-  is_detected: false,
-  is_builtin: false,
-  is_enabled: true,
-};
 
 function resetSettingsStoreState() {
   useSettingsStore.setState(createSettingsStoreInitialState());
@@ -270,73 +260,6 @@ describe("settingsStore", () => {
     await expect(
       useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", false)
     ).rejects.toThrow("DB error");
-  });
-
-  // ── addCustomAgent ────────────────────────────────────────────────────────
-
-  it("addCustomAgent calls add_custom_agent and returns the agent", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(mockAgent);
-
-    const config = {
-      display_name: "QClaw",
-      global_skills_dir: "~/.qclaw/skills/",
-    };
-
-    const result = await useSettingsStore.getState().addCustomAgent(config);
-
-    expect(result).toEqual(mockAgent);
-    expect(invoke).toHaveBeenCalledWith("add_custom_agent", { config });
-  });
-
-  it("addCustomAgent throws on failure", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("UNIQUE constraint"));
-
-    await expect(
-      useSettingsStore.getState().addCustomAgent({
-        display_name: "Dup",
-        global_skills_dir: "/dup",
-      })
-    ).rejects.toThrow("UNIQUE constraint");
-  });
-
-  // ── updateCustomAgent ─────────────────────────────────────────────────────
-
-  it("updateCustomAgent calls update_custom_agent and returns updated agent", async () => {
-    const updatedAgent = { ...mockAgent, display_name: "QClaw v2" };
-    vi.mocked(invoke).mockResolvedValueOnce(updatedAgent);
-
-    const config = {
-      display_name: "QClaw v2",
-      global_skills_dir: "~/.qclaw/skills/",
-    };
-
-    const result = await useSettingsStore.getState().updateCustomAgent("custom-qclaw", config);
-
-    expect(result).toEqual(updatedAgent);
-    expect(invoke).toHaveBeenCalledWith("update_custom_agent", {
-      agentId: "custom-qclaw",
-      config,
-    });
-  });
-
-  // ── removeCustomAgent ─────────────────────────────────────────────────────
-
-  it("removeCustomAgent calls remove_custom_agent command", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
-
-    await useSettingsStore.getState().removeCustomAgent("custom-qclaw");
-
-    expect(invoke).toHaveBeenCalledWith("remove_custom_agent", {
-      agentId: "custom-qclaw",
-    });
-  });
-
-  it("removeCustomAgent throws on failure", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("Not found"));
-
-    await expect(
-      useSettingsStore.getState().removeCustomAgent("nonexistent")
-    ).rejects.toThrow("Not found");
   });
 
   // ── clearError ────────────────────────────────────────────────────────────

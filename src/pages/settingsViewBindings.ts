@@ -18,9 +18,9 @@ export function useSettingsViewBindings() {
   const addScanDirectory = useSettingsStore((state) => state.addScanDirectory);
   const removeScanDirectory = useSettingsStore((state) => state.removeScanDirectory);
   const toggleScanDirectory = useSettingsStore((state) => state.toggleScanDirectory);
-  const addCustomAgent = useSettingsStore((state) => state.addCustomAgent);
-  const updateCustomAgent = useSettingsStore((state) => state.updateCustomAgent);
-  const removeCustomAgent = useSettingsStore((state) => state.removeCustomAgent);
+  const addCustomAgent = usePlatformStore((state) => state.addCustomAgent);
+  const updateCustomAgent = usePlatformStore((state) => state.updateCustomAgent);
+  const removeCustomAgent = usePlatformStore((state) => state.removeCustomAgent);
   const githubPat = useSettingsStore((state) => state.githubPat);
   const isLoadingGitHubPat = useSettingsStore((state) => state.isLoadingGitHubPat);
   const isSavingGitHubPat = useSettingsStore((state) => state.isSavingGitHubPat);

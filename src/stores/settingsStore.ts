@@ -1,11 +1,8 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  AgentWithStatus,
-  CustomAgentConfig,
   GitHubPatTestResult,
   ScanDirectory,
-  UpdateCustomAgentConfig,
 } from "@/types";
 import {
   type AiConnectionTestResult,
@@ -37,13 +34,6 @@ interface SettingsState extends AiSettingsSlice {
   saveGitHubPat: (value: string) => Promise<void>;
   clearGitHubPat: () => Promise<void>;
   testGitHubPat: () => Promise<GitHubPatTestResult>;
-
-  addCustomAgent: (config: CustomAgentConfig) => Promise<AgentWithStatus>;
-  updateCustomAgent: (
-    agentId: string,
-    config: UpdateCustomAgentConfig
-  ) => Promise<AgentWithStatus>;
-  removeCustomAgent: (agentId: string) => Promise<void>;
 
   clearError: () => void;
 }
@@ -182,24 +172,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       });
       throw err;
     }
-  },
-
-  addCustomAgent: async (config: CustomAgentConfig) => {
-    return invoke<AgentWithStatus>("add_custom_agent", { config });
-  },
-
-  updateCustomAgent: async (
-    agentId: string,
-    config: UpdateCustomAgentConfig
-  ) => {
-    return invoke<AgentWithStatus>("update_custom_agent", {
-      agentId,
-      config,
-    });
-  },
-
-  removeCustomAgent: async (agentId: string) => {
-    await invoke<void>("remove_custom_agent", { agentId });
   },
 
   clearError: () => set({ error: null }),

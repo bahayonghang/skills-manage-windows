@@ -16,6 +16,7 @@ import {
   type PlatformTarget,
   type PlatformTargetGroup,
 } from "@/lib/platformTargetGroups";
+import { getPlatformPathHint } from "@/lib/path";
 import type { PlatformCategoryKey } from "@/lib/platformVisibility";
 import { matchesPlatformVisibilityQuery } from "./platformVisibilityUtils";
 
@@ -37,18 +38,6 @@ interface PlatformVisibilitySettingsSectionProps {
   onQueryChange: (value: string) => void;
   onToggleCategory: (category: PlatformCategoryKey, visible: boolean) => void;
   onTogglePlatform: (agentId: string, enabled: boolean) => void;
-}
-
-function formatPlatformPathHint(path: string): string {
-  const normalized = path.replace(/\\/g, "/");
-  if (normalized.includes("/.agents/skills")) {
-    return "~/.agents/skills/";
-  }
-  const homeMatch = normalized.match(/\/\.([^/]+)\/skills\/?$/);
-  if (homeMatch) {
-    return `~/.${homeMatch[1]}/skills/`;
-  }
-  return path;
 }
 
 export function PlatformVisibilitySettingsSection({
@@ -125,7 +114,7 @@ interface PlatformVisibilityRowProps {
 
 function PlatformVisibilityRow({ agent, onToggle }: PlatformVisibilityRowProps) {
   const { t } = useTranslation();
-  const pathHint = formatPlatformPathHint(agent.global_skills_dir);
+  const pathHint = getPlatformPathHint(agent.global_skills_dir);
 
   return (
     <div className="flex items-center gap-3 rounded-md border border-border/60 bg-background px-3 py-2">
@@ -167,7 +156,7 @@ function PlatformVisibilityUniversalRow({
   );
   const enabledMembers = agent.member_agents.filter((member) => member.is_enabled).length;
   const allMembersEnabled = agent.member_agents.every((member) => member.is_enabled);
-  const pathHint = formatPlatformPathHint(agent.global_skills_dir);
+  const pathHint = getPlatformPathHint(agent.global_skills_dir);
 
   return (
     <div className="rounded-md border border-border/60 bg-background p-3">

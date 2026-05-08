@@ -195,9 +195,6 @@ function setupMocks({
       addScanDirectory,
       removeScanDirectory,
       toggleScanDirectory,
-      addCustomAgent,
-      updateCustomAgent,
-      removeCustomAgent,
       githubPat,
       isLoadingGitHubPat,
       isSavingGitHubPat,
@@ -225,7 +222,8 @@ function setupMocks({
   vi.mocked(usePlatformStore).mockImplementation((selector) =>
     selector({
       agents,
-      skillsByAgent: {},
+      platformPaths: {},
+    skillsByAgent: {},
       collectionCount: 0,
       discoveredCount: 0,
       categoryVisibility,
@@ -245,6 +243,9 @@ function setupMocks({
       applyScanSummary: vi.fn(),
       setCollectionCount: vi.fn(),
       setDiscoveredCount: vi.fn(),
+      addCustomAgent,
+      updateCustomAgent,
+      removeCustomAgent,
     })
   );
 
