@@ -7,7 +7,14 @@ src-tauri/target/
 /dist-docs/
 /docs/.vitepress/cache/
 .tmp/
+
+.agents/
 .claude/
+.codex/
+.opencode/
+.cursor/
+.trellis/
+
 
 
 .vscode/
