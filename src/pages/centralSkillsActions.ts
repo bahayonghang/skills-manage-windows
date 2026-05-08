@@ -2,22 +2,17 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { TFunction } from "i18next";
 import { toast } from "sonner";
 
-import { createCentralSkillsDeleteWorkflow } from "@/pages/centralSkillsDeleteWorkflow";
-import { createCentralSkillsImportWorkflow } from "@/pages/centralSkillsImportWorkflow";
-import { createCentralSkillsUpdateWorkflow } from "@/pages/centralSkillsUpdateWorkflow";
+import { useCentralSkillsDeleteWorkflow } from "@/pages/centralSkillsDeleteWorkflow";
+import { useCentralSkillsImportWorkflow } from "@/pages/centralSkillsImportWorkflow";
+import { useCentralSkillsUpdateWorkflow } from "@/pages/centralSkillsUpdateWorkflow";
+import { usePlatformStore } from "@/stores/platformStore";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import type {
   BatchDeleteCentralSkillPreviewResult,
-  BatchDeleteCentralSkillRequest,
-  BatchDeleteCentralSkillResult,
   BatchInstallResult,
   CentralBatchInstallResult,
   CentralSkillUpdateState,
   DeleteSkillRepositoryPreview,
-  DeleteSkillRepositoryResult,
-  GitHubRepoImportResult,
-  GitHubRepoPreview,
-  GitHubSkillImportSelection,
-  ScannedSkill,
   SkillAiTagReview,
   SkillDetail,
   SkillRepositoryWithStats,
@@ -26,138 +21,25 @@ import type {
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
-export function useCentralSkillsActions({
-  acceptAiTagReview,
-  assignSkillTags,
-  batchInstallSkills,
-  bulkSuggestSkillTags,
-  cancelAiTagJob,
-  cancelCentralUpdates,
-  checkSkillUpdates,
-  createTag,
-  deleteCentralSkill,
-  deleteCentralSkills,
-  deleteSkillRepository,
-  detailButtonRefs,
-  getSkillsByAgent,
-  githubRepoUrl,
-  importGitHubRepoSkills,
-  deleteTargetSkill,
-  installSkill,
-  loadBatchDeletePreview,
-  loadCentralSkills,
-  loadDeletePreview,
-  loadRepositoryDeletePreview,
-  manualSelectedTagIds,
-  manualTagQuery,
-  previewGitHubRepoImport,
-  refreshCounts,
-  repositoryDeleteTarget,
-  repositoryFilter,
-  selectedSkillIds,
-  skipAiTagReview,
-  sortedSkills,
-  skillsByAgent,
-  t,
-  togglePlatformLink,
-  updateSkills,
-  keepRemoteMissingSkills,
-  setBatchDeletePreview,
-  setBatchDeletePreviewError,
-  setDeletePreview,
-  setDeletePreviewError,
-  setDeleteTargetSkill,
-  setDrawerSkillId,
-  setIsBatchDeleteDialogOpen,
-  setIsBatchDeletePreviewLoading,
-  setIsDeleteDialogOpen,
-  setIsDeletePreviewLoading,
-  setIsDialogOpen,
-  setIsDrawerOpen,
-  setIsRemoteMissingDialogOpen,
-  setIsRemoteMissingPreviewLoading,
-  setIsRepositoryDeleteDialogOpen,
-  setIsRepositoryDeletePreviewLoading,
-  setIsResolvingRemoteMissing,
-  setInstallTargetSkill,
-  setManualSelectedTagIds,
-  setManualTagQuery,
-  setRemoteMissingError,
-  setRemoteMissingPreview,
-  setRemoteMissingStates,
-  setRepositoryDeletePreview,
-  setRepositoryDeletePreviewError,
-  setRepositoryDeleteTarget,
-  setRepositoryFilter,
-  setSelectedSkillIds,
-}: {
-  acceptAiTagReview?: (skillId: string, tagIds: string[]) => Promise<void>;
-  assignSkillTags?: (skillIds: string[], tagIds: string[]) => Promise<void>;
-  batchInstallSkills: (
-    skillIds: string[],
-    agentIds: string[],
-    method: "symlink" | "copy",
-    projectPath?: string | null
-  ) => Promise<CentralBatchInstallResult>;
-  bulkSuggestSkillTags?: (skillIds: string[]) => Promise<Array<{
-    succeeded?: boolean;
-    error?: string | null;
-    low_confidence_count?: number | null;
-  }>>;
-  cancelAiTagJob?: () => Promise<void>;
-  cancelCentralUpdates: () => Promise<void>;
-  checkSkillUpdates: (skillIds?: string[]) => Promise<CentralSkillUpdateState[]>;
-  createTag?: (name: string) => Promise<{ id: string }>;
-  deleteCentralSkill: (skillId: string, removeAgentIds: string[]) => Promise<void>;
-  deleteCentralSkills: (
-    requests: BatchDeleteCentralSkillRequest[]
-  ) => Promise<BatchDeleteCentralSkillResult>;
-  deleteSkillRepository: (
-    repositoryId: string,
-    requests: BatchDeleteCentralSkillRequest[]
-  ) => Promise<DeleteSkillRepositoryResult>;
-  detailButtonRefs: RefObject<Record<string, HTMLButtonElement | null>>;
-  getSkillsByAgent: (agentId: string) => Promise<void>;
-  githubRepoUrl: string;
-  importGitHubRepoSkills: (
-    repoUrl: string,
-    selections: GitHubSkillImportSelection[]
-  ) => Promise<GitHubRepoImportResult>;
+export interface CentralSkillsActionsState {
   deleteTargetSkill: SkillWithLinks | null;
-  installSkill: (
-    skillId: string,
-    agentIds: string[],
-    method: "symlink" | "copy",
-    projectPath?: string | null
-  ) => Promise<BatchInstallResult>;
-  loadBatchDeletePreview: (skillIds: string[]) => Promise<BatchDeleteCentralSkillPreviewResult>;
-  loadCentralSkills: () => Promise<void>;
-  loadDeletePreview: (skillId: string) => Promise<SkillDetail>;
-  loadRepositoryDeletePreview: (repositoryId: string) => Promise<DeleteSkillRepositoryPreview>;
+  githubRepoUrl: string;
   manualSelectedTagIds: string[];
   manualTagQuery: string;
-  previewGitHubRepoImport: (repoUrl: string) => Promise<GitHubRepoPreview | null>;
-  refreshCounts: () => Promise<void>;
   repositoryDeleteTarget: SkillRepositoryWithStats | null;
   repositoryFilter: string;
   selectedSkillIds: string[];
-  skipAiTagReview?: (skillId: string) => Promise<void>;
   sortedSkills: SkillWithLinks[];
-  skillsByAgent: Record<string, ScannedSkill[]>;
-  t: TFunction;
-  togglePlatformLink: (skillId: string, agentId: string) => Promise<void>;
-  updateSkills: (skillIds: string[]) => Promise<{
-    succeeded: unknown[];
-    failed: unknown[];
-    skipped: unknown[];
-  }>;
-  keepRemoteMissingSkills: (skillIds: string[]) => Promise<string[]>;
+}
+
+export interface CentralSkillsActionsSetters {
   setBatchDeletePreview: StateSetter<BatchDeleteCentralSkillPreviewResult | null>;
   setBatchDeletePreviewError: StateSetter<string | null>;
   setDeletePreview: StateSetter<SkillDetail | null>;
   setDeletePreviewError: StateSetter<string | null>;
   setDeleteTargetSkill: StateSetter<SkillWithLinks | null>;
   setDrawerSkillId: StateSetter<string | null>;
+  setInstallTargetSkill: StateSetter<SkillWithLinks | null>;
   setIsBatchDeleteDialogOpen: StateSetter<boolean>;
   setIsBatchDeletePreviewLoading: StateSetter<boolean>;
   setIsDeleteDialogOpen: StateSetter<boolean>;
@@ -169,7 +51,6 @@ export function useCentralSkillsActions({
   setIsRepositoryDeleteDialogOpen: StateSetter<boolean>;
   setIsRepositoryDeletePreviewLoading: StateSetter<boolean>;
   setIsResolvingRemoteMissing: StateSetter<boolean>;
-  setInstallTargetSkill: StateSetter<SkillWithLinks | null>;
   setManualSelectedTagIds: StateSetter<string[]>;
   setManualTagQuery: StateSetter<string>;
   setRemoteMissingError: StateSetter<string | null>;
@@ -180,66 +61,118 @@ export function useCentralSkillsActions({
   setRepositoryDeleteTarget: StateSetter<SkillRepositoryWithStats | null>;
   setRepositoryFilter: StateSetter<string>;
   setSelectedSkillIds: StateSetter<string[]>;
-}) {
-  const deleteWorkflow = createCentralSkillsDeleteWorkflow({
-    t,
+}
+
+export interface CentralSkillsActionsDeps {
+  detailButtonRefs: RefObject<Record<string, HTMLButtonElement | null>>;
+  state: CentralSkillsActionsState;
+  setters: CentralSkillsActionsSetters;
+  t: TFunction;
+}
+
+export function useCentralSkillsActions({
+  detailButtonRefs,
+  state,
+  setters,
+  t,
+}: CentralSkillsActionsDeps) {
+  const acceptAiTagReview = useCentralSkillsStore((store) => store.acceptAiTagReview);
+  const assignSkillTags = useCentralSkillsStore((store) => store.assignSkillTags);
+  const batchInstallSkills = useCentralSkillsStore((store) => store.batchInstallSkills);
+  const bulkSuggestSkillTags = useCentralSkillsStore((store) => store.bulkSuggestSkillTags);
+  const cancelAiTagJob = useCentralSkillsStore((store) => store.cancelAiTagJob);
+  const createTag = useCentralSkillsStore((store) => store.createTag);
+  const installSkill = useCentralSkillsStore((store) => store.installSkill);
+  const loadCentralSkills = useCentralSkillsStore((store) => store.loadCentralSkills);
+  const skipAiTagReview = useCentralSkillsStore((store) => store.skipAiTagReview);
+  const togglePlatformLink = useCentralSkillsStore((store) => store.togglePlatformLink);
+  const refreshCounts = usePlatformStore((store) => store.refreshCounts);
+
+  const {
     deleteTargetSkill,
+    githubRepoUrl,
+    manualSelectedTagIds,
+    manualTagQuery,
     repositoryDeleteTarget,
     repositoryFilter,
     selectedSkillIds,
-    loadDeletePreview,
-    loadBatchDeletePreview,
-    loadRepositoryDeletePreview,
-    deleteCentralSkill,
-    deleteCentralSkills,
-    deleteSkillRepository,
-    refreshCounts,
+    sortedSkills,
+  } = state;
+  const {
     setBatchDeletePreview,
     setBatchDeletePreviewError,
     setDeletePreview,
     setDeletePreviewError,
     setDeleteTargetSkill,
+    setDrawerSkillId,
+    setInstallTargetSkill,
     setIsBatchDeleteDialogOpen,
     setIsBatchDeletePreviewLoading,
     setIsDeleteDialogOpen,
     setIsDeletePreviewLoading,
+    setIsDialogOpen,
+    setIsDrawerOpen,
+    setIsRemoteMissingDialogOpen,
+    setIsRemoteMissingPreviewLoading,
     setIsRepositoryDeleteDialogOpen,
     setIsRepositoryDeletePreviewLoading,
+    setIsResolvingRemoteMissing,
+    setManualSelectedTagIds,
+    setManualTagQuery,
+    setRemoteMissingError,
+    setRemoteMissingPreview,
+    setRemoteMissingStates,
     setRepositoryDeletePreview,
     setRepositoryDeletePreviewError,
     setRepositoryDeleteTarget,
     setRepositoryFilter,
     setSelectedSkillIds,
-  });
+  } = setters;
 
-  const updateWorkflow = createCentralSkillsUpdateWorkflow({
+  const deleteWorkflow = useCentralSkillsDeleteWorkflow({
     t,
-    cancelCentralUpdates,
-    checkSkillUpdates,
-    deleteCentralSkills,
-    keepRemoteMissingSkills,
-    loadBatchDeletePreview,
-    refreshCounts,
-    updateSkills,
-    setIsRemoteMissingDialogOpen,
-    setIsRemoteMissingPreviewLoading,
-    setIsResolvingRemoteMissing,
-    setRemoteMissingError,
-    setRemoteMissingPreview,
-    setRemoteMissingStates,
-    setSelectedSkillIds,
+    state: {
+      deleteTargetSkill,
+      repositoryDeleteTarget,
+      repositoryFilter,
+      selectedSkillIds,
+    },
+    setters: {
+      setBatchDeletePreview,
+      setBatchDeletePreviewError,
+      setDeletePreview,
+      setDeletePreviewError,
+      setDeleteTargetSkill,
+      setIsBatchDeleteDialogOpen,
+      setIsBatchDeletePreviewLoading,
+      setIsDeleteDialogOpen,
+      setIsDeletePreviewLoading,
+      setIsRepositoryDeleteDialogOpen,
+      setIsRepositoryDeletePreviewLoading,
+      setRepositoryDeletePreview,
+      setRepositoryDeletePreviewError,
+      setRepositoryDeleteTarget,
+      setRepositoryFilter,
+      setSelectedSkillIds,
+    },
   });
 
-  const importWorkflow = createCentralSkillsImportWorkflow({
+  const updateWorkflow = useCentralSkillsUpdateWorkflow({
+    t,
+    setters: {
+      setIsRemoteMissingDialogOpen,
+      setIsRemoteMissingPreviewLoading,
+      setIsResolvingRemoteMissing,
+      setRemoteMissingError,
+      setRemoteMissingPreview,
+      setRemoteMissingStates,
+      setSelectedSkillIds,
+    },
+  });
+
+  const importWorkflow = useCentralSkillsImportWorkflow({
     t,
     githubRepoUrl,
-    skillsByAgent,
-    getSkillsByAgent,
-    importGitHubRepoSkills,
-    installSkill,
-    loadCentralSkills,
-    previewGitHubRepoImport,
-    refreshCounts,
   });
 
   function handleInstallClick(skill: SkillWithLinks) {
@@ -272,7 +205,7 @@ export function useCentralSkillsActions({
     projectPath?: string | null
   ) {
     try {
-      const result = await installSkill(skillId, agentIds, method, projectPath);
+      const result = await installSkill(skillId, agentIds, method, projectPath) as BatchInstallResult;
       await refreshCounts();
       if (result.failed.length > 0) {
         const failedNames = result.failed
@@ -297,7 +230,12 @@ export function useCentralSkillsActions({
     const platformCount = agentIds.length;
 
     try {
-      const result = await batchInstallSkills(requestedSkillIds, agentIds, method, projectPath);
+      const result = await batchInstallSkills(
+        requestedSkillIds,
+        agentIds,
+        method,
+        projectPath
+      ) as CentralBatchInstallResult;
       await refreshCounts();
       if (result.failed.length > 0) {
         toast.error(

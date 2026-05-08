@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { BROWSER_PLATFORM_PATHS, getPlatformSkillFilePath } from "@/lib/platformPathPolicy";
 
 export function CentralSkillEmptyState({ message }: { message: string }) {
   return (
@@ -18,6 +19,11 @@ export function CentralSkillEmptyState({ message }: { message: string }) {
 export function CentralSkillFirstVisitEmptyState() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const exampleSkillPath = getPlatformSkillFilePath(
+    BROWSER_PLATFORM_PATHS,
+    "central",
+    "my-skill"
+  );
 
   return (
     <div className="flex flex-col items-center justify-center h-full gap-6 py-16 text-center px-8">
@@ -35,7 +41,7 @@ export function CentralSkillFirstVisitEmptyState() {
           <FolderOpen className="size-4 shrink-0 text-primary/60" />
           <span>
             {t("empty.createHint")}{" "}
-            <code className="font-mono">~/.skillsmanage/skills/my-skill/SKILL.md</code>
+            <code className="font-mono">{exampleSkillPath}</code>
           </span>
         </div>
         <Button

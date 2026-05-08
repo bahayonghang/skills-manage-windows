@@ -2,34 +2,17 @@ import type { Dispatch, SetStateAction } from "react";
 import type { TFunction } from "i18next";
 import { toast } from "sonner";
 
+import { usePlatformStore } from "@/stores/platformStore";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import type {
   BatchDeleteCentralSkillPreviewResult,
   BatchDeleteCentralSkillRequest,
-  BatchDeleteCentralSkillResult,
   CentralSkillUpdateState,
 } from "@/types";
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
-export interface CentralSkillsUpdateWorkflowDeps {
-  t: TFunction;
-
-  cancelCentralUpdates: () => Promise<void>;
-  checkSkillUpdates: (skillIds?: string[]) => Promise<CentralSkillUpdateState[]>;
-  deleteCentralSkills: (
-    requests: BatchDeleteCentralSkillRequest[]
-  ) => Promise<BatchDeleteCentralSkillResult>;
-  keepRemoteMissingSkills: (skillIds: string[]) => Promise<string[]>;
-  loadBatchDeletePreview: (
-    skillIds: string[]
-  ) => Promise<BatchDeleteCentralSkillPreviewResult>;
-  refreshCounts: () => Promise<void>;
-  updateSkills: (skillIds: string[]) => Promise<{
-    succeeded: unknown[];
-    failed: unknown[];
-    skipped: unknown[];
-  }>;
-
+export interface CentralSkillsUpdateWorkflowSetters {
   setIsRemoteMissingDialogOpen: StateSetter<boolean>;
   setIsRemoteMissingPreviewLoading: StateSetter<boolean>;
   setIsResolvingRemoteMissing: StateSetter<boolean>;
@@ -39,18 +22,24 @@ export interface CentralSkillsUpdateWorkflowDeps {
   setSelectedSkillIds: StateSetter<string[]>;
 }
 
-export function createCentralSkillsUpdateWorkflow(
-  deps: CentralSkillsUpdateWorkflowDeps
-) {
+export interface CentralSkillsUpdateWorkflowDeps {
+  t: TFunction;
+  setters: CentralSkillsUpdateWorkflowSetters;
+}
+
+export function useCentralSkillsUpdateWorkflow({
+  t,
+  setters,
+}: CentralSkillsUpdateWorkflowDeps) {
+  const cancelCentralUpdates = useCentralSkillsStore((store) => store.cancelCentralUpdates);
+  const checkSkillUpdates = useCentralSkillsStore((store) => store.checkSkillUpdates);
+  const deleteCentralSkills = useCentralSkillsStore((store) => store.deleteCentralSkills);
+  const keepRemoteMissingSkills = useCentralSkillsStore((store) => store.keepRemoteMissingSkills);
+  const loadBatchDeletePreview = useCentralSkillsStore((store) => store.loadBatchDeletePreview);
+  const updateSkills = useCentralSkillsStore((store) => store.updateSkills);
+  const refreshCounts = usePlatformStore((store) => store.refreshCounts);
+
   const {
-    t,
-    cancelCentralUpdates,
-    checkSkillUpdates,
-    deleteCentralSkills,
-    keepRemoteMissingSkills,
-    loadBatchDeletePreview,
-    refreshCounts,
-    updateSkills,
     setIsRemoteMissingDialogOpen,
     setIsRemoteMissingPreviewLoading,
     setIsResolvingRemoteMissing,
@@ -58,7 +47,7 @@ export function createCentralSkillsUpdateWorkflow(
     setRemoteMissingPreview,
     setRemoteMissingStates,
     setSelectedSkillIds,
-  } = deps;
+  } = setters;
 
   function handleRemoteMissingDialogOpenChange(open: boolean) {
     setIsRemoteMissingDialogOpen(open);
@@ -152,7 +141,7 @@ export function createCentralSkillsUpdateWorkflow(
         await keepRemoteMissingSkills(keepSkillIds);
       }
 
-      const deleteResult: BatchDeleteCentralSkillResult =
+      const deleteResult =
         deleteRequests.length > 0
           ? await deleteCentralSkills(deleteRequests)
           : { succeeded: [], failed: [] };

@@ -1,50 +1,28 @@
 import type { TFunction } from "i18next";
 import { toast } from "sonner";
 
-import type {
-  BatchInstallResult,
-  GitHubRepoImportResult,
-  GitHubRepoPreview,
-  GitHubSkillImportSelection,
-  ScannedSkill,
-} from "@/types";
+import { usePlatformStore } from "@/stores/platformStore";
+import { useSkillStore } from "@/stores/skillStore";
+import { useMarketplaceStore } from "@/stores/marketplaceStore";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
+import type { GitHubSkillImportSelection } from "@/types";
 
 export interface CentralSkillsImportWorkflowDeps {
   t: TFunction;
-
   githubRepoUrl: string;
-  skillsByAgent: Record<string, ScannedSkill[]>;
-
-  getSkillsByAgent: (agentId: string) => Promise<void>;
-  importGitHubRepoSkills: (
-    repoUrl: string,
-    selections: GitHubSkillImportSelection[]
-  ) => Promise<GitHubRepoImportResult>;
-  installSkill: (
-    skillId: string,
-    agentIds: string[],
-    method: "symlink" | "copy",
-    projectPath?: string | null
-  ) => Promise<BatchInstallResult>;
-  loadCentralSkills: () => Promise<void>;
-  previewGitHubRepoImport: (repoUrl: string) => Promise<GitHubRepoPreview | null>;
-  refreshCounts: () => Promise<void>;
 }
 
-export function createCentralSkillsImportWorkflow(
-  deps: CentralSkillsImportWorkflowDeps
-) {
-  const {
-    t,
-    githubRepoUrl,
-    skillsByAgent,
-    getSkillsByAgent,
-    importGitHubRepoSkills,
-    installSkill,
-    loadCentralSkills,
-    previewGitHubRepoImport,
-    refreshCounts,
-  } = deps;
+export function useCentralSkillsImportWorkflow({
+  t,
+  githubRepoUrl,
+}: CentralSkillsImportWorkflowDeps) {
+  const skillsByAgent = useSkillStore((store) => store.skillsByAgent);
+  const getSkillsByAgent = useSkillStore((store) => store.getSkillsByAgent);
+  const previewGitHubRepoImport = useMarketplaceStore((store) => store.previewGitHubRepoImport);
+  const importGitHubRepoSkills = useMarketplaceStore((store) => store.importGitHubRepoSkills);
+  const installSkill = useCentralSkillsStore((store) => store.installSkill);
+  const loadCentralSkills = useCentralSkillsStore((store) => store.loadCentralSkills);
+  const refreshCounts = usePlatformStore((store) => store.refreshCounts);
 
   async function handleGitHubPreview() {
     try {

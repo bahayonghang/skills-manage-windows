@@ -4,28 +4,25 @@ import type { TFunction } from "i18next";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import { usePlatformStore } from "@/stores/platformStore";
-import { useSkillStore } from "@/stores/skillStore";
 import { useTargetStore } from "@/stores/targetStore";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
 } from "@/lib/platformVisibility";
 import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 import { formatPathForDisplay } from "@/lib/path";
+import {
+  BROWSER_PLATFORM_PATHS,
+  getPlatformSkillDir,
+  getPlatformSkillFilePath,
+} from "@/lib/platformPathPolicy";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 import { isTauriRuntime } from "@/lib/tauri";
 import type {
   AgentWithStatus,
   AiTagJob,
-  BatchDeleteCentralSkillPreviewResult,
-  BatchDeleteCentralSkillResult,
-  CentralBatchInstallResult,
   CentralSkillUpdateJob,
   CentralSkillUpdateState,
-  DeleteSkillRepositoryPreview,
-  DeleteSkillRepositoryResult,
-  ScannedSkill,
   SkillAiTagReview,
-  SkillDetail,
   SkillRepositoryWithStats,
   SkillTag,
   SkillWithLinks,
@@ -43,8 +40,16 @@ const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
     id: "fixture-central-skill",
     name: "fixture-central-skill",
     description: "Browser validation fixture for Central and drawer entry flows.",
-    file_path: "~/.skillsmanage/skills/fixture-central-skill/SKILL.md",
-    canonical_path: "~/.skillsmanage/skills/fixture-central-skill",
+    file_path: getPlatformSkillFilePath(
+      BROWSER_PLATFORM_PATHS,
+      "central",
+      "fixture-central-skill"
+    ),
+    canonical_path: getPlatformSkillDir(
+      BROWSER_PLATFORM_PATHS,
+      "central",
+      "fixture-central-skill"
+    ),
     is_central: true,
     source: "browser-fixture",
     scanned_at: "2026-04-17T00:00:00.000Z",
@@ -62,7 +67,6 @@ const EMPTY_AGENTS: AgentWithStatus[] = [];
 const EMPTY_REPOSITORIES: SkillRepositoryWithStats[] = [];
 const EMPTY_TAGS: SkillTag[] = [];
 const EMPTY_AI_TAG_REVIEWS: SkillAiTagReview[] = [];
-const EMPTY_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {};
 const EMPTY_UPDATE_STATUSES: Record<string, CentralSkillUpdateState> = {};
 const IDLE_AI_TAG_JOB: AiTagJob = {
   jobId: null,
@@ -95,22 +99,6 @@ const EMPTY_GITHUB_IMPORT_STATE = {
 
 async function noopAsync(): Promise<void> {}
 
-async function noopInstallSkill() {
-  return { succeeded: [], failed: [] };
-}
-
-async function noopBatchInstallSkills(): Promise<CentralBatchInstallResult> {
-  return { succeeded: [], failed: [] };
-}
-
-async function noopPreviewGitHubRepoImport() {
-  return null;
-}
-
-async function noopImportGitHubRepoSkills() {
-  throw new Error("GitHub import is unavailable");
-}
-
 async function noopExportSkillportState(): Promise<string> {
   return JSON.stringify(
     {
@@ -138,44 +126,8 @@ async function noopImportSkillportState(
   throw new Error("State import is unavailable");
 }
 
-async function noopGetSkillsByAgent(_agentId: string): Promise<void> {}
-
-async function noopLoadDeletePreview(): Promise<SkillDetail> {
-  throw new Error("Central skill deletion is unavailable");
-}
-
-async function noopLoadBatchDeletePreview(): Promise<BatchDeleteCentralSkillPreviewResult> {
-  throw new Error("Central skill deletion is unavailable");
-}
-
-async function noopLoadRepositoryDeletePreview(): Promise<DeleteSkillRepositoryPreview> {
-  throw new Error("Repository deletion is unavailable");
-}
-
-async function noopDeleteCentralSkill(): Promise<void> {}
-
-async function noopDeleteCentralSkills(): Promise<BatchDeleteCentralSkillResult> {
-  return { succeeded: [], failed: [] };
-}
-
-async function noopDeleteSkillRepository(): Promise<DeleteSkillRepositoryResult> {
-  throw new Error("Repository deletion is unavailable");
-}
-
 async function noopUnlisten() {
   return () => {};
-}
-
-async function noopCheckUpdates(): Promise<CentralSkillUpdateState[]> {
-  return [];
-}
-
-async function noopUpdateSkills() {
-  return { succeeded: [], failed: [], skipped: [], states: [] };
-}
-
-async function noopKeepRemoteMissingSkills(): Promise<string[]> {
-  return [];
 }
 
 function noopResetGitHubImport() {}
@@ -246,39 +198,6 @@ export function useCentralSkillsStoreBindings(t: TFunction) {
     ),
     isLoading: shouldUseBrowserFixtures ? false : rawIsLoading ?? false,
     loadCentralSkills: rawLoadCentralSkills ?? noopAsync,
-    installSkill: useCentralSkillsStore((state) => state.installSkill) ?? noopInstallSkill,
-    batchInstallSkills:
-      useCentralSkillsStore((state) => state.batchInstallSkills) ?? noopBatchInstallSkills,
-    loadDeletePreview:
-      useCentralSkillsStore((state) => state.loadDeletePreview) ?? noopLoadDeletePreview,
-    loadBatchDeletePreview:
-      useCentralSkillsStore((state) => state.loadBatchDeletePreview) ??
-      noopLoadBatchDeletePreview,
-    loadRepositoryDeletePreview:
-      useCentralSkillsStore((state) => state.loadRepositoryDeletePreview) ??
-      noopLoadRepositoryDeletePreview,
-    deleteCentralSkill:
-      useCentralSkillsStore((state) => state.deleteCentralSkill) ?? noopDeleteCentralSkill,
-    deleteCentralSkills:
-      useCentralSkillsStore((state) => state.deleteCentralSkills) ?? noopDeleteCentralSkills,
-    deleteSkillRepository:
-      useCentralSkillsStore((state) => state.deleteSkillRepository) ??
-      noopDeleteSkillRepository,
-    togglePlatformLink:
-      useCentralSkillsStore((state) => state.togglePlatformLink) ?? noopAsync,
-    createTag: useCentralSkillsStore((state) => state.createTag),
-    assignSkillTags: useCentralSkillsStore((state) => state.assignSkillTags),
-    bulkSuggestSkillTags: useCentralSkillsStore((state) => state.bulkSuggestSkillTags),
-    cancelAiTagJob: useCentralSkillsStore((state) => state.cancelAiTagJob),
-    cancelCentralUpdates: useCentralSkillsStore((state) => state.cancelCentralUpdates),
-    acceptAiTagReview: useCentralSkillsStore((state) => state.acceptAiTagReview),
-    skipAiTagReview: useCentralSkillsStore((state) => state.skipAiTagReview),
-    checkSkillUpdates:
-      useCentralSkillsStore((state) => state.checkSkillUpdates) ?? noopCheckUpdates,
-    updateSkills: useCentralSkillsStore((state) => state.updateSkills) ?? noopUpdateSkills,
-    keepRemoteMissingSkills:
-      useCentralSkillsStore((state) => state.keepRemoteMissingSkills) ??
-      noopKeepRemoteMissingSkills,
     subscribeAiTagProgress:
       useCentralSkillsStore((state) => state.subscribeAiTagProgress) ?? noopUnlisten,
     subscribeUpdateProgress:
@@ -292,15 +211,7 @@ export function useCentralSkillsStoreBindings(t: TFunction) {
     togglingAgentId: useCentralSkillsStore((state) => state.togglingAgentId),
     refreshCounts: usePlatformStore((state) => state.refreshCounts) ?? noopAsync,
     availableInstallAgents: getPlatformTargetGroups(platformAgents, categoryVisibility),
-    skillsByAgent: useSkillStore((state) => state.skillsByAgent) ?? EMPTY_SKILLS_BY_AGENT,
-    getSkillsByAgent: useSkillStore((state) => state.getSkillsByAgent) ?? noopGetSkillsByAgent,
     githubImport: useMarketplaceStore((state) => state.githubImport) ?? EMPTY_GITHUB_IMPORT_STATE,
-    previewGitHubRepoImport:
-      useMarketplaceStore((state) => state.previewGitHubRepoImport) ??
-      noopPreviewGitHubRepoImport,
-    importGitHubRepoSkills:
-      useMarketplaceStore((state) => state.importGitHubRepoSkills) ??
-      noopImportGitHubRepoSkills,
     resetGitHubImport:
       useMarketplaceStore((state) => state.resetGitHubImport) ?? noopResetGitHubImport,
     exportSkillportState:

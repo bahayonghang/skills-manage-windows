@@ -10,6 +10,12 @@ import {
   SkillTagSuggestionResult,
   SkillWithLinks,
 } from "@/types";
+import {
+  applyPlatformPathsToAgents,
+  BROWSER_PLATFORM_PATHS,
+  getPlatformSkillDir,
+  getPlatformSkillFilePath,
+} from "@/lib/platformPathPolicy";
 
 export const AI_TAG_PROGRESS_EVENT = "central://ai-tag-progress";
 export const CENTRAL_UPDATE_PROGRESS_EVENT = "central://skill-update-progress";
@@ -51,7 +57,7 @@ export const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "claude-code",
     display_name: "Claude Code",
     category: "coding",
-    global_skills_dir: "~/.claude/skills/",
+    global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -60,7 +66,7 @@ export const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "cursor",
     display_name: "Cursor",
     category: "coding",
-    global_skills_dir: "~/.agents/skills/",
+    global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -69,7 +75,7 @@ export const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "central",
     display_name: "Central Skills",
     category: "central",
-    global_skills_dir: "~/.skillsmanage/skills/",
+    global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -81,8 +87,16 @@ export const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
     id: "fixture-central-skill",
     name: "fixture-central-skill",
     description: "Browser validation fixture for Central and drawer entry flows.",
-    file_path: "~/.skillsmanage/skills/fixture-central-skill/SKILL.md",
-    canonical_path: "~/.skillsmanage/skills/fixture-central-skill",
+    file_path: getPlatformSkillFilePath(
+      BROWSER_PLATFORM_PATHS,
+      "central",
+      "fixture-central-skill"
+    ),
+    canonical_path: getPlatformSkillDir(
+      BROWSER_PLATFORM_PATHS,
+      "central",
+      "fixture-central-skill"
+    ),
     is_central: true,
     source: "browser-fixture",
     scanned_at: "2026-04-17T00:00:00.000Z",
@@ -288,7 +302,7 @@ export function summarizeAiTagResults(skillIds: string[], results: SkillTagSugge
 export function createCentralBrowserFixtureState() {
   return {
     skills: BROWSER_FIXTURE_SKILLS,
-    agents: BROWSER_FIXTURE_AGENTS,
+    agents: applyPlatformPathsToAgents(BROWSER_FIXTURE_AGENTS, BROWSER_PLATFORM_PATHS),
     repositories: [BROWSER_UNKNOWN_REPOSITORY],
     tags: BROWSER_TAGS,
     aiTagReviews: [],

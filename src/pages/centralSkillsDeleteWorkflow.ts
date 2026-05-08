@@ -2,12 +2,12 @@ import type { Dispatch, SetStateAction } from "react";
 import type { TFunction } from "i18next";
 import { toast } from "sonner";
 
+import { usePlatformStore } from "@/stores/platformStore";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import type {
   BatchDeleteCentralSkillPreviewResult,
   BatchDeleteCentralSkillRequest,
-  BatchDeleteCentralSkillResult,
   DeleteSkillRepositoryPreview,
-  DeleteSkillRepositoryResult,
   SkillDetail,
   SkillRepositoryWithStats,
   SkillWithLinks,
@@ -15,34 +15,14 @@ import type {
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
-export interface CentralSkillsDeleteWorkflowDeps {
-  t: TFunction;
-
+export interface CentralSkillsDeleteWorkflowState {
   deleteTargetSkill: SkillWithLinks | null;
   repositoryDeleteTarget: SkillRepositoryWithStats | null;
   repositoryFilter: string;
   selectedSkillIds: string[];
+}
 
-  loadDeletePreview: (skillId: string) => Promise<SkillDetail>;
-  loadBatchDeletePreview: (
-    skillIds: string[]
-  ) => Promise<BatchDeleteCentralSkillPreviewResult>;
-  loadRepositoryDeletePreview: (
-    repositoryId: string
-  ) => Promise<DeleteSkillRepositoryPreview>;
-  deleteCentralSkill: (
-    skillId: string,
-    removeAgentIds: string[]
-  ) => Promise<void>;
-  deleteCentralSkills: (
-    requests: BatchDeleteCentralSkillRequest[]
-  ) => Promise<BatchDeleteCentralSkillResult>;
-  deleteSkillRepository: (
-    repositoryId: string,
-    requests: BatchDeleteCentralSkillRequest[]
-  ) => Promise<DeleteSkillRepositoryResult>;
-  refreshCounts: () => Promise<void>;
-
+export interface CentralSkillsDeleteWorkflowSetters {
   setBatchDeletePreview: StateSetter<BatchDeleteCentralSkillPreviewResult | null>;
   setBatchDeletePreviewError: StateSetter<string | null>;
   setDeletePreview: StateSetter<SkillDetail | null>;
@@ -61,22 +41,34 @@ export interface CentralSkillsDeleteWorkflowDeps {
   setSelectedSkillIds: StateSetter<string[]>;
 }
 
-export function createCentralSkillsDeleteWorkflow(
-  deps: CentralSkillsDeleteWorkflowDeps
-) {
+export interface CentralSkillsDeleteWorkflowDeps {
+  t: TFunction;
+  state: CentralSkillsDeleteWorkflowState;
+  setters: CentralSkillsDeleteWorkflowSetters;
+}
+
+export function useCentralSkillsDeleteWorkflow({
+  t,
+  state,
+  setters,
+}: CentralSkillsDeleteWorkflowDeps) {
+  const loadDeletePreview = useCentralSkillsStore((store) => store.loadDeletePreview);
+  const loadBatchDeletePreview = useCentralSkillsStore((store) => store.loadBatchDeletePreview);
+  const loadRepositoryDeletePreview = useCentralSkillsStore(
+    (store) => store.loadRepositoryDeletePreview
+  );
+  const deleteCentralSkill = useCentralSkillsStore((store) => store.deleteCentralSkill);
+  const deleteCentralSkills = useCentralSkillsStore((store) => store.deleteCentralSkills);
+  const deleteSkillRepository = useCentralSkillsStore((store) => store.deleteSkillRepository);
+  const refreshCounts = usePlatformStore((store) => store.refreshCounts);
+
   const {
-    t,
     deleteTargetSkill,
     repositoryDeleteTarget,
     repositoryFilter,
     selectedSkillIds,
-    loadDeletePreview,
-    loadBatchDeletePreview,
-    loadRepositoryDeletePreview,
-    deleteCentralSkill,
-    deleteCentralSkills,
-    deleteSkillRepository,
-    refreshCounts,
+  } = state;
+  const {
     setBatchDeletePreview,
     setBatchDeletePreviewError,
     setDeletePreview,
@@ -93,7 +85,7 @@ export function createCentralSkillsDeleteWorkflow(
     setRepositoryDeleteTarget,
     setRepositoryFilter,
     setSelectedSkillIds,
-  } = deps;
+  } = setters;
 
   function handleDeleteDialogOpenChange(open: boolean) {
     setIsDeleteDialogOpen(open);
@@ -160,9 +152,7 @@ export function createCentralSkillsDeleteWorkflow(
     }
   }
 
-  async function handleRepositoryDeleteClick(
-    repository: SkillRepositoryWithStats
-  ) {
+  async function handleRepositoryDeleteClick(repository: SkillRepositoryWithStats) {
     if (repository.is_unknown) return;
 
     setRepositoryDeleteTarget(repository);
