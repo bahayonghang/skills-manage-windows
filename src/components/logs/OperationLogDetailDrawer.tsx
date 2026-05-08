@@ -1,7 +1,8 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import { XIcon } from "lucide-react";
+import { Copy, XIcon } from "lucide-react";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 import {
   Dialog,
@@ -53,6 +54,15 @@ export function OperationLogDetailDrawer({
   const titleId = useId();
   const formattedDetails = formatJson(entry?.detailsJson);
 
+  async function handleCopy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(t("logs.copy.success"));
+    } catch (err) {
+      toast.error(t("logs.copy.failure", { error: String(err) }));
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal keepMounted={false}>
@@ -71,18 +81,33 @@ export function OperationLogDetailDrawer({
             <h2 id={titleId} className="truncate text-sm font-semibold">
               {t("logs.detailTitle")}
             </h2>
-            <DialogClose
-              render={
+            <div className="flex items-center gap-1">
+              {entry && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={t("common.close")}
-                />
-              }
-            >
-              <XIcon />
-            </DialogClose>
+                  aria-label={t("logs.copy.id")}
+                  title={t("logs.copy.id")}
+                  onClick={() => handleCopy(entry.id)}
+                  data-testid="logs-detail-copy-id"
+                >
+                  <Copy />
+                </Button>
+              )}
+              <DialogClose
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("common.close")}
+                  />
+                }
+              >
+                <XIcon />
+              </DialogClose>
+            </div>
           </div>
 
           {entry ? (
@@ -116,8 +141,20 @@ export function OperationLogDetailDrawer({
 
               {formattedDetails && (
                 <div className="mt-5">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">
-                    {t("logs.fields.details")}
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      {t("logs.fields.details")}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => handleCopy(formattedDetails)}
+                      data-testid="logs-detail-copy-json"
+                    >
+                      <Copy className="size-3.5" />
+                      {t("logs.copy.json")}
+                    </Button>
                   </div>
                   <pre className="max-h-[38vh] overflow-auto rounded-lg border border-border bg-muted/30 p-3 text-xs leading-relaxed">
                     {formattedDetails}

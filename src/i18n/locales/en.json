@@ -240,6 +240,7 @@
       "level": "Level",
       "target": "Target",
       "action": "Action",
+      "duration": "Duration",
       "result": "Result"
     },
     "fields": {
@@ -254,7 +255,58 @@
       "duration": "Duration",
       "batchId": "Batch ID",
       "details": "Details JSON"
-    }
+    },
+    "kpi": {
+      "total": "Total operations",
+      "successRate": "Success rate",
+      "failures": "Failures / partial",
+      "failuresBreakdown": "{{failed}} failed · {{partial}} partial",
+      "avgDuration": "Avg duration",
+      "basedOn": "Based on {{count}} loaded"
+    },
+    "activity": {
+      "title": "Last 14 days",
+      "description": "{{count}} operation(s)",
+      "dayLabel": "{{date}}: {{count}} operation(s)",
+      "less": "Less",
+      "more": "More"
+    },
+    "groups": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "earlier": "Earlier"
+    },
+    "loadMore": "Load more ({{loaded}} / {{total}})",
+    "allLoaded": "All {{total}} loaded",
+    "errorInline": "Error:",
+    "quickFilters": {
+      "label": "Quick filters",
+      "today": "Today",
+      "last24h": "Last 24h",
+      "last7days": "Last 7 days",
+      "failed": "Failed only",
+      "local": "Local",
+      "ssh": "SSH"
+    },
+    "advancedFilters": {
+      "show": "Advanced filters",
+      "hide": "Hide advanced filters"
+    },
+    "density": {
+      "toggleLabel": "Row density",
+      "compact": "Compact",
+      "comfortable": "Comfortable"
+    },
+    "shortcuts": {
+      "searchHint": "Press / to search"
+    },
+    "copy": {
+      "id": "Copy ID",
+      "json": "Copy JSON",
+      "success": "Copied to clipboard",
+      "failure": "Copy failed: {{error}}"
+    },
+    "emptyCta": "Reset filters"
   },
   "platform": {
     "searchPlaceholder": "Search skills...",

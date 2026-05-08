@@ -1,57 +1,38 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChevronDown,
+  ChevronUp,
   Download,
   Loader2,
   RefreshCw,
   RotateCcw,
+  Rows3,
   Search,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
+import { LogsActivityCard } from "@/components/logs/LogsActivityCard";
+import { LogsEmptyState } from "@/components/logs/LogsEmptyState";
+import { LogsKpiRow } from "@/components/logs/LogsKpiRow";
+import { LogsListRow } from "@/components/logs/LogsListRow";
+import type { LogsListDensity } from "@/components/logs/LogsListRow";
+import { LogsListSkeleton } from "@/components/logs/LogsListSkeleton";
+import { LogsLoadMore } from "@/components/logs/LogsLoadMore";
+import { LogsQuickFilters } from "@/components/logs/LogsQuickFilters";
 import { OperationLogDetailDrawer } from "@/components/logs/OperationLogDetailDrawer";
+import {
+  aggregateLogsKpi,
+  dayBoundsIso,
+  groupLogsByDay,
+} from "@/components/logs/logsUtils";
+import { useLogsKeyboard } from "@/components/logs/useLogsKeyboard";
 import { Button } from "@/components/ui/button";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { Input } from "@/components/ui/input";
 import { useOperationLogStore } from "@/stores/operationLogStore";
 import { OperationLogEntry, OperationLogFilter } from "@/types";
-import { cn } from "@/lib/utils";
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function statusClass(status: string): string {
-  switch (status) {
-    case "succeeded":
-      return "bg-emerald-500/10 text-emerald-600";
-    case "failed":
-      return "bg-destructive/10 text-destructive";
-    case "partial":
-      return "bg-amber-500/10 text-amber-600";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
-
-function levelClass(level: string): string {
-  switch (level) {
-    case "error":
-      return "text-destructive";
-    case "warn":
-      return "text-amber-600";
-    default:
-      return "text-muted-foreground";
-  }
-}
 
 function downloadJson(payload: string) {
   const now = new Date();
@@ -82,6 +63,14 @@ function fromEndDateInput(value: string): string | undefined {
   return value ? `${value}T23:59:59Z` : undefined;
 }
 
+const LOG_DENSITY_STORAGE_KEY = "skillport.logs.density";
+
+function loadDensity(): LogsListDensity {
+  if (typeof window === "undefined") return "comfortable";
+  const stored = window.localStorage.getItem(LOG_DENSITY_STORAGE_KEY);
+  return stored === "compact" ? "compact" : "comfortable";
+}
+
 export function OperationLogsView() {
   const { t } = useTranslation();
   const entries = useOperationLogStore((s) => s.entries);
@@ -99,11 +88,55 @@ export function OperationLogsView() {
   const clearLogs = useOperationLogStore((s) => s.clearLogs);
   const exportLogs = useOperationLogStore((s) => s.exportLogs);
   const closeDetail = useOperationLogStore((s) => s.closeDetail);
+  const loadMore = useOperationLogStore((s) => s.loadMore);
   const [query, setQuery] = useState(filter.query ?? "");
+  const [advancedManual, setAdvancedManual] = useState(false);
+  const showAdvanced =
+    advancedManual ||
+    Boolean(filter.action || filter.createdAfter || filter.createdBefore);
+  const [density, setDensity] = useState<LogsListDensity>(() => loadDensity());
+
+  const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const rowsContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const kpi = useMemo(() => aggregateLogsKpi(entries), [entries]);
+  const groups = useMemo(() => groupLogsByDay(entries), [entries]);
+  const hasFilters = Boolean(
+    filter.query ||
+      filter.targetKind ||
+      filter.level ||
+      filter.status ||
+      filter.action ||
+      filter.createdAfter ||
+      filter.createdBefore,
+  );
 
   useEffect(() => {
     loadLogs();
   }, [loadLogs]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(LOG_DENSITY_STORAGE_KEY, density);
+  }, [density]);
+
+  useEffect(() => {
+    searchInputRef.current =
+      searchContainerRef.current?.querySelector<HTMLInputElement>("input") ??
+      null;
+  }, []);
+
+  useLogsKeyboard({
+    searchInputRef,
+    rowsContainerRef,
+    onRefresh: () => {
+      loadLogs().catch((err) => toast.error(String(err)));
+    },
+    onExport: () => {
+      handleExport();
+    },
+  });
 
   function updateFilter(partial: Partial<OperationLogFilter>) {
     const nextFilter = { ...filter, ...partial, offset: 0 };
@@ -163,7 +196,7 @@ export function OperationLogsView() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => loadLogs().catch((err) => toast.error(String(err)))}
               disabled={isLoading}
@@ -176,7 +209,7 @@ export function OperationLogsView() {
               {t("common.refresh")}
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={handleExport}
               disabled={isExporting || isLoading}
@@ -187,6 +220,21 @@ export function OperationLogsView() {
                 <Download className="size-4" />
               )}
               {t("common.export")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                setDensity((current) =>
+                  current === "compact" ? "comfortable" : "compact",
+                )
+              }
+              aria-label={t("logs.density.toggleLabel")}
+              title={`${t("logs.density.toggleLabel")} · ${t(`logs.density.${density}`)}`}
+              data-testid="logs-density-toggle"
+            >
+              <Rows3 className="size-4" />
+              {t(`logs.density.${density}`)}
             </Button>
             <InlineConfirmAction
               idleAriaLabel={t("logs.clear")}
@@ -202,9 +250,9 @@ export function OperationLogsView() {
 
         <form
           onSubmit={handleSearch}
-          className="mt-4 grid gap-2 lg:grid-cols-[minmax(15rem,1.4fr)_repeat(6,minmax(8rem,0.7fr))_auto]"
+          className="mt-4 grid gap-2 lg:grid-cols-[minmax(15rem,1.4fr)_repeat(3,minmax(8rem,0.9fr))_auto]"
         >
-          <div className="relative">
+          <div ref={searchContainerRef} className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
@@ -246,28 +294,50 @@ export function OperationLogsView() {
             <option value="partial">{t("logs.status.partial")}</option>
             <option value="cancelled">{t("logs.status.cancelled")}</option>
           </select>
-          <Input
-            value={filter.action ?? ""}
-            onChange={(event) => updateFilter({ action: event.target.value })}
-            placeholder={t("logs.filters.action")}
-            aria-label={t("logs.filters.action")}
-          />
-          <Input
-            type="date"
-            value={toDateInput(filter.createdAfter)}
-            onChange={(event) => updateFilter({ createdAfter: fromStartDateInput(event.target.value) })}
-            aria-label={t("logs.filters.from")}
-          />
-          <Input
-            type="date"
-            value={toDateInput(filter.createdBefore)}
-            onChange={(event) => updateFilter({ createdBefore: fromEndDateInput(event.target.value) })}
-            aria-label={t("logs.filters.to")}
-          />
           <Button type="submit" size="sm" disabled={isLoading}>
             {t("common.search")}
           </Button>
         </form>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <LogsQuickFilters filter={filter} onApply={updateFilter} />
+          <button
+            type="button"
+            onClick={() => setAdvancedManual((value) => !value)}
+            aria-expanded={showAdvanced}
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {showAdvanced ? (
+              <ChevronUp className="size-3.5" />
+            ) : (
+              <ChevronDown className="size-3.5" />
+            )}
+            {t(showAdvanced ? "logs.advancedFilters.hide" : "logs.advancedFilters.show")}
+          </button>
+        </div>
+
+        {showAdvanced && (
+          <div className="mt-3 grid gap-2 lg:grid-cols-3">
+            <Input
+              value={filter.action ?? ""}
+              onChange={(event) => updateFilter({ action: event.target.value })}
+              placeholder={t("logs.filters.action")}
+              aria-label={t("logs.filters.action")}
+            />
+            <Input
+              type="date"
+              value={toDateInput(filter.createdAfter)}
+              onChange={(event) => updateFilter({ createdAfter: fromStartDateInput(event.target.value) })}
+              aria-label={t("logs.filters.from")}
+            />
+            <Input
+              type="date"
+              value={toDateInput(filter.createdBefore)}
+              onChange={(event) => updateFilter({ createdBefore: fromEndDateInput(event.target.value) })}
+              aria-label={t("logs.filters.to")}
+            />
+          </div>
+        )}
         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
           <span>{t("logs.total", { count: total })}</span>
           <button
@@ -287,55 +357,68 @@ export function OperationLogsView() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto p-5">
+      <div className="min-h-0 flex-1 space-y-5 overflow-auto p-5">
+        <LogsKpiRow kpi={kpi} total={total} loadedCount={entries.length} />
+
+        {entries.length > 0 && (
+          <LogsActivityCard
+            entries={entries}
+            selectedDayKey={null}
+            onSelectDay={(_dayKey, date) => {
+              const bounds = dayBoundsIso(date);
+              updateFilter({
+                createdAfter: bounds.start,
+                createdBefore: bounds.end,
+              });
+            }}
+          />
+        )}
+
         <div className="overflow-hidden rounded-xl border border-border">
-          <div className="grid grid-cols-[9rem_5rem_minmax(8rem,1fr)_minmax(8rem,1fr)_7rem] gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="grid grid-cols-[9rem_4.5rem_minmax(0,1fr)_minmax(0,1.6fr)_5rem_7rem] gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <div>{t("logs.columns.time")}</div>
             <div>{t("logs.columns.level")}</div>
             <div>{t("logs.columns.target")}</div>
             <div>{t("logs.columns.action")}</div>
+            <div>{t("logs.columns.duration")}</div>
             <div>{t("logs.columns.result")}</div>
           </div>
 
           {isLoading && entries.length === 0 ? (
-            <div className="flex h-44 items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              {t("logs.loading")}
-            </div>
+            <LogsListSkeleton rows={6} />
           ) : entries.length === 0 ? (
-            <div className="flex h-44 items-center justify-center text-sm text-muted-foreground">
-              {t("logs.empty")}
-            </div>
+            <LogsEmptyState
+              hasFilters={hasFilters}
+              onResetFilters={handleResetFilters}
+            />
           ) : (
-            entries.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => handleOpenDetail(entry)}
-                className="grid w-full grid-cols-[9rem_5rem_minmax(8rem,1fr)_minmax(8rem,1fr)_7rem] gap-3 border-b border-border px-3 py-3 text-left text-sm transition-colors last:border-b-0 hover:bg-muted/40"
-              >
-                <span className="text-muted-foreground">{formatDateTime(entry.createdAt)}</span>
-                <span className={cn("font-medium", levelClass(entry.level))}>{entry.level}</span>
-                <span className="min-w-0">
-                  <span className="block truncate">{entry.targetLabel ?? entry.targetId}</span>
-                  <span className="text-xs text-muted-foreground">{entry.targetKind}</span>
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate font-mono text-xs">{entry.action}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {entry.summary}
-                  </span>
-                </span>
-                <span
-                  className={cn(
-                    "inline-flex h-6 items-center justify-center rounded-full px-2 text-xs font-medium",
-                    statusClass(entry.status)
-                  )}
-                >
-                  {t(`logs.status.${entry.status}`, { defaultValue: entry.status })}
-                </span>
-              </button>
-            ))
+            <div ref={rowsContainerRef}>
+              {groups.map((group) => (
+                <div key={group.key}>
+                  <div className="border-b border-border/70 bg-muted/30 px-3 py-1.5 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
+                    {t(`logs.groups.${group.key}`)} · {group.entries.length}
+                  </div>
+                  {group.entries.map((entry) => (
+                    <LogsListRow
+                      key={entry.id}
+                      entry={entry}
+                      density={density}
+                      onOpen={handleOpenDetail}
+                    />
+                  ))}
+                </div>
+              ))}
+              <LogsLoadMore
+                loaded={entries.length}
+                total={total}
+                isLoading={isLoading}
+                onLoadMore={() =>
+                  loadMore().catch((err) =>
+                    toast.error(t("logs.loadError", { error: String(err) })),
+                  )
+                }
+              />
+            </div>
           )}
         </div>
       </div>

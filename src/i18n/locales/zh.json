@@ -240,6 +240,7 @@
       "level": "级别",
       "target": "目标",
       "action": "动作",
+      "duration": "耗时",
       "result": "结果"
     },
     "fields": {
@@ -254,7 +255,58 @@
       "duration": "耗时",
       "batchId": "批次 ID",
       "details": "详情 JSON"
-    }
+    },
+    "kpi": {
+      "total": "总操作数",
+      "successRate": "成功率",
+      "failures": "失败 / 部分",
+      "failuresBreakdown": "失败 {{failed}} · 部分 {{partial}}",
+      "avgDuration": "平均耗时",
+      "basedOn": "基于已加载 {{count}} 条"
+    },
+    "activity": {
+      "title": "近 14 天活动",
+      "description": "{{count}} 次操作",
+      "dayLabel": "{{date}}: {{count}} 次操作",
+      "less": "少",
+      "more": "多"
+    },
+    "groups": {
+      "today": "今天",
+      "yesterday": "昨天",
+      "earlier": "更早"
+    },
+    "loadMore": "加载更多 ({{loaded}} / {{total}})",
+    "allLoaded": "已加载全部 {{total}} 条",
+    "errorInline": "错误：",
+    "quickFilters": {
+      "label": "快捷筛选",
+      "today": "今天",
+      "last24h": "最近 24h",
+      "last7days": "最近 7 天",
+      "failed": "仅失败",
+      "local": "本机",
+      "ssh": "SSH"
+    },
+    "advancedFilters": {
+      "show": "高级筛选",
+      "hide": "收起高级筛选"
+    },
+    "density": {
+      "toggleLabel": "列表密度",
+      "compact": "紧凑",
+      "comfortable": "舒适"
+    },
+    "shortcuts": {
+      "searchHint": "按 / 搜索"
+    },
+    "copy": {
+      "id": "复制 ID",
+      "json": "复制 JSON",
+      "success": "已复制到剪贴板",
+      "failure": "复制失败：{{error}}"
+    },
+    "emptyCta": "重置筛选条件"
   },
   "platform": {
     "searchPlaceholder": "搜索技能...",
