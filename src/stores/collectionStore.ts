@@ -2,6 +2,11 @@ import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import { Collection, CollectionDetail, CollectionBatchInstallResult } from "@/types";
 import { usePlatformStore } from "@/stores/platformStore";
+import {
+  BROWSER_PLATFORM_PATHS,
+  getPlatformSkillDir,
+  getPlatformSkillFilePath,
+} from "@/lib/platformPathPolicy";
 
 const BROWSER_FIXTURE_COLLECTIONS: Collection[] = [
   {
@@ -24,8 +29,16 @@ const BROWSER_FIXTURE_COLLECTION_DETAIL: CollectionDetail = {
       id: "fixture-central-skill",
       name: "fixture-central-skill",
       description: "Browser validation fixture for Collection drawer entry flows.",
-      file_path: "~/.skillsmanage/skills/fixture-central-skill/SKILL.md",
-      canonical_path: "~/.skillsmanage/skills/fixture-central-skill",
+      file_path: getPlatformSkillFilePath(
+        BROWSER_PLATFORM_PATHS,
+        "central",
+        "fixture-central-skill"
+      ),
+      canonical_path: getPlatformSkillDir(
+        BROWSER_PLATFORM_PATHS,
+        "central",
+        "fixture-central-skill"
+      ),
       is_central: true,
       source: "browser-fixture",
       scanned_at: "2026-04-17T00:00:00.000Z",

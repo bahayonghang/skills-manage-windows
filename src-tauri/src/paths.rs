@@ -87,6 +87,73 @@ pub fn universal_skills_dir_from_home(home_dir: &Path) -> PathBuf {
     home_dir.join(".agents").join("skills")
 }
 
+
+#[derive(Debug, Clone, Copy)]
+pub struct PlatformPathSpec<'a> {
+    pub agent_id: &'a str,
+    pub global_skills_dir: &'a str,
+    pub project_skills_dir: Option<&'a str>,
+}
+
+pub fn platform_global_skills_dir(
+    agent_id: &str,
+    specs: &[PlatformPathSpec<'_>],
+) -> Result<PathBuf, String> {
+    let spec = find_platform_path_spec(agent_id, specs)?;
+    Ok(expand_home_path(spec.global_skills_dir))
+}
+
+pub fn platform_project_skills_dir(
+    agent_id: &str,
+    specs: &[PlatformPathSpec<'_>],
+) -> Result<Option<PathBuf>, String> {
+    let spec = find_platform_path_spec(agent_id, specs)?;
+    Ok(spec
+        .project_skills_dir
+        .and_then(non_empty_str)
+        .map(|path| PathBuf::from(path.replace('\\', "/"))))
+}
+
+pub fn platform_global_skills_dir_for_remote(
+    agent_id: &str,
+    specs: &[PlatformPathSpec<'_>],
+    remote_home: &str,
+) -> Result<String, String> {
+    let spec = find_platform_path_spec(agent_id, specs)?;
+    Ok(expand_remote_home_path(spec.global_skills_dir, remote_home))
+}
+
+pub fn platform_project_skills_dir_for_remote(
+    agent_id: &str,
+    specs: &[PlatformPathSpec<'_>],
+    remote_home: &str,
+) -> Result<Option<String>, String> {
+    let spec = find_platform_path_spec(agent_id, specs)?;
+    Ok(spec
+        .project_skills_dir
+        .and_then(non_empty_str)
+        .map(|path| expand_remote_home_path(path, remote_home).replace('\\', "/")))
+}
+
+fn find_platform_path_spec<'a>(
+    agent_id: &str,
+    specs: &'a [PlatformPathSpec<'a>],
+) -> Result<&'a PlatformPathSpec<'a>, String> {
+    specs
+        .iter()
+        .find(|spec| spec.agent_id == agent_id)
+        .ok_or_else(|| format!("Agent '{}' not found", agent_id))
+}
+
+fn non_empty_str(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
 /*
  * ========================================================================
  * 步骤3：补充应用数据与展示路径工具
@@ -313,6 +380,61 @@ mod tests {
     fn expand_remote_home_path_leaves_absolute_paths_unchanged() {
         let expanded = expand_remote_home_path("/opt/skills/custom", "/home/alice");
         assert_eq!(expanded, "/opt/skills/custom");
+    }
+
+
+    #[test]
+    fn platform_global_skills_dir_resolves_agent_home_path() {
+        let specs = [PlatformPathSpec {
+            agent_id: "claude-code",
+            global_skills_dir: "~/.claude/skills",
+            project_skills_dir: Some(".claude/skills"),
+        }];
+
+        let resolved = platform_global_skills_dir("claude-code", &specs).unwrap();
+        assert_eq!(resolved, expand_home_path("~/.claude/skills"));
+    }
+
+    #[test]
+    fn platform_project_skills_dir_keeps_relative_pattern() {
+        let specs = [PlatformPathSpec {
+            agent_id: "claude-code",
+            global_skills_dir: "~/.claude/skills",
+            project_skills_dir: Some(".claude/skills"),
+        }];
+
+        let resolved = platform_project_skills_dir("claude-code", &specs)
+            .unwrap()
+            .unwrap();
+        assert_eq!(resolved, PathBuf::from(".claude/skills"));
+    }
+
+    #[test]
+    fn platform_paths_expand_remote_home_with_posix_separators() {
+        let specs = [PlatformPathSpec {
+            agent_id: "codex",
+            global_skills_dir: "~/.codex/skills",
+            project_skills_dir: Some("~\\.codex\\skills"),
+        }];
+
+        let global = platform_global_skills_dir_for_remote("codex", &specs, "/home/alice").unwrap();
+        let project = platform_project_skills_dir_for_remote("codex", &specs, "/home/alice")
+            .unwrap()
+            .unwrap();
+        assert_eq!(global, "/home/alice/.codex/skills");
+        assert_eq!(project, "/home/alice/.codex/skills");
+    }
+
+    #[test]
+    fn platform_path_lookup_errors_for_unknown_agent() {
+        let specs = [PlatformPathSpec {
+            agent_id: "known",
+            global_skills_dir: "~/.known/skills",
+            project_skills_dir: None,
+        }];
+
+        let error = platform_global_skills_dir("missing", &specs).unwrap_err();
+        assert!(error.contains("missing"));
     }
 
     #[test]

@@ -132,6 +132,7 @@ function buildCollectionStoreState(overrides = {}) {
 function buildPlatformStoreState(overrides = {}) {
   return {
     agents: mockAgents,
+    platformPaths: {},
     skillsByAgent: {},
     collectionCount: 0,
     discoveredCount: 0,
@@ -155,6 +156,9 @@ function buildPlatformStoreState(overrides = {}) {
     applyScanSummary: vi.fn(),
     setCollectionCount: vi.fn(),
     setDiscoveredCount: vi.fn(),
+    addCustomAgent: vi.fn(),
+    updateCustomAgent: vi.fn(),
+    removeCustomAgent: vi.fn(),
     ...overrides,
   };
 }

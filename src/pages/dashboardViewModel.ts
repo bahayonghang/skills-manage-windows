@@ -92,6 +92,10 @@ function getResolvedTarget(activeTarget: TargetSummary | undefined, t: TFunction
   );
 }
 
+function resolveCentralPath(agents: AgentWithStatus[]): string {
+  return agents.find((agent) => agent.id === "central")?.global_skills_dir ?? "";
+}
+
 export function useDashboardViewModel({
   t,
   platformAgents,
@@ -159,9 +163,7 @@ export function useDashboardViewModel({
     [platformAgents, resolvedCategoryVisibility],
   );
 
-  const centralPath =
-    platformAgents.find((agent) => agent.id === "central")
-      ?.global_skills_dir ?? "~/.skillsmanage/skills/";
+  const centralPath = resolveCentralPath(platformAgents);
   const centralTotal =
     centralSkills.length > 0
       ? centralSkills.length

@@ -1,5 +1,5 @@
 import type { AgentWithStatus } from "@/types";
-import { compactHomePath } from "@/lib/path";
+import { getPlatformPathHint as formatPlatformPathHint } from "@/lib/path";
 import {
   filterVisiblePlatformAgents,
   type PlatformCategoryVisibility,
@@ -199,5 +199,5 @@ export function getPlatformTargetMemberNames(
 export function getPlatformTargetPathHint(
   agent: PlatformTarget
 ): string {
-  return compactHomePath(agent.global_skills_dir);
+  return formatPlatformPathHint(agent.global_skills_dir);
 }

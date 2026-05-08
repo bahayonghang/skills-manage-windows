@@ -102,3 +102,7 @@ export function describeSkillsPattern(path: string): string {
   const compact = compactHomePath(path);
   return compact.startsWith("~/") ? compact.slice(2) : compact;
 }
+
+export function getPlatformPathHint(path: string): string {
+  return compactHomePath(path);
+}

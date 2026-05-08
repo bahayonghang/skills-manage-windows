@@ -486,6 +486,7 @@ export function buildCentralStoreState(overrides = {}) {
 export function buildPlatformStoreState(overrides = {}) {
   return {
     agents: mockAgents,
+    platformPaths: {},
     skillsByAgent: {},
     collectionCount: 0,
     discoveredCount: 0,
@@ -508,6 +509,7 @@ export function buildPlatformStoreState(overrides = {}) {
 
 export function buildSkillStoreState(overrides = {}) {
   return {
+    platformPaths: {},
     skillsByAgent: {},
     loadingByAgent: {},
     error: null,

@@ -181,6 +181,7 @@ pub fn run() {
             // Agents
             commands::agents::get_agents,
             commands::agents::detect_agents,
+            commands::agents::list_platform_paths,
             commands::agents::add_custom_agent,
             commands::agents::update_custom_agent,
             commands::agents::remove_custom_agent,

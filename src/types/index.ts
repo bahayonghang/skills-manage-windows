@@ -25,6 +25,13 @@ export interface UpdateCustomAgentConfig {
   global_skills_dir: string;
 }
 
+export interface ResolvedPlatformPaths {
+  global_skills_dir: string;
+  project_skills_dir?: string | null;
+}
+
+export type PlatformPathMap = Record<string, ResolvedPlatformPaths>;
+
 // ─── Scan Types ───────────────────────────────────────────────────────────────
 
 export interface ScanResult {

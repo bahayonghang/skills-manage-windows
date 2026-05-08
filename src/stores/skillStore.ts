@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import { ScannedSkill, SkillWithLinks } from "@/types";
+import {
+  BROWSER_PLATFORM_PATHS,
+  getPlatformSkillDir,
+  getPlatformSkillFilePath,
+} from "@/lib/platformPathPolicy";
 
 const BROWSER_FIXTURE_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {
   "claude-code": [
@@ -8,10 +13,22 @@ const BROWSER_FIXTURE_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {
       id: "fixture-central-skill",
       name: "fixture-central-skill",
       description: "Installed browser validation fixture for platform drawer flows.",
-      file_path: "~/.claude/skills/fixture-central-skill/SKILL.md",
-      dir_path: "~/.claude/skills/fixture-central-skill",
+      file_path: getPlatformSkillFilePath(
+        BROWSER_PLATFORM_PATHS,
+        "claude-code",
+        "fixture-central-skill"
+      ),
+      dir_path: getPlatformSkillDir(
+        BROWSER_PLATFORM_PATHS,
+        "claude-code",
+        "fixture-central-skill"
+      ),
       link_type: "symlink",
-      symlink_target: "~/.skillsmanage/skills/fixture-central-skill",
+      symlink_target: getPlatformSkillDir(
+        BROWSER_PLATFORM_PATHS,
+        "central",
+        "fixture-central-skill"
+      ),
       is_central: true,
     },
   ],
@@ -20,8 +37,16 @@ const BROWSER_FIXTURE_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {
       id: "fixture-universal-skill",
       name: "fixture-universal-skill",
       description: "Installed browser validation fixture for Universal platform flows.",
-      file_path: "~/.agents/skills/fixture-universal-skill/SKILL.md",
-      dir_path: "~/.agents/skills/fixture-universal-skill",
+      file_path: getPlatformSkillFilePath(
+        BROWSER_PLATFORM_PATHS,
+        "codex",
+        "fixture-universal-skill"
+      ),
+      dir_path: getPlatformSkillDir(
+        BROWSER_PLATFORM_PATHS,
+        "codex",
+        "fixture-universal-skill"
+      ),
       link_type: "native",
       is_central: false,
     },
@@ -31,10 +56,22 @@ const BROWSER_FIXTURE_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {
       id: "fixture-central-skill",
       name: "fixture-central-skill",
       description: "Installed browser validation fixture for platform drawer flows.",
-      file_path: "~/.cursor/skills/fixture-central-skill/SKILL.md",
-      dir_path: "~/.cursor/skills/fixture-central-skill",
+      file_path: getPlatformSkillFilePath(
+        BROWSER_PLATFORM_PATHS,
+        "cursor",
+        "fixture-central-skill"
+      ),
+      dir_path: getPlatformSkillDir(
+        BROWSER_PLATFORM_PATHS,
+        "cursor",
+        "fixture-central-skill"
+      ),
       link_type: "symlink",
-      symlink_target: "~/.skillsmanage/skills/fixture-central-skill",
+      symlink_target: getPlatformSkillDir(
+        BROWSER_PLATFORM_PATHS,
+        "central",
+        "fixture-central-skill"
+      ),
       is_central: true,
     },
   ],

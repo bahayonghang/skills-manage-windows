@@ -74,7 +74,7 @@ function App() {
           path="platform/:agentId"
           element={lazyPage(<PlatformView />)}
         />
-        {/* Central Skills: canonical ~/.skillsmanage/skills/ view */}
+        {/* Central Skills: canonical SkillPort library view */}
         <Route
           path="central"
           element={lazyPage(<CentralSkillsView />)}

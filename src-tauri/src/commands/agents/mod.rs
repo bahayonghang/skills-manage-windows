@@ -1,11 +1,20 @@
 use std::path::Path;
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tauri::State;
 use uuid::Uuid;
 
 use crate::db::{self, Agent, DbPool};
-use crate::paths::{expand_home_path, expand_remote_home_path, path_to_string};
+use crate::operation_log::{
+    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
+};
+use crate::paths::{
+    expand_home_path, expand_remote_home_path, path_to_string, platform_global_skills_dir,
+    platform_global_skills_dir_for_remote, platform_project_skills_dir,
+    platform_project_skills_dir_for_remote, PlatformPathSpec,
+};
 use crate::targets::{connect_ssh_target, remote_parent, ActiveTarget, RemoteTargetConfig};
 use crate::AppState;
 
@@ -25,6 +34,64 @@ pub struct AgentWithStatus {
     pub is_detected: bool,
     pub is_builtin: bool,
     pub is_enabled: bool,
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResolvedPlatformPaths {
+    pub global_skills_dir: String,
+    pub project_skills_dir: Option<String>,
+}
+
+fn agent_path_specs(agents: &[Agent]) -> Vec<PlatformPathSpec<'_>> {
+    agents
+        .iter()
+        .map(|agent| PlatformPathSpec {
+            agent_id: agent.id.as_str(),
+            global_skills_dir: agent.global_skills_dir.as_str(),
+            project_skills_dir: agent.project_skills_dir.as_deref(),
+        })
+        .collect()
+}
+
+fn resolved_paths_for_agent(
+    agent: &Agent,
+    specs: &[PlatformPathSpec<'_>],
+    remote_home: Option<&str>,
+) -> Result<ResolvedPlatformPaths, String> {
+    let (global_skills_dir, project_skills_dir) = match remote_home {
+        Some(home) => (
+            platform_global_skills_dir_for_remote(&agent.id, specs, home)?,
+            platform_project_skills_dir_for_remote(&agent.id, specs, home)?,
+        ),
+        None => (
+            path_to_string(&platform_global_skills_dir(&agent.id, specs)?),
+            platform_project_skills_dir(&agent.id, specs)?.map(|path| path_to_string(&path)),
+        ),
+    };
+
+    Ok(ResolvedPlatformPaths {
+        global_skills_dir,
+        project_skills_dir,
+    })
+}
+
+pub async fn list_platform_paths_impl(
+    pool: &DbPool,
+    remote_home: Option<&str>,
+) -> Result<std::collections::HashMap<String, ResolvedPlatformPaths>, String> {
+    let agents = db::get_all_agents(pool).await?;
+    let specs = agent_path_specs(&agents);
+    let mut paths = std::collections::HashMap::with_capacity(agents.len());
+
+    for agent in &agents {
+        paths.insert(
+            agent.id.clone(),
+            resolved_paths_for_agent(agent, &specs, remote_home)?,
+        );
+    }
+
+    Ok(paths)
 }
 
 /// Payload for registering a new user-defined agent.
@@ -275,6 +342,20 @@ pub async fn get_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatu
     }
 }
 
+
+#[tauri::command]
+pub async fn list_platform_paths(
+    state: State<'_, AppState>,
+) -> Result<std::collections::HashMap<String, ResolvedPlatformPaths>, String> {
+    let active_target = state.active_target().await?;
+    let pool = state.active_db().await?;
+    let remote_home = match &active_target {
+        ActiveTarget::Ssh(target) => Some(target.remote_home.as_str()),
+        ActiveTarget::Local => None,
+    };
+    list_platform_paths_impl(&pool, remote_home).await
+}
+
 #[tauri::command]
 pub async fn detect_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatus>, String> {
     let active_target = state.active_target().await?;
@@ -291,12 +372,36 @@ pub async fn add_custom_agent(
     config: CustomAgentConfig,
 ) -> Result<AgentWithStatus, String> {
     let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
     let remote_home = match &active_target {
         ActiveTarget::Ssh(target) => Some(target.remote_home.as_str()),
         ActiveTarget::Local => None,
     };
-    add_custom_agent_impl_for_home(&pool, config, remote_home).await
+    let display_name = config.display_name.clone();
+    let global_skills_dir = config.global_skills_dir.clone();
+    let started_at = Instant::now();
+    let result = add_custom_agent_impl_for_home(&pool, config, remote_home).await;
+
+    let status = if result.is_ok() { "succeeded" } else { "failed" };
+    let summary = match &result {
+        Ok(agent) => format!("Added custom platform {}", agent.display_name),
+        Err(_) => format!("Failed to add custom platform {}", display_name),
+    };
+    let mut event = OperationLogEvent::new("platform", "platform.add", status, summary)
+        .details(json!({
+            "display_name": &display_name,
+            "global_skills_dir": &global_skills_dir,
+        }))
+        .duration_ms(started_at.elapsed().as_millis() as i64);
+    if let Ok(agent) = &result {
+        event = event.subject("platform", &agent.id, &agent.display_name);
+    }
+    if let Err(error) = &result {
+        event = event.error(error);
+    }
+    record_operation_log_best_effort(&pool, target_context, event).await;
+    result
 }
 
 #[tauri::command]
@@ -306,12 +411,34 @@ pub async fn update_custom_agent(
     config: UpdateCustomAgentConfig,
 ) -> Result<AgentWithStatus, String> {
     let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
     let remote_home = match &active_target {
         ActiveTarget::Ssh(target) => Some(target.remote_home.as_str()),
         ActiveTarget::Local => None,
     };
-    update_custom_agent_impl_for_home(&pool, &agent_id, config, remote_home).await
+    let display_name = config.display_name.clone();
+    let global_skills_dir = config.global_skills_dir.clone();
+    let started_at = Instant::now();
+    let result = update_custom_agent_impl_for_home(&pool, &agent_id, config, remote_home).await;
+
+    let status = if result.is_ok() { "succeeded" } else { "failed" };
+    let summary = match &result {
+        Ok(agent) => format!("Updated custom platform {}", agent.display_name),
+        Err(_) => format!("Failed to update custom platform {}", agent_id),
+    };
+    let mut event = OperationLogEvent::new("platform", "platform.update", status, summary)
+        .subject("platform", &agent_id, &display_name)
+        .details(json!({
+            "display_name": &display_name,
+            "global_skills_dir": &global_skills_dir,
+        }))
+        .duration_ms(started_at.elapsed().as_millis() as i64);
+    if let Err(error) = &result {
+        event = event.error(error);
+    }
+    record_operation_log_best_effort(&pool, target_context, event).await;
+    result
 }
 
 #[tauri::command]
@@ -319,8 +446,26 @@ pub async fn remove_custom_agent(
     state: State<'_, AppState>,
     agent_id: String,
 ) -> Result<(), String> {
+    let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    remove_custom_agent_impl(&pool, &agent_id).await
+    let started_at = Instant::now();
+    let result = remove_custom_agent_impl(&pool, &agent_id).await;
+
+    let status = if result.is_ok() { "succeeded" } else { "failed" };
+    let summary = if result.is_ok() {
+        format!("Removed custom platform {}", agent_id)
+    } else {
+        format!("Failed to remove custom platform {}", agent_id)
+    };
+    let mut event = OperationLogEvent::new("platform", "platform.remove", status, summary)
+        .subject("platform", &agent_id, &agent_id)
+        .duration_ms(started_at.elapsed().as_millis() as i64);
+    if let Err(error) = &result {
+        event = event.error(error);
+    }
+    record_operation_log_best_effort(&pool, target_context, event).await;
+    result
 }
 
 #[tauri::command]

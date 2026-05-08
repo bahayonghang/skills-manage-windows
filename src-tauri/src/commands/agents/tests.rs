@@ -39,6 +39,48 @@ fn test_is_detected_nonexistent_path() {
     );
 }
 
+
+#[tokio::test]
+async fn test_list_platform_paths_resolves_local_paths() {
+    let pool = setup_test_db().await;
+    let tmp = TempDir::new().unwrap();
+    let global_dir = tmp.path().join("custom-agent").join("skills");
+
+    let config = CustomAgentConfig {
+        id: Some("path-agent".to_string()),
+        display_name: "Path Agent".to_string(),
+        category: Some("coding".to_string()),
+        global_skills_dir: global_dir.to_string_lossy().into_owned(),
+    };
+    add_custom_agent_impl(&pool, config).await.unwrap();
+
+    let paths = list_platform_paths_impl(&pool, None).await.unwrap();
+    let custom = paths.get("path-agent").unwrap();
+    assert_eq!(custom.global_skills_dir, global_dir.to_string_lossy());
+    assert_eq!(custom.project_skills_dir, None);
+
+    let claude = paths.get("claude-code").unwrap();
+    assert!(
+        claude.global_skills_dir.ends_with(".claude\\skills")
+            || claude.global_skills_dir.ends_with(".claude/skills")
+    );
+    assert_eq!(claude.project_skills_dir.as_deref(), Some(".claude/skills"));
+}
+
+#[tokio::test]
+async fn test_list_platform_paths_resolves_remote_paths() {
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    db::init_database_for_remote_home(&pool, "/home/alice")
+        .await
+        .unwrap();
+
+    let paths = list_platform_paths_impl(&pool, Some("/home/alice")).await.unwrap();
+    let claude = paths.get("claude-code").unwrap();
+
+    assert_eq!(claude.global_skills_dir, "/home/alice/.claude/skills");
+    assert_eq!(claude.project_skills_dir.as_deref(), Some(".claude/skills"));
+}
+
 #[tokio::test]
 async fn test_get_agents_returns_all_builtin() {
     let pool = setup_test_db().await;

@@ -10,19 +10,27 @@ import {
 import {
   AgentWithStatus,
   BootstrapSnapshot,
+  CustomAgentConfig,
   DashboardCentralSummary,
+  PlatformPathMap,
   ScanResult,
   ScanState,
   SkillCountsSummary,
+  UpdateCustomAgentConfig,
 } from "@/types";
 import { markAppPerformance } from "@/lib/performance";
+import {
+  applyPlatformPathsToAgents,
+  BROWSER_PLATFORM_PATHS,
+  collectPlatformPathsFromAgents,
+} from "@/lib/platformPathPolicy";
 
 const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
   {
     id: "claude-code",
     display_name: "Claude Code",
     category: "coding",
-    global_skills_dir: "~/.claude/skills/",
+    global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -31,7 +39,7 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "codex",
     display_name: "Codex CLI",
     category: "coding",
-    global_skills_dir: "~/.agents/skills/",
+    global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -40,7 +48,7 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "gemini-cli",
     display_name: "Gemini CLI",
     category: "coding",
-    global_skills_dir: "~/.agents/skills/",
+    global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -49,7 +57,7 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "opencode",
     display_name: "OpenCode",
     category: "coding",
-    global_skills_dir: "~/.agents/skills/",
+    global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -58,7 +66,7 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "kiro",
     display_name: "Kiro",
     category: "coding",
-    global_skills_dir: "~/.kiro/skills/",
+    global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -67,7 +75,7 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "cursor",
     display_name: "Cursor",
     category: "coding",
-    global_skills_dir: "~/.agents/skills/",
+    global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: false,
@@ -76,7 +84,7 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "openclaw",
     display_name: "OpenClaw",
     category: "lobster",
-    global_skills_dir: "~/.openclaw/skills/",
+    global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: false,
@@ -85,7 +93,7 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     id: "central",
     display_name: "Central Skills",
     category: "central",
-    global_skills_dir: "~/.skillsmanage/skills/",
+    global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
@@ -132,10 +140,12 @@ function buildAgentCounts(
 }
 
 function applyBootstrapSnapshot(
-  snapshot: BootstrapSnapshot
+  snapshot: BootstrapSnapshot,
+  platformPaths: PlatformPathMap = {}
 ): Pick<
   PlatformState,
   | "agents"
+  | "platformPaths"
   | "skillsByAgent"
   | "collectionCount"
   | "discoveredCount"
@@ -143,9 +153,19 @@ function applyBootstrapSnapshot(
   | "lastScanAt"
   | "scanState"
 > {
+  const resolvedPlatformPaths = collectPlatformPathsFromAgents(
+    snapshot.agents,
+    platformPaths
+  );
+  const agents = applyPlatformPathsToAgents(
+    snapshot.agents,
+    resolvedPlatformPaths
+  );
+
   return {
-    agents: snapshot.agents,
-    skillsByAgent: buildAgentCounts(snapshot.agents, snapshot.cachedSkillCounts),
+    agents,
+    platformPaths: resolvedPlatformPaths,
+    skillsByAgent: buildAgentCounts(agents, snapshot.cachedSkillCounts),
     collectionCount: snapshot.collectionCount,
     discoveredCount: snapshot.discoveredCount,
     dashboardCentralSummary:
@@ -166,20 +186,23 @@ async function loadBootstrapState(): Promise<
     | "lastScanAt"
     | "scanState"
     | "categoryVisibility"
+    | "platformPaths"
   >
 > {
-  const [snapshot, rawCategoryVisibility] = await Promise.all([
+  const [snapshot, rawCategoryVisibility, platformPaths] = await Promise.all([
     invoke<BootstrapSnapshot>("get_bootstrap_snapshot"),
     invoke<string | null>("get_setting", {
       key: PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY,
     }),
+    invoke<PlatformPathMap>("list_platform_paths"),
   ]);
+  const bootstrapState = applyBootstrapSnapshot(snapshot, platformPaths);
 
   return {
-    ...applyBootstrapSnapshot(snapshot),
+    ...bootstrapState,
     categoryVisibility: resolvePlatformCategoryVisibility(
       rawCategoryVisibility,
-      snapshot.agents
+      bootstrapState.agents
     ),
   };
 }
@@ -188,6 +211,7 @@ async function loadBootstrapState(): Promise<
 
 interface PlatformState {
   agents: AgentWithStatus[];
+  platformPaths: PlatformPathMap;
   skillsByAgent: Record<string, number>;
   collectionCount: number;
   discoveredCount: number;
@@ -212,12 +236,19 @@ interface PlatformState {
   applyScanSummary: (summary: SkillCountsSummary) => void;
   setCollectionCount: (count: number) => void;
   setDiscoveredCount: (count: number) => void;
+  addCustomAgent: (config: CustomAgentConfig) => Promise<AgentWithStatus>;
+  updateCustomAgent: (
+    agentId: string,
+    config: UpdateCustomAgentConfig
+  ) => Promise<AgentWithStatus>;
+  removeCustomAgent: (agentId: string) => Promise<void>;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 export const usePlatformStore = create<PlatformState>((set, get) => ({
   agents: [],
+  platformPaths: {},
   skillsByAgent: {},
   collectionCount: 0,
   discoveredCount: 0,
@@ -236,14 +267,15 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
 
     if (!isTauriRuntime()) {
       set((state) => ({
-        agents: BROWSER_FIXTURE_AGENTS,
+        agents: applyPlatformPathsToAgents(BROWSER_FIXTURE_AGENTS, BROWSER_PLATFORM_PATHS),
+        platformPaths: BROWSER_PLATFORM_PATHS,
         skillsByAgent: BROWSER_FIXTURE_COUNTS.skills_by_agent,
         collectionCount: 0,
         discoveredCount: 1,
         dashboardCentralSummary: BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY,
         categoryVisibility: resolvePlatformCategoryVisibility(
           null,
-          BROWSER_FIXTURE_AGENTS
+          applyPlatformPathsToAgents(BROWSER_FIXTURE_AGENTS, BROWSER_PLATFORM_PATHS)
         ),
         lastScanAt: "2026-04-23T00:00:00.000Z",
         scanState: "idle",
@@ -313,10 +345,13 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     const refreshPromise = (async () => {
       try {
         await invoke<ScanResult>("scan_all_skills");
-        const snapshot = await invoke<BootstrapSnapshot>("get_bootstrap_snapshot");
+        const [snapshot, platformPaths] = await Promise.all([
+          invoke<BootstrapSnapshot>("get_bootstrap_snapshot"),
+          invoke<PlatformPathMap>("list_platform_paths"),
+        ]);
         if (currentRefreshToken === refreshToken) {
           set((state) => ({
-            ...applyBootstrapSnapshot(snapshot),
+            ...applyBootstrapSnapshot(snapshot, platformPaths),
             isRefreshing: false,
             isLoading: state.isLoading,
             error: null,
@@ -411,6 +446,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     backgroundRefreshPromise = null;
     set((state) => ({
       agents: [],
+      platformPaths: {},
       skillsByAgent: {},
       collectionCount: 0,
       discoveredCount: 0,
@@ -490,5 +526,56 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
 
   setDiscoveredCount: (count) => {
     set({ discoveredCount: count });
+  },
+
+  addCustomAgent: async (config) => {
+    const created = await invoke<AgentWithStatus>("add_custom_agent", { config });
+    set((state) => ({
+      agents: [...state.agents, created],
+      platformPaths: {
+        ...state.platformPaths,
+        [created.id]: {
+          global_skills_dir: created.global_skills_dir,
+          project_skills_dir: created.project_skills_dir ?? null,
+        },
+      },
+      skillsByAgent: { ...state.skillsByAgent, [created.id]: 0 },
+    }));
+    return created;
+  },
+
+  updateCustomAgent: async (agentId, config) => {
+    const updated = await invoke<AgentWithStatus>("update_custom_agent", {
+      agentId,
+      config,
+    });
+    set((state) => ({
+      agents: state.agents.map((agent) =>
+        agent.id === updated.id ? updated : agent
+      ),
+      platformPaths: {
+        ...state.platformPaths,
+        [updated.id]: {
+          global_skills_dir: updated.global_skills_dir,
+          project_skills_dir: updated.project_skills_dir ?? null,
+        },
+      },
+    }));
+    return updated;
+  },
+
+  removeCustomAgent: async (agentId) => {
+    await invoke<void>("remove_custom_agent", { agentId });
+    set((state) => {
+      const nextSkillsByAgent = { ...state.skillsByAgent };
+      const nextPlatformPaths = { ...state.platformPaths };
+      delete nextSkillsByAgent[agentId];
+      delete nextPlatformPaths[agentId];
+      return {
+        agents: state.agents.filter((agent) => agent.id !== agentId),
+        platformPaths: nextPlatformPaths,
+        skillsByAgent: nextSkillsByAgent,
+      };
+    });
   },
 }));
