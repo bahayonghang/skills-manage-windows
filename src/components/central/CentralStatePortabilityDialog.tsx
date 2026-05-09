@@ -75,6 +75,15 @@ function statusTone(status: SkillportStateSkillPreview["status"]) {
   return "border-muted-foreground/30 bg-muted text-muted-foreground";
 }
 
+function isManifestPreviewError(error: unknown) {
+  const message = String(error);
+  return (
+    message.includes("Invalid SkillPort state JSON:") ||
+    message.includes("Unsupported SkillPort state export kind") ||
+    message.includes("Unsupported SkillPort state export version:")
+  );
+}
+
 export function CentralStatePortabilityDialog({
   open,
   onOpenChange,
@@ -97,6 +106,7 @@ export function CentralStatePortabilityDialog({
     Record<string, SkillportStateImportResolutionType>
   >({});
   const [renameValues, setRenameValues] = useState<Record<string, string>>({});
+  const [lastImportResult, setLastImportResult] = useState<SkillportStateImportResult | null>(null);
 
   useEffect(() => {
     tRef.current = t;
@@ -118,6 +128,10 @@ export function CentralStatePortabilityDialog({
   useEffect(() => {
     if (!open) return;
     setActiveTab("export");
+    setPreview(null);
+    setLastImportResult(null);
+    setConflictResolutions({});
+    setRenameValues({});
     void refreshExportPreview();
   }, [open, refreshExportPreview]);
 
@@ -149,6 +163,7 @@ export function CentralStatePortabilityDialog({
       if (typeof selected !== "string") return;
       const text = await readTextFile(selected);
       setImportJson(text);
+      setLastImportResult(null);
       await handlePreview(text);
     } catch (err) {
       toast.error(t("central.portabilityImportError", { error: String(err) }));
@@ -162,6 +177,7 @@ export function CentralStatePortabilityDialog({
     try {
       const nextPreview = await previewImport(trimmed);
       setPreview(nextPreview);
+      setLastImportResult(null);
       setConflictResolutions(
         Object.fromEntries(
           nextPreview.skills
@@ -171,7 +187,10 @@ export function CentralStatePortabilityDialog({
       );
       setRenameValues({});
     } catch (err) {
-      setPreview(null);
+      if (isManifestPreviewError(err)) {
+        setPreview(null);
+        setLastImportResult(null);
+      }
       toast.error(t("central.portabilityPreviewError", { error: String(err) }));
     } finally {
       setIsPreviewLoading(false);
@@ -210,7 +229,7 @@ export function CentralStatePortabilityDialog({
     setIsImporting(true);
     try {
       const result = await importState(importJson.trim(), resolutions);
-      await onAfterImport?.();
+      setLastImportResult(result);
       toast.success(
         t("central.portabilityImportSuccess", {
           imported: result.importedSkills.length,
@@ -221,6 +240,7 @@ export function CentralStatePortabilityDialog({
       if (result.failedSkills.length === 0) {
         onOpenChange(false);
       }
+      await onAfterImport?.();
     } catch (err) {
       toast.error(t("central.portabilityImportError", { error: String(err) }));
     } finally {
@@ -312,16 +332,23 @@ export function CentralStatePortabilityDialog({
               <Textarea
                 data-testid="central-portability-json-input"
                 value={importJson}
-                onChange={(event) => setImportJson(event.target.value)}
+                onChange={(event) => {
+                  setImportJson(event.target.value);
+                  setLastImportResult(null);
+                }}
                 placeholder={t("central.portabilityPastePlaceholder")}
                 className="min-h-28 font-mono text-xs"
               />
               {preview && (
                 <div className="space-y-3">
-                  <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="grid gap-2 sm:grid-cols-4">
                     <SummaryTile label={t("central.portabilityReady")} value={preview.summary.ready} />
                     <SummaryTile label={t("central.portabilityConflicts")} value={preview.summary.conflicts} />
                     <SummaryTile label={t("central.portabilityMissing")} value={preview.summary.missing} />
+                    <SummaryTile
+                      label={t("central.portabilityUnrestorable")}
+                      value={preview.summary.unrestorable}
+                    />
                   </div>
                   <div className="max-h-72 overflow-auto rounded-md border border-border">
                     {preview.skills.map((skill) => (
@@ -334,8 +361,20 @@ export function CentralStatePortabilityDialog({
                             </span>
                           </div>
                           <div className="mt-1 truncate text-xs text-muted-foreground">
-                            {skill.sourcePath ?? skill.reason ?? skill.id}
+                            {skill.sourcePath ?? skill.id}
                           </div>
+                          {(skill.reason || skill.detail) && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              <span>
+                                {skill.reason
+                                  ? t(`central.portabilityReason.${skill.reason}`, {
+                                      defaultValue: skill.reason,
+                                    })
+                                  : t("central.portabilityReason.unknown")}
+                              </span>
+                              {skill.detail ? <span>{`: ${skill.detail}`}</span> : null}
+                            </div>
+                          )}
                         </div>
                         {skill.status === "conflict" && (
                           <div className="flex items-center gap-2">
@@ -372,6 +411,31 @@ export function CentralStatePortabilityDialog({
                       </div>
                     ))}
                   </div>
+                  {lastImportResult && lastImportResult.failedSkills.length > 0 && (
+                    <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                      <div className="text-sm font-medium text-destructive">
+                        {t("central.portabilityImportFailuresTitle", {
+                          count: lastImportResult.failedSkills.length,
+                        })}
+                      </div>
+                      <div className="space-y-2">
+                        {lastImportResult.failedSkills.map((failure) => (
+                          <div
+                            key={`${failure.skillId}-${failure.sourcePath ?? "unknown"}`}
+                            className="rounded-md border border-border bg-background/70 p-2"
+                          >
+                            <div className="text-sm font-medium">{failure.skillId}</div>
+                            {failure.sourcePath ? (
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {failure.sourcePath}
+                              </div>
+                            ) : null}
+                            <div className="mt-1 text-xs text-muted-foreground">{failure.error}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

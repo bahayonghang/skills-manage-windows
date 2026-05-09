@@ -100,7 +100,7 @@ pub(crate) struct SkillFrontmatter {
     pub(crate) description: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RemoteSkillCandidate {
     pub(crate) source_path: String,
     pub(crate) skill_id: String,
@@ -109,6 +109,34 @@ pub(crate) struct RemoteSkillCandidate {
     pub(crate) root_directory: String,
     pub(crate) skill_directory_name: String,
     pub(crate) download_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct InvalidRemoteSkillCandidate {
+    pub(crate) source_path: String,
+    pub(crate) reason: String,
+    pub(crate) detail: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct InspectedGitHubRepoSkills {
+    pub(crate) repo: GitHubRepoRef,
+    pub(crate) valid_candidates: Vec<RemoteSkillCandidate>,
+    pub(crate) invalid_candidates: Vec<InvalidRemoteSkillCandidate>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PartialGitHubRepoImportFailure {
+    pub(crate) source_path: String,
+    pub(crate) error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PartialGitHubRepoImportResult {
+    pub(crate) repo: GitHubRepoRef,
+    pub(crate) imported_skills: Vec<ImportedGitHubSkillSummary>,
+    pub(crate) skipped_skills: Vec<String>,
+    pub(crate) failed_skills: Vec<PartialGitHubRepoImportFailure>,
 }
 
 #[derive(Debug, Clone, Default)]

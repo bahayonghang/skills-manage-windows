@@ -1,4 +1,5 @@
 use chrono::Utc;
+use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
@@ -18,6 +19,7 @@ use crate::{
 
 const EXPORT_KIND: &str = "skillport/state-export";
 const EXPORT_VERSION: u32 = 1;
+const REMOTE_CATALOG_CONCURRENCY_LIMIT: usize = 4;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -120,6 +122,7 @@ pub struct SkillportStateSkillPreview {
     pub status: SkillPreviewStatus,
     pub existing_skill_id: Option<String>,
     pub reason: Option<String>,
+    pub detail: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -189,6 +192,19 @@ struct RepoKey {
 struct ImportGroup {
     repo_url: String,
     selections: Vec<GitHubSkillImportSelection>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RemoteCatalogEntry {
+    valid_source_paths: HashSet<String>,
+    invalid_candidates: HashMap<String, RemoteCatalogInvalidCandidate>,
+    repo_error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct RemoteCatalogInvalidCandidate {
+    reason: String,
+    detail: String,
 }
 
 #[tauri::command]
@@ -365,18 +381,41 @@ pub async fn import_skillport_state(
 async fn export_skillport_state_impl(pool: &DbPool) -> Result<String, String> {
     let github_sources = export_github_sources(pool).await?;
     let skills = db::get_central_skills(pool).await?;
+    let skill_ids = skills
+        .iter()
+        .map(|skill| skill.id.clone())
+        .collect::<Vec<_>>();
+    let mut assignments = db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
+    let mut tags_by_skill = db::get_skill_tags_for_skills(pool, &skill_ids).await?;
+    let unknown_repository = db::get_local_unknown_repository(pool).await?;
     let mut central_skills = Vec::new();
     let mut unrestorable_skills = Vec::new();
 
     for skill in skills {
-        let assignment = db::get_skill_repository_assignment(pool, &skill.id).await?;
+        let assignment =
+            assignments
+                .remove(&skill.id)
+                .unwrap_or_else(|| db::SkillRepositoryAssignment {
+                    repository: unknown_repository.clone(),
+                    source_path: None,
+                    is_source_unknown: true,
+                });
         if let Some(source) = exportable_skill_source(&assignment) {
             central_skills.push(PortableCentralSkill {
                 id: skill.id.clone(),
                 name: skill.name.clone(),
                 description: skill.description.clone(),
                 source,
-                tags: export_skill_tags(pool, &skill.id).await?,
+                tags: tags_by_skill
+                    .remove(&skill.id)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|tag| PortableSkillTag {
+                        name: tag.name,
+                        description: tag.description,
+                        color: tag.color,
+                    })
+                    .collect(),
             });
         } else {
             unrestorable_skills.push(PortableUnrestorableSkill {
@@ -481,18 +520,6 @@ fn exportable_skill_source(
     })
 }
 
-async fn export_skill_tags(pool: &DbPool, skill_id: &str) -> Result<Vec<PortableSkillTag>, String> {
-    let tags = db::get_skill_tags_for_skill(pool, skill_id).await?;
-    Ok(tags
-        .into_iter()
-        .map(|tag| PortableSkillTag {
-            name: tag.name,
-            description: tag.description,
-            color: tag.color,
-        })
-        .collect())
-}
-
 fn parse_manifest(json: &str) -> Result<SkillportStateManifest, String> {
     let manifest: SkillportStateManifest =
         serde_json::from_str(json).map_err(|e| format!("Invalid SkillPort state JSON: {e}"))?;
@@ -511,9 +538,18 @@ fn parse_manifest(json: &str) -> Result<SkillportStateManifest, String> {
 async fn preview_skillport_state_import_impl(
     pool: &DbPool,
     manifest: &SkillportStateManifest,
-    remote_catalog: Option<&HashMap<RepoKey, HashSet<String>>>,
+    remote_catalog: Option<&HashMap<RepoKey, RemoteCatalogEntry>>,
 ) -> Result<SkillportStateImportPreview, String> {
     let existing_sources = existing_registry_identities(pool).await?;
+    let existing_skills = db::get_skills_by_ids(
+        pool,
+        &manifest
+            .central_skills
+            .iter()
+            .map(|skill| skill.id.clone())
+            .collect::<Vec<_>>(),
+    )
+    .await?;
     let mut summary = SkillportStateImportPreviewSummary::default();
     let github_sources = manifest
         .github_sources
@@ -540,34 +576,35 @@ async fn preview_skillport_state_import_impl(
         Vec::with_capacity(manifest.central_skills.len() + manifest.unrestorable_skills.len());
     for skill in &manifest.central_skills {
         let source_path = import_source_path(&skill.source.source_path);
-        let (status, existing_skill_id, reason) = if skill.source.source_type != "github" {
+        let (status, existing_skill_id, reason, detail) = if skill.source.source_type != "github" {
             (
                 SkillPreviewStatus::Unrestorable,
                 None,
                 Some("source_unknown".to_string()),
-            )
-        } else if !remote_catalog_contains(remote_catalog, &skill.source, &source_path) {
-            (
-                SkillPreviewStatus::Missing,
                 None,
-                Some("source_missing".to_string()),
             )
-        } else if let Some(existing) = db::get_skill_by_id(pool, &skill.id).await? {
+        } else if let Some((status, reason, detail)) =
+            remote_catalog_issue(remote_catalog, &skill.source, &source_path)
+        {
+            (status, None, Some(reason), detail)
+        } else if let Some(existing) = existing_skills.get(&skill.id) {
             if existing.is_central {
                 (
                     SkillPreviewStatus::Conflict,
-                    Some(existing.id),
+                    Some(existing.id.clone()),
                     Some("central_skill_exists".to_string()),
+                    None,
                 )
             } else {
                 (
                     SkillPreviewStatus::Unrestorable,
-                    Some(existing.id),
+                    Some(existing.id.clone()),
                     Some("non_central_conflict".to_string()),
+                    None,
                 )
             }
         } else {
-            (SkillPreviewStatus::Ready, None, None)
+            (SkillPreviewStatus::Ready, None, None, None)
         };
         increment_skill_summary(&mut summary, &status);
         skills.push(SkillportStateSkillPreview {
@@ -577,6 +614,7 @@ async fn preview_skillport_state_import_impl(
             status,
             existing_skill_id,
             reason,
+            detail,
         });
     }
 
@@ -589,6 +627,7 @@ async fn preview_skillport_state_import_impl(
             status: SkillPreviewStatus::Unrestorable,
             existing_skill_id: None,
             reason: Some(skill.reason.clone()),
+            detail: None,
         });
     }
 
@@ -614,41 +653,95 @@ fn increment_skill_summary(
 async fn build_remote_catalog(
     pool: &DbPool,
     manifest: &SkillportStateManifest,
-) -> Result<HashMap<RepoKey, HashSet<String>>, String> {
-    let mut catalog = HashMap::new();
+) -> Result<HashMap<RepoKey, RemoteCatalogEntry>, String> {
+    let auth = github_import::github_direct_auth_from_settings(pool).await?;
+    let mut repo_urls = HashMap::<RepoKey, String>::new();
     for source in manifest.central_skills.iter().map(|skill| &skill.source) {
         if source.source_type != "github" {
             continue;
         }
         let key = repo_key(source);
-        if catalog.contains_key(&key) {
-            continue;
-        }
-        let preview =
-            github_import::preview_github_repo_import_impl(pool, &repo_url_for_source(source))
-                .await?;
-        let source_paths = preview
-            .skills
-            .into_iter()
-            .map(|skill| import_source_path(&skill.source_path))
-            .collect::<HashSet<_>>();
-        catalog.insert(key, source_paths);
+        repo_urls
+            .entry(key)
+            .or_insert_with(|| repo_url_for_source(source));
     }
-    Ok(catalog)
+
+    let entries = stream::iter(repo_urls.into_iter().map(|(key, repo_url)| {
+        let auth = auth.clone();
+        async move {
+            let entry = match github_import::inspect_github_repo_skills_with_auth(
+                &repo_url,
+                auth.as_deref(),
+            )
+            .await
+            {
+                Ok(inspected) => RemoteCatalogEntry {
+                    valid_source_paths: inspected
+                        .valid_candidates
+                        .into_iter()
+                        .map(|candidate| import_source_path(&candidate.source_path))
+                        .collect(),
+                    invalid_candidates: inspected
+                        .invalid_candidates
+                        .into_iter()
+                        .map(|candidate| {
+                            (
+                                import_source_path(&candidate.source_path),
+                                RemoteCatalogInvalidCandidate {
+                                    reason: candidate.reason,
+                                    detail: candidate.detail,
+                                },
+                            )
+                        })
+                        .collect(),
+                    repo_error: None,
+                },
+                Err(error) => RemoteCatalogEntry {
+                    valid_source_paths: HashSet::new(),
+                    invalid_candidates: HashMap::new(),
+                    repo_error: Some(error),
+                },
+            };
+            (key, entry)
+        }
+    }))
+    .buffer_unordered(REMOTE_CATALOG_CONCURRENCY_LIMIT)
+    .collect::<Vec<_>>()
+    .await;
+
+    Ok(entries.into_iter().collect())
 }
 
-fn remote_catalog_contains(
-    remote_catalog: Option<&HashMap<RepoKey, HashSet<String>>>,
+fn remote_catalog_issue(
+    remote_catalog: Option<&HashMap<RepoKey, RemoteCatalogEntry>>,
     source: &PortableCentralSkillSource,
     source_path: &str,
-) -> bool {
-    let Some(catalog) = remote_catalog else {
-        return true;
-    };
-    catalog
-        .get(&repo_key(source))
-        .map(|paths| paths.contains(source_path))
-        .unwrap_or(false)
+) -> Option<(SkillPreviewStatus, String, Option<String>)> {
+    let catalog = remote_catalog?;
+    let entry = catalog.get(&repo_key(source))?;
+    if let Some(error) = &entry.repo_error {
+        return Some((
+            SkillPreviewStatus::Unrestorable,
+            "repo_unavailable".to_string(),
+            Some(error.clone()),
+        ));
+    }
+    if let Some(invalid) = entry.invalid_candidates.get(source_path) {
+        return Some((
+            SkillPreviewStatus::Unrestorable,
+            invalid.reason.clone(),
+            Some(invalid.detail.clone()),
+        ));
+    }
+    if entry.valid_source_paths.contains(source_path) {
+        return None;
+    }
+
+    Some((
+        SkillPreviewStatus::Missing,
+        "source_missing".to_string(),
+        None,
+    ))
 }
 
 async fn import_skillport_state_impl(
@@ -656,6 +749,7 @@ async fn import_skillport_state_impl(
     manifest: &SkillportStateManifest,
     resolutions: Vec<SkillportStateImportResolution>,
 ) -> Result<SkillportStateImportResult, String> {
+    let auth = github_import::github_direct_auth_from_settings(pool).await?;
     let (sources_added, sources_skipped) =
         ensure_github_sources(pool, &manifest.github_sources).await?;
     let (groups, mut result) = build_import_groups(pool, manifest, resolutions).await?;
@@ -674,11 +768,12 @@ async fn import_skillport_state_impl(
             .iter()
             .map(|selection| selection.source_path.clone())
             .collect::<Vec<_>>();
-        match github_import::import_github_repo_skills_impl(
+        match github_import::import_github_repo_skills_partially_with_auth(
             pool,
             &group.repo_url,
             group.selections,
             None,
+            auth.as_deref(),
         )
         .await
         {
@@ -693,9 +788,19 @@ async fn import_skillport_state_impl(
                                 .await?;
                     }
                     result.imported_skills.push(SkillportStateImportedSkill {
-                        source_path: skill.source_path,
+                        source_path: export_source_path(&skill.source_path),
                         imported_skill_id: skill.imported_skill_id,
                         skill_name: skill.skill_name,
+                    });
+                }
+                for failure in imported.failed_skills {
+                    let skill = skill_by_source_path.get(&failure.source_path);
+                    result.failed_skills.push(SkillportStateImportFailure {
+                        skill_id: skill
+                            .map(|skill| skill.id.clone())
+                            .unwrap_or_else(|| failure.source_path.clone()),
+                        source_path: Some(export_source_path(&failure.source_path)),
+                        error: failure.error,
                     });
                 }
             }
@@ -778,6 +883,16 @@ async fn build_import_groups(
         .into_iter()
         .map(|resolution| (resolution.skill_id.clone(), resolution))
         .collect::<HashMap<_, _>>();
+    let existing_skills = db::get_skills_by_ids(
+        pool,
+        &manifest
+            .central_skills
+            .iter()
+            .filter(|skill| !resolution_map.contains_key(&skill.id))
+            .map(|skill| skill.id.clone())
+            .collect::<Vec<_>>(),
+    )
+    .await?;
     let mut grouped = HashMap::<RepoKey, ImportGroup>::new();
     let mut result = SkillportStateImportResult::default();
 
@@ -792,7 +907,7 @@ async fn build_import_groups(
         }
 
         let source_path = import_source_path(&skill.source.source_path);
-        let resolution = resolution_for_skill(pool, skill, &resolution_map).await?;
+        let resolution = resolution_for_skill(skill, &resolution_map, &existing_skills);
         if resolution.resolution == DuplicateResolution::Skip {
             result.skipped_skills.push(skill.id.clone());
             continue;
@@ -814,27 +929,27 @@ async fn build_import_groups(
     Ok((grouped.into_values().collect(), result))
 }
 
-async fn resolution_for_skill(
-    pool: &DbPool,
+fn resolution_for_skill(
     skill: &PortableCentralSkill,
     resolutions: &HashMap<String, SkillportStateImportResolution>,
-) -> Result<SkillportStateImportResolution, String> {
+    existing_skills: &HashMap<String, db::Skill>,
+) -> SkillportStateImportResolution {
     if let Some(resolution) = resolutions.get(&skill.id) {
-        return Ok(resolution.clone());
+        return resolution.clone();
     }
 
-    let resolution = if db::get_skill_by_id(pool, &skill.id).await?.is_some() {
+    let resolution = if existing_skills.contains_key(&skill.id) {
         DuplicateResolution::Skip
     } else {
         DuplicateResolution::Overwrite
     };
 
-    Ok(SkillportStateImportResolution {
+    SkillportStateImportResolution {
         skill_id: skill.id.clone(),
         source_path: Some(skill.source.source_path.clone()),
         resolution,
         renamed_skill_id: None,
-    })
+    }
 }
 
 async fn restore_skill_tags(
@@ -945,12 +1060,21 @@ mod tests {
     }
 
     fn github_source(path: &str) -> PortableCentralSkillSource {
+        github_source_for_repo("openai", "skills", "main", path)
+    }
+
+    fn github_source_for_repo(
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        path: &str,
+    ) -> PortableCentralSkillSource {
         PortableCentralSkillSource {
             source_type: "github".to_string(),
-            owner: "openai".to_string(),
-            repo: "skills".to_string(),
-            branch: "main".to_string(),
-            url: "https://github.com/openai/skills".to_string(),
+            owner: owner.to_string(),
+            repo: repo.to_string(),
+            branch: branch.to_string(),
+            url: format!("https://github.com/{owner}/{repo}"),
             source_path: path.to_string(),
         }
     }
@@ -1212,7 +1336,11 @@ mod tests {
         let mut catalog = HashMap::new();
         catalog.insert(
             repo_key(&github_source("skills/ready-skill/SKILL.md")),
-            paths,
+            RemoteCatalogEntry {
+                valid_source_paths: paths,
+                invalid_candidates: HashMap::new(),
+                repo_error: None,
+            },
         );
 
         let preview = preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog))
@@ -1223,6 +1351,99 @@ mod tests {
         assert_eq!(preview.summary.conflicts, 1);
         assert_eq!(preview.summary.missing, 1);
         assert_eq!(preview.summary.unrestorable, 1);
+    }
+
+    #[tokio::test]
+    async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_unrestorable() {
+        let pool = setup_test_db().await;
+        let invalid_source = github_source_for_repo(
+            "openai",
+            "skills",
+            "main",
+            "skills/bad-frontmatter/SKILL.md",
+        );
+        let repo_error_source =
+            github_source_for_repo("other", "skills", "main", "skills/network-error/SKILL.md");
+        let manifest = SkillportStateManifest {
+            kind: EXPORT_KIND.to_string(),
+            version: EXPORT_VERSION,
+            exported_at: "2026-04-25T00:00:00Z".to_string(),
+            exported_from: ExportedFrom {
+                app: "SkillPort".to_string(),
+            },
+            github_sources: vec![],
+            central_skills: vec![
+                PortableCentralSkill {
+                    id: "bad-frontmatter".to_string(),
+                    name: "bad-frontmatter".to_string(),
+                    description: None,
+                    source: invalid_source.clone(),
+                    tags: Vec::new(),
+                },
+                PortableCentralSkill {
+                    id: "network-error".to_string(),
+                    name: "network-error".to_string(),
+                    description: None,
+                    source: repo_error_source.clone(),
+                    tags: Vec::new(),
+                },
+            ],
+            unrestorable_skills: Vec::new(),
+        };
+
+        let mut catalog = HashMap::new();
+        catalog.insert(
+            repo_key(&invalid_source),
+            RemoteCatalogEntry {
+                valid_source_paths: HashSet::new(),
+                invalid_candidates: HashMap::from([(
+                    "skills/bad-frontmatter".to_string(),
+                    RemoteCatalogInvalidCandidate {
+                        reason: "invalid_frontmatter".to_string(),
+                        detail: "Skill 'skills/bad-frontmatter' is missing valid frontmatter."
+                            .to_string(),
+                    },
+                )]),
+                repo_error: None,
+            },
+        );
+        catalog.insert(
+            repo_key(&repo_error_source),
+            RemoteCatalogEntry {
+                valid_source_paths: HashSet::new(),
+                invalid_candidates: HashMap::new(),
+                repo_error: Some("GitHub rate limit was exceeded".to_string()),
+            },
+        );
+
+        let preview = preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog))
+            .await
+            .unwrap();
+
+        let invalid = preview
+            .skills
+            .iter()
+            .find(|skill| skill.id == "bad-frontmatter")
+            .expect("invalid skill");
+        assert_eq!(invalid.status, SkillPreviewStatus::Unrestorable);
+        assert_eq!(invalid.reason.as_deref(), Some("invalid_frontmatter"));
+        assert_eq!(
+            invalid.detail.as_deref(),
+            Some("Skill 'skills/bad-frontmatter' is missing valid frontmatter.")
+        );
+
+        let repo_failure = preview
+            .skills
+            .iter()
+            .find(|skill| skill.id == "network-error")
+            .expect("repo failure skill");
+        assert_eq!(repo_failure.status, SkillPreviewStatus::Unrestorable);
+        assert_eq!(repo_failure.reason.as_deref(), Some("repo_unavailable"));
+        assert_eq!(
+            repo_failure.detail.as_deref(),
+            Some("GitHub rate limit was exceeded")
+        );
+        assert_eq!(preview.summary.unrestorable, 2);
     }
 
     #[tokio::test]

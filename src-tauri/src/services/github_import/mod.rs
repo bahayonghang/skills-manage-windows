@@ -15,6 +15,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Emitter, State};
 use tokio::time::{sleep, Duration as TokioDuration, Instant};
+use uuid::Uuid;
 
 use crate::{
     db::{self, DbPool, Skill},

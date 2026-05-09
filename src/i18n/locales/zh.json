@@ -597,7 +597,19 @@
     "portabilityExportError": "导出失败: {{error}}",
     "portabilityPreviewError": "预览失败: {{error}}",
     "portabilityImportSuccess": "已导入 {{imported}} 个，跳过 {{skipped}} 个，失败 {{failed}} 个",
+    "portabilityImportFailuresTitle": "{{count}} 个技能导入失败",
     "portabilityImportError": "导入失败: {{error}}",
+    "portabilityReason": {
+      "central_skill_exists": "已存在同 ID 的中央技能",
+      "invalid_frontmatter": "导出的技能元数据无效",
+      "invalid_skill_id": "导出的技能 ID 无效",
+      "invalid_utf8": "导出的技能文件不是有效的 UTF-8",
+      "non_central_conflict": "已存在同 ID 的非中央技能",
+      "repo_unavailable": "无法检查源仓库",
+      "source_missing": "导出的 sourcePath 已不存在",
+      "source_unknown": "该技能没有可恢复的 GitHub 来源",
+      "unknown": "不可用"
+    },
     "portabilityStatus": {
       "ready": "可导入",
       "conflict": "冲突",

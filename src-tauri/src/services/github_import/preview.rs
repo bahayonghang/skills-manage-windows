@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub(crate) async fn preview_github_repo_import_impl(
     pool: &DbPool,
     repo_url: &str,
@@ -75,4 +76,3 @@ pub(crate) async fn preview_github_repo_import_ssh_with_auth(
         }
     }
 }
-

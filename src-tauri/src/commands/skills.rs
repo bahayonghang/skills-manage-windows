@@ -24,14 +24,13 @@ pub use crate::services::central_skills::{
     delete_central_skill_impl, delete_central_skill_ssh_impl, delete_central_skills_impl,
     delete_central_skills_ssh_impl, delete_skill_repository_impl, delete_skill_repository_ssh_impl,
     get_central_skills_impl, get_skill_detail_with_row_impl, get_skills_by_agent_impl,
-    list_directory_tree_for_target_impl,
-    preview_delete_central_skills_impl, preview_delete_central_skills_ssh_impl,
-    preview_delete_skill_repository_impl, preview_delete_skill_repository_ssh_impl,
-    BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest,
-    BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, DeleteCentralSkillPreview,
-    DeleteCentralSkillResult, DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult,
-    DirectoryTreeEntry,
-    FailedCentralSkillDelete, SkillDetail, SkillInstallationDetail, SkillWithLinks,
+    list_directory_tree_for_target_impl, preview_delete_central_skills_impl,
+    preview_delete_central_skills_ssh_impl, preview_delete_skill_repository_impl,
+    preview_delete_skill_repository_ssh_impl, BatchDeleteCentralSkillPreviewResult,
+    BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess,
+    DeleteCentralSkillPreview, DeleteCentralSkillResult, DeleteSkillRepositoryPreview,
+    DeleteSkillRepositoryResult, DirectoryTreeEntry, FailedCentralSkillDelete, SkillDetail,
+    SkillInstallationDetail, SkillWithLinks,
 };
 
 /// Tauri command: return all skills installed for a given agent, including

@@ -54,7 +54,8 @@ pub async fn import_discovered_skill_to_central_at(
         .await?
         .ok_or_else(|| format!("Discovered skill '{}' not found", discovered_skill_id))?;
 
-    let result = import_skill_dir_to_central_at(pool, Path::new(&skill.dir_path), central_dir).await?;
+    let result =
+        import_skill_dir_to_central_at(pool, Path::new(&skill.dir_path), central_dir).await?;
 
     db::delete_discovered_skill(pool, discovered_skill_id).await?;
 

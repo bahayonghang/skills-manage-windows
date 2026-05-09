@@ -114,7 +114,12 @@ fn obsidian_vault_id(vault_path: &str) -> String {
 }
 
 fn obsidian_qualified_id(vault_path: &str, skill_id: &str) -> String {
-    format!("{}__{}__{}", OBSIDIAN_PLATFORM_ID, obsidian_vault_id(vault_path), skill_id)
+    format!(
+        "{}__{}__{}",
+        OBSIDIAN_PLATFORM_ID,
+        obsidian_vault_id(vault_path),
+        skill_id
+    )
 }
 
 fn is_obsidian_vault_dir(path: &Path) -> bool {
@@ -339,7 +344,9 @@ pub async fn get_obsidian_vault_skills_impl(
         })
         .ok_or_else(|| format!("Obsidian vault '{}' not found", vault_id))?;
 
-    Ok(scan_obsidian_vault(&vault_path, &paths::central_skills_dir())
-        .map(|project| project.skills)
-        .unwrap_or_default())
+    Ok(
+        scan_obsidian_vault(&vault_path, &paths::central_skills_dir())
+            .map(|project| project.skills)
+            .unwrap_or_default(),
+    )
 }

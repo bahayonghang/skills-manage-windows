@@ -676,6 +676,7 @@ export interface SkillportStateSkillPreview {
   status: SkillportStateSkillStatus;
   existingSkillId?: string | null;
   reason?: string | null;
+  detail?: string | null;
 }
 
 export interface SkillportStateImportPreview {

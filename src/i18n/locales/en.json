@@ -597,7 +597,19 @@
     "portabilityExportError": "Export failed: {{error}}",
     "portabilityPreviewError": "Preview failed: {{error}}",
     "portabilityImportSuccess": "Imported {{imported}}, skipped {{skipped}}, failed {{failed}}",
+    "portabilityImportFailuresTitle": "{{count}} skill(s) failed to import",
     "portabilityImportError": "Import failed: {{error}}",
+    "portabilityReason": {
+      "central_skill_exists": "A Central skill with the same ID already exists",
+      "invalid_frontmatter": "The exported skill metadata is invalid",
+      "invalid_skill_id": "The exported skill ID is invalid",
+      "invalid_utf8": "The exported skill file is not valid UTF-8",
+      "non_central_conflict": "A non-Central skill with the same ID already exists",
+      "repo_unavailable": "The source repository could not be inspected",
+      "source_missing": "The exported source path no longer exists",
+      "source_unknown": "This skill has no restorable GitHub source",
+      "unknown": "Unavailable"
+    },
     "portabilityStatus": {
       "ready": "Ready",
       "conflict": "Conflict",

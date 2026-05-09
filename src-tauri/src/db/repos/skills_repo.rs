@@ -231,6 +231,29 @@ pub async fn get_skill_by_id(pool: &DbPool, skill_id: &str) -> Result<Option<Ski
         .map_err(|e| e.to_string())
 }
 
+/// Retrieve multiple skills by ID in one round-trip.
+pub async fn get_skills_by_ids(
+    pool: &DbPool,
+    skill_ids: &[String],
+) -> Result<HashMap<String, Skill>, String> {
+    if skill_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = skill_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!("SELECT * FROM skills WHERE id IN ({placeholders})");
+    let mut query = sqlx::query_as::<_, Skill>(&sql);
+    for skill_id in skill_ids {
+        query = query.bind(skill_id);
+    }
+
+    let skills = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    Ok(skills
+        .into_iter()
+        .map(|skill| (skill.id.clone(), skill))
+        .collect())
+}
+
 /// Delete a skill and all its installation records.
 pub async fn delete_skill(pool: &DbPool, skill_id: &str) -> Result<(), String> {
     sqlx::query("DELETE FROM skill_update_states WHERE skill_id = ?")

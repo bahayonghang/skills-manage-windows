@@ -50,6 +50,14 @@ const preview: SkillportStateImportPreview = {
       status: "conflict",
       existingSkillId: "frontend-design",
     },
+    {
+      id: "broken-skill",
+      name: "broken-skill",
+      sourcePath: "skills/broken-skill/SKILL.md",
+      status: "unrestorable",
+      reason: "invalid_frontmatter",
+      detail: "Skill 'skills/broken-skill' is missing valid frontmatter.",
+    },
   ],
   summary: {
     sourcesToAdd: 1,
@@ -57,7 +65,7 @@ const preview: SkillportStateImportPreview = {
     ready: 1,
     conflicts: 1,
     missing: 0,
-    unrestorable: 0,
+    unrestorable: 1,
   },
 };
 
@@ -120,8 +128,38 @@ describe("CentralStatePortabilityDialog", () => {
     expect(await screen.findByText("frontend-design")).toBeInTheDocument();
   });
 
+  it("renders unrestorable preview diagnostics", async () => {
+    const previewImport = vi.fn().mockResolvedValue(preview);
+
+    render(
+      <CentralStatePortabilityDialog
+        open
+        onOpenChange={vi.fn()}
+        exportState={vi.fn().mockResolvedValue(manifestJson)}
+        previewImport={previewImport}
+        importState={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("central-portability-import-tab"));
+    fireEvent.change(screen.getByTestId("central-portability-json-input"), {
+      target: { value: manifestJson },
+    });
+    fireEvent.click(screen.getByTestId("central-portability-preview"));
+
+    expect(await screen.findByText("broken-skill")).toBeInTheDocument();
+    expect(screen.getAllByText("不可恢复").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText((_, element) =>
+        element?.textContent ===
+        "导出的技能元数据无效: Skill 'skills/broken-skill' is missing valid frontmatter."
+      )
+    ).toBeInTheDocument();
+  });
+
   it("submits ready and conflict resolutions", async () => {
     const previewImport = vi.fn().mockResolvedValue(preview);
+    const onOpenChange = vi.fn();
     const importState = vi.fn().mockResolvedValue({
       sourcesAdded: 1,
       sourcesSkipped: 0,
@@ -141,7 +179,7 @@ describe("CentralStatePortabilityDialog", () => {
     render(
       <CentralStatePortabilityDialog
         open
-        onOpenChange={vi.fn()}
+        onOpenChange={onOpenChange}
         exportState={vi.fn().mockResolvedValue(manifestJson)}
         previewImport={previewImport}
         importState={importState}
@@ -179,5 +217,87 @@ describe("CentralStatePortabilityDialog", () => {
       ])
     );
     expect(onAfterImport).toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("keeps the dialog open and renders failed imports on partial success", async () => {
+    const previewImport = vi.fn().mockResolvedValue(preview);
+    const onOpenChange = vi.fn();
+    const importState = vi.fn().mockResolvedValue({
+      sourcesAdded: 1,
+      sourcesSkipped: 0,
+      importedSkills: [
+        {
+          sourcePath: "skills/.system/openai-docs/SKILL.md",
+          importedSkillId: "openai-docs",
+          skillName: "openai-docs",
+        },
+      ],
+      skippedSkills: [],
+      failedSkills: [
+        {
+          skillId: "frontend-design",
+          sourcePath: "skills/frontend-design/SKILL.md",
+          error: "Target directory already exists.",
+        },
+      ],
+      tagsRestored: 1,
+    });
+
+    render(
+      <CentralStatePortabilityDialog
+        open
+        onOpenChange={onOpenChange}
+        exportState={vi.fn().mockResolvedValue(manifestJson)}
+        previewImport={previewImport}
+        importState={importState}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("central-portability-import-tab"));
+    fireEvent.change(screen.getByTestId("central-portability-json-input"), {
+      target: { value: manifestJson },
+    });
+    fireEvent.click(screen.getByTestId("central-portability-preview"));
+
+    await screen.findByText("frontend-design");
+    fireEvent.click(screen.getByTestId("central-portability-run-import"));
+
+    expect(await screen.findByText("1 个技能导入失败")).toBeInTheDocument();
+    expect(screen.getByText("Target directory already exists.")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("only clears the preview for manifest errors", async () => {
+    const previewImport = vi
+      .fn()
+      .mockResolvedValueOnce(preview)
+      .mockRejectedValueOnce(new Error("Repository access denied"))
+      .mockRejectedValueOnce(new Error("Invalid SkillPort state JSON: bad json"));
+
+    render(
+      <CentralStatePortabilityDialog
+        open
+        onOpenChange={vi.fn()}
+        exportState={vi.fn().mockResolvedValue(manifestJson)}
+        previewImport={previewImport}
+        importState={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("central-portability-import-tab"));
+    fireEvent.change(screen.getByTestId("central-portability-json-input"), {
+      target: { value: manifestJson },
+    });
+    fireEvent.click(screen.getByTestId("central-portability-preview"));
+    expect(await screen.findByText("frontend-design")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("central-portability-preview"));
+    expect(await screen.findByText("frontend-design")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("central-portability-preview"));
+    await waitFor(() =>
+      expect(screen.queryByText("frontend-design")).not.toBeInTheDocument()
+    );
   });
 });

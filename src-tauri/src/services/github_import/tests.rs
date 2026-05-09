@@ -143,6 +143,19 @@ mod tests {
         ])
     }
 
+    fn mixed_valid_invalid_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "skills/valid-skill/SKILL.md",
+                sample_frontmatter("Valid Skill", "Valid"),
+            ),
+            (
+                "skills/bad-frontmatter/SKILL.md",
+                "# missing frontmatter\n".to_string(),
+            ),
+        ])
+    }
+
     fn repository_archive(files: &[(&str, &[u8])]) -> Vec<u8> {
         let encoder = GzEncoder::new(Vec::new(), Compression::default());
         let mut builder = tar::Builder::new(encoder);
@@ -546,6 +559,152 @@ mod tests {
         assert!(
             occupied.contains(&commit.skill_id),
             "skip leaves the existing canonical id occupied without needing a new id"
+        );
+    }
+
+    #[test]
+    fn inspect_snapshot_keeps_valid_candidates_and_reports_invalid_ones() {
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+
+        let inspected =
+            inspect_repo_skill_candidates_from_snapshot_at_path(&repo, &mixed_valid_invalid_snapshot(), None)
+                .expect("inspect");
+
+        assert_eq!(inspected.valid_candidates.len(), 1);
+        assert_eq!(inspected.valid_candidates[0].source_path, "skills/valid-skill");
+        assert_eq!(inspected.invalid_candidates.len(), 1);
+        assert_eq!(
+            inspected.invalid_candidates[0].source_path,
+            "skills/bad-frontmatter"
+        );
+        assert_eq!(
+            inspected.invalid_candidates[0].reason,
+            "invalid_frontmatter"
+        );
+    }
+
+    #[tokio::test]
+    async fn partial_import_continues_after_invalid_skill_and_preserves_successful_imports() {
+        let pool = setup_test_db().await;
+        let central_root = tempdir().expect("central");
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+            .bind(central_root.path().to_string_lossy().into_owned())
+            .execute(&pool)
+            .await
+            .expect("update central");
+
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+        let snapshot = mixed_valid_invalid_snapshot();
+        let inspected =
+            inspect_repo_skill_candidates_from_snapshot_at_path(&repo, &snapshot, None)
+                .expect("inspect");
+
+        let result = import_github_repo_skills_from_snapshot_partially(
+            &pool,
+            &repo,
+            &snapshot,
+            inspected,
+            vec![
+                GitHubSkillImportSelection {
+                    source_path: "skills/valid-skill".to_string(),
+                    resolution: DuplicateResolution::Overwrite,
+                    renamed_skill_id: None,
+                },
+                GitHubSkillImportSelection {
+                    source_path: "skills/bad-frontmatter".to_string(),
+                    resolution: DuplicateResolution::Overwrite,
+                    renamed_skill_id: None,
+                },
+            ],
+            central_root.path(),
+            None,
+        )
+        .await
+        .expect("partial import");
+
+        assert_eq!(result.imported_skills.len(), 1);
+        assert_eq!(result.failed_skills.len(), 1);
+        assert_eq!(result.failed_skills[0].source_path, "skills/bad-frontmatter");
+        assert!(db::get_skill_by_id(&pool, "valid-skill")
+            .await
+            .expect("db")
+            .is_some());
+        assert!(central_root.path().join("valid-skill").join("SKILL.md").exists());
+    }
+
+    #[tokio::test]
+    async fn partial_import_cleans_staging_dirs_after_per_skill_failure() {
+        let pool = setup_test_db().await;
+        let central_root = tempdir().expect("central");
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+            .bind(central_root.path().to_string_lossy().into_owned())
+            .execute(&pool)
+            .await
+            .expect("update central");
+
+        let conflicting_dir = central_root.path().join("commit-imported");
+        std::fs::create_dir_all(&conflicting_dir).expect("mkdir conflict");
+        std::fs::write(conflicting_dir.join("sentinel.txt"), "keep").expect("write sentinel");
+
+        let repo = GitHubRepoRef {
+            owner: "anthropics".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/anthropics/skills".to_string(),
+        };
+        let snapshot = multi_skill_snapshot();
+        let inspected =
+            inspect_repo_skill_candidates_from_snapshot_at_path(&repo, &snapshot, None)
+                .expect("inspect");
+
+        let result = import_github_repo_skills_from_snapshot_partially(
+            &pool,
+            &repo,
+            &snapshot,
+            inspected,
+            vec![
+                GitHubSkillImportSelection {
+                    source_path: "skills/agent-planner".to_string(),
+                    resolution: DuplicateResolution::Overwrite,
+                    renamed_skill_id: None,
+                },
+                GitHubSkillImportSelection {
+                    source_path: "skills/commit".to_string(),
+                    resolution: DuplicateResolution::Rename,
+                    renamed_skill_id: Some("commit-imported".to_string()),
+                },
+            ],
+            central_root.path(),
+            None,
+        )
+        .await
+        .expect("partial import");
+
+        assert_eq!(result.imported_skills.len(), 1);
+        assert_eq!(result.failed_skills.len(), 1);
+        assert_eq!(result.failed_skills[0].source_path, "skills/commit");
+        assert!(central_root.path().join("agent-planner").join("SKILL.md").exists());
+        assert!(conflicting_dir.join("sentinel.txt").exists());
+
+        let leaked_staging = std::fs::read_dir(central_root.path())
+            .expect("read central")
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.starts_with(".skillport-import-") || name.starts_with(".skillport-backup-"))
+            .collect::<Vec<_>>();
+        assert!(
+            leaked_staging.is_empty(),
+            "temporary staging directories should be cleaned up: {leaked_staging:?}"
         );
     }
 

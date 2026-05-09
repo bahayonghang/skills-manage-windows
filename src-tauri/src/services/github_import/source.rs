@@ -177,6 +177,29 @@ pub(crate) async fn fetch_repo_skill_candidates_from_source(
     build_repo_skill_candidates_from_snapshot_at_path(repo, &snapshot, source_path)
 }
 
+pub(crate) async fn inspect_github_repo_skills_with_auth(
+    repo_url: &str,
+    auth_token: Option<&str>,
+) -> Result<InspectedGitHubRepoSkills, String> {
+    let resolved = resolve_repo_source(repo_url, auth_token).await?;
+    inspect_repo_skill_candidates_from_source(
+        &resolved.repo,
+        resolved.source_path.as_deref(),
+        auth_token,
+    )
+    .await
+}
+
+pub(crate) async fn inspect_repo_skill_candidates_from_source(
+    repo: &GitHubRepoRef,
+    source_path: Option<&str>,
+    auth_token: Option<&str>,
+) -> Result<InspectedGitHubRepoSkills, String> {
+    let client = github_client()?;
+    let snapshot = download_repo_snapshot(&client, repo, auth_token).await?;
+    inspect_repo_skill_candidates_from_snapshot_at_path(repo, &snapshot, source_path)
+}
+
 #[cfg(test)]
 fn build_repo_skill_candidates_from_snapshot(
     repo: &GitHubRepoRef,
@@ -190,58 +213,54 @@ pub(crate) fn build_repo_skill_candidates_from_snapshot_at_path(
     snapshot: &GitHubRepoSnapshot,
     source_path: Option<&str>,
 ) -> Result<Vec<RemoteSkillCandidate>, String> {
+    let inspected = inspect_repo_skill_candidates_from_snapshot_at_path(repo, snapshot, source_path)?;
+    if let Some(invalid) = inspected.invalid_candidates.into_iter().next() {
+        return Err(invalid.detail);
+    }
+    Ok(inspected.valid_candidates)
+}
+
+pub(crate) fn inspect_repo_skill_candidates_from_snapshot_at_path(
+    repo: &GitHubRepoRef,
+    snapshot: &GitHubRepoSnapshot,
+    source_path: Option<&str>,
+) -> Result<InspectedGitHubRepoSkills, String> {
     let direct_endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
     let manifests = discover_skill_manifests(snapshot, source_path)?;
 
-    let mut candidates = Vec::with_capacity(manifests.len());
+    let mut valid_candidates = Vec::with_capacity(manifests.len());
+    let mut invalid_candidates = Vec::new();
     let mut seen_names = HashSet::new();
     for manifest in manifests {
-        let raw = snapshot
+        let outcome = snapshot
             .files
             .get(&manifest.skill_md_path)
-            .ok_or_else(|| format!("Missing snapshot file '{}'.", manifest.skill_md_path))?;
-        let content = String::from_utf8(raw.clone())
-            .map_err(|_| format!("Skill '{}' is not valid UTF-8.", manifest.source_path))?;
-        let frontmatter = parse_frontmatter(&content).ok_or_else(|| {
-            if manifest.source_path == "." {
-                "Repository root SKILL.md is missing valid frontmatter.".to_string()
-            } else {
-                format!(
-                    "Skill '{}' is missing valid frontmatter.",
-                    manifest.source_path
+            .ok_or_else(|| format!("Missing snapshot file '{}'.", manifest.skill_md_path))
+            .and_then(|raw| {
+                build_remote_skill_candidate(
+                    repo,
+                    &manifest,
+                    raw.clone(),
+                    direct_endpoint,
                 )
+                .map_err(|invalid| invalid.detail.clone())
+            });
+
+        match outcome {
+            Ok(candidate) => {
+                if seen_names.insert(candidate.skill_name.clone()) {
+                    valid_candidates.push(candidate);
+                }
             }
-        })?;
-        if !seen_names.insert(frontmatter.name.clone()) {
-            continue;
+            Err(error) => invalid_candidates.push(invalid_candidate_from_manifest(&manifest, &error)),
         }
-
-        let skill_id = if manifest.source_path == "." {
-            let repo_skill_id = sanitize_skill_id(&repo.repo)?;
-            repo_skill_id
-                .strip_suffix("-skill")
-                .unwrap_or(&repo_skill_id)
-                .to_string()
-        } else {
-            sanitize_skill_id(&manifest.skill_directory_name)?
-        };
-
-        candidates.push(RemoteSkillCandidate {
-            source_path: manifest.source_path.clone(),
-            skill_id,
-            skill_name: frontmatter.name,
-            description: frontmatter.description,
-            root_directory: manifest.root_directory,
-            skill_directory_name: if manifest.source_path == "." {
-                repo.repo.clone()
-            } else {
-                manifest.skill_directory_name
-            },
-            download_url: raw_file_url(direct_endpoint, repo, &manifest.skill_md_path),
-        });
     }
 
-    Ok(candidates)
+    Ok(InspectedGitHubRepoSkills {
+        repo: repo.clone(),
+        valid_candidates,
+        invalid_candidates,
+    })
 }
 
 async fn build_remote_repo_skill_candidates_from_workspace(
@@ -262,48 +281,102 @@ async fn build_remote_repo_skill_candidates_from_workspace(
     for manifest in manifests {
         let skill_md_remote_path = remote_join(remote_repo_dir, &manifest.skill_md_path);
         let raw = connection.read_file(&skill_md_remote_path).await?;
-        let content = String::from_utf8(raw)
-            .map_err(|_| format!("Skill '{}' is not valid UTF-8.", manifest.source_path))?;
-        let frontmatter = parse_frontmatter(&content).ok_or_else(|| {
-            if manifest.source_path == "." {
-                "Repository root SKILL.md is missing valid frontmatter.".to_string()
-            } else {
-                format!(
-                    "Skill '{}' is missing valid frontmatter.",
-                    manifest.source_path
-                )
-            }
-        })?;
-        if !seen_names.insert(frontmatter.name.clone()) {
+        let candidate = build_remote_skill_candidate(repo, &manifest, raw, direct_endpoint)
+            .map_err(|invalid| invalid.detail)?;
+        if !seen_names.insert(candidate.skill_name.clone()) {
             continue;
         }
 
-        let skill_id = if manifest.source_path == "." {
-            let repo_skill_id = sanitize_skill_id(&repo.repo)?;
-            repo_skill_id
-                .strip_suffix("-skill")
-                .unwrap_or(&repo_skill_id)
-                .to_string()
-        } else {
-            sanitize_skill_id(&manifest.skill_directory_name)?
-        };
-
-        candidates.push(RemoteSkillCandidate {
-            source_path: manifest.source_path.clone(),
-            skill_id,
-            skill_name: frontmatter.name,
-            description: frontmatter.description,
-            root_directory: manifest.root_directory,
-            skill_directory_name: if manifest.source_path == "." {
-                repo.repo.clone()
-            } else {
-                manifest.skill_directory_name
-            },
-            download_url: raw_file_url(direct_endpoint, repo, &manifest.skill_md_path),
-        });
+        candidates.push(candidate);
     }
 
     Ok(candidates)
+}
+
+fn build_remote_skill_candidate(
+    repo: &GitHubRepoRef,
+    manifest: &SnapshotSkillManifest,
+    raw: Vec<u8>,
+    direct_endpoint: &GitHubMirrorEndpoint,
+) -> Result<RemoteSkillCandidate, InvalidRemoteSkillCandidate> {
+    let content = String::from_utf8(raw).map_err(|_| InvalidRemoteSkillCandidate {
+        source_path: manifest.source_path.clone(),
+        reason: "invalid_utf8".to_string(),
+        detail: invalid_utf8_message(manifest),
+    })?;
+    let frontmatter = parse_frontmatter(&content).ok_or_else(|| InvalidRemoteSkillCandidate {
+        source_path: manifest.source_path.clone(),
+        reason: "invalid_frontmatter".to_string(),
+        detail: invalid_frontmatter_message(manifest),
+    })?;
+
+    let skill_id = if manifest.source_path == "." {
+        let repo_skill_id =
+            sanitize_skill_id(&repo.repo).map_err(|error| InvalidRemoteSkillCandidate {
+                source_path: manifest.source_path.clone(),
+                reason: "invalid_skill_id".to_string(),
+                detail: error,
+            })?;
+        repo_skill_id
+            .strip_suffix("-skill")
+            .unwrap_or(&repo_skill_id)
+            .to_string()
+    } else {
+        sanitize_skill_id(&manifest.skill_directory_name).map_err(|error| {
+            InvalidRemoteSkillCandidate {
+                source_path: manifest.source_path.clone(),
+                reason: "invalid_skill_id".to_string(),
+                detail: error,
+            }
+        })?
+    };
+
+    Ok(RemoteSkillCandidate {
+        source_path: manifest.source_path.clone(),
+        skill_id,
+        skill_name: frontmatter.name,
+        description: frontmatter.description,
+        root_directory: manifest.root_directory.clone(),
+        skill_directory_name: if manifest.source_path == "." {
+            repo.repo.clone()
+        } else {
+            manifest.skill_directory_name.clone()
+        },
+        download_url: raw_file_url(direct_endpoint, repo, &manifest.skill_md_path),
+    })
+}
+
+fn invalid_candidate_from_manifest(
+    manifest: &SnapshotSkillManifest,
+    detail: &str,
+) -> InvalidRemoteSkillCandidate {
+    let reason = if detail.contains("valid frontmatter") {
+        "invalid_frontmatter"
+    } else if detail.contains("valid UTF-8") {
+        "invalid_utf8"
+    } else {
+        "invalid_skill_id"
+    };
+    InvalidRemoteSkillCandidate {
+        source_path: manifest.source_path.clone(),
+        reason: reason.to_string(),
+        detail: detail.to_string(),
+    }
+}
+
+fn invalid_utf8_message(manifest: &SnapshotSkillManifest) -> String {
+    format!("Skill '{}' is not valid UTF-8.", manifest.source_path)
+}
+
+fn invalid_frontmatter_message(manifest: &SnapshotSkillManifest) -> String {
+    if manifest.source_path == "." {
+        "Repository root SKILL.md is missing valid frontmatter.".to_string()
+    } else {
+        format!(
+            "Skill '{}' is missing valid frontmatter.",
+            manifest.source_path
+        )
+    }
 }
 
 async fn remote_skill_manifest_paths(
