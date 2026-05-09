@@ -245,9 +245,17 @@ export function SkillDetailView({
       }
 
       const isInstalled = installationMap.has(targetAgentId);
+      const rowAwareUninstallId =
+        targetAgentId === "claude-code" && detail?.source_kind === "user" && !detail.is_read_only
+          ? detail.row_id
+          : undefined;
       try {
         if (isInstalled) {
-          await uninstallSkill(skillId, targetAgentId);
+          if (rowAwareUninstallId) {
+            await uninstallSkill(skillId, targetAgentId, rowAwareUninstallId);
+          } else {
+            await uninstallSkill(skillId, targetAgentId);
+          }
         } else {
           await installSkill(skillId, targetAgentId);
         }
@@ -262,6 +270,8 @@ export function SkillDetailView({
     },
     [
       detail?.is_read_only,
+      detail?.row_id,
+      detail?.source_kind,
       installationMap,
       installSkill,
       refreshCounts,

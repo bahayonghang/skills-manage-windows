@@ -34,8 +34,8 @@ pub use crate::services::installation::{
     install_skill_to_agent_auto_impl, install_skill_to_agent_copy_impl,
     install_skill_to_agent_impl, install_skill_to_agent_ssh_impl, make_relative_path,
     symlink_target_path, uninstall_skill_from_agent_impl, uninstall_skill_from_agent_ssh_impl,
-    BatchInstallResult, CentralBatchInstallFailure, CentralBatchInstallResult,
-    CentralBatchInstallSuccess, FailedInstall, InstallResult,
+    uninstall_skill_from_agent_with_row_impl, BatchInstallResult, CentralBatchInstallFailure,
+    CentralBatchInstallResult, CentralBatchInstallSuccess, FailedInstall, InstallResult,
 };
 
 /// Tauri command: install a skill to a single agent via relative symlink.
@@ -113,6 +113,7 @@ pub async fn uninstall_skill_from_agent(
     state: State<'_, AppState>,
     skill_id: String,
     agent_id: String,
+    row_id: Option<String>,
 ) -> Result<(), String> {
     let active_target = state.active_target().await?;
     let target_context = target_context_from_active_target(&active_target);
@@ -120,7 +121,13 @@ pub async fn uninstall_skill_from_agent(
     let started_at = Instant::now();
     let result = match active_target {
         ActiveTarget::Local => {
-            installation::uninstall_skill_from_agent_impl(&pool, &skill_id, &agent_id).await
+            installation::uninstall_skill_from_agent_with_row_impl(
+                &pool,
+                &skill_id,
+                &agent_id,
+                row_id.as_deref(),
+            )
+            .await
         }
         ActiveTarget::Ssh(target) => {
             installation::uninstall_skill_from_agent_ssh_impl(&pool, &target, &skill_id, &agent_id)
@@ -146,6 +153,7 @@ pub async fn uninstall_skill_from_agent(
     .details(json!({
         "skillId": skill_id,
         "agentId": agent_id,
+        "rowId": row_id,
     }))
     .duration_ms(started_at.elapsed().as_millis() as i64);
     if let Err(error) = &result {

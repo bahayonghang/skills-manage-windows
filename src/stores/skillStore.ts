@@ -87,7 +87,7 @@ interface SkillState {
 
   // Actions
   getSkillsByAgent: (agentId: string) => Promise<void>;
-  uninstallSkillFromAgent: (skillId: string, agentId: string) => Promise<void>;
+  uninstallSkillFromAgent: (skillId: string, agentId: string, rowId?: string | null) => Promise<void>;
   /** Fetch central skills as a one-shot read (no internal caching). */
   fetchCentralSkillsList: () => Promise<SkillWithLinks[]>;
   resetForTargetChange: () => void;
@@ -95,8 +95,8 @@ interface SkillState {
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-function skillActionKey(agentId: string, skillId: string) {
-  return `${agentId}::${skillId}`;
+function skillActionKey(agentId: string, skillId: string, rowId?: string | null) {
+  return rowId ?? `${agentId}::${skillId}`;
 }
 
 let skillStoreGeneration = 0;
@@ -146,9 +146,9 @@ export const useSkillStore = create<SkillState>((set) => ({
     }
   },
 
-  uninstallSkillFromAgent: async (skillId: string, agentId: string) => {
+  uninstallSkillFromAgent: async (skillId: string, agentId: string, rowId?: string | null) => {
     const generation = skillStoreGeneration;
-    const actionKey = skillActionKey(agentId, skillId);
+    const actionKey = skillActionKey(agentId, skillId, rowId);
     set((state) => ({
       pendingSkillActionKeys: {
         ...state.pendingSkillActionKeys,
@@ -170,7 +170,11 @@ export const useSkillStore = create<SkillState>((set) => ({
     }
 
     try {
-      await invoke("uninstall_skill_from_agent", { skillId, agentId });
+      await invoke("uninstall_skill_from_agent", {
+        skillId,
+        agentId,
+        ...(rowId ? { rowId } : {}),
+      });
       const skills = await invoke<ScannedSkill[]>("get_skills_by_agent", {
         agentId,
       });

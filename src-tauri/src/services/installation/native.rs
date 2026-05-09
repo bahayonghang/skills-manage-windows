@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::db::{self, DbPool, SkillInstallation};
+use crate::db::{self, AgentSkillObservation, DbPool, SkillInstallation};
 
 use super::centralize::{agents_share_skills_dir, ensure_centralized};
 use super::fs_util::{copy_dir_all, create_symlink, remove_symlink_path, symlink_target_path};
@@ -253,6 +253,140 @@ pub(crate) async fn install_central_skill_to_agent_by_method(
     }
 }
 
+fn remove_install_path(path: &Path, link_type: &str, allow_native_dir: bool) -> Result<(), String> {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => {
+            remove_symlink_path(path).map_err(|e| e.replace("existing symlink", "symlink"))?;
+        }
+        Ok(meta) if meta.is_dir() => {
+            if link_type == "copy" || (allow_native_dir && link_type == "native") {
+                std::fs::remove_dir_all(path).map_err(|e| {
+                    format!(
+                        "Failed to remove copied skill directory '{}': {}",
+                        path.display(),
+                        e
+                    )
+                })?;
+            } else {
+                return Err(format!(
+                    "Path '{}' exists but is not a symlink. Refusing to delete.",
+                    path.display()
+                ));
+            }
+        }
+        Ok(_) => {
+            return Err(format!(
+                "Path '{}' exists but is not a symlink. Refusing to delete.",
+                path.display()
+            ));
+        }
+        Err(_) => {
+            // Path doesn't exist — still clean up DB state.
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_claude_user_observation(
+    observation: &AgentSkillObservation,
+    skill_id: &str,
+    agent_id: &str,
+) -> Result<(), String> {
+    if observation.agent_id != agent_id {
+        return Err(format!(
+            "Claude row '{}' belongs to agent '{}', not '{}'",
+            observation.row_id, observation.agent_id, agent_id
+        ));
+    }
+
+    if observation.skill_id != skill_id {
+        return Err(format!(
+            "Claude row '{}' belongs to skill '{}', not '{}'",
+            observation.row_id, observation.skill_id, skill_id
+        ));
+    }
+
+    if observation.source_kind != "user" || observation.is_read_only {
+        return Err(format!(
+            "Claude row '{}' is read-only and cannot be uninstalled",
+            observation.row_id
+        ));
+    }
+
+    Ok(())
+}
+
+fn ensure_child_path(root: &Path, child: &Path) -> Result<(), String> {
+    if crate::paths::paths_equivalent(root, child) {
+        return Err(format!(
+            "Refusing to delete the Claude user skills root '{}'",
+            root.display()
+        ));
+    }
+
+    let root_cmp = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let child_parent = child
+        .parent()
+        .ok_or_else(|| format!("Path '{}' has no parent", child.display()))?;
+    let child_parent_cmp = child_parent
+        .canonicalize()
+        .unwrap_or_else(|_| child_parent.to_path_buf());
+
+    if !child_parent_cmp.starts_with(&root_cmp) {
+        return Err(format!(
+            "Refusing to delete '{}' because it is outside Claude user skills root '{}'",
+            child.display(),
+            root.display()
+        ));
+    }
+
+    Ok(())
+}
+
+async fn uninstall_claude_observation_from_agent_impl(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+    row_id: &str,
+) -> Result<(), String> {
+    if agent_id != "claude-code" {
+        return Err("Row-aware uninstall is only supported for Claude Code".to_string());
+    }
+
+    let agent = db::get_agent_by_id(pool, agent_id)
+        .await?
+        .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
+    let observation = db::get_agent_skill_observation_by_row_id(pool, row_id)
+        .await?
+        .ok_or_else(|| format!("Claude row '{}' not found", row_id))?;
+    ensure_claude_user_observation(&observation, skill_id, agent_id)?;
+
+    let user_root = PathBuf::from(&agent.global_skills_dir);
+    let install_path = PathBuf::from(&observation.dir_path);
+    ensure_child_path(&user_root, &install_path)?;
+
+    remove_install_path(&install_path, &observation.link_type, true)?;
+    db::delete_agent_skill_observation(pool, row_id).await?;
+    db::delete_skill_installation(pool, skill_id, agent_id).await?;
+
+    Ok(())
+}
+
+pub async fn uninstall_skill_from_agent_with_row_impl(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+    row_id: Option<&str>,
+) -> Result<(), String> {
+    if let Some(row_id) = row_id {
+        return uninstall_claude_observation_from_agent_impl(pool, skill_id, agent_id, row_id)
+            .await;
+    }
+
+    uninstall_skill_from_agent_impl(pool, skill_id, agent_id).await
+}
+
 /// Core uninstall logic, separated from the Tauri layer for testability.
 ///
 /// Removes the symlink at `agent.global_skills_dir/<skill_id>` and deletes the
@@ -291,34 +425,7 @@ pub async fn uninstall_skill_from_agent_impl(
     let link_type = record.map(|r| r.link_type.as_str()).unwrap_or("symlink");
 
     // 4. Inspect the entry at that path and remove it appropriately.
-    match std::fs::symlink_metadata(&install_path) {
-        Ok(meta) if meta.file_type().is_symlink() => {
-            // Always safe to remove symlinks.
-            remove_symlink_path(&install_path)
-                .map_err(|e| e.replace("existing symlink", "symlink"))?;
-        }
-        Ok(meta) if meta.is_dir() => {
-            // Only remove real directories that were explicitly installed as copies.
-            if link_type == "copy" {
-                std::fs::remove_dir_all(&install_path)
-                    .map_err(|e| format!("Failed to remove copied skill directory: {}", e))?;
-            } else {
-                return Err(format!(
-                    "Path '{}' exists but is not a symlink. Refusing to delete.",
-                    install_path.display()
-                ));
-            }
-        }
-        Ok(_) => {
-            return Err(format!(
-                "Path '{}' exists but is not a symlink. Refusing to delete.",
-                install_path.display()
-            ));
-        }
-        Err(_) => {
-            // Path doesn't exist — still clean up the DB record.
-        }
-    }
+    remove_install_path(&install_path, link_type, false)?;
 
     // 5. Remove the installation record from the database.
     db::delete_skill_installation(pool, skill_id, agent_id).await?;

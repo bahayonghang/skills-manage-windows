@@ -285,6 +285,24 @@ describe("skillDetailStore", () => {
     });
   });
 
+  it("passes rowId when uninstalling a source-aware Claude row", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(mockDetailAfterUninstall);
+    await useSkillDetailStore
+      .getState()
+      .uninstallSkill(
+        "frontend-design",
+        "claude-code",
+        "claude-code::user::frontend-design"
+      );
+    expect(invoke).toHaveBeenCalledWith("uninstall_skill_from_agent", {
+      skillId: "frontend-design",
+      agentId: "claude-code",
+      rowId: "claude-code::user::frontend-design",
+    });
+  });
+
   it("reloads detail after uninstall", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce(undefined)

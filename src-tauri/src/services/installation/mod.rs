@@ -26,6 +26,7 @@ pub use fs_util::{copy_dir_all, create_symlink, make_relative_path, symlink_targ
 pub use native::{
     install_skill_to_agent_auto_impl, install_skill_to_agent_copy_impl,
     install_skill_to_agent_impl, uninstall_skill_from_agent_impl,
+    uninstall_skill_from_agent_with_row_impl,
 };
 pub(crate) use remote::install_skill_to_agent_ssh_with_connection;
 pub use remote::{install_skill_to_agent_ssh_impl, uninstall_skill_from_agent_ssh_impl};

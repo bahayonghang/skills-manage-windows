@@ -59,6 +59,29 @@ pub async fn get_agent_skill_observations(
     .map_err(|e| e.to_string())
 }
 
+pub async fn get_agent_skill_observation_by_row_id(
+    pool: &DbPool,
+    row_id: &str,
+) -> Result<Option<AgentSkillObservation>, String> {
+    sqlx::query_as::<_, AgentSkillObservation>(
+        "SELECT * FROM agent_skill_observations
+         WHERE row_id = ?",
+    )
+    .bind(row_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+pub async fn delete_agent_skill_observation(pool: &DbPool, row_id: &str) -> Result<(), String> {
+    sqlx::query("DELETE FROM agent_skill_observations WHERE row_id = ?")
+        .bind(row_id)
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 pub async fn delete_stale_agent_skill_observations(
     pool: &DbPool,
     agent_id: &str,

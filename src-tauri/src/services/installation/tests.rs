@@ -14,13 +14,14 @@ use std::path::{Path, PathBuf};
 use sqlx::SqlitePool;
 use tempfile::TempDir;
 
-use crate::db::{self, DbPool, SkillInstallation};
+use crate::db::{self, AgentSkillObservation, DbPool, SkillInstallation};
 use crate::targets::RemotePathInfo;
 
 use super::batch::batch_install_central_skills_impl;
 use super::fs_util::make_relative_path;
 use super::native::{
     install_skill_to_agent_copy_impl, install_skill_to_agent_impl, uninstall_skill_from_agent_impl,
+    uninstall_skill_from_agent_with_row_impl,
 };
 use super::project::install_central_skill_to_project_impl;
 use super::remote::{classify_remote_existing_install_target, RemoteExistingInstallAction};
@@ -63,6 +64,52 @@ fn create_central_skill(central_dir: &Path, skill_id: &str) -> PathBuf {
     )
     .unwrap();
     skill_dir
+}
+
+fn create_user_skill(agent_dir: &Path, skill_id: &str) -> PathBuf {
+    let skill_dir = agent_dir.join(skill_id);
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        format!(
+            "---\nname: {}\ndescription: User skill\n---\n\n# {}\n",
+            skill_id, skill_id
+        ),
+    )
+    .unwrap();
+    skill_dir
+}
+
+fn claude_observation(
+    agent_dir: &Path,
+    skill_id: &str,
+    dir_path: &Path,
+    source_kind: &str,
+    is_read_only: bool,
+) -> AgentSkillObservation {
+    AgentSkillObservation {
+        row_id: format!("claude-code::{}", dir_path.to_string_lossy()),
+        agent_id: "claude-code".to_string(),
+        skill_id: skill_id.to_string(),
+        name: skill_id.to_string(),
+        description: Some("Observed skill".to_string()),
+        file_path: dir_path.join("SKILL.md").to_string_lossy().into_owned(),
+        dir_path: dir_path.to_string_lossy().into_owned(),
+        source_kind: source_kind.to_string(),
+        source_root: if source_kind == "user" {
+            agent_dir.to_string_lossy().into_owned()
+        } else {
+            dir_path
+                .parent()
+                .unwrap_or(dir_path)
+                .to_string_lossy()
+                .into_owned()
+        },
+        link_type: "native".to_string(),
+        symlink_target: None,
+        is_read_only,
+        scanned_at: chrono::Utc::now().to_rfc3339(),
+    }
 }
 
 async fn point_codex_to_dir(pool: &DbPool, skills_dir: &Path) {
@@ -532,6 +579,149 @@ async fn test_uninstall_same_root_agent_is_rejected_without_deleting_central_dir
         .unwrap();
     assert_eq!(installations.len(), 1);
     assert_eq!(installations[0].agent_id, "codex");
+}
+
+#[tokio::test]
+async fn test_uninstall_claude_user_row_removes_observed_dir_and_observation() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&agent_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    let skill_dir = create_user_skill(&agent_dir, "observed-user-skill");
+    let observation =
+        claude_observation(&agent_dir, "observed-user-skill", &skill_dir, "user", false);
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "observed-user-skill".to_string(),
+            agent_id: "claude-code".to_string(),
+            installed_path: skill_dir.to_string_lossy().into_owned(),
+            link_type: "native".to_string(),
+            symlink_target: None,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    uninstall_skill_from_agent_with_row_impl(
+        &pool,
+        "observed-user-skill",
+        "claude-code",
+        Some(&row_id),
+    )
+    .await
+    .unwrap();
+
+    assert!(
+        fs::symlink_metadata(&skill_dir).is_err(),
+        "Claude user source directory should be deleted"
+    );
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &row_id)
+            .await
+            .unwrap()
+            .is_none(),
+        "Claude observation row should be deleted"
+    );
+    assert!(
+        db::get_skill_installations(&pool, "observed-user-skill")
+            .await
+            .unwrap()
+            .is_empty(),
+        "installation record should be cleaned up"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_claude_plugin_row_is_rejected_without_deleting_path() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    let plugin_dir = tmp
+        .path()
+        .join("plugin")
+        .join("skills")
+        .join("plugin-skill");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&agent_dir).unwrap();
+    fs::create_dir_all(&plugin_dir).unwrap();
+    fs::write(
+        plugin_dir.join("SKILL.md"),
+        "---\nname: plugin-skill\n---\n\n# plugin\n",
+    )
+    .unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    let observation = claude_observation(&agent_dir, "plugin-skill", &plugin_dir, "plugin", true);
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+
+    let result = uninstall_skill_from_agent_with_row_impl(
+        &pool,
+        "plugin-skill",
+        "claude-code",
+        Some(&row_id),
+    )
+    .await;
+
+    assert!(
+        result
+            .as_ref()
+            .is_err_and(|error| error.contains("read-only")),
+        "plugin source rows should be rejected: {:?}",
+        result
+    );
+    assert!(
+        plugin_dir.join("SKILL.md").exists(),
+        "plugin path must not be deleted"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_claude_row_rejects_skill_id_mismatch() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&agent_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    let skill_dir = create_user_skill(&agent_dir, "row-skill");
+    let observation = claude_observation(&agent_dir, "row-skill", &skill_dir, "user", false);
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+
+    let result = uninstall_skill_from_agent_with_row_impl(
+        &pool,
+        "other-skill",
+        "claude-code",
+        Some(&row_id),
+    )
+    .await;
+
+    assert!(
+        result
+            .as_ref()
+            .is_err_and(|error| error.contains("belongs to skill")),
+        "mismatched row/skill should be rejected: {:?}",
+        result
+    );
+    assert!(
+        skill_dir.join("SKILL.md").exists(),
+        "mismatched row should not delete the observed path"
+    );
 }
 
 // ── batch install ─────────────────────────────────────────────────────────

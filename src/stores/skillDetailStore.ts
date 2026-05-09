@@ -35,7 +35,7 @@ interface SkillDetailState {
   generateExplanation: (skillId: string, content: string, lang: string) => Promise<void>;
   refreshExplanation: (skillId: string, content: string, lang: string) => Promise<void>;
   installSkill: (skillId: string, agentId: string) => Promise<void>;
-  uninstallSkill: (skillId: string, agentId: string) => Promise<void>;
+  uninstallSkill: (skillId: string, agentId: string, rowId?: string | null) => Promise<void>;
   refreshInstallations: (skillId: string) => Promise<void>;
   /** Read SKILL.md content directly from a path (Discover file mode). */
   loadFileContent: (path: string) => Promise<void>;
@@ -346,7 +346,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
    * Remove the skill installation from the given agent.
    * Reloads detail afterward so installation status updates.
    */
-  uninstallSkill: async (skillId: string, agentId: string) => {
+  uninstallSkill: async (skillId: string, agentId: string, rowId?: string | null) => {
     set({ installingAgentId: agentId, error: null });
     if (!isTauriRuntime()) {
       set({
@@ -356,7 +356,11 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
       return;
     }
     try {
-      await invoke("uninstall_skill_from_agent", { skillId, agentId });
+      await invoke("uninstall_skill_from_agent", {
+        skillId,
+        agentId,
+        ...(rowId ? { rowId } : {}),
+      });
       // Reload detail so the installations list reflects the removal.
       const detailRequest = getActiveDetailRequest(skillId);
       const detail = await invoke<SkillDetail>(

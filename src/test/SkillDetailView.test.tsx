@@ -700,6 +700,38 @@ describe("SkillDetailView", () => {
     expect(mockRefreshInstallations).toHaveBeenCalledWith("frontend-design");
   });
 
+  it("passes the Claude user row identity when uninstalling the active Claude row", async () => {
+    applyStoreMocks({
+      detail: mockClaudeUserDetail,
+      content: mockUserContent,
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::user::frontend-design"
+          variant="drawer"
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /切换 frontend-design 在 Claude Code 的链接状态/i,
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockUninstallSkill).toHaveBeenCalledWith(
+        "frontend-design",
+        "claude-code",
+        "claude-code::user::frontend-design"
+      );
+    });
+  });
+
   // ── Collections ───────────────────────────────────────────────────────────
 
   it("shows collections section", () => {

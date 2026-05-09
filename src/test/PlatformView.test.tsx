@@ -130,6 +130,7 @@ const mockSkills: ScannedSkill[] = [
 const mockCursorSkills: ScannedSkill[] = [
   {
     id: "cursor-helper",
+    row_id: "cursor-helper",
     name: "cursor-helper",
     description: "Cursor-specific helper skill",
     file_path: "~/.cursor/skills/cursor-helper/SKILL.md",
@@ -786,6 +787,110 @@ describe("PlatformView", () => {
       );
     });
     expect(mockRefreshCounts).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes the selected Claude user row id when uninstalling duplicate rows", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockDuplicateClaudeSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    const userBadge = getCardBadgeMatches(userSourceText)[0];
+    const userCard = userBadge.closest(".rounded-xl");
+    expect(userCard).not.toBeNull();
+
+    fireEvent.click(
+      within(userCard as HTMLElement).getByRole("button", {
+        name: /从 Claude Code 卸载 shared-skill/i,
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /确认删除/i }));
+
+    await waitFor(() => {
+      expect(mockUninstallSkillFromAgent).toHaveBeenCalledWith(
+        "shared-skill",
+        "claude-code",
+        "claude-code::user::shared-skill"
+      );
+    });
+  });
+
+  it("does not pass ordinary row ids when uninstalling non-Claude platform skills", async () => {
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockCursorAgent],
+        skillsByAgent: {
+          "claude-code": mockSkills.length,
+          cursor: mockCursorSkills.length,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: {
+          "claude-code": mockSkills,
+          cursor: mockCursorSkills,
+        },
+        loadingByAgent: {
+          "claude-code": false,
+          cursor: false,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView("cursor");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /从 Cursor 卸载 cursor-helper/i })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /确认删除/i }));
+
+    await waitFor(() => {
+      expect(mockUninstallSkillFromAgent).toHaveBeenCalledWith(
+        "cursor-helper",
+        "cursor"
+      );
+    });
+  });
+
+  it("uses row-scoped pending state for duplicate Claude rows", () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockDuplicateClaudeSkills },
+        pendingSkillActionKeys: {
+          "claude-code::user::shared-skill": true,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    const userBadge = getCardBadgeMatches(userSourceText)[0];
+    const pluginBadge = getCardBadgeMatches(pluginSourceText)[0];
+    const userCard = userBadge.closest(".rounded-xl");
+    const pluginCard = pluginBadge.closest(".rounded-xl");
+    expect(userCard).not.toBeNull();
+    expect(pluginCard).not.toBeNull();
+
+    expect(
+      within(userCard as HTMLElement).getByRole("button", { name: /确认删除/i })
+    ).toBeDisabled();
+    expect(
+      within(pluginCard as HTMLElement).queryByRole("button", {
+        name: /从 Claude Code 卸载 shared-skill/i,
+      })
+    ).not.toBeInTheDocument();
   });
 
   it("cancels the armed uninstall state when clicking outside the card actions", async () => {
