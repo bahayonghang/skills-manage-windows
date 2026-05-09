@@ -87,7 +87,6 @@ pub fn universal_skills_dir_from_home(home_dir: &Path) -> PathBuf {
     home_dir.join(".agents").join("skills")
 }
 
-
 #[derive(Debug, Clone, Copy)]
 pub struct PlatformPathSpec<'a> {
     pub agent_id: &'a str,
@@ -381,7 +380,6 @@ mod tests {
         let expanded = expand_remote_home_path("/opt/skills/custom", "/home/alice");
         assert_eq!(expanded, "/opt/skills/custom");
     }
-
 
     #[test]
     fn platform_global_skills_dir_resolves_agent_home_path() {

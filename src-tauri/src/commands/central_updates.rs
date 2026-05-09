@@ -257,8 +257,15 @@ pub async fn update_central_skills(
             None,
         );
 
-        match load_remote_skill_content(&state.db, &fs, &skill, auth.as_deref(), &client, &mut snapshots)
-            .await
+        match load_remote_skill_content(
+            &state.db,
+            &fs,
+            &skill,
+            auth.as_deref(),
+            &client,
+            &mut snapshots,
+        )
+        .await
         {
             Ok(Some(remote)) if remote.remote_hash == remote.local_hash => {
                 let state_result = state_from_remote(&skill, &remote, false);

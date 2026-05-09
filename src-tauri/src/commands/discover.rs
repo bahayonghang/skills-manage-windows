@@ -29,9 +29,7 @@ pub async fn get_scan_roots(state: State<'_, AppState>) -> Result<Vec<ScanRoot>,
 }
 
 #[tauri::command]
-pub async fn get_obsidian_vaults(
-    state: State<'_, AppState>,
-) -> Result<Vec<ObsidianVault>, String> {
+pub async fn get_obsidian_vaults(state: State<'_, AppState>) -> Result<Vec<ObsidianVault>, String> {
     if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
         return Ok(Vec::new());
     }

@@ -26,10 +26,7 @@ pub use crate::services::scanner::{
     ScannedSkill, SkillInfo,
 };
 
-async fn run_ssh_scan_with_timeout<F>(
-    future: F,
-    timeout: Duration,
-) -> Result<ScanResult, String>
+async fn run_ssh_scan_with_timeout<F>(future: F, timeout: Duration) -> Result<ScanResult, String>
 where
     F: Future<Output = Result<ScanResult, String>>,
 {
@@ -55,8 +52,11 @@ pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, S
     let scan_result = match active_target {
         ActiveTarget::Local => scan_all_skills_impl(&pool).await,
         ActiveTarget::Ssh(target) => {
-            run_ssh_scan_with_timeout(scan_ssh_skills_impl(&pool, &target), Duration::from_secs(90))
-                .await
+            run_ssh_scan_with_timeout(
+                scan_ssh_skills_impl(&pool, &target),
+                Duration::from_secs(90),
+            )
+            .await
         }
     };
 

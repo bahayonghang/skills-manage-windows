@@ -349,10 +349,7 @@ async fn write_skill_dir_atomic_remote(
     .map_err(|err| {
         // The script aborts before staging touches `target_dir`, so the
         // canonical directory remains untouched on early failures.
-        format!(
-            "Remote update script failed for '{}': {}",
-            target_dir, err
-        )
+        format!("Remote update script failed for '{}': {}", target_dir, err)
     })
 }
 

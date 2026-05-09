@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use std::time::Instant;
 use tauri::State;
 
+use crate::db::{self, DbPool, ScanDirectory};
 use crate::operation_log::{
     record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
 };
-use crate::db::{self, DbPool, ScanDirectory};
 use crate::paths::{expand_home_path, expand_remote_home_path, path_to_string};
 use crate::targets::ActiveTarget;
 use crate::AppState;

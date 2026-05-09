@@ -37,7 +37,11 @@ fn make_directory_tree_fixture(root: &Path) {
     fs::create_dir_all(root.join("examples").join("nested")).unwrap();
     fs::write(root.join("SKILL.md"), "# Demo").unwrap();
     fs::write(root.join("examples").join("demo.md"), "demo").unwrap();
-    fs::write(root.join("examples").join("nested").join("deep.txt"), "deep").unwrap();
+    fs::write(
+        root.join("examples").join("nested").join("deep.txt"),
+        "deep",
+    )
+    .unwrap();
 }
 
 fn make_central_skill_at(id: &str, name: &str, dir: &Path) -> Skill {

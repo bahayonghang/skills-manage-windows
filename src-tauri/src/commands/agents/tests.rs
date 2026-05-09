@@ -39,7 +39,6 @@ fn test_is_detected_nonexistent_path() {
     );
 }
 
-
 #[tokio::test]
 async fn test_list_platform_paths_resolves_local_paths() {
     let pool = setup_test_db().await;
@@ -74,7 +73,9 @@ async fn test_list_platform_paths_resolves_remote_paths() {
         .await
         .unwrap();
 
-    let paths = list_platform_paths_impl(&pool, Some("/home/alice")).await.unwrap();
+    let paths = list_platform_paths_impl(&pool, Some("/home/alice"))
+        .await
+        .unwrap();
     let claude = paths.get("claude-code").unwrap();
 
     assert_eq!(claude.global_skills_dir, "/home/alice/.claude/skills");
@@ -133,11 +134,13 @@ async fn test_get_agents_not_detected_when_dir_missing() {
 async fn test_get_agents_cached_uses_persisted_detection_state() {
     let pool = setup_test_db().await;
 
-    sqlx::query("UPDATE agents SET global_skills_dir = ?, is_detected = 1 WHERE id = 'claude-code'")
-        .bind("/nonexistent/deep/path/skills")
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE agents SET global_skills_dir = ?, is_detected = 1 WHERE id = 'claude-code'",
+    )
+    .bind("/nonexistent/deep/path/skills")
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let agents = get_agents_cached_impl(&pool).await.unwrap();
     let claude = agents.iter().find(|a| a.id == "claude-code").unwrap();
@@ -220,7 +223,10 @@ async fn test_add_custom_agent_auto_generates_id() {
     };
 
     let agent = add_custom_agent_impl(&pool, config).await.unwrap();
-    assert!(!agent.id.is_empty(), "auto-generated ID should not be empty");
+    assert!(
+        !agent.id.is_empty(),
+        "auto-generated ID should not be empty"
+    );
     assert!(
         agent.id.starts_with("custom-"),
         "auto-generated ID should start with 'custom-'"
@@ -283,7 +289,10 @@ async fn test_add_custom_agent_default_category() {
     };
 
     let agent = add_custom_agent_impl(&pool, config).await.unwrap();
-    assert_eq!(agent.category, "other", "default category should be 'other'");
+    assert_eq!(
+        agent.category, "other",
+        "default category should be 'other'"
+    );
 }
 
 #[tokio::test]
@@ -366,7 +375,10 @@ async fn test_update_custom_agent_default_category() {
     let updated = update_custom_agent_impl(&pool, "cat-default", config)
         .await
         .unwrap();
-    assert_eq!(updated.category, "other", "default category should be 'other'");
+    assert_eq!(
+        updated.category, "other",
+        "default category should be 'other'"
+    );
 }
 
 #[tokio::test]
@@ -401,10 +413,14 @@ async fn test_update_custom_agent_expands_tilde_path_with_remote_home() {
         global_skills_dir: "~/.remote-update/skills".to_string(),
     };
 
-    let updated =
-        update_custom_agent_impl_for_home(&pool, "remote-tilde-update", config, Some("/home/alice"))
-            .await
-            .unwrap();
+    let updated = update_custom_agent_impl_for_home(
+        &pool,
+        "remote-tilde-update",
+        config,
+        Some("/home/alice"),
+    )
+    .await
+    .unwrap();
     assert_eq!(
         updated.global_skills_dir,
         "/home/alice/.remote-update/skills"

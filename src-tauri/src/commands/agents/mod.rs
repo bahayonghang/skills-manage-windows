@@ -36,7 +36,6 @@ pub struct AgentWithStatus {
     pub is_enabled: bool,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ResolvedPlatformPaths {
     pub global_skills_dir: String,
@@ -342,7 +341,6 @@ pub async fn get_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatu
     }
 }
 
-
 #[tauri::command]
 pub async fn list_platform_paths(
     state: State<'_, AppState>,
@@ -383,7 +381,11 @@ pub async fn add_custom_agent(
     let started_at = Instant::now();
     let result = add_custom_agent_impl_for_home(&pool, config, remote_home).await;
 
-    let status = if result.is_ok() { "succeeded" } else { "failed" };
+    let status = if result.is_ok() {
+        "succeeded"
+    } else {
+        "failed"
+    };
     let summary = match &result {
         Ok(agent) => format!("Added custom platform {}", agent.display_name),
         Err(_) => format!("Failed to add custom platform {}", display_name),
@@ -422,7 +424,11 @@ pub async fn update_custom_agent(
     let started_at = Instant::now();
     let result = update_custom_agent_impl_for_home(&pool, &agent_id, config, remote_home).await;
 
-    let status = if result.is_ok() { "succeeded" } else { "failed" };
+    let status = if result.is_ok() {
+        "succeeded"
+    } else {
+        "failed"
+    };
     let summary = match &result {
         Ok(agent) => format!("Updated custom platform {}", agent.display_name),
         Err(_) => format!("Failed to update custom platform {}", agent_id),
@@ -452,7 +458,11 @@ pub async fn remove_custom_agent(
     let started_at = Instant::now();
     let result = remove_custom_agent_impl(&pool, &agent_id).await;
 
-    let status = if result.is_ok() { "succeeded" } else { "failed" };
+    let status = if result.is_ok() {
+        "succeeded"
+    } else {
+        "failed"
+    };
     let summary = if result.is_ok() {
         format!("Removed custom platform {}", agent_id)
     } else {
