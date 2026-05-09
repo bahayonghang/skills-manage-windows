@@ -22,8 +22,11 @@ const bundleConfigs = {
     staleOutputs: ["skillport.exe"],
   },
   darwin: {
-    bundles: "app",
-    artifacts: [{ dir: "macos", pattern: /\.app$/i }],
+    bundles: "app,dmg",
+    artifacts: [
+      { dir: "macos", pattern: /\.app$/i },
+      { dir: "dmg", pattern: /\.dmg$/i },
+    ],
     staleOutputs: [],
   },
   linux: {
