@@ -4,8 +4,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
 use std::collections::{HashMap, HashSet};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::Instant;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use super::github_import::{self, DuplicateResolution, GitHubSkillImportSelection};
@@ -20,6 +24,9 @@ use crate::{
 const EXPORT_KIND: &str = "skillport/state-export";
 const EXPORT_VERSION: u32 = 1;
 const REMOTE_CATALOG_CONCURRENCY_LIMIT: usize = 4;
+const PORTABILITY_PROGRESS_EVENT: &str = "central://state-portability-progress";
+const STATUS_CANCELLED: &str = "cancelled";
+const PORTABILITY_CANCELLED_MESSAGE: &str = "SkillPort state portability cancelled";
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,6 +118,7 @@ pub struct SkillportStateSourcePreview {
 pub enum SourcePreviewStatus {
     Exists,
     WillAdd,
+    Duplicate,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -132,6 +140,7 @@ pub enum SkillPreviewStatus {
     Conflict,
     Missing,
     Unrestorable,
+    DuplicateSkipped,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -139,10 +148,12 @@ pub enum SkillPreviewStatus {
 pub struct SkillportStateImportPreviewSummary {
     pub sources_to_add: usize,
     pub sources_existing: usize,
+    pub sources_duplicate: usize,
     pub ready: usize,
     pub conflicts: usize,
     pub missing: usize,
     pub unrestorable: usize,
+    pub duplicate_skipped: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -163,6 +174,7 @@ pub struct SkillportStateImportResult {
     pub skipped_skills: Vec<String>,
     pub failed_skills: Vec<SkillportStateImportFailure>,
     pub tags_restored: usize,
+    pub cancelled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -181,6 +193,40 @@ pub struct SkillportStateImportFailure {
     pub error: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillportStatePortabilityPhase {
+    Exporting,
+    Previewing,
+    Importing,
+    Finalizing,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillportStatePortabilityStatus {
+    Idle,
+    Running,
+    Completed,
+    Failed,
+    Cancelling,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillportStatePortabilityProgressPayload {
+    pub phase: SkillportStatePortabilityPhase,
+    pub status: SkillportStatePortabilityStatus,
+    pub total: usize,
+    pub completed: usize,
+    pub message: Option<String>,
+    pub current_item: Option<String>,
+    pub error: Option<String>,
+}
+
+type CancelFlag = Arc<AtomicBool>;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct RepoKey {
     owner: String,
@@ -192,6 +238,15 @@ struct RepoKey {
 struct ImportGroup {
     repo_url: String,
     selections: Vec<GitHubSkillImportSelection>,
+}
+
+impl ImportGroup {
+    fn selected_paths(&self) -> Vec<String> {
+        self.selections
+            .iter()
+            .map(|selection| selection.source_path.clone())
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -207,15 +262,59 @@ struct RemoteCatalogInvalidCandidate {
     detail: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct SkillManifestKey {
+    id: String,
+    source_path: String,
+}
+
+#[derive(Debug, Clone)]
+struct PortabilityProgressUpdate<'a> {
+    phase: SkillportStatePortabilityPhase,
+    status: SkillportStatePortabilityStatus,
+    total: usize,
+    completed: usize,
+    message: Option<&'a str>,
+    current_item: Option<&'a str>,
+    error: Option<&'a str>,
+}
+
 #[tauri::command]
 pub async fn export_skillport_state(
+    app: AppHandle,
     state: State<'_, AppState>,
     _options: Option<SkillportStateExportOptions>,
 ) -> Result<String, String> {
+    state.portable_state_cancel.store(false, Ordering::SeqCst);
+    let cancel = Arc::clone(&state.portable_state_cancel);
     let started_at = Instant::now();
-    let result = export_skillport_state_impl(&state.db).await;
+    emit_portability_progress(
+        &app,
+        PortabilityProgressUpdate {
+            phase: SkillportStatePortabilityPhase::Exporting,
+            status: SkillportStatePortabilityStatus::Running,
+            total: 1,
+            completed: 0,
+            message: Some("Preparing portable SkillPort state export"),
+            current_item: None,
+            error: None,
+        },
+    );
+    let result = export_skillport_state_impl(&state.db, Some(&app), Some(&cancel)).await;
     match &result {
         Ok(payload) => {
+            emit_portability_progress(
+                &app,
+                PortabilityProgressUpdate {
+                    phase: SkillportStatePortabilityPhase::Exporting,
+                    status: SkillportStatePortabilityStatus::Completed,
+                    total: 1,
+                    completed: 1,
+                    message: Some("Portable SkillPort state export completed"),
+                    current_item: None,
+                    error: None,
+                },
+            );
             let manifest = serde_json::from_str::<SkillportStateManifest>(payload).ok();
             record_operation_log_best_effort(
                 &state.db,
@@ -237,6 +336,23 @@ pub async fn export_skillport_state(
             .await;
         }
         Err(error) => {
+            let status = if is_cancelled_error(error) {
+                SkillportStatePortabilityStatus::Cancelled
+            } else {
+                SkillportStatePortabilityStatus::Failed
+            };
+            emit_portability_progress(
+                &app,
+                PortabilityProgressUpdate {
+                    phase: SkillportStatePortabilityPhase::Exporting,
+                    status,
+                    total: 1,
+                    completed: 0,
+                    message: None,
+                    current_item: None,
+                    error: Some(error),
+                },
+            );
             record_operation_log_best_effort(
                 &state.db,
                 local_target_context(),
@@ -258,22 +374,59 @@ pub async fn export_skillport_state(
 
 #[tauri::command]
 pub async fn preview_skillport_state_import(
+    app: AppHandle,
     state: State<'_, AppState>,
     json: String,
 ) -> Result<SkillportStateImportPreview, String> {
+    state.portable_state_cancel.store(false, Ordering::SeqCst);
+    let cancel = Arc::clone(&state.portable_state_cancel);
     let started_at = Instant::now();
-    let result = match parse_manifest(&json) {
-        Ok(manifest) => match build_remote_catalog(&state.db, &manifest).await {
-            Ok(remote_catalog) => {
-                preview_skillport_state_import_impl(&state.db, &manifest, Some(&remote_catalog))
-                    .await
-            }
-            Err(error) => Err(error),
+    emit_portability_progress(
+        &app,
+        PortabilityProgressUpdate {
+            phase: SkillportStatePortabilityPhase::Previewing,
+            status: SkillportStatePortabilityStatus::Running,
+            total: 3,
+            completed: 0,
+            message: Some("Parsing SkillPort state JSON"),
+            current_item: None,
+            error: None,
         },
+    );
+    let result = match parse_manifest(&json) {
+        Ok(manifest) => {
+            match build_remote_catalog(&state.db, &manifest, Some(&app), Some(&cancel)).await {
+                Ok(remote_catalog) => match preview_skillport_state_import_impl(
+                    &state.db,
+                    &manifest,
+                    Some(&remote_catalog),
+                    Some(&app),
+                    Some(&cancel),
+                )
+                .await
+                {
+                    Ok(preview) => Ok(preview),
+                    Err(error) => Err(error),
+                },
+                Err(error) => Err(error),
+            }
+        }
         Err(error) => Err(error),
     };
     match &result {
         Ok(preview) => {
+            emit_portability_progress(
+                &app,
+                PortabilityProgressUpdate {
+                    phase: SkillportStatePortabilityPhase::Previewing,
+                    status: SkillportStatePortabilityStatus::Completed,
+                    total: 3,
+                    completed: 3,
+                    message: Some("SkillPort state import preview completed"),
+                    current_item: None,
+                    error: None,
+                },
+            );
             record_operation_log_best_effort(
                 &state.db,
                 local_target_context(),
@@ -292,6 +445,23 @@ pub async fn preview_skillport_state_import(
             .await;
         }
         Err(error) => {
+            let status = if is_cancelled_error(error) {
+                SkillportStatePortabilityStatus::Cancelled
+            } else {
+                SkillportStatePortabilityStatus::Failed
+            };
+            emit_portability_progress(
+                &app,
+                PortabilityProgressUpdate {
+                    phase: SkillportStatePortabilityPhase::Previewing,
+                    status,
+                    total: 3,
+                    completed: 0,
+                    message: None,
+                    current_item: None,
+                    error: Some(error),
+                },
+            );
             record_operation_log_best_effort(
                 &state.db,
                 local_target_context(),
@@ -313,25 +483,75 @@ pub async fn preview_skillport_state_import(
 
 #[tauri::command]
 pub async fn import_skillport_state(
+    app: AppHandle,
     state: State<'_, AppState>,
     json: String,
     resolutions: Vec<SkillportStateImportResolution>,
 ) -> Result<SkillportStateImportResult, String> {
+    state.portable_state_cancel.store(false, Ordering::SeqCst);
+    let cancel = Arc::clone(&state.portable_state_cancel);
     let started_at = Instant::now();
+    emit_portability_progress(
+        &app,
+        PortabilityProgressUpdate {
+            phase: SkillportStatePortabilityPhase::Importing,
+            status: SkillportStatePortabilityStatus::Running,
+            total: 1,
+            completed: 0,
+            message: Some("Preparing SkillPort state import"),
+            current_item: None,
+            error: None,
+        },
+    );
     let result = match parse_manifest(&json) {
-        Ok(manifest) => import_skillport_state_impl(&state.db, &manifest, resolutions).await,
+        Ok(manifest) => {
+            import_skillport_state_impl(
+                &state.db,
+                &manifest,
+                resolutions,
+                Some(&app),
+                Some(&cancel),
+            )
+            .await
+        }
         Err(error) => Err(error),
     };
     match &result {
         Ok(import_result) => {
-            let status = match (
-                import_result.imported_skills.len() + import_result.sources_added,
-                import_result.failed_skills.len(),
-            ) {
-                (_, 0) => "succeeded",
-                (0, _) => "failed",
-                _ => "partial",
+            let status = if import_result.cancelled {
+                "cancelled"
+            } else {
+                match (
+                    import_result.imported_skills.len() + import_result.sources_added,
+                    import_result.failed_skills.len(),
+                ) {
+                    (_, 0) => "succeeded",
+                    (0, _) => "failed",
+                    _ => "partial",
+                }
             };
+            emit_portability_progress(
+                &app,
+                PortabilityProgressUpdate {
+                    phase: SkillportStatePortabilityPhase::Importing,
+                    status: if import_result.cancelled {
+                        SkillportStatePortabilityStatus::Cancelled
+                    } else if import_result.failed_skills.is_empty() {
+                        SkillportStatePortabilityStatus::Completed
+                    } else {
+                        SkillportStatePortabilityStatus::Failed
+                    },
+                    total: import_result.imported_skills.len()
+                        + import_result.failed_skills.len()
+                        + import_result.skipped_skills.len(),
+                    completed: import_result.imported_skills.len()
+                        + import_result.failed_skills.len()
+                        + import_result.skipped_skills.len(),
+                    message: Some("SkillPort state import finished"),
+                    current_item: None,
+                    error: None,
+                },
+            );
             record_operation_log_best_effort(
                 &state.db,
                 local_target_context(),
@@ -353,12 +573,30 @@ pub async fn import_skillport_state(
                     "skippedSkills": &import_result.skipped_skills,
                     "failedSkills": &import_result.failed_skills,
                     "tagsRestored": import_result.tags_restored,
+                    "cancelled": import_result.cancelled,
                 }))
                 .duration_ms(started_at.elapsed().as_millis() as i64),
             )
             .await;
         }
         Err(error) => {
+            let status = if is_cancelled_error(error) {
+                SkillportStatePortabilityStatus::Cancelled
+            } else {
+                SkillportStatePortabilityStatus::Failed
+            };
+            emit_portability_progress(
+                &app,
+                PortabilityProgressUpdate {
+                    phase: SkillportStatePortabilityPhase::Importing,
+                    status,
+                    total: 1,
+                    completed: 0,
+                    message: None,
+                    current_item: None,
+                    error: Some(error),
+                },
+            );
             record_operation_log_best_effort(
                 &state.db,
                 local_target_context(),
@@ -378,20 +616,58 @@ pub async fn import_skillport_state(
     result
 }
 
-async fn export_skillport_state_impl(pool: &DbPool) -> Result<String, String> {
+#[tauri::command]
+pub async fn cancel_skillport_state_portability(state: State<'_, AppState>) -> Result<(), String> {
+    state.portable_state_cancel.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+async fn export_skillport_state_impl(
+    pool: &DbPool,
+    app: Option<&AppHandle>,
+    cancel: Option<&CancelFlag>,
+) -> Result<String, String> {
+    check_cancel(cancel)?;
     let github_sources = export_github_sources(pool).await?;
+    emit_portability_step(
+        app,
+        SkillportStatePortabilityPhase::Exporting,
+        3,
+        1,
+        Some("Collected GitHub sources"),
+        None,
+    );
+    check_cancel(cancel)?;
     let skills = db::get_central_skills(pool).await?;
     let skill_ids = skills
         .iter()
         .map(|skill| skill.id.clone())
         .collect::<Vec<_>>();
+    let total_export_steps = skill_ids.len() + 3;
     let mut assignments = db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
     let mut tags_by_skill = db::get_skill_tags_for_skills(pool, &skill_ids).await?;
     let unknown_repository = db::get_local_unknown_repository(pool).await?;
     let mut central_skills = Vec::new();
     let mut unrestorable_skills = Vec::new();
+    emit_portability_step(
+        app,
+        SkillportStatePortabilityPhase::Exporting,
+        total_export_steps,
+        2,
+        Some("Loaded Central skill metadata"),
+        None,
+    );
 
-    for skill in skills {
+    for (index, skill) in skills.into_iter().enumerate() {
+        check_cancel(cancel)?;
+        emit_portability_step(
+            app,
+            SkillportStatePortabilityPhase::Exporting,
+            total_export_steps,
+            index + 2,
+            Some("Exporting Central skill"),
+            Some(&skill.name),
+        );
         let assignment =
             assignments
                 .remove(&skill.id)
@@ -425,6 +701,7 @@ async fn export_skillport_state_impl(pool: &DbPool) -> Result<String, String> {
             });
         }
     }
+    check_cancel(cancel)?;
 
     let manifest = SkillportStateManifest {
         kind: EXPORT_KIND.to_string(),
@@ -438,6 +715,14 @@ async fn export_skillport_state_impl(pool: &DbPool) -> Result<String, String> {
         unrestorable_skills,
     };
 
+    emit_portability_step(
+        app,
+        SkillportStatePortabilityPhase::Finalizing,
+        total_export_steps,
+        total_export_steps,
+        Some("Serializing SkillPort state JSON"),
+        None,
+    );
     serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())
 }
 
@@ -539,7 +824,18 @@ async fn preview_skillport_state_import_impl(
     pool: &DbPool,
     manifest: &SkillportStateManifest,
     remote_catalog: Option<&HashMap<RepoKey, RemoteCatalogEntry>>,
+    app: Option<&AppHandle>,
+    cancel: Option<&CancelFlag>,
 ) -> Result<SkillportStateImportPreview, String> {
+    check_cancel(cancel)?;
+    emit_portability_step(
+        app,
+        SkillportStatePortabilityPhase::Previewing,
+        3,
+        2,
+        Some("Checking existing Central skills and sources"),
+        None,
+    );
     let existing_sources = existing_registry_identities(pool).await?;
     let existing_skills = db::get_skills_by_ids(
         pool,
@@ -551,32 +847,64 @@ async fn preview_skillport_state_import_impl(
     )
     .await?;
     let mut summary = SkillportStateImportPreviewSummary::default();
-    let github_sources = manifest
+    let mut seen_source_identities = HashSet::new();
+    let mut github_sources = Vec::new();
+    for source in manifest
         .github_sources
         .iter()
         .filter(|source| source.source_type == "github")
-        .map(|source| {
-            let identity = normalize_registry_identity(&source.url);
-            let status = if existing_sources.contains(&identity) {
-                summary.sources_existing += 1;
-                SourcePreviewStatus::Exists
-            } else {
-                summary.sources_to_add += 1;
-                SourcePreviewStatus::WillAdd
-            };
-            SkillportStateSourcePreview {
-                name: source.name.clone(),
-                url: source.url.clone(),
-                status,
-            }
-        })
-        .collect();
+    {
+        check_cancel(cancel)?;
+        let identity = normalize_registry_identity(&source.url);
+        let status = if !seen_source_identities.insert(identity.clone()) {
+            summary.sources_duplicate += 1;
+            SourcePreviewStatus::Duplicate
+        } else if existing_sources.contains(&identity) {
+            summary.sources_existing += 1;
+            SourcePreviewStatus::Exists
+        } else {
+            summary.sources_to_add += 1;
+            SourcePreviewStatus::WillAdd
+        };
+        github_sources.push(SkillportStateSourcePreview {
+            name: source.name.clone(),
+            url: source.url.clone(),
+            status,
+        });
+    }
 
     let mut skills =
         Vec::with_capacity(manifest.central_skills.len() + manifest.unrestorable_skills.len());
+    let mut seen_skill_keys = HashSet::new();
+    let mut seen_skill_ids = HashMap::<String, String>::new();
     for skill in &manifest.central_skills {
+        check_cancel(cancel)?;
         let source_path = import_source_path(&skill.source.source_path);
-        let (status, existing_skill_id, reason, detail) = if skill.source.source_type != "github" {
+        let key = SkillManifestKey {
+            id: skill.id.clone(),
+            source_path: source_path.clone(),
+        };
+        let id_duplicate_with_other_path = seen_skill_ids
+            .get(&skill.id)
+            .is_some_and(|previous_path| previous_path != &source_path);
+        let (status, existing_skill_id, reason, detail) = if !seen_skill_keys.insert(key) {
+            (
+                SkillPreviewStatus::DuplicateSkipped,
+                None,
+                Some("duplicate_in_json".to_string()),
+                Some("A skill with the same id and sourcePath already appeared earlier in this JSON.".to_string()),
+            )
+        } else if id_duplicate_with_other_path {
+            (
+                SkillPreviewStatus::Conflict,
+                None,
+                Some("duplicate_skill_id_different_source".to_string()),
+                Some(
+                    "The JSON contains the same skill id with different sourcePath values."
+                        .to_string(),
+                ),
+            )
+        } else if skill.source.source_type != "github" {
             (
                 SkillPreviewStatus::Unrestorable,
                 None,
@@ -606,6 +934,9 @@ async fn preview_skillport_state_import_impl(
         } else {
             (SkillPreviewStatus::Ready, None, None, None)
         };
+        seen_skill_ids
+            .entry(skill.id.clone())
+            .or_insert_with(|| source_path.clone());
         increment_skill_summary(&mut summary, &status);
         skills.push(SkillportStateSkillPreview {
             id: skill.id.clone(),
@@ -619,6 +950,7 @@ async fn preview_skillport_state_import_impl(
     }
 
     for skill in &manifest.unrestorable_skills {
+        check_cancel(cancel)?;
         summary.unrestorable += 1;
         skills.push(SkillportStateSkillPreview {
             id: skill.id.clone(),
@@ -630,6 +962,14 @@ async fn preview_skillport_state_import_impl(
             detail: None,
         });
     }
+    emit_portability_step(
+        app,
+        SkillportStatePortabilityPhase::Previewing,
+        3,
+        3,
+        Some("Classified SkillPort state import preview"),
+        None,
+    );
 
     Ok(SkillportStateImportPreview {
         github_sources,
@@ -647,13 +987,17 @@ fn increment_skill_summary(
         SkillPreviewStatus::Conflict => summary.conflicts += 1,
         SkillPreviewStatus::Missing => summary.missing += 1,
         SkillPreviewStatus::Unrestorable => summary.unrestorable += 1,
+        SkillPreviewStatus::DuplicateSkipped => summary.duplicate_skipped += 1,
     }
 }
 
 async fn build_remote_catalog(
     pool: &DbPool,
     manifest: &SkillportStateManifest,
+    app: Option<&AppHandle>,
+    cancel: Option<&CancelFlag>,
 ) -> Result<HashMap<RepoKey, RemoteCatalogEntry>, String> {
+    check_cancel(cancel)?;
     let auth = github_import::github_direct_auth_from_settings(pool).await?;
     let mut repo_urls = HashMap::<RepoKey, String>::new();
     for source in manifest.central_skills.iter().map(|skill| &skill.source) {
@@ -665,6 +1009,14 @@ async fn build_remote_catalog(
             .entry(key)
             .or_insert_with(|| repo_url_for_source(source));
     }
+    emit_portability_step(
+        app,
+        SkillportStatePortabilityPhase::Previewing,
+        3,
+        1,
+        Some("Checking GitHub source catalogs"),
+        None,
+    );
 
     let entries = stream::iter(repo_urls.into_iter().map(|(key, repo_url)| {
         let auth = auth.clone();
@@ -708,6 +1060,7 @@ async fn build_remote_catalog(
     .buffer_unordered(REMOTE_CATALOG_CONCURRENCY_LIMIT)
     .collect::<Vec<_>>()
     .await;
+    check_cancel(cancel)?;
 
     Ok(entries.into_iter().collect())
 }
@@ -748,13 +1101,44 @@ async fn import_skillport_state_impl(
     pool: &DbPool,
     manifest: &SkillportStateManifest,
     resolutions: Vec<SkillportStateImportResolution>,
+    app: Option<&AppHandle>,
+    cancel: Option<&CancelFlag>,
 ) -> Result<SkillportStateImportResult, String> {
+    if check_cancel(cancel).is_err() {
+        return Ok(cancelled_import_result(manifest, 0, 0));
+    }
     let auth = github_import::github_direct_auth_from_settings(pool).await?;
+    if check_cancel(cancel).is_err() {
+        return Ok(cancelled_import_result(manifest, 0, 0));
+    }
     let (sources_added, sources_skipped) =
         ensure_github_sources(pool, &manifest.github_sources).await?;
+    emit_portability_step(
+        app,
+        SkillportStatePortabilityPhase::Importing,
+        manifest.central_skills.len().max(1),
+        0,
+        Some("Registered GitHub sources"),
+        None,
+    );
+    if check_cancel(cancel).is_err() {
+        return Ok(cancelled_import_result(
+            manifest,
+            sources_added,
+            sources_skipped,
+        ));
+    }
     let (groups, mut result) = build_import_groups(pool, manifest, resolutions).await?;
     result.sources_added = sources_added;
     result.sources_skipped = sources_skipped;
+    let total_import_items = groups
+        .iter()
+        .map(|group| group.selections.len())
+        .sum::<usize>()
+        + result.skipped_skills.len()
+        + result.failed_skills.len();
+    let total_import_items = total_import_items.max(1);
+    let mut completed_import_items = result.skipped_skills.len() + result.failed_skills.len();
 
     let skill_by_source_path = manifest
         .central_skills
@@ -762,12 +1146,34 @@ async fn import_skillport_state_impl(
         .map(|skill| (import_source_path(&skill.source.source_path), skill))
         .collect::<HashMap<_, _>>();
 
-    for group in groups {
-        let selected_paths = group
-            .selections
-            .iter()
-            .map(|selection| selection.source_path.clone())
-            .collect::<Vec<_>>();
+    for group_index in 0..groups.len() {
+        let group = groups[group_index].clone();
+        if check_cancel(cancel).is_err() {
+            for pending_group in &groups[group_index..] {
+                mark_group_cancelled(&mut result, pending_group, &skill_by_source_path);
+            }
+            result.cancelled = true;
+            completed_import_items = total_import_items;
+            emit_portability_step(
+                app,
+                SkillportStatePortabilityPhase::Importing,
+                total_import_items,
+                completed_import_items,
+                Some("SkillPort state import cancelled"),
+                None,
+            );
+            break;
+        }
+
+        let selected_paths = group.selected_paths();
+        emit_portability_step(
+            app,
+            SkillportStatePortabilityPhase::Importing,
+            total_import_items,
+            completed_import_items,
+            Some("Importing GitHub-backed skills"),
+            Some(&group.repo_url),
+        );
         match github_import::import_github_repo_skills_partially_with_auth(
             pool,
             &group.repo_url,
@@ -805,21 +1211,74 @@ async fn import_skillport_state_impl(
                 }
             }
             Err(error) => {
-                for source_path in selected_paths {
-                    let skill = skill_by_source_path.get(&source_path);
+                for source_path in &selected_paths {
+                    let skill = skill_by_source_path.get(source_path);
                     result.failed_skills.push(SkillportStateImportFailure {
                         skill_id: skill
                             .map(|skill| skill.id.clone())
-                            .unwrap_or_else(|| source_path.clone()),
-                        source_path: Some(export_source_path(&source_path)),
+                            .unwrap_or_else(|| source_path.to_string()),
+                        source_path: Some(export_source_path(source_path)),
                         error: error.clone(),
                     });
                 }
             }
         }
+        completed_import_items =
+            (completed_import_items + selected_paths.len()).min(total_import_items);
+        emit_portability_step(
+            app,
+            SkillportStatePortabilityPhase::Importing,
+            total_import_items,
+            completed_import_items,
+            Some("Imported GitHub-backed skill group"),
+            Some(&group.repo_url),
+        );
     }
 
     Ok(result)
+}
+
+fn cancelled_import_result(
+    manifest: &SkillportStateManifest,
+    sources_added: usize,
+    sources_skipped: usize,
+) -> SkillportStateImportResult {
+    let mut seen = HashSet::new();
+    SkillportStateImportResult {
+        sources_added,
+        sources_skipped,
+        skipped_skills: manifest
+            .central_skills
+            .iter()
+            .filter_map(|skill| {
+                if seen.insert(SkillManifestKey {
+                    id: skill.id.clone(),
+                    source_path: import_source_path(&skill.source.source_path),
+                }) {
+                    Some(skill.id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect(),
+        cancelled: true,
+        ..SkillportStateImportResult::default()
+    }
+}
+
+fn mark_group_cancelled(
+    result: &mut SkillportStateImportResult,
+    group: &ImportGroup,
+    skill_by_source_path: &HashMap<String, &PortableCentralSkill>,
+) {
+    for source_path in group.selected_paths() {
+        let skill = skill_by_source_path.get(&source_path);
+        result.skipped_skills.push(
+            skill
+                .map(|skill| skill.id.clone())
+                .unwrap_or_else(|| source_path.clone()),
+        );
+    }
 }
 
 async fn ensure_github_sources(
@@ -827,6 +1286,7 @@ async fn ensure_github_sources(
     sources: &[PortableGithubSource],
 ) -> Result<(usize, usize), String> {
     let mut existing = existing_registry_identities(pool).await?;
+    let mut seen_import_identities = HashSet::new();
     let mut added = 0;
     let mut skipped = 0;
 
@@ -835,7 +1295,7 @@ async fn ensure_github_sources(
         .filter(|source| source.source_type == "github")
     {
         let identity = normalize_registry_identity(&source.url);
-        if existing.contains(&identity) {
+        if !seen_import_identities.insert(identity.clone()) || existing.contains(&identity) {
             skipped += 1;
             continue;
         }
@@ -881,7 +1341,12 @@ async fn build_import_groups(
 ) -> Result<(Vec<ImportGroup>, SkillportStateImportResult), String> {
     let resolution_map = resolutions
         .into_iter()
-        .map(|resolution| (resolution.skill_id.clone(), resolution))
+        .map(|resolution| {
+            (
+                resolution_key(&resolution.skill_id, resolution.source_path.as_deref()),
+                resolution,
+            )
+        })
         .collect::<HashMap<_, _>>();
     let existing_skills = db::get_skills_by_ids(
         pool,
@@ -895,6 +1360,8 @@ async fn build_import_groups(
     .await?;
     let mut grouped = HashMap::<RepoKey, ImportGroup>::new();
     let mut result = SkillportStateImportResult::default();
+    let mut seen_skill_keys = HashSet::<SkillManifestKey>::new();
+    let mut seen_skill_ids = HashMap::<String, String>::new();
 
     for skill in &manifest.central_skills {
         if skill.source.source_type != "github" {
@@ -907,7 +1374,25 @@ async fn build_import_groups(
         }
 
         let source_path = import_source_path(&skill.source.source_path);
+        let key = SkillManifestKey {
+            id: skill.id.clone(),
+            source_path: source_path.clone(),
+        };
+        if !seen_skill_keys.insert(key) {
+            result.skipped_skills.push(skill.id.clone());
+            continue;
+        }
+        let duplicate_id_with_other_path = seen_skill_ids
+            .get(&skill.id)
+            .is_some_and(|previous_path| previous_path != &source_path);
+        seen_skill_ids
+            .entry(skill.id.clone())
+            .or_insert_with(|| source_path.clone());
         let resolution = resolution_for_skill(skill, &resolution_map, &existing_skills);
+        if duplicate_id_with_other_path && resolution.resolution != DuplicateResolution::Rename {
+            result.skipped_skills.push(skill.id.clone());
+            continue;
+        }
         if resolution.resolution == DuplicateResolution::Skip {
             result.skipped_skills.push(skill.id.clone());
             continue;
@@ -934,7 +1419,10 @@ fn resolution_for_skill(
     resolutions: &HashMap<String, SkillportStateImportResolution>,
     existing_skills: &HashMap<String, db::Skill>,
 ) -> SkillportStateImportResolution {
-    if let Some(resolution) = resolutions.get(&skill.id) {
+    if let Some(resolution) = resolutions
+        .get(&resolution_key(&skill.id, Some(&skill.source.source_path)))
+        .or_else(|| resolutions.get(&resolution_key(&skill.id, None)))
+    {
         return resolution.clone();
     }
 
@@ -950,6 +1438,14 @@ fn resolution_for_skill(
         resolution,
         renamed_skill_id: None,
     }
+}
+
+fn resolution_key(skill_id: &str, source_path: Option<&str>) -> String {
+    format!(
+        "{}\u{1f}{}",
+        skill_id,
+        source_path.map(import_source_path).unwrap_or_default()
+    )
 }
 
 async fn restore_skill_tags(
@@ -1047,6 +1543,55 @@ fn import_source_path(source_path: &str) -> String {
     }
 }
 
+fn check_cancel(cancel: Option<&CancelFlag>) -> Result<(), String> {
+    if cancel.is_some_and(|cancel| cancel.load(Ordering::SeqCst)) {
+        Err(PORTABILITY_CANCELLED_MESSAGE.to_string())
+    } else {
+        Ok(())
+    }
+}
+
+fn is_cancelled_error(error: &str) -> bool {
+    error.contains(PORTABILITY_CANCELLED_MESSAGE) || error == STATUS_CANCELLED
+}
+
+fn emit_portability_step(
+    app: Option<&AppHandle>,
+    phase: SkillportStatePortabilityPhase,
+    total: usize,
+    completed: usize,
+    message: Option<&str>,
+    current_item: Option<&str>,
+) {
+    if let Some(app) = app {
+        emit_portability_progress(
+            app,
+            PortabilityProgressUpdate {
+                phase,
+                status: SkillportStatePortabilityStatus::Running,
+                total,
+                completed,
+                message,
+                current_item,
+                error: None,
+            },
+        );
+    }
+}
+
+fn emit_portability_progress(app: &AppHandle, update: PortabilityProgressUpdate<'_>) {
+    let payload = SkillportStatePortabilityProgressPayload {
+        phase: update.phase,
+        status: update.status,
+        total: update.total,
+        completed: update.completed,
+        message: update.message.map(str::to_string),
+        current_item: update.current_item.map(str::to_string),
+        error: update.error.map(str::to_string),
+    };
+    let _ = app.emit(PORTABILITY_PROGRESS_EVENT, payload);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1111,7 +1656,9 @@ mod tests {
     #[tokio::test]
     async fn export_empty_state_produces_manifest() {
         let pool = setup_test_db().await;
-        let json = export_skillport_state_impl(&pool).await.unwrap();
+        let json = export_skillport_state_impl(&pool, None, None)
+            .await
+            .unwrap();
         let manifest = parse_manifest(&json).unwrap();
         assert_eq!(manifest.kind, EXPORT_KIND);
         assert_eq!(manifest.version, EXPORT_VERSION);
@@ -1170,7 +1717,12 @@ mod tests {
         };
         db::upsert_skill(&pool, &local).await.unwrap();
 
-        let manifest = parse_manifest(&export_skillport_state_impl(&pool).await.unwrap()).unwrap();
+        let manifest = parse_manifest(
+            &export_skillport_state_impl(&pool, None, None)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
 
         assert_eq!(manifest.central_skills.len(), 1);
         assert_eq!(manifest.github_sources.len(), 1);
@@ -1246,7 +1798,12 @@ mod tests {
         .await
         .unwrap();
 
-        let manifest = parse_manifest(&export_skillport_state_impl(&pool).await.unwrap()).unwrap();
+        let manifest = parse_manifest(
+            &export_skillport_state_impl(&pool, None, None)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         let urls = manifest
             .github_sources
             .iter()
@@ -1289,6 +1846,23 @@ mod tests {
 
         assert_eq!(first, (1, 0));
         assert_eq!(second, (0, 1));
+    }
+
+    #[tokio::test]
+    async fn ensure_github_sources_skips_duplicate_sources_in_same_manifest() {
+        let pool = setup_test_db().await;
+        let mut manifest = manifest_with_skill("openai-docs", "skills/openai-docs/SKILL.md");
+        manifest.github_sources[0].url = "https://github.com/example/portable-skills".to_string();
+        let mut duplicate_source = manifest.github_sources[0].clone();
+        duplicate_source.name = "OpenAI Skills Duplicate".to_string();
+        duplicate_source.url = "https://github.com/example/portable-skills.git".to_string();
+        manifest.github_sources.push(duplicate_source);
+
+        let result = ensure_github_sources(&pool, &manifest.github_sources)
+            .await
+            .unwrap();
+
+        assert_eq!(result, (1, 1));
     }
 
     #[tokio::test]
@@ -1343,14 +1917,67 @@ mod tests {
             },
         );
 
-        let preview = preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog))
-            .await
-            .unwrap();
+        let preview =
+            preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog), None, None)
+                .await
+                .unwrap();
 
         assert_eq!(preview.summary.ready, 1);
         assert_eq!(preview.summary.conflicts, 1);
         assert_eq!(preview.summary.missing, 1);
         assert_eq!(preview.summary.unrestorable, 1);
+    }
+
+    #[tokio::test]
+    async fn preview_reports_internal_duplicate_skills_and_sources() {
+        let pool = setup_test_db().await;
+        let mut manifest = manifest_with_skill("dup-skill", "skills/dup-skill/SKILL.md");
+        manifest.github_sources.push(PortableGithubSource {
+            name: "OpenAI Skills Duplicate".to_string(),
+            source_type: "github".to_string(),
+            url: "https://github.com/openai/skills.git".to_string(),
+            is_enabled: true,
+        });
+        manifest
+            .central_skills
+            .push(manifest.central_skills[0].clone());
+        manifest.central_skills.push(PortableCentralSkill {
+            id: "dup-skill".to_string(),
+            name: "dup-skill-alt".to_string(),
+            description: None,
+            source: github_source("skills/dup-skill-alt/SKILL.md"),
+            tags: Vec::new(),
+        });
+
+        let mut paths = HashSet::new();
+        paths.insert("skills/dup-skill".to_string());
+        paths.insert("skills/dup-skill-alt".to_string());
+        let mut catalog = HashMap::new();
+        catalog.insert(
+            repo_key(&github_source("skills/dup-skill/SKILL.md")),
+            RemoteCatalogEntry {
+                valid_source_paths: paths,
+                invalid_candidates: HashMap::new(),
+                repo_error: None,
+            },
+        );
+
+        let preview =
+            preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog), None, None)
+                .await
+                .unwrap();
+
+        assert_eq!(preview.summary.sources_duplicate, 1);
+        assert_eq!(preview.summary.duplicate_skipped, 1);
+        assert_eq!(preview.summary.conflicts, 1);
+        assert!(preview.skills.iter().any(|skill| {
+            skill.status == SkillPreviewStatus::DuplicateSkipped
+                && skill.reason.as_deref() == Some("duplicate_in_json")
+        }));
+        assert!(preview.skills.iter().any(|skill| {
+            skill.status == SkillPreviewStatus::Conflict
+                && skill.reason.as_deref() == Some("duplicate_skill_id_different_source")
+        }));
     }
 
     #[tokio::test]
@@ -1416,9 +2043,10 @@ mod tests {
             },
         );
 
-        let preview = preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog))
-            .await
-            .unwrap();
+        let preview =
+            preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog), None, None)
+                .await
+                .unwrap();
 
         let invalid = preview
             .skills
@@ -1497,6 +2125,82 @@ mod tests {
             groups[0].selections[1].resolution,
             DuplicateResolution::Rename
         );
+    }
+
+    #[tokio::test]
+    async fn build_import_groups_skips_exact_duplicate_entries() {
+        let pool = setup_test_db().await;
+        let mut manifest = manifest_with_skill("dup-skill", "skills/dup-skill/SKILL.md");
+        manifest
+            .central_skills
+            .push(manifest.central_skills[0].clone());
+
+        let (groups, result) = build_import_groups(&pool, &manifest, Vec::new())
+            .await
+            .unwrap();
+
+        assert_eq!(result.skipped_skills, vec!["dup-skill"]);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].selections.len(), 1);
+        assert_eq!(groups[0].selections[0].source_path, "skills/dup-skill");
+    }
+
+    #[tokio::test]
+    async fn build_import_groups_requires_resolution_for_duplicate_id_with_different_source() {
+        let pool = setup_test_db().await;
+        let mut manifest = manifest_with_skill("dup-skill", "skills/dup-skill/SKILL.md");
+        manifest.central_skills.push(PortableCentralSkill {
+            id: "dup-skill".to_string(),
+            name: "dup-skill-alt".to_string(),
+            description: None,
+            source: github_source("skills/dup-skill-alt/SKILL.md"),
+            tags: Vec::new(),
+        });
+
+        let (groups, result) = build_import_groups(&pool, &manifest, Vec::new())
+            .await
+            .unwrap();
+
+        assert_eq!(result.skipped_skills, vec!["dup-skill"]);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].selections.len(), 1);
+        assert_eq!(groups[0].selections[0].source_path, "skills/dup-skill");
+
+        let (groups, result) = build_import_groups(
+            &pool,
+            &manifest,
+            vec![SkillportStateImportResolution {
+                skill_id: "dup-skill".to_string(),
+                source_path: Some("skills/dup-skill-alt/SKILL.md".to_string()),
+                resolution: DuplicateResolution::Rename,
+                renamed_skill_id: Some("dup-skill-alt-copy".to_string()),
+            }],
+        )
+        .await
+        .unwrap();
+
+        assert!(result.skipped_skills.is_empty());
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].selections.len(), 2);
+        assert_eq!(
+            groups[0].selections[1].renamed_skill_id.as_deref(),
+            Some("dup-skill-alt-copy")
+        );
+    }
+
+    #[tokio::test]
+    async fn import_cancelled_before_groups_returns_partial_cancelled_result() {
+        let pool = setup_test_db().await;
+        let manifest = manifest_with_skill("cancelled-skill", "skills/cancelled-skill/SKILL.md");
+        let cancel = Arc::new(AtomicBool::new(true));
+
+        let result = import_skillport_state_impl(&pool, &manifest, Vec::new(), None, Some(&cancel))
+            .await
+            .unwrap();
+
+        assert!(result.cancelled);
+        assert_eq!(result.skipped_skills, vec!["cancelled-skill"]);
+        assert!(result.failed_skills.is_empty());
     }
 
     #[tokio::test]

@@ -45,6 +45,9 @@ pub struct AppState {
     /// reset to false on entry and poll between iterations; the
     /// `cancel_central_skill_updates` command stores true to request stop.
     pub central_update_cancel: Arc<AtomicBool>,
+    /// Cooperative cancel flag for the at-most-one SkillPort state
+    /// portability command (export, preview, or import).
+    pub portable_state_cancel: Arc<AtomicBool>,
     pub targets: targets::TargetRegistry,
 }
 
@@ -121,6 +124,7 @@ pub fn run() {
                 db: pool.clone(),
                 ai_tag_jobs: AiTagJobRegistry::default(),
                 central_update_cancel: Arc::new(AtomicBool::new(false)),
+                portable_state_cancel: Arc::new(AtomicBool::new(false)),
                 targets: targets::TargetRegistry::default(),
             });
 
@@ -281,6 +285,7 @@ pub fn run() {
             commands::portable_state::export_skillport_state,
             commands::portable_state::preview_skillport_state_import,
             commands::portable_state::import_skillport_state,
+            commands::portable_state::cancel_skillport_state_portability,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
