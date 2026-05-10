@@ -22,6 +22,7 @@ import type {
   AiTagJob,
   CentralSkillUpdateJob,
   CentralSkillUpdateState,
+  SkillportStatePortabilityJob,
   SkillAiTagReview,
   SkillRepositoryWithStats,
   SkillTag,
@@ -88,6 +89,12 @@ const IDLE_UPDATE_JOB: CentralSkillUpdateJob = {
   skipped: 0,
   items: {},
 };
+const IDLE_PORTABILITY_JOB: SkillportStatePortabilityJob = {
+  phase: null,
+  status: "idle",
+  total: 0,
+  completed: 0,
+};
 const EMPTY_GITHUB_IMPORT_STATE = {
   isPreviewLoading: false,
   isImporting: false,
@@ -130,6 +137,8 @@ async function noopUnlisten() {
   return () => {};
 }
 
+async function noopCancelPortability() {}
+
 function noopResetGitHubImport() {}
 
 function parseSortableTimestamp(value?: string | null): number {
@@ -158,6 +167,7 @@ export function useCentralSkillsStoreBindings(t: TFunction) {
   const rawAiTagJob = useCentralSkillsStore((state) => state.aiTagJob);
   const rawUpdateStatuses = useCentralSkillsStore((state) => state.updateStatuses);
   const rawUpdateJob = useCentralSkillsStore((state) => state.updateJob);
+  const rawPortabilityJob = useCentralSkillsStore((state) => state.portabilityJob);
   const rawAiTaggingAvailable = useCentralSkillsStore((state) => state.aiTaggingAvailable);
   const rawIsLoading = useCentralSkillsStore((state) => state.isLoading);
   const rawLoadCentralSkills = useCentralSkillsStore((state) => state.loadCentralSkills);
@@ -175,6 +185,7 @@ export function useCentralSkillsStoreBindings(t: TFunction) {
   const aiTagJob = rawAiTagJob ?? IDLE_AI_TAG_JOB;
   const updateStatuses = rawUpdateStatuses ?? EMPTY_UPDATE_STATUSES;
   const updateJob = rawUpdateJob ?? IDLE_UPDATE_JOB;
+  const portabilityJob = rawPortabilityJob ?? IDLE_PORTABILITY_JOB;
   const activeTarget = useTargetStore((state) => state.activeTarget);
   const categoryVisibility =
     usePlatformStore((state) => state.categoryVisibility) ??
@@ -190,6 +201,7 @@ export function useCentralSkillsStoreBindings(t: TFunction) {
     aiTagJob,
     updateStatuses,
     updateJob,
+    portabilityJob,
     activeTarget,
     isRemoteTarget: activeTarget.kind === "ssh",
     aiTaggingAvailable: rawAiTaggingAvailable ?? false,
@@ -202,6 +214,11 @@ export function useCentralSkillsStoreBindings(t: TFunction) {
       useCentralSkillsStore((state) => state.subscribeAiTagProgress) ?? noopUnlisten,
     subscribeUpdateProgress:
       useCentralSkillsStore((state) => state.subscribeUpdateProgress) ?? noopUnlisten,
+    subscribePortabilityProgress:
+      useCentralSkillsStore((state) => state.subscribePortabilityProgress) ?? noopUnlisten,
+    cancelSkillportStatePortability:
+      useCentralSkillsStore((state) => state.cancelSkillportStatePortability) ??
+      noopCancelPortability,
     isMetadataUpdating: useCentralSkillsStore((state) => state.isMetadataUpdating) ?? false,
     isSuggestingTags: useCentralSkillsStore((state) => state.isSuggestingTags) ?? false,
     isCheckingUpdates: useCentralSkillsStore((state) => state.isCheckingUpdates) ?? false,

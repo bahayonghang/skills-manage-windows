@@ -608,18 +608,38 @@
       "repo_unavailable": "无法检查源仓库",
       "source_missing": "导出的 sourcePath 已不存在",
       "source_unknown": "该技能没有可恢复的 GitHub 来源",
-      "unknown": "不可用"
+      "unknown": "不可用",
+      "duplicate_in_json": "JSON 中的重复条目已跳过",
+      "duplicate_skill_id_different_source": "JSON 中同一技能 ID 对应了不同 sourcePath"
     },
     "portabilityStatus": {
       "ready": "可导入",
       "conflict": "冲突",
       "missing": "缺失",
-      "unrestorable": "不可恢复"
+      "unrestorable": "不可恢复",
+      "duplicate_skipped": "重复已跳过"
     },
     "platformTargetsLabel": "安装目标",
     "platformManageButton": "管理平台",
     "platformManageTitle": "管理安装目标",
-    "platformManageDesc": "无需离开中央技能库即可调整平台可见性和自定义安装目标。"
+    "platformManageDesc": "无需离开中央技能库即可调整平台可见性和自定义安装目标。",
+    "portabilityRawJson": "原始 JSON",
+    "portabilityPrettyJson": "美化 JSON",
+    "portabilityPrettyError": "无法格式化 JSON：{{error}}",
+    "portabilityFormatJson": "格式化 JSON",
+    "portabilityDuplicateSkipped": "JSON 内重复",
+    "portabilitySourceDuplicates": "源重复",
+    "portabilityProgressTitle": "导入 / 导出进度",
+    "portabilityCancel": "中断任务",
+    "portabilityCancelling": "中断中…",
+    "portabilityProgressCompleted": "已完成 {{completed}} / {{total}}",
+    "portabilityImportCancelled": "导入已中断：已导入 {{imported}} 个，跳过 {{skipped}} 个，失败 {{failed}} 个",
+    "portabilityPhase": {
+      "exporting": "正在导出",
+      "previewing": "正在预览",
+      "importing": "正在导入",
+      "finalizing": "正在收尾"
+    }
   },
   "installDialog": {
     "title": "安装 {{name}}",

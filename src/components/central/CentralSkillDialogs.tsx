@@ -26,6 +26,7 @@ import type {
   SkillportStateImportPreview,
   SkillportStateImportResolution,
   SkillportStateImportResult,
+  SkillportStatePortabilityJob,
 } from "@/types";
 
 type GitHubImportState = {
@@ -107,6 +108,8 @@ export function CentralSkillDialogs({
   setIsPortabilityOpen,
   t,
   exportSkillportState,
+  portabilityJob,
+  cancelSkillportStatePortability,
   platformManagement,
   onAfterImportSuccess,
   onBatchDeleteCentralSkills,
@@ -178,6 +181,8 @@ export function CentralSkillDialogs({
   setIsPortabilityOpen: (open: boolean) => void;
   t: TFunction;
   exportSkillportState: () => Promise<string>;
+  portabilityJob: SkillportStatePortabilityJob;
+  cancelSkillportStatePortability: () => Promise<void>;
   platformManagement: PlatformManagementProps;
   onAfterImportSuccess: () => Promise<void>;
   onBatchDeleteCentralSkills: (
@@ -379,6 +384,8 @@ export function CentralSkillDialogs({
             exportState={exportSkillportState}
             previewImport={previewSkillportStateImport}
             importState={importSkillportState}
+            portabilityJob={portabilityJob}
+            onCancelJob={cancelSkillportStatePortability}
             onAfterImport={async () => {
               await Promise.all([onRefreshCounts(), loadCentralSkills()]);
             }}

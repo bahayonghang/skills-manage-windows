@@ -608,18 +608,38 @@
       "repo_unavailable": "The source repository could not be inspected",
       "source_missing": "The exported source path no longer exists",
       "source_unknown": "This skill has no restorable GitHub source",
-      "unknown": "Unavailable"
+      "unknown": "Unavailable",
+      "duplicate_in_json": "Duplicate entry in the JSON was skipped",
+      "duplicate_skill_id_different_source": "The JSON repeats this skill ID with a different source path"
     },
     "portabilityStatus": {
       "ready": "Ready",
       "conflict": "Conflict",
       "missing": "Missing",
-      "unrestorable": "Unrestorable"
+      "unrestorable": "Unrestorable",
+      "duplicate_skipped": "Duplicate skipped"
     },
     "platformTargetsLabel": "Targets",
     "platformManageButton": "Manage platforms",
     "platformManageTitle": "Manage install targets",
-    "platformManageDesc": "Adjust platform visibility and custom install targets without leaving Central Skills."
+    "platformManageDesc": "Adjust platform visibility and custom install targets without leaving Central Skills.",
+    "portabilityRawJson": "Raw JSON",
+    "portabilityPrettyJson": "Pretty JSON",
+    "portabilityPrettyError": "JSON could not be formatted: {{error}}",
+    "portabilityFormatJson": "Format JSON",
+    "portabilityDuplicateSkipped": "JSON duplicates",
+    "portabilitySourceDuplicates": "Source duplicates",
+    "portabilityProgressTitle": "Import / export progress",
+    "portabilityCancel": "Cancel job",
+    "portabilityCancelling": "Cancelling…",
+    "portabilityProgressCompleted": "{{completed}} / {{total}} completed",
+    "portabilityImportCancelled": "Import cancelled: imported {{imported}}, skipped {{skipped}}, failed {{failed}}",
+    "portabilityPhase": {
+      "exporting": "Exporting",
+      "previewing": "Previewing",
+      "importing": "Importing",
+      "finalizing": "Finalizing"
+    }
   },
   "installDialog": {
     "title": "Install {{name}}",

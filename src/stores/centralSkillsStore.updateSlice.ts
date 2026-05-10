@@ -4,6 +4,7 @@ import {
   CentralSkillUpdateProgressPayload,
   CentralSkillUpdateResult,
   CentralSkillUpdateState,
+  SkillportStatePortabilityProgressPayload,
   SkillportStateImportPreview,
   SkillportStateImportResolution,
   SkillportStateImportResult,
@@ -14,10 +15,13 @@ import {
 import {
   AI_TAG_PROGRESS_EVENT,
   CENTRAL_UPDATE_PROGRESS_EVENT,
+  PORTABILITY_PROGRESS_EVENT,
   createCentralSkillsInitialState,
+  createIdlePortabilityJob,
   createRunningUpdateJob,
   indexUpdateStates,
   mergeAiTagProgress,
+  mergePortabilityProgress,
   mergeUpdateProgress,
   mergeUpdateStates,
 } from "./centralSkillsStore.shared";
@@ -31,6 +35,8 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
   | "cancelAiTagJob"
   | "subscribeAiTagProgress"
   | "subscribeUpdateProgress"
+  | "subscribePortabilityProgress"
+  | "cancelSkillportStatePortability"
   | "exportSkillportState"
   | "previewSkillportStateImport"
   | "importSkillportState"
@@ -220,19 +226,120 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
     });
   },
 
+  subscribePortabilityProgress: async () => {
+    if (!isTauriRuntime()) {
+      return () => {};
+    }
+
+    return listen<SkillportStatePortabilityProgressPayload>(PORTABILITY_PROGRESS_EVENT, (event) => {
+      set((state) => ({
+        portabilityJob: mergePortabilityProgress(state.portabilityJob, event.payload),
+      }));
+    });
+  },
+
+  cancelSkillportStatePortability: async () => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    set((state) =>
+      state.portabilityJob.status === "running"
+        ? { portabilityJob: { ...state.portabilityJob, status: "cancelling" } }
+        : {}
+    );
+    try {
+      await invoke("cancel_skillport_state_portability");
+    } catch (err) {
+      set({ error: String(err) });
+      throw err;
+    }
+  },
+
   exportSkillportState: async () => {
-    return invoke<string>("export_skillport_state", { options: {} });
+    set({
+      portabilityJob: {
+        ...createIdlePortabilityJob(),
+        phase: "exporting",
+        status: "running",
+        total: 1,
+      },
+    });
+    try {
+      const json = await invoke<string>("export_skillport_state", { options: {} });
+      set((state) => ({
+        portabilityJob:
+          state.portabilityJob.status === "running"
+            ? { ...state.portabilityJob, status: "completed", completed: state.portabilityJob.total }
+            : state.portabilityJob,
+      }));
+      return json;
+    } catch (err) {
+      set((state) => ({
+        portabilityJob: {
+          ...state.portabilityJob,
+          status: String(err).includes("cancelled") ? "cancelled" : "failed",
+          error: String(err),
+        },
+      }));
+      throw err;
+    }
   },
 
   previewSkillportStateImport: async (json: string) => {
-    return invoke<SkillportStateImportPreview>("preview_skillport_state_import", { json });
+    set({
+      portabilityJob: {
+        ...createIdlePortabilityJob(),
+        phase: "previewing",
+        status: "running",
+        total: 3,
+      },
+    });
+    try {
+      const preview = await invoke<SkillportStateImportPreview>("preview_skillport_state_import", { json });
+      set((state) => ({
+        portabilityJob:
+          state.portabilityJob.status === "running"
+            ? { ...state.portabilityJob, status: "completed", completed: state.portabilityJob.total }
+            : state.portabilityJob,
+      }));
+      return preview;
+    } catch (err) {
+      set((state) => ({
+        portabilityJob: {
+          ...state.portabilityJob,
+          status: String(err).includes("cancelled") ? "cancelled" : "failed",
+          error: String(err),
+        },
+      }));
+      throw err;
+    }
   },
 
   importSkillportState: async (json: string, resolutions: SkillportStateImportResolution[]) => {
-    const result = await invoke<SkillportStateImportResult>("import_skillport_state", {
-      json,
-      resolutions,
+    set({
+      portabilityJob: {
+        ...createIdlePortabilityJob(),
+        phase: "importing",
+        status: "running",
+        total: Math.max(1, resolutions.length),
+      },
     });
+    let result: SkillportStateImportResult;
+    try {
+      result = await invoke<SkillportStateImportResult>("import_skillport_state", {
+        json,
+        resolutions,
+      });
+    } catch (err) {
+      set((state) => ({
+        portabilityJob: {
+          ...state.portabilityJob,
+          status: String(err).includes("cancelled") ? "cancelled" : "failed",
+          error: String(err),
+        },
+      }));
+      throw err;
+    }
     const [skills, repositories, tags, updateStates] = await Promise.all([
       invoke<SkillWithLinks[]>("get_central_skills"),
       invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
@@ -244,6 +351,14 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       repositories: repositories ?? [],
       tags: tags ?? [],
       updateStatuses: indexUpdateStates(updateStates ?? []),
+      portabilityJob: {
+        ...get().portabilityJob,
+        status: result.cancelled
+          ? "cancelled"
+          : result.failedSkills.length > 0
+            ? "failed"
+            : "completed",
+      },
     });
     return result;
   },

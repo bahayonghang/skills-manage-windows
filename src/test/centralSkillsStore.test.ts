@@ -167,6 +167,12 @@ describe("centralSkillsStore", () => {
         skipped: 0,
         items: {},
       },
+      portabilityJob: {
+        phase: null,
+        status: "idle",
+        total: 0,
+        completed: 0,
+      },
       aiTaggingAvailable: false,
       isLoading: false,
       isInstalling: false,
@@ -193,6 +199,7 @@ describe("centralSkillsStore", () => {
     expect(state.aiTagJob.status).toBe("idle");
     expect(state.updateStatuses).toEqual({});
     expect(state.updateJob.status).toBe("idle");
+    expect(state.portabilityJob.status).toBe("idle");
     expect(state.aiTaggingAvailable).toBe(false);
     expect(state.isLoading).toBe(false);
     expect(state.isInstalling).toBe(false);
@@ -1012,6 +1019,63 @@ describe("centralSkillsStore", () => {
     state = useCentralSkillsStore.getState();
     expect(state.updateJob.status).toBe("completed");
     expect(state.updateJob.error).toBeUndefined();
+  });
+
+  it("updates SkillPort portability job state from progress events", async () => {
+    let handler: ((event: { payload: unknown }) => void) | undefined;
+    const unlisten = vi.fn();
+    vi.mocked(listen).mockImplementation(async (_event, callback) => {
+      handler = callback as (event: { payload: unknown }) => void;
+      return unlisten;
+    });
+
+    await useCentralSkillsStore.getState().subscribePortabilityProgress();
+    handler?.({
+      payload: {
+        phase: "previewing",
+        status: "running",
+        total: 3,
+        completed: 1,
+        message: "Checking GitHub source catalogs",
+      },
+    });
+
+    let state = useCentralSkillsStore.getState();
+    expect(state.portabilityJob.status).toBe("running");
+    expect(state.portabilityJob.phase).toBe("previewing");
+    expect(state.portabilityJob.completed).toBe(1);
+    expect(state.portabilityJob.message).toBe("Checking GitHub source catalogs");
+
+    handler?.({
+      payload: {
+        phase: "previewing",
+        status: "cancelled",
+        total: 3,
+        completed: 1,
+        error: "cancelled",
+      },
+    });
+
+    state = useCentralSkillsStore.getState();
+    expect(state.portabilityJob.status).toBe("cancelled");
+    expect(state.portabilityJob.error).toBe("cancelled");
+  });
+
+  it("cancels the active SkillPort portability job", async () => {
+    useCentralSkillsStore.setState({
+      portabilityJob: {
+        phase: "importing",
+        status: "running",
+        total: 2,
+        completed: 1,
+      },
+    });
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await useCentralSkillsStore.getState().cancelSkillportStatePortability();
+
+    expect(invoke).toHaveBeenCalledWith("cancel_skillport_state_portability");
+    expect(useCentralSkillsStore.getState().portabilityJob.status).toBe("cancelling");
   });
 
   it("exports the SkillPort portable state manifest", async () => {

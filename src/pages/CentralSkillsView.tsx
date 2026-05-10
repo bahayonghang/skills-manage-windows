@@ -34,12 +34,15 @@ export function CentralSkillsView() {
     aiTagJob,
     updateStatuses,
     updateJob,
+    portabilityJob,
     aiTaggingAvailable,
     centralSkillsDir,
     isLoading,
     loadCentralSkills,
     subscribeAiTagProgress,
     subscribeUpdateProgress,
+    subscribePortabilityProgress,
+    cancelSkillportStatePortability,
     isMetadataUpdating,
     isSuggestingTags,
     isCheckingUpdates,
@@ -265,6 +268,23 @@ export function CentralSkillsView() {
   }, [subscribeUpdateProgress]);
 
   useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    subscribePortabilityProgress().then((unsubscribe) => {
+      if (disposed) {
+        unsubscribe();
+        return;
+      }
+      unlisten = unsubscribe;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [subscribePortabilityProgress]);
+
+  useEffect(() => {
     if (!isSearchActive || !contentRef.current) return;
     contentRef.current.scrollTop = 0;
   }, [isSearchActive, normalizedSearchQuery]);
@@ -444,6 +464,8 @@ export function CentralSkillsView() {
         setIsPlatformManageOpen,
         setIsPortabilityOpen,
         exportSkillportState,
+        portabilityJob,
+        cancelSkillportStatePortability,
         platformManagement: {
           agents,
           categoryVisibility,

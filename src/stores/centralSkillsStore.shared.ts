@@ -5,6 +5,8 @@ import {
   CentralSkillUpdateJob,
   CentralSkillUpdateProgressPayload,
   CentralSkillUpdateState,
+  SkillportStatePortabilityJob,
+  SkillportStatePortabilityProgressPayload,
   SkillRepositoryWithStats,
   SkillTag,
   SkillTagSuggestionResult,
@@ -19,6 +21,7 @@ import {
 
 export const AI_TAG_PROGRESS_EVENT = "central://ai-tag-progress";
 export const CENTRAL_UPDATE_PROGRESS_EVENT = "central://skill-update-progress";
+export const PORTABILITY_PROGRESS_EVENT = "central://state-portability-progress";
 
 const BROWSER_UNKNOWN_REPOSITORY: SkillRepositoryWithStats = {
   id: "local-unknown",
@@ -133,6 +136,15 @@ export function createIdleUpdateJob(): CentralSkillUpdateJob {
     failed: 0,
     skipped: 0,
     items: {},
+  };
+}
+
+export function createIdlePortabilityJob(): SkillportStatePortabilityJob {
+  return {
+    phase: null,
+    status: "idle",
+    total: 0,
+    completed: 0,
   };
 }
 
@@ -253,6 +265,33 @@ export function mergeUpdateProgress(
   };
 }
 
+export function mergePortabilityProgress(
+  current: SkillportStatePortabilityJob,
+  payload: SkillportStatePortabilityProgressPayload
+): SkillportStatePortabilityJob {
+  const status =
+    payload.status === "completed"
+      ? "completed"
+      : payload.status === "cancelled"
+        ? "cancelled"
+        : payload.status === "failed"
+          ? "failed"
+          : current.status === "cancelling"
+            ? "cancelling"
+            : "running";
+
+  return {
+    ...current,
+    phase: payload.phase,
+    status,
+    total: payload.total,
+    completed: payload.completed,
+    message: payload.message ?? current.message,
+    currentItem: payload.currentItem ?? current.currentItem,
+    error: status === "completed" ? undefined : payload.error ?? current.error,
+  };
+}
+
 export function indexUpdateStates(
   states: CentralSkillUpdateState[]
 ): Record<string, CentralSkillUpdateState> {
@@ -307,6 +346,7 @@ export function createCentralBrowserFixtureState() {
     tags: BROWSER_TAGS,
     aiTagReviews: [],
     updateStatuses: {},
+    portabilityJob: createIdlePortabilityJob(),
     aiTaggingAvailable: false,
     isLoading: false,
     error: null,
@@ -323,6 +363,7 @@ export function createCentralSkillsInitialState() {
     aiTagJob: createIdleAiTagJob(),
     updateStatuses: {},
     updateJob: createIdleUpdateJob(),
+    portabilityJob: createIdlePortabilityJob(),
     aiTaggingAvailable: false,
     isLoading: false,
     isInstalling: false,

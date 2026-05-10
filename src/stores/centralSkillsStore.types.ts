@@ -14,6 +14,7 @@ import {
   SkillportStateImportPreview,
   SkillportStateImportResolution,
   SkillportStateImportResult,
+  SkillportStatePortabilityJob,
   SkillDetail,
   SkillAiTagReview,
   SkillRepository,
@@ -32,6 +33,7 @@ export interface CentralSkillsState {
   aiTagJob: AiTagJob;
   updateStatuses: Record<string, CentralSkillUpdateState>;
   updateJob: CentralSkillUpdateJob;
+  portabilityJob: SkillportStatePortabilityJob;
   aiTaggingAvailable: boolean;
   isLoading: boolean;
   isInstalling: boolean;
@@ -85,6 +87,8 @@ export interface CentralSkillsState {
   skipAiTagReview: (skillId: string) => Promise<void>;
   subscribeAiTagProgress: () => Promise<() => void>;
   subscribeUpdateProgress: () => Promise<() => void>;
+  subscribePortabilityProgress: () => Promise<() => void>;
+  cancelSkillportStatePortability: () => Promise<void>;
   exportSkillportState: () => Promise<string>;
   previewSkillportStateImport: (json: string) => Promise<SkillportStateImportPreview>;
   importSkillportState: (

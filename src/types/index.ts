@@ -650,17 +650,59 @@ export interface MarketplaceSkill {
 
 // ─── Portable State Types ───────────────────────────────────────────────────
 
-export type SkillportStateSourceStatus = "exists" | "will_add";
-export type SkillportStateSkillStatus = "ready" | "conflict" | "missing" | "unrestorable";
+export type SkillportStateSourceStatus = "exists" | "will_add" | "duplicate";
+export type SkillportStateSkillStatus =
+  | "ready"
+  | "conflict"
+  | "missing"
+  | "unrestorable"
+  | "duplicate_skipped";
 export type SkillportStateImportResolutionType = "overwrite" | "skip" | "rename";
+
+export type SkillportStatePortabilityJobStatus =
+  | "idle"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelling"
+  | "cancelled";
+
+export type SkillportStatePortabilityPhase =
+  | "exporting"
+  | "previewing"
+  | "importing"
+  | "finalizing"
+  | null;
+
+export interface SkillportStatePortabilityJob {
+  phase: SkillportStatePortabilityPhase;
+  status: SkillportStatePortabilityJobStatus;
+  total: number;
+  completed: number;
+  message?: string;
+  currentItem?: string;
+  error?: string;
+}
+
+export interface SkillportStatePortabilityProgressPayload {
+  phase: Exclude<SkillportStatePortabilityPhase, null>;
+  status: Exclude<SkillportStatePortabilityJobStatus, "idle" | "cancelling">;
+  total: number;
+  completed: number;
+  message?: string | null;
+  currentItem?: string | null;
+  error?: string | null;
+}
 
 export interface SkillportStateImportPreviewSummary {
   sourcesToAdd: number;
   sourcesExisting: number;
+  sourcesDuplicate?: number;
   ready: number;
   conflicts: number;
   missing: number;
   unrestorable: number;
+  duplicateSkipped?: number;
 }
 
 export interface SkillportStateSourcePreview {
@@ -711,6 +753,7 @@ export interface SkillportStateImportResult {
   skippedSkills: string[];
   failedSkills: SkillportStateImportFailure[];
   tagsRestored: number;
+  cancelled?: boolean;
 }
 
 export interface GitHubRepoRef {
