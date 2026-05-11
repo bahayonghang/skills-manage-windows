@@ -1,7 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ChevronDown,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   CircleAlert,
   FolderGit2,
   FolderOpen,
@@ -14,6 +16,9 @@ import type { TFunction } from "i18next";
 
 import { FacetItem } from "@/components/central/v2/FacetItem";
 import { FacetSection } from "@/components/central/v2/FacetSection";
+import { SidebarExpansionProvider } from "@/components/central/v2/SidebarExpansionProvider";
+import type { SidebarExpansionSignal } from "@/components/central/v2/sidebarExpansionContext";
+import { useSidebarExpansionSignal } from "@/components/central/v2/useSidebarExpansionSignal";
 import { groupRepositoriesForSidebar } from "@/lib/centralRepositoryGroups";
 import { cn } from "@/lib/utils";
 import type { FacetCounts } from "@/lib/centralFacetCounts";
@@ -71,6 +76,9 @@ export function CentralSidebarV2({
   onAssignTagToGroup,
   savedViewsSlot,
 }: CommonSidebarProps) {
+  const [bulkExpansionSignal, setBulkExpansionSignal] =
+    useState<SidebarExpansionSignal | null>(null);
+  const [bulkExpanded, setBulkExpanded] = useState(true);
   const repoSelectionSet = new Set(selectedRepos);
   const tagSelectionSet = new Set(selectedTags);
 
@@ -92,6 +100,17 @@ export function CentralSidebarV2({
     else tagsByGroup.set(key, [t]);
   }
 
+  const handleToggleAllGroups = () => {
+    const nextExpanded = !bulkExpanded;
+    setBulkExpanded(nextExpanded);
+    setBulkExpansionSignal((current) => ({
+      expanded: nextExpanded,
+      token: (current?.token ?? 0) + 1,
+    }));
+  };
+
+  const BulkIcon = bulkExpanded ? ChevronsDownUp : ChevronsUpDown;
+
   return (
     <aside
       data-testid="central-sidebar-v2"
@@ -99,141 +118,176 @@ export function CentralSidebarV2({
       style={{ width }}
     >
       <div className="scrollbar-subtle min-h-0 flex-1 overflow-y-auto px-3 pb-6 pr-2">
-        {savedViewsSlot ? <div className="mb-2">{savedViewsSlot}</div> : null}
-        {/* Smart views ─────────────────────────────────────────────────── */}
-        <FacetSection
-          title={t("central.v2.smartViews")}
-          icon={<Sparkles className="size-3.5" />}
-          testId="sidebar-section-smart"
-        >
-          <FacetItem
-            label={t("central.v2.allSkills")}
-            active={!hasAnySelection}
-            count={facetCounts.smartViews.all}
-            icon={<Layers className="size-3.5" />}
-            testId="smart-view-all"
-            onClick={() => {
-              onSelectSmartView("all");
-              onClearAll();
-            }}
-          />
-          <FacetItem
-            label={t("central.v2.uncategorized")}
-            active={tagSelectionSet.has("uncategorized")}
-            count={facetCounts.smartViews.uncategorized}
-            icon={<Inbox className="size-3.5" />}
-            testId="smart-view-uncategorized"
-            onClick={() => onToggleTag("uncategorized")}
-          />
-          <FacetItem
-            label={t("central.v2.updates")}
-            active={tagSelectionSet.has("updates")}
-            count={facetCounts.smartViews.updates}
-            icon={<CircleAlert className="size-3.5" />}
-            testId="smart-view-updates"
-            onClick={() => onToggleTag("updates")}
-          />
-          <FacetItem
-            label={t("central.v2.aiReview")}
-            active={tagSelectionSet.has("ai-review")}
-            count={facetCounts.smartViews.aiReview}
+        <div className="pb-3 pt-3">
+          <button
+            type="button"
+            data-testid="sidebar-bulk-expansion-toggle"
+            aria-label={
+              bulkExpanded
+                ? t("central.v2.sidebarCollapseAllGroupsAria")
+                : t("central.v2.sidebarExpandAllGroupsAria")
+            }
+            onClick={handleToggleAllGroups}
+            className={cn(
+              "group flex w-full items-center gap-2 rounded-2xl border px-3 py-2 text-left text-xs font-semibold shadow-sm ring-1 transition-colors",
+              bulkExpanded
+                ? "border-primary/25 bg-primary/10 text-primary ring-primary/10 hover:bg-primary/15"
+                : "border-border/90 bg-background text-foreground ring-border/40 hover:border-primary/30 hover:bg-muted/40"
+            )}
+          >
+            <span className="grid size-7 shrink-0 place-items-center rounded-xl bg-background/85 text-primary ring-1 ring-primary/20 transition-colors group-hover:bg-background">
+              <BulkIcon className="size-3.5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">
+                {bulkExpanded
+                  ? t("central.v2.sidebarCollapseAllGroups")
+                  : t("central.v2.sidebarExpandAllGroups")}
+              </span>
+              <span className="mt-0.5 block truncate text-[10px] font-medium text-muted-foreground">
+                {t("central.v2.sidebarBulkExpansionHint")}
+              </span>
+            </span>
+          </button>
+        </div>
+
+        <SidebarExpansionProvider signal={bulkExpansionSignal}>
+          {savedViewsSlot ? <div className="mb-2">{savedViewsSlot}</div> : null}
+          {/* Smart views ─────────────────────────────────────────────────── */}
+          <FacetSection
+            title={t("central.v2.smartViews")}
             icon={<Sparkles className="size-3.5" />}
-            testId="smart-view-ai-review"
-            onClick={() => onToggleTag("ai-review")}
-          />
-        </FacetSection>
-
-        {/* Repositories ────────────────────────────────────────────────── */}
-        <div className="mt-4">
-          <FacetSection
-            title={t("central.v2.repositories")}
-            icon={<FolderGit2 className="size-3.5" />}
-            testId="sidebar-section-repos"
+            testId="sidebar-section-smart"
           >
-            {repositorySections.length === 0 ? (
-              <p className="px-2 text-[11px] text-muted-foreground">
-                {t("central.v2.facetEmpty")}
-              </p>
-            ) : (
-              repositorySections.map((section) => (
-                <RepositorySectionBlock
-                  key={section.kind}
-                  section={section}
-                  facetCounts={facetCounts}
-                  selectionSet={repoSelectionSet}
-                  onToggleRepo={onToggleRepo}
-                  t={t}
-                />
-              ))
-            )}
+            <FacetItem
+              label={t("central.v2.allSkills")}
+              active={!hasAnySelection}
+              count={facetCounts.smartViews.all}
+              icon={<Layers className="size-3.5" />}
+              testId="smart-view-all"
+              onClick={() => {
+                onSelectSmartView("all");
+                onClearAll();
+              }}
+            />
+            <FacetItem
+              label={t("central.v2.uncategorized")}
+              active={tagSelectionSet.has("uncategorized")}
+              count={facetCounts.smartViews.uncategorized}
+              icon={<Inbox className="size-3.5" />}
+              testId="smart-view-uncategorized"
+              onClick={() => onToggleTag("uncategorized")}
+            />
+            <FacetItem
+              label={t("central.v2.updates")}
+              active={tagSelectionSet.has("updates")}
+              count={facetCounts.smartViews.updates}
+              icon={<CircleAlert className="size-3.5" />}
+              testId="smart-view-updates"
+              onClick={() => onToggleTag("updates")}
+            />
+            <FacetItem
+              label={t("central.v2.aiReview")}
+              active={tagSelectionSet.has("ai-review")}
+              count={facetCounts.smartViews.aiReview}
+              icon={<Sparkles className="size-3.5" />}
+              testId="smart-view-ai-review"
+              onClick={() => onToggleTag("ai-review")}
+            />
           </FacetSection>
-        </div>
 
-        {/* Tags ─────────────────────────────────────────────────────── */}
-        <div className="mt-4">
-          <FacetSection
-            title={t("central.v2.tags")}
-            icon={<Tag className="size-3.5" />}
-            testId="sidebar-section-tags"
-          >
-            {tagsSorted.length === 0 ? (
-              <p className="px-2 text-[11px] text-muted-foreground">
-                {t("central.v2.facetEmpty")}
-              </p>
-            ) : tagGroupSorted.length === 0 ? (
-              tagsSorted.map((tag) => (
-                <SidebarTagRow
-                  key={tag.id}
-                  tag={tag}
-                  active={tagSelectionSet.has(tag.id)}
-                  count={facetCounts.tags[tag.id] ?? 0}
-                  onToggle={() => onToggleTag(tag.id)}
-                  tagGroups={tagGroupSorted}
-                  onAssignTagToGroup={onAssignTagToGroup}
-                  t={t}
-                />
-              ))
-            ) : (
-              <>
-                {tagGroupSorted.map((group) => {
-                  const groupTags = tagsByGroup.get(group.id) ?? [];
-                  if (groupTags.length === 0) return null;
-                  return (
-                    <TagGroupBlock
-                      key={group.id}
-                      group={group}
-                      tags={groupTags}
-                      tagSelectionSet={tagSelectionSet}
-                      facetCounts={facetCounts}
-                      onToggleTag={onToggleTag}
-                      allTagGroups={tagGroupSorted}
-                      onAssignTagToGroup={onAssignTagToGroup}
-                      t={t}
-                    />
-                  );
-                })}
-                {(() => {
-                  const ungrouped = tagsByGroup.get("__ungrouped__") ?? [];
-                  if (ungrouped.length === 0) return null;
-                  return (
-                    <TagGroupBlock
-                      key="__ungrouped__"
-                      group={null}
-                      tags={ungrouped}
-                      tagSelectionSet={tagSelectionSet}
-                      facetCounts={facetCounts}
-                      onToggleTag={onToggleTag}
-                      ungroupedLabel={t("central.v2.tagGroupsUngrouped")}
-                      allTagGroups={tagGroupSorted}
-                      onAssignTagToGroup={onAssignTagToGroup}
-                      t={t}
-                    />
-                  );
-                })()}
-              </>
-            )}
-          </FacetSection>
-        </div>
+          {/* Repositories ────────────────────────────────────────────────── */}
+          <div className="mt-4">
+            <FacetSection
+              title={t("central.v2.repositories")}
+              icon={<FolderGit2 className="size-3.5" />}
+              testId="sidebar-section-repos"
+            >
+              {repositorySections.length === 0 ? (
+                <p className="px-2 text-[11px] text-muted-foreground">
+                  {t("central.v2.facetEmpty")}
+                </p>
+              ) : (
+                repositorySections.map((section) => (
+                  <RepositorySectionBlock
+                    key={section.kind}
+                    section={section}
+                    facetCounts={facetCounts}
+                    selectionSet={repoSelectionSet}
+                    onToggleRepo={onToggleRepo}
+                    t={t}
+                  />
+                ))
+              )}
+            </FacetSection>
+          </div>
+
+          {/* Tags ─────────────────────────────────────────────────────── */}
+          <div className="mt-4">
+            <FacetSection
+              title={t("central.v2.tags")}
+              icon={<Tag className="size-3.5" />}
+              testId="sidebar-section-tags"
+            >
+              {tagsSorted.length === 0 ? (
+                <p className="px-2 text-[11px] text-muted-foreground">
+                  {t("central.v2.facetEmpty")}
+                </p>
+              ) : tagGroupSorted.length === 0 ? (
+                tagsSorted.map((tag) => (
+                  <SidebarTagRow
+                    key={tag.id}
+                    tag={tag}
+                    active={tagSelectionSet.has(tag.id)}
+                    count={facetCounts.tags[tag.id] ?? 0}
+                    onToggle={() => onToggleTag(tag.id)}
+                    tagGroups={tagGroupSorted}
+                    onAssignTagToGroup={onAssignTagToGroup}
+                    t={t}
+                  />
+                ))
+              ) : (
+                <>
+                  {tagGroupSorted.map((group) => {
+                    const groupTags = tagsByGroup.get(group.id) ?? [];
+                    if (groupTags.length === 0) return null;
+                    return (
+                      <TagGroupBlock
+                        key={group.id}
+                        group={group}
+                        tags={groupTags}
+                        tagSelectionSet={tagSelectionSet}
+                        facetCounts={facetCounts}
+                        onToggleTag={onToggleTag}
+                        allTagGroups={tagGroupSorted}
+                        onAssignTagToGroup={onAssignTagToGroup}
+                        t={t}
+                      />
+                    );
+                  })}
+                  {(() => {
+                    const ungrouped = tagsByGroup.get("__ungrouped__") ?? [];
+                    if (ungrouped.length === 0) return null;
+                    return (
+                      <TagGroupBlock
+                        key="__ungrouped__"
+                        group={null}
+                        tags={ungrouped}
+                        tagSelectionSet={tagSelectionSet}
+                        facetCounts={facetCounts}
+                        onToggleTag={onToggleTag}
+                        ungroupedLabel={t("central.v2.tagGroupsUngrouped")}
+                        allTagGroups={tagGroupSorted}
+                        onAssignTagToGroup={onAssignTagToGroup}
+                        t={t}
+                      />
+                    );
+                  })()}
+                </>
+              )}
+            </FacetSection>
+          </div>
+        </SidebarExpansionProvider>
 
         {/* Quick clear footer */}
         {hasAnySelection && (
@@ -340,8 +394,16 @@ function OwnerGroup({
   t,
 }: OwnerGroupProps) {
   const [expanded, setExpanded] = useState(true);
+  const expansionSignal = useSidebarExpansionSignal();
+  const expansionToken = expansionSignal?.token;
+  const forcedExpanded = expansionSignal?.expanded;
   const Caret = expanded ? ChevronDown : ChevronRight;
   const hasSelected = repositories.some((r) => selectionSet.has(r.id));
+
+  useEffect(() => {
+    if (forcedExpanded === undefined) return;
+    setExpanded(forcedExpanded);
+  }, [forcedExpanded, expansionToken]);
 
   return (
     <div className="space-y-1">
@@ -412,10 +474,18 @@ function TagGroupBlock({
   t,
 }: TagGroupBlockProps) {
   const [expanded, setExpanded] = useState(true);
+  const expansionSignal = useSidebarExpansionSignal();
+  const expansionToken = expansionSignal?.token;
+  const forcedExpanded = expansionSignal?.expanded;
   const Caret = expanded ? ChevronDown : ChevronRight;
   const totalCount = tags.reduce((acc, tag) => acc + (facetCounts.tags[tag.id] ?? 0), 0);
   const label = group?.name ?? ungroupedLabel ?? "Other";
   const testId = group ? `tag-group-${group.id}` : "tag-group-ungrouped";
+
+  useEffect(() => {
+    if (forcedExpanded === undefined) return;
+    setExpanded(forcedExpanded);
+  }, [forcedExpanded, expansionToken]);
 
   return (
     <div className="space-y-1">

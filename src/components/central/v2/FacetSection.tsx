@@ -1,8 +1,9 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { useSidebarExpansionSignal } from "@/components/central/v2/useSidebarExpansionSignal";
 
 /**
  * Sidebar 中可折叠的分组容器。
@@ -32,7 +33,15 @@ export function FacetSection({
   testId,
 }: FacetSectionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const expansionSignal = useSidebarExpansionSignal();
+  const expansionToken = expansionSignal?.token;
+  const forcedExpanded = expansionSignal?.expanded;
   const Caret = expanded ? ChevronDown : ChevronRight;
+
+  useEffect(() => {
+    if (forcedExpanded === undefined) return;
+    setExpanded(forcedExpanded);
+  }, [forcedExpanded, expansionToken]);
 
   return (
     <section data-testid={testId}>
@@ -55,6 +64,7 @@ export function FacetSection({
         {rightSlot}
       </div>
       <div
+        data-testid={testId ? `${testId}-content` : undefined}
         className={cn(
           "space-y-1 pt-2 transition-[max-height,opacity] duration-150",
           !expanded && "hidden"
