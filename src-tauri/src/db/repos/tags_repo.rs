@@ -194,6 +194,7 @@ pub async fn get_pending_ai_tag_reviews(pool: &DbPool) -> Result<Vec<SkillAiTagR
            t.is_builtin AS tag_is_builtin,
            t.created_at AS tag_created_at,
            t.updated_at AS tag_updated_at,
+           t.group_id AS tag_group_id,
            r.confidence,
            r.reason,
            r.suggested_at,
@@ -221,6 +222,7 @@ pub async fn get_pending_ai_tag_reviews(pool: &DbPool) -> Result<Vec<SkillAiTagR
                     is_builtin: row.get("tag_is_builtin"),
                     created_at: row.get("tag_created_at"),
                     updated_at: row.get("tag_updated_at"),
+                    group_id: row.get("tag_group_id"),
                 },
                 confidence: row.get("confidence"),
                 reason: row
@@ -352,7 +354,8 @@ pub async fn get_skill_tags_for_skills(
             t.color AS tag_color,
             t.is_builtin AS tag_is_builtin,
             t.created_at AS tag_created_at,
-            t.updated_at AS tag_updated_at
+            t.updated_at AS tag_updated_at,
+            t.group_id AS tag_group_id
          FROM skill_tag_links l
          JOIN skill_tags t ON t.id = l.tag_id
          WHERE l.skill_id IN ({})
@@ -376,6 +379,7 @@ pub async fn get_skill_tags_for_skills(
             is_builtin: row.try_get("tag_is_builtin").map_err(|e| e.to_string())?,
             created_at: row.try_get("tag_created_at").map_err(|e| e.to_string())?,
             updated_at: row.try_get("tag_updated_at").map_err(|e| e.to_string())?,
+            group_id: row.try_get("tag_group_id").map_err(|e| e.to_string())?,
         });
     }
 

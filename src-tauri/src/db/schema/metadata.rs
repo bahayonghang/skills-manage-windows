@@ -7,6 +7,7 @@
 //! - `skill_ai_tag_reviews`：待审核的 AI 标签建议
 
 use crate::db::DbPool;
+use crate::db::migrations::ensure_column;
 
 pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     // skill_repositories — local metadata for grouping Central skills by source repo.
@@ -88,6 +89,32 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    // skill_tag_groups — 标签分组（M3）。一级，不允许嵌套（D4）。tag.group_id 是
+    // skill_tag_groups.id 的 nullable 引用；group 被删除时由 commands 把成员的
+    // group_id 置 NULL，不在 DB 层做级联（保证 tag 本身不丢）。
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_tag_groups (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            color       TEXT,
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            is_builtin  BOOLEAN NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_tag_groups_sort_order
+         ON skill_tag_groups(sort_order)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     // skill_tags — local category taxonomy separate from user Collections.
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_tags (
@@ -103,6 +130,15 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    // M3 增量列：tag 隶属哪个 group。旧 db 文件升级时通过 ensure_column 安全加列。
+    ensure_column(
+        pool,
+        "skill_tags",
+        "group_id",
+        "ALTER TABLE skill_tags ADD COLUMN group_id TEXT",
+    )
+    .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_tag_links (

@@ -338,6 +338,19 @@ pub fn run() {
             commands::portable_state::preview_skillport_state_import,
             commands::portable_state::import_skillport_state,
             commands::portable_state::cancel_skillport_state_portability,
+            // Saved Views (Central V2)
+            commands::saved_views::list_saved_views,
+            commands::saved_views::create_saved_view,
+            commands::saved_views::update_saved_view,
+            commands::saved_views::delete_saved_view,
+            commands::saved_views::reorder_saved_views,
+            // Tag Groups (Central V2)
+            commands::tag_groups::list_tag_groups,
+            commands::tag_groups::create_tag_group,
+            commands::tag_groups::update_tag_group,
+            commands::tag_groups::delete_tag_group,
+            commands::tag_groups::reorder_tag_groups,
+            commands::tag_groups::set_tag_group,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

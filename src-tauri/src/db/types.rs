@@ -164,6 +164,20 @@ pub struct SkillTag {
     pub is_builtin: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// 标签所属分组的 id。M3 加入；旧 db 升级时通过 ensure_column 自动加列。
+    #[serde(default)]
+    pub group_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct TagGroup {
+    pub id: String,
+    pub name: String,
+    pub color: Option<String>,
+    pub sort_order: i64,
+    pub is_builtin: bool,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -246,6 +260,23 @@ pub struct OperationLogPage {
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
+}
+
+// ─── Saved Views (Central Skills V2 / M2) ────────────────────────────────────
+
+/// 一个 saved view 行。`query` 字段是前端 `CentralViewState` 的 JSON，后端只做
+/// 透传，不参与解析。`sort_order` 控制 sidebar 渲染顺序，越小越靠前。
+/// 字段命名沿用项目其它表的 snake_case（与 Collection 一致），前端 contract 同步。
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SavedView {
+    pub id: String,
+    pub name: String,
+    pub query: String,
+    pub sort_order: i64,
+    pub icon: Option<String>,
+    pub pinned: bool,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

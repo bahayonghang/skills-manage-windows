@@ -22,6 +22,7 @@ pub(super) mod core;
 pub(super) mod discovery;
 pub(super) mod marketplace;
 pub(super) mod metadata;
+pub(super) mod saved_views;
 pub(super) mod settings;
 
 use super::types::DbPool;
@@ -44,6 +45,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     discovery::init(pool).await?;
     settings::init(pool).await?;
     marketplace::init(pool).await?;
+    saved_views::init(pool).await?;
 
     Ok(())
 }

@@ -10,9 +10,11 @@ pub mod linker;
 pub mod logs;
 pub mod marketplace;
 pub mod portable_state;
+pub mod saved_views;
 pub mod scanner;
 pub mod settings;
 pub mod skills;
+pub mod tag_groups;
 pub mod targets;
 
 pub const APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
