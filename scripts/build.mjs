@@ -9,11 +9,14 @@ import {
 } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 
+const require = createRequire(import.meta.url);
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const outputDir = join(repoRoot, "outputs");
 const bundleRoot = join(repoRoot, "src-tauri", "target", "release", "bundle");
+const tauriCliEntry = require.resolve("@tauri-apps/cli/tauri.js");
 
 const bundleConfigs = {
   win32: {
@@ -48,7 +51,6 @@ if (!config) {
 function run(command, args) {
   const result = spawnSync(command, args, {
     cwd: repoRoot,
-    shell: process.platform === "win32",
     stdio: "inherit",
   });
 
@@ -90,7 +92,7 @@ for (const staleOutput of config.staleOutputs) {
 }
 
 console.log(`[build] running Tauri build for ${process.platform}: ${config.bundles}`);
-run("pnpm", ["tauri", "build", "--bundles", config.bundles]);
+run(process.execPath, [tauriCliEntry, "build", "--bundles", config.bundles]);
 
 const copied = [];
 
