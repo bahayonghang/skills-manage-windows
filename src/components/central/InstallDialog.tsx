@@ -117,7 +117,8 @@ export function InstallDialog({
       setError(null);
       setResult(null);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // reason: dialog open/skill changes reset defaults; helper dependencies would reselect while the user edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, skill?.id, targetMode, targetAgents, canInstallToProject, canUseSymlink]);
 
   const isProjectTargetDisabled = (agent: AgentWithStatus) =>

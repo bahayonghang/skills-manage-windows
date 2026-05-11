@@ -71,7 +71,8 @@ export function CollectionInstallDialog({
       setError(null);
       setResult(null);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // reason: opening the dialog intentionally snapshots currently visible targets as the default selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   function handleToggle(agentId: string, checked: boolean) {

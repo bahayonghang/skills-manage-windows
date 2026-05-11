@@ -62,6 +62,7 @@ export function AppShell() {
     return () => {
       cancelled = true;
     };
+    // reason: startup bootstrap must run once; store action references are stable by convention.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -90,6 +91,7 @@ export function AppShell() {
     resetSkillsForTargetChange();
     resetMarketplaceForTargetChange();
     void handleGlobalRescan();
+    // reason: target-change reset should react only to target identity/load state, not store action references.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTargetId, hasLoadedTargets]);
 
