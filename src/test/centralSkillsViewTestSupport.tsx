@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { CentralSkillsView as CentralSkillsViewComponent } from "../pages/CentralSkillsView";
+import { setFeatureFlag } from "../lib/featureFlags";
 import type {
   AgentWithStatus,
   SkillDetail,
@@ -578,6 +579,9 @@ export const tauriBridge = tauriBridgeModule;
 
 export function resetCentralSkillsViewTestState() {
   vi.clearAllMocks();
+  // M6: V2 现在默认 ON，但这些测试是 V1 UI 的回归测试。
+  // 显式关闭以保留 V1 行为；要测 V2 的用例自行 setFeatureFlag(..., true)。
+  setFeatureFlag("central.newLayout", false);
   useTargetStore.setState({
     targets: [localTarget],
     activeTarget: localTarget,

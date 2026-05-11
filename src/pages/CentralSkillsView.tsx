@@ -6,7 +6,16 @@ import { markAppPerformance } from "@/lib/performance";
 import { useResizableWidth } from "@/hooks/useResizableWidth";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { CentralSkillsShell } from "@/components/central/CentralSkillsShell";
+import { CentralSidebarV2Header } from "@/components/central/v2/CentralSidebarV2Header";
+import { CentralSkillsShellV2 } from "@/components/central/v2/CentralSkillsShellV2";
+import { CommandPaletteV2 } from "@/components/central/v2/CommandPaletteV2";
+import { useFeatureFlag } from "@/lib/featureFlags";
+import { useCentralViewStateUrl } from "@/hooks/useCentralViewStateUrl";
 import { useCentralSkillsActions } from "@/pages/centralSkillsActions";
+import { useCentralSkillsViewModelV2 } from "@/pages/centralSkillsViewModelV2";
+import { addUniqueToCentralViewState, useCentralV2SavedViewsBridge } from "@/pages/centralV2SavedViewsBridge";
+import { useCentralV2TagGroupsBridge } from "@/pages/centralV2TagGroupsBridge";
+import { useCentralV2PaletteActions } from "@/pages/centralV2PaletteActions";
 import {
   useCentralSkillsDerivedData,
   useCentralSkillsStoreBindings,
@@ -163,6 +172,36 @@ export function CentralSkillsView() {
     sortField,
     sortDirection,
   });
+
+  // ─── Central V2 (M1) ───────────────────────────────────────────────
+  // 新布局通过 feature flag 切换。V2 view-model 与 V1 并存，state 各自维护，
+  // 保证 V1 行为完全不受影响。
+  const v2EnabledFromFlag = useFeatureFlag("central.newLayout");
+  const [v2OverrideClassic, setV2OverrideClassic] = useState(false);
+  const v2Enabled = v2EnabledFromFlag && !v2OverrideClassic;
+  const [v2ViewState, setV2ViewState] = useCentralViewStateUrl({ disabled: !v2Enabled });
+  const v2 = useCentralSkillsViewModelV2({
+    skills,
+    repositories,
+    tags,
+    aiTagReviews,
+    updateStatuses,
+    state: v2ViewState,
+  });
+
+  // ─── Saved Views (M2) ────────────────────────────────────────
+  const savedViewsBridge = useCentralV2SavedViewsBridge({
+    enabled: v2Enabled,
+    v2ViewState,
+    setV2ViewState,
+    t,
+  });
+
+  // ─── Tag Groups (M3) ─────────────────────────────────────────
+  const tagGroupsBridge = useCentralV2TagGroupsBridge({ enabled: v2Enabled, t });
+
+  // ─── Command palette state (M2) + actions (M6) ───────────────────────
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const updateProgressKey = useMemo(
     () =>
       [
@@ -321,6 +360,14 @@ export function CentralSkillsView() {
     { value: "desc", label: t("central.sortDescending") },
   ];
 
+  const { actions: paletteActions, groupByOptions } = useCentralV2PaletteActions({
+    t, viewState: v2ViewState, setViewState: setV2ViewState,
+    canSaveCurrent: savedViewsBridge.canSaveCurrent,
+    onSaveCurrentView: savedViewsBridge.handleSaveCurrentView,
+    onCreateTagGroup: tagGroupsBridge.handleCreateTagGroup,
+    onSwitchToClassic: () => setV2OverrideClassic(true),
+  });
+
   const installableImportedSkills = useMemo(() => {
     if (!githubImport.importResult) return [];
     const importedIds = new Set(
@@ -411,10 +458,8 @@ export function CentralSkillsView() {
     },
   });
 
-  return (
-    <CentralSkillsShell
-      centralSkillsDir={centralSkillsDir}
-      dialogs={{
+  // ─── 共享 props（V1/V2 Shell 公用），保证两个 Shell 渲染一致的对话框、列表、进度 ───
+  const dialogsProps = {
         agents,
         availableInstallAgents,
         batchDeletePreview,
@@ -495,8 +540,9 @@ export function CentralSkillsView() {
         onRepositoryDeleteDialogOpenChange: handleRepositoryDeleteDialogOpenChange,
         onResetGitHubImport: resetGitHubImport,
         onResolveRemoteMissing: handleResolveRemoteMissing,
-      }}
-      filterSidebar={{
+  };
+
+  const filterSidebarProps = {
         filterSidebarWidth,
         isDeleting,
         isRepositoryDeletePreviewLoading,
@@ -507,33 +553,33 @@ export function CentralSkillsView() {
         skillsCount: skills.length,
         startFilterSidebarResize,
         handleFilterSidebarResizeKeyDown,
-        onRepositoryDelete: (repository) => {
+        onRepositoryDelete: (repository: SkillRepositoryWithStats) => {
           void handleRepositoryDeleteClick(repository);
         },
-      }}
-      tagSearch={{
-        setCategorizeTab,
-        tagCounts,
-        uncategorizedCount,
-        aiReviewCount: aiTagReviews.length,
-        totalSkillCount: skills.length,
-      }}
-      isCheckingUpdates={isCheckingUpdates}
-      isLoading={isLoading}
-      listContent={{
+  };
+
+  const tagSearchProps = {
+    setCategorizeTab,
+    tagCounts,
+    uncategorizedCount,
+    aiReviewCount: aiTagReviews.length,
+    totalSkillCount: skills.length,
+  };
+
+  const listContentProps = {
         availableInstallAgents,
         contentRef,
         filteredSkills,
         isLoading,
         isSearchActive,
-        onDelete: (skill) => {
+        onDelete: (skill: SkillWithLinks) => {
           void handleDeleteClick(skill);
         },
         onDetail: handleOpenDrawer,
         onInstallTo: handleInstallClick,
         onTogglePlatform: handleTogglePlatform,
         onToggleSelection: handleToggleSelection,
-        onUpdateCentral: (skillIds) => {
+        onUpdateCentral: (skillIds: string[]) => {
           void handleUpdateSkills(skillIds);
         },
         searchQuery,
@@ -544,7 +590,181 @@ export function CentralSkillsView() {
         togglingAgentId: togglingAgentId ?? null,
         updateStatuses,
         updatingSkillIds,
-      }}
+  };
+
+  const updateButtonProps = {
+    disabled: updateTargetSkillIds.length === 0 || updatingSkillIds.length > 0,
+    label:
+      selectedSkillIds.length > 0
+        ? t("central.updateSelected", { count: updateTargetSkillIds.length })
+        : t("central.updateAvailable", { count: updateTargetSkillIds.length }),
+    targetSkillIds: updateTargetSkillIds,
+  };
+
+  const aiProgressProps = {
+    aiTagJob,
+    onCancel: () => {
+      void handleCancelAiTagJob();
+    },
+    onViewReviews: () => {
+      setCategorizeTab("review");
+      setTagFilter("ai-review");
+    },
+  };
+
+  const categorizePanelProps = {
+    aiTagJob,
+    aiTagReviews,
+    aiTaggingAvailable,
+    canCreateManualTag,
+    categorizeSidebarWidth,
+    categorizeTab,
+    filteredManualTags,
+    isDeleting,
+    isInstalling,
+    isMetadataUpdating,
+    isSuggestingTags,
+    manualSelectedTagIds,
+    manualTagQuery,
+    selectedSkillCount: selectedSkillIds.length,
+    sortedSkillCount: sortedSkills.length,
+    startCategorizeSidebarResize,
+    handleCategorizeSidebarResizeKeyDown,
+    onAcceptReview: (review: Parameters<typeof handleAcceptReview>[0]) => {
+      void handleAcceptReview(review);
+    },
+    onApplyManualTags: () => {
+      void handleApplyManualTags();
+    },
+    onApplyManualTagsToReview: (review: Parameters<typeof handleApplyManualTagsToReview>[0]) => {
+      void handleApplyManualTagsToReview(review);
+    },
+    onBatchDelete: () => {
+      void handleBatchDeleteClick();
+    },
+    onBatchInstallOpen: () => setIsBatchInstallDialogOpen(true),
+    onBulkSuggestTags: () => {
+      void handleBulkSuggestTags();
+    },
+    onClearSelection: () => setSelectedSkillIds([]),
+    onCreateManualTag: () => {
+      void handleCreateManualTag();
+    },
+    onSelectCurrentFilter: handleSelectCurrentFilter,
+    onSelectUncategorized: handleSelectUncategorized,
+    onSetCategorizeTab: setCategorizeTab,
+    onSetManualTagQuery: setManualTagQuery,
+    onSkipReview: (review: Parameters<typeof handleSkipReview>[0]) => {
+      void handleSkipReview(review);
+    },
+    onToggleManualTag: handleToggleManualTag,
+  };
+
+  const updateProgressProps = {
+    isDismissible: isUpdateProgressDismissible,
+    updateJob,
+    updateProgressKey,
+    updateProgressRatio,
+    onCancel: () => {
+      void handleCancelCentralUpdates();
+    },
+    onDismiss: setDismissedUpdateProgressKey,
+  };
+
+  const checkButtonProps = {
+    label: checkButtonLabel,
+    disabled:
+      isCheckingUpdates ||
+      updateJob.status === "running" ||
+      updateJob.status === "cancelling" ||
+      checkButtonTargetSkillIds.length === 0,
+    onClick: () => {
+      void handleCheckUpdates(checkButtonScopedSkillIds);
+    },
+  };
+
+  if (v2Enabled) {
+    // V2 Shell：listContent 用 V2 view-model 的 sortedSkills/filteredSkills/searchQuery/isSearchActive
+    const v2ListContentProps = {
+      ...listContentProps,
+      filteredSkills: v2.filteredSkills,
+      sortedSkills: v2.sortedSkills,
+      searchQuery: v2ViewState.q,
+      isSearchActive: v2.isSearchActive,
+    };
+    const sidebarHeaderSlot = (
+      <CentralSidebarV2Header
+        savedViewsBridge={savedViewsBridge}
+        tagGroupsBridge={tagGroupsBridge}
+      />
+    );
+    return (
+      <>
+        <CentralSkillsShellV2
+          t={t}
+          centralSkillsDir={centralSkillsDir}
+          isLoading={isLoading}
+          isCheckingUpdates={isCheckingUpdates}
+          filterSidebarWidth={filterSidebarWidth}
+          startFilterSidebarResize={startFilterSidebarResize}
+          handleFilterSidebarResizeKeyDown={handleFilterSidebarResizeKeyDown}
+          viewState={v2ViewState}
+          setViewState={setV2ViewState}
+          queryAst={v2.queryAst}
+          facetCounts={v2.facetCounts}
+          repositories={repositories}
+          tags={tags}
+          sortFieldOptions={sortFieldOptions}
+          sortDirectionOptions={sortDirectionOptions}
+          groupByOptions={groupByOptions}
+          listContent={v2ListContentProps}
+          categorizePanel={categorizePanelProps}
+          shouldShowCategorizePanel={skills.length > 0}
+          aiProgress={aiProgressProps}
+          updateProgress={updateProgressProps}
+          shouldShowUpdateProgress={shouldShowUpdateProgress}
+          dialogs={dialogsProps}
+          setIsGitHubImportOpen={setIsGitHubImportOpen}
+          setIsPlatformManageOpen={setIsPlatformManageOpen}
+          setIsPortabilityOpen={setIsPortabilityOpen}
+          onRefresh={() => {
+            void handleRefresh();
+          }}
+          onUpdateSkills={(skillIds) => {
+            void handleUpdateSkills(skillIds);
+          }}
+          updateAvailableSkillCount={updateAvailableSkillIds.length}
+          updateButton={updateButtonProps}
+          checkButton={checkButtonProps}
+          onSwitchToClassic={() => setV2OverrideClassic(true)}
+          onOpenPalette={() => setCommandPaletteOpen(true)}
+          savedViewsSlot={sidebarHeaderSlot}
+          tagGroups={tagGroupsBridge.tagGroups} onAssignTagToGroup={tagGroupsBridge.handleAssignTagToGroup}
+        />
+        <CommandPaletteV2
+          open={commandPaletteOpen}
+          onOpenChange={setCommandPaletteOpen}
+          savedViews={savedViewsBridge.savedViews}
+          tags={tags}
+          repositories={repositories}
+          actions={paletteActions}
+          onSelectSavedView={savedViewsBridge.handleApplySavedView}
+          onSelectTag={(tag) => addUniqueToCentralViewState(v2ViewState, setV2ViewState, "tags", tag.id)}
+          onSelectRepository={(repo) => addUniqueToCentralViewState(v2ViewState, setV2ViewState, "repos", repo.id)}
+        />
+      </>
+    );
+  }
+
+  return (
+    <CentralSkillsShell
+      centralSkillsDir={centralSkillsDir}
+      dialogs={dialogsProps}
+      filterSidebar={filterSidebarProps}
+      tagSearch={tagSearchProps}
+      isCheckingUpdates={isCheckingUpdates}
+      isLoading={isLoading}
+      listContent={listContentProps}
       searchQuery={searchQuery}
       setIsGitHubImportOpen={setIsGitHubImportOpen}
       setIsPlatformManageOpen={setIsPlatformManageOpen}
@@ -564,92 +784,11 @@ export function CentralSkillsView() {
       tags={tags}
       t={t}
       updateAvailableSkillCount={updateAvailableSkillIds.length}
-      updateButton={{
-        disabled: updateTargetSkillIds.length === 0 || updatingSkillIds.length > 0,
-        label:
-          selectedSkillIds.length > 0
-            ? t("central.updateSelected", { count: updateTargetSkillIds.length })
-            : t("central.updateAvailable", { count: updateTargetSkillIds.length }),
-        targetSkillIds: updateTargetSkillIds,
-      }}
-      aiProgress={{
-        aiTagJob,
-        onCancel: () => {
-          void handleCancelAiTagJob();
-        },
-        onViewReviews: () => {
-          setCategorizeTab("review");
-          setTagFilter("ai-review");
-        },
-      }}
-      categorizePanel={{
-        aiTagJob,
-        aiTagReviews,
-        aiTaggingAvailable,
-        canCreateManualTag,
-        categorizeSidebarWidth,
-        categorizeTab,
-        filteredManualTags,
-        isDeleting,
-        isInstalling,
-        isMetadataUpdating,
-        isSuggestingTags,
-        manualSelectedTagIds,
-        manualTagQuery,
-        selectedSkillCount: selectedSkillIds.length,
-        sortedSkillCount: sortedSkills.length,
-        startCategorizeSidebarResize,
-        handleCategorizeSidebarResizeKeyDown,
-        onAcceptReview: (review) => {
-          void handleAcceptReview(review);
-        },
-        onApplyManualTags: () => {
-          void handleApplyManualTags();
-        },
-        onApplyManualTagsToReview: (review) => {
-          void handleApplyManualTagsToReview(review);
-        },
-        onBatchDelete: () => {
-          void handleBatchDeleteClick();
-        },
-        onBatchInstallOpen: () => setIsBatchInstallDialogOpen(true),
-        onBulkSuggestTags: () => {
-          void handleBulkSuggestTags();
-        },
-        onClearSelection: () => setSelectedSkillIds([]),
-        onCreateManualTag: () => {
-          void handleCreateManualTag();
-        },
-        onSelectCurrentFilter: handleSelectCurrentFilter,
-        onSelectUncategorized: handleSelectUncategorized,
-        onSetCategorizeTab: setCategorizeTab,
-        onSetManualTagQuery: setManualTagQuery,
-        onSkipReview: (review) => {
-          void handleSkipReview(review);
-        },
-        onToggleManualTag: handleToggleManualTag,
-      }}
-      updateProgress={{
-        isDismissible: isUpdateProgressDismissible,
-        updateJob,
-        updateProgressKey,
-        updateProgressRatio,
-        onCancel: () => {
-          void handleCancelCentralUpdates();
-        },
-        onDismiss: setDismissedUpdateProgressKey,
-      }}
-      checkButton={{
-        label: checkButtonLabel,
-        disabled:
-          isCheckingUpdates ||
-          updateJob.status === "running" ||
-          updateJob.status === "cancelling" ||
-          checkButtonTargetSkillIds.length === 0,
-        onClick: () => {
-          void handleCheckUpdates(checkButtonScopedSkillIds);
-        },
-      }}
+      updateButton={updateButtonProps}
+      aiProgress={aiProgressProps}
+      categorizePanel={categorizePanelProps}
+      updateProgress={updateProgressProps}
+      checkButton={checkButtonProps}
       onRefresh={() => {
         void handleRefresh();
       }}

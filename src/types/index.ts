@@ -280,6 +280,8 @@ export interface SkillTag {
   is_builtin: boolean;
   created_at: string;
   updated_at: string;
+  /** 标签所属分组 id（M3 加入；旧数据为 null）。 */
+  group_id?: string | null;
 }
 
 export interface SkillTagSuggestion {
@@ -763,3 +765,14 @@ export interface GitHubImportProgressPayload {
   completedBytes: number;
   totalBytes: number;
 }
+
+// ─── Central Skills v2 Information Architecture (M0~M6) ──────────────────
+// 类型契约移到独立文件以满足体积预算约束。
+export type {
+  CentralQueryAst,
+  CentralQueryFilter,
+  GroupByMode,
+  SavedView,
+  TagGroup,
+  ViewMode,
+} from "./centralV2";
