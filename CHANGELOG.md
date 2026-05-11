@@ -2,9 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## 0.11.0 - 2026-05-10
+## 0.11.0 - 2026-05-11
 
-Security-focused release notes for the 0.10.x → 0.11.0 secret store consolidation line.
+Security and Central Library V2 release for the 0.10.x → 0.11.0 line. This release keeps the Windows-first packaging contract unchanged while making Central Skills the default high-density workspace.
+
+### Features
+
+- Make Central Library V2 the default layout, with a classic-layout fallback link and `featureFlag.central.newLayout=off` override for troubleshooting.
+- Add structured Central search syntax for `tag:`, `repo:`, `owner:`, `source:`, `has:`, `platform:`, `created:`, and `updated:` filters while preserving free-text search.
+- Add URL-backed Central view state for query text, multi-select facets, sorting, grouping, view mode, and saved-view identity.
+- Add local Saved Views for reusable Central queries, plus sidebar and command-palette entry points.
+- Add Tag Groups and sidebar assignment so large tag sets can be grouped without moving skill files.
+- Add group-by views for repository, owner, tag, and update status.
+- Add Central V2 command-palette actions for saving the current view, creating tag groups, changing group-by mode, and switching back to the classic layout.
 
 ### Security
 
@@ -17,8 +27,15 @@ Security-focused release notes for the 0.10.x → 0.11.0 secret store consolidat
 
 - Route the remaining Settings store actions through the shared `@/lib/tauri` wrapper so browser fixtures and Tauri runtime checks stay consistent across stores.
 - Replace direct `serde_yaml` usage with `serde_norway` for SKILL.md frontmatter parsing after confirming the planned `serde_yml` alternative is itself RustSec-flagged.
-- Keep the Windows packaging contract unchanged; no installer, signing, or bundle output path changes are included in this security consolidation.
+- Harden the operation-log warning test so concurrent Rust test runs no longer depend on the old flaky SQL error path.
+- Extend the Central Skills guide and README with V2 search, Saved Views, Tag Groups, group-by, command-palette, and rollback guidance.
+- Keep the Windows packaging contract unchanged; no installer, signing, or bundle output path changes are included in this release.
 
+### Known gaps
+
+- Drag-and-drop reorder UI for Saved Views and Tag Groups is deferred; the backend IPC and store actions are already present.
+- Saved View and Tag Group management still use lightweight prompt/confirm flows until a dedicated dialog primitive is introduced.
+- Backend FTS5 search remains deferred until library size or p95 filter latency justifies it.
 ## 0.10.0 - 2026-05-03
 
 Alignment release focused on upstream 0.10.0 packaging parity, Linux desktop bundles, and safer Discover installs for this Windows-first SkillPort fork.

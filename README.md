@@ -26,6 +26,7 @@
 - Marketplace browsing and GitHub repository import with authenticated requests and retry fallback.
 - Fast search for large skill libraries with deferred queries, lazy indexing, and virtualization.
 - Bilingual UI, Catppuccin themes, accent colors, onboarding, and responsive navigation.
+- **Central Library V2 (default)**: structured query syntax (`tag:`, `repo:`, `owner:`, `has:source`, etc.), URL-as-state, saved views, command palette (`Ctrl+K`), tag groups, group-by views (none / repository / owner / tag / status). Use the "Switch to classic layout" link in the Beta badge area, or set `featureFlag.central.newLayout=off` in DevTools localStorage, to fall back to the V1 layout.
 
 ## SSH Remote Mode
 

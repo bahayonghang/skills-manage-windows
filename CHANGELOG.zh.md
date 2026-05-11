@@ -2,9 +2,19 @@
 
 本文件记录该项目的重要变更。
 
-## 0.11.0 - 2026-05-10
+## 0.11.0 - 2026-05-11
 
-这是 `0.10.x → 0.11.0 secret store consolidation` 版本线的安全收口记录。
+这是 `0.10.x → 0.11.0` 版本线的安全与中央技能库 V2 收口版本。本版本继续保持 Windows-first 打包契约不变，同时让 Central Skills 成为默认的高信息密度工作区。
+
+### 新功能
+
+- 中央技能库 V2 默认开启，并保留“切回经典布局”链接与 `featureFlag.central.newLayout=off` 排障开关。
+- 新增 Central 结构化搜索语法，支持 `tag:`、`repo:`、`owner:`、`source:`、`has:`、`platform:`、`created:`、`updated:`，同时保留自由文本搜索。
+- 新增 URL-backed Central view state，把查询、多选 facet、排序、分组、视图模式和 saved view 身份写入 URL。
+- 新增本地 Saved Views，用于保存常用 Central 查询，并接入侧边栏与命令面板。
+- 新增 Tag Groups 与侧边栏分配入口，大量标签可按一级分组整理，且不会移动 skill 文件。
+- 新增按仓库、owner、标签、更新状态分组的 group-by 视图。
+- 新增 Central V2 命令面板动作：保存当前视图、创建标签分组、切换 group-by 模式、退回经典布局。
 
 ### 安全
 
@@ -17,8 +27,15 @@
 
 - Settings store 剩余 action 统一改用 `@/lib/tauri` 封装，让浏览器 fixture 与 Tauri runtime 判断和其他 store 保持一致。
 - 在确认计划中的 `serde_yml` 替代项同样存在 RustSec 风险后，将 SKILL.md frontmatter 解析从 `serde_yaml` 切换到 `serde_norway`。
-- 本轮安全收口不改变 Windows 打包契约；未修改安装器、签名或 bundle 输出路径。
+- 收敛 operation-log warning 测试，避免并发 Rust 测试继续依赖旧的 flaky SQL 错误路径。
+- Central Skills 指南和 README 已补充 V2 搜索、Saved Views、Tag Groups、group-by、命令面板和回滚说明。
+- 本版本不改变 Windows 打包契约；未修改安装器、签名或 bundle 输出路径。
 
+### 已知缺口
+
+- Saved Views 与 Tag Groups 的拖拽排序 UI 延后；后端 IPC 与 store action 已就绪。
+- Saved View 与 Tag Group 管理仍使用轻量 prompt/confirm，后续再接统一 Dialog primitive。
+- 后端 FTS5 搜索继续延后到技能规模或 p95 过滤耗时达到触发条件之后。
 ## 0.10.0 - 2026-05-03
 
 这是一次围绕上游 0.10.0 对齐、Linux 桌面打包补齐，以及 Discover 安装链路修正的版本升级，同时继续保持当前 SkillPort fork 的 Windows-first 发布契约。

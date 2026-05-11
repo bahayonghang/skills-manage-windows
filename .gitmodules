@@ -1,0 +1,3 @@
+[submodule "ref/skillshare"]
+	path = ref/skillshare
+	url = https://github.com/runkids/skillshare.git
