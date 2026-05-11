@@ -1,4 +1,16 @@
-import { AlertTriangle, Check, Download, ListChecks, Plus, Trash2, Wand2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  Check,
+  Download,
+  ListChecks,
+  Plus,
+  Tags,
+  Trash2,
+  Wand2,
+  X,
+} from "lucide-react";
+import type { ReactNode } from "react";
 import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
@@ -105,6 +117,11 @@ export function CentralSkillCategorizePanel({
   const aiDisabledReason = getAiDisabledReason();
   const isManualActionDisabled = Boolean(manualDisabledReason);
   const isAiActionDisabled = Boolean(aiDisabledReason);
+  const tabIcons: Record<CentralCategorizeTab, ReactNode> = {
+    manual: <Tags className="size-3.5" />,
+    ai: <Wand2 className="size-3.5" />,
+    review: <AlertTriangle className="size-3.5" />,
+  };
 
   return (
     <aside
@@ -162,26 +179,25 @@ export function CentralSkillCategorizePanel({
             <span className="grid size-5 place-items-center rounded-full bg-primary/15 text-[11px] font-bold text-primary ring-1 ring-primary/25">1</span>
             {t("central.categorizeRange")}
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              size="sm"
-              className="h-auto min-h-8 whitespace-normal px-2 leading-tight"
+          <div className="space-y-2">
+            <RangeActionCard
+              title={t("central.selectCurrentFilter")}
+              description={t("central.categorizeSelectCurrentFilterDesc")}
+              icon={<ListChecks className="size-4" />}
+              emphasis="primary"
               onClick={onSelectCurrentFilter}
-            >
-              {t("central.selectCurrentFilter")}
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-auto min-h-8 whitespace-normal px-2 leading-tight"
+            />
+            <RangeActionCard
+              title={t("central.selectUncategorized")}
+              description={t("central.categorizeSelectUncategorizedDesc")}
+              icon={<Tags className="size-4" />}
+              emphasis="secondary"
               onClick={onSelectUncategorized}
-            >
-              {t("central.selectUncategorized")}
-            </Button>
+            />
             <Button
               variant="ghost"
               size="sm"
-              className="col-span-2 justify-start text-foreground/75 hover:text-foreground"
+              className="h-7 px-1 text-xs text-foreground/65 hover:text-foreground"
               onClick={onClearSelection}
             >
               <X className="size-3.5" />
@@ -189,27 +205,39 @@ export function CentralSkillCategorizePanel({
             </Button>
           </div>
           {selectedSkillCount > 0 && (
-            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/70 pt-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onBatchInstallOpen}
-                disabled={isInstalling}
-                data-testid="batch-install-central-skills"
-              >
-                <Download className="size-3.5" />
-                {t("central.batchInstallSelected", { count: selectedSkillCount })}
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={onBatchDelete}
-                disabled={isDeleting}
-                data-testid="batch-delete-central-skills"
-              >
-                <Trash2 className="size-3.5" />
-                {t("central.batchDeleteSelected", { count: selectedSkillCount })}
-              </Button>
+            <div className="mt-3 rounded-2xl border border-border/80 bg-muted/10 p-3 shadow-sm">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t("central.categorizeSelectedActions")}
+                </span>
+                <span className="rounded-full border border-border/80 bg-background px-2 py-0.5 text-[10px] font-medium text-foreground/70">
+                  {t("central.selectedSkillSummary", { count: selectedSkillCount })}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-auto min-h-8 whitespace-normal px-2 leading-tight"
+                  onClick={onBatchInstallOpen}
+                  disabled={isInstalling}
+                  data-testid="batch-install-central-skills"
+                >
+                  <Download className="size-3.5" />
+                  {t("central.batchInstallSelected", { count: selectedSkillCount })}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-auto min-h-8 whitespace-normal border-destructive/20 bg-destructive/5 px-2 leading-tight"
+                  onClick={onBatchDelete}
+                  disabled={isDeleting}
+                  data-testid="batch-delete-central-skills"
+                >
+                  <Trash2 className="size-3.5" />
+                  {t("central.batchDeleteSelected", { count: selectedSkillCount })}
+                </Button>
+              </div>
             </div>
           )}
         </section>
@@ -222,7 +250,7 @@ export function CentralSkillCategorizePanel({
           <div
             role="tablist"
             aria-label={t("central.categorizeIntent")}
-            className="mb-3 grid grid-cols-3 rounded-xl border border-border/60 bg-muted/10 p-1"
+            className="mb-4 grid grid-cols-3 gap-1 rounded-2xl border border-border/80 bg-muted/20 p-1.5 shadow-inner"
           >
             {(["manual", "ai", "review"] as const).map((tab) => (
               <button
@@ -232,13 +260,15 @@ export function CentralSkillCategorizePanel({
                 aria-selected={categorizeTab === tab}
                 onClick={() => onSetCategorizeTab(tab)}
                 className={cn(
-                  "h-8 rounded-lg text-xs font-medium transition-colors",
+                  "flex h-9 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
                   categorizeTab === tab
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-foreground/70 hover:bg-background hover:text-foreground"
+                    ? "border-primary/35 bg-background text-primary shadow-sm ring-1 ring-primary/15"
+                    : "border-transparent text-foreground/60 hover:border-border/80 hover:bg-background/80 hover:text-foreground"
                 )}
               >
-                {t(`central.categorizeTab.${tab}`)}
+                {tabIcons[tab]}
+                <span>{t(`central.categorizeTab.${tab}`)}</span>
               </button>
             ))}
           </div>
@@ -284,7 +314,10 @@ export function CentralSkillCategorizePanel({
           {categorizeTab === "ai" && (
             <div className="space-y-3">
               <div className="rounded-2xl border border-border/90 bg-background p-3 text-xs shadow-sm">
-                <div className="mb-1 font-medium text-foreground">{t("central.aiScopeTitle")}</div>
+                <div className="mb-1 flex items-center gap-1.5 font-medium text-foreground">
+                  <Bot className="size-3.5 text-primary" />
+                  {t("central.aiScopeTitle")}
+                </div>
                 <p className="leading-relaxed text-foreground/75">
                   {t("central.aiScopeDesc", {
                     selected: selectedSkillCount,
@@ -369,7 +402,12 @@ export function CentralSkillCategorizePanel({
         {categorizeTab === "manual" && (
           <>
             <Button
-              className="w-full"
+              className={cn(
+                "w-full",
+                isManualActionDisabled
+                  ? "border border-dashed border-border bg-muted/30 text-foreground/60 shadow-none"
+                  : "shadow-sm"
+              )}
               disabled={isManualActionDisabled}
               onClick={onApplyManualTags}
               data-testid="categorize-primary-action"
@@ -390,7 +428,12 @@ export function CentralSkillCategorizePanel({
         {categorizeTab === "ai" && (
           <>
             <Button
-              className="w-full"
+              className={cn(
+                "w-full",
+                isAiActionDisabled
+                  ? "border border-dashed border-border bg-muted/30 text-foreground/60 shadow-none"
+                  : "shadow-sm"
+              )}
               disabled={isAiActionDisabled}
               onClick={onBulkSuggestTags}
               data-testid="categorize-primary-action"
@@ -415,5 +458,51 @@ export function CentralSkillCategorizePanel({
         )}
       </div>
     </aside>
+  );
+}
+
+function RangeActionCard({
+  title,
+  description,
+  icon,
+  emphasis,
+  onClick,
+}: {
+  title: string;
+  description: string;
+  icon: ReactNode;
+  emphasis: "primary" | "secondary";
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={title}
+      onClick={onClick}
+      className={cn(
+        "group flex w-full items-start gap-3 rounded-2xl border p-3 text-left shadow-sm transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+        emphasis === "primary"
+          ? "border-primary/25 bg-primary/10 text-foreground hover:bg-primary/15"
+          : "border-border/90 bg-muted/15 text-foreground hover:border-primary/25 hover:bg-background"
+      )}
+    >
+      <span
+        className={cn(
+          "mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl ring-1 transition-colors",
+          emphasis === "primary"
+            ? "bg-background/90 text-primary ring-primary/20"
+            : "bg-background text-foreground/70 ring-border/80 group-hover:text-primary"
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold leading-tight">{title}</span>
+        <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+          {description}
+        </span>
+      </span>
+    </button>
   );
 }

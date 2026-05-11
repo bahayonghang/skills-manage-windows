@@ -105,11 +105,29 @@ describe("CentralSkillsView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "选择当前结果" }));
 
-    expect(screen.getByText("已选 2 个技能")).toBeInTheDocument();
+    expect(screen.getAllByText("已选 2 个技能").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("待添加 0 个分类")).toBeInTheDocument();
     const action = screen.getByTestId("categorize-primary-action");
     expect(action).toHaveTextContent("选择要添加的分类");
     expect(action).toBeDisabled();
+  });
+
+  it("keeps batch categorize quick actions wired after selecting skills", () => {
+    renderCentralSkillsView();
+
+    const selectCurrent = screen.getByRole("button", { name: "选择当前结果" });
+    expect(selectCurrent).toHaveTextContent("使用当前搜索和筛选范围内的全部结果。");
+
+    fireEvent.click(selectCurrent);
+
+    expect(screen.getByText("已选操作")).toBeInTheDocument();
+    expect(screen.getByTestId("batch-install-central-skills")).toBeInTheDocument();
+    expect(screen.getByTestId("batch-delete-central-skills")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "清空选择" }));
+
+    expect(screen.queryByTestId("batch-install-central-skills")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("batch-delete-central-skills")).not.toBeInTheDocument();
   });
 
 
