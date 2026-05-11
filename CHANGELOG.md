@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.11.0 - 2026-05-10
+
+Security-focused release notes for the 0.10.x → 0.11.0 secret store consolidation line.
+
+### Security
+
+- Move GitHub PAT storage from plaintext SQLite settings into the shared SecretStore path with keyring, Windows DPAPI, and session fallback support.
+- Move AI API Key storage into SecretStore while keeping non-sensitive AI provider, region, model, URL, and tagging options in normal settings.
+- Add guarded one-time migrations for legacy `github_pat` and `ai_api_key` settings rows: old values are cleared only after the secret is written and read back successfully.
+- Block generic settings IPC from reading or writing protected secret keys so new plaintext writes cannot be reintroduced through `get_setting`, `set_setting`, `get_settings`, or `set_settings`.
+
+### Improvements
+
+- Route the remaining Settings store actions through the shared `@/lib/tauri` wrapper so browser fixtures and Tauri runtime checks stay consistent across stores.
+- Replace direct `serde_yaml` usage with `serde_norway` for SKILL.md frontmatter parsing after confirming the planned `serde_yml` alternative is itself RustSec-flagged.
+- Keep the Windows packaging contract unchanged; no installer, signing, or bundle output path changes are included in this security consolidation.
+
 ## 0.10.0 - 2026-05-03
 
 Alignment release focused on upstream 0.10.0 packaging parity, Linux desktop bundles, and safer Discover installs for this Windows-first SkillPort fork.

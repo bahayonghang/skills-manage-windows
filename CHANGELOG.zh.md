@@ -2,6 +2,23 @@
 
 本文件记录该项目的重要变更。
 
+## 0.11.0 - 2026-05-10
+
+这是 `0.10.x → 0.11.0 secret store consolidation` 版本线的安全收口记录。
+
+### 安全
+
+- GitHub PAT 不再以明文写入 SQLite settings，改走统一 SecretStore，并复用 keyring、Windows DPAPI、session fallback 三层存储能力。
+- AI API Key 改走 SecretStore；AI provider、region、model、URL、标签并发与间隔等非敏感配置仍保留在普通 settings。
+- 为旧版 `github_pat` 与 `ai_api_key` settings 行增加一次性安全迁移：只有 SecretStore 写入并读回成功后，才清理旧明文值。
+- generic settings IPC 阻止读写受保护 secret key，避免后续通过 `get_setting`、`set_setting`、`get_settings`、`set_settings` 重新引入明文写入。
+
+### 改进
+
+- Settings store 剩余 action 统一改用 `@/lib/tauri` 封装，让浏览器 fixture 与 Tauri runtime 判断和其他 store 保持一致。
+- 在确认计划中的 `serde_yml` 替代项同样存在 RustSec 风险后，将 SKILL.md frontmatter 解析从 `serde_yaml` 切换到 `serde_norway`。
+- 本轮安全收口不改变 Windows 打包契约；未修改安装器、签名或 bundle 输出路径。
+
 ## 0.10.0 - 2026-05-03
 
 这是一次围绕上游 0.10.0 对齐、Linux 桌面打包补齐，以及 Discover 安装链路修正的版本升级，同时继续保持当前 SkillPort fork 的 Windows-first 发布契约。
