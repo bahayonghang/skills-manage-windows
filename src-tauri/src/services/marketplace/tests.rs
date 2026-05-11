@@ -9,6 +9,7 @@ use super::{
 };
 use crate::commands::github_import::RemoteSkillCandidate;
 use crate::db;
+use crate::secrets::MockSecretStore;
 use std::path::Path;
 use tempfile::{tempdir, TempDir};
 
@@ -141,6 +142,7 @@ async fn sync_registry_uses_cached_skills_without_refresh() {
     let skills = sync_registry_impl(
         &pool,
         &pool,
+        &MockSecretStore::default(),
         registry.id.clone(),
         SyncRegistryOptions::default(),
     )
@@ -202,6 +204,7 @@ async fn force_refresh_failure_preserves_last_good_cached_data() {
     let skills = sync_registry_impl(
         &pool,
         &pool,
+        &MockSecretStore::default(),
         registry.id.clone(),
         SyncRegistryOptions {
             force_refresh: true,

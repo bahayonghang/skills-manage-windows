@@ -13,6 +13,16 @@ import {
 } from "./centralSkillsStore.shared";
 import type { CentralSkillsState, CentralStoreContext } from "./centralSkillsStore.types";
 
+type AiApiKeyState = { configured: boolean };
+
+async function loadAiApiKeyState(): Promise<AiApiKeyState | null> {
+  try {
+    return (await invoke<AiApiKeyState>("get_ai_api_key_state")) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function createCentralListSlice({ set, getGeneration }: CentralStoreContext): Pick<CentralSkillsState, "loadCentralSkills"> {
   return {
   /**
@@ -27,14 +37,14 @@ export function createCentralListSlice({ set, getGeneration }: CentralStoreConte
       return;
     }
     try {
-      const [skills, agents, repositories, tags, reviews, updateStates, aiApiKey] = await Promise.all([
+      const [skills, agents, repositories, tags, reviews, updateStates, aiApiKeyState] = await Promise.all([
         invoke<SkillWithLinks[]>("get_central_skills"),
         invoke<AgentWithStatus[]>("get_agents"),
         invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
         invoke<SkillTag[]>("get_skill_tags"),
         invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
         invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
-        Promise.resolve(invoke<string | null>("get_setting", { key: "ai_api_key" })).catch(() => null),
+        loadAiApiKeyState(),
       ]);
       if (generation === getGeneration()) {
         set({
@@ -44,7 +54,7 @@ export function createCentralListSlice({ set, getGeneration }: CentralStoreConte
           tags: tags ?? [],
           aiTagReviews: reviews ?? [],
           updateStatuses: indexUpdateStates(updateStates ?? []),
-          aiTaggingAvailable: !!aiApiKey,
+          aiTaggingAvailable: !!aiApiKeyState?.configured,
           isLoading: false,
         });
       }

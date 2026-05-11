@@ -1,9 +1,11 @@
+use super::*;
 #[allow(dead_code)]
 pub(crate) async fn preview_github_repo_import_impl(
     pool: &DbPool,
+    secrets: &dyn crate::secrets::SecretStore,
     repo_url: &str,
 ) -> Result<GitHubRepoPreview, String> {
-    let auth = github_direct_auth_from_settings(pool).await?;
+    let auth = github_direct_auth_from_secret_store(pool, secrets).await?;
     preview_github_repo_import_with_auth(pool, repo_url, auth.as_deref()).await
 }
 

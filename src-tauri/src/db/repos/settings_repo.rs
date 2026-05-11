@@ -62,6 +62,16 @@ pub async fn set_setting(pool: &DbPool, key: &str, value: &str) -> Result<(), St
         .map_err(|e| e.to_string())
 }
 
+/// Delete a setting value by key.
+pub async fn delete_setting(pool: &DbPool, key: &str) -> Result<(), String> {
+    sqlx::query("DELETE FROM settings WHERE key = ?")
+        .bind(key)
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// Set (upsert) a batch of settings in a single transaction.
 pub async fn set_settings(pool: &DbPool, values: &HashMap<String, String>) -> Result<(), String> {
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;

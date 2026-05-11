@@ -57,6 +57,7 @@ pub async fn sync_registry(
     marketplace::sync_registry_impl(
         &pool,
         &state.db,
+        state.secrets.as_ref(),
         registry_id,
         SyncRegistryOptions::default(),
     )
@@ -70,8 +71,14 @@ pub async fn sync_registry_with_options(
     options: Option<SyncRegistryOptions>,
 ) -> Result<Vec<MarketplaceSkill>, String> {
     let pool = state.active_db().await?;
-    marketplace::sync_registry_impl(&pool, &state.db, registry_id, options.unwrap_or_default())
-        .await
+    marketplace::sync_registry_impl(
+        &pool,
+        &state.db,
+        state.secrets.as_ref(),
+        registry_id,
+        options.unwrap_or_default(),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -98,7 +105,7 @@ pub async fn install_marketplace_skill(
 
 #[tauri::command]
 pub async fn explain_skill(state: State<'_, AppState>, content: String) -> Result<String, String> {
-    ai_provider::explain_skill_impl(&state.db, content).await
+    ai_provider::explain_skill_impl(&state.db, state.secrets.as_ref(), content).await
 }
 
 #[tauri::command]
@@ -118,7 +125,15 @@ pub async fn explain_skill_stream(
     content: String,
     lang: String,
 ) -> Result<(), String> {
-    ai_provider::explain_skill_stream_impl(&state.db, &app, skill_id, content, lang).await
+    ai_provider::explain_skill_stream_impl(
+        &state.db,
+        state.secrets.as_ref(),
+        &app,
+        skill_id,
+        content,
+        lang,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -129,5 +144,13 @@ pub async fn refresh_skill_explanation(
     content: String,
     lang: String,
 ) -> Result<(), String> {
-    ai_provider::refresh_skill_explanation_impl(&state.db, &app, skill_id, content, lang).await
+    ai_provider::refresh_skill_explanation_impl(
+        &state.db,
+        state.secrets.as_ref(),
+        &app,
+        skill_id,
+        content,
+        lang,
+    )
+    .await
 }

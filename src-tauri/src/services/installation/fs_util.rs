@@ -4,6 +4,21 @@
 
 use std::path::{Path, PathBuf};
 
+pub(crate) async fn run_blocking_fs<T, F>(label: &'static str, task: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|e| format!("Failed to join {} task: {}", label, e))?
+}
+
+pub(crate) async fn path_exists_blocking(path: &Path) -> Result<bool, String> {
+    let path = path.to_path_buf();
+    run_blocking_fs("path existence check", move || Ok(path.exists())).await
+}
+
 /// Compute a relative path from `from_dir` to `to_path`.
 ///
 /// Both paths must be absolute. The resulting path can be used as a symlink
@@ -126,4 +141,10 @@ pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+pub(crate) async fn copy_dir_all_blocking(src: &Path, dst: &Path) -> Result<(), String> {
+    let src = src.to_path_buf();
+    let dst = dst.to_path_buf();
+    run_blocking_fs("directory copy", move || copy_dir_all(&src, &dst)).await
 }

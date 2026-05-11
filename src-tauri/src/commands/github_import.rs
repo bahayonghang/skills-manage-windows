@@ -12,12 +12,11 @@ use crate::AppState;
 
 pub(crate) use crate::services::github_import::{
     build_repo_skill_candidates_from_snapshot_at_path, download_repo_snapshot,
-    fetch_repo_skill_candidates_from_source, github_client, github_direct_auth_from_settings,
-    import_github_repo_skills_partially_with_auth, inspect_github_repo_skills_with_auth,
+    fetch_repo_skill_candidates_from_source, github_client, github_direct_auth_from_secret_store,
     resolve_repo_source, GitHubRepoSnapshot, RemoteSkillCandidate,
 };
 pub use crate::services::github_import::{
-    DuplicateResolution, GitHubImportProgressPayload, GitHubImportProgressPhase,
+    DuplicateResolution, GitHubImportProgressPayload, GitHubImportProgressPhase, GitHubPatState,
     GitHubPatTestResult, GitHubRepoImportResult, GitHubRepoPreview, GitHubRepoRef,
     GitHubSkillConflict, GitHubSkillImportSelection, GitHubSkillPreview,
     ImportedGitHubSkillSummary,
@@ -30,7 +29,9 @@ pub async fn preview_github_repo_import(
 ) -> Result<GitHubRepoPreview, String> {
     let active_target = state.active_target().await?;
     let pool = state.active_db().await?;
-    let auth = github_import::github_direct_auth_from_settings(&state.db).await?;
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await?;
     match active_target {
         ActiveTarget::Local => {
             github_import::preview_github_repo_import_with_auth(&pool, &repo_url, auth.as_deref())
@@ -58,7 +59,9 @@ pub async fn import_github_repo_skills(
 ) -> Result<GitHubRepoImportResult, String> {
     let active_target = state.active_target().await?;
     let pool = state.active_db().await?;
-    let auth = github_import::github_direct_auth_from_settings(&state.db).await?;
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await?;
     match active_target {
         ActiveTarget::Local => {
             github_import::import_github_repo_skills_with_auth(
@@ -102,7 +105,9 @@ pub async fn fetch_github_skill_markdown(
     }
 
     let client = github_import::github_client()?;
-    let auth = github_import::github_direct_auth_from_settings(&state.db).await?;
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await?;
     github_import::fetch_raw_text(&client, &download_url, auth.as_deref()).await
 }
 
@@ -116,21 +121,24 @@ pub async fn discard_github_repo_preview_workspace(
 }
 
 #[tauri::command]
-pub async fn get_github_pat(state: State<'_, AppState>) -> Result<Option<String>, String> {
-    github_import::github_direct_auth_from_settings(&state.db).await
+pub async fn get_github_pat(state: State<'_, AppState>) -> Result<GitHubPatState, String> {
+    github_import::get_github_pat_state_impl(&state.db, state.secrets.as_ref()).await
 }
 
 #[tauri::command]
-pub async fn set_github_pat(state: State<'_, AppState>, value: String) -> Result<(), String> {
-    github_import::set_github_pat_impl(&state.db, value).await
+pub async fn set_github_pat(
+    state: State<'_, AppState>,
+    value: String,
+) -> Result<GitHubPatState, String> {
+    github_import::set_github_pat_impl(&state.db, state.secrets.as_ref(), value).await
 }
 
 #[tauri::command]
-pub async fn clear_github_pat(state: State<'_, AppState>) -> Result<(), String> {
-    github_import::clear_github_pat_impl(&state.db).await
+pub async fn clear_github_pat(state: State<'_, AppState>) -> Result<GitHubPatState, String> {
+    github_import::clear_github_pat_impl(&state.db, state.secrets.as_ref()).await
 }
 
 #[tauri::command]
 pub async fn test_github_pat(state: State<'_, AppState>) -> Result<GitHubPatTestResult, String> {
-    github_import::test_github_pat_impl(&state.db).await
+    github_import::test_github_pat_impl(&state.db, state.secrets.as_ref()).await
 }

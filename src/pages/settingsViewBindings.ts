@@ -21,7 +21,7 @@ export function useSettingsViewBindings() {
   const addCustomAgent = usePlatformStore((state) => state.addCustomAgent);
   const updateCustomAgent = usePlatformStore((state) => state.updateCustomAgent);
   const removeCustomAgent = usePlatformStore((state) => state.removeCustomAgent);
-  const githubPat = useSettingsStore((state) => state.githubPat);
+  const githubPatState = useSettingsStore((state) => state.githubPatState);
   const isLoadingGitHubPat = useSettingsStore((state) => state.isLoadingGitHubPat);
   const isSavingGitHubPat = useSettingsStore((state) => state.isSavingGitHubPat);
   const isTestingGitHubPat = useSettingsStore((state) => state.isTestingGitHubPat);
@@ -30,6 +30,7 @@ export function useSettingsViewBindings() {
   const clearGitHubPat = useSettingsStore((state) => state.clearGitHubPat);
   const testGitHubPat = useSettingsStore((state) => state.testGitHubPat);
   const aiSettings = useSettingsStore((state) => state.aiSettings);
+  const aiApiKeyState = useSettingsStore((state) => state.aiApiKeyState);
   const aiSettingsLoaded = useSettingsStore((state) => state.aiSettingsLoaded);
   const isLoadingAiSettings = useSettingsStore((state) => state.isLoadingAiSettings);
   const aiSaveStatus = useSettingsStore((state) => state.aiSaveStatus);
@@ -38,6 +39,7 @@ export function useSettingsViewBindings() {
   const aiTestResult = useSettingsStore((state) => state.aiTestResult);
   const loadAiSettings = useSettingsStore((state) => state.loadAiSettings);
   const updateAiSettings = useSettingsStore((state) => state.updateAiSettings);
+  const clearAiApiKey = useSettingsStore((state) => state.clearAiApiKey);
   const testAiConnection = useSettingsStore((state) => state.testAiConnection);
 
   const agents = usePlatformStore((state) => state.agents);
@@ -95,7 +97,7 @@ export function useSettingsViewBindings() {
     addCustomAgent,
     updateCustomAgent,
     removeCustomAgent,
-    githubPat,
+    githubPatState,
     isLoadingGitHubPat,
     isSavingGitHubPat,
     isTestingGitHubPat,
@@ -104,6 +106,7 @@ export function useSettingsViewBindings() {
     clearGitHubPat,
     testGitHubPat,
     aiSettings,
+    aiApiKeyState,
     aiSettingsLoaded,
     isLoadingAiSettings,
     aiSaveStatus,
@@ -112,6 +115,7 @@ export function useSettingsViewBindings() {
     aiTestResult,
     loadAiSettings,
     updateAiSettings,
+    clearAiApiKey,
     testAiConnection,
     agents,
     categoryVisibility,

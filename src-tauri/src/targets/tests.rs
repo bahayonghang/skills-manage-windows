@@ -1,5 +1,6 @@
+use super::*;
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use sqlx::SqlitePool;
     use std::path::Path;

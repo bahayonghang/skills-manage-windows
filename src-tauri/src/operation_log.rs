@@ -20,9 +20,12 @@
 //! IPC surface for list / get / clear / export.
 
 use serde_json::Value;
+use std::future::Future;
+use std::time::Instant;
 
 use crate::db::{self, DbPool, NewOperationLogEntry};
 use crate::targets::{ActiveTarget, LOCAL_TARGET_ID};
+use crate::AppState;
 
 /// Maximum number of characters allowed in an error summary stored on the log.
 /// Longer strings are truncated and ended with the ellipsis character.
@@ -74,6 +77,37 @@ pub struct OperationLogEvent {
     pub batch_id: Option<String>,
 }
 
+/// Specification for [`with_operation_log`].
+///
+/// Keeps command wrappers responsible for domain-specific summaries and
+/// subjects while centralizing the repeated run → time → persist template.
+type OperationLogSuccessBuilder<'a, R> = Box<dyn FnOnce(&R, i64) -> OperationLogEvent + Send + 'a>;
+type OperationLogFailureBuilder<'a, E> = Box<dyn FnOnce(&E, i64) -> OperationLogEvent + Send + 'a>;
+
+pub struct OperationSpec<'a, R, E> {
+    target_context: OperationLogTargetContext,
+    on_success: OperationLogSuccessBuilder<'a, R>,
+    on_failure: OperationLogFailureBuilder<'a, E>,
+}
+
+impl<'a, R, E> OperationSpec<'a, R, E> {
+    pub fn new<OnSuccess, OnFailure>(
+        target_context: OperationLogTargetContext,
+        on_success: OnSuccess,
+        on_failure: OnFailure,
+    ) -> Self
+    where
+        OnSuccess: FnOnce(&R, i64) -> OperationLogEvent + Send + 'a,
+        OnFailure: FnOnce(&E, i64) -> OperationLogEvent + Send + 'a,
+    {
+        Self {
+            target_context,
+            on_success: Box::new(on_success),
+            on_failure: Box::new(on_failure),
+        }
+    }
+}
+
 impl OperationLogEvent {
     pub fn new(category: &str, action: &str, status: &str, summary: impl Into<String>) -> Self {
         Self {
@@ -116,6 +150,47 @@ impl OperationLogEvent {
     pub fn batch_id(mut self, batch_id: impl Into<String>) -> Self {
         self.batch_id = Some(batch_id.into());
         self
+    }
+}
+
+/// Run an async business operation and record one best-effort Operation Log.
+///
+/// The business `Result` is returned unchanged. Logging failures remain
+/// best-effort and are swallowed by [`record_operation_log_best_effort`].
+pub async fn with_operation_log<'a, F, Fut, R, E>(
+    state: &AppState,
+    spec: OperationSpec<'a, R, E>,
+    f: F,
+) -> Result<R, E>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<R, E>>,
+    E: std::fmt::Display,
+{
+    let started_at = Instant::now();
+    let result = f().await;
+    let duration_ms = started_at.elapsed().as_millis() as i64;
+    let OperationSpec {
+        target_context,
+        on_success,
+        on_failure,
+    } = spec;
+    match result {
+        Ok(value) => {
+            record_operation_log_best_effort(
+                &state.db,
+                target_context,
+                on_success(&value, duration_ms),
+            )
+            .await;
+            Ok(value)
+        }
+        Err(error) => {
+            let error_text = error.to_string();
+            let event = on_failure(&error, duration_ms).error(error_text);
+            record_operation_log_best_effort(&state.db, target_context, event).await;
+            Err(error)
+        }
     }
 }
 
@@ -190,7 +265,7 @@ pub async fn record_operation_log_best_effort(
     };
 
     if let Err(error) = db::insert_operation_log(pool, entry).await {
-        eprintln!("Failed to record operation log: {}", error);
+        tracing::warn!(error = %error, "Failed to record operation log");
     }
 }
 
@@ -397,5 +472,103 @@ mod tests {
             OperationLogEvent::new("test", "test.action", "succeeded", "No schema"),
         )
         .await;
+    }
+
+    #[tokio::test]
+    async fn with_operation_log_records_success_and_preserves_result() {
+        let pool = SqlitePool::connect(":memory:").await.unwrap();
+        crate::db::init_database(&pool).await.unwrap();
+        let app_state = test_app_state(pool);
+
+        let result = with_operation_log(
+            &app_state,
+            OperationSpec::new(
+                local_target_context(),
+                |value, duration_ms| {
+                    OperationLogEvent::new(
+                        "test",
+                        "test.wrapper",
+                        "succeeded",
+                        format!("Returned {value}"),
+                    )
+                    .duration_ms(duration_ms)
+                },
+                |error: &String, duration_ms| {
+                    OperationLogEvent::new("test", "test.wrapper", "failed", "Failed")
+                        .error(error)
+                        .duration_ms(duration_ms)
+                },
+            ),
+            || async { Ok::<_, String>(7) },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result, 7);
+        let page =
+            crate::db::list_operation_logs(&app_state.db, crate::db::OperationLogFilter::default())
+                .await
+                .unwrap();
+        assert_eq!(page.entries.len(), 1);
+        let entry = &page.entries[0];
+        assert_eq!(entry.action, "test.wrapper");
+        assert_eq!(entry.status, "succeeded");
+        assert_eq!(entry.summary, "Returned 7");
+        assert!(entry.duration_ms.is_some());
+        assert!(entry.error_summary.is_none());
+    }
+
+    #[tokio::test]
+    async fn with_operation_log_records_failure_and_preserves_error() {
+        let pool = SqlitePool::connect(":memory:").await.unwrap();
+        crate::db::init_database(&pool).await.unwrap();
+        let app_state = test_app_state(pool);
+
+        let result = with_operation_log(
+            &app_state,
+            OperationSpec::new(
+                local_target_context(),
+                |value: &(), duration_ms| {
+                    OperationLogEvent::new(
+                        "test",
+                        "test.wrapper",
+                        "succeeded",
+                        format!("Returned {value:?}"),
+                    )
+                    .duration_ms(duration_ms)
+                },
+                |error: &String, duration_ms| {
+                    OperationLogEvent::new("test", "test.wrapper", "failed", "Failed")
+                        .error(error)
+                        .duration_ms(duration_ms)
+                },
+            ),
+            || async { Err::<(), _>("boom\nboom".to_string()) },
+        )
+        .await;
+
+        assert_eq!(result, Err("boom\nboom".to_string()));
+        let page =
+            crate::db::list_operation_logs(&app_state.db, crate::db::OperationLogFilter::default())
+                .await
+                .unwrap();
+        assert_eq!(page.entries.len(), 1);
+        let entry = &page.entries[0];
+        assert_eq!(entry.action, "test.wrapper");
+        assert_eq!(entry.status, "failed");
+        assert_eq!(entry.summary, "Failed");
+        assert_eq!(entry.error_summary.as_deref(), Some("boom boom"));
+        assert!(entry.duration_ms.is_some());
+    }
+
+    fn test_app_state(pool: SqlitePool) -> crate::AppState {
+        crate::AppState {
+            db: pool,
+            ai_tag_jobs: crate::AiTagJobRegistry::default(),
+            central_update_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            portable_state_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            secrets: std::sync::Arc::new(crate::secrets::MockSecretStore::default()),
+            targets: crate::targets::TargetRegistry::default(),
+        }
     }
 }

@@ -128,7 +128,9 @@ pub async fn check_central_skill_updates(
 ) -> Result<Vec<SkillUpdateState>, String> {
     let fs = CentralFs::from_active_target(state.active_target().await?).await?;
     let skills = load_selected_central_skills(&state.db, skill_ids.as_deref()).await?;
-    let auth = github_import::github_direct_auth_from_settings(&state.db).await?;
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await?;
     let client = github_import::github_client()?;
     let mut snapshots = HashMap::new();
     let mut counters = UpdateCounters::default();
@@ -214,7 +216,9 @@ pub async fn update_central_skills(
     let fs = CentralFs::from_active_target(state.active_target().await?).await?;
 
     let skills = load_selected_central_skills(&state.db, Some(&skill_ids)).await?;
-    let auth = github_import::github_direct_auth_from_settings(&state.db).await?;
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await?;
     let client = github_import::github_client()?;
     let mut snapshots = HashMap::new();
     let mut counters = UpdateCounters::default();

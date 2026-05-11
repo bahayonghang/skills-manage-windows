@@ -23,6 +23,7 @@ mod tests;
 pub use batch::batch_install_central_skills_impl;
 pub(crate) use batch::{batch_operation_status, dedupe_ordered};
 pub use fs_util::{copy_dir_all, create_symlink, make_relative_path, symlink_target_path};
+pub(crate) use fs_util::{copy_dir_all_blocking, run_blocking_fs};
 pub use native::{
     install_skill_to_agent_auto_impl, install_skill_to_agent_copy_impl,
     install_skill_to_agent_impl, uninstall_skill_from_agent_impl,

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { DirectoryTreeEntry, SkillDetail, SkillDetailRequest } from "@/types";
+import { parseBackendError } from "@/lib/backendError";
 import {
   ExplanationErrorInfo,
   setupExplanationStreamListeners,
@@ -133,10 +134,20 @@ function failExplanationRequest(
     return;
   }
   cleanupExplanationListeners();
+  const parsed = parseBackendError(error);
   set({
     explanation: null,
-    explanationError: String(error),
-    explanationErrorInfo: null,
+    explanationError: parsed.message,
+    explanationErrorInfo: parsed.code
+      ? {
+          code: parsed.code,
+          message: parsed.message,
+          details: parsed.details ?? parsed.message,
+          kind: "response",
+          retryable: false,
+          fallbackTried: false,
+        }
+      : null,
     isExplanationLoading: false,
     isExplanationStreaming: false,
   });
@@ -450,8 +461,9 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
       const result = await invoke<string>("explain_skill", { content });
       set({ fileExplanation: result, fileIsExplaining: false });
     } catch (err) {
+      const parsed = parseBackendError(err);
       set({
-        fileExplanation: `Error: ${String(err)}`,
+        fileExplanation: `Error: ${parsed.message}`,
         fileIsExplaining: false,
       });
     }

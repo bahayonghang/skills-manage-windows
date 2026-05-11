@@ -16,6 +16,7 @@ import { CollectionPickerDialog } from "@/components/collection/CollectionPicker
 import { SkillDetailPreview } from "@/components/skill/SkillDetailPreview";
 import { SkillDetailSidebar } from "@/components/skill/SkillDetailSidebar";
 import { TabToggle } from "@/components/skill/SkillDetailViewShared";
+import { formatBackendError } from "@/lib/backendError";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { arePathsEquivalent } from "@/lib/path";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
@@ -307,7 +308,7 @@ export function SkillDetailView({
       await loadDetail(detailRequest);
       toast.success(t("central.repositoryAssigned", { count: 1 }));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
+      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
     }
   }, [assignSkillsToRepository, detailRequest, loadDetail, selectedRepositoryId, skillId, t]);
 
@@ -321,7 +322,7 @@ export function SkillDetailView({
       toast.success(t("central.tagsAssigned", { count: 1 }));
       setSelectedTagId("");
     } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
+      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
     }
   }, [assignSkillTags, detailRequest, loadDetail, selectedTagId, skillId, t]);
 

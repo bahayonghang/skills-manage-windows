@@ -4,7 +4,9 @@ use chrono::Utc;
 
 use crate::db::{self, DbPool};
 use crate::paths;
-use crate::services::installation::{copy_dir_all, create_symlink, symlink_target_path};
+use crate::services::installation::{
+    copy_dir_all_blocking, create_symlink, run_blocking_fs, symlink_target_path,
+};
 use crate::services::scanner::parse_skill_md;
 
 use super::types::ImportResult;
@@ -191,10 +193,20 @@ async fn import_skill_dir_to_platform(
 
     let target_path = agent_dir.join(&skill_dir_name);
 
-    std::fs::create_dir_all(agent_dir)
-        .map_err(|e| format!("Failed to create agent skills directory: {}", e))?;
+    let agent_dir_for_create = agent_dir.to_path_buf();
+    run_blocking_fs("agent skills directory creation", move || {
+        std::fs::create_dir_all(&agent_dir_for_create)
+            .map_err(|e| format!("Failed to create agent skills directory: {}", e))
+    })
+    .await?;
 
-    if target_path.exists() || std::fs::symlink_metadata(&target_path).is_ok() {
+    let target_path_for_check = target_path.clone();
+    let target_exists = run_blocking_fs("platform import target inspection", move || {
+        Ok(target_path_for_check.exists()
+            || std::fs::symlink_metadata(&target_path_for_check).is_ok())
+    })
+    .await?;
+    if target_exists {
         return Err(format!(
             "Skill '{}' already exists in {}",
             skill_dir_name, target_label
@@ -204,10 +216,14 @@ async fn import_skill_dir_to_platform(
     match install_method {
         DiscoveredPlatformInstallMethod::Symlink => {
             let relative_target = symlink_target_path(agent_dir, source_dir);
-            create_symlink(&relative_target, &target_path)?;
+            let target_path_for_symlink = target_path.clone();
+            run_blocking_fs("platform import symlink creation", move || {
+                create_symlink(&relative_target, &target_path_for_symlink)
+            })
+            .await?;
         }
         DiscoveredPlatformInstallMethod::Copy => {
-            copy_dir_all(source_dir, &target_path)?;
+            copy_dir_all_blocking(source_dir, &target_path).await?;
         }
     }
 
@@ -262,7 +278,12 @@ async fn import_skill_dir_to_central_at(
     source_dir: &Path,
     central_dir: &Path,
 ) -> Result<ImportResult, String> {
-    if !source_dir.is_dir() {
+    let source_dir_for_check = source_dir.to_path_buf();
+    let source_is_dir = run_blocking_fs("Central import source inspection", move || {
+        Ok(source_dir_for_check.is_dir())
+    })
+    .await?;
+    if !source_is_dir {
         return Err(format!(
             "Skill source directory '{}' does not exist.",
             source_dir.display()
@@ -272,14 +293,19 @@ async fn import_skill_dir_to_central_at(
     let skill_dir_name = skill_dir_name(source_dir)?;
     let target_dir = central_dir.join(&skill_dir_name);
 
-    if target_dir.exists() {
+    let target_dir_for_check = target_dir.clone();
+    let target_exists = run_blocking_fs("Central import target inspection", move || {
+        Ok(target_dir_for_check.exists())
+    })
+    .await?;
+    if target_exists {
         return Err(format!(
             "A skill named '{}' already exists in central skills",
             skill_dir_name
         ));
     }
 
-    copy_dir_all(source_dir, &target_dir)?;
+    copy_dir_all_blocking(source_dir, &target_dir).await?;
 
     let skill_md_path = target_dir.join("SKILL.md");
     let info = parse_skill_md(&skill_md_path);

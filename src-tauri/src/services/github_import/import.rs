@@ -1,14 +1,15 @@
+use super::*;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) async fn import_github_repo_skills_impl(
     pool: &DbPool,
+    secrets: &dyn crate::secrets::SecretStore,
     repo_url: &str,
     selections: Vec<GitHubSkillImportSelection>,
     app: Option<&AppHandle>,
 ) -> Result<GitHubRepoImportResult, String> {
-    let auth = github_direct_auth_from_settings(pool).await?;
+    let auth = github_direct_auth_from_secret_store(pool, secrets).await?;
     import_github_repo_skills_with_auth(pool, repo_url, selections, app, auth.as_deref()).await
 }
-
 pub(crate) async fn import_github_repo_skills_with_auth(
     pool: &DbPool,
     repo_url: &str,
@@ -28,7 +29,6 @@ pub(crate) async fn import_github_repo_skills_with_auth(
             total_bytes: 0,
         },
     );
-
     let resolved = resolve_repo_source(repo_url, auth).await?;
     let client = github_client()?;
     let snapshot = download_repo_snapshot(&client, &resolved.repo, auth).await?;
@@ -40,11 +40,9 @@ pub(crate) async fn import_github_repo_skills_with_auth(
     if candidates.is_empty() {
         return Err(NO_IMPORTABLE_SKILLS_ERROR.to_string());
     }
-
     let central_root = central_skills_root(pool).await?;
     std::fs::create_dir_all(&central_root)
         .map_err(|e| format!("Failed to create central skills directory: {}", e))?;
-
     let (mut staging_ops, skipped_skills) =
         plan_import_staging(pool, &candidates, selections).await?;
 
@@ -231,19 +229,19 @@ pub(crate) async fn import_github_repo_skills_partially_with_auth(
     .await
 }
 
-struct StagedImport {
-    candidate: RemoteSkillCandidate,
-    final_skill_id: String,
-    resolution: DuplicateResolution,
-    source_files: Vec<SnapshotSourceFile>,
+pub(super) struct StagedImport {
+    pub(super) candidate: RemoteSkillCandidate,
+    pub(super) final_skill_id: String,
+    pub(super) resolution: DuplicateResolution,
+    pub(super) source_files: Vec<SnapshotSourceFile>,
 }
 
 #[derive(Debug)]
-struct ExistingSkillBackup {
-    path: PathBuf,
+pub(super) struct ExistingSkillBackup {
+    pub(super) path: PathBuf,
 }
 
-async fn plan_import_staging(
+pub(super) async fn plan_import_staging(
     pool: &DbPool,
     candidates: &[RemoteSkillCandidate],
     selections: Vec<GitHubSkillImportSelection>,
@@ -320,7 +318,7 @@ async fn plan_import_staging(
     Ok((staging_ops, skipped_skills))
 }
 
-async fn import_github_repo_skills_from_snapshot_partially(
+pub(super) async fn import_github_repo_skills_from_snapshot_partially(
     pool: &DbPool,
     repo: &GitHubRepoRef,
     snapshot: &GitHubRepoSnapshot,
@@ -471,7 +469,7 @@ async fn import_github_repo_skills_from_snapshot_partially(
     })
 }
 
-async fn import_single_staged_skill(
+pub(super) async fn import_single_staged_skill(
     pool: &DbPool,
     repo: &GitHubRepoRef,
     snapshot: &GitHubRepoSnapshot,
@@ -496,11 +494,10 @@ async fn import_single_staged_skill(
     }
 
     let skill_md_path = staging_path.join("SKILL.md");
-    let raw = std::fs::read_to_string(&skill_md_path)
-        .map_err(|e| {
-            let _ = std::fs::remove_dir_all(&staging_path);
-            format!("Failed to read imported SKILL.md: {}", e)
-        })?;
+    let raw = std::fs::read_to_string(&skill_md_path).map_err(|e| {
+        let _ = std::fs::remove_dir_all(&staging_path);
+        format!("Failed to read imported SKILL.md: {}", e)
+    })?;
     let frontmatter = parse_frontmatter(&raw).ok_or_else(|| {
         let _ = std::fs::remove_dir_all(&staging_path);
         format!(
@@ -580,7 +577,7 @@ async fn import_single_staged_skill(
     })
 }
 
-fn backup_existing_skill_dir(
+pub(super) fn backup_existing_skill_dir(
     central_root: &Path,
     target_dir: &Path,
 ) -> Result<ExistingSkillBackup, String> {
@@ -595,7 +592,10 @@ fn backup_existing_skill_dir(
     Ok(ExistingSkillBackup { path: backup_path })
 }
 
-fn restore_or_cleanup_target_dir(target_dir: &Path, backup: Option<ExistingSkillBackup>) {
+pub(super) fn restore_or_cleanup_target_dir(
+    target_dir: &Path,
+    backup: Option<ExistingSkillBackup>,
+) {
     if target_dir.exists() {
         let _ = std::fs::remove_dir_all(target_dir);
     }
@@ -604,33 +604,38 @@ fn restore_or_cleanup_target_dir(target_dir: &Path, backup: Option<ExistingSkill
     }
 }
 
-fn drop_existing_backup(backup: Option<ExistingSkillBackup>) {
+pub(super) fn drop_existing_backup(backup: Option<ExistingSkillBackup>) {
     if let Some(backup) = backup {
         let _ = std::fs::remove_dir_all(&backup.path);
     }
 }
 
-fn create_unique_work_dir(parent: &Path, prefix: &str) -> Result<PathBuf, String> {
+pub(super) fn create_unique_work_dir(parent: &Path, prefix: &str) -> Result<PathBuf, String> {
     let path = parent.join(format!("{prefix}{}", Uuid::new_v4()));
-    std::fs::create_dir_all(&path)
-        .map_err(|e| format!("Failed to create staging directory '{}': {}", path.display(), e))?;
+    std::fs::create_dir_all(&path).map_err(|e| {
+        format!(
+            "Failed to create staging directory '{}': {}",
+            path.display(),
+            e
+        )
+    })?;
     Ok(path)
 }
 
-fn cleanup_created_directories(paths: &[PathBuf]) {
+pub(super) fn cleanup_created_directories(paths: &[PathBuf]) {
     for path in paths.iter().rev() {
         let _ = std::fs::remove_dir_all(path);
     }
 }
 
-async fn central_skills_root(pool: &DbPool) -> Result<PathBuf, String> {
+pub(super) async fn central_skills_root(pool: &DbPool) -> Result<PathBuf, String> {
     let central = db::get_agent_by_id(pool, "central")
         .await?
         .ok_or_else(|| "Central agent not found in database".to_string())?;
     Ok(PathBuf::from(central.global_skills_dir))
 }
 
-async fn current_central_skill_ids(pool: &DbPool) -> Result<HashSet<String>, String> {
+pub(super) async fn current_central_skill_ids(pool: &DbPool) -> Result<HashSet<String>, String> {
     let rows = sqlx::query("SELECT id FROM skills WHERE is_central = 1")
         .fetch_all(pool)
         .await
@@ -641,7 +646,7 @@ async fn current_central_skill_ids(pool: &DbPool) -> Result<HashSet<String>, Str
         .collect::<HashSet<_>>())
 }
 
-async fn build_preview_skills(
+pub(super) async fn build_preview_skills(
     pool: &DbPool,
     candidates: &[RemoteSkillCandidate],
 ) -> Result<Vec<GitHubSkillPreview>, String> {
@@ -652,19 +657,21 @@ async fn build_preview_skills(
     let existing_by_id = db::get_skills_by_ids(pool, &skill_ids).await?;
     let mut skills = Vec::with_capacity(candidates.len());
     for candidate in candidates {
-        let conflict = existing_by_id.get(&candidate.skill_id).and_then(|existing| {
-            if existing.is_central {
-                Some(GitHubSkillConflict {
-                    existing_skill_id: existing.id.clone(),
-                    existing_name: existing.name.clone(),
-                    existing_canonical_path: existing.canonical_path.clone(),
-                    proposed_skill_id: candidate.skill_id.clone(),
-                    proposed_name: candidate.skill_name.clone(),
-                })
-            } else {
-                None
-            }
-        });
+        let conflict = existing_by_id
+            .get(&candidate.skill_id)
+            .and_then(|existing| {
+                if existing.is_central {
+                    Some(GitHubSkillConflict {
+                        existing_skill_id: existing.id.clone(),
+                        existing_name: existing.name.clone(),
+                        existing_canonical_path: existing.canonical_path.clone(),
+                        proposed_skill_id: candidate.skill_id.clone(),
+                        proposed_name: candidate.skill_name.clone(),
+                    })
+                } else {
+                    None
+                }
+            });
 
         skills.push(GitHubSkillPreview {
             source_path: candidate.source_path.clone(),
@@ -678,126 +685,4 @@ async fn build_preview_skills(
         });
     }
     Ok(skills)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct SnapshotSourceFile {
-    repo_path: String,
-    relative_path: String,
-    byte_len: usize,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct GitHubImportProgressState {
-    completed_files: usize,
-    total_files: usize,
-    completed_bytes: u64,
-    total_bytes: u64,
-}
-
-fn collect_snapshot_source_files(
-    snapshot: &GitHubRepoSnapshot,
-    source_path: &str,
-) -> Result<Vec<SnapshotSourceFile>, String> {
-    let mut files = snapshot
-        .files
-        .iter()
-        .filter_map(|(path, bytes)| {
-            let relative_path = if source_path == "." {
-                if path.contains('/') {
-                    return None;
-                }
-                path.clone()
-            } else {
-                let prefix = format!("{}/", source_path.trim_matches('/'));
-                let relative = path.strip_prefix(&prefix)?;
-                if relative.is_empty() {
-                    return None;
-                }
-                relative.to_string()
-            };
-
-            Some(SnapshotSourceFile {
-                repo_path: path.clone(),
-                relative_path,
-                byte_len: bytes.len(),
-            })
-        })
-        .collect::<Vec<_>>();
-
-    files.sort_by(|left, right| left.repo_path.cmp(&right.repo_path));
-
-    if files.is_empty() {
-        return Err(format!(
-            "Repository path '{}' is no longer available in the archive.",
-            source_path
-        ));
-    }
-
-    Ok(files)
-}
-
-fn write_snapshot_source_to_target(
-    snapshot: &GitHubRepoSnapshot,
-    files: &[SnapshotSourceFile],
-    target_dir: &Path,
-    source_path: &str,
-    progress_state: &mut GitHubImportProgressState,
-    app: Option<&AppHandle>,
-) -> Result<(), String> {
-    std::fs::create_dir_all(target_dir)
-        .map_err(|e| format!("Failed to create import target directory: {}", e))?;
-
-    for file in files {
-        if !is_safe_repo_relative_path(&file.relative_path) {
-            return Err(format!(
-                "Repository contains an unsupported path '{}'.",
-                file.repo_path
-            ));
-        }
-
-        let bytes = snapshot.files.get(&file.repo_path).ok_or_else(|| {
-            format!(
-                "Repository file '{}' is no longer available in the archive.",
-                file.repo_path
-            )
-        })?;
-
-        let destination = target_dir.join(&file.relative_path);
-        let parent = destination
-            .parent()
-            .ok_or_else(|| "Failed to determine imported file parent directory.".to_string())?;
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create imported file parent directory: {}", e))?;
-        std::fs::write(&destination, bytes).map_err(|e| {
-            format!(
-                "Failed to write imported file '{}': {}",
-                destination.display(),
-                e
-            )
-        })?;
-
-        progress_state.completed_files += 1;
-        progress_state.completed_bytes += file.byte_len as u64;
-        emit_github_import_progress(
-            app,
-            GitHubImportProgressPayload {
-                phase: GitHubImportProgressPhase::Writing,
-                current_skill: Some(source_path.to_string()),
-                current_path: Some(file.relative_path.clone()),
-                completed_files: progress_state.completed_files,
-                total_files: progress_state.total_files,
-                completed_bytes: progress_state.completed_bytes,
-                total_bytes: progress_state.total_bytes,
-            },
-        );
-    }
-
-    Ok(())
-}
-
-fn emit_github_import_progress(app: Option<&AppHandle>, payload: GitHubImportProgressPayload) {
-    if let Some(app) = app {
-        let _ = app.emit("github-import:progress", payload);
-    }
 }

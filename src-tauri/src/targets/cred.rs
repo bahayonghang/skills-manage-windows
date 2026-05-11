@@ -1,11 +1,12 @@
+use super::*;
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum CredentialStoreError {
+pub(super) enum CredentialStoreError {
     NoEntry,
     Other(String),
 }
 
 impl CredentialStoreError {
-    fn message(&self) -> String {
+    pub(super) fn message(&self) -> String {
         match self {
             CredentialStoreError::NoEntry => "No saved SSH password is available.".to_string(),
             CredentialStoreError::Other(error) => error.clone(),
@@ -13,7 +14,7 @@ impl CredentialStoreError {
     }
 }
 
-trait CredentialBackend: Send + Sync {
+pub(super) trait CredentialBackend: Send + Sync {
     fn set_password(
         &self,
         credential_key: &str,
@@ -23,10 +24,10 @@ trait CredentialBackend: Send + Sync {
     fn delete_credential(&self, credential_key: &str) -> Result<(), CredentialStoreError>;
 }
 
-struct SystemCredentialBackend;
+pub(super) struct SystemCredentialBackend;
 
 #[cfg(windows)]
-fn hex_encode(bytes: &[u8]) -> String {
+pub(super) fn hex_encode(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut encoded = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
@@ -37,7 +38,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 #[cfg(windows)]
-fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
+pub(super) fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
     if !value.len().is_multiple_of(2) {
         return Err("Protected password payload is not valid hex.".to_string());
     }
@@ -57,7 +58,7 @@ fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(windows)]
-mod protected_credentials {
+pub(super) mod protected_credentials {
     use std::ffi::c_void;
     use std::io;
     use std::ptr::{null, null_mut};
@@ -187,7 +188,7 @@ mod protected_credentials {
 }
 
 #[cfg(not(windows))]
-mod protected_credentials {
+pub(super) mod protected_credentials {
     pub fn protect(_password: &str) -> Result<String, String> {
         Err("App-local protected SSH password fallback is only available on Windows.".to_string())
     }
@@ -243,7 +244,9 @@ impl CredentialBackend for SystemCredentialBackend {
     }
 }
 
-fn protected_password_for_target(target: &RemoteTargetConfig) -> Result<Option<String>, String> {
+pub(super) fn protected_password_for_target(
+    target: &RemoteTargetConfig,
+) -> Result<Option<String>, String> {
     target
         .protected_password
         .as_deref()
@@ -252,8 +255,7 @@ fn protected_password_for_target(target: &RemoteTargetConfig) -> Result<Option<S
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct TargetCredentialState {
-    status: TargetCredentialStatus,
-    error: Option<String>,
+pub(super) struct TargetCredentialState {
+    pub(super) status: TargetCredentialStatus,
+    pub(super) error: Option<String>,
 }
-

@@ -151,10 +151,6 @@ export function getPlatformVisibilityGroups({
     .filter((group) => !searchActive || group.agents.length > 0);
 }
 
-export function isGitHubPatDirty(githubPatInput: string, githubPat: string) {
-  return githubPatInput.trim() !== githubPat;
-}
-
 export function getAiProviderViewModel(
   aiSettings: AiSettings,
   providers: AiProvider[]

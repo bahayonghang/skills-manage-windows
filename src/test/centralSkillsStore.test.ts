@@ -222,7 +222,7 @@ describe("centralSkillsStore", () => {
       .mockResolvedValueOnce(mockTags) // get_skill_tags
       .mockResolvedValueOnce([]) // get_pending_ai_tag_reviews
       .mockResolvedValueOnce([]) // get_central_skill_update_states
-      .mockResolvedValueOnce("test-key"); // get_setting
+      .mockResolvedValueOnce({ configured: true }); // get_ai_api_key_state
 
     await useCentralSkillsStore.getState().loadCentralSkills();
 
@@ -232,7 +232,7 @@ describe("centralSkillsStore", () => {
     expect(invoke).toHaveBeenCalledWith("get_skill_tags");
     expect(invoke).toHaveBeenCalledWith("get_pending_ai_tag_reviews");
     expect(invoke).toHaveBeenCalledWith("get_central_skill_update_states");
-    expect(invoke).toHaveBeenCalledWith("get_setting", { key: "ai_api_key" });
+    expect(invoke).toHaveBeenCalledWith("get_ai_api_key_state");
   });
 
   it("populates skills and agents after successful loadCentralSkills", async () => {
@@ -243,7 +243,7 @@ describe("centralSkillsStore", () => {
       .mockResolvedValueOnce(mockTags)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce(mockUpdateStates)
-      .mockResolvedValueOnce("test-key");
+      .mockResolvedValueOnce({ configured: true });
 
     await useCentralSkillsStore.getState().loadCentralSkills();
 

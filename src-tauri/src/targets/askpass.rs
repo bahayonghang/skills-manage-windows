@@ -1,20 +1,21 @@
+use super::*;
 pub struct ConnectedSshTarget {
-    target: RemoteTargetConfig,
-    password: Option<String>,
-    askpass_helper: Option<AskpassHelper>,
+    pub(super) target: RemoteTargetConfig,
+    pub(super) password: Option<String>,
+    pub(super) askpass_helper: Option<AskpassHelper>,
 }
 
 #[derive(Debug, Clone)]
-struct AskpassHelper {
-    path: PathBuf,
-    remove_on_drop: bool,
-    use_app_helper_env: bool,
+pub(super) struct AskpassHelper {
+    pub(super) path: PathBuf,
+    pub(super) remove_on_drop: bool,
+    pub(super) use_app_helper_env: bool,
 }
 
 #[cfg(not(windows))]
-const ASKPASS_HELPER_FILE_PREFIX: &str = "skillport-ssh-askpass-";
+pub(super) const ASKPASS_HELPER_FILE_PREFIX: &str = "skillport-ssh-askpass-";
 #[cfg(not(windows))]
-const ASKPASS_HELPER_MAX_AGE_SECS: u64 = 60 * 60;
+pub(super) const ASKPASS_HELPER_MAX_AGE_SECS: u64 = 60 * 60;
 
 pub async fn connect_ssh_target(target: &RemoteTargetConfig) -> Result<ConnectedSshTarget, String> {
     let password = match target.auth_method {
@@ -37,7 +38,7 @@ pub async fn connect_ssh_target(target: &RemoteTargetConfig) -> Result<Connected
 }
 
 #[cfg(windows)]
-fn create_askpass_helper() -> Result<AskpassHelper, String> {
+pub(super) fn create_askpass_helper() -> Result<AskpassHelper, String> {
     let path = env::current_exe()
         .map_err(|e| format!("Failed to resolve SkillPort SSH askpass helper path: {}", e))?;
     Ok(AskpassHelper {
@@ -48,7 +49,7 @@ fn create_askpass_helper() -> Result<AskpassHelper, String> {
 }
 
 #[cfg(not(windows))]
-fn create_askpass_helper() -> Result<AskpassHelper, String> {
+pub(super) fn create_askpass_helper() -> Result<AskpassHelper, String> {
     sweep_stale_askpass_helpers()?;
     let extension = "sh";
     let pid = std::process::id();
@@ -78,7 +79,7 @@ fn create_askpass_helper() -> Result<AskpassHelper, String> {
 }
 
 #[cfg(not(windows))]
-fn current_unix_timestamp_secs() -> u64 {
+pub(super) fn current_unix_timestamp_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_secs())
@@ -86,12 +87,12 @@ fn current_unix_timestamp_secs() -> u64 {
 }
 
 #[cfg(not(windows))]
-fn sweep_stale_askpass_helpers() -> Result<(), String> {
+pub(super) fn sweep_stale_askpass_helpers() -> Result<(), String> {
     sweep_stale_askpass_helpers_in(&env::temp_dir(), std::time::SystemTime::now())
 }
 
 #[cfg(not(windows))]
-fn sweep_stale_askpass_helpers_in(
+pub(super) fn sweep_stale_askpass_helpers_in(
     temp_dir: &PathBuf,
     now: std::time::SystemTime,
 ) -> Result<(), String> {
@@ -119,7 +120,10 @@ fn sweep_stale_askpass_helpers_in(
 }
 
 #[cfg(not(windows))]
-fn should_remove_stale_askpass_helper(path: &std::path::Path, now: std::time::SystemTime) -> bool {
+pub(super) fn should_remove_stale_askpass_helper(
+    path: &std::path::Path,
+    now: std::time::SystemTime,
+) -> bool {
     let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
         return false;
     };
@@ -140,7 +144,7 @@ fn should_remove_stale_askpass_helper(path: &std::path::Path, now: std::time::Sy
 }
 
 #[cfg(unix)]
-fn set_askpass_permissions(path: &PathBuf) -> Result<(), String> {
+pub(super) fn set_askpass_permissions(path: &PathBuf) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
     let mut permissions = fs::metadata(path)
         .map_err(|e| {

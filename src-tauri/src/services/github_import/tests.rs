@@ -1,7 +1,12 @@
+use super::*;
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
+    use crate::secrets::{
+        MockSecretStore, SecretError, SecretStorageState, SecretStore, GITHUB_PAT_SECRET_KEY,
+    };
     use flate2::{write::GzEncoder, Compression};
+    use serde_json::Value;
     use std::collections::HashMap;
     use tempfile::tempdir;
 
@@ -571,12 +576,18 @@ mod tests {
             normalized_url: "https://github.com/openai/skills".to_string(),
         };
 
-        let inspected =
-            inspect_repo_skill_candidates_from_snapshot_at_path(&repo, &mixed_valid_invalid_snapshot(), None)
-                .expect("inspect");
+        let inspected = inspect_repo_skill_candidates_from_snapshot_at_path(
+            &repo,
+            &mixed_valid_invalid_snapshot(),
+            None,
+        )
+        .expect("inspect");
 
         assert_eq!(inspected.valid_candidates.len(), 1);
-        assert_eq!(inspected.valid_candidates[0].source_path, "skills/valid-skill");
+        assert_eq!(
+            inspected.valid_candidates[0].source_path,
+            "skills/valid-skill"
+        );
         assert_eq!(inspected.invalid_candidates.len(), 1);
         assert_eq!(
             inspected.invalid_candidates[0].source_path,
@@ -605,9 +616,8 @@ mod tests {
             normalized_url: "https://github.com/openai/skills".to_string(),
         };
         let snapshot = mixed_valid_invalid_snapshot();
-        let inspected =
-            inspect_repo_skill_candidates_from_snapshot_at_path(&repo, &snapshot, None)
-                .expect("inspect");
+        let inspected = inspect_repo_skill_candidates_from_snapshot_at_path(&repo, &snapshot, None)
+            .expect("inspect");
 
         let result = import_github_repo_skills_from_snapshot_partially(
             &pool,
@@ -634,12 +644,19 @@ mod tests {
 
         assert_eq!(result.imported_skills.len(), 1);
         assert_eq!(result.failed_skills.len(), 1);
-        assert_eq!(result.failed_skills[0].source_path, "skills/bad-frontmatter");
+        assert_eq!(
+            result.failed_skills[0].source_path,
+            "skills/bad-frontmatter"
+        );
         assert!(db::get_skill_by_id(&pool, "valid-skill")
             .await
             .expect("db")
             .is_some());
-        assert!(central_root.path().join("valid-skill").join("SKILL.md").exists());
+        assert!(central_root
+            .path()
+            .join("valid-skill")
+            .join("SKILL.md")
+            .exists());
     }
 
     #[tokio::test]
@@ -663,9 +680,8 @@ mod tests {
             normalized_url: "https://github.com/anthropics/skills".to_string(),
         };
         let snapshot = multi_skill_snapshot();
-        let inspected =
-            inspect_repo_skill_candidates_from_snapshot_at_path(&repo, &snapshot, None)
-                .expect("inspect");
+        let inspected = inspect_repo_skill_candidates_from_snapshot_at_path(&repo, &snapshot, None)
+            .expect("inspect");
 
         let result = import_github_repo_skills_from_snapshot_partially(
             &pool,
@@ -693,14 +709,20 @@ mod tests {
         assert_eq!(result.imported_skills.len(), 1);
         assert_eq!(result.failed_skills.len(), 1);
         assert_eq!(result.failed_skills[0].source_path, "skills/commit");
-        assert!(central_root.path().join("agent-planner").join("SKILL.md").exists());
+        assert!(central_root
+            .path()
+            .join("agent-planner")
+            .join("SKILL.md")
+            .exists());
         assert!(conflicting_dir.join("sentinel.txt").exists());
 
         let leaked_staging = std::fs::read_dir(central_root.path())
             .expect("read central")
             .filter_map(Result::ok)
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
-            .filter(|name| name.starts_with(".skillport-import-") || name.starts_with(".skillport-backup-"))
+            .filter(|name| {
+                name.starts_with(".skillport-import-") || name.starts_with(".skillport-backup-")
+            })
             .collect::<Vec<_>>();
         assert!(
             leaked_staging.is_empty(),
@@ -720,6 +742,7 @@ mod tests {
 
         let result = import_github_repo_skills_impl(
             &pool,
+            &MockSecretStore::default(),
             "https://github.com/example/definitely-missing-repo",
             vec![GitHubSkillImportSelection {
                 source_path: "skills/foo".to_string(),
@@ -758,6 +781,7 @@ mod tests {
 
         let result = import_github_repo_skills_impl(
             &pool,
+            &MockSecretStore::default(),
             "https://github.com/example/restricted-repo",
             vec![GitHubSkillImportSelection {
                 source_path: "skills/private-skill".to_string(),
@@ -1087,26 +1111,187 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn github_pat_setting_is_trimmed_and_empty_values_are_ignored() {
+    async fn github_pat_secret_store_is_trimmed_and_empty_values_are_ignored() {
         let pool = setup_test_db().await;
+        let secrets = MockSecretStore::default();
 
-        db::set_setting(&pool, GITHUB_PAT_SETTING_KEY, "  test-token  ")
+        set_github_pat_impl(&pool, &secrets, "  test-token  ".to_string())
             .await
             .expect("set token");
         assert_eq!(
-            github_direct_auth_from_settings(&pool)
+            github_direct_auth_from_secret_store(&pool, &secrets)
                 .await
                 .expect("read token"),
             Some("test-token".to_string())
         );
+        assert_eq!(
+            db::get_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY)
+                .await
+                .expect("legacy token removed"),
+            None
+        );
 
-        db::set_setting(&pool, GITHUB_PAT_SETTING_KEY, "   ")
+        assert!(set_github_pat_impl(&pool, &secrets, "   ".to_string())
+            .await
+            .is_err());
+        clear_github_pat_impl(&pool, &secrets)
             .await
             .expect("clear token");
         assert_eq!(
-            github_direct_auth_from_settings(&pool)
+            github_direct_auth_from_secret_store(&pool, &secrets)
                 .await
                 .expect("read empty"),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn legacy_github_pat_migrates_to_secret_store_and_deletes_setting() {
+        let pool = setup_test_db().await;
+        let secrets = MockSecretStore::default();
+        db::set_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY, "  legacy-token  ")
+            .await
+            .expect("set legacy token");
+
+        assert_eq!(
+            github_direct_auth_from_secret_store(&pool, &secrets)
+                .await
+                .expect("read migrated token"),
+            Some("legacy-token".to_string())
+        );
+        assert_eq!(
+            secrets.get(GITHUB_PAT_SECRET_KEY).expect("secret read"),
+            Some("legacy-token".to_string())
+        );
+        assert_eq!(
+            db::get_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY)
+                .await
+                .expect("legacy token removed"),
+            None
+        );
+        assert_eq!(
+            db::get_setting(&pool, GITHUB_PAT_MIGRATION_SETTING_KEY)
+                .await
+                .expect("migration marker"),
+            Some("1".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn legacy_github_pat_migration_failure_keeps_setting_and_marker_absent() {
+        let pool = setup_test_db().await;
+        let secrets = MockSecretStore::default();
+        secrets.set_set_error(SecretError::Other("vault unavailable".to_string()));
+        db::set_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY, " legacy-token ")
+            .await
+            .expect("set legacy token");
+
+        let result = github_direct_auth_from_secret_store(&pool, &secrets).await;
+
+        assert_eq!(
+            result.expect("legacy fallback remains readable"),
+            Some("legacy-token".to_string())
+        );
+        assert_eq!(
+            db::get_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY)
+                .await
+                .expect("legacy token retained"),
+            Some(" legacy-token ".to_string())
+        );
+        assert_eq!(
+            db::get_setting(&pool, GITHUB_PAT_MIGRATION_SETTING_KEY)
+                .await
+                .expect("no migration marker"),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn get_github_pat_state_reports_legacy_config_when_migration_fails() {
+        let pool = setup_test_db().await;
+        let secrets = MockSecretStore::default();
+        secrets.set_set_error(SecretError::Other("vault unavailable".to_string()));
+        db::set_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY, " legacy-token ")
+            .await
+            .expect("set legacy token");
+
+        let state = get_github_pat_state_impl(&pool, &secrets)
+            .await
+            .expect("state");
+
+        assert!(state.configured);
+        assert_eq!(state.storage_state, SecretStorageState::Missing);
+        assert!(state
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("vault unavailable")));
+        assert_eq!(
+            db::get_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY)
+                .await
+                .expect("legacy token retained"),
+            Some(" legacy-token ".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn startup_github_pat_migration_records_sanitized_failure_log() {
+        let pool = setup_test_db().await;
+        let secrets = MockSecretStore::default();
+        secrets.set_set_error(SecretError::Other("vault unavailable".to_string()));
+        db::set_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY, " legacy-token ")
+            .await
+            .expect("set legacy token");
+
+        migrate_github_pat_on_startup(&pool, &secrets)
+            .await
+            .expect("startup migration keeps app usable");
+
+        let page = db::list_operation_logs(
+            &pool,
+            db::OperationLogFilter {
+                action: Some("settings.github_pat_migration".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("list operation logs");
+        assert_eq!(page.total, 1);
+        let entry = &page.entries[0];
+        assert_eq!(entry.status, "failed");
+        assert_eq!(
+            entry.error_summary.as_deref(),
+            Some("Failed to migrate GitHub token: vault unavailable")
+        );
+        let details: Value =
+            serde_json::from_str(entry.details_json.as_deref().expect("details json present"))
+                .expect("details json");
+        assert_eq!(details["legacySettingRetained"], true);
+        assert_eq!(details["key"], LEGACY_GITHUB_PAT_SETTING_KEY);
+        assert!(!entry
+            .details_json
+            .as_deref()
+            .unwrap_or_default()
+            .contains("legacy-token"));
+    }
+
+    #[tokio::test]
+    async fn empty_legacy_github_pat_is_ignored_without_marker() {
+        let pool = setup_test_db().await;
+        let secrets = MockSecretStore::default();
+        db::set_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY, "   ")
+            .await
+            .expect("set empty legacy token");
+
+        assert_eq!(
+            github_direct_auth_from_secret_store(&pool, &secrets)
+                .await
+                .expect("read token"),
+            None
+        );
+        assert_eq!(
+            db::get_setting(&pool, GITHUB_PAT_MIGRATION_SETTING_KEY)
+                .await
+                .expect("no migration marker"),
             None
         );
     }

@@ -23,11 +23,46 @@ pub enum ExplanationErrorKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExplanationErrorInfo {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
     pub message: String,
     pub details: String,
     pub kind: ExplanationErrorKind,
     pub retryable: bool,
     pub fallback_tried: bool,
+}
+
+pub(crate) const AI_MISSING_API_KEY: &str = "ai.missing_api_key";
+pub(crate) const AI_RATE_LIMIT: &str = "ai.rate_limit";
+pub(crate) const AI_INVALID_API_KEY: &str = "ai.invalid_api_key";
+pub(crate) const AI_REQUEST_FAILED: &str = "ai.request_failed";
+pub(crate) const AI_CLIENT_BUILD_FAILED: &str = "ai.client_build_failed";
+pub(crate) const AI_RESPONSE_ERROR: &str = "ai.response_error";
+pub(crate) const AI_RESPONSE_READ_FAILED: &str = "ai.response_read_failed";
+pub(crate) const AI_RESPONSE_PARSE_FAILED: &str = "ai.response_parse_failed";
+pub(crate) const AI_PROXY: &str = "ai.proxy";
+pub(crate) const AI_CONNECT: &str = "ai.connect";
+pub(crate) const AI_TIMEOUT: &str = "ai.timeout";
+pub(crate) const AI_DNS: &str = "ai.dns";
+pub(crate) const AI_TLS: &str = "ai.tls";
+pub(crate) const AI_NETWORK: &str = "ai.network";
+pub(crate) const AI_EMPTY_RESPONSE: &str = "ai.empty_response";
+
+pub(crate) fn coded_error(code: &str, message: impl AsRef<str>) -> String {
+    format!("{code}:{}", message.as_ref())
+}
+
+pub(crate) fn coded_error_with_details(
+    code: &str,
+    message: impl AsRef<str>,
+    details: impl AsRef<str>,
+) -> String {
+    let details = details.as_ref().trim();
+    if details.is_empty() {
+        coded_error(code, message)
+    } else {
+        format!("{}\n{}", coded_error(code, message), details)
+    }
 }
 
 /// Classify a reqwest error into a structured `ExplanationErrorInfo`.
@@ -46,54 +81,64 @@ pub(crate) fn classify_reqwest_error(
     let chain = parts.join(" → ");
     let low = chain.to_ascii_lowercase();
 
-    let (kind, message, retryable) = if low.contains("tunnel")
+    let (kind, code, message, retryable) = if low.contains("tunnel")
         || (low.contains("proxy") && low.contains("connect"))
         || (low.contains("proxy") && low.contains("unsuccessful"))
     {
         (
             ExplanationErrorKind::Proxy,
-            "代理或网络隧道连接失败，请尝试切换区域端点或在终端执行 `unset HTTPS_PROXY HTTP_PROXY ALL_PROXY` 后重启应用".to_string(),
+            AI_PROXY,
+            "Proxy or network tunnel connection failed. Try another region endpoint, or clear HTTPS_PROXY, HTTP_PROXY, and ALL_PROXY before restarting the app."
+                .to_string(),
             true,
         )
     } else if low.contains("proxy") {
         (
             ExplanationErrorKind::Proxy,
-            "系统代理可能拦截了请求。请尝试为该域名配置直连规则或切换区域端点".to_string(),
+            AI_PROXY,
+            "A system proxy may be intercepting the request. Add a direct-connect rule for this domain or switch region endpoint.".to_string(),
             true,
         )
     } else if e.is_connect() || low.contains("connect") {
         (
             ExplanationErrorKind::Connect,
-            "无法建立连接。请确认 URL 可从本机访问，或尝试切换区域端点".to_string(),
+            AI_CONNECT,
+            "Unable to connect. Confirm the URL is reachable from this machine, or try another region endpoint.".to_string(),
             true,
         )
     } else if e.is_timeout() || low.contains("timed out") || low.contains("deadline has elapsed") {
         (
             ExplanationErrorKind::Timeout,
-            "请求超时，可能网络不通或被防火墙拦截。可在终端 `curl -v <url>` 验证连通性".to_string(),
+            AI_TIMEOUT,
+            "The request timed out. The network may be blocked or intercepted by a firewall; verify connectivity with curl if needed.".to_string(),
             true,
         )
     } else if low.contains("dns") || low.contains("lookup") {
         (
             ExplanationErrorKind::Dns,
-            "DNS 解析失败。请确认域名拼写正确，或尝试切换 DNS".to_string(),
+            AI_DNS,
+            "DNS lookup failed. Confirm the domain is correct, or try another DNS resolver."
+                .to_string(),
             true,
         )
     } else if low.contains("certificate") || low.contains("tls") || low.contains("handshake") {
         (
             ExplanationErrorKind::Tls,
-            "TLS/证书握手失败。请检查系统时间是否正确，或排查中间人代理".to_string(),
+            AI_TLS,
+            "TLS or certificate handshake failed. Check the system clock and any intercepting proxy.".to_string(),
             false,
         )
     } else {
         (
             ExplanationErrorKind::Unknown,
-            "网络请求失败".to_string(),
+            AI_NETWORK,
+            "The network request failed.".to_string(),
             false,
         )
     };
 
     ExplanationErrorInfo {
+        code: Some(code.to_string()),
         message,
         details: chain,
         kind,

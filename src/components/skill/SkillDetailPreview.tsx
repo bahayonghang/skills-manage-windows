@@ -4,6 +4,7 @@ import { Bot, ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { SkillFrontmatterCard } from "@/components/skill/SkillFrontmatterCard";
 import { SkillMarkdownRenderer } from "@/components/skill/SkillMarkdownRenderer";
+import { formatBackendError } from "@/lib/backendError";
 import type { FrontmatterValue } from "@/lib/frontmatter";
 import type { ExplanationErrorInfo } from "@/lib/explanationStream";
 import type { PreviewTab } from "./skillDetailViewTypes";
@@ -46,6 +47,9 @@ export function SkillDetailPreview({
   onRefreshExplanation,
 }: SkillDetailPreviewProps) {
   const { t } = useTranslation();
+  const explanationErrorMessage = explanationErrorInfo?.code
+    ? formatBackendError(`${explanationErrorInfo.code}:${explanationErrorInfo.message}`, t)
+    : explanationErrorInfo?.message || explanationError;
 
   return (
     <div
@@ -102,8 +106,8 @@ export function SkillDetailPreview({
 
             {explanationError && (
               <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                <p className="text-sm text-destructive">{explanationErrorInfo?.message || explanationError}</p>
-                {(explanationErrorInfo?.details || explanationError !== explanationErrorInfo?.message) && (
+                <p className="text-sm text-destructive">{explanationErrorMessage}</p>
+                {(explanationErrorInfo?.details || explanationError !== explanationErrorMessage) && (
                   <div>
                     <button
                       className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"

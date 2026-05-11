@@ -5,8 +5,11 @@ use std::path::{Path, PathBuf};
 
 use crate::db::{self, AgentSkillObservation, DbPool, SkillInstallation};
 
-use super::centralize::{agents_share_skills_dir, ensure_centralized};
-use super::fs_util::{copy_dir_all, create_symlink, remove_symlink_path, symlink_target_path};
+use super::centralize::{agents_share_skills_dir, ensure_centralized, ensure_replaceable_target};
+use super::fs_util::{
+    copy_dir_all_blocking, create_symlink, remove_symlink_path, run_blocking_fs,
+    symlink_target_path,
+};
 use super::types::InstallResult;
 
 /// Record a native installation: the agent's `global_skills_dir` is the same
@@ -85,35 +88,25 @@ pub async fn install_skill_to_agent_impl(
     let symlink_path = agent_dir.join(skill_id);
 
     // 5. Ensure the agent's skills directory exists.
-    std::fs::create_dir_all(&agent_dir)
-        .map_err(|e| format!("Failed to create agent skills directory: {}", e))?;
+    let agent_dir_for_create = agent_dir.clone();
+    run_blocking_fs("agent skills directory creation", move || {
+        std::fs::create_dir_all(&agent_dir_for_create)
+            .map_err(|e| format!("Failed to create agent skills directory: {}", e))
+    })
+    .await?;
 
     // 6. Handle any existing entry at the symlink path.
-    match std::fs::symlink_metadata(&symlink_path) {
-        Ok(meta) if meta.file_type().is_symlink() => {
-            // Remove stale symlink so we can replace it.
-            remove_symlink_path(&symlink_path)?;
-        }
-        Ok(meta) if meta.is_dir() => {
-            return Err(format!(
-                "A real directory already exists at '{}'. Refusing to overwrite.",
-                symlink_path.display()
-            ));
-        }
-        Ok(_) => {
-            return Err(format!(
-                "A file already exists at '{}'. Refusing to overwrite.",
-                symlink_path.display()
-            ));
-        }
-        Err(_) => {} // Path does not exist — proceed normally.
-    }
+    ensure_replaceable_target(&symlink_path).await?;
 
     // 7. Compute the relative path from the agent directory to the canonical dir.
     let relative_target = symlink_target_path(&agent_dir, &canonical_dir);
 
     // 8. Create the symlink.
-    create_symlink(&relative_target, &symlink_path)?;
+    let symlink_path_for_create = symlink_path.clone();
+    run_blocking_fs("skill symlink creation", move || {
+        create_symlink(&relative_target, &symlink_path_for_create)
+    })
+    .await?;
 
     // 9. Persist the installation record.
     let installation = SkillInstallation {
@@ -196,32 +189,18 @@ pub async fn install_skill_to_agent_copy_impl(
     let target_path = agent_dir.join(skill_id);
 
     // 5. Ensure the agent's skills directory exists.
-    std::fs::create_dir_all(&agent_dir)
-        .map_err(|e| format!("Failed to create agent skills directory: {}", e))?;
+    let agent_dir_for_create = agent_dir.clone();
+    run_blocking_fs("agent skills directory creation", move || {
+        std::fs::create_dir_all(&agent_dir_for_create)
+            .map_err(|e| format!("Failed to create agent skills directory: {}", e))
+    })
+    .await?;
 
     // 6. Handle any existing entry at the target path.
-    match std::fs::symlink_metadata(&target_path) {
-        Ok(meta) if meta.file_type().is_symlink() => {
-            // Remove stale symlink so we can replace it with a real copy.
-            remove_symlink_path(&target_path)?;
-        }
-        Ok(meta) if meta.is_dir() => {
-            return Err(format!(
-                "A real directory already exists at '{}'. Refusing to overwrite.",
-                target_path.display()
-            ));
-        }
-        Ok(_) => {
-            return Err(format!(
-                "A file already exists at '{}'. Refusing to overwrite.",
-                target_path.display()
-            ));
-        }
-        Err(_) => {} // Path does not exist — proceed normally.
-    }
+    ensure_replaceable_target(&target_path).await?;
 
     // 7. Recursively copy the canonical skill directory.
-    copy_dir_all(&canonical_dir, &target_path)?;
+    copy_dir_all_blocking(&canonical_dir, &target_path).await?;
 
     // 8. Persist the installation record.
     let installation = SkillInstallation {
@@ -366,7 +345,12 @@ async fn uninstall_claude_observation_from_agent_impl(
     let install_path = PathBuf::from(&observation.dir_path);
     ensure_child_path(&user_root, &install_path)?;
 
-    remove_install_path(&install_path, &observation.link_type, true)?;
+    let install_path_for_remove = install_path.clone();
+    let link_type = observation.link_type.clone();
+    run_blocking_fs("Claude observation uninstall", move || {
+        remove_install_path(&install_path_for_remove, &link_type, true)
+    })
+    .await?;
     db::delete_agent_skill_observation(pool, row_id).await?;
     db::delete_skill_installation(pool, skill_id, agent_id).await?;
 
@@ -425,7 +409,12 @@ pub async fn uninstall_skill_from_agent_impl(
     let link_type = record.map(|r| r.link_type.as_str()).unwrap_or("symlink");
 
     // 4. Inspect the entry at that path and remove it appropriately.
-    remove_install_path(&install_path, link_type, false)?;
+    let install_path_for_remove = install_path.clone();
+    let link_type = link_type.to_string();
+    run_blocking_fs("skill uninstall", move || {
+        remove_install_path(&install_path_for_remove, &link_type, false)
+    })
+    .await?;
 
     // 5. Remove the installation record from the database.
     db::delete_skill_installation(pool, skill_id, agent_id).await?;

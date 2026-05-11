@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::db::{self, DbPool};
 
 use super::centralize::{ensure_centralized, ensure_replaceable_target};
-use super::fs_util::{copy_dir_all, create_symlink, symlink_target_path};
+use super::fs_util::{copy_dir_all_blocking, create_symlink, run_blocking_fs, symlink_target_path};
 use super::native::should_fallback_to_copy;
 use super::types::InstallResult;
 
@@ -53,7 +53,7 @@ pub(crate) fn project_relative_skills_dir(agent: &db::Agent) -> Result<PathBuf, 
     Ok(relative.to_path_buf())
 }
 
-pub(crate) fn ensure_project_dir(project_path: &Path) -> Result<(), String> {
+fn ensure_project_dir_sync(project_path: &Path) -> Result<(), String> {
     if !project_path.exists() {
         return Err(format!(
             "Project path '{}' does not exist.",
@@ -69,6 +69,14 @@ pub(crate) fn ensure_project_dir(project_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) async fn ensure_project_dir(project_path: &Path) -> Result<(), String> {
+    let project_path = project_path.to_path_buf();
+    run_blocking_fs("project directory inspection", move || {
+        ensure_project_dir_sync(&project_path)
+    })
+    .await
+}
+
 pub(crate) async fn install_central_skill_to_project_impl(
     pool: &DbPool,
     skill_id: &str,
@@ -76,7 +84,7 @@ pub(crate) async fn install_central_skill_to_project_impl(
     project_path: &Path,
     method: &str,
 ) -> Result<InstallResult, String> {
-    ensure_project_dir(project_path)?;
+    ensure_project_dir(project_path).await?;
 
     let agent = db::get_agent_by_id(pool, agent_id)
         .await?
@@ -92,23 +100,34 @@ pub(crate) async fn install_central_skill_to_project_impl(
     let project_skills_dir = project_path.join(relative_skills_dir);
     let target_path = project_skills_dir.join(skill_id);
 
-    std::fs::create_dir_all(&project_skills_dir).map_err(|e| {
-        format!(
-            "Failed to create project skills directory '{}': {}",
-            project_skills_dir.display(),
-            e
-        )
-    })?;
-    ensure_replaceable_target(&target_path)?;
+    let project_skills_dir_for_create = project_skills_dir.clone();
+    run_blocking_fs("project skills directory creation", move || {
+        std::fs::create_dir_all(&project_skills_dir_for_create).map_err(|e| {
+            format!(
+                "Failed to create project skills directory '{}': {}",
+                project_skills_dir_for_create.display(),
+                e
+            )
+        })
+    })
+    .await?;
+    ensure_replaceable_target(&target_path).await?;
 
     if method == "copy" {
-        copy_dir_all(&canonical_dir, &target_path)?;
+        copy_dir_all_blocking(&canonical_dir, &target_path).await?;
     } else {
         let relative_target = symlink_target_path(&project_skills_dir, &canonical_dir);
-        match create_symlink(&relative_target, &target_path) {
+        let symlink_result = {
+            let target_path_for_create = target_path.clone();
+            run_blocking_fs("project skill symlink creation", move || {
+                create_symlink(&relative_target, &target_path_for_create)
+            })
+            .await
+        };
+        match symlink_result {
             Ok(()) => {}
             Err(error) if method != "symlink" && should_fallback_to_copy(&error) => {
-                copy_dir_all(&canonical_dir, &target_path)?;
+                copy_dir_all_blocking(&canonical_dir, &target_path).await?;
             }
             Err(error) => return Err(error),
         }

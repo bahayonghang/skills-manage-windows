@@ -26,11 +26,8 @@ pub struct ExplanationCompletePayload {
     pub explanation: Option<String>,
 }
 
-fn empty_explanation_error_info(lang: &str, saw_thinking_delta: bool) -> ExplanationErrorInfo {
-    let message = match lang {
-        "en" => "The model returned no displayable explanation text.".to_string(),
-        _ => "模型没有返回可显示的解释正文。".to_string(),
-    };
+fn empty_explanation_error_info(_lang: &str, saw_thinking_delta: bool) -> ExplanationErrorInfo {
+    let message = "The model returned no displayable explanation text.".to_string();
     let details = if saw_thinking_delta {
         "Streaming completed without any text_delta content. The provider emitted thinking deltas but no final text block.".to_string()
     } else {
@@ -38,6 +35,7 @@ fn empty_explanation_error_info(lang: &str, saw_thinking_delta: bool) -> Explana
     };
 
     ExplanationErrorInfo {
+        code: Some(super::AI_EMPTY_RESPONSE.to_string()),
         message,
         details,
         kind: ExplanationErrorKind::Response,
@@ -108,14 +106,18 @@ async fn send_stream_request(
 /// Core streaming logic shared by `explain_skill_stream` and `refresh_skill_explanation`.
 pub(crate) async fn do_explain_skill_stream(
     pool: &crate::db::DbPool,
+    secrets: &dyn crate::secrets::SecretStore,
     app: &AppHandle,
     skill_id: &str,
     content: &str,
     lang: &str,
 ) -> Result<(), String> {
-    let api_key = super::get_ai_setting(pool, "ai_api_key")
-        .await
-        .ok_or_else(|| "请先在设置中配置 AI API Key".to_string())?;
+    let api_key = super::get_ai_api_key(pool, secrets).await?.ok_or_else(|| {
+        super::coded_error(
+            super::AI_MISSING_API_KEY,
+            "Configure an AI API key in Settings before requesting an AI explanation.",
+        )
+    })?;
 
     let api_url = super::get_ai_setting(pool, "ai_api_url")
         .await
@@ -145,59 +147,52 @@ pub(crate) async fn do_explain_skill_stream(
         .connect_timeout(Duration::from_secs(10))
         .pool_idle_timeout(Duration::from_secs(90))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            super::coded_error_with_details(
+                super::AI_CLIENT_BUILD_FAILED,
+                "Failed to initialize the AI HTTP client.",
+                e.to_string(),
+            )
+        })?;
 
     // Try primary endpoint; on connect-layer failure, try fallback once
-    let resp =
-        match send_stream_request(&client, &api_url, &api_key, &body, is_anthropic, false).await {
-            Ok(r) => r,
-            Err(err_info) => {
-                // Only retry on connect-layer errors that are retryable
-                if err_info.retryable {
-                    if let Some(fallback_url) = get_fallback_endpoint(&provider, &api_url) {
-                        eprintln!(
-                            "[explain] primary endpoint failed ({:?}), trying fallback: {}",
-                            err_info.kind, fallback_url
-                        );
-                        let fallback_protocol = detect_explanation_api_protocol(&fallback_url);
-                        let fallback_anthropic = matches!(
-                            fallback_protocol,
-                            ExplanationApiProtocol::AnthropicCompatible
-                                | ExplanationApiProtocol::Unknown
-                        );
-                        match send_stream_request(
-                            &client,
-                            &fallback_url,
-                            &api_key,
-                            &body,
-                            fallback_anthropic,
-                            true,
-                        )
-                        .await
-                        {
-                            Ok(r) => r,
-                            Err(fallback_err) => {
-                                let _ = app.emit(
-                                    "skill:explanation:error",
-                                    serde_json::json!({
-                                        "skill_id": skill_id,
-                                        "error": &fallback_err.message,
-                                        "error_info": fallback_err,
-                                    }),
-                                );
-                                return Err(fallback_err.message);
-                            }
+    let resp = match send_stream_request(&client, &api_url, &api_key, &body, is_anthropic, false)
+        .await
+    {
+        Ok(r) => r,
+        Err(err_info) => {
+            // Only retry on connect-layer errors that are retryable
+            if err_info.retryable {
+                if let Some(fallback_url) = get_fallback_endpoint(&provider, &api_url) {
+                    tracing::warn!(error_kind = ?err_info.kind, fallback_url = %fallback_url, "AI explanation primary endpoint failed; trying fallback");
+                    let fallback_protocol = detect_explanation_api_protocol(&fallback_url);
+                    let fallback_anthropic = matches!(
+                        fallback_protocol,
+                        ExplanationApiProtocol::AnthropicCompatible
+                            | ExplanationApiProtocol::Unknown
+                    );
+                    match send_stream_request(
+                        &client,
+                        &fallback_url,
+                        &api_key,
+                        &body,
+                        fallback_anthropic,
+                        true,
+                    )
+                    .await
+                    {
+                        Ok(r) => r,
+                        Err(fallback_err) => {
+                            let _ = app.emit(
+                                "skill:explanation:error",
+                                serde_json::json!({
+                                    "skill_id": skill_id,
+                                    "error": &fallback_err.message,
+                                    "error_info": fallback_err,
+                                }),
+                            );
+                            return Err(fallback_err.message);
                         }
-                    } else {
-                        let _ = app.emit(
-                            "skill:explanation:error",
-                            serde_json::json!({
-                                "skill_id": skill_id,
-                                "error": &err_info.message,
-                                "error_info": err_info,
-                            }),
-                        );
-                        return Err(err_info.message);
                     }
                 } else {
                     let _ = app.emit(
@@ -210,8 +205,19 @@ pub(crate) async fn do_explain_skill_stream(
                     );
                     return Err(err_info.message);
                 }
+            } else {
+                let _ = app.emit(
+                    "skill:explanation:error",
+                    serde_json::json!({
+                        "skill_id": skill_id,
+                        "error": &err_info.message,
+                        "error_info": err_info,
+                    }),
+                );
+                return Err(err_info.message);
             }
-        };
+        }
+    };
 
     if !resp.status().is_success() {
         let status = resp.status();
@@ -222,14 +228,24 @@ pub(crate) async fn do_explain_skill_stream(
         } else {
             ExplanationErrorKind::Response
         };
-        let user_msg = if status_code == 401 || status_code == 403 {
-            "API Key 无效或权限不足，请检查设置中的 API Key".to_string()
+        let (code, user_msg) = if status_code == 401 || status_code == 403 {
+            (
+                super::AI_INVALID_API_KEY,
+                "The API key is invalid or does not have permission for this provider.".to_string(),
+            )
         } else if status_code == 429 {
-            "请求过于频繁，请稍后重试".to_string()
+            (
+                super::AI_RATE_LIMIT,
+                "The provider rate limited the request. Try again later or reduce AI Tag concurrency.".to_string(),
+            )
         } else {
-            format!("API 返回错误 {}", status)
+            (
+                super::AI_RESPONSE_ERROR,
+                format!("The AI provider returned HTTP {status}."),
+            )
         };
         let err_info = ExplanationErrorInfo {
+            code: Some(code.to_string()),
             message: user_msg,
             details: format!("HTTP {}: {}", status, body_text),
             kind: err_kind,
@@ -244,7 +260,11 @@ pub(crate) async fn do_explain_skill_stream(
                 "error_info": err_info,
             }),
         );
-        return Err(format!("API 返回错误 {}: {}", status, body_text));
+        return Err(super::coded_error_with_details(
+            code,
+            &err_info.message,
+            &err_info.details,
+        ));
     }
 
     // Stream SSE response
@@ -254,7 +274,13 @@ pub(crate) async fn do_explain_skill_stream(
     let mut saw_thinking_delta = false;
 
     while let Some(chunk_result) = stream.next().await {
-        let chunk = chunk_result.map_err(|e| format!("流读取失败: {}", e))?;
+        let chunk = chunk_result.map_err(|e| {
+            super::coded_error_with_details(
+                super::AI_RESPONSE_READ_FAILED,
+                "Failed to read the AI response stream.",
+                e.to_string(),
+            )
+        })?;
         sse_buffer.push_str(&String::from_utf8_lossy(&chunk));
 
         // Process complete SSE lines

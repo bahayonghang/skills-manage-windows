@@ -82,7 +82,7 @@ pub(crate) async fn cache_skill_explanation(
     .bind(&now)
     .execute(pool)
     .await
-    .map_err(|e| format!("缓存解释失败: {}", e))?;
+    .map_err(|e| format!("Failed to cache AI explanation: {}", e))?;
 
     Ok(())
 }

@@ -1,5 +1,6 @@
 import { KeyRound, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { GitHubPatState, SecretStorageState } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,13 +12,16 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-type GitHubPatMessage = { type: "success" | "error"; text: string } | null;
+type GitHubPatMessage = {
+  type: "success" | "error";
+  text: string;
+  detail?: string | null;
+} | null;
 
 interface GitHubPatSettingsSectionProps {
-  githubPat: string;
+  githubPatState: GitHubPatState;
   githubPatInput: string;
   githubPatMessage: GitHubPatMessage;
-  isGitHubPatDirty: boolean;
   isLoadingGitHubPat: boolean;
   isSavingGitHubPat: boolean;
   isTestingGitHubPat: boolean;
@@ -28,10 +32,9 @@ interface GitHubPatSettingsSectionProps {
 }
 
 export function GitHubPatSettingsSection({
-  githubPat,
+  githubPatState,
   githubPatInput,
   githubPatMessage,
-  isGitHubPatDirty,
   isLoadingGitHubPat,
   isSavingGitHubPat,
   isTestingGitHubPat,
@@ -41,6 +44,11 @@ export function GitHubPatSettingsSection({
   onTest,
 }: GitHubPatSettingsSectionProps) {
   const { t } = useTranslation();
+  const storageLabel =
+    githubPatState.configured || githubPatState.storageState === "unreadable"
+      ? t(`settings.githubPatStorageState.${githubPatState.storageState}`)
+      : t("settings.githubPatNotConfigured");
+  const storageTone = githubPatStorageTone(githubPatState.storageState);
 
   return (
     <Card>
@@ -69,9 +77,26 @@ export function GitHubPatSettingsSection({
               onChange={(event) => onInputChange(event.target.value)}
               disabled={isLoadingGitHubPat || isSavingGitHubPat}
             />
+            {githubPatState.configured && !githubPatInput ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {t("settings.githubPatConfiguredNoReveal")}
+              </p>
+            ) : null}
           </div>
 
           <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-sm text-muted-foreground">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[11px] ${storageTone}`}
+              >
+                {storageLabel}
+              </span>
+              {githubPatState.error ? (
+                <span className="text-xs text-amber-600 dark:text-amber-300">
+                  {t("settings.githubPatMigrationWarning")}
+                </span>
+              ) : null}
+            </div>
             <p>{t("settings.githubPatDirectOnly")}</p>
             <p className="mt-2">{t("settings.githubPatRateLimitHint")}</p>
             <p className="mt-2">{t("settings.githubPatAppWideHint")}</p>
@@ -87,13 +112,20 @@ export function GitHubPatSettingsSection({
               role="status"
             >
               {githubPatMessage.text}
+              {githubPatMessage.detail ? (
+                <span className="mt-1 block text-xs opacity-80">
+                  {githubPatMessage.detail}
+                </span>
+              ) : null}
             </p>
           ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
             <Button
               onClick={onSave}
-              disabled={isLoadingGitHubPat || isSavingGitHubPat || !isGitHubPatDirty}
+              disabled={
+                isLoadingGitHubPat || isSavingGitHubPat || !githubPatInput.trim()
+              }
             >
               {isSavingGitHubPat ? <Loader2 className="size-4 animate-spin" /> : null}
               <span>{t("common.save")}</span>
@@ -101,7 +133,9 @@ export function GitHubPatSettingsSection({
             <Button
               variant="outline"
               onClick={onClear}
-              disabled={isLoadingGitHubPat || isSavingGitHubPat || !githubPat}
+              disabled={
+                isLoadingGitHubPat || isSavingGitHubPat || !githubPatState.configured
+              }
             >
               <span>{t("settings.githubPatClear")}</span>
             </Button>
@@ -112,8 +146,8 @@ export function GitHubPatSettingsSection({
                 isLoadingGitHubPat ||
                 isSavingGitHubPat ||
                 isTestingGitHubPat ||
-                !githubPat ||
-                isGitHubPatDirty
+                !githubPatState.configured ||
+                Boolean(githubPatInput.trim())
               }
             >
               {isTestingGitHubPat ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -127,4 +161,18 @@ export function GitHubPatSettingsSection({
       </CardContent>
     </Card>
   );
+}
+
+function githubPatStorageTone(state: SecretStorageState) {
+  switch (state) {
+    case "stored":
+      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "session":
+      return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    case "unreadable":
+      return "border-destructive/40 bg-destructive/10 text-destructive";
+    case "missing":
+    default:
+      return "border-border bg-background text-muted-foreground";
+  }
 }

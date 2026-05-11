@@ -1,8 +1,10 @@
 pub mod central_migration;
 pub mod commands;
 pub mod db;
+pub mod logging;
 pub mod operation_log;
 pub mod paths;
+pub mod secrets;
 pub mod services;
 pub mod targets;
 
@@ -48,6 +50,10 @@ pub struct AppState {
     /// Cooperative cancel flag for the at-most-one SkillPort state
     /// portability command (export, preview, or import).
     pub portable_state_cancel: Arc<AtomicBool>,
+    /// Application-level sensitive values such as GitHub PAT and AI API keys.
+    /// Commands receive this injectable store from AppState so unit tests do
+    /// not need to touch the real OS credential vault.
+    pub secrets: Arc<dyn secrets::SecretStore>,
     pub targets: targets::TargetRegistry,
 }
 
@@ -69,14 +75,20 @@ pub struct AiTagJobRegistry {
 impl AiTagJobRegistry {
     pub fn register(&self, job_id: &str) -> Arc<AtomicBool> {
         let cancel_flag = Arc::new(AtomicBool::new(false));
-        if let Ok(mut jobs) = self.jobs.lock() {
-            jobs.insert(job_id.to_string(), Arc::clone(&cancel_flag));
+        match self.jobs.lock() {
+            Ok(mut jobs) => {
+                jobs.insert(job_id.to_string(), Arc::clone(&cancel_flag));
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "AI tag job registry lock is poisoned during register");
+            }
         }
         cancel_flag
     }
 
     pub fn cancel(&self, job_id: &str) -> bool {
         let Ok(jobs) = self.jobs.lock() else {
+            tracing::warn!("AI tag job registry lock is poisoned during cancel");
             return false;
         };
         let Some(cancel_flag) = jobs.get(job_id) else {
@@ -87,8 +99,13 @@ impl AiTagJobRegistry {
     }
 
     pub fn finish(&self, job_id: &str) {
-        if let Ok(mut jobs) = self.jobs.lock() {
-            jobs.remove(job_id);
+        match self.jobs.lock() {
+            Ok(mut jobs) => {
+                jobs.remove(job_id);
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "AI tag job registry lock is poisoned during finish");
+            }
         }
     }
 }
@@ -101,6 +118,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            logging::init_file_logging().map_err(std::io::Error::other)?;
+
             let db_dir = paths::app_data_dir();
             fs::create_dir_all(&db_dir).expect("Failed to create ~/.skillsmanage directory");
             let db_path = paths::path_to_string(&db_dir.join("db.sqlite"));
@@ -120,12 +139,42 @@ pub fn run() {
                     .expect("Failed to initialize database schema")
             });
 
+            let secrets: Arc<dyn secrets::SecretStore> =
+                Arc::new(secrets::SystemSecretStore::default());
+
             app.manage(AppState {
                 db: pool.clone(),
                 ai_tag_jobs: AiTagJobRegistry::default(),
                 central_update_cancel: Arc::new(AtomicBool::new(false)),
                 portable_state_cancel: Arc::new(AtomicBool::new(false)),
+                secrets: Arc::clone(&secrets),
                 targets: targets::TargetRegistry::default(),
+            });
+
+            let github_pat_migration_pool = pool.clone();
+            let github_pat_migration_secrets = Arc::clone(&secrets);
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = services::github_import::migrate_github_pat_on_startup(
+                    &github_pat_migration_pool,
+                    github_pat_migration_secrets.as_ref(),
+                )
+                .await
+                {
+                    tracing::warn!(error = %error, "Failed to run GitHub token secure-storage migration");
+                }
+            });
+
+            let ai_api_key_migration_pool = pool.clone();
+            let ai_api_key_migration_secrets = Arc::clone(&secrets);
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = services::ai_provider::migrate_ai_api_key_on_startup(
+                    &ai_api_key_migration_pool,
+                    ai_api_key_migration_secrets.as_ref(),
+                )
+                .await
+                {
+                    tracing::warn!(error = %error, "Failed to run AI API key secure-storage migration");
+                }
             });
 
             // Legacy central-skills migration runs after the IPC handlers are
@@ -151,7 +200,7 @@ pub fn run() {
                         );
                     }
                     Err(error) => {
-                        eprintln!("Failed to migrate legacy Central Skills store: {}", error);
+                        tracing::error!(error = %error, "Failed to migrate legacy Central Skills store");
                         let _ = migration_handle.emit(
                             MIGRATION_PROGRESS_EVENT,
                             MigrationProgress::Failed {
@@ -247,6 +296,9 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::set_setting,
             commands::settings::set_settings,
+            commands::settings::get_ai_api_key_state,
+            commands::settings::set_ai_api_key,
+            commands::settings::clear_ai_api_key,
             commands::github_import::get_github_pat,
             commands::github_import::set_github_pat,
             commands::github_import::clear_github_pat,
@@ -289,4 +341,26 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ai_tag_job_registry_poisoning_returns_controlled_fallbacks() {
+        let registry = Arc::new(AiTagJobRegistry::default());
+        let poisoned = Arc::clone(&registry);
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoned.jobs.lock().expect("lock");
+            panic!("poison AI job registry");
+        })
+        .join();
+
+        let cancel_flag = registry.register("job-after-poison");
+
+        assert!(!cancel_flag.load(Ordering::SeqCst));
+        assert!(!registry.cancel("job-after-poison"));
+        registry.finish("job-after-poison");
+    }
 }

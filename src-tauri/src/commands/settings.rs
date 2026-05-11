@@ -5,13 +5,30 @@ use tauri::State;
 
 use crate::db::{self, DbPool, ScanDirectory};
 use crate::operation_log::{
-    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
+    record_operation_log_best_effort, target_context_from_active_target, with_operation_log,
+    OperationLogEvent, OperationSpec,
 };
 use crate::paths::{expand_home_path, expand_remote_home_path, path_to_string};
+use crate::secrets::{AI_API_KEY_SECRET_KEY, GITHUB_PAT_SECRET_KEY};
 use crate::targets::ActiveTarget;
 use crate::AppState;
 
 // ─── Core Implementations (testable without Tauri State) ──────────────────────
+
+const PROTECTED_SETTINGS_KEYS: &[&str] = &[GITHUB_PAT_SECRET_KEY, AI_API_KEY_SECRET_KEY];
+
+fn is_protected_settings_key(key: &str) -> bool {
+    PROTECTED_SETTINGS_KEYS
+        .iter()
+        .any(|protected_key| key.trim().eq_ignore_ascii_case(protected_key))
+}
+
+fn protected_settings_error(key: &str) -> String {
+    format!(
+        "Setting '{}' is managed by secure storage; use the dedicated command instead.",
+        key.trim()
+    )
+}
 
 /// Return all scan directories, built-in first then custom ordered by added_at.
 pub async fn get_scan_directories_impl(pool: &DbPool) -> Result<Vec<ScanDirectory>, String> {
@@ -66,6 +83,9 @@ pub async fn set_scan_directory_active_impl(
 
 /// Get a settings value by key. Returns `None` if the key is not set.
 pub async fn get_setting_impl(pool: &DbPool, key: &str) -> Result<Option<String>, String> {
+    if is_protected_settings_key(key) {
+        return Err(protected_settings_error(key));
+    }
     db::get_setting(pool, key).await
 }
 
@@ -74,6 +94,9 @@ pub async fn get_settings_impl(
     pool: &DbPool,
     keys: &[String],
 ) -> Result<HashMap<String, Option<String>>, String> {
+    if let Some(key) = keys.iter().find(|key| is_protected_settings_key(key)) {
+        return Err(protected_settings_error(key));
+    }
     db::get_settings(pool, keys).await
 }
 
@@ -81,6 +104,9 @@ pub async fn get_settings_impl(
 pub async fn set_setting_impl(pool: &DbPool, key: &str, value: &str) -> Result<(), String> {
     if key.trim().is_empty() {
         return Err("Settings key cannot be empty".to_string());
+    }
+    if is_protected_settings_key(key) {
+        return Err(protected_settings_error(key));
     }
     db::set_setting(pool, key, value).await
 }
@@ -92,6 +118,9 @@ pub async fn set_settings_impl(
 ) -> Result<(), String> {
     if values.keys().any(|key| key.trim().is_empty()) {
         return Err("Settings key cannot be empty".to_string());
+    }
+    if let Some(key) = values.keys().find(|key| is_protected_settings_key(key)) {
+        return Err(protected_settings_error(key));
     }
     db::set_settings(pool, values).await
 }
@@ -170,30 +199,34 @@ pub async fn remove_scan_directory(state: State<'_, AppState>, path: String) -> 
     let active_target = state.active_target().await?;
     let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    let started_at = Instant::now();
-    let result = remove_scan_directory_impl(&pool, &path).await;
-    let status = if result.is_ok() {
-        "succeeded"
-    } else {
-        "failed"
-    };
-    let mut event = OperationLogEvent::new(
-        "settings",
-        "scan_dir.remove",
-        status,
-        if result.is_ok() {
-            format!("Removed scan directory {}", path)
-        } else {
-            format!("Failed to remove scan directory {}", path)
-        },
+    with_operation_log(
+        &state,
+        OperationSpec::new(
+            target_context,
+            |_: &(), duration_ms| {
+                OperationLogEvent::new(
+                    "settings",
+                    "scan_dir.remove",
+                    "succeeded",
+                    format!("Removed scan directory {}", path),
+                )
+                .subject("scan_root", &path, &path)
+                .duration_ms(duration_ms)
+            },
+            |_: &String, duration_ms| {
+                OperationLogEvent::new(
+                    "settings",
+                    "scan_dir.remove",
+                    "failed",
+                    format!("Failed to remove scan directory {}", path),
+                )
+                .subject("scan_root", &path, &path)
+                .duration_ms(duration_ms)
+            },
+        ),
+        || remove_scan_directory_impl(&pool, &path),
     )
-    .subject("scan_root", &path, &path)
-    .duration_ms(started_at.elapsed().as_millis() as i64);
-    if let Err(error) = &result {
-        event = event.error(error);
-    }
-    record_operation_log_best_effort(&state.db, target_context, event).await;
-    result
+    .await
 }
 
 /// Tauri command: set the is_active flag on a scan directory.
@@ -206,34 +239,42 @@ pub async fn set_scan_directory_active(
     let active_target = state.active_target().await?;
     let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    let started_at = Instant::now();
-    let result = set_scan_directory_active_impl(&pool, &path, is_active).await;
-    let status = if result.is_ok() {
-        "succeeded"
-    } else {
-        "failed"
-    };
-    let mut event = OperationLogEvent::new(
-        "settings",
-        "scan_dir.toggle",
-        status,
-        if result.is_ok() {
-            format!("Updated scan directory {} enabled={}", path, is_active)
-        } else {
-            format!("Failed to update scan directory {}", path)
-        },
+    with_operation_log(
+        &state,
+        OperationSpec::new(
+            target_context,
+            |_: &(), duration_ms| {
+                OperationLogEvent::new(
+                    "settings",
+                    "scan_dir.toggle",
+                    "succeeded",
+                    format!("Updated scan directory {} enabled={}", path, is_active),
+                )
+                .subject("scan_root", &path, &path)
+                .details(json!({
+                    "path": &path,
+                    "isActive": is_active,
+                }))
+                .duration_ms(duration_ms)
+            },
+            |_: &String, duration_ms| {
+                OperationLogEvent::new(
+                    "settings",
+                    "scan_dir.toggle",
+                    "failed",
+                    format!("Failed to update scan directory {}", path),
+                )
+                .subject("scan_root", &path, &path)
+                .details(json!({
+                    "path": &path,
+                    "isActive": is_active,
+                }))
+                .duration_ms(duration_ms)
+            },
+        ),
+        || set_scan_directory_active_impl(&pool, &path, is_active),
     )
-    .subject("scan_root", &path, &path)
-    .details(json!({
-        "path": path,
-        "isActive": is_active,
-    }))
-    .duration_ms(started_at.elapsed().as_millis() as i64);
-    if let Err(error) = &result {
-        event = event.error(error);
-    }
-    record_operation_log_best_effort(&state.db, target_context, event).await;
-    result
+    .await
 }
 
 /// Tauri command: get a settings value by key.
@@ -252,6 +293,29 @@ pub async fn get_settings(
     keys: Vec<String>,
 ) -> Result<HashMap<String, Option<String>>, String> {
     get_settings_impl(&state.db, &keys).await
+}
+
+#[tauri::command]
+pub async fn get_ai_api_key_state(
+    state: State<'_, AppState>,
+) -> Result<crate::services::ai_provider::AiApiKeyState, String> {
+    crate::services::ai_provider::get_ai_api_key_state_impl(&state.db, state.secrets.as_ref()).await
+}
+
+#[tauri::command]
+pub async fn set_ai_api_key(
+    state: State<'_, AppState>,
+    value: String,
+) -> Result<crate::services::ai_provider::AiApiKeyState, String> {
+    crate::services::ai_provider::set_ai_api_key_impl(&state.db, state.secrets.as_ref(), value)
+        .await
+}
+
+#[tauri::command]
+pub async fn clear_ai_api_key(
+    state: State<'_, AppState>,
+) -> Result<crate::services::ai_provider::AiApiKeyState, String> {
+    crate::services::ai_provider::clear_ai_api_key_impl(&state.db, state.secrets.as_ref()).await
 }
 
 /// Tauri command: set (upsert) a settings value.
@@ -587,6 +651,20 @@ mod tests {
         assert_eq!(value.as_deref(), Some("dark"));
     }
 
+    #[tokio::test]
+    async fn test_protected_secret_settings_are_blocked() {
+        let pool = setup_test_db().await;
+
+        assert!(get_setting_impl(&pool, "github_pat").await.is_err());
+        assert!(set_setting_impl(&pool, "github_pat", "token")
+            .await
+            .is_err());
+        assert!(get_setting_impl(&pool, "ai_api_key").await.is_err());
+        assert!(set_setting_impl(&pool, "ai_api_key", "token")
+            .await
+            .is_err());
+    }
+
     // ── set_setting_impl ──────────────────────────────────────────────────────
 
     #[tokio::test]
@@ -629,6 +707,22 @@ mod tests {
             get_setting_impl(&pool, "c").await.unwrap().as_deref(),
             Some("3")
         );
+    }
+
+    #[tokio::test]
+    async fn test_batch_settings_block_protected_secret_keys() {
+        let pool = setup_test_db().await;
+        let mut values = HashMap::new();
+        values.insert("theme".to_string(), "dark".to_string());
+        values.insert("ai_api_key".to_string(), "token".to_string());
+
+        assert!(set_settings_impl(&pool, &values).await.is_err());
+        assert!(
+            get_settings_impl(&pool, &values.keys().cloned().collect::<Vec<_>>())
+                .await
+                .is_err()
+        );
+        assert_eq!(db::get_setting(&pool, "ai_api_key").await.unwrap(), None);
     }
 
     #[tokio::test]

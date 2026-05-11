@@ -23,20 +23,66 @@ use crate::{
     AppState,
 };
 
-include!("types.rs");
-include!("preview_workspace.rs");
-include!("preview.rs");
-include!("remote.rs");
-include!("import.rs");
-include!("source.rs");
-include!("archive.rs");
-include!("raw_http.rs");
-include!("pat.rs");
+mod archive;
+mod import;
+mod pat;
+mod preview;
+mod preview_workspace;
+mod progress;
+mod raw_http;
+mod remote;
+mod source;
+#[cfg(test)]
+mod tests;
+mod types;
 
-type Duration = ChronoDuration;
+#[cfg(test)]
+use archive::*;
+use import::*;
+use preview_workspace::*;
+use progress::*;
+use raw_http::*;
+use remote::*;
+use source::*;
+use types::*;
+
+pub(crate) use archive::download_repo_snapshot;
+#[cfg(test)]
+pub(crate) use import::import_github_repo_skills_impl;
+pub(crate) use import::{
+    import_github_repo_skills_partially_with_auth, import_github_repo_skills_with_auth,
+};
+pub(crate) use pat::{
+    clear_github_pat_impl, get_github_pat_state_impl, github_client,
+    github_direct_auth_from_secret_store, migrate_github_pat_on_startup, set_github_pat_impl,
+    test_github_pat_impl,
+};
+#[cfg(test)]
+use pat::{GITHUB_PAT_MIGRATION_SETTING_KEY, LEGACY_GITHUB_PAT_SETTING_KEY};
+pub(crate) use preview::{
+    preview_github_repo_import_ssh_with_auth, preview_github_repo_import_with_auth,
+};
+pub(crate) use raw_http::fetch_raw_text;
+pub(crate) use remote::import_github_repo_skills_ssh_with_auth;
+pub(crate) use remote::{
+    discard_preview_workspace_for_active_target, fetch_github_skill_markdown_from_remote_workspace,
+};
+pub(crate) use source::{
+    build_repo_skill_candidates_from_snapshot_at_path, fetch_repo_skill_candidates_from_source,
+    inspect_github_repo_skills_with_auth, resolve_repo_source,
+};
+pub use types::{
+    DuplicateResolution, GitHubImportProgressPayload, GitHubImportProgressPhase, GitHubPatState,
+    GitHubPatTestResult, GitHubRepoImportResult, GitHubRepoPreview, GitHubRepoRef,
+    GitHubSkillConflict, GitHubSkillImportSelection, GitHubSkillPreview,
+    ImportedGitHubSkillSummary,
+};
+pub(crate) use types::{GitHubRepoSnapshot, RemoteSkillCandidate, ResolvedGitHubRepoSource};
+
+pub(crate) type Duration = ChronoDuration;
 
 fn github_host_rate_limiters() -> &'static tokio::sync::Mutex<HashMap<String, Instant>> {
-    GITHUB_HOST_RATE_LIMITERS.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()))
+    types::GITHUB_HOST_RATE_LIMITERS.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()))
 }
 
 async fn wait_for_github_host_slot(url: &str) -> Result<(), String> {
@@ -46,7 +92,7 @@ async fn wait_for_github_host_slot(url: &str) -> Result<(), String> {
         .host_str()
         .ok_or_else(|| format!("GitHub URL '{}' has no host.", url))?
         .to_string();
-    let interval = TokioDuration::from_secs_f64(1.0 / DEFAULT_GITHUB_HOST_QPS);
+    let interval = TokioDuration::from_secs_f64(1.0 / types::DEFAULT_GITHUB_HOST_QPS);
 
     loop {
         let sleep_for = {
@@ -67,6 +113,3 @@ async fn wait_for_github_host_slot(url: &str) -> Result<(), String> {
         }
     }
 }
-
-#[cfg(test)]
-include!("tests.rs");

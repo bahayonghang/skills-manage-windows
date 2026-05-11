@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) async fn fetch_raw_text(
     client: &reqwest::Client,
     url: &str,
@@ -33,12 +34,12 @@ pub(crate) async fn fetch_raw_text(
 }
 
 #[derive(Debug, Clone)]
-struct RawRepoPath {
-    repo: GitHubRepoRef,
-    file_path: String,
+pub(super) struct RawRepoPath {
+    pub(super) repo: GitHubRepoRef,
+    pub(super) file_path: String,
 }
 
-fn raw_url_to_repo_path(url: &str) -> Option<RawRepoPath> {
+pub(super) fn raw_url_to_repo_path(url: &str) -> Option<RawRepoPath> {
     let parsed = reqwest::Url::parse(url).ok()?;
     let host = parsed.host_str()?;
     if host != "raw.githubusercontent.com" {
@@ -62,7 +63,7 @@ fn raw_url_to_repo_path(url: &str) -> Option<RawRepoPath> {
     })
 }
 
-fn github_endpoint_url(
+pub(super) fn github_endpoint_url(
     endpoint: &GitHubMirrorEndpoint,
     surface: GitHubFetchSurface,
     path: &str,
@@ -74,7 +75,11 @@ fn github_endpoint_url(
     format!("{}{}", base.trim_end_matches('/'), path)
 }
 
-fn raw_file_url(endpoint: &GitHubMirrorEndpoint, repo: &GitHubRepoRef, file_path: &str) -> String {
+pub(super) fn raw_file_url(
+    endpoint: &GitHubMirrorEndpoint,
+    repo: &GitHubRepoRef,
+    file_path: &str,
+) -> String {
     github_endpoint_url(
         endpoint,
         GitHubFetchSurface::Raw,
@@ -88,7 +93,7 @@ fn raw_file_url(endpoint: &GitHubMirrorEndpoint, repo: &GitHubRepoRef, file_path
     )
 }
 
-async fn send_github_request_with_fallback<F>(
+pub(super) async fn send_github_request_with_fallback<F>(
     client: &reqwest::Client,
     surface: GitHubFetchSurface,
     build_url: F,
@@ -216,7 +221,7 @@ where
     ))
 }
 
-fn should_retry_via_mirror_status(
+pub(super) fn should_retry_via_mirror_status(
     surface: GitHubFetchSurface,
     status: reqwest::StatusCode,
 ) -> bool {
@@ -230,11 +235,11 @@ fn should_retry_via_mirror_status(
     }
 }
 
-fn is_retryable_github_transport_error(error: &reqwest::Error) -> bool {
+pub(super) fn is_retryable_github_transport_error(error: &reqwest::Error) -> bool {
     error.is_timeout() || error.is_connect() || error.is_request() || error.is_body()
 }
 
-fn summarize_mirror_attempts(attempts: &[MirrorAttemptOutcome]) -> String {
+pub(super) fn summarize_mirror_attempts(attempts: &[MirrorAttemptOutcome]) -> String {
     attempts
         .iter()
         .map(|attempt| attempt.error_message.clone())
@@ -242,14 +247,14 @@ fn summarize_mirror_attempts(attempts: &[MirrorAttemptOutcome]) -> String {
         .join("; ")
 }
 
-fn surface_label(surface: GitHubFetchSurface) -> &'static str {
+pub(super) fn surface_label(surface: GitHubFetchSurface) -> &'static str {
     match surface {
         GitHubFetchSurface::Api => "API",
         GitHubFetchSurface::Raw => "raw",
     }
 }
 
-async fn classify_github_denial_response(
+pub(super) async fn classify_github_denial_response(
     response: reqwest::Response,
     operation: &'static str,
 ) -> Option<String> {
@@ -258,7 +263,7 @@ async fn classify_github_denial_response(
         .map(|denial| denial.to_string())
 }
 
-async fn parse_github_denial_response(
+pub(super) async fn parse_github_denial_response(
     response: reqwest::Response,
     operation: &'static str,
     used_auth: bool,
@@ -308,13 +313,13 @@ async fn parse_github_denial_response(
     })
 }
 
-fn parse_github_error_message(body: &str) -> Option<String> {
+pub(super) fn parse_github_error_message(body: &str) -> Option<String> {
     serde_json::from_str::<GitHubErrorResponse>(body)
         .ok()
         .and_then(|payload| payload.message)
 }
 
-fn header_value(headers: &reqwest::header::HeaderMap, name: &str) -> Option<String> {
+pub(super) fn header_value(headers: &reqwest::header::HeaderMap, name: &str) -> Option<String> {
     headers
         .get(name)
         .and_then(|value| value.to_str().ok())
@@ -323,7 +328,7 @@ fn header_value(headers: &reqwest::header::HeaderMap, name: &str) -> Option<Stri
         .map(str::to_string)
 }
 
-fn parse_rate_limit_reset_epoch(raw: &str) -> Option<String> {
+pub(super) fn parse_rate_limit_reset_epoch(raw: &str) -> Option<String> {
     let epoch = raw.parse::<i64>().ok()?;
     chrono::DateTime::<Utc>::from_timestamp(epoch, 0)
         .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())

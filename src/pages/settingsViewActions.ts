@@ -6,6 +6,7 @@ import type { PlatformCategoryKey } from "@/lib/platformVisibility";
 import type {
   AgentWithStatus,
   CreateSshTargetRequest,
+  GitHubPatTestResult,
   SshTargetTestResult,
   TargetSummary,
   TestSshTargetRequest,
@@ -22,6 +23,7 @@ import { createPlatformManagementActions } from "@/pages/platformManagementActio
 export type StatusMessage = {
   type: "success" | "error";
   text: string;
+  detail?: string | null;
 } | null;
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
@@ -97,7 +99,7 @@ export function createSettingsViewActions({
   removeCustomAgent: (agentId: string) => Promise<void>;
   saveGitHubPat: (value: string) => Promise<void>;
   clearGitHubPat: () => Promise<void>;
-  testGitHubPat: () => Promise<{ ok: boolean; message: string }>;
+  testGitHubPat: () => Promise<GitHubPatTestResult>;
   rescan: () => Promise<void>;
   refreshCounts: () => Promise<void>;
   loadCentralSkills: () => Promise<void>;
@@ -385,8 +387,8 @@ export function createSettingsViewActions({
         text: t("settings.githubPatSaved"),
       });
       toast.success(t("settings.githubPatSaved"));
-    } catch (err) {
-      const text = String(err);
+    } catch {
+      const text = t("settings.githubPatSaveFailed");
       setGitHubPatMessage({ type: "error", text });
       toast.error(text);
     }
@@ -402,8 +404,8 @@ export function createSettingsViewActions({
         text: t("settings.githubPatCleared"),
       });
       toast.success(t("settings.githubPatCleared"));
-    } catch (err) {
-      const text = String(err);
+    } catch {
+      const text = t("settings.githubPatClearFailed");
       setGitHubPatMessage({ type: "error", text });
       toast.error(text);
     }
@@ -413,17 +415,24 @@ export function createSettingsViewActions({
     setGitHubPatMessage(null);
     try {
       const result = await testGitHubPat();
+      const text = t(result.messageKey, {
+        defaultValue: t(
+          result.ok ? "settings.githubPatTestSuccess" : "settings.githubPatTestFailure"
+        ),
+        status: result.status ?? "",
+      });
       setGitHubPatMessage({
         type: result.ok ? "success" : "error",
-        text: result.message,
+        text,
+        detail: result.ok ? null : `HTTP ${result.status ?? "-"}`,
       });
       if (result.ok) {
-        toast.success(result.message);
+        toast.success(text);
       } else {
-        toast.error(result.message);
+        toast.error(text);
       }
-    } catch (err) {
-      const text = String(err);
+    } catch {
+      const text = t("settings.githubPatTestFailed");
       setGitHubPatMessage({ type: "error", text });
       toast.error(text);
     }

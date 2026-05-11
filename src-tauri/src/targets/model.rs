@@ -1,11 +1,12 @@
-const TARGETS_SETTING_KEY: &str = "ssh_targets_v1";
-const ACTIVE_TARGET_SETTING_KEY: &str = "active_target_id_v1";
-const SSH_PASSWORD_SERVICE: &str = "SkillPort SSH Targets";
-const SSH_ASKPASS_HELPER_ENV: &str = "SKILLPORT_SSH_ASKPASS_HELPER";
-const SSH_PASSWORD_ENV: &str = "SKILLPORT_SSH_PASSWORD";
+use super::*;
+pub(super) const TARGETS_SETTING_KEY: &str = "ssh_targets_v1";
+pub(super) const ACTIVE_TARGET_SETTING_KEY: &str = "active_target_id_v1";
+pub(super) const SSH_PASSWORD_SERVICE: &str = "SkillPort SSH Targets";
+pub(super) const SSH_ASKPASS_HELPER_ENV: &str = "SKILLPORT_SSH_ASKPASS_HELPER";
+pub(super) const SSH_PASSWORD_ENV: &str = "SKILLPORT_SSH_PASSWORD";
 pub const LOCAL_TARGET_ID: &str = "local";
 #[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
+pub(super) const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -32,7 +33,7 @@ pub enum TargetCredentialStatus {
 }
 
 impl TargetCredentialStatus {
-    fn is_available(self) -> bool {
+    pub(super) fn is_available(self) -> bool {
         matches!(
             self,
             TargetCredentialStatus::Stored | TargetCredentialStatus::Session

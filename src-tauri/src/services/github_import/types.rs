@@ -1,3 +1,4 @@
+use super::*;
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitHubRepoRef {
@@ -144,11 +145,10 @@ pub(crate) struct GitHubRepoSnapshot {
     pub(crate) files: HashMap<String, Vec<u8>>,
 }
 
-const GITHUB_PAT_SETTING_KEY: &str = "github_pat";
-const NO_IMPORTABLE_SKILLS_ERROR: &str = "No importable skills found in this repository. Supported layouts include root SKILL.md, common skill directories such as skills/, .agents/skills/, .claude/skills/, direct repository subpaths, and bounded recursive SKILL.md discovery.";
-const REMOTE_PREVIEW_WORKSPACE_TTL_MINUTES: i64 = 30;
-const RECURSIVE_DISCOVERY_MAX_DEPTH: usize = 5;
-const SKIP_DISCOVERY_DIRS: &[&str] = &[
+pub(super) const NO_IMPORTABLE_SKILLS_ERROR: &str = "No importable skills found in this repository. Supported layouts include root SKILL.md, common skill directories such as skills/, .agents/skills/, .claude/skills/, direct repository subpaths, and bounded recursive SKILL.md discovery.";
+pub(super) const REMOTE_PREVIEW_WORKSPACE_TTL_MINUTES: i64 = 30;
+pub(super) const RECURSIVE_DISCOVERY_MAX_DEPTH: usize = 5;
+pub(super) const SKIP_DISCOVERY_DIRS: &[&str] = &[
     ".git",
     "node_modules",
     "dist",
@@ -157,7 +157,7 @@ const SKIP_DISCOVERY_DIRS: &[&str] = &[
     "outputs",
     "__pycache__",
 ];
-const PRIORITY_SKILL_ROOTS: &[&str] = &[
+pub(super) const PRIORITY_SKILL_ROOTS: &[&str] = &[
     ".",
     "skills",
     "skills/.curated",
@@ -197,33 +197,35 @@ const PRIORITY_SKILL_ROOTS: &[&str] = &[
     ".zencoder/skills",
 ];
 
-static GITHUB_PREVIEW_WORKSPACES: OnceLock<Mutex<HashMap<String, GitHubPreviewWorkspace>>> =
-    OnceLock::new();
-static GITHUB_SHARED_CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
-static GITHUB_HOST_RATE_LIMITERS: OnceLock<tokio::sync::Mutex<HashMap<String, tokio::time::Instant>>> =
-    OnceLock::new();
+pub(super) static GITHUB_PREVIEW_WORKSPACES: OnceLock<
+    Mutex<HashMap<String, GitHubPreviewWorkspace>>,
+> = OnceLock::new();
+pub(super) static GITHUB_SHARED_CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
+pub(super) static GITHUB_HOST_RATE_LIMITERS: OnceLock<
+    tokio::sync::Mutex<HashMap<String, tokio::time::Instant>>,
+> = OnceLock::new();
 
-const DEFAULT_GITHUB_HOST_QPS: f64 = 10.0;
+pub(super) const DEFAULT_GITHUB_HOST_QPS: f64 = 10.0;
 
 #[derive(Debug, Clone)]
-struct GitHubPreviewWorkspace {
-    id: String,
-    target_id: String,
-    repo: GitHubRepoRef,
-    source_path: Option<String>,
-    remote_workspace_dir: String,
-    remote_repo_dir: String,
-    created_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
+pub(super) struct GitHubPreviewWorkspace {
+    pub(super) id: String,
+    pub(super) target_id: String,
+    pub(super) repo: GitHubRepoRef,
+    pub(super) source_path: Option<String>,
+    pub(super) remote_workspace_dir: String,
+    pub(super) remote_repo_dir: String,
+    pub(super) created_at: DateTime<Utc>,
+    pub(super) expires_at: DateTime<Utc>,
 }
 
 impl GitHubPreviewWorkspace {
-    fn is_expired(&self, now: DateTime<Utc>) -> bool {
+    pub(super) fn is_expired(&self, now: DateTime<Utc>) -> bool {
         debug_assert!(self.expires_at >= self.created_at);
         self.expires_at <= now
     }
 
-    fn matches_source(
+    pub(super) fn matches_source(
         &self,
         target_id: &str,
         repo: &GitHubRepoRef,
@@ -242,15 +244,15 @@ pub(crate) struct ResolvedGitHubRepoSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ParsedGitHubSource {
-    owner: String,
-    repo: String,
-    branch: Option<String>,
-    source_path: Option<String>,
+pub(super) struct ParsedGitHubSource {
+    pub(super) owner: String,
+    pub(super) repo: String,
+    pub(super) branch: Option<String>,
+    pub(super) source_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum GitHubAccessDenialKind {
+pub(super) enum GitHubAccessDenialKind {
     RateLimited {
         reset_at: Option<String>,
         remaining: Option<String>,
@@ -259,12 +261,12 @@ enum GitHubAccessDenialKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct GitHubAccessDenial {
-    kind: GitHubAccessDenialKind,
-    operation: &'static str,
-    status: reqwest::StatusCode,
-    github_message: Option<String>,
-    used_auth: bool,
+pub(super) struct GitHubAccessDenial {
+    pub(super) kind: GitHubAccessDenialKind,
+    pub(super) operation: &'static str,
+    pub(super) status: reqwest::StatusCode,
+    pub(super) github_message: Option<String>,
+    pub(super) used_auth: bool,
 }
 
 impl fmt::Display for GitHubAccessDenial {
@@ -320,8 +322,8 @@ impl fmt::Display for GitHubAccessDenial {
 }
 
 #[derive(Debug, Deserialize)]
-struct GitHubErrorResponse {
-    message: Option<String>,
+pub(super) struct GitHubErrorResponse {
+    pub(super) message: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -330,29 +332,39 @@ pub struct GitHubPatTestResult {
     pub configured: bool,
     pub ok: bool,
     pub status: Option<u16>,
+    pub message_key: String,
     pub message: String,
 }
 
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubPatState {
+    pub configured: bool,
+    pub storage_state: crate::secrets::SecretStorageState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum GitHubFetchSurface {
+pub(super) enum GitHubFetchSurface {
     Api,
     Raw,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MirrorAttemptOutcome {
-    status: Option<reqwest::StatusCode>,
-    error_message: String,
+pub(super) struct MirrorAttemptOutcome {
+    pub(super) status: Option<reqwest::StatusCode>,
+    pub(super) error_message: String,
 }
 
 #[derive(Debug, Clone, Copy)]
-struct GitHubMirrorEndpoint {
-    label: &'static str,
-    api_base: &'static str,
-    raw_base: &'static str,
+pub(super) struct GitHubMirrorEndpoint {
+    pub(super) label: &'static str,
+    pub(super) api_base: &'static str,
+    pub(super) raw_base: &'static str,
 }
 
-const GITHUB_MIRROR_ENDPOINTS: &[GitHubMirrorEndpoint] = &[
+pub(super) const GITHUB_MIRROR_ENDPOINTS: &[GitHubMirrorEndpoint] = &[
     GitHubMirrorEndpoint {
         label: "github",
         api_base: "https://api.github.com",

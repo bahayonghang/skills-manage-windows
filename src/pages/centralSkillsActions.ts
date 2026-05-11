@@ -2,6 +2,7 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { TFunction } from "i18next";
 import { toast } from "sonner";
 
+import { formatBackendError } from "@/lib/backendError";
 import { useCentralSkillsDeleteWorkflow } from "@/pages/centralSkillsDeleteWorkflow";
 import { useCentralSkillsImportWorkflow } from "@/pages/centralSkillsImportWorkflow";
 import { useCentralSkillsUpdateWorkflow } from "@/pages/centralSkillsUpdateWorkflow";
@@ -303,7 +304,7 @@ export function useCentralSkillsActions({
       setManualTagQuery("");
       toast.success(t("central.tagCreated"));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
+      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
     }
   }
 
@@ -313,7 +314,7 @@ export function useCentralSkillsActions({
       await assignSkillTags(selectedSkillIds, manualSelectedTagIds);
       toast.success(t("central.tagsAssigned", { count: selectedSkillIds.length }));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
+      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
     }
   }
 
@@ -323,7 +324,7 @@ export function useCentralSkillsActions({
       await acceptAiTagReview(review.skill_id, [review.tag.id]);
       toast.success(t("central.reviewAccepted"));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
+      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
     }
   }
 
@@ -334,7 +335,7 @@ export function useCentralSkillsActions({
       await skipAiTagReview(review.skill_id);
       toast.success(t("central.reviewChanged"));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
+      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
     }
   }
 
@@ -344,7 +345,7 @@ export function useCentralSkillsActions({
       await skipAiTagReview(review.skill_id);
       toast.success(t("central.reviewSkipped"));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
+      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
     }
   }
 
@@ -357,7 +358,7 @@ export function useCentralSkillsActions({
       const review = result.reduce((count, item) => count + (item.low_confidence_count ?? 0), 0);
       toast.success(t("central.aiTagsFinished", { succeeded, failed, review }));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
+      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
     }
   }
 
@@ -367,7 +368,7 @@ export function useCentralSkillsActions({
       await cancelAiTagJob();
       toast.info(t("central.aiTagCancelRequested"));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
+      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
     }
   }
 

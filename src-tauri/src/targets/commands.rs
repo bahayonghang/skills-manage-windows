@@ -1,3 +1,4 @@
+use super::*;
 pub async fn create_ssh_target_impl(
     registry: &TargetRegistry,
     local_db: &DbPool,
@@ -328,7 +329,7 @@ pub async fn load_remote_targets(local_db: &DbPool) -> Result<Vec<RemoteTargetCo
     serde_json::from_str(&raw).map_err(|e| format!("Failed to parse remote targets: {}", e))
 }
 
-async fn save_remote_targets(
+pub(super) async fn save_remote_targets(
     local_db: &DbPool,
     targets: &[RemoteTargetConfig],
 ) -> Result<(), String> {
@@ -336,7 +337,7 @@ async fn save_remote_targets(
     db::set_setting(local_db, TARGETS_SETTING_KEY, &raw).await
 }
 
-fn request_to_config(
+pub(super) fn request_to_config(
     request: CreateSshTargetRequest,
     target_id: String,
 ) -> Result<RemoteTargetConfig, String> {
@@ -386,7 +387,7 @@ fn request_to_config(
     })
 }
 
-fn update_request_to_config(
+pub(super) fn update_request_to_config(
     request: UpdateSshTargetRequest,
     existing: &RemoteTargetConfig,
 ) -> Result<RemoteTargetConfig, String> {
@@ -457,7 +458,9 @@ fn update_request_to_config(
     })
 }
 
-fn test_request_to_config(request: TestSshTargetRequest) -> Result<RemoteTargetConfig, String> {
+pub(super) fn test_request_to_config(
+    request: TestSshTargetRequest,
+) -> Result<RemoteTargetConfig, String> {
     let auth_method = request.auth_method.unwrap_or_default();
     if auth_method == SshAuthMethod::Key
         && request
@@ -505,7 +508,7 @@ fn test_request_to_config(request: TestSshTargetRequest) -> Result<RemoteTargetC
     })
 }
 
-fn required_field(name: &str, value: &str) -> Result<String, String> {
+pub(super) fn required_field(name: &str, value: &str) -> Result<String, String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         Err(format!("{} is required.", name))
@@ -514,7 +517,7 @@ fn required_field(name: &str, value: &str) -> Result<String, String> {
     }
 }
 
-fn apply_supplied_password_to_existing_target(
+pub(super) fn apply_supplied_password_to_existing_target(
     target: &mut RemoteTargetConfig,
     password: Option<&str>,
 ) -> Result<bool, String> {
@@ -540,7 +543,7 @@ pub fn remote_cache_db_path(target_id: &str) -> Result<PathBuf, String> {
         .join("db.sqlite"))
 }
 
-fn sanitize_target_id(target_id: &str) -> Result<String, String> {
+pub(super) fn sanitize_target_id(target_id: &str) -> Result<String, String> {
     let trimmed = target_id.trim();
     if trimmed.is_empty()
         || !trimmed
@@ -552,11 +555,11 @@ fn sanitize_target_id(target_id: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
-fn credential_key_for_target(target_id: &str) -> String {
+pub(super) fn credential_key_for_target(target_id: &str) -> String {
     format!("{}:ssh-password", target_id)
 }
 
-fn credential_key_for_password_target(target: &RemoteTargetConfig) -> Option<String> {
+pub(super) fn credential_key_for_password_target(target: &RemoteTargetConfig) -> Option<String> {
     if target.auth_method != SshAuthMethod::Password {
         return None;
     }
@@ -568,7 +571,10 @@ fn credential_key_for_password_target(target: &RemoteTargetConfig) -> Option<Str
     )
 }
 
-fn ssh_success_message(default_message: &str, state: Option<&TargetCredentialState>) -> String {
+pub(super) fn ssh_success_message(
+    default_message: &str,
+    state: Option<&TargetCredentialState>,
+) -> String {
     match state.map(|state| state.status) {
         Some(TargetCredentialStatus::Session) => {
             "SSH password was verified for this session. The system credential store could not be read back, so enter it again after restarting SkillPort.".to_string()
@@ -577,7 +583,7 @@ fn ssh_success_message(default_message: &str, state: Option<&TargetCredentialSta
     }
 }
 
-fn load_target_password(target: &RemoteTargetConfig) -> Result<String, String> {
+pub(super) fn load_target_password(target: &RemoteTargetConfig) -> Result<String, String> {
     if let Some(password) = target.password.as_deref().filter(|value| !value.is_empty()) {
         return Ok(password.to_string());
     }
@@ -595,4 +601,3 @@ fn load_target_password(target: &RemoteTargetConfig) -> Result<String, String> {
         Err(error) => protected_password_for_target(target)?.ok_or_else(|| error.message()),
     }
 }
-

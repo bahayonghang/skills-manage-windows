@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::github_import;
 use crate::paths;
+use crate::secrets::SecretStore;
 use crate::targets::{connect_ssh_target, remote_join, ActiveTarget};
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -88,10 +89,11 @@ struct MarketplaceSkillRow {
 /// the GitHub import flow so Marketplace preview and import stay in sync.
 async fn fetch_github_skills(
     auth_pool: &crate::db::DbPool,
+    secrets: &dyn SecretStore,
     url: &str,
     registry_id: &str,
 ) -> Result<Vec<MarketplaceSkill>, String> {
-    let auth = github_import::github_direct_auth_from_settings(auth_pool).await?;
+    let auth = github_import::github_direct_auth_from_secret_store(auth_pool, secrets).await?;
     let resolved = github_import::resolve_repo_source(url, auth.as_deref()).await?;
     let candidates = github_import::fetch_repo_skill_candidates_from_source(
         &resolved.repo,
@@ -254,6 +256,7 @@ pub async fn remove_registry_impl(
 pub(crate) async fn sync_registry_impl(
     pool: &crate::db::DbPool,
     auth_pool: &crate::db::DbPool,
+    secrets: &dyn SecretStore,
     registry_id: String,
     options: SyncRegistryOptions,
 ) -> Result<Vec<MarketplaceSkill>, String> {
@@ -309,29 +312,31 @@ pub(crate) async fn sync_registry_impl(
 
     // Fetch skills based on source type
     let skills = match registry.source_type.as_str() {
-        "github" => match fetch_github_skills(auth_pool, &registry.url, &registry.id).await {
-            Ok(skills) => skills,
-            Err(error) => {
-                sqlx::query(
-                    "UPDATE skill_registries
+        "github" => {
+            match fetch_github_skills(auth_pool, secrets, &registry.url, &registry.id).await {
+                Ok(skills) => skills,
+                Err(error) => {
+                    sqlx::query(
+                        "UPDATE skill_registries
                      SET last_attempted_sync = ?, last_sync_status = ?, last_sync_error = ?
                      WHERE id = ?",
-                )
-                .bind(&attempt_time)
-                .bind(RegistrySyncStatus::Error.as_str())
-                .bind(&error)
-                .bind(&registry.id)
-                .execute(pool)
-                .await
-                .map_err(|e| e.to_string())?;
+                    )
+                    .bind(&attempt_time)
+                    .bind(RegistrySyncStatus::Error.as_str())
+                    .bind(&error)
+                    .bind(&registry.id)
+                    .execute(pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
 
-                if registry_has_cached_skills(pool, &registry.id).await? {
-                    return search_marketplace_skills_impl(pool, Some(registry_id), None).await;
+                    if registry_has_cached_skills(pool, &registry.id).await? {
+                        return search_marketplace_skills_impl(pool, Some(registry_id), None).await;
+                    }
+
+                    return Err(error);
                 }
-
-                return Err(error);
             }
-        },
+        }
         _ => return Err(format!("Unsupported source type: {}", registry.source_type)),
     };
 

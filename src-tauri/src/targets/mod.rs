@@ -11,11 +11,24 @@ use uuid::Uuid;
 
 use crate::db::{self, DbPool};
 
-include!("model.rs");
-include!("cred.rs");
-include!("registry.rs");
-include!("commands.rs");
-include!("askpass.rs");
-include!("exec.rs");
+mod askpass;
+mod commands;
+mod cred;
+mod exec;
+mod model;
+mod registry;
 #[cfg(test)]
-include!("tests.rs");
+mod tests;
+
+#[cfg(test)]
+use askpass::*;
+use commands::*;
+use cred::*;
+use exec::*;
+use model::*;
+
+pub use askpass::{connect_ssh_target, ConnectedSshTarget};
+pub use commands::*;
+pub use exec::*;
+pub use model::*;
+pub use registry::TargetRegistry;

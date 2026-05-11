@@ -1,13 +1,14 @@
-struct SshProbe {
-    remote_home: String,
-    remote_os: String,
+use super::*;
+pub(super) struct SshProbe {
+    pub(super) remote_home: String,
+    pub(super) remote_os: String,
 }
 
-const SSH_CONNECT_TIMEOUT_SECS: u64 = 10;
-const SSH_SERVER_ALIVE_INTERVAL_SECS: u64 = 15;
-const SSH_SERVER_ALIVE_COUNT_MAX: u64 = 3;
+pub(super) const SSH_CONNECT_TIMEOUT_SECS: u64 = 10;
+pub(super) const SSH_SERVER_ALIVE_INTERVAL_SECS: u64 = 15;
+pub(super) const SSH_SERVER_ALIVE_COUNT_MAX: u64 = 3;
 
-fn askpass_password_from_env(
+pub(super) fn askpass_password_from_env(
     marker: Option<OsString>,
     password: Option<OsString>,
 ) -> Option<String> {
@@ -28,7 +29,7 @@ pub fn maybe_run_ssh_askpass_helper() -> bool {
     true
 }
 
-async fn probe_ssh_target(target: &RemoteTargetConfig) -> Result<SshProbe, String> {
+pub(super) async fn probe_ssh_target(target: &RemoteTargetConfig) -> Result<SshProbe, String> {
     let connection = connect_ssh_target(target).await?;
     let output = connection
         .run_script(
@@ -43,7 +44,7 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#,
     Ok(probe)
 }
 
-fn is_supported_remote_os(remote_os: &str) -> bool {
+pub(super) fn is_supported_remote_os(remote_os: &str) -> bool {
     matches!(remote_os, "Linux" | "Darwin")
 }
 
@@ -64,7 +65,7 @@ pub struct RemotePathInfo {
     pub symlink_target: Option<String>,
 }
 
-fn ssh_program() -> std::ffi::OsString {
+pub(super) fn ssh_program() -> std::ffi::OsString {
     #[cfg(windows)]
     {
         if let Ok(windir) = env::var("WINDIR") {
@@ -81,7 +82,7 @@ fn ssh_program() -> std::ffi::OsString {
 }
 
 impl ConnectedSshTarget {
-    fn base_command(&self) -> Command {
+    pub(super) fn base_command(&self) -> Command {
         let mut command = Command::new(ssh_program());
         #[cfg(windows)]
         {
@@ -150,7 +151,7 @@ impl ConnectedSshTarget {
         )
     }
 
-    fn ssh_failure_detail(&self, stderr: &[u8]) -> String {
+    pub(super) fn ssh_failure_detail(&self, stderr: &[u8]) -> String {
         let detail = String::from_utf8_lossy(stderr);
         let detail = detail.trim();
         if let Some(message) = self.ssh_auth_failure_message(detail) {
@@ -382,7 +383,7 @@ impl ConnectedSshTarget {
     }
 }
 
-fn remote_script_command(args: &[&str]) -> String {
+pub(super) fn remote_script_command(args: &[&str]) -> String {
     let mut command = "sh -s --".to_string();
     for arg in args {
         command.push(' ');
@@ -421,7 +422,7 @@ pub fn remote_file_type_is_dir(debug_value: &str) -> bool {
     matches!(debug_value, "dir" | "Directory") || debug_value.contains("Directory")
 }
 
-fn parse_ssh_probe_output(output: &str) -> Result<SshProbe, String> {
+pub(super) fn parse_ssh_probe_output(output: &str) -> Result<SshProbe, String> {
     let mut remote_home = None;
     let mut remote_os = None;
     let mut mkdir_ok = false;

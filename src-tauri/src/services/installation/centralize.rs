@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool};
 
-use super::fs_util::{copy_dir_all, remove_symlink_path};
+use super::fs_util::{
+    copy_dir_all_blocking, path_exists_blocking, remove_symlink_path, run_blocking_fs,
+};
 
 /// Ensure the skill exists in the central directory. If it doesn't, copy it
 /// from its actual location (looked up in the database) and update the DB
@@ -20,7 +22,7 @@ pub(crate) async fn ensure_centralized(
     skill_id: &str,
     canonical_dir: &Path,
 ) -> Result<(), String> {
-    if canonical_dir.join("SKILL.md").exists() {
+    if path_exists_blocking(&canonical_dir.join("SKILL.md")).await? {
         return Ok(());
     }
 
@@ -35,7 +37,7 @@ pub(crate) async fn ensure_centralized(
         .parent()
         .ok_or_else(|| format!("Invalid file_path for skill '{}'", skill_id))?;
 
-    if !source_file.exists() {
+    if !path_exists_blocking(&source_file).await? {
         return Err(format!(
             "Skill source not found at '{}'",
             source_file.display()
@@ -43,7 +45,7 @@ pub(crate) async fn ensure_centralized(
     }
 
     // Copy to central directory.
-    copy_dir_all(source_dir, canonical_dir)?;
+    copy_dir_all_blocking(source_dir, canonical_dir).await?;
 
     // Update the DB record to reflect centralization.
     let mut updated = skill;
@@ -72,7 +74,7 @@ pub(crate) fn agents_share_skills_dir(agent: &db::Agent, central: &db::Agent) ->
 /// - Symlink at the path: removed.
 /// - Real directory or file: refused.
 /// - Path missing: ok.
-pub(crate) fn ensure_replaceable_target(target_path: &Path) -> Result<(), String> {
+pub(crate) fn ensure_replaceable_target_sync(target_path: &Path) -> Result<(), String> {
     match std::fs::symlink_metadata(target_path) {
         Ok(meta) if meta.file_type().is_symlink() => remove_symlink_path(target_path),
         Ok(meta) if meta.is_dir() => Err(format!(
@@ -85,4 +87,12 @@ pub(crate) fn ensure_replaceable_target(target_path: &Path) -> Result<(), String
         )),
         Err(_) => Ok(()),
     }
+}
+
+pub(crate) async fn ensure_replaceable_target(target_path: &Path) -> Result<(), String> {
+    let target_path = target_path.to_path_buf();
+    run_blocking_fs("install target inspection", move || {
+        ensure_replaceable_target_sync(&target_path)
+    })
+    .await
 }

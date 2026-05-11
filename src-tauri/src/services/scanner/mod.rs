@@ -92,7 +92,7 @@ pub fn parse_skill_md_content(content: &str) -> Option<SkillInfo> {
     let frontmatter_str = &after_open[..close_pos];
 
     // Parse the YAML block
-    let yaml: serde_yaml::Value = serde_yaml::from_str(frontmatter_str).ok()?;
+    let yaml: serde_norway::Value = serde_norway::from_str(frontmatter_str).ok()?;
 
     // `name` is required
     let name = yaml.get("name")?.as_str()?.to_string();

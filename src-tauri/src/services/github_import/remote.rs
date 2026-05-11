@@ -1,4 +1,5 @@
-async fn cleanup_expired_preview_workspaces_for_connection(
+use super::*;
+pub(super) async fn cleanup_expired_preview_workspaces_for_connection(
     connection: &crate::targets::ConnectedSshTarget,
     target: &RemoteTargetConfig,
 ) {
@@ -11,7 +12,7 @@ async fn cleanup_expired_preview_workspaces_for_connection(
     }
 }
 
-async fn create_remote_preview_workspace(
+pub(super) async fn create_remote_preview_workspace(
     connection: &crate::targets::ConnectedSshTarget,
     target: &RemoteTargetConfig,
     resolved: &ResolvedGitHubRepoSource,
@@ -47,14 +48,14 @@ async fn create_remote_preview_workspace(
     })
 }
 
-fn github_archive_url(repo: &GitHubRepoRef) -> String {
+pub(super) fn github_archive_url(repo: &GitHubRepoRef) -> String {
     format!(
         "https://api.github.com/repos/{}/{}/tarball/{}",
         repo.owner, repo.repo, repo.branch
     )
 }
 
-fn remote_workspace_download_script(auth: Option<&str>) -> Result<String, String> {
+pub(super) fn remote_workspace_download_script(auth: Option<&str>) -> Result<String, String> {
     let auth_block = match auth.filter(|token| !token.trim().is_empty()) {
         Some(token) => {
             let header = curl_auth_header_config_line(token)?;
@@ -110,7 +111,7 @@ printf '%s\n' "$workspace"
     ))
 }
 
-fn curl_auth_header_config_line(token: &str) -> Result<String, String> {
+pub(super) fn curl_auth_header_config_line(token: &str) -> Result<String, String> {
     if token.contains('\n') || token.contains('\r') {
         return Err("GitHub token contains unsupported newline characters.".to_string());
     }
@@ -323,7 +324,7 @@ pub(crate) async fn import_github_repo_skills_ssh_with_auth(
     })
 }
 
-async fn resolve_ssh_import_workspace(
+pub(super) async fn resolve_ssh_import_workspace(
     connection: &crate::targets::ConnectedSshTarget,
     target: &RemoteTargetConfig,
     resolved: &ResolvedGitHubRepoSource,
@@ -359,7 +360,10 @@ async fn resolve_ssh_import_workspace(
     Ok(workspace)
 }
 
-fn remote_skill_source_dir(remote_repo_dir: &str, source_path: &str) -> Result<String, String> {
+pub(super) fn remote_skill_source_dir(
+    remote_repo_dir: &str,
+    source_path: &str,
+) -> Result<String, String> {
     if source_path == "." {
         return Ok(remote_repo_dir.to_string());
     }
@@ -369,7 +373,7 @@ fn remote_skill_source_dir(remote_repo_dir: &str, source_path: &str) -> Result<S
     ))
 }
 
-fn remote_import_skill_script() -> &'static str {
+pub(super) fn remote_import_skill_script() -> &'static str {
     r#"set -eu
 source_dir=$1
 stage_dir=$2

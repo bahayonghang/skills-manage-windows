@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) async fn resolve_repo_source(
     repo_url: &str,
     auth_token: Option<&str>,
@@ -53,7 +54,7 @@ pub(crate) async fn resolve_repo_source(
     })
 }
 
-fn parse_github_source(url: &str) -> Result<ParsedGitHubSource, String> {
+pub(super) fn parse_github_source(url: &str) -> Result<ParsedGitHubSource, String> {
     let trimmed = url.trim();
     if trimmed.is_empty() {
         return Err("Invalid GitHub repository URL.".to_string());
@@ -125,7 +126,7 @@ fn parse_github_source(url: &str) -> Result<ParsedGitHubSource, String> {
     })
 }
 
-fn is_github_shorthand_source(value: &str) -> bool {
+pub(super) fn is_github_shorthand_source(value: &str) -> bool {
     let mut segments = value.split('/').filter(|segment| !segment.is_empty());
     let Some(owner) = segments.next() else {
         return false;
@@ -142,7 +143,7 @@ fn is_github_shorthand_source(value: &str) -> bool {
         && !repo.starts_with('.')
 }
 
-fn has_raw_path_traversal(value: &str) -> bool {
+pub(super) fn has_raw_path_traversal(value: &str) -> bool {
     let path_only = value
         .split(['?', '#'])
         .next()
@@ -154,7 +155,7 @@ fn has_raw_path_traversal(value: &str) -> bool {
         .any(|segment| segment == ".." || segment == "%2e%2e")
 }
 
-fn normalize_repo_subpath(segments: &[&str]) -> Result<Option<String>, String> {
+pub(super) fn normalize_repo_subpath(segments: &[&str]) -> Result<Option<String>, String> {
     if segments.is_empty() {
         return Ok(None);
     }
@@ -201,7 +202,7 @@ pub(crate) async fn inspect_repo_skill_candidates_from_source(
 }
 
 #[cfg(test)]
-fn build_repo_skill_candidates_from_snapshot(
+pub(super) fn build_repo_skill_candidates_from_snapshot(
     repo: &GitHubRepoRef,
     snapshot: &GitHubRepoSnapshot,
 ) -> Result<Vec<RemoteSkillCandidate>, String> {
@@ -213,7 +214,8 @@ pub(crate) fn build_repo_skill_candidates_from_snapshot_at_path(
     snapshot: &GitHubRepoSnapshot,
     source_path: Option<&str>,
 ) -> Result<Vec<RemoteSkillCandidate>, String> {
-    let inspected = inspect_repo_skill_candidates_from_snapshot_at_path(repo, snapshot, source_path)?;
+    let inspected =
+        inspect_repo_skill_candidates_from_snapshot_at_path(repo, snapshot, source_path)?;
     if let Some(invalid) = inspected.invalid_candidates.into_iter().next() {
         return Err(invalid.detail);
     }
@@ -237,13 +239,8 @@ pub(crate) fn inspect_repo_skill_candidates_from_snapshot_at_path(
             .get(&manifest.skill_md_path)
             .ok_or_else(|| format!("Missing snapshot file '{}'.", manifest.skill_md_path))
             .and_then(|raw| {
-                build_remote_skill_candidate(
-                    repo,
-                    &manifest,
-                    raw.clone(),
-                    direct_endpoint,
-                )
-                .map_err(|invalid| invalid.detail.clone())
+                build_remote_skill_candidate(repo, &manifest, raw.clone(), direct_endpoint)
+                    .map_err(|invalid| invalid.detail.clone())
             });
 
         match outcome {
@@ -252,7 +249,9 @@ pub(crate) fn inspect_repo_skill_candidates_from_snapshot_at_path(
                     valid_candidates.push(candidate);
                 }
             }
-            Err(error) => invalid_candidates.push(invalid_candidate_from_manifest(&manifest, &error)),
+            Err(error) => {
+                invalid_candidates.push(invalid_candidate_from_manifest(&manifest, &error))
+            }
         }
     }
 
@@ -263,7 +262,7 @@ pub(crate) fn inspect_repo_skill_candidates_from_snapshot_at_path(
     })
 }
 
-async fn build_remote_repo_skill_candidates_from_workspace(
+pub(super) async fn build_remote_repo_skill_candidates_from_workspace(
     connection: &crate::targets::ConnectedSshTarget,
     repo: &GitHubRepoRef,
     remote_repo_dir: &str,
@@ -293,7 +292,7 @@ async fn build_remote_repo_skill_candidates_from_workspace(
     Ok(candidates)
 }
 
-fn build_remote_skill_candidate(
+pub(super) fn build_remote_skill_candidate(
     repo: &GitHubRepoRef,
     manifest: &SnapshotSkillManifest,
     raw: Vec<u8>,
@@ -346,7 +345,7 @@ fn build_remote_skill_candidate(
     })
 }
 
-fn invalid_candidate_from_manifest(
+pub(super) fn invalid_candidate_from_manifest(
     manifest: &SnapshotSkillManifest,
     detail: &str,
 ) -> InvalidRemoteSkillCandidate {
@@ -364,11 +363,11 @@ fn invalid_candidate_from_manifest(
     }
 }
 
-fn invalid_utf8_message(manifest: &SnapshotSkillManifest) -> String {
+pub(super) fn invalid_utf8_message(manifest: &SnapshotSkillManifest) -> String {
     format!("Skill '{}' is not valid UTF-8.", manifest.source_path)
 }
 
-fn invalid_frontmatter_message(manifest: &SnapshotSkillManifest) -> String {
+pub(super) fn invalid_frontmatter_message(manifest: &SnapshotSkillManifest) -> String {
     if manifest.source_path == "." {
         "Repository root SKILL.md is missing valid frontmatter.".to_string()
     } else {
@@ -379,7 +378,7 @@ fn invalid_frontmatter_message(manifest: &SnapshotSkillManifest) -> String {
     }
 }
 
-async fn remote_skill_manifest_paths(
+pub(super) async fn remote_skill_manifest_paths(
     connection: &crate::targets::ConnectedSshTarget,
     remote_repo_dir: &str,
 ) -> Result<Vec<String>, String> {
@@ -408,21 +407,21 @@ find . -type f -iname 'SKILL.md' -print | sed 's#^\./##'
 }
 
 #[derive(Debug, Clone)]
-struct SnapshotSkillManifest {
-    source_path: String,
-    root_directory: String,
-    skill_directory_name: String,
-    skill_md_path: String,
+pub(super) struct SnapshotSkillManifest {
+    pub(super) source_path: String,
+    pub(super) root_directory: String,
+    pub(super) skill_directory_name: String,
+    pub(super) skill_md_path: String,
 }
 
-fn discover_skill_manifests(
+pub(super) fn discover_skill_manifests(
     snapshot: &GitHubRepoSnapshot,
     source_path: Option<&str>,
 ) -> Result<Vec<SnapshotSkillManifest>, String> {
     discover_skill_manifests_from_paths(snapshot.files.keys().map(String::as_str), source_path)
 }
 
-fn discover_skill_manifests_from_paths<'a, I>(
+pub(super) fn discover_skill_manifests_from_paths<'a, I>(
     paths: I,
     source_path: Option<&str>,
 ) -> Result<Vec<SnapshotSkillManifest>, String>
@@ -460,7 +459,7 @@ where
     Ok(manifests)
 }
 
-fn direct_skill_manifest(
+pub(super) fn direct_skill_manifest(
     paths: &HashSet<String>,
     base_path: &str,
 ) -> Option<SnapshotSkillManifest> {
@@ -471,7 +470,7 @@ fn direct_skill_manifest(
         .flatten()
 }
 
-fn immediate_skill_manifests(
+pub(super) fn immediate_skill_manifests(
     paths: &HashSet<String>,
     search_root: &str,
 ) -> Result<Vec<SnapshotSkillManifest>, String> {
@@ -484,7 +483,7 @@ fn immediate_skill_manifests(
     Ok(manifests)
 }
 
-fn recursive_skill_manifests(
+pub(super) fn recursive_skill_manifests(
     paths: &HashSet<String>,
     base_path: &str,
 ) -> Result<Vec<SnapshotSkillManifest>, String> {
@@ -497,7 +496,7 @@ fn recursive_skill_manifests(
     Ok(manifests)
 }
 
-fn insert_manifest(
+pub(super) fn insert_manifest(
     manifests: &mut Vec<SnapshotSkillManifest>,
     seen_source_paths: &mut HashSet<String>,
     manifest: SnapshotSkillManifest,
@@ -507,7 +506,7 @@ fn insert_manifest(
     }
 }
 
-fn is_immediate_skill_manifest(path: &str, search_root: &str) -> bool {
+pub(super) fn is_immediate_skill_manifest(path: &str, search_root: &str) -> bool {
     if !is_skill_md_repo_path(path) {
         return false;
     }
@@ -523,7 +522,7 @@ fn is_immediate_skill_manifest(path: &str, search_root: &str) -> bool {
     source_segments.len() == root_segments.len() + 1 && source_segments.starts_with(&root_segments)
 }
 
-fn is_recursive_skill_manifest(path: &str, base_path: &str) -> bool {
+pub(super) fn is_recursive_skill_manifest(path: &str, base_path: &str) -> bool {
     if !is_skill_md_repo_path(path) {
         return false;
     }
@@ -541,7 +540,7 @@ fn is_recursive_skill_manifest(path: &str, base_path: &str) -> bool {
             <= RECURSIVE_DISCOVERY_MAX_DEPTH
 }
 
-fn manifest_from_skill_md_path(path: &str) -> Option<SnapshotSkillManifest> {
+pub(super) fn manifest_from_skill_md_path(path: &str) -> Option<SnapshotSkillManifest> {
     let normalized = normalize_repo_path(path).ok()?;
     let source_path = source_path_from_skill_md(&normalized)?;
     let skill_directory_name = if source_path == "." {
@@ -572,7 +571,7 @@ fn manifest_from_skill_md_path(path: &str) -> Option<SnapshotSkillManifest> {
     })
 }
 
-fn source_path_from_skill_md(path: &str) -> Option<String> {
+pub(super) fn source_path_from_skill_md(path: &str) -> Option<String> {
     let normalized = normalize_repo_path(path).ok()?;
     if normalized.eq_ignore_ascii_case("SKILL.md") {
         return Some(".".to_string());
@@ -584,7 +583,7 @@ fn source_path_from_skill_md(path: &str) -> Option<String> {
         .map(|_| normalized[..normalized.len() - "/SKILL.md".len()].to_string())
 }
 
-fn join_repo_path(base_path: &str, child: &str) -> Result<String, String> {
+pub(super) fn join_repo_path(base_path: &str, child: &str) -> Result<String, String> {
     let mut parts = Vec::new();
     for part in base_path.split('/').chain(child.split('/')) {
         let trimmed = part.trim();
@@ -596,7 +595,7 @@ fn join_repo_path(base_path: &str, child: &str) -> Result<String, String> {
     normalize_repo_path(&parts.join("/"))
 }
 
-fn normalize_repo_path(path: &str) -> Result<String, String> {
+pub(super) fn normalize_repo_path(path: &str) -> Result<String, String> {
     let normalized = path.trim().trim_matches('/').replace('\\', "/");
     if normalized.is_empty() || normalized == "." {
         return Ok(String::new());
@@ -607,13 +606,13 @@ fn normalize_repo_path(path: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
-fn repo_path_segments(path: &str) -> Vec<&str> {
+pub(super) fn repo_path_segments(path: &str) -> Vec<&str> {
     path.split('/')
         .filter(|segment| !segment.is_empty())
         .collect()
 }
 
-fn has_skipped_discovery_segment(path: &str) -> bool {
+pub(super) fn has_skipped_discovery_segment(path: &str) -> bool {
     repo_path_segments(path).iter().any(|segment| {
         SKIP_DISCOVERY_DIRS
             .iter()
@@ -621,10 +620,10 @@ fn has_skipped_discovery_segment(path: &str) -> bool {
     })
 }
 
-fn is_skill_md_repo_path(path: &str) -> bool {
+pub(super) fn is_skill_md_repo_path(path: &str) -> bool {
     path.eq_ignore_ascii_case("SKILL.md") || path.to_ascii_lowercase().ends_with("/skill.md")
 }
-fn is_safe_repo_relative_path(path: &str) -> bool {
+pub(super) fn is_safe_repo_relative_path(path: &str) -> bool {
     let relative = Path::new(path);
     !relative.is_absolute()
         && relative
@@ -638,10 +637,10 @@ pub(crate) fn parse_frontmatter(content: &str) -> Option<SkillFrontmatter> {
     }
     let rest = &trimmed[3..];
     let end = rest.find("---")?;
-    serde_yaml::from_str::<SkillFrontmatter>(&rest[..end]).ok()
+    serde_norway::from_str::<SkillFrontmatter>(&rest[..end]).ok()
 }
 
-fn sanitize_skill_id(raw: &str) -> Result<String, String> {
+pub(super) fn sanitize_skill_id(raw: &str) -> Result<String, String> {
     let lowered = raw.trim().to_lowercase();
     let mut sanitized = String::new();
     let mut last_was_dash = false;

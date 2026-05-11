@@ -51,7 +51,7 @@ fn leaves_unknown_endpoints_unclassified() {
 }
 
 /// A live reqwest error (connect-refused on localhost:1) must be
-/// classified with an actionable Chinese hint, not just the opaque
+/// classified with an actionable hint, not just the opaque
 /// top-level "error sending request for url (...)".
 /// `.no_proxy()` ensures the test is deterministic even when the
 /// developer has `HTTP(S)_PROXY` set in their environment.
@@ -69,8 +69,8 @@ async fn format_reqwest_error_surfaces_actionable_hint() {
         .expect_err("expected connect failure");
     let msg = format_reqwest_error(&err);
     assert!(
-        msg.contains("切换区域端点") || msg.contains("建立连接"),
-        "expected actionable Chinese hint in formatted error, got: {msg}"
+        msg.contains("region endpoint") || msg.contains("Unable to connect"),
+        "expected actionable English hint in formatted error, got: {msg}"
     );
 }
 
@@ -88,6 +88,7 @@ async fn classify_connect_error_as_connect_kind() {
         .expect_err("expected connect failure");
     let info = classify_reqwest_error(&err, false);
     assert_eq!(info.kind, ExplanationErrorKind::Connect);
+    assert_eq!(info.code.as_deref(), Some(super::AI_CONNECT));
     assert!(info.retryable);
     assert!(!info.message.is_empty());
     assert!(!info.details.is_empty());

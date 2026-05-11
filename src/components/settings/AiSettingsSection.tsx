@@ -12,15 +12,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { AI_PROVIDERS, REGION_LABELS, type RegionId } from "@/data/aiProviders";
+import { formatBackendError } from "@/lib/backendError";
 import type {
   AiConnectionTestResult,
   AiSaveStatus,
   AiSettings,
 } from "@/stores/settingsStore";
+import type { AiApiKeyState, SecretStorageState } from "@/types";
 
 interface AiSettingsSectionProps {
   aiSaveError: string | null;
   aiSaveStatus: AiSaveStatus;
+  aiApiKeyState: AiApiKeyState;
   aiSettings: AiSettings;
   aiTestResult: AiConnectionTestResult | null;
   aiTesting: boolean;
@@ -29,6 +32,7 @@ interface AiSettingsSectionProps {
   resolvedUrl: string;
   showAiTestDetails: boolean;
   onProviderChange: (id: string) => void;
+  onClearApiKey: () => void;
   onSetShowAiTestDetails: (value: boolean | ((current: boolean) => boolean)) => void;
   onTestConnection: () => void;
   onUpdateAiSettings: (patch: Partial<AiSettings>) => void;
@@ -37,6 +41,7 @@ interface AiSettingsSectionProps {
 export function AiSettingsSection({
   aiSaveError,
   aiSaveStatus,
+  aiApiKeyState,
   aiSettings,
   aiTestResult,
   aiTesting,
@@ -45,6 +50,7 @@ export function AiSettingsSection({
   resolvedUrl,
   showAiTestDetails,
   onProviderChange,
+  onClearApiKey,
   onSetShowAiTestDetails,
   onTestConnection,
   onUpdateAiSettings,
@@ -104,6 +110,37 @@ export function AiSettingsSection({
               value={aiSettings.apiKey}
               onChange={(event) => onUpdateAiSettings({ apiKey: event.target.value })}
             />
+            {aiApiKeyState.configured && !aiSettings.apiKey ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("settings.aiApiKeyConfiguredNoReveal")}
+              </p>
+            ) : null}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${secretStorageTone(aiApiKeyState.storageState)}`}
+              >
+                {aiApiKeyState.configured || aiApiKeyState.storageState === "unreadable"
+                  ? t(`settings.aiApiKeyStorageState.${aiApiKeyState.storageState}`)
+                  : t("settings.aiApiKeyNotConfigured")}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  isLoadingAiSettings ||
+                  aiSaveStatus === "saving" ||
+                  !aiApiKeyState.configured
+                }
+                onClick={onClearApiKey}
+              >
+                {t("settings.aiApiKeyClear")}
+              </Button>
+            </div>
+            {aiApiKeyState.error ? (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                {t("settings.aiApiKeyMigrationWarning")}
+              </p>
+            ) : null}
           </div>
           <AiSaveStatusRow
             aiSaveError={aiSaveError}
@@ -147,7 +184,7 @@ export function AiSettingsSection({
             <Button
               variant="outline"
               size="sm"
-              disabled={aiTesting || !aiSettings.apiKey || !resolvedUrl}
+              disabled={aiTesting || (!aiSettings.apiKey && !aiApiKeyState.configured) || !resolvedUrl}
               onClick={onTestConnection}
               className="shrink-0"
             >
@@ -169,6 +206,20 @@ export function AiSettingsSection({
       </CardContent>
     </Card>
   );
+}
+
+function secretStorageTone(state: SecretStorageState) {
+  switch (state) {
+    case "stored":
+      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "session":
+      return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    case "unreadable":
+      return "bg-destructive/10 text-destructive";
+    case "missing":
+    default:
+      return "bg-muted text-muted-foreground";
+  }
 }
 
 interface AiRegionPickerProps {
@@ -318,10 +369,13 @@ function AiTestResultPanel({
   onSetShowAiTestDetails,
 }: AiTestResultPanelProps) {
   const { t } = useTranslation();
+  const message = aiTestResult.code
+    ? formatBackendError(`${aiTestResult.code}:${aiTestResult.msg}`, t)
+    : aiTestResult.msg;
 
   return (
     <div className={`text-xs rounded-md px-3 py-2 space-y-1.5 ${aiTestResult.ok ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-destructive/10 text-destructive"}`}>
-      <p>{aiTestResult.ok ? "✓ " : "✕ "}{aiTestResult.msg}</p>
+      <p>{aiTestResult.ok ? "✓ " : "✕ "}{message}</p>
       {!aiTestResult.ok && aiTestResult.details && (
         <div>
           <button

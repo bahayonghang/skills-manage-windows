@@ -2,8 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { SettingsView } from "../pages/SettingsView";
-import { ScanDirectory, AgentWithStatus, TargetSummary } from "../types";
-import { invoke } from "@tauri-apps/api/core";
+import {
+  AiApiKeyState,
+  ScanDirectory,
+  AgentWithStatus,
+  TargetSummary,
+  GitHubPatState,
+} from "../types";
+import { invoke } from "@/lib/tauri";
 
 // Mock stores
 vi.mock("../stores/settingsStore", () => ({
@@ -40,8 +46,9 @@ vi.mock("../stores/marketplaceStore", () => ({
   useMarketplaceStore: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
+vi.mock("@/lib/tauri", () => ({
   invoke: vi.fn(),
+  isTauriRuntime: vi.fn(() => true),
 }));
 
 import { useSettingsStore } from "../stores/settingsStore";
@@ -135,7 +142,7 @@ function setupMocks({
   addCustomAgent = vi.fn(),
   updateCustomAgent = vi.fn(),
   removeCustomAgent = vi.fn(),
-  githubPat = "",
+  githubPatState: providedGitHubPatState = undefined as GitHubPatState | undefined,
   isLoadingGitHubPat = false,
   isSavingGitHubPat = false,
   isTestingGitHubPat = false,
@@ -153,14 +160,16 @@ function setupMocks({
     tagIntervalMs: "4000",
     tagStopOnRateLimit: true,
   },
+  aiApiKeyState: providedAiApiKeyState = undefined as AiApiKeyState | undefined,
   aiSettingsLoaded = true,
   isLoadingAiSettings = false,
   aiSaveStatus = "saved" as const,
   aiSaveError = null as string | null,
   aiTesting = false,
-  aiTestResult = null as { ok: boolean; msg: string; details?: string } | null,
+  aiTestResult = null as { ok: boolean; msg: string; code?: string; details?: string } | null,
   loadAiSettings = vi.fn(),
   updateAiSettings = vi.fn(),
+  clearAiApiKey = vi.fn(),
   flushAiSettings = vi.fn(),
   testAiConnection = vi.fn(),
   rescan = vi.fn(),
@@ -186,6 +195,21 @@ function setupMocks({
   accent = "lavender" as const,
   setAccent = vi.fn(),
 } = {}) {
+  const githubPatState =
+    providedGitHubPatState ??
+    ({
+      configured: false,
+      storageState: "missing",
+      error: null,
+    } satisfies GitHubPatState);
+  const aiApiKeyState =
+    providedAiApiKeyState ??
+    ({
+      configured: false,
+      storageState: "missing",
+      error: null,
+    } satisfies AiApiKeyState);
+
   vi.mocked(useSettingsStore).mockImplementation((selector) =>
     selector({
       scanDirectories: scanDirs,
@@ -195,12 +219,13 @@ function setupMocks({
       addScanDirectory,
       removeScanDirectory,
       toggleScanDirectory,
-      githubPat,
+      githubPatState,
       isLoadingGitHubPat,
       isSavingGitHubPat,
       isTestingGitHubPat,
       githubPatTestResult: null,
       aiSettings,
+      aiApiKeyState,
       aiSettingsLoaded,
       isLoadingAiSettings,
       aiSaveStatus,
@@ -213,6 +238,7 @@ function setupMocks({
       testGitHubPat,
       loadAiSettings,
       updateAiSettings,
+      clearAiApiKey,
       flushAiSettings,
       testAiConnection,
       clearError: vi.fn(),
@@ -368,6 +394,30 @@ describe("SettingsView", () => {
     expect(screen.getByLabelText("请求间隔 ms")).toBeTruthy();
   });
 
+  it("shows configured AI API key status without revealing the saved key", () => {
+    setupMocks({
+      aiApiKeyState: { configured: true, storageState: "stored", error: null },
+    });
+    renderSettingsView();
+    expect(screen.getByText("已保存到安全存储")).toBeTruthy();
+    expect(screen.getByText(/已配置 AI API Key/)).toBeTruthy();
+  });
+
+  it("clears the AI API key through the secure-storage action", async () => {
+    const clearAiApiKey = vi.fn().mockResolvedValue(undefined);
+    setupMocks({
+      clearAiApiKey,
+      aiApiKeyState: { configured: true, storageState: "stored", error: null },
+    });
+    renderSettingsView();
+
+    fireEvent.click(screen.getByRole("button", { name: "清除 Key" }));
+
+    await waitFor(() => {
+      expect(clearAiApiKey).toHaveBeenCalled();
+    });
+  });
+
   it("renders the existing settings sections", () => {
     setupMocks();
     renderSettingsView();
@@ -401,18 +451,22 @@ describe("SettingsView", () => {
     expect(loadGitHubPat).toHaveBeenCalled();
   });
 
-  it("renders the saved github pat value and explanation copy", () => {
-    setupMocks({ githubPat: "github_pat_saved" });
+  it("renders the saved github pat status without revealing the token", () => {
+    setupMocks({
+      githubPatState: { configured: true, storageState: "stored", error: null },
+    });
     renderSettingsView();
 
-    expect(screen.getByLabelText("GitHub Personal Access Token")).toHaveValue("github_pat_saved");
+    expect(screen.getByLabelText("GitHub Personal Access Token")).toHaveValue("");
+    expect(screen.getByText("已保存到安全存储")).toBeTruthy();
+    expect(screen.getByText(/已配置 GitHub 令牌/)).toBeTruthy();
     expect(screen.getByText(/它绝不会被发送到公共镜像或代理回退链路/)).toBeTruthy();
     expect(screen.getByText(/当 GitHub 预览\/导入遇到限流/)).toBeTruthy();
   });
 
   it("saves the github pat from settings", async () => {
     const saveGitHubPat = vi.fn().mockResolvedValue(undefined);
-    setupMocks({ githubPat: "", saveGitHubPat });
+    setupMocks({ saveGitHubPat });
     renderSettingsView();
 
     fireEvent.change(screen.getByLabelText("GitHub Personal Access Token"), {
@@ -428,7 +482,10 @@ describe("SettingsView", () => {
 
   it("clears the github pat from settings", async () => {
     const clearGitHubPat = vi.fn().mockResolvedValue(undefined);
-    setupMocks({ githubPat: "github_pat_saved", clearGitHubPat });
+    setupMocks({
+      githubPatState: { configured: true, storageState: "stored", error: null },
+      clearGitHubPat,
+    });
     renderSettingsView();
 
     fireEvent.click(screen.getByRole("button", { name: "清除令牌" }));

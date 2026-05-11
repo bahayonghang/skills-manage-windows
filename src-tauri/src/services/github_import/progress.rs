@@ -1,0 +1,126 @@
+use super::*;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct SnapshotSourceFile {
+    pub(super) repo_path: String,
+    pub(super) relative_path: String,
+    pub(super) byte_len: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(super) struct GitHubImportProgressState {
+    pub(super) completed_files: usize,
+    pub(super) total_files: usize,
+    pub(super) completed_bytes: u64,
+    pub(super) total_bytes: u64,
+}
+
+pub(super) fn collect_snapshot_source_files(
+    snapshot: &GitHubRepoSnapshot,
+    source_path: &str,
+) -> Result<Vec<SnapshotSourceFile>, String> {
+    let mut files = snapshot
+        .files
+        .iter()
+        .filter_map(|(path, bytes)| {
+            let relative_path = if source_path == "." {
+                if path.contains('/') {
+                    return None;
+                }
+                path.clone()
+            } else {
+                let prefix = format!("{}/", source_path.trim_matches('/'));
+                let relative = path.strip_prefix(&prefix)?;
+                if relative.is_empty() {
+                    return None;
+                }
+                relative.to_string()
+            };
+
+            Some(SnapshotSourceFile {
+                repo_path: path.clone(),
+                relative_path,
+                byte_len: bytes.len(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    files.sort_by(|left, right| left.repo_path.cmp(&right.repo_path));
+
+    if files.is_empty() {
+        return Err(format!(
+            "Repository path '{}' is no longer available in the archive.",
+            source_path
+        ));
+    }
+
+    Ok(files)
+}
+
+pub(super) fn write_snapshot_source_to_target(
+    snapshot: &GitHubRepoSnapshot,
+    files: &[SnapshotSourceFile],
+    target_dir: &Path,
+    source_path: &str,
+    progress_state: &mut GitHubImportProgressState,
+    app: Option<&AppHandle>,
+) -> Result<(), String> {
+    std::fs::create_dir_all(target_dir)
+        .map_err(|e| format!("Failed to create import target directory: {}", e))?;
+
+    for file in files {
+        if !is_safe_repo_relative_path(&file.relative_path) {
+            return Err(format!(
+                "Repository contains an unsupported path '{}'.",
+                file.repo_path
+            ));
+        }
+
+        let bytes = snapshot.files.get(&file.repo_path).ok_or_else(|| {
+            format!(
+                "Repository file '{}' is no longer available in the archive.",
+                file.repo_path
+            )
+        })?;
+
+        let destination = target_dir.join(&file.relative_path);
+        let parent = destination
+            .parent()
+            .ok_or_else(|| "Failed to determine imported file parent directory.".to_string())?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create imported file parent directory: {}", e))?;
+        std::fs::write(&destination, bytes).map_err(|e| {
+            format!(
+                "Failed to write imported file '{}': {}",
+                destination.display(),
+                e
+            )
+        })?;
+
+        progress_state.completed_files += 1;
+        progress_state.completed_bytes += file.byte_len as u64;
+        emit_github_import_progress(
+            app,
+            GitHubImportProgressPayload {
+                phase: GitHubImportProgressPhase::Writing,
+                current_skill: Some(source_path.to_string()),
+                current_path: Some(file.relative_path.clone()),
+                completed_files: progress_state.completed_files,
+                total_files: progress_state.total_files,
+                completed_bytes: progress_state.completed_bytes,
+                total_bytes: progress_state.total_bytes,
+            },
+        );
+    }
+
+    Ok(())
+}
+
+pub(super) fn emit_github_import_progress(
+    app: Option<&AppHandle>,
+    payload: GitHubImportProgressPayload,
+) {
+    if let Some(app) = app {
+        let _ = app.emit("github-import:progress", payload);
+    }
+}

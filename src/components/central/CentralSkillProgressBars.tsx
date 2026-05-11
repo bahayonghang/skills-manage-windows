@@ -2,6 +2,7 @@ import { AlertTriangle, Check, Download, Eye, Wand2, X } from "lucide-react";
 import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
+import { formatBackendError } from "@/lib/backendError";
 import { cn } from "@/lib/utils";
 import type { AiTagJob, CentralSkillUpdateJob } from "@/types";
 
@@ -62,7 +63,7 @@ export function AiTagProgressBar({
         />
       </div>
       {aiTagJob.error && (
-        <p className="mt-2 text-xs text-destructive">{aiTagJob.error}</p>
+        <p className="mt-2 text-xs text-destructive">{formatBackendError(aiTagJob.error, t)}</p>
       )}
     </div>
   );

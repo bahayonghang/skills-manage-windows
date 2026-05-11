@@ -1,3 +1,4 @@
+use super::*;
 pub struct TargetRegistry {
     pools: Mutex<HashMap<String, DbPool>>,
     session_passwords: Mutex<HashMap<String, String>>,
@@ -16,7 +17,7 @@ impl Default for TargetRegistry {
 
 impl TargetRegistry {
     #[cfg(test)]
-    fn with_credential_backend(credential_backend: Arc<dyn CredentialBackend>) -> Self {
+    pub(super) fn with_credential_backend(credential_backend: Arc<dyn CredentialBackend>) -> Self {
         Self {
             pools: Mutex::new(HashMap::new()),
             session_passwords: Mutex::new(HashMap::new()),
@@ -24,14 +25,21 @@ impl TargetRegistry {
         }
     }
 
-    fn get_session_password(&self, credential_key: &str) -> Option<String> {
-        self.session_passwords
-            .lock()
-            .ok()
-            .and_then(|passwords| passwords.get(credential_key).cloned())
+    pub(super) fn get_session_password(&self, credential_key: &str) -> Option<String> {
+        match self.session_passwords.lock() {
+            Ok(passwords) => passwords.get(credential_key).cloned(),
+            Err(error) => {
+                tracing::warn!(error = %error, "SSH session password cache lock is poisoned during read");
+                None
+            }
+        }
     }
 
-    fn set_session_password(&self, credential_key: &str, password: &str) -> Result<(), String> {
+    pub(super) fn set_session_password(
+        &self,
+        credential_key: &str,
+        password: &str,
+    ) -> Result<(), String> {
         self.session_passwords
             .lock()
             .map_err(|_| "Failed to update SSH password session cache.".to_string())?
@@ -39,13 +47,18 @@ impl TargetRegistry {
         Ok(())
     }
 
-    fn clear_session_password(&self, credential_key: &str) {
-        if let Ok(mut passwords) = self.session_passwords.lock() {
-            passwords.remove(credential_key);
+    pub(super) fn clear_session_password(&self, credential_key: &str) {
+        match self.session_passwords.lock() {
+            Ok(mut passwords) => {
+                passwords.remove(credential_key);
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "SSH session password cache lock is poisoned during clear");
+            }
         }
     }
 
-    fn target_credential_state(
+    pub(super) fn target_credential_state(
         &self,
         target: &RemoteTargetConfig,
     ) -> Option<TargetCredentialState> {
@@ -143,7 +156,7 @@ impl TargetRegistry {
         }
     }
 
-    fn attach_available_password(&self, target: &mut RemoteTargetConfig) {
+    pub(super) fn attach_available_password(&self, target: &mut RemoteTargetConfig) {
         if target.auth_method != SshAuthMethod::Password
             || target
                 .password
@@ -171,7 +184,7 @@ impl TargetRegistry {
         }
     }
 
-    fn save_target_password(
+    pub(super) fn save_target_password(
         &self,
         target: &mut RemoteTargetConfig,
     ) -> Result<TargetCredentialState, String> {
@@ -232,7 +245,10 @@ impl TargetRegistry {
         }
     }
 
-    fn delete_target_password(&self, target: &mut RemoteTargetConfig) -> Result<(), String> {
+    pub(super) fn delete_target_password(
+        &self,
+        target: &mut RemoteTargetConfig,
+    ) -> Result<(), String> {
         let Some(credential_key) = credential_key_for_password_target(target) else {
             return Ok(());
         };
@@ -243,7 +259,11 @@ impl TargetRegistry {
             .map_err(|error| error.message())
     }
 
-    fn target_summary(&self, target: &RemoteTargetConfig, active_id: &str) -> TargetSummary {
+    pub(super) fn target_summary(
+        &self,
+        target: &RemoteTargetConfig,
+        active_id: &str,
+    ) -> TargetSummary {
         let credential_state = self.target_credential_state(target);
         TargetSummary {
             id: target.id.clone(),
@@ -328,9 +348,14 @@ impl TargetRegistry {
     }
 
     pub async fn remote_db(&self, target: &RemoteTargetConfig) -> Result<DbPool, String> {
-        if let Ok(pools) = self.pools.lock() {
-            if let Some(pool) = pools.get(&target.id) {
-                return Ok(pool.clone());
+        match self.pools.lock() {
+            Ok(pools) => {
+                if let Some(pool) = pools.get(&target.id) {
+                    return Ok(pool.clone());
+                }
+            }
+            Err(error) => {
+                tracing::warn!(target_id = %target.id, error = %error, "SSH remote DB pool cache lock is poisoned during lookup");
             }
         }
 
@@ -349,17 +374,26 @@ impl TargetRegistry {
         let pool = db::create_pool(&db_path).await?;
         db::init_database_for_remote_home(&pool, &target.remote_home).await?;
 
-        if let Ok(mut pools) = self.pools.lock() {
-            pools.insert(target.id.clone(), pool.clone());
+        match self.pools.lock() {
+            Ok(mut pools) => {
+                pools.insert(target.id.clone(), pool.clone());
+            }
+            Err(error) => {
+                tracing::warn!(target_id = %target.id, error = %error, "SSH remote DB pool cache lock is poisoned during insert");
+            }
         }
 
         Ok(pool)
     }
 
-    fn drop_remote_pool(&self, target_id: &str) {
-        if let Ok(mut pools) = self.pools.lock() {
-            pools.remove(target_id);
+    pub(super) fn drop_remote_pool(&self, target_id: &str) {
+        match self.pools.lock() {
+            Ok(mut pools) => {
+                pools.remove(target_id);
+            }
+            Err(error) => {
+                tracing::warn!(target_id = %target_id, error = %error, "SSH remote DB pool cache lock is poisoned during drop");
+            }
         }
     }
 }
-

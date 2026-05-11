@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) async fn download_repo_snapshot(
     client: &reqwest::Client,
     repo: &GitHubRepoRef,
@@ -7,7 +8,7 @@ pub(crate) async fn download_repo_snapshot(
     snapshot_from_repository_archive(&archive)
 }
 
-async fn download_repository_archive(
+pub(super) async fn download_repository_archive(
     client: &reqwest::Client,
     repo: &GitHubRepoRef,
     auth_token: Option<&str>,
@@ -55,7 +56,9 @@ async fn download_repository_archive(
         .map_err(|e| format!("Failed to read GitHub repository archive: {}", e))
 }
 
-fn snapshot_from_repository_archive(archive_bytes: &[u8]) -> Result<GitHubRepoSnapshot, String> {
+pub(super) fn snapshot_from_repository_archive(
+    archive_bytes: &[u8],
+) -> Result<GitHubRepoSnapshot, String> {
     let cursor = Cursor::new(archive_bytes);
     let decoder = GzDecoder::new(cursor);
     let mut archive = tar::Archive::new(decoder);
@@ -86,7 +89,7 @@ fn snapshot_from_repository_archive(archive_bytes: &[u8]) -> Result<GitHubRepoSn
     Ok(GitHubRepoSnapshot { files })
 }
 
-fn relative_archive_path<R: Read>(entry: &tar::Entry<'_, R>) -> Result<String, String> {
+pub(super) fn relative_archive_path<R: Read>(entry: &tar::Entry<'_, R>) -> Result<String, String> {
     let archive_path = entry
         .path()
         .map_err(|e| format!("Failed to inspect GitHub repository archive: {}", e))?;
@@ -113,4 +116,3 @@ fn relative_archive_path<R: Read>(entry: &tar::Entry<'_, R>) -> Result<String, S
 
     Ok(joined)
 }
-

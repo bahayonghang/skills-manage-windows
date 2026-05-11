@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauriRuntime } from "@/lib/tauri";
 import {
+  GitHubPatState,
   GitHubPatTestResult,
   ScanDirectory,
 } from "@/types";
@@ -19,10 +20,10 @@ interface SettingsState extends AiSettingsSlice {
   scanDirectories: ScanDirectory[];
   isLoadingScanDirs: boolean;
   error: string | null;
-  githubPat: string;
   isLoadingGitHubPat: boolean;
   isSavingGitHubPat: boolean;
   isTestingGitHubPat: boolean;
+  githubPatState: GitHubPatState;
   githubPatTestResult: GitHubPatTestResult | null;
 
   loadScanDirectories: () => Promise<void>;
@@ -38,15 +39,41 @@ interface SettingsState extends AiSettingsSlice {
   clearError: () => void;
 }
 
+
+const BROWSER_FIXTURE_SCAN_DIRECTORIES: ScanDirectory[] = [
+  {
+    id: 1,
+    path: "~/.agents/skills/",
+    label: "Central Skills",
+    is_active: true,
+    is_builtin: true,
+    added_at: "2026-01-01T00:00:00Z",
+  },
+];
+
+const BROWSER_FIXTURE_GITHUB_PAT_STATE: GitHubPatState = {
+  configured: false,
+  storageState: "missing",
+  error: null,
+};
+
+const BROWSER_FIXTURE_GITHUB_PAT_TEST_RESULT: GitHubPatTestResult = {
+  configured: false,
+  ok: false,
+  status: null,
+  messageKey: "settings.githubPatMissing",
+  message: "GitHub PAT is not configured in the browser fixture.",
+};
+
 export function createSettingsStoreInitialState(): Pick<
   SettingsState,
   | "scanDirectories"
   | "isLoadingScanDirs"
   | "error"
-  | "githubPat"
   | "isLoadingGitHubPat"
   | "isSavingGitHubPat"
   | "isTestingGitHubPat"
+  | "githubPatState"
   | "githubPatTestResult"
 > &
   ReturnType<typeof createAiSettingsInitialState> {
@@ -54,10 +81,14 @@ export function createSettingsStoreInitialState(): Pick<
     scanDirectories: [],
     isLoadingScanDirs: false,
     error: null,
-    githubPat: "",
     isLoadingGitHubPat: false,
     isSavingGitHubPat: false,
     isTestingGitHubPat: false,
+    githubPatState: {
+      configured: false,
+      storageState: "missing",
+      error: null,
+    },
     githubPatTestResult: null,
     ...createAiSettingsInitialState(),
   };
@@ -69,6 +100,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadScanDirectories: async () => {
     set({ isLoadingScanDirs: true, error: null });
+    if (!isTauriRuntime()) {
+      set({
+        scanDirectories: BROWSER_FIXTURE_SCAN_DIRECTORIES,
+        isLoadingScanDirs: false,
+      });
+      return;
+    }
     try {
       const dirs = await invoke<ScanDirectory[]>("get_scan_directories");
       set({ scanDirectories: dirs, isLoadingScanDirs: false });
@@ -78,6 +116,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   addScanDirectory: async (path: string, label?: string) => {
+    if (!isTauriRuntime()) {
+      const dir: ScanDirectory = {
+        id: Date.now(),
+        path,
+        label: label || undefined,
+        is_active: true,
+        is_builtin: false,
+        added_at: new Date(0).toISOString(),
+      };
+      set((state) => ({
+        scanDirectories: [...state.scanDirectories, dir],
+      }));
+      return dir;
+    }
     const dir = await invoke<ScanDirectory>("add_scan_directory", {
       path,
       label: label || null,
@@ -89,6 +141,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   removeScanDirectory: async (path: string) => {
+    if (!isTauriRuntime()) {
+      set((state) => ({
+        scanDirectories: state.scanDirectories.filter((dir) => dir.path !== path),
+      }));
+      return;
+    }
     await invoke<void>("remove_scan_directory", { path });
     set((state) => ({
       scanDirectories: state.scanDirectories.filter((dir) => dir.path !== path),
@@ -96,6 +154,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   toggleScanDirectory: async (path: string, active: boolean) => {
+    if (!isTauriRuntime()) {
+      set((state) => ({
+        scanDirectories: state.scanDirectories.map((dir) =>
+          dir.path === path ? { ...dir, is_active: active } : dir
+        ),
+      }));
+      return;
+    }
     await invoke<void>("set_scan_directory_active", { path, isActive: active });
     set((state) => ({
       scanDirectories: state.scanDirectories.map((dir) =>
@@ -106,10 +172,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadGitHubPat: async () => {
     set({ isLoadingGitHubPat: true, error: null });
-    try {
-      const value = await invoke<string | null>("get_github_pat");
+    if (!isTauriRuntime()) {
       set({
-        githubPat: value ?? "",
+        githubPatState: BROWSER_FIXTURE_GITHUB_PAT_STATE,
+        isLoadingGitHubPat: false,
+      });
+      return;
+    }
+    try {
+      const state = await invoke<GitHubPatState>("get_github_pat");
+      set({
+        githubPatState: state,
         isLoadingGitHubPat: false,
       });
     } catch (err) {
@@ -122,10 +195,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   saveGitHubPat: async (value: string) => {
     set({ isSavingGitHubPat: true, error: null });
-    try {
-      await invoke("set_github_pat", { value });
+    if (!isTauriRuntime()) {
       set({
-        githubPat: value.trim(),
+        githubPatState: value.trim()
+          ? { configured: true, storageState: "session", error: null }
+          : BROWSER_FIXTURE_GITHUB_PAT_STATE,
+        isSavingGitHubPat: false,
+        githubPatTestResult: null,
+      });
+      return;
+    }
+    try {
+      const state = await invoke<GitHubPatState>("set_github_pat", { value });
+      set({
+        githubPatState: state,
         isSavingGitHubPat: false,
         githubPatTestResult: null,
       });
@@ -140,10 +223,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   clearGitHubPat: async () => {
     set({ isSavingGitHubPat: true, error: null });
-    try {
-      await invoke("clear_github_pat");
+    if (!isTauriRuntime()) {
       set({
-        githubPat: "",
+        githubPatState: BROWSER_FIXTURE_GITHUB_PAT_STATE,
+        isSavingGitHubPat: false,
+        githubPatTestResult: null,
+      });
+      return;
+    }
+    try {
+      const state = await invoke<GitHubPatState>("clear_github_pat");
+      set({
+        githubPatState: state,
         isSavingGitHubPat: false,
         githubPatTestResult: null,
       });
@@ -158,6 +249,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   testGitHubPat: async () => {
     set({ isTestingGitHubPat: true, error: null, githubPatTestResult: null });
+    if (!isTauriRuntime()) {
+      set({
+        githubPatTestResult: BROWSER_FIXTURE_GITHUB_PAT_TEST_RESULT,
+        isTestingGitHubPat: false,
+      });
+      return BROWSER_FIXTURE_GITHUB_PAT_TEST_RESULT;
+    }
     try {
       const result = await invoke<GitHubPatTestResult>("test_github_pat");
       set({

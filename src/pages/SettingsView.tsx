@@ -29,7 +29,6 @@ import {
   getNextAiProviderPatch,
   getNormalizedPlatformVisibilityQuery,
   getPlatformVisibilityGroups,
-  isGitHubPatDirty,
   isPlatformVisibilitySearchActive,
   resolveSettingsDbPath,
 } from "@/pages/settingsViewModel";
@@ -49,7 +48,7 @@ export function SettingsView() {
     addCustomAgent,
     updateCustomAgent,
     removeCustomAgent,
-    githubPat,
+    githubPatState,
     isLoadingGitHubPat,
     isSavingGitHubPat,
     isTestingGitHubPat,
@@ -58,6 +57,7 @@ export function SettingsView() {
     clearGitHubPat,
     testGitHubPat,
     aiSettings,
+    aiApiKeyState,
     aiSettingsLoaded,
     isLoadingAiSettings,
     aiSaveStatus,
@@ -66,6 +66,7 @@ export function SettingsView() {
     aiTestResult,
     loadAiSettings,
     updateAiSettings,
+    clearAiApiKey,
     testAiConnection,
     agents,
     categoryVisibility,
@@ -120,6 +121,7 @@ export function SettingsView() {
   const [githubPatMessage, setGitHubPatMessage] = useState<{
     type: "success" | "error";
     text: string;
+    detail?: string | null;
   } | null>(null);
   const [sshTargetForm, setSshTargetForm] =
     useState<SshTargetFormState>(EMPTY_SSH_TARGET_FORM);
@@ -153,8 +155,8 @@ export function SettingsView() {
   }, [loadScanDirectories, loadGitHubPat, loadTargets]);
 
   useEffect(() => {
-    setGitHubPatInput(githubPat);
-  }, [githubPat]);
+    setGitHubPatInput("");
+  }, [githubPatState.configured]);
 
   const normalizedPlatformVisibilityQuery = useMemo(
     () => getNormalizedPlatformVisibilityQuery(platformVisibilityQuery),
@@ -174,11 +176,6 @@ export function SettingsView() {
       }),
     [agents, categoryVisibility, normalizedPlatformVisibilityQuery, t]
   );
-  const githubPatDirty = useMemo(
-    () => isGitHubPatDirty(githubPatInput, githubPat),
-    [githubPatInput, githubPat]
-  );
-
   function handleProviderChange(id: string) {
     updateAiSettings(getNextAiProviderPatch(id, AI_PROVIDERS, aiSettings));
   }
@@ -333,10 +330,9 @@ export function SettingsView() {
         />
 
         <GitHubPatSettingsSection
-          githubPat={githubPat}
+          githubPatState={githubPatState}
           githubPatInput={githubPatInput}
           githubPatMessage={githubPatMessage}
-          isGitHubPatDirty={githubPatDirty}
           isLoadingGitHubPat={isLoadingGitHubPat}
           isSavingGitHubPat={isSavingGitHubPat}
           isTestingGitHubPat={isTestingGitHubPat}
@@ -355,6 +351,7 @@ export function SettingsView() {
         <AiSettingsSection
           aiSaveError={aiSaveError}
           aiSaveStatus={aiSaveStatus}
+          aiApiKeyState={aiApiKeyState}
           aiSettings={aiSettings}
           aiTestResult={aiTestResult}
           aiTesting={aiTesting}
@@ -362,6 +359,9 @@ export function SettingsView() {
           lang={lang}
           resolvedUrl={resolvedUrl}
           showAiTestDetails={showAiTestDetails}
+          onClearApiKey={() => {
+            void clearAiApiKey();
+          }}
           onProviderChange={handleProviderChange}
           onSetShowAiTestDetails={setShowAiTestDetails}
           onTestConnection={async () => {
