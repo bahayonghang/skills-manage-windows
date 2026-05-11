@@ -25,6 +25,24 @@ pub(super) mod tests {
         format!("---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n")
     }
 
+    fn planning_with_files_like_skill() -> String {
+        r#"---
+name: planning-with-files-zh
+description: Plan with task_plan.md, findings.md, and progress.md files.
+hooks:
+  UserPromptSubmit:
+    - hooks:
+        - type: command
+          command: "echo '---BEGIN PLAN DATA---'"
+metadata:
+  version: "1.0.0"
+---
+
+# planning-with-files-zh
+"#
+        .to_string()
+    }
+
     fn repo_snapshot(files: &[(&str, String)]) -> GitHubRepoSnapshot {
         GitHubRepoSnapshot {
             files: files
@@ -234,6 +252,36 @@ pub(super) mod tests {
         let parsed = parse_frontmatter(&sample_frontmatter("alpha", "desc")).expect("fm");
         assert_eq!(parsed.name, "alpha");
         assert_eq!(parsed.description.as_deref(), Some("desc"));
+    }
+
+    #[test]
+    fn parse_frontmatter_allows_quoted_triple_dash_commands() {
+        let parsed = parse_frontmatter(&planning_with_files_like_skill()).expect("frontmatter");
+
+        assert_eq!(parsed.name, "planning-with-files-zh");
+        assert_eq!(
+            parsed.description.as_deref(),
+            Some("Plan with task_plan.md, findings.md, and progress.md files.")
+        );
+    }
+
+    #[test]
+    fn parse_frontmatter_accepts_crlf_delimiters() {
+        let content =
+            "---\r\nname: crlf-skill\r\ndescription: CRLF frontmatter\r\n---\r\n# Body\r\n";
+
+        let parsed = parse_frontmatter(content).expect("frontmatter");
+
+        assert_eq!(parsed.name, "crlf-skill");
+        assert_eq!(parsed.description.as_deref(), Some("CRLF frontmatter"));
+    }
+
+    #[test]
+    fn parse_frontmatter_requires_independent_closing_delimiter() {
+        let content =
+            "---\nname: missing-close\ndescription: inline --- is not a closing delimiter\n";
+
+        assert!(parse_frontmatter(content).is_none());
     }
 
     #[test]
@@ -935,6 +983,34 @@ pub(super) mod tests {
         assert!(candidates
             .iter()
             .all(|candidate| candidate.source_path.starts_with("content/skills/")));
+    }
+
+    #[test]
+    fn repo_skill_candidate_accepts_planning_with_files_style_frontmatter() {
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/skills".to_string(),
+        };
+        let snapshot = repo_snapshot(&[(
+            "skills/planning-with-files-zh/SKILL.md",
+            planning_with_files_like_skill(),
+        )]);
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot_at_path(&repo, &snapshot, Some("skills"))
+                .expect("candidates");
+
+        assert_eq!(candidates.len(), 1);
+        let candidate = &candidates[0];
+        assert_eq!(candidate.source_path, "skills/planning-with-files-zh");
+        assert_eq!(candidate.skill_id, "planning-with-files-zh");
+        assert_eq!(candidate.skill_name, "planning-with-files-zh");
+        assert_eq!(
+            candidate.description.as_deref(),
+            Some("Plan with task_plan.md, findings.md, and progress.md files.")
+        );
     }
 
     #[test]
