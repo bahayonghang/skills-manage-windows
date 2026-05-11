@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
+import { ProjectPathPicker } from "@/components/central/ProjectPathPicker";
 import { AgentWithStatus, BatchInstallResult, SkillWithLinks } from "@/types";
 import { useTargetStore } from "@/stores/targetStore";
 import {
@@ -237,10 +237,11 @@ export function InstallDialog({
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 {t("central.batchInstallProjectPath")}
               </label>
-              <Input
+              <ProjectPathPicker
                 value={projectPath}
-                onChange={(event) => setProjectPath(event.target.value)}
-                placeholder={t("central.batchInstallProjectPathPlaceholder")}
+                onChange={setProjectPath}
+                onError={setError}
+                disabled={isLoading}
               />
             </div>
           )}

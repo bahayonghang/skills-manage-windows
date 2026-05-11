@@ -14,9 +14,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
 import type { InstallMethod } from "@/components/central/InstallDialog";
+import { ProjectPathPicker } from "@/components/central/ProjectPathPicker";
 import { AgentWithStatus, CentralBatchInstallResult } from "@/types";
 import { useTargetStore } from "@/stores/targetStore";
 import {
@@ -197,10 +197,11 @@ export function BatchInstallCentralSkillsDialog({
               <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {t("central.batchInstallProjectPath")}
               </label>
-              <Input
+              <ProjectPathPicker
                 value={projectPath}
-                onChange={(event) => setProjectPath(event.target.value)}
-                placeholder={t("central.batchInstallProjectPathPlaceholder")}
+                onChange={setProjectPath}
+                onError={setError}
+                disabled={isInstalling}
               />
             </div>
           )}

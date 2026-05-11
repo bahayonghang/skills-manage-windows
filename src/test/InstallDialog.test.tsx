@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: vi.fn(),
+}));
+
 import { InstallDialog } from "../components/central/InstallDialog";
 import { AgentWithStatus, SkillWithLinks, TargetSummary } from "../types";
 import { getPlatformTargetGroups } from "../lib/platformTargetGroups";
 import { useTargetStore } from "../stores/targetStore";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -116,6 +122,7 @@ function renderDialog(props: {
 describe("InstallDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(openDialog).mockResolvedValue(null);
     mockOnInstall.mockResolvedValue(successInstallResult);
     useTargetStore.setState({
       targets: [localTarget],
@@ -368,6 +375,66 @@ describe("InstallDialog", () => {
         "D:\\work\\demo"
       );
     });
+  });
+
+  it("fills project path from the folder picker and submits it", async () => {
+    vi.mocked(openDialog).mockResolvedValueOnce("D:\\picked\\project");
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+    fireEvent.click(screen.getByRole("button", { name: "选择项目文件夹" }));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("D:\\Projects\\example 或 /Users/me/project"))
+        .toHaveValue("D:\\picked\\project")
+    );
+
+    fireEvent.click(screen.getByRole("button", {
+      name: /安装到 .* 个平台/i,
+    }));
+
+    await waitFor(() => {
+      expect(mockOnInstall).toHaveBeenCalledWith(
+        "frontend-design",
+        expect.any(Array),
+        "copy",
+        "D:\\picked\\project"
+      );
+    });
+    expect(openDialog).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+      defaultPath: undefined,
+      canCreateDirectories: true,
+    });
+  });
+
+  it("keeps manual project path when the folder picker is cancelled", async () => {
+    vi.mocked(openDialog).mockResolvedValueOnce(null);
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+    const input = screen.getByPlaceholderText("D:\\Projects\\example 或 /Users/me/project");
+    fireEvent.change(input, {
+      target: { value: "D:\\manual\\project" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "选择项目文件夹" }));
+
+    await waitFor(() => expect(openDialog).toHaveBeenCalled());
+    expect(input).toHaveValue("D:\\manual\\project");
+  });
+
+  it("shows a folder picker error without submitting install", async () => {
+    vi.mocked(openDialog).mockRejectedValueOnce(new Error("Dialog denied"));
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+    fireEvent.click(screen.getByRole("button", { name: "选择项目文件夹" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "无法选择项目文件夹：Error: Dialog denied"
+    );
+    expect(mockOnInstall).not.toHaveBeenCalled();
   });
 
   it("defaults to symlink for remote targets that support symlinks", async () => {
