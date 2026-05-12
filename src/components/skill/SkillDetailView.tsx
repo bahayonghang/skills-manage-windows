@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { Bot, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CentralUpdateConfirmDialog } from "@/components/central/CentralUpdateConfirmDialog";
 import { CollectionPickerDialog } from "@/components/collection/CollectionPickerDialog";
 import { SkillDetailPreview } from "@/components/skill/SkillDetailPreview";
 import { SkillDetailSidebar } from "@/components/skill/SkillDetailSidebar";
@@ -30,7 +31,11 @@ import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { useTargetStore } from "@/stores/targetStore";
-import type { SkillDetailRequest, SkillInstallation } from "@/types";
+import type {
+  CentralSkillUpdateState,
+  SkillDetailRequest,
+  SkillInstallation,
+} from "@/types";
 import type { DiscoverMetadata, PreviewTab } from "@/components/skill/skillDetailViewTypes";
 
 export type { DiscoverMetadata } from "@/components/skill/skillDetailViewTypes";
@@ -157,6 +162,8 @@ export function SkillDetailView({
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState("");
   const [selectedTagId, setSelectedTagId] = useState("");
+  const [isUpdateConfirmOpen, setIsUpdateConfirmOpen] = useState(false);
+  const [pendingUpdateStates, setPendingUpdateStates] = useState<CentralSkillUpdateState[]>([]);
   const addToCollectionButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -331,7 +338,14 @@ export function SkillDetailView({
       return;
     }
     try {
-      await checkSkillUpdates([skillId]);
+      const states = await checkSkillUpdates([skillId]);
+      const updatableStates = states.filter(
+        (state) => state.status === "update_available"
+      );
+      if (updatableStates.length > 0) {
+        setPendingUpdateStates(updatableStates);
+        setIsUpdateConfirmOpen(true);
+      }
       toast.success(t("central.updateCheckOneFinished"));
     } catch (err) {
       toast.error(t("central.updateCheckError", { error: String(err) }));
@@ -342,8 +356,16 @@ export function SkillDetailView({
     if (!skillId || updateStatus?.status !== "update_available") {
       return;
     }
+    setPendingUpdateStates([updateStatus]);
+    setIsUpdateConfirmOpen(true);
+  }, [skillId, updateStatus]);
+
+  const handleConfirmUpdateSkill = useCallback(async (skillIds: string[]) => {
+    if (skillIds.length === 0) {
+      return;
+    }
     try {
-      const result = await updateSkills([skillId]);
+      const result = await updateSkills(skillIds);
       if (result.succeeded.length > 0 && detailRequest) {
         await loadDetail(detailRequest);
       }
@@ -354,10 +376,13 @@ export function SkillDetailView({
           skipped: result.skipped.length,
         })
       );
+      setIsUpdateConfirmOpen(false);
+      setPendingUpdateStates([]);
     } catch (err) {
       toast.error(t("central.updateError", { error: String(err) }));
+      throw err;
     }
-  }, [detailRequest, loadDetail, skillId, t, updateSkills, updateStatus?.status]);
+  }, [detailRequest, loadDetail, t, updateSkills]);
 
   const handleGenerateExplanation = useCallback(() => {
     if (isFileMode && content) {
@@ -542,6 +567,20 @@ export function SkillDetailView({
           onAdded={handleCollectionAdded}
         />
       )}
+
+      <CentralUpdateConfirmDialog
+        open={isUpdateConfirmOpen}
+        onOpenChange={(open) => {
+          setIsUpdateConfirmOpen(open);
+          if (!open) {
+            setPendingUpdateStates([]);
+          }
+        }}
+        states={pendingUpdateStates}
+        skills={detail ? [detail] : []}
+        isApplying={isUpdatingThisSkill}
+        onConfirm={handleConfirmUpdateSkill}
+      />
     </div>
   );
 }

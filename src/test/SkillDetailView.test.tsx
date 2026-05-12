@@ -377,6 +377,25 @@ const updateStatusCases: Array<{
   },
 ];
 
+function makeUpdateAvailableState(
+  overrides: Partial<CentralSkillUpdateState> = {}
+): CentralSkillUpdateState {
+  return {
+    skill_id: "frontend-design",
+    source_type: "github",
+    source_url: "https://github.com/openai/skills",
+    ref: "main",
+    source_path: "skills/frontend-design",
+    last_remote_hash: "fnv1a64:old",
+    latest_remote_hash: "fnv1a64:new",
+    last_checked_at: "2026-04-29T01:23:45Z",
+    last_updated_at: null,
+    status: "update_available",
+    error: null,
+    ...overrides,
+  };
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("SkillDetailView", () => {
@@ -502,6 +521,54 @@ describe("SkillDetailView", () => {
     if (expectedError) {
       expect(card).toHaveTextContent(expectedError);
     }
+  });
+
+  it("opens an update confirmation dialog after detail check finds an update", async () => {
+    const updateState = makeUpdateAvailableState();
+    mockCheckSkillUpdates.mockResolvedValueOnce([updateState]);
+    renderView();
+
+    const actions = screen.getByTestId("detail-update-actions");
+    fireEvent.click(within(actions).getByRole("button", { name: "检查" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("确认更新技能")).toBeInTheDocument();
+    expect(within(dialog).getByText("frontend-design")).toBeInTheDocument();
+    expect(mockUpdateSkills).not.toHaveBeenCalled();
+  });
+
+  it("confirms detail skill updates before applying and reloads detail on success", async () => {
+    const updateState = makeUpdateAvailableState();
+    useCentralSkillsStore.setState({
+      updateStatuses: {
+        "frontend-design": updateState,
+      },
+    });
+    mockUpdateSkills.mockResolvedValueOnce({
+      succeeded: ["frontend-design"],
+      failed: [],
+      skipped: [],
+      states: [{ ...updateState, status: "up_to_date" }],
+    });
+    renderView();
+    mockLoadDetail.mockClear();
+
+    const actions = screen.getByTestId("detail-update-actions");
+    fireEvent.click(within(actions).getByRole("button", { name: "更新" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("confirm-central-skill-updates"));
+
+    await waitFor(() => {
+      expect(mockUpdateSkills).toHaveBeenCalledWith(["frontend-design"]);
+    });
+    await waitFor(() => {
+      expect(mockLoadDetail).toHaveBeenCalledWith({
+        skillId: "frontend-design",
+        agentId: undefined,
+        rowId: undefined,
+      });
+    });
   });
 
   it("stacks repository and tag management into vertical field groups", () => {
