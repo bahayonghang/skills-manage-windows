@@ -37,6 +37,7 @@ Thumbs.db
 .omx/
 .omc/
 .factory/
+.kiro/
 
 # planning with files
 task_plan.md
@@ -44,3 +45,4 @@ findings.md
 progress.md
 
 ref/
+
