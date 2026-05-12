@@ -8,7 +8,7 @@ import {
   Store,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { SkillDetailPanelShell } from "@/components/skill/SkillDetailPanelShell";
+import { SkillDetailModalShell } from "@/components/skill/SkillDetailModalShell";
 import { Button } from "@/components/ui/button";
 import { isTauriRuntime } from "@/lib/tauri";
 import { MarketplaceSkillDetailContent } from "./MarketplaceSkillDetailContent";
@@ -59,11 +59,25 @@ export function MarketplaceSkillDetailDrawer({
   });
 
   return (
-    <SkillDetailPanelShell
+    <SkillDetailModalShell
       open={open}
       onOpenChange={onOpenChange}
       returnFocusRef={returnFocusRef}
       titleId={titleId}
+      headerActions={
+        skill ? (
+          <Button onClick={onInstall} disabled={isInstalling || skill.installed} size="sm">
+            {isInstalling ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : skill.installed ? (
+              <CheckCircle2 className="size-3.5" />
+            ) : (
+              <FileText className="size-3.5" />
+            )}
+            <span>{skill.installed ? t("marketplace.installed") : t("marketplace.install")}</span>
+          </Button>
+        ) : undefined
+      }
     >
       {skill ? (
         <div className="flex h-full flex-col">
@@ -174,6 +188,6 @@ export function MarketplaceSkillDetailDrawer({
           </div>
         </div>
       ) : null}
-    </SkillDetailPanelShell>
+    </SkillDetailModalShell>
   );
 }

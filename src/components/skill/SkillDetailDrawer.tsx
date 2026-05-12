@@ -1,6 +1,8 @@
 import { RefObject, useEffect, useId, useRef } from "react";
 import { SkillDetailView, type DiscoverMetadata } from "@/components/skill/SkillDetailView";
-import { SkillDetailPanelShell } from "@/components/skill/SkillDetailPanelShell";
+import { SkillDetailModalShell } from "@/components/skill/SkillDetailModalShell";
+import { ModalInstallButton } from "@/components/skill/ModalInstallButton";
+import { useSkillDetailStore } from "@/stores/skillDetailStore";
 
 export interface SkillDetailDrawerProps {
   open: boolean;
@@ -28,6 +30,7 @@ export function SkillDetailDrawer({
   const titleId = useId();
   const showContent = open && (skillId !== null || filePath != null);
   const lastReturnFocusRef = useRef<RefObject<HTMLElement | null> | null>(null);
+  const isReadOnly = useSkillDetailStore((s) => s.detail?.is_read_only ?? false);
 
   useEffect(() => {
     if (returnFocusRef) {
@@ -36,7 +39,7 @@ export function SkillDetailDrawer({
   }, [returnFocusRef]);
 
   return (
-    <SkillDetailPanelShell
+    <SkillDetailModalShell
       open={open}
       onOpenChange={onOpenChange}
       returnFocusRef={{
@@ -46,6 +49,11 @@ export function SkillDetailDrawer({
           null,
       }}
       titleId={showContent ? titleId : undefined}
+      headerActions={
+        showContent && !isReadOnly && skillId
+          ? <ModalInstallButton skillId={skillId} />
+          : undefined
+      }
     >
       {showContent
         ? (
@@ -62,6 +70,6 @@ export function SkillDetailDrawer({
           />
         )
         : null}
-    </SkillDetailPanelShell>
+    </SkillDetailModalShell>
   );
 }

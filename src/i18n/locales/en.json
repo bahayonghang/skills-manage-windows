@@ -848,6 +848,7 @@
     "showDetails": "Show details",
     "fallbackTried": "The alternative endpoint was also unreachable.",
     "installTo": "Install to {{name}}",
+    "installSkillAriaLabel": "Install {{name}}",
     "uninstallFrom": "Uninstall from {{name}}",
     "metadataRegion": "Skill metadata",
     "metadataManagement": "Classification management",

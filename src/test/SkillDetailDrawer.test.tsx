@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { usePlatformStore } from "@/stores/platformStore";
+import { useTargetStore } from "@/stores/targetStore";
 import type { AgentWithStatus, SkillDetail as SkillDetailType } from "@/types";
 
 vi.mock("@/stores/skillDetailStore", () => ({
@@ -13,6 +14,10 @@ vi.mock("@/stores/skillDetailStore", () => ({
 
 vi.mock("@/stores/platformStore", () => ({
   usePlatformStore: vi.fn(),
+}));
+
+vi.mock("@/stores/targetStore", () => ({
+  useTargetStore: vi.fn(),
 }));
 
 vi.mock("@/components/collection/CollectionPickerDialog", () => ({
@@ -102,6 +107,14 @@ function applyStoreMocks(detailOverrides = {}, platformOverrides = {}) {
     if (typeof selector === "function") return selector(state);
     return state;
   });
+
+  vi.mocked(useTargetStore).mockImplementation((selector?: unknown) => {
+    const state = {
+      activeTarget: { id: "local", kind: "local", label: "Local", isActive: true },
+    };
+    if (typeof selector === "function") return selector(state);
+    return state;
+  });
 }
 
 function TestHarness({
@@ -177,26 +190,26 @@ describe("SkillDetailDrawer", () => {
   it("renders a dialog with overlay and close button when open", async () => {
     render(<TestHarness />);
 
-    const drawer = await screen.findByTestId("skill-detail-drawer");
+    const drawer = await screen.findByTestId("skill-detail-modal");
     expect(drawer).toHaveAttribute("role", "dialog");
     expect(drawer).toHaveAttribute("aria-modal", "true");
-    expect(screen.getByTestId("skill-detail-drawer-overlay")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /close/i })).toBeInTheDocument();
+    expect(screen.getByTestId("skill-detail-modal-overlay")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /关闭/i })).toBeInTheDocument();
   });
 
   it("does not render drawer contents when closed", () => {
     render(<TestHarness initialOpen={false} />);
-    expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
+    expect(screen.queryByTestId("skill-detail-modal")).toBeNull();
   });
 
   it("closes via close button and restores focus to returnFocusRef", async () => {
     render(<TestHarness />);
 
-    const closeButton = await screen.findByRole("button", { name: /close/i });
+    const closeButton = await screen.findByRole("button", { name: /关闭/i });
     fireEvent.click(closeButton);
 
     await waitFor(() => {
-      expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
+      expect(screen.queryByTestId("skill-detail-modal")).toBeNull();
     });
     expect(screen.getByRole("button", { name: /open drawer/i })).toHaveFocus();
     expect(mockReset).toHaveBeenCalled();
@@ -207,11 +220,11 @@ describe("SkillDetailDrawer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /open drawer/i }));
 
-    const closeButton = await screen.findByRole("button", { name: /close/i });
+    const closeButton = await screen.findByRole("button", { name: /关闭/i });
     fireEvent.click(closeButton);
 
     await waitFor(() => {
-      expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
+      expect(screen.queryByTestId("skill-detail-modal")).toBeNull();
     });
 
     expect(screen.getByRole("button", { name: /open drawer/i })).toHaveFocus();
@@ -220,34 +233,34 @@ describe("SkillDetailDrawer", () => {
   it("closes on Escape key", async () => {
     render(<TestHarness />);
 
-    const drawer = await screen.findByTestId("skill-detail-drawer");
+    const drawer = await screen.findByTestId("skill-detail-modal");
     fireEvent.keyDown(drawer, { key: "Escape" });
 
     await waitFor(() => {
-      expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
+      expect(screen.queryByTestId("skill-detail-modal")).toBeNull();
     });
   });
 
   it("closes on overlay click", async () => {
     render(<TestHarness />);
 
-    fireEvent.click(await screen.findByTestId("skill-detail-drawer-overlay"));
+    fireEvent.click(await screen.findByTestId("skill-detail-modal-overlay"));
 
     await waitFor(() => {
-      expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
+      expect(screen.queryByTestId("skill-detail-modal")).toBeNull();
     });
   });
 
   it("fully unmounts the shared overlay after close", async () => {
     render(<TestHarness />);
 
-    expect(await screen.findByTestId("skill-detail-drawer-overlay")).toBeInTheDocument();
+    expect(await screen.findByTestId("skill-detail-modal-overlay")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /close/i }));
+    fireEvent.click(screen.getByRole("button", { name: /关闭/i }));
 
     await waitFor(() => {
-      expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
-      expect(screen.queryByTestId("skill-detail-drawer-overlay")).toBeNull();
+      expect(screen.queryByTestId("skill-detail-modal")).toBeNull();
+      expect(screen.queryByTestId("skill-detail-modal-overlay")).toBeNull();
       expect(document.querySelector("[data-base-ui-inert]")).toBeNull();
     });
   });
@@ -255,9 +268,9 @@ describe("SkillDetailDrawer", () => {
   it("removes panel and overlay together when closed from the shell", async () => {
     render(<TestHarness />);
 
-    const closeButton = await screen.findByRole("button", { name: /close/i });
-    const overlay = screen.getByTestId("skill-detail-drawer-overlay");
-    const drawer = screen.getByTestId("skill-detail-drawer");
+    const closeButton = await screen.findByRole("button", { name: /关闭/i });
+    const overlay = screen.getByTestId("skill-detail-modal-overlay");
+    const drawer = screen.getByTestId("skill-detail-modal");
 
     expect(overlay).toBeInTheDocument();
     expect(drawer).toBeInTheDocument();
@@ -265,38 +278,32 @@ describe("SkillDetailDrawer", () => {
     fireEvent.click(closeButton);
 
     await waitFor(() => {
-      expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
-      expect(screen.queryByTestId("skill-detail-drawer-overlay")).toBeNull();
+      expect(screen.queryByTestId("skill-detail-modal")).toBeNull();
+      expect(screen.queryByTestId("skill-detail-modal-overlay")).toBeNull();
     });
   });
 
   it("wires aria-labelledby to the SkillDetailView heading", async () => {
     render(<TestHarness />);
 
-    const drawer = await screen.findByTestId("skill-detail-drawer");
+    const drawer = await screen.findByTestId("skill-detail-modal");
     const heading = screen.getByRole("heading", { name: /frontend-design/i });
     expect(drawer).toHaveAttribute("aria-labelledby", heading.id);
   });
 
-  it("applies responsive drawer and sidebar class expectations", async () => {
+  it("applies responsive modal class expectations", async () => {
     render(<TestHarness />);
 
-    const drawer = await screen.findByTestId("skill-detail-drawer");
-    const layout = screen.getByTestId("skill-detail-two-column-layout");
-    const sidebar = screen.getByTestId("skill-detail-right-sidebar");
+    const modal = await screen.findByTestId("skill-detail-modal");
 
-    expect(drawer.className).toContain("w-screen");
-    expect(drawer.className).toContain("md:w-[min(900px,90vw)]");
-    expect(layout.className).toContain("flex-col");
-    expect(layout.className).toContain("lg:flex-row");
-    expect(layout.className).not.toContain("md:flex-row");
-    expect(sidebar.className).toContain("border-t");
-    expect(sidebar.className).toContain("overflow-x-hidden");
-    expect(sidebar.className).toContain("lg:w-72");
-    expect(sidebar.className).toContain("xl:w-80");
-    expect(sidebar.className).toContain("lg:border-l");
-    expect(sidebar.className).toContain("lg:border-t-0");
-    expect(sidebar.className).not.toContain("md:w-64");
+    // SkillDetailModalShell uses centered modal classes
+    expect(modal.className).toContain("fixed");
+    expect(modal.className).toContain("top-1/2");
+    expect(modal.className).toContain("left-1/2");
+    expect(modal.className).toContain("w-[min(90vw,var(--modal-max-w))]");
+    expect(modal.className).toContain("lg:w-[min(70vw,var(--modal-max-w))]");
+    expect(modal.className).toContain("sm:max-lg:w-[85vw]");
+    expect(modal.className).toContain("max-sm:w-[95vw]");
   });
 
   it("does not unmount the parent container during open/close", async () => {
@@ -305,13 +312,54 @@ describe("SkillDetailDrawer", () => {
     const parent = screen.getByTestId("parent-shell");
     const initialNode = parent;
 
-    fireEvent.click(await screen.findByRole("button", { name: /close/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /关闭/i }));
 
     await waitFor(() => {
-      expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
+      expect(screen.queryByTestId("skill-detail-modal")).toBeNull();
     });
 
     expect(screen.getByTestId("parent-shell")).toBe(initialNode);
     expect(screen.getByTestId("parent-shell")).toHaveAttribute("data-render-count", "2");
+  });
+});
+
+describe("SkillDetailDrawer – modal shell integration", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    applyStoreMocks();
+  });
+
+  it("renders SkillDetailModalShell (not SkillDetailPanelShell)", async () => {
+    render(<TestHarness />);
+
+    // SkillDetailModalShell uses data-testid="skill-detail-modal"
+    const modal = await screen.findByTestId("skill-detail-modal");
+    expect(modal).toBeInTheDocument();
+    expect(modal).toHaveAttribute("role", "dialog");
+    expect(modal).toHaveAttribute("aria-modal", "true");
+
+    // The old SkillDetailPanelShell used data-testid="skill-detail-drawer" — should NOT be present
+    expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
+  });
+
+  it("renders ModalInstallButton in header when skill is not read-only", async () => {
+    applyStoreMocks({ detail: { ...mockDetail, is_read_only: false } });
+    render(<TestHarness />);
+
+    await screen.findByTestId("skill-detail-modal");
+
+    // ModalInstallButton renders a button with aria-label "安装 {name}"
+    const installButton = screen.getByRole("button", { name: /安装 frontend-design/i });
+    expect(installButton).toBeInTheDocument();
+  });
+
+  it("does not render ModalInstallButton when skill is read-only", async () => {
+    applyStoreMocks({ detail: { ...mockDetail, is_read_only: true } });
+    render(<TestHarness />);
+
+    await screen.findByTestId("skill-detail-modal");
+
+    // ModalInstallButton should not render when is_read_only is true
+    expect(screen.queryByRole("button", { name: /安装/i })).toBeNull();
   });
 });

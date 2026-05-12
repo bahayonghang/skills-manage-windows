@@ -848,6 +848,7 @@
     "showDetails": "查看详情",
     "fallbackTried": "备用端点也无法访问。",
     "installTo": "安装到 {{name}}",
+    "installSkillAriaLabel": "安装 {{name}}",
     "uninstallFrom": "从 {{name}} 卸载",
     "metadataRegion": "技能基本信息",
     "metadataManagement": "归类管理",
