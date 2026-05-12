@@ -12,6 +12,7 @@ import { CommandPaletteV2 } from "@/components/central/v2/CommandPaletteV2";
 import { useFeatureFlag } from "@/lib/featureFlags";
 import { useCentralViewStateUrl } from "@/hooks/useCentralViewStateUrl";
 import { useCentralSkillsActions } from "@/pages/centralSkillsActions";
+import { getCentralSkillsCheckButtonState } from "@/pages/centralSkillsCheckButton";
 import { useCentralSkillsViewModelV2 } from "@/pages/centralSkillsViewModelV2";
 import { addUniqueToCentralViewState, useCentralV2SavedViewsBridge } from "@/pages/centralV2SavedViewsBridge";
 import { useCentralV2TagGroupsBridge } from "@/pages/centralV2TagGroupsBridge";
@@ -188,6 +189,7 @@ export function CentralSkillsView() {
     updateStatuses,
     state: v2ViewState,
   });
+  const currentViewSkills = v2Enabled ? v2.sortedSkills : sortedSkills;
 
   // ─── Saved Views (M2) ────────────────────────────────────────
   const savedViewsBridge = useCentralV2SavedViewsBridge({
@@ -229,39 +231,18 @@ export function CentralSkillsView() {
     updateJob.status === "completed" ||
     updateJob.status === "failed" ||
     updateJob.status === "cancelled";
-  const repositoryFilterName = useMemo(() => {
-    if (repositoryFilter === "all") return null;
-    return repositories.find((repo) => repo.id === repositoryFilter)?.name ?? null;
-  }, [repositoryFilter, repositories]);
-  const repositorySkillIds = useMemo(() => {
-    if (repositoryFilter === "all") return [];
-    return sortedSkills
-      .filter((skill) => (skill.repository?.id ?? null) === repositoryFilter)
-      .map((skill) => skill.id);
-  }, [repositoryFilter, sortedSkills]);
-  const checkButtonScope: "selected" | "repository" | "all" =
-    selectedSkillIds.length > 0
-      ? "selected"
-      : repositoryFilter !== "all"
-        ? "repository"
-        : "all";
-  const checkButtonTargetSkillIds =
-    checkButtonScope === "selected"
-      ? selectedSkillIds
-      : checkButtonScope === "repository"
-        ? repositorySkillIds
-        : sortedSkills.map((skill) => skill.id);
-  const checkButtonScopedSkillIds: string[] | undefined =
-    checkButtonScope === "all" ? undefined : checkButtonTargetSkillIds;
-  const checkButtonLabel =
-    checkButtonScope === "selected"
-      ? t("central.checkUpdatesSelected", { count: checkButtonTargetSkillIds.length })
-      : checkButtonScope === "repository"
-        ? t("central.checkUpdatesRepository", {
-            repo: repositoryFilterName ?? "",
-            count: checkButtonTargetSkillIds.length,
-          })
-        : t("central.checkUpdatesAll", { count: skills.length });
+  const checkButtonState = getCentralSkillsCheckButtonState({
+    currentViewSkills,
+    repositories,
+    repositoryFilter,
+    selectedSkillIds,
+    sortedSkills,
+    t,
+    totalSkillCount: skills.length,
+    v2Enabled,
+    v2HasCurrentFilters:
+      v2ViewState.repos.length > 0 || v2ViewState.tags.length > 0 || v2.isSearchActive,
+  });
   const shouldShowUpdateProgress =
     updateJob.status !== "idle" &&
     (!isUpdateProgressDismissible || dismissedUpdateProgressKey !== updateProgressKey);
@@ -424,7 +405,7 @@ export function CentralSkillsView() {
       repositoryDeleteTarget,
       repositoryFilter,
       selectedSkillIds,
-      sortedSkills,
+      currentViewSkills,
     },
     setters: {
       setBatchDeletePreview,
@@ -627,7 +608,7 @@ export function CentralSkillsView() {
     manualSelectedTagIds,
     manualTagQuery,
     selectedSkillCount: selectedSkillIds.length,
-    sortedSkillCount: sortedSkills.length,
+    sortedSkillCount: currentViewSkills.length,
     startCategorizeSidebarResize,
     handleCategorizeSidebarResizeKeyDown,
     onAcceptReview: (review: Parameters<typeof handleAcceptReview>[0]) => {
@@ -672,14 +653,14 @@ export function CentralSkillsView() {
   };
 
   const checkButtonProps = {
-    label: checkButtonLabel,
+    label: checkButtonState.label,
     disabled:
       isCheckingUpdates ||
       updateJob.status === "running" ||
       updateJob.status === "cancelling" ||
-      checkButtonTargetSkillIds.length === 0,
+      checkButtonState.targetSkillIds.length === 0,
     onClick: () => {
-      void handleCheckUpdates(checkButtonScopedSkillIds);
+      void handleCheckUpdates(checkButtonState.scopedSkillIds);
     },
   };
 

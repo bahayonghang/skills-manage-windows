@@ -562,6 +562,7 @@
     "checkUpdatesFirst": "Check updates first",
     "checkUpdatesAll": "Check all ({{count}})",
     "checkUpdatesSelected": "Check selected ({{count}})",
+    "checkUpdatesCurrentResults": "Check current results ({{count}})",
     "checkUpdatesRepository": "Check {{repo}} ({{count}})",
     "cancelUpdateJob": "Cancel update check",
     "cancellingUpdateJob": "Cancelling…",

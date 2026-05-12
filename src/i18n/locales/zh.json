@@ -562,6 +562,7 @@
     "checkUpdatesFirst": "请先检查更新",
     "checkUpdatesAll": "检查全部（{{count}}）",
     "checkUpdatesSelected": "检查所选（{{count}}）",
+    "checkUpdatesCurrentResults": "检查当前结果（{{count}}）",
     "checkUpdatesRepository": "检查 {{repo}}（{{count}}）",
     "cancelUpdateJob": "中断更新检查",
     "cancellingUpdateJob": "中断中…",

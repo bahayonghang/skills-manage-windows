@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter } from "react-router-dom";
 import type { AgentWithStatus, CentralSkillUpdateState, SkillWithLinks, TargetSummary } from "../types";
 import * as S from "./centralSkillsViewTestSupport";
+import { setFeatureFlag } from "../lib/featureFlags";
 
 const {
   CentralSkillsView,
@@ -506,6 +507,68 @@ describe("CentralSkillsView", () => {
 
     await waitFor(() => {
       expect(mockCheckSkillUpdates).toHaveBeenCalled();
+    });
+  });
+
+  it("V2 selects only the current repository results for batch check updates", async () => {
+    setFeatureFlag("central.newLayout", true);
+    window.history.replaceState(null, "", "/");
+    const githubRepo = mockRepositories[1]!;
+    const localRepo = mockRepositories[0]!;
+    const skills: SkillWithLinks[] = [
+      { ...mockSkills[0]!, id: "github-one", name: "github-one", repository: githubRepo },
+      { ...mockSkills[0]!, id: "github-two", name: "github-two", repository: githubRepo },
+      { ...mockSkills[1]!, id: "local-one", name: "local-one", repository: localRepo },
+      { ...mockSkills[1]!, id: "local-two", name: "local-two", repository: localRepo },
+    ];
+
+    renderCentralSkillsView({
+      centralOverrides: { skills },
+    });
+
+    fireEvent.click(screen.getByTestId(`repo-${githubRepo.id}`));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "检查当前结果（2）" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "选择当前结果" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "检查所选（2）" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "检查所选（2）" }));
+
+    await waitFor(() => {
+      expect(mockCheckSkillUpdates).toHaveBeenCalledWith(["github-one", "github-two"]);
+    });
+  });
+
+  it("V2 checks current filtered results when nothing is manually selected", async () => {
+    setFeatureFlag("central.newLayout", true);
+    window.history.replaceState(null, "", "/");
+    const githubRepo = mockRepositories[1]!;
+    const localRepo = mockRepositories[0]!;
+    const skills: SkillWithLinks[] = [
+      { ...mockSkills[0]!, id: "github-one", name: "github-one", repository: githubRepo },
+      { ...mockSkills[0]!, id: "github-two", name: "github-two", repository: githubRepo },
+      { ...mockSkills[1]!, id: "local-one", name: "local-one", repository: localRepo },
+    ];
+
+    renderCentralSkillsView({
+      centralOverrides: { skills },
+    });
+
+    fireEvent.click(screen.getByTestId(`repo-${githubRepo.id}`));
+
+    const checkCurrentResults = await screen.findByRole("button", {
+      name: "检查当前结果（2）",
+    });
+    fireEvent.click(checkCurrentResults);
+
+    await waitFor(() => {
+      expect(mockCheckSkillUpdates).toHaveBeenCalledWith(["github-one", "github-two"]);
     });
   });
 });

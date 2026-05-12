@@ -30,7 +30,7 @@ export interface CentralSkillsActionsState {
   repositoryDeleteTarget: SkillRepositoryWithStats | null;
   repositoryFilter: string;
   selectedSkillIds: string[];
-  sortedSkills: SkillWithLinks[];
+  currentViewSkills: SkillWithLinks[];
 }
 
 export interface CentralSkillsActionsSetters {
@@ -97,7 +97,7 @@ export function useCentralSkillsActions({
     repositoryDeleteTarget,
     repositoryFilter,
     selectedSkillIds,
-    sortedSkills,
+    currentViewSkills,
   } = state;
   const {
     setBatchDeletePreview,
@@ -271,12 +271,12 @@ export function useCentralSkillsActions({
   }
 
   function handleSelectCurrentFilter() {
-    setSelectedSkillIds(sortedSkills.map((skill) => skill.id));
+    setSelectedSkillIds(currentViewSkills.map((skill) => skill.id));
   }
 
   function handleSelectUncategorized() {
     setSelectedSkillIds(
-      sortedSkills
+      currentViewSkills
         .filter((skill) => {
           const skillTags = skill.tags ?? [];
           return skillTags.length === 0 || skillTags.some((tag) => tag.id === "uncategorized");
