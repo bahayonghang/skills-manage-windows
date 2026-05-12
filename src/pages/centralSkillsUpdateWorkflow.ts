@@ -13,9 +13,12 @@ import type {
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
 export interface CentralSkillsUpdateWorkflowSetters {
+  setIsUpdateConfirmDialogOpen: StateSetter<boolean>;
   setIsRemoteMissingDialogOpen: StateSetter<boolean>;
   setIsRemoteMissingPreviewLoading: StateSetter<boolean>;
   setIsResolvingRemoteMissing: StateSetter<boolean>;
+  setPendingUpdateStates: StateSetter<CentralSkillUpdateState[]>;
+  setQueuedRemoteMissingStates: StateSetter<CentralSkillUpdateState[]>;
   setRemoteMissingError: StateSetter<string | null>;
   setRemoteMissingPreview: StateSetter<BatchDeleteCentralSkillPreviewResult | null>;
   setRemoteMissingStates: StateSetter<CentralSkillUpdateState[]>;
@@ -24,11 +27,15 @@ export interface CentralSkillsUpdateWorkflowSetters {
 
 export interface CentralSkillsUpdateWorkflowDeps {
   t: TFunction;
+  state: {
+    queuedRemoteMissingStates: CentralSkillUpdateState[];
+  };
   setters: CentralSkillsUpdateWorkflowSetters;
 }
 
 export function useCentralSkillsUpdateWorkflow({
   t,
+  state,
   setters,
 }: CentralSkillsUpdateWorkflowDeps) {
   const cancelCentralUpdates = useCentralSkillsStore((store) => store.cancelCentralUpdates);
@@ -36,18 +43,66 @@ export function useCentralSkillsUpdateWorkflow({
   const deleteCentralSkills = useCentralSkillsStore((store) => store.deleteCentralSkills);
   const keepRemoteMissingSkills = useCentralSkillsStore((store) => store.keepRemoteMissingSkills);
   const loadBatchDeletePreview = useCentralSkillsStore((store) => store.loadBatchDeletePreview);
+  const updateStatuses = useCentralSkillsStore((store) => store.updateStatuses);
   const updateSkills = useCentralSkillsStore((store) => store.updateSkills);
   const refreshCounts = usePlatformStore((store) => store.refreshCounts);
 
   const {
+    setIsUpdateConfirmDialogOpen,
     setIsRemoteMissingDialogOpen,
     setIsRemoteMissingPreviewLoading,
     setIsResolvingRemoteMissing,
+    setPendingUpdateStates,
+    setQueuedRemoteMissingStates,
     setRemoteMissingError,
     setRemoteMissingPreview,
     setRemoteMissingStates,
     setSelectedSkillIds,
   } = setters;
+
+  async function openRemoteMissingDialog(remoteMissing: CentralSkillUpdateState[]) {
+    if (remoteMissing.length === 0) {
+      return;
+    }
+    const missingSkillIds = remoteMissing.map((state) => state.skill_id);
+    setRemoteMissingStates(remoteMissing);
+    setRemoteMissingPreview(null);
+    setRemoteMissingError(null);
+    setIsRemoteMissingDialogOpen(true);
+    setIsRemoteMissingPreviewLoading(true);
+    try {
+      const preview = await loadBatchDeletePreview(missingSkillIds);
+      setRemoteMissingPreview(preview);
+    } catch (err) {
+      const message = String(err);
+      setRemoteMissingError(message);
+      toast.error(t("central.batchDeletePreviewError", { error: message }));
+    } finally {
+      setIsRemoteMissingPreviewLoading(false);
+    }
+  }
+
+  function openUpdateConfirmDialog(states: CentralSkillUpdateState[]) {
+    const updatableStates = states.filter((item) => item.status === "update_available");
+    if (updatableStates.length === 0) {
+      return;
+    }
+    setPendingUpdateStates(updatableStates);
+    setIsUpdateConfirmDialogOpen(true);
+  }
+
+  function handleUpdateConfirmDialogOpenChange(open: boolean) {
+    setIsUpdateConfirmDialogOpen(open);
+    if (open) {
+      return;
+    }
+    setPendingUpdateStates([]);
+    const queued = state.queuedRemoteMissingStates;
+    if (queued.length > 0) {
+      setQueuedRemoteMissingStates([]);
+      void openRemoteMissingDialog(queued);
+    }
+  }
 
   function handleRemoteMissingDialogOpenChange(open: boolean) {
     setIsRemoteMissingDialogOpen(open);
@@ -82,6 +137,9 @@ export function useCentralSkillsUpdateWorkflow({
         (state) => state.status === "remote_missing"
       );
       const failed = states.filter((state) => state.status === "error").length;
+      const availableStates = states.filter(
+        (state) => state.status === "update_available"
+      );
       toast.success(
         t("central.updateCheckFinished", {
           available,
@@ -91,29 +149,27 @@ export function useCentralSkillsUpdateWorkflow({
         })
       );
       if (remoteMissing.length > 0) {
-        const missingSkillIds = remoteMissing.map((state) => state.skill_id);
-        setRemoteMissingStates(remoteMissing);
-        setRemoteMissingPreview(null);
-        setRemoteMissingError(null);
-        setIsRemoteMissingDialogOpen(true);
-        setIsRemoteMissingPreviewLoading(true);
-        try {
-          const preview = await loadBatchDeletePreview(missingSkillIds);
-          setRemoteMissingPreview(preview);
-        } catch (err) {
-          const message = String(err);
-          setRemoteMissingError(message);
-          toast.error(t("central.batchDeletePreviewError", { error: message }));
-        } finally {
-          setIsRemoteMissingPreviewLoading(false);
+        if (availableStates.length > 0) {
+          setQueuedRemoteMissingStates(remoteMissing);
+        } else {
+          await openRemoteMissingDialog(remoteMissing);
         }
       }
+      openUpdateConfirmDialog(availableStates);
     } catch (err) {
       toast.error(t("central.updateCheckError", { error: String(err) }));
     }
   }
 
   async function handleUpdateSkills(skillIds: string[]) {
+    if (skillIds.length === 0) return;
+    const states = skillIds
+      .map((skillId) => updateStatuses[skillId])
+      .filter((state): state is CentralSkillUpdateState => state?.status === "update_available");
+    openUpdateConfirmDialog(states);
+  }
+
+  async function handleConfirmUpdateSkills(skillIds: string[]) {
     if (skillIds.length === 0) return;
     try {
       const result = await updateSkills(skillIds);
@@ -125,8 +181,10 @@ export function useCentralSkillsUpdateWorkflow({
           skipped: result.skipped.length,
         })
       );
+      handleUpdateConfirmDialogOpenChange(false);
     } catch (err) {
       toast.error(t("central.updateError", { error: String(err) }));
+      throw err;
     }
   }
 
@@ -184,6 +242,8 @@ export function useCentralSkillsUpdateWorkflow({
   return {
     handleCancelCentralUpdates,
     handleCheckUpdates,
+    handleConfirmUpdateSkills,
+    handleUpdateConfirmDialogOpenChange,
     handleRemoteMissingDialogOpenChange,
     handleResolveRemoteMissing,
     handleUpdateSkills,

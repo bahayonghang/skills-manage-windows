@@ -16,6 +16,7 @@ const {
   mockLoadBatchDeletePreview,
   mockDeleteCentralSkills,
   mockCheckSkillUpdates,
+  mockUpdateSkills,
   mockKeepRemoteMissingSkills,
   mockRescan,
   mockUseCentralSkillsStore,
@@ -507,6 +508,189 @@ describe("CentralSkillsView", () => {
 
     await waitFor(() => {
       expect(mockCheckSkillUpdates).toHaveBeenCalled();
+    });
+  });
+
+  it("opens an update confirmation dialog after check finds updateable skills", async () => {
+    const updateState: CentralSkillUpdateState = {
+      skill_id: "frontend-design",
+      source_type: "github",
+      source_url: "https://github.com/openai/skills",
+      ref: "main",
+      source_path: "skills/frontend-design",
+      last_remote_hash: "fnv1a64:old",
+      latest_remote_hash: "fnv1a64:new",
+      last_checked_at: "2026-04-29T01:23:45Z",
+      last_updated_at: null,
+      status: "update_available",
+      error: null,
+    };
+    mockCheckSkillUpdates.mockResolvedValueOnce([updateState]);
+    mockUpdateSkills.mockResolvedValueOnce({
+      succeeded: ["frontend-design"],
+      failed: [],
+      skipped: [],
+      states: [{ ...updateState, status: "up_to_date" }],
+    });
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByRole("button", { name: /检查/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("确认更新技能")).toBeInTheDocument();
+    expect(within(dialog).getByText("frontend-design")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByTestId("confirm-central-skill-updates"));
+
+    await waitFor(() => {
+      expect(mockUpdateSkills).toHaveBeenCalledWith(["frontend-design"]);
+    });
+  });
+
+  it("shows update confirmation before remote-missing cleanup when check returns both", async () => {
+    const updateState: CentralSkillUpdateState = {
+      skill_id: "frontend-design",
+      source_type: "github",
+      source_url: "https://github.com/openai/skills",
+      ref: "main",
+      source_path: "skills/frontend-design",
+      last_remote_hash: "fnv1a64:old",
+      latest_remote_hash: "fnv1a64:new",
+      last_checked_at: "2026-04-29T01:23:45Z",
+      last_updated_at: null,
+      status: "update_available",
+      error: null,
+    };
+    const remoteMissingState: CentralSkillUpdateState = {
+      skill_id: "code-reviewer",
+      source_type: "github",
+      source_url: "https://github.com/openai/skills",
+      ref: "main",
+      source_path: "skills/code-reviewer",
+      last_remote_hash: null,
+      latest_remote_hash: null,
+      last_checked_at: "2026-04-29T01:23:45Z",
+      last_updated_at: null,
+      status: "remote_missing",
+      error: "Skill source path 'skills/code-reviewer' no longer contains an importable skill.",
+    };
+    mockCheckSkillUpdates.mockResolvedValueOnce([updateState, remoteMissingState]);
+    mockUpdateSkills.mockResolvedValueOnce({
+      succeeded: ["frontend-design"],
+      failed: [],
+      skipped: [],
+      states: [{ ...updateState, status: "up_to_date" }],
+    });
+    mockLoadBatchDeletePreview.mockResolvedValueOnce({
+      previews: [
+        {
+          skill_id: "code-reviewer",
+          skill_name: "code-reviewer",
+          central_path: "~/.skillsmanage/skills/code-reviewer",
+          copy_installations: [],
+          auto_removed_agent_ids: [],
+        },
+      ],
+      failed: [],
+    });
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByRole("button", { name: /检查/i }));
+
+    const updateDialog = await screen.findByRole("dialog");
+    expect(within(updateDialog).getByText("确认更新技能")).toBeInTheDocument();
+    expect(within(updateDialog).getByText("frontend-design")).toBeInTheDocument();
+    expect(screen.queryByText("远端已删除的技能")).not.toBeInTheDocument();
+    expect(mockLoadBatchDeletePreview).not.toHaveBeenCalled();
+
+    fireEvent.click(within(updateDialog).getByTestId("confirm-central-skill-updates"));
+
+    await waitFor(() => {
+      expect(mockUpdateSkills).toHaveBeenCalledWith(["frontend-design"]);
+    });
+    await waitFor(() => {
+      expect(mockLoadBatchDeletePreview).toHaveBeenCalledWith(["code-reviewer"]);
+    });
+    expect(await screen.findByText("远端已删除的技能")).toBeInTheDocument();
+  });
+
+  it("routes single-card update actions through the same confirmation dialog", async () => {
+    const updateState: CentralSkillUpdateState = {
+      skill_id: "frontend-design",
+      source_type: "github",
+      source_url: "https://github.com/openai/skills",
+      ref: "main",
+      source_path: "skills/frontend-design",
+      last_remote_hash: "fnv1a64:old",
+      latest_remote_hash: "fnv1a64:new",
+      last_checked_at: "2026-04-29T01:23:45Z",
+      last_updated_at: null,
+      status: "update_available",
+      error: null,
+    };
+    mockUpdateSkills.mockResolvedValueOnce({
+      succeeded: ["frontend-design"],
+      failed: [],
+      skipped: [],
+      states: [{ ...updateState, status: "up_to_date" }],
+    });
+    renderCentralSkillsView({
+      centralOverrides: {
+        updateStatuses: {
+          "frontend-design": updateState,
+        },
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /从来源更新 frontend-design/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("确认更新技能")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByTestId("confirm-central-skill-updates"));
+
+    await waitFor(() => {
+      expect(mockUpdateSkills).toHaveBeenCalledWith(["frontend-design"]);
+    });
+  });
+
+  it("routes the update-all action through the confirmation dialog", async () => {
+    const updateState: CentralSkillUpdateState = {
+      skill_id: "frontend-design",
+      source_type: "github",
+      source_url: "https://github.com/openai/skills",
+      ref: "main",
+      source_path: "skills/frontend-design",
+      last_remote_hash: "fnv1a64:old",
+      latest_remote_hash: "fnv1a64:new",
+      last_checked_at: "2026-04-29T01:23:45Z",
+      last_updated_at: null,
+      status: "update_available",
+      error: null,
+    };
+    mockUpdateSkills.mockResolvedValueOnce({
+      succeeded: ["frontend-design"],
+      failed: [],
+      skipped: [],
+      states: [{ ...updateState, status: "up_to_date" }],
+    });
+    renderCentralSkillsView({
+      centralOverrides: {
+        updateStatuses: {
+          "frontend-design": updateState,
+        },
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "更新可用 (1)" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("确认更新技能")).toBeInTheDocument();
+    expect(within(dialog).getByText("frontend-design")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByTestId("confirm-central-skill-updates"));
+
+    await waitFor(() => {
+      expect(mockUpdateSkills).toHaveBeenCalledWith(["frontend-design"]);
     });
   });
 

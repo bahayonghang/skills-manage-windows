@@ -85,6 +85,9 @@ export function CentralSkillsView() {
   const [deletePreview, setDeletePreview] = useState<SkillDetail | null>(null);
   const [batchDeletePreview, setBatchDeletePreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
+  const [pendingUpdateStates, setPendingUpdateStates] = useState<CentralSkillUpdateState[]>([]);
+  const [queuedRemoteMissingStates, setQueuedRemoteMissingStates] =
+    useState<CentralSkillUpdateState[]>([]);
   const [remoteMissingStates, setRemoteMissingStates] = useState<CentralSkillUpdateState[]>([]);
   const [remoteMissingPreview, setRemoteMissingPreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
@@ -124,6 +127,7 @@ export function CentralSkillsView() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBatchInstallDialogOpen, setIsBatchInstallDialogOpen] = useState(false);
   const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
+  const [isUpdateConfirmDialogOpen, setIsUpdateConfirmDialogOpen] = useState(false);
   const [isRemoteMissingDialogOpen, setIsRemoteMissingDialogOpen] = useState(false);
   const [isRepositoryDeleteDialogOpen, setIsRepositoryDeleteDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
@@ -370,6 +374,7 @@ export function CentralSkillsView() {
     handleCancelAiTagJob,
     handleCancelCentralUpdates,
     handleCheckUpdates,
+    handleConfirmUpdateSkills,
     handleCreateManualTag,
     handleDeleteCentralSkill,
     handleDeleteClick,
@@ -383,6 +388,7 @@ export function CentralSkillsView() {
     handleOpenDrawer,
     handleRefresh,
     handleRemoteMissingDialogOpenChange,
+    handleUpdateConfirmDialogOpenChange,
     handleRepositoryDeleteClick,
     handleRepositoryDeleteDialogOpenChange,
     handleResolveRemoteMissing,
@@ -404,6 +410,7 @@ export function CentralSkillsView() {
       manualTagQuery,
       repositoryDeleteTarget,
       repositoryFilter,
+      queuedRemoteMissingStates,
       selectedSkillIds,
       currentViewSkills,
     },
@@ -426,8 +433,11 @@ export function CentralSkillsView() {
       setIsRepositoryDeleteDialogOpen,
       setIsRepositoryDeletePreviewLoading,
       setIsResolvingRemoteMissing,
+      setIsUpdateConfirmDialogOpen,
       setManualSelectedTagIds,
       setManualTagQuery,
+      setPendingUpdateStates,
+      setQueuedRemoteMissingStates,
       setRemoteMissingError,
       setRemoteMissingPreview,
       setRemoteMissingStates,
@@ -472,7 +482,10 @@ export function CentralSkillsView() {
         isRepositoryDeleteDialogOpen,
         isRepositoryDeletePreviewLoading,
         isResolvingRemoteMissing,
+        isUpdatingSkills: updatingSkillIds.length > 0,
+        isUpdateConfirmDialogOpen,
         loadCentralSkills,
+        pendingUpdateStates,
         previewSkillportStateImport,
         remoteMissingError,
         remoteMissingPreview,
@@ -481,6 +494,7 @@ export function CentralSkillsView() {
         repositoryDeletePreviewError,
         repositoryDeleteTarget,
         selectedSkillIds,
+        skills,
         setDrawerSkillId,
         setGithubRepoUrl: setGitHubRepoUrl,
         setIsBatchInstallDialogOpen,
@@ -517,7 +531,9 @@ export function CentralSkillsView() {
         onInstall: handleInstall,
         onInstallImportedSkill: handleInstallImportedSkill,
         onRefreshCounts: refreshCounts,
+        onConfirmUpdateSkills: handleConfirmUpdateSkills,
         onRemoteMissingDialogOpenChange: handleRemoteMissingDialogOpenChange,
+        onUpdateConfirmDialogOpenChange: handleUpdateConfirmDialogOpenChange,
         onRepositoryDeleteDialogOpenChange: handleRepositoryDeleteDialogOpenChange,
         onResetGitHubImport: resetGitHubImport,
         onResolveRemoteMissing: handleResolveRemoteMissing,

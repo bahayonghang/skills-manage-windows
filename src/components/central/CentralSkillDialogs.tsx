@@ -6,6 +6,7 @@ import { BatchInstallCentralSkillsDialog } from "@/components/central/BatchInsta
 import { DeleteCentralSkillDialog } from "@/components/central/DeleteCentralSkillDialog";
 import { InstallDialog, type InstallMethod } from "@/components/central/InstallDialog";
 import { RemoteMissingSkillsDialog } from "@/components/central/RemoteMissingSkillsDialog";
+import { CentralUpdateConfirmDialog } from "@/components/central/CentralUpdateConfirmDialog";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import type { GitHubRepoImportWizardProps } from "@/components/marketplace/githubImportWizardUtils";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
@@ -89,7 +90,10 @@ export function CentralSkillDialogs({
   isRepositoryDeleteDialogOpen,
   isRepositoryDeletePreviewLoading,
   isResolvingRemoteMissing,
+  isUpdatingSkills,
+  isUpdateConfirmDialogOpen,
   loadCentralSkills,
+  pendingUpdateStates,
   previewSkillportStateImport,
   remoteMissingError,
   remoteMissingPreview,
@@ -98,6 +102,7 @@ export function CentralSkillDialogs({
   repositoryDeletePreviewError,
   repositoryDeleteTarget,
   selectedSkillIds,
+  skills,
   setDrawerSkillId,
   setGithubRepoUrl,
   setIsBatchInstallDialogOpen,
@@ -123,7 +128,9 @@ export function CentralSkillDialogs({
   onInstall,
   onInstallImportedSkill,
   onRefreshCounts,
+  onConfirmUpdateSkills,
   onRemoteMissingDialogOpenChange,
+  onUpdateConfirmDialogOpenChange,
   onRepositoryDeleteDialogOpenChange,
   onResetGitHubImport,
   onResolveRemoteMissing,
@@ -162,7 +169,10 @@ export function CentralSkillDialogs({
   isRepositoryDeleteDialogOpen: boolean;
   isRepositoryDeletePreviewLoading: boolean;
   isResolvingRemoteMissing: boolean;
+  isUpdatingSkills: boolean;
+  isUpdateConfirmDialogOpen: boolean;
   loadCentralSkills: () => Promise<void>;
+  pendingUpdateStates: CentralSkillUpdateState[];
   previewSkillportStateImport: (json: string) => Promise<SkillportStateImportPreview>;
   remoteMissingError: string | null;
   remoteMissingPreview: BatchDeleteCentralSkillPreviewResult | null;
@@ -171,6 +181,7 @@ export function CentralSkillDialogs({
   repositoryDeletePreviewError: string | null;
   repositoryDeleteTarget: SkillRepositoryWithStats | null;
   selectedSkillIds: string[];
+  skills: SkillWithLinks[];
   setDrawerSkillId: (skillId: string | null) => void;
   setGithubRepoUrl: (url: string) => void;
   setIsBatchInstallDialogOpen: (open: boolean) => void;
@@ -214,7 +225,9 @@ export function CentralSkillDialogs({
     projectPath?: string | null
   ) => Promise<BatchInstallResult>;
   onRefreshCounts: () => Promise<void>;
+  onConfirmUpdateSkills: (skillIds: string[]) => Promise<void>;
   onRemoteMissingDialogOpenChange: (open: boolean) => void;
+  onUpdateConfirmDialogOpenChange: (open: boolean) => void;
   onRepositoryDeleteDialogOpenChange: (open: boolean) => void;
   onResetGitHubImport: () => void;
   onResolveRemoteMissing: (
@@ -275,6 +288,15 @@ export function CentralSkillDialogs({
         isApplying={isResolvingRemoteMissing || isDeleting}
         error={remoteMissingError}
         onConfirm={onResolveRemoteMissing}
+      />
+
+      <CentralUpdateConfirmDialog
+        open={isUpdateConfirmDialogOpen}
+        onOpenChange={onUpdateConfirmDialogOpenChange}
+        states={pendingUpdateStates}
+        skills={skills}
+        isApplying={isUpdatingSkills}
+        onConfirm={onConfirmUpdateSkills}
       />
 
       <BatchDeleteCentralSkillsDialog

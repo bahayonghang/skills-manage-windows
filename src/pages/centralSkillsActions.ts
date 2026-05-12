@@ -29,6 +29,7 @@ export interface CentralSkillsActionsState {
   manualTagQuery: string;
   repositoryDeleteTarget: SkillRepositoryWithStats | null;
   repositoryFilter: string;
+  queuedRemoteMissingStates: CentralSkillUpdateState[];
   selectedSkillIds: string[];
   currentViewSkills: SkillWithLinks[];
 }
@@ -52,8 +53,11 @@ export interface CentralSkillsActionsSetters {
   setIsRepositoryDeleteDialogOpen: StateSetter<boolean>;
   setIsRepositoryDeletePreviewLoading: StateSetter<boolean>;
   setIsResolvingRemoteMissing: StateSetter<boolean>;
+  setIsUpdateConfirmDialogOpen: StateSetter<boolean>;
   setManualSelectedTagIds: StateSetter<string[]>;
   setManualTagQuery: StateSetter<string>;
+  setPendingUpdateStates: StateSetter<CentralSkillUpdateState[]>;
+  setQueuedRemoteMissingStates: StateSetter<CentralSkillUpdateState[]>;
   setRemoteMissingError: StateSetter<string | null>;
   setRemoteMissingPreview: StateSetter<BatchDeleteCentralSkillPreviewResult | null>;
   setRemoteMissingStates: StateSetter<CentralSkillUpdateState[]>;
@@ -96,6 +100,7 @@ export function useCentralSkillsActions({
     manualTagQuery,
     repositoryDeleteTarget,
     repositoryFilter,
+    queuedRemoteMissingStates,
     selectedSkillIds,
     currentViewSkills,
   } = state;
@@ -118,8 +123,11 @@ export function useCentralSkillsActions({
     setIsRepositoryDeleteDialogOpen,
     setIsRepositoryDeletePreviewLoading,
     setIsResolvingRemoteMissing,
+    setIsUpdateConfirmDialogOpen,
     setManualSelectedTagIds,
     setManualTagQuery,
+    setPendingUpdateStates,
+    setQueuedRemoteMissingStates,
     setRemoteMissingError,
     setRemoteMissingPreview,
     setRemoteMissingStates,
@@ -160,10 +168,16 @@ export function useCentralSkillsActions({
 
   const updateWorkflow = useCentralSkillsUpdateWorkflow({
     t,
+    state: {
+      queuedRemoteMissingStates,
+    },
     setters: {
+      setIsUpdateConfirmDialogOpen,
       setIsRemoteMissingDialogOpen,
       setIsRemoteMissingPreviewLoading,
       setIsResolvingRemoteMissing,
+      setPendingUpdateStates,
+      setQueuedRemoteMissingStates,
       setRemoteMissingError,
       setRemoteMissingPreview,
       setRemoteMissingStates,
