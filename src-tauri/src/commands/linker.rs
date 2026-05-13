@@ -35,7 +35,8 @@ pub use crate::services::installation::{
     install_skill_to_agent_impl, install_skill_to_agent_ssh_impl, make_relative_path,
     symlink_target_path, uninstall_skill_from_agent_impl, uninstall_skill_from_agent_ssh_impl,
     uninstall_skill_from_agent_with_row_impl, BatchInstallResult, CentralBatchInstallFailure,
-    CentralBatchInstallResult, CentralBatchInstallSuccess, FailedInstall, InstallResult,
+    CentralBatchInstallResult, CentralBatchInstallSkipped, CentralBatchInstallSuccess,
+    FailedInstall, InstallResult, SkippedInstall,
 };
 
 /// Tauri command: install a skill to a single agent via relative symlink.
@@ -182,6 +183,7 @@ pub async fn batch_install_to_agents(
     let pool = state.active_db().await?;
     let started_at = Instant::now();
     let mut succeeded = Vec::new();
+    let mut skipped = Vec::new();
     let mut failed = Vec::new();
     if agent_ids.is_empty() {
         record_operation_log_best_effort(
@@ -199,12 +201,17 @@ pub async fn batch_install_to_agents(
                 "agentIds": agent_ids,
                 "method": method,
                 "succeeded": &succeeded,
+                "skipped": &skipped,
                 "failed": &failed,
             }))
             .duration_ms(started_at.elapsed().as_millis() as i64),
         )
         .await;
-        return Ok(BatchInstallResult { succeeded, failed });
+        return Ok(BatchInstallResult {
+            succeeded,
+            skipped,
+            failed,
+        });
     }
     let ssh_connection = match &active_target {
         ActiveTarget::Ssh(target) => match connect_ssh_target(target).await {
@@ -230,30 +237,40 @@ pub async fn batch_install_to_agents(
                         "agentIds": agent_ids,
                         "method": method,
                         "succeeded": &succeeded,
+                        "skipped": &skipped,
                         "failed": &failed,
                     }))
                     .duration_ms(started_at.elapsed().as_millis() as i64),
                 )
                 .await;
-                return Ok(BatchInstallResult { succeeded, failed });
+                return Ok(BatchInstallResult {
+                    succeeded,
+                    skipped,
+                    failed,
+                });
             }
         },
         ActiveTarget::Local => None,
     };
 
     for agent_id in &agent_ids {
-        let install_result = match &active_target {
-            ActiveTarget::Local => match method {
-                "copy" => {
-                    installation::install_skill_to_agent_copy_impl(&pool, &skill_id, agent_id).await
+        match &active_target {
+            ActiveTarget::Local => {
+                match installation::install_central_skill_to_agent_outcome_by_method(
+                    &pool, &skill_id, agent_id, method,
+                )
+                .await
+                {
+                    Ok(installation::InstallOutcome::Installed(_)) => {
+                        succeeded.push(agent_id.clone())
+                    }
+                    Ok(installation::InstallOutcome::Skipped(item)) => skipped.push(item),
+                    Err(e) => failed.push(FailedInstall {
+                        agent_id: agent_id.clone(),
+                        error: e,
+                    }),
                 }
-                "symlink" => {
-                    installation::install_skill_to_agent_impl(&pool, &skill_id, agent_id).await
-                }
-                _ => {
-                    installation::install_skill_to_agent_auto_impl(&pool, &skill_id, agent_id).await
-                }
-            },
+            }
             ActiveTarget::Ssh(target) => {
                 let remote_method = if method == "symlink" {
                     "symlink"
@@ -263,7 +280,7 @@ pub async fn batch_install_to_agents(
                 let connection = ssh_connection
                     .as_ref()
                     .ok_or_else(|| "SSH connection was not initialized".to_string())?;
-                installation::install_skill_to_agent_ssh_with_connection(
+                match installation::install_skill_to_agent_ssh_with_connection(
                     &pool,
                     connection,
                     target,
@@ -272,18 +289,18 @@ pub async fn batch_install_to_agents(
                     remote_method,
                 )
                 .await
+                {
+                    Ok(_) => succeeded.push(agent_id.clone()),
+                    Err(e) => failed.push(FailedInstall {
+                        agent_id: agent_id.clone(),
+                        error: e,
+                    }),
+                }
             }
-        };
-        match install_result {
-            Ok(_) => succeeded.push(agent_id.clone()),
-            Err(e) => failed.push(FailedInstall {
-                agent_id: agent_id.clone(),
-                error: e,
-            }),
         }
     }
 
-    let status = installation::batch_operation_status(succeeded.len(), failed.len());
+    let status = installation::batch_operation_status(succeeded.len(), skipped.len(), failed.len());
     record_operation_log_best_effort(
         &state.db,
         target_context,
@@ -304,13 +321,18 @@ pub async fn batch_install_to_agents(
             "agentIds": agent_ids,
             "method": method,
             "succeeded": &succeeded,
+            "skipped": &skipped,
             "failed": &failed,
         }))
         .duration_ms(started_at.elapsed().as_millis() as i64),
     )
     .await;
 
-    Ok(BatchInstallResult { succeeded, failed })
+    Ok(BatchInstallResult {
+        succeeded,
+        skipped,
+        failed,
+    })
 }
 
 /// Tauri command: install multiple Central skills to multiple platform or project targets.
@@ -358,6 +380,7 @@ pub async fn batch_install_central_skills(
             "copy"
         };
         let mut succeeded = Vec::new();
+        let skipped = Vec::new();
         let mut failed = Vec::new();
         let skill_ids = installation::dedupe_ordered(skill_ids);
         let agent_ids = installation::dedupe_ordered(agent_ids);
@@ -377,12 +400,17 @@ pub async fn batch_install_central_skills(
                     "agentIds": &agent_ids,
                     "method": method,
                     "succeeded": &succeeded,
+                    "skipped": &skipped,
                     "failed": &failed,
                 }))
                 .duration_ms(started_at.elapsed().as_millis() as i64),
             )
             .await;
-            return Ok(CentralBatchInstallResult { succeeded, failed });
+            return Ok(CentralBatchInstallResult {
+                succeeded,
+                skipped,
+                failed,
+            });
         }
         let connection = match connect_ssh_target(&target).await {
             Ok(connection) => connection,
@@ -412,12 +440,17 @@ pub async fn batch_install_central_skills(
                         "agentIds": &agent_ids,
                         "method": method,
                         "succeeded": &succeeded,
+                        "skipped": &skipped,
                         "failed": &failed,
                     }))
                     .duration_ms(started_at.elapsed().as_millis() as i64),
                 )
                 .await;
-                return Ok(CentralBatchInstallResult { succeeded, failed });
+                return Ok(CentralBatchInstallResult {
+                    succeeded,
+                    skipped,
+                    failed,
+                });
             }
         };
         for skill_id in skill_ids {
@@ -445,7 +478,8 @@ pub async fn batch_install_central_skills(
                 }
             }
         }
-        let status = installation::batch_operation_status(succeeded.len(), failed.len());
+        let status =
+            installation::batch_operation_status(succeeded.len(), skipped.len(), failed.len());
         record_operation_log_best_effort(
             &state.db,
             target_context,
@@ -464,12 +498,17 @@ pub async fn batch_install_central_skills(
                 "agentIds": &agent_ids,
                 "method": method,
                 "succeeded": &succeeded,
+                "skipped": &skipped,
                 "failed": &failed,
             }))
             .duration_ms(started_at.elapsed().as_millis() as i64),
         )
         .await;
-        return Ok(CentralBatchInstallResult { succeeded, failed });
+        return Ok(CentralBatchInstallResult {
+            succeeded,
+            skipped,
+            failed,
+        });
     }
 
     let project_path_buf = project_path
@@ -488,6 +527,7 @@ pub async fn batch_install_central_skills(
     .await;
     let status = installation::batch_operation_status(
         batch_result.succeeded.len(),
+        batch_result.skipped.len(),
         batch_result.failed.len(),
     );
     record_operation_log_best_effort(
@@ -499,7 +539,7 @@ pub async fn batch_install_central_skills(
             status,
             format!(
                 "Installed {} Central skill target(s), {} failed",
-                batch_result.succeeded.len(),
+                batch_result.succeeded.len() + batch_result.skipped.len(),
                 batch_result.failed.len()
             ),
         )
@@ -508,6 +548,7 @@ pub async fn batch_install_central_skills(
             "method": method,
             "projectPath": project_path_buf.as_ref().map(|path| path.display().to_string()),
             "succeeded": &batch_result.succeeded,
+            "skipped": &batch_result.skipped,
             "failed": &batch_result.failed,
         }))
         .duration_ms(started_at.elapsed().as_millis() as i64),

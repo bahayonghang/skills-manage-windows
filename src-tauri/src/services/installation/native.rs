@@ -10,7 +10,8 @@ use super::fs_util::{
     copy_dir_all_blocking, create_symlink, remove_symlink_path, run_blocking_fs,
     symlink_target_path,
 };
-use super::types::InstallResult;
+use super::skip::detect_existing_agent_install;
+use super::types::{InstallOutcome, InstallResult};
 
 /// Record a native installation: the agent's `global_skills_dir` is the same
 /// canonical root as Central, so no symlink/copy is needed — only a DB row.
@@ -59,6 +60,16 @@ pub async fn install_skill_to_agent_impl(
     skill_id: &str,
     agent_id: &str,
 ) -> Result<InstallResult, String> {
+    install_skill_to_agent_outcome_impl(pool, skill_id, agent_id)
+        .await
+        .map(InstallOutcome::into_install_result)
+}
+
+pub(crate) async fn install_skill_to_agent_outcome_impl(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+) -> Result<InstallOutcome, String> {
     // Guard: cannot install to the central agent itself.
     if agent_id == "central" {
         return Err("Cannot install a skill to the central agent itself".to_string());
@@ -80,7 +91,9 @@ pub async fn install_skill_to_agent_impl(
     ensure_centralized(pool, skill_id, &canonical_dir).await?;
 
     if agents_share_skills_dir(&agent, &central) {
-        return record_native_installation(pool, skill_id, agent_id, &canonical_dir).await;
+        return record_native_installation(pool, skill_id, agent_id, &canonical_dir)
+            .await
+            .map(InstallOutcome::Installed);
     }
 
     // 4. Compute symlink location.
@@ -94,6 +107,13 @@ pub async fn install_skill_to_agent_impl(
             .map_err(|e| format!("Failed to create agent skills directory: {}", e))
     })
     .await?;
+
+    if let Some(skipped) =
+        detect_existing_agent_install(pool, skill_id, agent_id, &symlink_path, &canonical_dir)
+            .await?
+    {
+        return Ok(InstallOutcome::Skipped(skipped));
+    }
 
     // 6. Handle any existing entry at the symlink path.
     ensure_replaceable_target(&symlink_path).await?;
@@ -119,9 +139,9 @@ pub async fn install_skill_to_agent_impl(
     };
     db::upsert_skill_installation(pool, &installation).await?;
 
-    Ok(InstallResult {
+    Ok(InstallOutcome::Installed(InstallResult {
         symlink_path: symlink_path.to_string_lossy().into_owned(),
-    })
+    }))
 }
 
 /// Try the symlink path; on Windows fall back to copy when the symlink call
@@ -131,10 +151,20 @@ pub async fn install_skill_to_agent_auto_impl(
     skill_id: &str,
     agent_id: &str,
 ) -> Result<InstallResult, String> {
-    match install_skill_to_agent_impl(pool, skill_id, agent_id).await {
+    install_skill_to_agent_auto_outcome_impl(pool, skill_id, agent_id)
+        .await
+        .map(InstallOutcome::into_install_result)
+}
+
+pub(crate) async fn install_skill_to_agent_auto_outcome_impl(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+) -> Result<InstallOutcome, String> {
+    match install_skill_to_agent_outcome_impl(pool, skill_id, agent_id).await {
         Ok(result) => Ok(result),
         Err(error) if should_fallback_to_copy(&error) => {
-            install_skill_to_agent_copy_impl(pool, skill_id, agent_id).await
+            install_skill_to_agent_copy_outcome_impl(pool, skill_id, agent_id).await
         }
         Err(error) => Err(error),
     }
@@ -160,6 +190,16 @@ pub async fn install_skill_to_agent_copy_impl(
     skill_id: &str,
     agent_id: &str,
 ) -> Result<InstallResult, String> {
+    install_skill_to_agent_copy_outcome_impl(pool, skill_id, agent_id)
+        .await
+        .map(InstallOutcome::into_install_result)
+}
+
+pub(crate) async fn install_skill_to_agent_copy_outcome_impl(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+) -> Result<InstallOutcome, String> {
     // Guard: cannot install to the central agent itself.
     if agent_id == "central" {
         return Err("Cannot install a skill to the central agent itself".to_string());
@@ -181,7 +221,9 @@ pub async fn install_skill_to_agent_copy_impl(
     ensure_centralized(pool, skill_id, &canonical_dir).await?;
 
     if agents_share_skills_dir(&agent, &central) {
-        return record_native_installation(pool, skill_id, agent_id, &canonical_dir).await;
+        return record_native_installation(pool, skill_id, agent_id, &canonical_dir)
+            .await
+            .map(InstallOutcome::Installed);
     }
 
     // 4. Compute target location.
@@ -195,6 +237,13 @@ pub async fn install_skill_to_agent_copy_impl(
             .map_err(|e| format!("Failed to create agent skills directory: {}", e))
     })
     .await?;
+
+    if let Some(skipped) =
+        detect_existing_agent_install(pool, skill_id, agent_id, &target_path, &canonical_dir)
+            .await?
+    {
+        return Ok(InstallOutcome::Skipped(skipped));
+    }
 
     // 6. Handle any existing entry at the target path.
     ensure_replaceable_target(&target_path).await?;
@@ -213,22 +262,22 @@ pub async fn install_skill_to_agent_copy_impl(
     };
     db::upsert_skill_installation(pool, &installation).await?;
 
-    Ok(InstallResult {
+    Ok(InstallOutcome::Installed(InstallResult {
         symlink_path: target_path.to_string_lossy().into_owned(),
-    })
+    }))
 }
 
 /// Dispatch by method string. Used by single-agent and batch IPC paths.
-pub(crate) async fn install_central_skill_to_agent_by_method(
+pub(crate) async fn install_central_skill_to_agent_outcome_by_method(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
     method: &str,
-) -> Result<InstallResult, String> {
+) -> Result<InstallOutcome, String> {
     match method {
-        "copy" => install_skill_to_agent_copy_impl(pool, skill_id, agent_id).await,
-        "symlink" => install_skill_to_agent_impl(pool, skill_id, agent_id).await,
-        _ => install_skill_to_agent_auto_impl(pool, skill_id, agent_id).await,
+        "copy" => install_skill_to_agent_copy_outcome_impl(pool, skill_id, agent_id).await,
+        "symlink" => install_skill_to_agent_outcome_impl(pool, skill_id, agent_id).await,
+        _ => install_skill_to_agent_auto_outcome_impl(pool, skill_id, agent_id).await,
     }
 }
 

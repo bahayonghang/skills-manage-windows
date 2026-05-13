@@ -20,12 +20,13 @@ use crate::targets::RemotePathInfo;
 use super::batch::batch_install_central_skills_impl;
 use super::fs_util::make_relative_path;
 use super::native::{
-    install_skill_to_agent_copy_impl, install_skill_to_agent_impl, uninstall_skill_from_agent_impl,
+    install_central_skill_to_agent_outcome_by_method, install_skill_to_agent_copy_impl,
+    install_skill_to_agent_impl, uninstall_skill_from_agent_impl,
     uninstall_skill_from_agent_with_row_impl,
 };
-use super::project::install_central_skill_to_project_impl;
+use super::project::install_central_skill_to_project_outcome_impl;
 use super::remote::{classify_remote_existing_install_target, RemoteExistingInstallAction};
-use super::types::{BatchInstallResult, FailedInstall};
+use super::types::{BatchInstallResult, FailedInstall, InstallOutcome};
 
 // ── Test helpers ──────────────────────────────────────────────────────────
 
@@ -78,6 +79,16 @@ fn create_user_skill(agent_dir: &Path, skill_id: &str) -> PathBuf {
     )
     .unwrap();
     skill_dir
+}
+
+#[cfg(unix)]
+fn create_symlink_for_test(target: &Path, link: &Path) {
+    std::os::unix::fs::symlink(target, link).unwrap();
+}
+
+#[cfg(windows)]
+fn create_symlink_for_test(target: &Path, link: &Path) {
+    std::os::windows::fs::symlink_dir(target, link).unwrap();
 }
 
 fn claude_observation(
@@ -785,6 +796,42 @@ async fn test_batch_install_partial_failure() {
 }
 
 #[tokio::test]
+async fn test_batch_install_reports_existing_copy_as_skipped() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &claude_dir).await;
+    let central_skill_dir = create_central_skill(&central_dir, "batch-existing-copy");
+    let target_dir = claude_dir.join("batch-existing-copy");
+    super::fs_util::copy_dir_all(&central_skill_dir, &target_dir).unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "batch-existing-copy".to_string(),
+            agent_id: "claude-code".to_string(),
+            installed_path: target_dir.to_string_lossy().into_owned(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let result =
+        batch_install_impl(&pool, "batch-existing-copy", &["claude-code".to_string()]).await;
+
+    assert!(result.succeeded.is_empty());
+    assert_eq!(result.skipped.len(), 1);
+    assert!(result.failed.is_empty());
+    assert_eq!(result.skipped[0].agent_id, "claude-code");
+    assert_eq!(result.skipped[0].reason, "already_installed");
+    assert_eq!(PathBuf::from(&result.skipped[0].target_path), target_dir);
+}
+
+#[tokio::test]
 async fn test_central_batch_install_multiple_skills_to_multiple_agents() {
     let tmp = TempDir::new().unwrap();
     let central_dir = tmp.path().join("central");
@@ -819,6 +866,138 @@ async fn test_central_batch_install_multiple_skills_to_multiple_agents() {
 }
 
 #[tokio::test]
+async fn test_central_batch_install_skips_existing_db_copy_record() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &claude_dir).await;
+    let central_skill_dir = create_central_skill(&central_dir, "existing-copy-skill");
+    let target_dir = claude_dir.join("existing-copy-skill");
+    super::fs_util::copy_dir_all(&central_skill_dir, &target_dir).unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "existing-copy-skill".to_string(),
+            agent_id: "claude-code".to_string(),
+            installed_path: target_dir.to_string_lossy().into_owned(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let result = batch_install_central_skills_impl(
+        &pool,
+        vec!["existing-copy-skill".to_string()],
+        vec!["claude-code".to_string()],
+        "symlink",
+        None,
+    )
+    .await;
+
+    assert!(result.succeeded.is_empty());
+    assert_eq!(result.skipped.len(), 1);
+    assert!(result.failed.is_empty());
+    assert_eq!(result.skipped[0].reason, "already_installed");
+    assert_eq!(PathBuf::from(&result.skipped[0].target_path), target_dir);
+}
+
+#[tokio::test]
+async fn test_central_batch_install_skips_shared_target_record_and_adds_agent_record() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    let universal_dir = tmp.path().join("universal");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &claude_dir).await;
+    point_codex_to_dir(&pool, &universal_dir).await;
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+        .bind(universal_dir.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let central_skill_dir = create_central_skill(&central_dir, "shared-universal-skill");
+    let target_dir = universal_dir.join("shared-universal-skill");
+    super::fs_util::copy_dir_all(&central_skill_dir, &target_dir).unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "shared-universal-skill".to_string(),
+            agent_id: "cursor".to_string(),
+            installed_path: target_dir.to_string_lossy().into_owned(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let result = batch_install_central_skills_impl(
+        &pool,
+        vec!["shared-universal-skill".to_string()],
+        vec!["codex".to_string()],
+        "symlink",
+        None,
+    )
+    .await;
+
+    assert!(result.succeeded.is_empty());
+    assert_eq!(result.skipped.len(), 1);
+    assert!(result.failed.is_empty());
+    assert_eq!(result.skipped[0].reason, "shared_target_record");
+
+    let installations = db::get_skill_installations(&pool, "shared-universal-skill")
+        .await
+        .unwrap();
+    assert!(installations
+        .iter()
+        .any(|record| record.agent_id == "cursor"));
+    let codex_record = installations
+        .iter()
+        .find(|record| record.agent_id == "codex")
+        .expect("codex record should be added");
+    assert_eq!(PathBuf::from(&codex_record.installed_path), target_dir);
+    assert_eq!(codex_record.link_type, "copy");
+}
+
+#[tokio::test]
+async fn test_central_batch_install_refuses_different_existing_real_dir() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(claude_dir.join("different-real-dir")).unwrap();
+
+    let pool = setup_db(&central_dir, &claude_dir).await;
+    create_central_skill(&central_dir, "different-real-dir");
+    fs::write(
+        claude_dir.join("different-real-dir").join("SKILL.md"),
+        "---\nname: different\n---\n\n# different\n",
+    )
+    .unwrap();
+
+    let result = batch_install_central_skills_impl(
+        &pool,
+        vec!["different-real-dir".to_string()],
+        vec!["claude-code".to_string()],
+        "copy",
+        None,
+    )
+    .await;
+
+    assert!(result.succeeded.is_empty());
+    assert!(result.skipped.is_empty());
+    assert_eq!(result.failed.len(), 1);
+    assert!(result.failed[0].error.contains("Refusing to overwrite"));
+}
+
+#[tokio::test]
 async fn test_project_install_creates_project_relative_skill_dir() {
     let tmp = TempDir::new().unwrap();
     let central_dir = tmp.path().join("central");
@@ -832,7 +1011,7 @@ async fn test_project_install_creates_project_relative_skill_dir() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "project-skill");
 
-    let result = install_central_skill_to_project_impl(
+    let result = install_central_skill_to_project_outcome_impl(
         &pool,
         "project-skill",
         "claude-code",
@@ -842,6 +1021,10 @@ async fn test_project_install_creates_project_relative_skill_dir() {
     .await
     .unwrap();
 
+    let result = match result {
+        InstallOutcome::Installed(result) => result,
+        InstallOutcome::Skipped(skipped) => panic!("expected install, got skip: {:?}", skipped),
+    };
     let target = project_dir
         .join(".claude")
         .join("skills")
@@ -868,7 +1051,7 @@ async fn test_project_install_refuses_existing_real_dir() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "existing-project-skill");
 
-    let result = install_central_skill_to_project_impl(
+    let result = install_central_skill_to_project_outcome_impl(
         &pool,
         "existing-project-skill",
         "claude-code",
@@ -885,6 +1068,112 @@ async fn test_project_install_refuses_existing_real_dir() {
         result
     );
     assert!(existing_dir.is_dir());
+}
+
+#[tokio::test]
+async fn test_project_install_skips_existing_central_symlink() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    let project_skills_dir = project_dir.join(".claude").join("skills");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&project_skills_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    let central_skill_dir = create_central_skill(&central_dir, "project-symlink-skill");
+    create_symlink_for_test(
+        &central_skill_dir,
+        &project_skills_dir.join("project-symlink-skill"),
+    );
+
+    let result = batch_install_central_skills_impl(
+        &pool,
+        vec!["project-symlink-skill".to_string()],
+        vec!["claude-code".to_string()],
+        "symlink",
+        Some(&project_dir),
+    )
+    .await;
+
+    assert!(result.succeeded.is_empty());
+    assert_eq!(result.skipped.len(), 1);
+    assert!(result.failed.is_empty());
+    assert_eq!(result.skipped[0].reason, "central_symlink");
+}
+
+#[tokio::test]
+async fn test_project_install_skips_existing_matching_copy() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    let target_dir = project_dir
+        .join(".claude")
+        .join("skills")
+        .join("project-copy-skill");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(target_dir.parent().unwrap()).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    let central_skill_dir = create_central_skill(&central_dir, "project-copy-skill");
+    super::fs_util::copy_dir_all(&central_skill_dir, &target_dir).unwrap();
+
+    let result = batch_install_central_skills_impl(
+        &pool,
+        vec!["project-copy-skill".to_string()],
+        vec!["claude-code".to_string()],
+        "copy",
+        Some(&project_dir),
+    )
+    .await;
+
+    assert!(result.succeeded.is_empty());
+    assert_eq!(result.skipped.len(), 1);
+    assert!(result.failed.is_empty());
+    assert_eq!(result.skipped[0].reason, "matching_copy");
+}
+
+#[tokio::test]
+async fn test_project_install_refuses_existing_different_copy() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    let target_dir = project_dir
+        .join(".claude")
+        .join("skills")
+        .join("project-different-skill");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&target_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "project-different-skill");
+    fs::write(
+        target_dir.join("SKILL.md"),
+        "---\nname: project-different\n---\n\n# different\n",
+    )
+    .unwrap();
+
+    let result = batch_install_central_skills_impl(
+        &pool,
+        vec!["project-different-skill".to_string()],
+        vec!["claude-code".to_string()],
+        "copy",
+        Some(&project_dir),
+    )
+    .await;
+
+    assert!(result.succeeded.is_empty());
+    assert!(result.skipped.is_empty());
+    assert_eq!(result.failed.len(), 1);
+    assert!(result.failed[0].error.contains("Refusing to overwrite"));
 }
 
 #[tokio::test]
@@ -913,7 +1202,7 @@ async fn test_project_install_does_not_overwrite_global_installation_record() {
         .await
         .unwrap();
 
-    install_central_skill_to_project_impl(
+    let outcome = install_central_skill_to_project_outcome_impl(
         &pool,
         "db-project-skill",
         "claude-code",
@@ -922,6 +1211,7 @@ async fn test_project_install_does_not_overwrite_global_installation_record() {
     )
     .await
     .unwrap();
+    assert!(matches!(outcome, InstallOutcome::Installed(_)));
 
     let installations = db::get_skill_installations(&pool, "db-project-skill")
         .await
@@ -942,11 +1232,15 @@ async fn batch_install_impl(
     agent_ids: &[String],
 ) -> BatchInstallResult {
     let mut succeeded = Vec::new();
+    let mut skipped = Vec::new();
     let mut failed = Vec::new();
 
     for agent_id in agent_ids {
-        match install_skill_to_agent_impl(pool, skill_id, agent_id).await {
-            Ok(_) => succeeded.push(agent_id.clone()),
+        match install_central_skill_to_agent_outcome_by_method(pool, skill_id, agent_id, "symlink")
+            .await
+        {
+            Ok(InstallOutcome::Installed(_)) => succeeded.push(agent_id.clone()),
+            Ok(InstallOutcome::Skipped(item)) => skipped.push(item),
             Err(e) => failed.push(FailedInstall {
                 agent_id: agent_id.clone(),
                 error: e,
@@ -954,7 +1248,11 @@ async fn batch_install_impl(
         }
     }
 
-    BatchInstallResult { succeeded, failed }
+    BatchInstallResult {
+        succeeded,
+        skipped,
+        failed,
+    }
 }
 
 // ── install_skill_to_agent_copy_impl ──────────────────────────────────────

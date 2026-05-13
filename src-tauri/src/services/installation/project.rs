@@ -9,7 +9,8 @@ use crate::db::{self, DbPool};
 use super::centralize::{ensure_centralized, ensure_replaceable_target};
 use super::fs_util::{copy_dir_all_blocking, create_symlink, run_blocking_fs, symlink_target_path};
 use super::native::should_fallback_to_copy;
-use super::types::InstallResult;
+use super::skip::detect_existing_project_install;
+use super::types::{InstallOutcome, InstallResult};
 
 pub(crate) fn project_relative_skills_dir(agent: &db::Agent) -> Result<PathBuf, String> {
     if agent.id == "central" {
@@ -77,13 +78,13 @@ pub(crate) async fn ensure_project_dir(project_path: &Path) -> Result<(), String
     .await
 }
 
-pub(crate) async fn install_central_skill_to_project_impl(
+pub(crate) async fn install_central_skill_to_project_outcome_impl(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
     project_path: &Path,
     method: &str,
-) -> Result<InstallResult, String> {
+) -> Result<InstallOutcome, String> {
     ensure_project_dir(project_path).await?;
 
     let agent = db::get_agent_by_id(pool, agent_id)
@@ -111,6 +112,13 @@ pub(crate) async fn install_central_skill_to_project_impl(
         })
     })
     .await?;
+
+    if let Some(skipped) =
+        detect_existing_project_install(skill_id, agent_id, &target_path, &canonical_dir).await?
+    {
+        return Ok(InstallOutcome::Skipped(skipped));
+    }
+
     ensure_replaceable_target(&target_path).await?;
 
     if method == "copy" {
@@ -133,7 +141,7 @@ pub(crate) async fn install_central_skill_to_project_impl(
         }
     }
 
-    Ok(InstallResult {
+    Ok(InstallOutcome::Installed(InstallResult {
         symlink_path: target_path.to_string_lossy().into_owned(),
-    })
+    }))
 }
