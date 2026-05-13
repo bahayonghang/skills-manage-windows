@@ -90,6 +90,7 @@ export function InstallDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BatchInstallResult | null>(null);
+  const skipped = result?.skipped ?? [];
 
   // When the dialog opens for a skill, pre-select currently unlinked agents.
   // Agents that already have this skill are checked by default too so the
@@ -366,6 +367,9 @@ export function InstallDialog({
               <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
                 {t("central.installPartialFail", {
                   platforms: result.failed.map((failure) => failure.agent_id).join(", "),
+                  succeededCount: result.succeeded.length,
+                  skippedCount: skipped.length,
+                  failedCount: result.failed.length,
                 })}
               </p>
               <ul className="max-h-32 space-y-0.5 overflow-auto text-xs text-destructive">
@@ -375,6 +379,17 @@ export function InstallDialog({
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {result && result.failed.length === 0 && skipped.length > 0 && (
+            <div className="space-y-2" role="status">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("central.installSkipped", {
+                  skippedCount: skipped.length,
+                  succeededCount: result.succeeded.length,
+                })}
+              </p>
             </div>
           )}
 

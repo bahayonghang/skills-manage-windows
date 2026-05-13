@@ -63,6 +63,7 @@ export function BatchInstallCentralSkillsDialog({
   const [projectPath, setProjectPath] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CentralBatchInstallResult | null>(null);
+  const skipped = result?.skipped ?? [];
 
   const isProjectTargetDisabled = (agent: AgentWithStatus) =>
     targetMode === "project" && !hasProjectSkillPattern(agent);
@@ -289,6 +290,8 @@ export function BatchInstallCentralSkillsDialog({
                 {t("central.batchInstallPartial", {
                   skillCount,
                   platformCount,
+                  succeededCount: result.succeeded.length,
+                  skippedCount: skipped.length,
                   failedCount: result.failed.length,
                 })}
               </p>
@@ -299,6 +302,17 @@ export function BatchInstallCentralSkillsDialog({
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {result && result.failed.length === 0 && skipped.length > 0 && (
+            <div className="space-y-2" role="status">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("central.batchInstallSkipped", {
+                  skippedCount: skipped.length,
+                  succeededCount: result.succeeded.length,
+                })}
+              </p>
             </div>
           )}
 

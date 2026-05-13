@@ -162,6 +162,7 @@ export interface SkillWithLinks {
 
 export interface BatchInstallResult {
   succeeded: string[];
+  skipped?: Array<{ agent_id: string; target_path: string; reason: string }>;
   failed: Array<{ agent_id: string; error: string }>;
 }
 
@@ -177,8 +178,16 @@ export interface CentralBatchInstallFailure {
   error: string;
 }
 
+export interface CentralBatchInstallSkipped {
+  skill_id: string;
+  agent_id: string;
+  target_path: string;
+  reason: string;
+}
+
 export interface CentralBatchInstallResult {
   succeeded: CentralBatchInstallSuccess[];
+  skipped?: CentralBatchInstallSkipped[];
   failed: CentralBatchInstallFailure[];
 }
 

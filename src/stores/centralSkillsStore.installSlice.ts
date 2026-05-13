@@ -16,6 +16,24 @@ import {
 import { indexUpdateStates } from "./centralSkillsStore.shared";
 import type { CentralSkillsState, CentralStoreContext } from "./centralSkillsStore.types";
 
+function normalizeBatchInstallResult(result: BatchInstallResult): Required<BatchInstallResult> {
+  return {
+    succeeded: result.succeeded ?? [],
+    skipped: result.skipped ?? [],
+    failed: result.failed ?? [],
+  };
+}
+
+function normalizeCentralBatchInstallResult(
+  result: CentralBatchInstallResult
+): Required<CentralBatchInstallResult> {
+  return {
+    succeeded: result.succeeded ?? [],
+    skipped: result.skipped ?? [],
+    failed: result.failed ?? [],
+  };
+}
+
 export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pick<CentralSkillsState,
   | "installSkill"
   | "batchInstallSkills"
@@ -42,25 +60,33 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
             agentIds,
             method,
             projectPath: trimmedProjectPath,
-          }).then((batchResult) => ({
-            succeeded: batchResult.succeeded.map((success) => success.agent_id),
-            failed: batchResult.failed.map((failure) => ({
-              agent_id: failure.agent_id,
-              error: failure.error,
-            })),
-          }))
+          }).then((batchResult) => {
+            const normalized = normalizeCentralBatchInstallResult(batchResult);
+            return {
+              succeeded: normalized.succeeded.map((success) => success.agent_id),
+              skipped: normalized.skipped.map((skipped) => ({
+                agent_id: skipped.agent_id,
+                target_path: skipped.target_path,
+                reason: skipped.reason,
+              })),
+              failed: normalized.failed.map((failure) => ({
+                agent_id: failure.agent_id,
+                error: failure.error,
+              })),
+            };
+          })
         : await invoke<BatchInstallResult>("batch_install_to_agents", {
             skillId,
             agentIds,
             method,
-          });
+          }).then(normalizeBatchInstallResult);
 
       // Refresh central skills to get updated link status.
       const skills = await invoke<SkillWithLinks[]>("get_central_skills");
       const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
       set({ skills, repositories: repositories ?? get().repositories, isInstalling: false });
 
-      return result;
+      return normalizeBatchInstallResult(result);
     } catch (err) {
       set({ error: String(err), isInstalling: false });
       throw err;
@@ -75,7 +101,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
         agentIds,
         method,
         projectPath: projectPath ?? null,
-      });
+      }).then(normalizeCentralBatchInstallResult);
 
       const skills = await invoke<SkillWithLinks[]>("get_central_skills");
       const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");

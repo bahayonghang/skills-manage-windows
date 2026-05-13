@@ -137,6 +137,7 @@ describe("CentralSkillsView", () => {
         { skill_id: "frontend-design", agent_id: "codex", target_path: "/Users/test/.agents/skills/frontend-design" },
         { skill_id: "frontend-design", agent_id: "claude-code", target_path: "/Users/test/.claude/skills/frontend-design" },
       ],
+      skipped: [],
       failed: [
         { skill_id: "code-reviewer", agent_id: "claude-code", error: "already exists" },
       ],
@@ -153,10 +154,10 @@ describe("CentralSkillsView", () => {
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
-        "已请求将 2 个技能安装到 2 个平台，1 个目标失败"
+        "批量安装完成：成功 3，跳过 0，失败 1"
       );
     });
-    expect(screen.getByText("已请求将 2 个技能安装到 2 个平台，1 个目标失败")).toBeInTheDocument();
+    expect(screen.getByText("已请求将 2 个技能安装到 2 个平台：成功 3，跳过 0，失败 1")).toBeInTheDocument();
     expect(screen.queryByText(/4 install/i)).not.toBeInTheDocument();
   });
 

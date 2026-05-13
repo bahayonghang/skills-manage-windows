@@ -567,7 +567,7 @@ describe("centralSkillsStore", () => {
       .getState()
       .installSkill("frontend-design", ["cursor"], "symlink");
 
-    expect(result).toEqual(batchResult);
+    expect(result).toEqual({ ...batchResult, skipped: [] });
   });
 
   it("uses batch_install_central_skills for single-skill project installs", async () => {
@@ -577,6 +577,14 @@ describe("centralSkillsStore", () => {
           skill_id: "frontend-design",
           agent_id: "cursor",
           target_path: "D:\\work\\demo\\.cursor\\skills\\frontend-design",
+        },
+      ],
+      skipped: [
+        {
+          skill_id: "frontend-design",
+          agent_id: "codex",
+          target_path: "D:\\work\\demo\\.agents\\skills\\frontend-design",
+          reason: "already_installed",
         },
       ],
       failed: [
@@ -598,6 +606,13 @@ describe("centralSkillsStore", () => {
 
     expect(result).toEqual({
       succeeded: ["cursor"],
+      skipped: [
+        {
+          agent_id: "codex",
+          target_path: "D:\\work\\demo\\.agents\\skills\\frontend-design",
+          reason: "already_installed",
+        },
+      ],
       failed: [{ agent_id: "kiro", error: "No project pattern" }],
     });
     expect(invoke).toHaveBeenCalledWith("batch_install_central_skills", {
@@ -619,6 +634,7 @@ describe("centralSkillsStore", () => {
           target_path: "~/.cursor/skills/frontend-design",
         },
       ],
+      skipped: [],
       failed: [],
     };
     vi.mocked(invoke)

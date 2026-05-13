@@ -67,6 +67,7 @@ const successInstallResult: CentralBatchInstallResult = {
       target_path: "D:\\work\\demo\\.agents\\skills\\frontend-design",
     },
   ],
+  skipped: [],
   failed: [],
 };
 
@@ -161,5 +162,66 @@ describe("BatchInstallCentralSkillsDialog", () => {
       "无法选择项目文件夹：Error: Dialog denied"
     );
     expect(mockOnInstall).not.toHaveBeenCalled();
+  });
+
+  it("closes without an error when every selected target is skipped", async () => {
+    mockOnInstall.mockResolvedValueOnce({
+      succeeded: [],
+      skipped: [
+        {
+          skill_id: "frontend-design",
+          agent_id: "codex",
+          target_path: "D:\\work\\demo\\.agents\\skills\\frontend-design",
+          reason: "already_installed",
+        },
+      ],
+      failed: [],
+    } satisfies CentralBatchInstallResult);
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", {
+      name: /将 2 个技能安装到 .* 个平台/i,
+    }));
+
+    await waitFor(() => {
+      expect(mockOnOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows skipped counts next to failures for mixed results", async () => {
+    mockOnInstall.mockResolvedValueOnce({
+      succeeded: [
+        {
+          skill_id: "frontend-design",
+          agent_id: "codex",
+          target_path: "D:\\work\\demo\\.agents\\skills\\frontend-design",
+        },
+      ],
+      skipped: [
+        {
+          skill_id: "frontend-design",
+          agent_id: "claude-code",
+          target_path: "D:\\work\\demo\\.claude\\skills\\frontend-design",
+          reason: "already_installed",
+        },
+      ],
+      failed: [
+        {
+          skill_id: "frontend-design",
+          agent_id: "kiro",
+          error: "A real directory already exists",
+        },
+      ],
+    } satisfies CentralBatchInstallResult);
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", {
+      name: /将 2 个技能安装到 .* 个平台/i,
+    }));
+
+    expect(await screen.findByText(/成功 1，跳过 1，失败 1/)).toBeInTheDocument();
+    expect(screen.getByText(/frontend-design \/ kiro/)).toBeInTheDocument();
+    expect(mockOnOpenChange).not.toHaveBeenCalledWith(false);
   });
 });

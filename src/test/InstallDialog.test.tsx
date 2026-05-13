@@ -86,6 +86,7 @@ const mockOnInstall = vi.fn();
 const mockOnOpenChange = vi.fn();
 const successInstallResult = {
   succeeded: ["claude-code", "codex", "kiro"],
+  skipped: [],
   failed: [],
 };
 
@@ -472,6 +473,7 @@ describe("InstallDialog", () => {
   it("keeps partial failures open with agent error details", async () => {
     mockOnInstall.mockResolvedValueOnce({
       succeeded: ["codex"],
+      skipped: [],
       failed: [
         { agent_id: "claude-code", error: "A remote directory already exists" },
       ],
@@ -487,6 +489,30 @@ describe("InstallDialog", () => {
       expect(screen.getByText(/claude-code: A remote directory already exists/)).toBeInTheDocument();
     });
     expect(mockOnOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("closes without an error when every selected target is skipped", async () => {
+    mockOnInstall.mockResolvedValueOnce({
+      succeeded: [],
+      skipped: [
+        {
+          agent_id: "claude-code",
+          target_path: "/Users/test/.claude/skills/frontend-design",
+          reason: "already_installed",
+        },
+      ],
+      failed: [],
+    });
+
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", {
+      name: /安装到 .* 个平台/i,
+    }));
+
+    await waitFor(() => {
+      expect(mockOnOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("calls onOpenChange(false) after successful install", async () => {

@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 
 import { BatchDeleteCentralSkillPreviewResult, CentralSkillUpdateState, DeleteSkillRepositoryPreview, SkillDetail, SkillRepositoryWithStats, SkillWithLinks } from "@/types";
 import { markAppPerformance } from "@/lib/performance";
-import { useResizableWidth } from "@/hooks/useResizableWidth";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { CentralSkillsShell } from "@/components/central/CentralSkillsShell";
 import { CentralSidebarV2Header } from "@/components/central/v2/CentralSidebarV2Header";
@@ -25,14 +24,8 @@ import {
   type CentralSortField,
 } from "@/pages/centralSkillsViewModel";
 import { usePlatformStore } from "@/stores/platformStore";
-
-const CENTRAL_FILTER_DEFAULT_WIDTH = 286;
-const CENTRAL_FILTER_MIN_WIDTH = 220;
-const CENTRAL_FILTER_MAX_WIDTH = 460;
-const CENTRAL_CATEGORIZE_DEFAULT_WIDTH = 392;
-const CENTRAL_CATEGORIZE_MIN_WIDTH = 336;
-const CENTRAL_CATEGORIZE_MAX_WIDTH = 640;
-
+import { useCentralInstalledSkillsFilterBridge } from "@/pages/centralInstalledSkillsFilterBridge";
+import { useCentralSkillsLayoutSizing } from "@/pages/centralSkillsLayoutSizing";
 export function CentralSkillsView() {
   const { t } = useTranslation();
   const {
@@ -96,24 +89,13 @@ export function CentralSkillsView() {
   const [repositoryDeletePreview, setRepositoryDeletePreview] =
     useState<DeleteSkillRepositoryPreview | null>(null);
   const {
-    width: filterSidebarWidth,
-    startResize: startFilterSidebarResize,
-    handleResizeKeyDown: handleFilterSidebarResizeKeyDown,
-  } = useResizableWidth({
-    defaultWidth: CENTRAL_FILTER_DEFAULT_WIDTH,
-    minWidth: CENTRAL_FILTER_MIN_WIDTH,
-    maxWidth: CENTRAL_FILTER_MAX_WIDTH,
-  });
-  const {
-    width: categorizeSidebarWidth,
-    startResize: startCategorizeSidebarResize,
-    handleResizeKeyDown: handleCategorizeSidebarResizeKeyDown,
-  } = useResizableWidth({
-    defaultWidth: CENTRAL_CATEGORIZE_DEFAULT_WIDTH,
-    minWidth: CENTRAL_CATEGORIZE_MIN_WIDTH,
-    maxWidth: CENTRAL_CATEGORIZE_MAX_WIDTH,
-    resizeFrom: "left",
-  });
+    categorizeSidebarWidth,
+    filterSidebarWidth,
+    handleCategorizeSidebarResizeKeyDown,
+    handleFilterSidebarResizeKeyDown,
+    startCategorizeSidebarResize,
+    startFilterSidebarResize,
+  } = useCentralSkillsLayoutSizing();
   const [isDeletePreviewLoading, setIsDeletePreviewLoading] = useState(false);
   const [isBatchDeletePreviewLoading, setIsBatchDeletePreviewLoading] = useState(false);
   const [isRemoteMissingPreviewLoading, setIsRemoteMissingPreviewLoading] = useState(false);
@@ -194,6 +176,21 @@ export function CentralSkillsView() {
     state: v2ViewState,
   });
   const currentViewSkills = v2Enabled ? v2.sortedSkills : sortedSkills;
+  const {
+    installedSkillsFilterProps,
+    isInstalledSkillsFilterActive,
+    visibleCurrentViewSkills,
+    visibleFilteredSkills,
+    visibleV2FilteredSkills,
+  } = useCentralInstalledSkillsFilterBridge({
+    availableInstallAgents,
+    currentViewSkills,
+    filteredSkills,
+    selectedSkillIds,
+    setIsBatchInstallDialogOpen,
+    setSelectedSkillIds,
+    v2FilteredSkills: v2.filteredSkills,
+  });
 
   // ─── Saved Views (M2) ────────────────────────────────────────
   const savedViewsBridge = useCentralV2SavedViewsBridge({
@@ -236,16 +233,19 @@ export function CentralSkillsView() {
     updateJob.status === "failed" ||
     updateJob.status === "cancelled";
   const checkButtonState = getCentralSkillsCheckButtonState({
-    currentViewSkills,
+    currentViewSkills: visibleCurrentViewSkills,
     repositories,
     repositoryFilter,
     selectedSkillIds,
-    sortedSkills,
+    sortedSkills: visibleCurrentViewSkills,
     t,
     totalSkillCount: skills.length,
     v2Enabled,
     v2HasCurrentFilters:
-      v2ViewState.repos.length > 0 || v2ViewState.tags.length > 0 || v2.isSearchActive,
+      v2ViewState.repos.length > 0 ||
+      v2ViewState.tags.length > 0 ||
+      v2.isSearchActive ||
+      isInstalledSkillsFilterActive,
   });
   const shouldShowUpdateProgress =
     updateJob.status !== "idle" &&
@@ -412,7 +412,7 @@ export function CentralSkillsView() {
       repositoryFilter,
       queuedRemoteMissingStates,
       selectedSkillIds,
-      currentViewSkills,
+      currentViewSkills: visibleCurrentViewSkills,
     },
     setters: {
       setBatchDeletePreview,
@@ -566,7 +566,7 @@ export function CentralSkillsView() {
   const listContentProps = {
         availableInstallAgents,
         contentRef,
-        filteredSkills,
+        filteredSkills: visibleFilteredSkills,
         isLoading,
         isSearchActive,
         onDelete: (skill: SkillWithLinks) => {
@@ -583,7 +583,7 @@ export function CentralSkillsView() {
         selectedSkillIdSet,
         setDetailButtonRef,
         skillsCount: skills.length,
-        sortedSkills,
+        sortedSkills: visibleCurrentViewSkills,
         togglingAgentId: togglingAgentId ?? null,
         updateStatuses,
         updatingSkillIds,
@@ -624,7 +624,7 @@ export function CentralSkillsView() {
     manualSelectedTagIds,
     manualTagQuery,
     selectedSkillCount: selectedSkillIds.length,
-    sortedSkillCount: currentViewSkills.length,
+    sortedSkillCount: visibleCurrentViewSkills.length,
     startCategorizeSidebarResize,
     handleCategorizeSidebarResizeKeyDown,
     onAcceptReview: (review: Parameters<typeof handleAcceptReview>[0]) => {
@@ -684,10 +684,10 @@ export function CentralSkillsView() {
     // V2 Shell：listContent 用 V2 view-model 的 sortedSkills/filteredSkills/searchQuery/isSearchActive
     const v2ListContentProps = {
       ...listContentProps,
-      filteredSkills: v2.filteredSkills,
-      sortedSkills: v2.sortedSkills,
+      filteredSkills: visibleV2FilteredSkills,
+      sortedSkills: visibleCurrentViewSkills,
       searchQuery: v2ViewState.q,
-      isSearchActive: v2.isSearchActive,
+      isSearchActive: v2.isSearchActive || isInstalledSkillsFilterActive,
     };
     const sidebarHeaderSlot = (
       <CentralSidebarV2Header
@@ -714,6 +714,7 @@ export function CentralSkillsView() {
           sortFieldOptions={sortFieldOptions}
           sortDirectionOptions={sortDirectionOptions}
           groupByOptions={groupByOptions}
+          installedSkillsFilter={installedSkillsFilterProps}
           listContent={v2ListContentProps}
           categorizePanel={categorizePanelProps}
           shouldShowCategorizePanel={skills.length > 0}
@@ -762,6 +763,7 @@ export function CentralSkillsView() {
       isCheckingUpdates={isCheckingUpdates}
       isLoading={isLoading}
       listContent={listContentProps}
+      installedSkillsFilter={installedSkillsFilterProps}
       searchQuery={searchQuery}
       setIsGitHubImportOpen={setIsGitHubImportOpen}
       setIsPlatformManageOpen={setIsPlatformManageOpen}
@@ -792,6 +794,7 @@ export function CentralSkillsView() {
       onUpdateSkills={(skillIds) => {
         void handleUpdateSkills(skillIds);
       }}
+      onSwitchToNew={v2EnabledFromFlag ? () => setV2OverrideClassic(false) : undefined}
     />
   );
 }

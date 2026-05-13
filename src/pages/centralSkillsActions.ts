@@ -75,6 +75,10 @@ export interface CentralSkillsActionsDeps {
   t: TFunction;
 }
 
+function skippedCount(result: BatchInstallResult | CentralBatchInstallResult): number {
+  return result.skipped?.length ?? 0;
+}
+
 export function useCentralSkillsActions({
   detailButtonRefs,
   state,
@@ -226,7 +230,27 @@ export function useCentralSkillsActions({
         const failedNames = result.failed
           .map((failure) => `${failure.agent_id}: ${failure.error}`)
           .join("; ");
-        toast.error(t("central.installPartialFail", { platforms: failedNames }));
+        toast.error(
+          t("central.installPartialFailDetailed", {
+            succeededCount: result.succeeded.length,
+            skippedCount: skippedCount(result),
+            failedCount: result.failed.length,
+            platforms: failedNames,
+          })
+        );
+      } else if (skippedCount(result) > 0) {
+        toast.success(
+          t("central.installSkippedToast", {
+            succeededCount: result.succeeded.length,
+            skippedCount: skippedCount(result),
+          })
+        );
+      } else {
+        toast.success(
+          t("central.installSuccessToast", {
+            succeededCount: result.succeeded.length,
+          })
+        );
       }
       return result;
     } catch (err) {
@@ -257,9 +281,21 @@ export function useCentralSkillsActions({
           t("central.batchInstallPartialToast", {
             skillCount: requestedSkillCount,
             platformCount,
+            succeededCount: result.succeeded.length,
+            skippedCount: skippedCount(result),
             failedCount: result.failed.length,
           })
         );
+      } else if (skippedCount(result) > 0) {
+        toast.success(
+          t("central.batchInstallSkippedToast", {
+            skillCount: requestedSkillCount,
+            platformCount,
+            succeededCount: result.succeeded.length,
+            skippedCount: skippedCount(result),
+          })
+        );
+        setSelectedSkillIds([]);
       } else {
         toast.success(
           t("central.batchInstallSuccess", {

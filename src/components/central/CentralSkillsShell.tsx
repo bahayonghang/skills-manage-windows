@@ -1,9 +1,10 @@
 import type { ComponentProps } from "react";
-import { ArrowUpDown, Download, FileJson, RefreshCw, Search } from "lucide-react";
+import { ArrowUpDown, Download, FileJson, LayoutGrid, RefreshCw, Search } from "lucide-react";
 import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CentralInstalledSkillsQuickFilter } from "@/components/central/CentralInstalledSkillsQuickFilter";
 import { AiTagProgressBar, CentralUpdateProgressBar } from "@/components/central/CentralSkillProgressBars";
 import { CentralSkillCategorizePanel } from "@/components/central/CentralSkillCategorizePanel";
 import { CentralSkillDialogs } from "@/components/central/CentralSkillDialogs";
@@ -23,6 +24,7 @@ type CategorizePanelProps = Omit<ComponentProps<typeof CentralSkillCategorizePan
 type AiProgressProps = Omit<ComponentProps<typeof AiTagProgressBar>, "t">;
 type UpdateProgressProps = Omit<ComponentProps<typeof CentralUpdateProgressBar>, "t">;
 type DialogProps = Omit<ComponentProps<typeof CentralSkillDialogs>, "t">;
+type InstalledSkillsFilterProps = Omit<ComponentProps<typeof CentralInstalledSkillsQuickFilter>, "t">;
 type TagSearchProps = Omit<
   ComponentProps<typeof CentralSkillTagSearch>,
   "t" | "tagFilter" | "setTagFilter" | "tags" | "updateAvailableSkillCount"
@@ -34,6 +36,7 @@ export function CentralSkillsShell({
   filterSidebar,
   isCheckingUpdates,
   isLoading,
+  installedSkillsFilter,
   listContent,
   searchQuery,
   setIsGitHubImportOpen,
@@ -62,12 +65,14 @@ export function CentralSkillsShell({
   updateProgress,
   onRefresh,
   onUpdateSkills,
+  onSwitchToNew,
 }: {
   centralSkillsDir: string;
   dialogs: DialogProps;
   filterSidebar: FilterSidebarProps;
   isCheckingUpdates: boolean;
   isLoading: boolean;
+  installedSkillsFilter: InstalledSkillsFilterProps;
   listContent: ListContentProps;
   searchQuery: string;
   setIsGitHubImportOpen: (open: boolean) => void;
@@ -104,6 +109,7 @@ export function CentralSkillsShell({
   updateProgress: UpdateProgressProps;
   onRefresh: () => void;
   onUpdateSkills: (skillIds: string[]) => void;
+  onSwitchToNew?: () => void;
 }) {
   return (
     <div className="flex flex-col h-full">
@@ -164,6 +170,17 @@ export function CentralSkillsShell({
           <Button variant="outline" onClick={() => setIsGitHubImportOpen(true)}>
             {t("marketplace.githubImportSecondaryCta")}
           </Button>
+          {onSwitchToNew && (
+            <Button
+              variant="ghost"
+              size="sm"
+              data-testid="central-switch-new-layout"
+              onClick={onSwitchToNew}
+            >
+              <LayoutGrid className="size-3.5" />
+              {t("central.v2.switchToNew")}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -253,6 +270,10 @@ export function CentralSkillsShell({
             >
               {t("central.unassignedOnly")}
             </Button>
+            <CentralInstalledSkillsQuickFilter
+              {...installedSkillsFilter}
+              t={t}
+            />
           </div>
         </div>
       </div>

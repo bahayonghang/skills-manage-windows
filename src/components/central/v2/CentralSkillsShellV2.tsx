@@ -3,6 +3,7 @@ import { ArrowUpDown, Download, FileJson, RefreshCw } from "lucide-react";
 import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
+import { CentralInstalledSkillsQuickFilter } from "@/components/central/CentralInstalledSkillsQuickFilter";
 import { AiTagProgressBar, CentralUpdateProgressBar } from "@/components/central/CentralSkillProgressBars";
 import { CentralSkillCategorizePanel } from "@/components/central/CentralSkillCategorizePanel";
 import { CentralSkillDialogs } from "@/components/central/CentralSkillDialogs";
@@ -42,6 +43,7 @@ type CategorizePanelProps = Omit<ComponentProps<typeof CentralSkillCategorizePan
 type AiProgressProps = Omit<ComponentProps<typeof AiTagProgressBar>, "t">;
 type UpdateProgressProps = Omit<ComponentProps<typeof CentralUpdateProgressBar>, "t">;
 type DialogProps = Omit<ComponentProps<typeof CentralSkillDialogs>, "t">;
+type InstalledSkillsFilterProps = Omit<ComponentProps<typeof CentralInstalledSkillsQuickFilter>, "t">;
 
 export interface CentralSkillsShellV2Props {
   t: TFunction;
@@ -75,6 +77,7 @@ export interface CentralSkillsShellV2Props {
   groupByOptions?: Array<{ value: GroupByMode; label: string }>;
 
   // V1 渲染单元（复用）
+  installedSkillsFilter: InstalledSkillsFilterProps;
   listContent: ListContentProps;
   categorizePanel: CategorizePanelProps;
   shouldShowCategorizePanel: boolean;
@@ -121,6 +124,7 @@ export function CentralSkillsShellV2(props: CentralSkillsShellV2Props) {
     sortFieldOptions,
     sortDirectionOptions,
     groupByOptions,
+    installedSkillsFilter,
     listContent,
     categorizePanel,
     shouldShowCategorizePanel,
@@ -285,6 +289,10 @@ export function CentralSkillsShellV2(props: CentralSkillsShellV2Props) {
                 />
               </>
             )}
+            <CentralInstalledSkillsQuickFilter
+              {...installedSkillsFilter}
+              t={t}
+            />
           </div>
         </div>
       </div>
