@@ -43,6 +43,17 @@ const mockPage: OperationLogPage = {
   offset: 0,
 };
 
+const mockEntry2: OperationLogEntry = {
+  ...mockEntry,
+  id: "log-2",
+  createdAt: "2026-04-27T11:00:00Z",
+  action: "scan.partial",
+  status: "partial",
+  summary: "Second batch",
+  detailsJson: null,
+  errorSummary: "One target unavailable",
+};
+
 function resetStore() {
   useOperationLogStore.setState({
     entries: [],
@@ -61,6 +72,11 @@ describe("OperationLogsView", () => {
   beforeEach(() => {
     resetStore();
     vi.clearAllMocks();
+    window.localStorage.clear();
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      configurable: true,
+    });
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "list_operation_logs") return mockPage;
       if (command === "get_operation_log") return mockEntry;
@@ -107,6 +123,84 @@ describe("OperationLogsView", () => {
       expect(invoke).toHaveBeenCalledWith("clear_operation_logs", {
         filter: { limit: 100, offset: 0 },
       });
+    });
+  });
+
+  it("persists row density to localStorage when toggled", async () => {
+    render(<OperationLogsView />);
+    await screen.findByText("scan.all");
+
+    fireEvent.click(screen.getByTestId("logs-density-toggle"));
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem("skillport.logs.density")).toBe(
+        "compact",
+      );
+    });
+  });
+
+  it("applies the failed quick chip and reloads with status=failed", async () => {
+    render(<OperationLogsView />);
+    await screen.findByText("scan.all");
+
+    fireEvent.click(screen.getByTestId("logs-chip-failed"));
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenLastCalledWith("list_operation_logs", {
+        filter: { status: "failed", limit: 100, offset: 0 },
+      });
+    });
+  });
+
+  it("loads more entries when the load more button is clicked", async () => {
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "list_operation_logs") {
+        const offset =
+          (args as { filter?: { offset?: number } } | undefined)?.filter
+            ?.offset ?? 0;
+        return offset === 0
+          ? { entries: [mockEntry], total: 2, limit: 100, offset: 0 }
+          : { entries: [mockEntry2], total: 2, limit: 100, offset: 1 };
+      }
+      if (command === "get_operation_log") return mockEntry;
+      return null;
+    });
+
+    render(<OperationLogsView />);
+    await screen.findByText("scan.all");
+    fireEvent.click(await screen.findByText(/加载更多/));
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenLastCalledWith("list_operation_logs", {
+        filter: { limit: 100, offset: 1 },
+      });
+    });
+    expect(await screen.findByText("scan.partial")).toBeInTheDocument();
+  });
+
+  it("copies the log id from the detail drawer", async () => {
+    render(<OperationLogsView />);
+    await screen.findByText("scan.all");
+
+    fireEvent.click(screen.getByText("scan.all").closest("button")!);
+    fireEvent.click(await screen.findByTestId("logs-detail-copy-id"));
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("log-1");
+    });
+  });
+
+  it("focuses the search input when pressing /", async () => {
+    render(<OperationLogsView />);
+    await screen.findByText("scan.all");
+
+    const searchInput = screen.getByPlaceholderText(/搜索摘要/);
+    expect(document.activeElement).not.toBe(searchInput);
+
+    fireEvent.keyDown(document.body, { key: "/" });
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(searchInput);
     });
   });
 });

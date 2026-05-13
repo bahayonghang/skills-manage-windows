@@ -25,6 +25,9 @@ vi.mock("@/stores/platformStore", () => ({
       applyScanSummary: vi.fn(),
       setCollectionCount: vi.fn(),
       setDiscoveredCount: vi.fn(),
+      addCustomAgent: vi.fn(),
+      updateCustomAgent: vi.fn(),
+      removeCustomAgent: vi.fn(),
     };
     if (typeof selector === "function") {
       return selector(state);

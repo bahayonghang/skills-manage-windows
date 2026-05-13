@@ -1,533 +1,74 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Search, RefreshCw, Blocks, FolderOpen, Settings, ArrowUpDown, Tag, X, Wand2, AlertTriangle, Check, Eye, ListChecks, Plus, Download, Trash2, FolderGit2, FileJson } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
-import { usePlatformStore } from "@/stores/platformStore";
-import { useSkillStore } from "@/stores/skillStore";
-import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
-import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
-import { InstallDialog } from "@/components/central/InstallDialog";
-import { BatchInstallCentralSkillsDialog } from "@/components/central/BatchInstallCentralSkillsDialog";
-import { DeleteCentralSkillDialog } from "@/components/central/DeleteCentralSkillDialog";
-import { BatchDeleteCentralSkillsDialog } from "@/components/central/BatchDeleteCentralSkillsDialog";
-import { RemoteMissingSkillsDialog } from "@/components/central/RemoteMissingSkillsDialog";
-import { CentralStatePortabilityDialog } from "@/components/central/CentralStatePortabilityDialog";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { AgentWithStatus, AiTagJob, BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult, CentralBatchInstallResult, CentralSkillUpdateJob, CentralSkillUpdateState, DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult, SkillAiTagReview, ScannedSkill, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks, SkillportStateImportPreview, SkillportStateImportResolution, SkillportStateImportResult } from "@/types";
+import { BatchDeleteCentralSkillPreviewResult, CentralSkillUpdateState, DeleteSkillRepositoryPreview, SkillDetail, SkillRepositoryWithStats, SkillWithLinks } from "@/types";
 import { markAppPerformance } from "@/lib/performance";
-import { cn } from "@/lib/utils";
-import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
-import { useMarketplaceStore } from "@/stores/marketplaceStore";
-import { useTargetStore } from "@/stores/targetStore";
-import { VirtualizedList } from "@/components/ui/virtualized-list";
-import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
-import { formatPathForDisplay } from "@/lib/path";
-import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
+import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
+import { CentralSkillsShell } from "@/components/central/CentralSkillsShell";
+import { CentralSidebarV2Header } from "@/components/central/v2/CentralSidebarV2Header";
+import { CentralSkillsShellV2 } from "@/components/central/v2/CentralSkillsShellV2";
+import { CommandPaletteV2 } from "@/components/central/v2/CommandPaletteV2";
+import { useFeatureFlag } from "@/lib/featureFlags";
+import { useCentralViewStateUrl } from "@/hooks/useCentralViewStateUrl";
+import { useCentralSkillsActions } from "@/pages/centralSkillsActions";
+import { getCentralSkillsCheckButtonState } from "@/pages/centralSkillsCheckButton";
+import { useCentralSkillsViewModelV2 } from "@/pages/centralSkillsViewModelV2";
+import { addUniqueToCentralViewState, useCentralV2SavedViewsBridge } from "@/pages/centralV2SavedViewsBridge";
+import { useCentralV2TagGroupsBridge } from "@/pages/centralV2TagGroupsBridge";
+import { useCentralV2PaletteActions } from "@/pages/centralV2PaletteActions";
 import {
-  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-} from "@/lib/platformVisibility";
-import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
-import { isTauriRuntime } from "@/lib/tauri";
-import { useResizableWidth } from "@/hooks/useResizableWidth";
-
-const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
-  {
-    id: "fixture-central-skill",
-    name: "fixture-central-skill",
-    description: "Browser validation fixture for Central and drawer entry flows.",
-    file_path: "~/.skillsmanage/skills/fixture-central-skill/SKILL.md",
-    canonical_path: "~/.skillsmanage/skills/fixture-central-skill",
-    is_central: true,
-    source: "browser-fixture",
-    scanned_at: "2026-04-17T00:00:00.000Z",
-    created_at: "2026-04-17T00:00:00.000Z",
-    updated_at: "2026-04-17T00:00:00.000Z",
-    linked_agents: ["claude-code"],
-    shared_root_agents: [],
-    tags: [],
-    is_source_unknown: true,
-  },
-];
-
-const EMPTY_SKILLS: SkillWithLinks[] = [];
-const EMPTY_AGENTS: AgentWithStatus[] = [];
-const EMPTY_REPOSITORIES: SkillRepositoryWithStats[] = [];
-const EMPTY_TAGS: SkillTag[] = [];
-const EMPTY_AI_TAG_REVIEWS: SkillAiTagReview[] = [];
-const EMPTY_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {};
-const EMPTY_UPDATE_STATUSES: Record<string, CentralSkillUpdateState> = {};
-const CENTRAL_FILTER_DEFAULT_WIDTH = 286;
-const CENTRAL_FILTER_MIN_WIDTH = 220;
-const CENTRAL_FILTER_MAX_WIDTH = 460;
-const CENTRAL_CATEGORIZE_DEFAULT_WIDTH = 392;
-const CENTRAL_CATEGORIZE_MIN_WIDTH = 336;
-const CENTRAL_CATEGORIZE_MAX_WIDTH = 640;
-const IDLE_AI_TAG_JOB: AiTagJob = {
-  jobId: null,
-  status: "idle",
-  total: 0,
-  completed: 0,
-  succeeded: 0,
-  failed: 0,
-  lowConfidenceCount: 0,
-  items: {},
-};
-const IDLE_UPDATE_JOB: CentralSkillUpdateJob = {
-  phase: null,
-  status: "idle",
-  total: 0,
-  completed: 0,
-  succeeded: 0,
-  failed: 0,
-  skipped: 0,
-  items: {},
-};
-const EMPTY_GITHUB_IMPORT_STATE = {
-  isPreviewLoading: false,
-  isImporting: false,
-  preview: null,
-  importResult: null,
-  previewedRepoUrl: null,
-  error: null,
-};
-
-async function noopAsync(): Promise<void> {}
-
-async function noopInstallSkill() {
-  return {
-    succeeded: [],
-    failed: [],
-  };
-}
-
-async function noopBatchInstallSkills(): Promise<CentralBatchInstallResult> {
-  return {
-    succeeded: [],
-    failed: [],
-  };
-}
-
-async function noopPreviewGitHubRepoImport() {
-  return null;
-}
-
-async function noopImportGitHubRepoSkills() {
-  throw new Error("GitHub import is unavailable");
-}
-
-async function noopExportSkillportState(): Promise<string> {
-  return JSON.stringify(
-    {
-      kind: "skillport/state-export",
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      exportedFrom: { app: "SkillPort" },
-      githubSources: [],
-      centralSkills: [],
-      unrestorableSkills: [],
-    },
-    null,
-    2
-  );
-}
-
-async function noopPreviewSkillportStateImport(_json: string): Promise<SkillportStateImportPreview> {
-  throw new Error("State import is unavailable");
-}
-
-async function noopImportSkillportState(
-  _json: string,
-  _resolutions: SkillportStateImportResolution[]
-): Promise<SkillportStateImportResult> {
-  throw new Error("State import is unavailable");
-}
-
-async function noopGetSkillsByAgent(_agentId: string): Promise<void> {}
-
-async function noopLoadDeletePreview(): Promise<SkillDetail> {
-  throw new Error("Central skill deletion is unavailable");
-}
-
-async function noopLoadBatchDeletePreview(): Promise<BatchDeleteCentralSkillPreviewResult> {
-  throw new Error("Central skill deletion is unavailable");
-}
-
-async function noopLoadRepositoryDeletePreview(): Promise<DeleteSkillRepositoryPreview> {
-  throw new Error("Repository deletion is unavailable");
-}
-
-async function noopDeleteCentralSkill(): Promise<void> {}
-
-async function noopDeleteCentralSkills(): Promise<BatchDeleteCentralSkillResult> {
-  return {
-    succeeded: [],
-    failed: [],
-  };
-}
-
-async function noopDeleteSkillRepository(): Promise<DeleteSkillRepositoryResult> {
-  throw new Error("Repository deletion is unavailable");
-}
-
-async function noopUnlisten() {
-  return () => {};
-}
-
-async function noopCheckUpdates(): Promise<CentralSkillUpdateState[]> {
-  return [];
-}
-
-async function noopUpdateSkills() {
-  return {
-    succeeded: [],
-    failed: [],
-    skipped: [],
-    states: [],
-  };
-}
-
-async function noopKeepRemoteMissingSkills(): Promise<string[]> {
-  return [];
-}
-
-function noopResetGitHubImport() {}
-
-// ─── Empty State ──────────────────────────────────────────────────────────────
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full gap-4 py-20">
-      <div className="p-4 rounded-full bg-muted/60">
-        <Blocks className="size-12 text-muted-foreground opacity-60" />
-      </div>
-      <p className="text-sm text-muted-foreground font-medium">{message}</p>
-    </div>
-  );
-}
-
-// ─── First Visit Empty State ──────────────────────────────────────────────────
-
-function FirstVisitEmptyState() {
-  const navigate = useNavigate();
-  const { t } = useTranslation();
-  return (
-    <div className="flex flex-col items-center justify-center h-full gap-6 py-16 text-center px-8">
-      <div className="p-5 rounded-full bg-primary/10 ring-1 ring-primary/20">
-        <Blocks className="size-14 text-primary opacity-70" />
-      </div>
-      <div className="space-y-2">
-        <h2 className="text-xl font-semibold text-foreground">{t("empty.welcomeTitle")}</h2>
-        <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">
-          {t("empty.welcomeDesc")}
-        </p>
-      </div>
-      <div className="flex flex-col gap-3 items-center">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-xl px-4 py-3 max-w-xs text-left border border-border">
-          <FolderOpen className="size-4 shrink-0 text-primary/60" />
-          <span>
-            {t("empty.createHint")} <code className="font-mono">~/.skillsmanage/skills/my-skill/SKILL.md</code>
-          </span>
-        </div>
-        <Button
-          variant="default"
-          size="sm"
-          onClick={() => navigate("/settings")}
-          className="gap-2"
-        >
-          <Settings className="size-4" />
-          {t("empty.goToSettings")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function parseSortableTimestamp(value?: string | null): number {
-  if (!value) return 0;
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
-function getSkillSortTimestamp(
-  skill: SkillWithLinks,
-  field: "createdAt" | "updatedAt"
-): number {
-  return parseSortableTimestamp(
-    field === "createdAt"
-      ? skill.created_at ?? skill.scanned_at
-      : skill.updated_at ?? skill.scanned_at
-  );
-}
-
-// ─── CentralSkillsView ────────────────────────────────────────────────────────
-
-function isGithubRepository(repository: SkillRepositoryWithStats): boolean {
-  return (
-    repository.source_type === "github" ||
-    Boolean(repository.owner && repository.repo)
-  );
-}
-
-function getRepositorySkillCount(repository: SkillRepositoryWithStats): number {
-  return repository.is_unknown
-    ? repository.unknown_skill_count
-    : repository.skill_count;
-}
-
-function FilterSection({
-  icon,
-  title,
-  children,
-}: {
-  icon: ReactNode;
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="space-y-2.5">
-      <div className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {icon}
-        <span>{title}</span>
-      </div>
-      <div className="space-y-1.5">{children}</div>
-    </section>
-  );
-}
-
-function RepositoryFilterButton({
-  active,
-  count,
-  label,
-  sourceKind,
-  onClick,
-  onDelete,
-  deleteLabel,
-  deleteDisabled,
-  isDeleteLoading,
-  testId,
-}: {
-  active: boolean;
-  count: number;
-  label: string;
-  sourceKind: "all" | "github" | "local";
-  onClick: () => void;
-  onDelete?: () => void;
-  deleteLabel?: string;
-  deleteDisabled?: boolean;
-  isDeleteLoading?: boolean;
-  testId: string;
-}) {
-  const Icon = sourceKind === "github" ? FolderGit2 : FolderOpen;
-
-  return (
-    <div
-      className={cn(
-        "group flex min-h-10 w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
-        active
-          ? "border-primary/25 bg-background text-foreground shadow-sm ring-1 ring-primary/10"
-          : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-background/70 hover:text-foreground",
-        sourceKind === "local" && !active
-          ? "border-dashed border-border/80 bg-muted/20"
-          : null
-      )}
-    >
-      <button
-        type="button"
-        data-testid={testId}
-        data-source-kind={sourceKind}
-        onClick={onClick}
-        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-      >
-        <span
-          className={cn(
-            "grid size-6 shrink-0 place-items-center rounded-md border",
-            sourceKind === "github"
-              ? "border-sky-500/20 bg-sky-500/10 text-sky-600 dark:text-sky-300"
-              : sourceKind === "local"
-                ? "border-dashed border-border bg-muted text-muted-foreground"
-                : "border-border bg-background text-muted-foreground"
-          )}
-        >
-          <Icon className="size-3.5" />
-        </span>
-        <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
-      </button>
-      <span className="shrink-0 rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-        {count}
-      </span>
-      {onDelete && (
-        <button
-          type="button"
-          data-testid={`${testId}-delete`}
-          aria-label={deleteLabel}
-          title={deleteLabel}
-          disabled={deleteDisabled || isDeleteLoading}
-          onClick={(event) => {
-            event.stopPropagation();
-            onDelete();
-          }}
-          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive focus:opacity-100 disabled:pointer-events-none disabled:opacity-40 group-hover:opacity-100"
-        >
-          <Trash2 className={cn("size-3.5", isDeleteLoading && "animate-pulse")} />
-        </button>
-      )}
-    </div>
-  );
-}
-
-function TagFilterButton({
-  active,
-  count,
-  label,
-  tone,
-  onClick,
-  testId,
-}: {
-  active: boolean;
-  count: number;
-  label: string;
-  tone: "all" | "tag" | "uncategorized" | "updates" | "ai";
-  onClick: () => void;
-  testId: string;
-}) {
-  const dotClassName =
-    tone === "updates"
-      ? "bg-amber-500"
-      : tone === "ai"
-        ? "bg-violet-500"
-        : tone === "uncategorized"
-          ? "bg-slate-400"
-          : tone === "tag"
-            ? "bg-emerald-500"
-            : "bg-muted-foreground/60";
-
-  return (
-    <button
-      type="button"
-      data-testid={testId}
-      data-filter-kind="tag"
-      onClick={onClick}
-      className={cn(
-        "flex min-h-9 w-full items-center gap-2 rounded-full border px-2.5 py-1.5 text-left text-xs transition-colors",
-        active
-          ? "border-primary/30 bg-primary/10 text-primary ring-1 ring-primary/10"
-          : "border-border/70 bg-background/35 text-muted-foreground hover:bg-background hover:text-foreground"
-      )}
-    >
-      <span className={cn("size-2 shrink-0 rounded-full", dotClassName)} />
-      <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
-      <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-        {count}
-      </span>
-    </button>
-  );
-}
-
+  useCentralSkillsDerivedData,
+  useCentralSkillsStoreBindings,
+  type CentralCategorizeTab,
+  type CentralSortDirection,
+  type CentralSortField,
+} from "@/pages/centralSkillsViewModel";
+import { usePlatformStore } from "@/stores/platformStore";
+import { useCentralInstalledSkillsFilterBridge } from "@/pages/centralInstalledSkillsFilterBridge";
+import { useCentralSkillsLayoutSizing } from "@/pages/centralSkillsLayoutSizing";
 export function CentralSkillsView() {
   const { t } = useTranslation();
-  const rawSkills = useCentralSkillsStore((state) => state.skills);
-  const rawAgents = useCentralSkillsStore((state) => state.agents);
-  const rawRepositories = useCentralSkillsStore((state) => state.repositories);
-  const rawTags = useCentralSkillsStore((state) => state.tags);
-  const rawAiTagReviews = useCentralSkillsStore((state) => state.aiTagReviews);
-  const rawAiTagJob = useCentralSkillsStore((state) => state.aiTagJob);
-  const rawUpdateStatuses = useCentralSkillsStore((state) => state.updateStatuses);
-  const rawUpdateJob = useCentralSkillsStore((state) => state.updateJob);
-  const rawAiTaggingAvailable = useCentralSkillsStore((state) => state.aiTaggingAvailable);
-  const rawIsLoading = useCentralSkillsStore((state) => state.isLoading);
-  const rawLoadCentralSkills = useCentralSkillsStore(
-    (state) => state.loadCentralSkills
-  );
-  const shouldUseBrowserFixtures =
-    !isTauriRuntime() &&
-    rawSkills === undefined &&
-    rawAgents === undefined &&
-    rawLoadCentralSkills === undefined;
-  const skills = shouldUseBrowserFixtures ? BROWSER_FIXTURE_SKILLS : rawSkills ?? EMPTY_SKILLS;
-  const agents = rawAgents ?? EMPTY_AGENTS;
-  const repositories = rawRepositories ?? EMPTY_REPOSITORIES;
-  const tags = rawTags ?? EMPTY_TAGS;
-  const aiTagReviews = rawAiTagReviews ?? EMPTY_AI_TAG_REVIEWS;
-  const aiTagJob = rawAiTagJob ?? IDLE_AI_TAG_JOB;
-  const updateStatuses = rawUpdateStatuses ?? EMPTY_UPDATE_STATUSES;
-  const updateJob = rawUpdateJob ?? IDLE_UPDATE_JOB;
-  const aiTaggingAvailable = rawAiTaggingAvailable ?? false;
-  const centralSkillsDir = formatPathForDisplay(
-    agents.find((agent) => agent.id === "central")?.global_skills_dir ?? t("central.path")
-  );
-  const isLoading = shouldUseBrowserFixtures ? false : rawIsLoading ?? false;
-  const loadCentralSkills = rawLoadCentralSkills ?? noopAsync;
-  const installSkill = useCentralSkillsStore((state) => state.installSkill) ?? noopInstallSkill;
-  const batchInstallSkills =
-    useCentralSkillsStore((state) => state.batchInstallSkills) ?? noopBatchInstallSkills;
-  const loadDeletePreview = useCentralSkillsStore((state) => state.loadDeletePreview) ?? noopLoadDeletePreview;
-  const loadBatchDeletePreview = useCentralSkillsStore((state) => state.loadBatchDeletePreview) ?? noopLoadBatchDeletePreview;
-  const loadRepositoryDeletePreview =
-    useCentralSkillsStore((state) => state.loadRepositoryDeletePreview) ?? noopLoadRepositoryDeletePreview;
-  const deleteCentralSkill = useCentralSkillsStore((state) => state.deleteCentralSkill) ?? noopDeleteCentralSkill;
-  const deleteCentralSkills = useCentralSkillsStore((state) => state.deleteCentralSkills) ?? noopDeleteCentralSkills;
-  const deleteSkillRepository =
-    useCentralSkillsStore((state) => state.deleteSkillRepository) ?? noopDeleteSkillRepository;
-  const togglePlatformLink = useCentralSkillsStore((state) => state.togglePlatformLink) ?? noopAsync;
-  const createTag = useCentralSkillsStore((state) => state.createTag);
-  const assignSkillTags = useCentralSkillsStore((state) => state.assignSkillTags);
-  const bulkSuggestSkillTags = useCentralSkillsStore((state) => state.bulkSuggestSkillTags);
-  const cancelAiTagJob = useCentralSkillsStore((state) => state.cancelAiTagJob);
-  const acceptAiTagReview = useCentralSkillsStore((state) => state.acceptAiTagReview);
-  const skipAiTagReview = useCentralSkillsStore((state) => state.skipAiTagReview);
-  const checkSkillUpdates = useCentralSkillsStore((state) => state.checkSkillUpdates) ?? noopCheckUpdates;
-  const updateSkills = useCentralSkillsStore((state) => state.updateSkills) ?? noopUpdateSkills;
-  const keepRemoteMissingSkills =
-    useCentralSkillsStore((state) => state.keepRemoteMissingSkills) ??
-    noopKeepRemoteMissingSkills;
-  const subscribeAiTagProgress =
-    useCentralSkillsStore((state) => state.subscribeAiTagProgress) ?? noopUnlisten;
-  const subscribeUpdateProgress =
-    useCentralSkillsStore((state) => state.subscribeUpdateProgress) ?? noopUnlisten;
-  const isMetadataUpdating = useCentralSkillsStore((state) => state.isMetadataUpdating) ?? false;
-  const isSuggestingTags = useCentralSkillsStore((state) => state.isSuggestingTags) ?? false;
-  const isCheckingUpdates = useCentralSkillsStore((state) => state.isCheckingUpdates) ?? false;
-  const updatingSkillIds = useCentralSkillsStore((state) => state.updatingSkillIds) ?? [];
-  const isInstalling = useCentralSkillsStore((state) => state.isInstalling) ?? false;
-  const isDeleting = useCentralSkillsStore((state) => state.isDeleting) ?? false;
-  const togglingAgentId = useCentralSkillsStore((state) => state.togglingAgentId);
-  const activeTarget = useTargetStore((state) => state.activeTarget);
-  const isRemoteTarget = activeTarget.kind === "ssh";
+  const {
+    skills,
+    agents,
+    repositories,
+    tags,
+    aiTagReviews,
+    aiTagJob,
+    updateStatuses,
+    updateJob,
+    portabilityJob,
+    aiTaggingAvailable,
+    centralSkillsDir,
+    isLoading,
+    loadCentralSkills,
+    subscribeAiTagProgress,
+    subscribeUpdateProgress,
+    subscribePortabilityProgress,
+    cancelSkillportStatePortability,
+    isMetadataUpdating,
+    isSuggestingTags,
+    isCheckingUpdates,
+    updatingSkillIds,
+    isInstalling,
+    isDeleting,
+    togglingAgentId,
+    refreshCounts,
+    availableInstallAgents,
+    githubImport,
+    resetGitHubImport,
+    exportSkillportState,
+    previewSkillportStateImport,
+    importSkillportState,
+  } = useCentralSkillsStoreBindings(t);
 
-  // Keep the platform sidebar counts in sync after install.
-  const categoryVisibility = usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
-  const refreshCounts = usePlatformStore((state) => state.refreshCounts) ?? noopAsync;
-  const platformAgents = usePlatformStore((state) => state.agents) ?? EMPTY_AGENTS;
-  const skillsByAgent = useSkillStore((state) => state.skillsByAgent) ?? EMPTY_SKILLS_BY_AGENT;
-  const getSkillsByAgent = useSkillStore((state) => state.getSkillsByAgent) ?? noopGetSkillsByAgent;
-  const githubImport = useMarketplaceStore((state) => state.githubImport) ?? EMPTY_GITHUB_IMPORT_STATE;
-  const previewGitHubRepoImport =
-    useMarketplaceStore((state) => state.previewGitHubRepoImport) ?? noopPreviewGitHubRepoImport;
-  const importGitHubRepoSkills =
-    useMarketplaceStore((state) => state.importGitHubRepoSkills) ?? noopImportGitHubRepoSkills;
-  const resetGitHubImport =
-    useMarketplaceStore((state) => state.resetGitHubImport) ?? noopResetGitHubImport;
-  const exportSkillportState =
-    useCentralSkillsStore((state) => state.exportSkillportState) ?? noopExportSkillportState;
-  const previewSkillportStateImport =
-    useCentralSkillsStore((state) => state.previewSkillportStateImport) ?? noopPreviewSkillportStateImport;
-  const importSkillportState =
-    useCentralSkillsStore((state) => state.importSkillportState) ?? noopImportSkillportState;
-
-  type SortField = "name" | "createdAt" | "updatedAt";
-  type SortDirection = "asc" | "desc";
-  type CategorizeTab = "manual" | "ai" | "review";
-  const [sortField, setSortField] = useState<SortField>("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [sortField, setSortField] = useState<CentralSortField>("name");
+  const [sortDirection, setSortDirection] = useState<CentralSortDirection>("asc");
   const [searchQuery, setSearchQuery] = useState("");
   const [repositoryFilter, setRepositoryFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
-  const [categorizeTab, setCategorizeTab] = useState<CategorizeTab>("manual");
+  const [categorizeTab, setCategorizeTab] = useState<CentralCategorizeTab>("manual");
   const [manualTagQuery, setManualTagQuery] = useState("");
   const [manualSelectedTagIds, setManualSelectedTagIds] = useState<string[]>([]);
   const [installTargetSkill, setInstallTargetSkill] =
@@ -537,6 +78,9 @@ export function CentralSkillsView() {
   const [deletePreview, setDeletePreview] = useState<SkillDetail | null>(null);
   const [batchDeletePreview, setBatchDeletePreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
+  const [pendingUpdateStates, setPendingUpdateStates] = useState<CentralSkillUpdateState[]>([]);
+  const [queuedRemoteMissingStates, setQueuedRemoteMissingStates] =
+    useState<CentralSkillUpdateState[]>([]);
   const [remoteMissingStates, setRemoteMissingStates] = useState<CentralSkillUpdateState[]>([]);
   const [remoteMissingPreview, setRemoteMissingPreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
@@ -545,24 +89,13 @@ export function CentralSkillsView() {
   const [repositoryDeletePreview, setRepositoryDeletePreview] =
     useState<DeleteSkillRepositoryPreview | null>(null);
   const {
-    width: filterSidebarWidth,
-    startResize: startFilterSidebarResize,
-    handleResizeKeyDown: handleFilterSidebarResizeKeyDown,
-  } = useResizableWidth({
-    defaultWidth: CENTRAL_FILTER_DEFAULT_WIDTH,
-    minWidth: CENTRAL_FILTER_MIN_WIDTH,
-    maxWidth: CENTRAL_FILTER_MAX_WIDTH,
-  });
-  const {
-    width: categorizeSidebarWidth,
-    startResize: startCategorizeSidebarResize,
-    handleResizeKeyDown: handleCategorizeSidebarResizeKeyDown,
-  } = useResizableWidth({
-    defaultWidth: CENTRAL_CATEGORIZE_DEFAULT_WIDTH,
-    minWidth: CENTRAL_CATEGORIZE_MIN_WIDTH,
-    maxWidth: CENTRAL_CATEGORIZE_MAX_WIDTH,
-    resizeFrom: "left",
-  });
+    categorizeSidebarWidth,
+    filterSidebarWidth,
+    handleCategorizeSidebarResizeKeyDown,
+    handleFilterSidebarResizeKeyDown,
+    startCategorizeSidebarResize,
+    startFilterSidebarResize,
+  } = useCentralSkillsLayoutSizing();
   const [isDeletePreviewLoading, setIsDeletePreviewLoading] = useState(false);
   const [isBatchDeletePreviewLoading, setIsBatchDeletePreviewLoading] = useState(false);
   const [isRemoteMissingPreviewLoading, setIsRemoteMissingPreviewLoading] = useState(false);
@@ -576,11 +109,13 @@ export function CentralSkillsView() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBatchInstallDialogOpen, setIsBatchInstallDialogOpen] = useState(false);
   const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
+  const [isUpdateConfirmDialogOpen, setIsUpdateConfirmDialogOpen] = useState(false);
   const [isRemoteMissingDialogOpen, setIsRemoteMissingDialogOpen] = useState(false);
   const [isRepositoryDeleteDialogOpen, setIsRepositoryDeleteDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isGitHubImportOpen, setIsGitHubImportOpen] = useState(false);
+  const [isPlatformManageOpen, setIsPlatformManageOpen] = useState(false);
   const [isPortabilityOpen, setIsPortabilityOpen] = useState(false);
   const [dismissedUpdateProgressKey, setDismissedUpdateProgressKey] = useState<string | null>(null);
   const [githubRepoUrl, setGitHubRepoUrl] = useState("");
@@ -588,12 +123,88 @@ export function CentralSkillsView() {
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const hasMarkedCentralListReady = useRef(false);
   const deferredSearchQuery = useDeferredValue(searchQuery);
+  const categoryVisibility =
+    usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+  const setCategoryVisibility = usePlatformStore((state) => state.setCategoryVisibility);
+  const setAgentEnabled = usePlatformStore((state) => state.setAgentEnabled);
+  const addCustomAgent = usePlatformStore((state) => state.addCustomAgent);
+  const updateCustomAgent = usePlatformStore((state) => state.updateCustomAgent);
+  const removeCustomAgent = usePlatformStore((state) => state.removeCustomAgent);
   const effectiveSearchQuery =
     skills.length > 80 ? deferredSearchQuery : searchQuery;
-  const normalizedSearchQuery = useMemo(
-    () => normalizeSearchQuery(effectiveSearchQuery),
-    [effectiveSearchQuery]
-  );
+  const {
+    canCreateManualTag,
+    filteredManualTags,
+    filteredSkills,
+    isSearchActive,
+    normalizedSearchQuery,
+    selectedSkillIdSet,
+    skillIdsKey,
+    sortedSkills,
+    tagCounts,
+    uncategorizedCount,
+    updateAvailableSkillIds,
+    updateTargetSkillIds,
+  } = useCentralSkillsDerivedData({
+    skills,
+    tags,
+    aiTagReviews,
+    updateStatuses,
+    selectedSkillIds,
+    searchQuery,
+    effectiveSearchQuery,
+    manualTagQuery,
+    repositoryFilter,
+    tagFilter,
+    sortField,
+    sortDirection,
+  });
+
+  // ─── Central V2 (M1) ───────────────────────────────────────────────
+  // 新布局通过 feature flag 切换。V2 view-model 与 V1 并存，state 各自维护，
+  // 保证 V1 行为完全不受影响。
+  const v2EnabledFromFlag = useFeatureFlag("central.newLayout");
+  const [v2OverrideClassic, setV2OverrideClassic] = useState(false);
+  const v2Enabled = v2EnabledFromFlag && !v2OverrideClassic;
+  const [v2ViewState, setV2ViewState] = useCentralViewStateUrl({ disabled: !v2Enabled });
+  const v2 = useCentralSkillsViewModelV2({
+    skills,
+    repositories,
+    tags,
+    aiTagReviews,
+    updateStatuses,
+    state: v2ViewState,
+  });
+  const currentViewSkills = v2Enabled ? v2.sortedSkills : sortedSkills;
+  const {
+    installedSkillsFilterProps,
+    isInstalledSkillsFilterActive,
+    visibleCurrentViewSkills,
+    visibleFilteredSkills,
+    visibleV2FilteredSkills,
+  } = useCentralInstalledSkillsFilterBridge({
+    availableInstallAgents,
+    currentViewSkills,
+    filteredSkills,
+    selectedSkillIds,
+    setIsBatchInstallDialogOpen,
+    setSelectedSkillIds,
+    v2FilteredSkills: v2.filteredSkills,
+  });
+
+  // ─── Saved Views (M2) ────────────────────────────────────────
+  const savedViewsBridge = useCentralV2SavedViewsBridge({
+    enabled: v2Enabled,
+    v2ViewState,
+    setV2ViewState,
+    t,
+  });
+
+  // ─── Tag Groups (M3) ─────────────────────────────────────────
+  const tagGroupsBridge = useCentralV2TagGroupsBridge({ enabled: v2Enabled, t });
+
+  // ─── Command palette state (M2) + actions (M6) ───────────────────────
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const updateProgressKey = useMemo(
     () =>
       [
@@ -618,81 +229,29 @@ export function CentralSkillsView() {
     ]
   );
   const isUpdateProgressDismissible =
-    updateJob.status === "completed" || updateJob.status === "failed";
+    updateJob.status === "completed" ||
+    updateJob.status === "failed" ||
+    updateJob.status === "cancelled";
+  const checkButtonState = getCentralSkillsCheckButtonState({
+    currentViewSkills: visibleCurrentViewSkills,
+    repositories,
+    repositoryFilter,
+    selectedSkillIds,
+    sortedSkills: visibleCurrentViewSkills,
+    t,
+    totalSkillCount: skills.length,
+    v2Enabled,
+    v2HasCurrentFilters:
+      v2ViewState.repos.length > 0 ||
+      v2ViewState.tags.length > 0 ||
+      v2.isSearchActive ||
+      isInstalledSkillsFilterActive,
+  });
   const shouldShowUpdateProgress =
     updateJob.status !== "idle" &&
     (!isUpdateProgressDismissible || dismissedUpdateProgressKey !== updateProgressKey);
   const updateProgressRatio =
     updateJob.total > 0 ? Math.min(1, updateJob.completed / updateJob.total) : 0;
-  const searchableSkills = useMemo(
-    () =>
-      skills.map((skill) => ({
-        skill,
-        searchText: buildSearchText([
-          skill.name,
-          skill.description,
-          skill.repository?.name,
-          skill.source_path,
-          ...(skill.tags ?? []).map((tag) => tag.name),
-        ]),
-      })),
-    [skills]
-  );
-  const aiReviewSkillIds = useMemo(
-    () => new Set(aiTagReviews.map((review) => review.skill_id)),
-    [aiTagReviews]
-  );
-  const updateAvailableSkillIds = useMemo(
-    () =>
-      skills
-        .filter((skill) => updateStatuses[skill.id]?.status === "update_available")
-        .map((skill) => skill.id),
-    [skills, updateStatuses]
-  );
-  const selectedUpdatableSkillIds = useMemo(
-    () => selectedSkillIds.filter((skillId) => updateStatuses[skillId]?.status === "update_available"),
-    [selectedSkillIds, updateStatuses]
-  );
-  const selectedSkillIdSet = useMemo(() => new Set(selectedSkillIds), [selectedSkillIds]);
-  const updateTargetSkillIds =
-    selectedSkillIds.length > 0 ? selectedUpdatableSkillIds : updateAvailableSkillIds;
-  const uncategorizedCount = useMemo(
-    () =>
-      skills.filter((skill) => {
-        const skillTags = skill.tags ?? [];
-        return skillTags.length === 0 || skillTags.some((tag) => tag.id === "uncategorized");
-      }).length,
-    [skills]
-  );
-  const tagCounts = useMemo(
-    () => {
-      const counts = new Map<string, number>();
-      for (const skill of skills) {
-        for (const tag of skill.tags ?? []) {
-          counts.set(tag.id, (counts.get(tag.id) ?? 0) + 1);
-        }
-      }
-      return tags.map((tag) => ({
-        tag,
-        count: counts.get(tag.id) ?? 0,
-      }));
-    },
-    [skills, tags]
-  );
-  const filteredManualTags = useMemo(() => {
-    const query = normalizeSearchQuery(manualTagQuery);
-    return query
-      ? tags.filter((tag) => normalizeSearchQuery(tag.name).includes(query))
-      : tags;
-  }, [manualTagQuery, tags]);
-  const canCreateManualTag = useMemo(() => {
-    const name = manualTagQuery.trim();
-    if (!name) return false;
-    return !tags.some((tag) => normalizeSearchQuery(tag.name) === normalizeSearchQuery(name));
-  }, [manualTagQuery, tags]);
-  const skillIdsKey = useMemo(() => skills.map((skill) => skill.id).join("\0"), [skills]);
-  const isSearchActive = normalizedSearchQuery.length > 0;
-
   // Load central skills on mount.
   useEffect(() => {
     loadCentralSkills();
@@ -732,55 +291,22 @@ export function CentralSkillsView() {
     };
   }, [subscribeUpdateProgress]);
 
-  // Filter skills by search query.
-  const filteredSkills = useMemo(() => {
-    return searchableSkills
-      .filter(({ searchText }) => !normalizedSearchQuery || searchText.includes(normalizedSearchQuery))
-      .map(({ skill }) => skill)
-      .filter((skill) => {
-        const repository = skill.repository;
-        const skillTags = skill.tags ?? [];
-        const matchesRepository =
-          repositoryFilter === "all" ||
-          (repositoryFilter === "unassigned"
-            ? skill.is_source_unknown || repository?.is_unknown
-            : repository?.id === repositoryFilter);
-        const matchesTag =
-          tagFilter === "all" ||
-          (tagFilter === "updates"
-            ? updateStatuses[skill.id]?.status === "update_available"
-            : false) ||
-          (tagFilter === "ai-review"
-            ? aiReviewSkillIds.has(skill.id)
-            : false) ||
-          (tagFilter === "uncategorized"
-            ? skillTags.length === 0 || skillTags.some((tag) => tag.id === "uncategorized")
-            : skillTags.some((tag) => tag.id === tagFilter));
-        return matchesRepository && matchesTag;
-      });
-  }, [aiReviewSkillIds, normalizedSearchQuery, repositoryFilter, searchableSkills, tagFilter, updateStatuses]);
-
-  // Sort filtered skills.
-  const sortedSkills = useMemo(() => {
-    const list = [...filteredSkills];
-    const direction = sortDirection === "asc" ? 1 : -1;
-    return list.sort((a, b) => {
-      const nameComparison = a.name.localeCompare(b.name, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-
-      if (sortField === "name") {
-        return nameComparison * direction;
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    subscribePortabilityProgress().then((unsubscribe) => {
+      if (disposed) {
+        unsubscribe();
+        return;
       }
-
-      const leftTime = getSkillSortTimestamp(a, sortField);
-      const rightTime = getSkillSortTimestamp(b, sortField);
-      const timeComparison = leftTime - rightTime;
-
-      return timeComparison === 0 ? nameComparison : timeComparison * direction;
+      unlisten = unsubscribe;
     });
-  }, [filteredSkills, sortDirection, sortField]);
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [subscribePortabilityProgress]);
 
   useEffect(() => {
     if (!isSearchActive || !contentRef.current) return;
@@ -808,556 +334,24 @@ export function CentralSkillsView() {
     }
   }, [isLoading, skills.length]);
 
-  function handleInstallClick(skill: SkillWithLinks) {
-    setInstallTargetSkill(skill);
-    setIsDialogOpen(true);
-  }
-
-  function handleDeleteDialogOpenChange(open: boolean) {
-    setIsDeleteDialogOpen(open);
-    if (!open) {
-      setDeleteTargetSkill(null);
-      setDeletePreview(null);
-      setDeletePreviewError(null);
-      setIsDeletePreviewLoading(false);
-    }
-  }
-
-  function handleBatchDeleteDialogOpenChange(open: boolean) {
-    setIsBatchDeleteDialogOpen(open);
-    if (!open) {
-      setBatchDeletePreview(null);
-      setBatchDeletePreviewError(null);
-      setIsBatchDeletePreviewLoading(false);
-    }
-  }
-
-  function handleRepositoryDeleteDialogOpenChange(open: boolean) {
-    setIsRepositoryDeleteDialogOpen(open);
-    if (!open) {
-      setRepositoryDeleteTarget(null);
-      setRepositoryDeletePreview(null);
-      setRepositoryDeletePreviewError(null);
-      setIsRepositoryDeletePreviewLoading(false);
-    }
-  }
-
-  function handleRemoteMissingDialogOpenChange(open: boolean) {
-    setIsRemoteMissingDialogOpen(open);
-    if (!open) {
-      setRemoteMissingStates([]);
-      setRemoteMissingPreview(null);
-      setRemoteMissingError(null);
-      setIsRemoteMissingPreviewLoading(false);
-      setIsResolvingRemoteMissing(false);
-    }
-  }
-
-  async function handleDeleteClick(skill: SkillWithLinks) {
-    setDeleteTargetSkill(skill);
-    setDeletePreview(null);
-    setDeletePreviewError(null);
-    setIsDeleteDialogOpen(true);
-    setIsDeletePreviewLoading(true);
-    try {
-      const preview = await loadDeletePreview(skill.id);
-      setDeletePreview(preview);
-    } catch (err) {
-      const message = String(err);
-      setDeletePreviewError(message);
-      toast.error(t("central.deletePreviewError", { error: message }));
-    } finally {
-      setIsDeletePreviewLoading(false);
-    }
-  }
-
-  async function handleBatchDeleteClick() {
-    if (selectedSkillIds.length === 0) return;
-    setBatchDeletePreview(null);
-    setBatchDeletePreviewError(null);
-    setIsBatchDeleteDialogOpen(true);
-    setIsBatchDeletePreviewLoading(true);
-    try {
-      const preview = await loadBatchDeletePreview(selectedSkillIds);
-      setBatchDeletePreview(preview);
-    } catch (err) {
-      const message = String(err);
-      setBatchDeletePreviewError(message);
-      toast.error(t("central.batchDeletePreviewError", { error: message }));
-    } finally {
-      setIsBatchDeletePreviewLoading(false);
-    }
-  }
-
-  async function handleRepositoryDeleteClick(repository: SkillRepositoryWithStats) {
-    if (repository.is_unknown) return;
-
-    setRepositoryDeleteTarget(repository);
-    setRepositoryDeletePreview(null);
-    setRepositoryDeletePreviewError(null);
-    setIsRepositoryDeletePreviewLoading(true);
-    try {
-      const preview = await loadRepositoryDeletePreview(repository.id);
-      const previewedSkillCount = preview.delete_preview.previews.length;
-      if (previewedSkillCount === 0 && preview.delete_preview.failed.length === 0) {
-        const confirmed = window.confirm(
-          t("central.deleteRepositoryEmptyConfirm", { name: repository.name })
-        );
-        if (confirmed) {
-          const result = await deleteSkillRepository(repository.id, []);
-          await refreshCounts();
-          if (repositoryFilter === repository.id) {
-            setRepositoryFilter("all");
-          }
-          toast.success(
-            t("central.deleteRepositorySuccess", {
-              name: result.repository.name,
-              count: result.delete_result.succeeded.length,
-            })
-          );
-        }
-        setRepositoryDeleteTarget(null);
-        return;
-      }
-
-      setRepositoryDeletePreview(preview);
-      setIsRepositoryDeleteDialogOpen(true);
-    } catch (err) {
-      const message = String(err);
-      setRepositoryDeletePreviewError(message);
-      toast.error(t("central.deleteRepositoryError", { error: message }));
-    } finally {
-      setIsRepositoryDeletePreviewLoading(false);
-    }
-  }
-
-  const sortFieldOptions: Array<{ value: SortField; label: string }> = [
+  const sortFieldOptions: Array<{ value: CentralSortField; label: string }> = [
     { value: "name", label: t("central.sortByName") },
     { value: "createdAt", label: t("central.sortByCreatedAt") },
     { value: "updatedAt", label: t("central.sortByUpdatedAt") },
   ];
 
-  const sortDirectionOptions: Array<{ value: SortDirection; label: string }> = [
+  const sortDirectionOptions: Array<{ value: CentralSortDirection; label: string }> = [
     { value: "asc", label: t("central.sortAscending") },
     { value: "desc", label: t("central.sortDescending") },
   ];
 
-  function setDetailButtonRef(skillId: string, node: HTMLButtonElement | null) {
-    detailButtonRefs.current[skillId] = node;
-  }
-
-  function handleOpenDrawer(skillId: string) {
-    setDrawerSkillId(skillId);
-    setIsDrawerOpen(true);
-  }
-
-  async function handleTogglePlatform(skillId: string, agentId: string) {
-    try {
-      await togglePlatformLink(skillId, agentId);
-      await refreshCounts();
-    } catch (err) {
-      toast.error(t("central.installError", { error: String(err) }));
-    }
-  }
-
-  async function handleInstall(
-    skillId: string,
-    agentIds: string[],
-    method: string,
-    projectPath?: string | null
-  ) {
-    try {
-      const result = await installSkill(skillId, agentIds, method, projectPath);
-      // Refresh sidebar counts after install.
-      await refreshCounts();
-      if (result.failed.length > 0) {
-        const failedNames = result.failed
-          .map((failure) => `${failure.agent_id}: ${failure.error}`)
-          .join("; ");
-        toast.error(t("central.installPartialFail", { platforms: failedNames }));
-      }
-      return result;
-    } catch (err) {
-      toast.error(t("central.installError", { error: String(err) }));
-      throw err;
-    }
-  }
-
-  async function handleBatchInstallCentralSkills(
-    agentIds: string[],
-    method: "symlink" | "copy",
-    projectPath?: string | null
-  ) {
-    const requestedSkillIds = [...selectedSkillIds];
-    const requestedSkillCount = requestedSkillIds.length;
-    const platformCount = agentIds.length;
-
-    try {
-      const result = await batchInstallSkills(requestedSkillIds, agentIds, method, projectPath);
-      await refreshCounts();
-      if (result.failed.length > 0) {
-        toast.error(
-          t("central.batchInstallPartialToast", {
-            skillCount: requestedSkillCount,
-            platformCount,
-            failedCount: result.failed.length,
-          })
-        );
-      } else {
-        toast.success(
-          t("central.batchInstallSuccess", {
-            skillCount: requestedSkillCount,
-            platformCount,
-          })
-        );
-        setSelectedSkillIds([]);
-      }
-      return result;
-    } catch (err) {
-      toast.error(t("central.installError", { error: String(err) }));
-      throw err;
-    }
-  }
-
-  async function handleDeleteCentralSkill(skillId: string, removeAgentIds: string[]) {
-    try {
-      await deleteCentralSkill(skillId, removeAgentIds);
-      await refreshCounts();
-      toast.success(t("central.deleteSkillSuccess", { name: deleteTargetSkill?.name ?? skillId }));
-      handleDeleteDialogOpenChange(false);
-    } catch (err) {
-      const message = String(err);
-      setDeletePreviewError(message);
-      toast.error(t("central.deleteSkillError", { error: message }));
-      throw err;
-    }
-  }
-
-  async function handleBatchDeleteCentralSkills(requests: BatchDeleteCentralSkillRequest[]) {
-    try {
-      const result = await deleteCentralSkills(requests);
-      await refreshCounts();
-      const succeededIds = new Set(result.succeeded.map((item) => item.skill_id));
-      setSelectedSkillIds((current) => current.filter((skillId) => !succeededIds.has(skillId)));
-
-      if (result.failed.length > 0) {
-        toast.error(
-          t("central.batchDeletePartialError", {
-            succeeded: result.succeeded.length,
-            failed: result.failed.length,
-          })
-        );
-      } else {
-        toast.success(t("central.batchDeleteSuccess", { count: result.succeeded.length }));
-      }
-      handleBatchDeleteDialogOpenChange(false);
-      return result;
-    } catch (err) {
-      const message = String(err);
-      setBatchDeletePreviewError(message);
-      toast.error(t("central.deleteSkillError", { error: message }));
-      throw err;
-    }
-  }
-
-  function handleToggleSelection(skillId: string) {
-    setSelectedSkillIds((current) =>
-      current.includes(skillId)
-        ? current.filter((id) => id !== skillId)
-        : [...current, skillId]
-    );
-  }
-
-  function handleSelectCurrentFilter() {
-    setSelectedSkillIds(sortedSkills.map((skill) => skill.id));
-  }
-
-  function handleSelectUncategorized() {
-    setSelectedSkillIds(
-      sortedSkills
-        .filter((skill) => {
-          const skillTags = skill.tags ?? [];
-          return skillTags.length === 0 || skillTags.some((tag) => tag.id === "uncategorized");
-        })
-        .map((skill) => skill.id)
-    );
-  }
-
-  function handleToggleManualTag(tagId: string) {
-    setManualSelectedTagIds((current) =>
-      current.includes(tagId)
-        ? current.filter((id) => id !== tagId)
-        : [...current, tagId]
-    );
-  }
-
-  async function handleCreateManualTag() {
-    const name = manualTagQuery.trim();
-    if (!name || !createTag) return;
-    try {
-      const tag = await createTag(name);
-      setManualSelectedTagIds((current) =>
-        current.includes(tag.id) ? current : [...current, tag.id]
-      );
-      setManualTagQuery("");
-      toast.success(t("central.tagCreated"));
-    } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
-    }
-  }
-
-  async function handleApplyManualTags() {
-    if (!assignSkillTags || selectedSkillIds.length === 0 || manualSelectedTagIds.length === 0) return;
-    try {
-      await assignSkillTags(selectedSkillIds, manualSelectedTagIds);
-      toast.success(t("central.tagsAssigned", { count: selectedSkillIds.length }));
-    } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
-    }
-  }
-
-  async function handleAcceptReview(review: SkillAiTagReview) {
-    if (!acceptAiTagReview) return;
-    try {
-      await acceptAiTagReview(review.skill_id, [review.tag.id]);
-      toast.success(t("central.reviewAccepted"));
-    } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
-    }
-  }
-
-  async function handleApplyManualTagsToReview(review: SkillAiTagReview) {
-    if (!assignSkillTags || !skipAiTagReview || manualSelectedTagIds.length === 0) return;
-    try {
-      await assignSkillTags([review.skill_id], manualSelectedTagIds);
-      await skipAiTagReview(review.skill_id);
-      toast.success(t("central.reviewChanged"));
-    } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
-    }
-  }
-
-  async function handleSkipReview(review: SkillAiTagReview) {
-    if (!skipAiTagReview) return;
-    try {
-      await skipAiTagReview(review.skill_id);
-      toast.success(t("central.reviewSkipped"));
-    } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
-    }
-  }
-
-  async function handleBulkSuggestTags() {
-    if (!bulkSuggestSkillTags || selectedSkillIds.length === 0) return;
-    try {
-      const result = await bulkSuggestSkillTags(selectedSkillIds);
-      const succeeded = result.filter((item) => item.succeeded !== false && !item.error).length;
-      const failed = result.length - succeeded;
-      const review = result.reduce((count, item) => count + (item.low_confidence_count ?? 0), 0);
-      toast.success(t("central.aiTagsFinished", { succeeded, failed, review }));
-    } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
-    }
-  }
-
-  async function handleCancelAiTagJob() {
-    if (!cancelAiTagJob) return;
-    try {
-      await cancelAiTagJob();
-      toast.info(t("central.aiTagCancelRequested"));
-    } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
-    }
-  }
-
-  async function handleRefresh() {
-    try {
-      // Re-scan the filesystem first so new/removed skills are picked up,
-      // then reload central skills from the (now-updated) database.
-      await refreshCounts();
-      await loadCentralSkills();
-    } catch (err) {
-      toast.error(t("central.refreshError", { error: String(err) }));
-    }
-  }
-
-  async function handleCheckUpdates() {
-    try {
-      const states = await checkSkillUpdates();
-      const available = states.filter((state) => state.status === "update_available").length;
-      const unsupported = states.filter((state) => state.status === "unsupported").length;
-      const remoteMissing = states.filter((state) => state.status === "remote_missing");
-      const failed = states.filter((state) => state.status === "error").length;
-      toast.success(
-        t("central.updateCheckFinished", {
-          available,
-          unsupported,
-          remoteMissing: remoteMissing.length,
-          failed,
-        })
-      );
-      if (remoteMissing.length > 0) {
-        const missingSkillIds = remoteMissing.map((state) => state.skill_id);
-        setRemoteMissingStates(remoteMissing);
-        setRemoteMissingPreview(null);
-        setRemoteMissingError(null);
-        setIsRemoteMissingDialogOpen(true);
-        setIsRemoteMissingPreviewLoading(true);
-        try {
-          const preview = await loadBatchDeletePreview(missingSkillIds);
-          setRemoteMissingPreview(preview);
-        } catch (err) {
-          const message = String(err);
-          setRemoteMissingError(message);
-          toast.error(t("central.batchDeletePreviewError", { error: message }));
-        } finally {
-          setIsRemoteMissingPreviewLoading(false);
-        }
-      }
-    } catch (err) {
-      toast.error(t("central.updateCheckError", { error: String(err) }));
-    }
-  }
-
-  async function handleUpdateSkills(skillIds: string[]) {
-    if (skillIds.length === 0) return;
-    try {
-      const result = await updateSkills(skillIds);
-      await refreshCounts();
-      toast.success(
-        t("central.updateFinished", {
-          succeeded: result.succeeded.length,
-          failed: result.failed.length,
-          skipped: result.skipped.length,
-        })
-      );
-    } catch (err) {
-      toast.error(t("central.updateError", { error: String(err) }));
-    }
-  }
-
-  async function handleResolveRemoteMissing(
-    keepSkillIds: string[],
-    deleteRequests: BatchDeleteCentralSkillRequest[]
-  ) {
-    setIsResolvingRemoteMissing(true);
-    setRemoteMissingError(null);
-    try {
-      if (keepSkillIds.length > 0) {
-        await keepRemoteMissingSkills(keepSkillIds);
-      }
-
-      const deleteResult: BatchDeleteCentralSkillResult =
-        deleteRequests.length > 0
-          ? await deleteCentralSkills(deleteRequests)
-          : { succeeded: [], failed: [] };
-
-      await refreshCounts();
-      const succeededDeleteIds = new Set(deleteResult.succeeded.map((item) => item.skill_id));
-      setSelectedSkillIds((current) =>
-        current.filter((skillId) => !succeededDeleteIds.has(skillId))
-      );
-
-      if (deleteResult.failed.length > 0) {
-        toast.error(
-          t("central.remoteMissingResolvePartial", {
-            kept: keepSkillIds.length,
-            deleted: deleteResult.succeeded.length,
-            failed: deleteResult.failed.length,
-          })
-        );
-      } else {
-        toast.success(
-          t("central.remoteMissingResolveSuccess", {
-            kept: keepSkillIds.length,
-            deleted: deleteResult.succeeded.length,
-          })
-        );
-      }
-      handleRemoteMissingDialogOpenChange(false);
-    } catch (err) {
-      const message = String(err);
-      setRemoteMissingError(message);
-      toast.error(t("central.remoteMissingResolveError", { error: message }));
-      throw err;
-    } finally {
-      setIsResolvingRemoteMissing(false);
-    }
-  }
-
-  async function handleGitHubPreview() {
-    try {
-      return await previewGitHubRepoImport(githubRepoUrl);
-    } catch {
-      return null;
-    }
-  }
-
-  async function handleGitHubImport(
-    selections: Parameters<typeof importGitHubRepoSkills>[1]
-  ) {
-    try {
-      const result = await importGitHubRepoSkills(githubRepoUrl, selections);
-      await Promise.all([refreshCounts(), loadCentralSkills()]);
-      toast.success(t("marketplace.githubImportCentralSuccess"));
-      return result;
-    } catch (err) {
-      toast.error(t("marketplace.githubImportError", { error: String(err) }));
-      throw err;
-    }
-  }
-
-  async function handleDeleteSkillRepository(requests: BatchDeleteCentralSkillRequest[]) {
-    if (!repositoryDeleteTarget) {
-      throw new Error("Repository delete target is missing");
-    }
-
-    try {
-      const result = await deleteSkillRepository(repositoryDeleteTarget.id, requests);
-      await refreshCounts();
-      const succeededIds = new Set(result.delete_result.succeeded.map((item) => item.skill_id));
-      setSelectedSkillIds((current) => current.filter((skillId) => !succeededIds.has(skillId)));
-
-      if (repositoryFilter === repositoryDeleteTarget.id && result.deleted_repository) {
-        setRepositoryFilter("all");
-      }
-
-      if (result.delete_result.failed.length > 0) {
-        toast.error(
-          t("central.deleteRepositoryPartialError", {
-            name: result.repository.name,
-            succeeded: result.delete_result.succeeded.length,
-            failed: result.delete_result.failed.length,
-          })
-        );
-      } else {
-        toast.success(
-          t("central.deleteRepositorySuccess", {
-            name: result.repository.name,
-            count: result.delete_result.succeeded.length,
-          })
-        );
-      }
-      handleRepositoryDeleteDialogOpenChange(false);
-      return result.delete_result;
-    } catch (err) {
-      const message = String(err);
-      setRepositoryDeletePreviewError(message);
-      toast.error(t("central.deleteRepositoryError", { error: message }));
-      throw err;
-    }
-  }
-
-  async function handleInstallImportedSkill(
-    skillId: string,
-    agentIds: string[],
-    method: "symlink" | "copy",
-    projectPath?: string | null
-  ) {
-    const result = await handleInstall(skillId, agentIds, method, projectPath);
-    await Promise.all(agentIds.map((agentId) => getSkillsByAgent(agentId)));
-    return result;
-  }
+  const { actions: paletteActions, groupByOptions } = useCentralV2PaletteActions({
+    t, viewState: v2ViewState, setViewState: setV2ViewState,
+    canSaveCurrent: savedViewsBridge.canSaveCurrent,
+    onSaveCurrentView: savedViewsBridge.handleSaveCurrentView,
+    onCreateTagGroup: tagGroupsBridge.handleCreateTagGroup,
+    onSwitchToClassic: () => setV2OverrideClassic(true),
+  });
 
   const installableImportedSkills = useMemo(() => {
     if (!githubImport.importResult) return [];
@@ -1367,1039 +361,440 @@ export function CentralSkillsView() {
     return skills.filter((skill) => importedIds.has(skill.id));
   }, [githubImport.importResult, skills]);
 
-  const availableInstallAgents = useMemo(
-    () => getPlatformTargetGroups(platformAgents, categoryVisibility),
-    [platformAgents, categoryVisibility]
-  );
+  const {
+    handleAcceptReview,
+    handleAfterImportSuccess,
+    handleApplyManualTags,
+    handleApplyManualTagsToReview,
+    handleBatchDeleteCentralSkills,
+    handleBatchDeleteClick,
+    handleBatchDeleteDialogOpenChange,
+    handleBatchInstallCentralSkills,
+    handleBulkSuggestTags,
+    handleCancelAiTagJob,
+    handleCancelCentralUpdates,
+    handleCheckUpdates,
+    handleConfirmUpdateSkills,
+    handleCreateManualTag,
+    handleDeleteCentralSkill,
+    handleDeleteClick,
+    handleDeleteDialogOpenChange,
+    handleDeleteSkillRepository,
+    handleGitHubImport,
+    handleGitHubPreview,
+    handleInstall,
+    handleInstallClick,
+    handleInstallImportedSkill,
+    handleOpenDrawer,
+    handleRefresh,
+    handleRemoteMissingDialogOpenChange,
+    handleUpdateConfirmDialogOpenChange,
+    handleRepositoryDeleteClick,
+    handleRepositoryDeleteDialogOpenChange,
+    handleResolveRemoteMissing,
+    handleSelectCurrentFilter,
+    handleSelectUncategorized,
+    handleSkipReview,
+    handleToggleManualTag,
+    handleTogglePlatform,
+    handleToggleSelection,
+    handleUpdateSkills,
+    setDetailButtonRef,
+  } = useCentralSkillsActions({
+    detailButtonRefs,
+    t,
+    state: {
+      deleteTargetSkill,
+      githubRepoUrl,
+      manualSelectedTagIds,
+      manualTagQuery,
+      repositoryDeleteTarget,
+      repositoryFilter,
+      queuedRemoteMissingStates,
+      selectedSkillIds,
+      currentViewSkills: visibleCurrentViewSkills,
+    },
+    setters: {
+      setBatchDeletePreview,
+      setBatchDeletePreviewError,
+      setDeletePreview,
+      setDeletePreviewError,
+      setDeleteTargetSkill,
+      setDrawerSkillId,
+      setInstallTargetSkill,
+      setIsBatchDeleteDialogOpen,
+      setIsBatchDeletePreviewLoading,
+      setIsDeleteDialogOpen,
+      setIsDeletePreviewLoading,
+      setIsDialogOpen,
+      setIsDrawerOpen,
+      setIsRemoteMissingDialogOpen,
+      setIsRemoteMissingPreviewLoading,
+      setIsRepositoryDeleteDialogOpen,
+      setIsRepositoryDeletePreviewLoading,
+      setIsResolvingRemoteMissing,
+      setIsUpdateConfirmDialogOpen,
+      setManualSelectedTagIds,
+      setManualTagQuery,
+      setPendingUpdateStates,
+      setQueuedRemoteMissingStates,
+      setRemoteMissingError,
+      setRemoteMissingPreview,
+      setRemoteMissingStates,
+      setRepositoryDeletePreview,
+      setRepositoryDeletePreviewError,
+      setRepositoryDeleteTarget,
+      setRepositoryFilter,
+      setSelectedSkillIds,
+    },
+  });
 
-  async function handleAfterImportSuccess() {
-    const agentIds = Object.keys(skillsByAgent);
-    if (agentIds.length === 0) return;
-    await Promise.all(agentIds.map((agentId) => getSkillsByAgent(agentId)));
-  }
+  // ─── 共享 props（V1/V2 Shell 公用），保证两个 Shell 渲染一致的对话框、列表、进度 ───
+  const dialogsProps = {
+        agents,
+        availableInstallAgents,
+        batchDeletePreview,
+        batchDeletePreviewError,
+        deletePreview,
+        deletePreviewError,
+        deleteTargetSkill,
+        detailButtonRefs,
+        drawerSkillId,
+        githubImport,
+        githubRepoUrl,
+        importSkillportState,
+        installTargetSkill,
+        installableImportedSkills,
+        isBatchDeleteDialogOpen,
+        isBatchDeletePreviewLoading,
+        isBatchInstallDialogOpen,
+        isDeleteDialogOpen,
+        isDeletePreviewLoading,
+        isDeleting,
+        isDialogOpen,
+        isDrawerOpen,
+        isGitHubImportOpen,
+        isPlatformManageOpen,
+        isInstalling,
+        isPortabilityOpen,
+        isRemoteMissingDialogOpen,
+        isRemoteMissingPreviewLoading,
+        isRepositoryDeleteDialogOpen,
+        isRepositoryDeletePreviewLoading,
+        isResolvingRemoteMissing,
+        isUpdatingSkills: updatingSkillIds.length > 0,
+        isUpdateConfirmDialogOpen,
+        loadCentralSkills,
+        pendingUpdateStates,
+        previewSkillportStateImport,
+        remoteMissingError,
+        remoteMissingPreview,
+        remoteMissingStates,
+        repositoryDeletePreview,
+        repositoryDeletePreviewError,
+        repositoryDeleteTarget,
+        selectedSkillIds,
+        skills,
+        setDrawerSkillId,
+        setGithubRepoUrl: setGitHubRepoUrl,
+        setIsBatchInstallDialogOpen,
+        setIsDialogOpen,
+        setIsDrawerOpen,
+        setIsGitHubImportOpen,
+        setIsPlatformManageOpen,
+        setIsPortabilityOpen,
+        exportSkillportState,
+        portabilityJob,
+        cancelSkillportStatePortability,
+        platformManagement: {
+          agents,
+          categoryVisibility,
+          addCustomAgent,
+          updateCustomAgent,
+          removeCustomAgent,
+          setCategoryVisibility,
+          setAgentEnabled,
+          refreshAfterPlatformChange: async () => {
+            await loadCentralSkills();
+            await refreshCounts();
+          },
+        },
+        onAfterImportSuccess: handleAfterImportSuccess,
+        onBatchDeleteCentralSkills: handleBatchDeleteCentralSkills,
+        onBatchDeleteDialogOpenChange: handleBatchDeleteDialogOpenChange,
+        onBatchInstallCentralSkills: handleBatchInstallCentralSkills,
+        onDeleteCentralSkill: handleDeleteCentralSkill,
+        onDeleteDialogOpenChange: handleDeleteDialogOpenChange,
+        onDeleteSkillRepository: handleDeleteSkillRepository,
+        onGitHubImport: handleGitHubImport,
+        onGitHubPreview: handleGitHubPreview,
+        onInstall: handleInstall,
+        onInstallImportedSkill: handleInstallImportedSkill,
+        onRefreshCounts: refreshCounts,
+        onConfirmUpdateSkills: handleConfirmUpdateSkills,
+        onRemoteMissingDialogOpenChange: handleRemoteMissingDialogOpenChange,
+        onUpdateConfirmDialogOpenChange: handleUpdateConfirmDialogOpenChange,
+        onRepositoryDeleteDialogOpenChange: handleRepositoryDeleteDialogOpenChange,
+        onResetGitHubImport: resetGitHubImport,
+        onResolveRemoteMissing: handleResolveRemoteMissing,
+  };
 
-  function renderSearchResult(skill: SkillWithLinks) {
-    return (
-      <UnifiedSkillCard
-        key={skill.id}
-        name={skill.name}
-        description={skill.description}
-        checkbox={{
-          checked: selectedSkillIdSet.has(skill.id),
-          onChange: () => handleToggleSelection(skill.id),
-        }}
-        tags={(skill.tags ?? []).map((tag) => ({ key: tag.id, label: tag.name }))}
-        publisher={skill.repository?.name}
-        updateStatus={
-          updateStatuses[skill.id]
-            ? {
-                ...updateStatuses[skill.id],
-                isUpdating: updatingSkillIds.includes(skill.id),
-              }
-            : undefined
-        }
-        onDetail={() => handleOpenDrawer(skill.id)}
-        onInstallTo={() => handleInstallClick(skill)}
-        onUpdateCentral={() => void handleUpdateSkills([skill.id])}
-        onDeleteFromCentral={() => void handleDeleteClick(skill)}
-        detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
-        className="h-[132px]"
+  const filterSidebarProps = {
+        filterSidebarWidth,
+        isDeleting,
+        isRepositoryDeletePreviewLoading,
+        repositoryDeleteTargetId: repositoryDeleteTarget?.id,
+        repositoryFilter,
+        repositories,
+        setRepositoryFilter,
+        skillsCount: skills.length,
+        startFilterSidebarResize,
+        handleFilterSidebarResizeKeyDown,
+        onRepositoryDelete: (repository: SkillRepositoryWithStats) => {
+          void handleRepositoryDeleteClick(repository);
+        },
+  };
+
+  const tagSearchProps = {
+    setCategorizeTab,
+    tagCounts,
+    uncategorizedCount,
+    aiReviewCount: aiTagReviews.length,
+    totalSkillCount: skills.length,
+  };
+
+  const listContentProps = {
+        availableInstallAgents,
+        contentRef,
+        filteredSkills: visibleFilteredSkills,
+        isLoading,
+        isSearchActive,
+        onDelete: (skill: SkillWithLinks) => {
+          void handleDeleteClick(skill);
+        },
+        onDetail: handleOpenDrawer,
+        onInstallTo: handleInstallClick,
+        onTogglePlatform: handleTogglePlatform,
+        onToggleSelection: handleToggleSelection,
+        onUpdateCentral: (skillIds: string[]) => {
+          void handleUpdateSkills(skillIds);
+        },
+        searchQuery,
+        selectedSkillIdSet,
+        setDetailButtonRef,
+        skillsCount: skills.length,
+        sortedSkills: visibleCurrentViewSkills,
+        togglingAgentId: togglingAgentId ?? null,
+        updateStatuses,
+        updatingSkillIds,
+  };
+
+  const updateButtonProps = {
+    disabled: updateTargetSkillIds.length === 0 || updatingSkillIds.length > 0,
+    label:
+      selectedSkillIds.length > 0
+        ? t("central.updateSelected", { count: updateTargetSkillIds.length })
+        : t("central.updateAvailable", { count: updateTargetSkillIds.length }),
+    targetSkillIds: updateTargetSkillIds,
+  };
+
+  const aiProgressProps = {
+    aiTagJob,
+    onCancel: () => {
+      void handleCancelAiTagJob();
+    },
+    onViewReviews: () => {
+      setCategorizeTab("review");
+      setTagFilter("ai-review");
+    },
+  };
+
+  const categorizePanelProps = {
+    aiTagJob,
+    aiTagReviews,
+    aiTaggingAvailable,
+    canCreateManualTag,
+    categorizeSidebarWidth,
+    categorizeTab,
+    filteredManualTags,
+    isDeleting,
+    isInstalling,
+    isMetadataUpdating,
+    isSuggestingTags,
+    manualSelectedTagIds,
+    manualTagQuery,
+    selectedSkillCount: selectedSkillIds.length,
+    sortedSkillCount: visibleCurrentViewSkills.length,
+    startCategorizeSidebarResize,
+    handleCategorizeSidebarResizeKeyDown,
+    onAcceptReview: (review: Parameters<typeof handleAcceptReview>[0]) => {
+      void handleAcceptReview(review);
+    },
+    onApplyManualTags: () => {
+      void handleApplyManualTags();
+    },
+    onApplyManualTagsToReview: (review: Parameters<typeof handleApplyManualTagsToReview>[0]) => {
+      void handleApplyManualTagsToReview(review);
+    },
+    onBatchDelete: () => {
+      void handleBatchDeleteClick();
+    },
+    onBatchInstallOpen: () => setIsBatchInstallDialogOpen(true),
+    onBulkSuggestTags: () => {
+      void handleBulkSuggestTags();
+    },
+    onClearSelection: () => setSelectedSkillIds([]),
+    onCreateManualTag: () => {
+      void handleCreateManualTag();
+    },
+    onSelectCurrentFilter: handleSelectCurrentFilter,
+    onSelectUncategorized: handleSelectUncategorized,
+    onSetCategorizeTab: setCategorizeTab,
+    onSetManualTagQuery: setManualTagQuery,
+    onSkipReview: (review: Parameters<typeof handleSkipReview>[0]) => {
+      void handleSkipReview(review);
+    },
+    onToggleManualTag: handleToggleManualTag,
+  };
+
+  const updateProgressProps = {
+    isDismissible: isUpdateProgressDismissible,
+    updateJob,
+    updateProgressKey,
+    updateProgressRatio,
+    onCancel: () => {
+      void handleCancelCentralUpdates();
+    },
+    onDismiss: setDismissedUpdateProgressKey,
+  };
+
+  const checkButtonProps = {
+    label: checkButtonState.label,
+    disabled:
+      isCheckingUpdates ||
+      updateJob.status === "running" ||
+      updateJob.status === "cancelling" ||
+      checkButtonState.targetSkillIds.length === 0,
+    onClick: () => {
+      void handleCheckUpdates(checkButtonState.scopedSkillIds);
+    },
+  };
+
+  if (v2Enabled) {
+    // V2 Shell：listContent 用 V2 view-model 的 sortedSkills/filteredSkills/searchQuery/isSearchActive
+    const v2ListContentProps = {
+      ...listContentProps,
+      filteredSkills: visibleV2FilteredSkills,
+      sortedSkills: visibleCurrentViewSkills,
+      searchQuery: v2ViewState.q,
+      isSearchActive: v2.isSearchActive || isInstalledSkillsFilterActive,
+    };
+    const sidebarHeaderSlot = (
+      <CentralSidebarV2Header
+        savedViewsBridge={savedViewsBridge}
+        tagGroupsBridge={tagGroupsBridge}
       />
     );
-  }
-
-  function renderGridCard(skill: SkillWithLinks) {
     return (
-      <UnifiedSkillCard
-        key={skill.id}
-        name={skill.name}
-        description={skill.description}
-        checkbox={{
-          checked: selectedSkillIdSet.has(skill.id),
-          onChange: () => handleToggleSelection(skill.id),
-        }}
-        tags={(skill.tags ?? []).map((tag) => ({ key: tag.id, label: tag.name }))}
-        publisher={skill.repository?.name}
-        updateStatus={
-          updateStatuses[skill.id]
-            ? {
-                ...updateStatuses[skill.id],
-                isUpdating: updatingSkillIds.includes(skill.id),
-              }
-            : undefined
-        }
-        onDetail={() => handleOpenDrawer(skill.id)}
-        onInstallTo={() => handleInstallClick(skill)}
-        onUpdateCentral={() => void handleUpdateSkills([skill.id])}
-        onDeleteFromCentral={() => void handleDeleteClick(skill)}
-        detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
-        platformIcons={{
-          agents: availableInstallAgents,
-          linkedAgents: skill.linked_agents,
-          lockedAgentIds: skill.shared_root_agents,
-          skillId: skill.id,
-          onToggle: handleTogglePlatform,
-          togglingAgentId,
-        }}
-        className="h-[212px]"
-      />
-    );
-  }
-
-  function getManualPrimaryLabel() {
-    if (selectedSkillIds.length === 0) return t("central.categorizeSelectSkillsFirst");
-    if (manualSelectedTagIds.length === 0) return t("central.categorizeSelectTagsFirst");
-    return t("central.applyToSelectedSkills", { count: selectedSkillIds.length });
-  }
-
-  function getManualDisabledReason() {
-    if (selectedSkillIds.length === 0) return t("central.categorizeSelectSkillsReason");
-    if (manualSelectedTagIds.length === 0) return t("central.categorizeSelectTagsReason");
-    if (isMetadataUpdating) return t("central.categorizeApplyingReason");
-    return null;
-  }
-
-  function getAiPrimaryLabel() {
-    if (selectedSkillIds.length === 0) return t("central.categorizeSelectSkillsFirst");
-    if (!aiTaggingAvailable) return t("central.aiTaggingConfigureFirst");
-    if (isSuggestingTags || aiTagJob.status === "running") return t("central.aiTaggingRunning");
-    return t("central.aiSuggestSelected", { count: selectedSkillIds.length });
-  }
-
-  function getAiDisabledReason() {
-    if (!aiTaggingAvailable) return t("central.aiTaggingConfigureReason");
-    if (selectedSkillIds.length === 0) return t("central.categorizeSelectSkillsReason");
-    if (isSuggestingTags || aiTagJob.status === "running") return t("central.aiTaggingRunningReason");
-    return null;
-  }
-
-  function renderCategorizeScope() {
-    return (
-      <section className="rounded-2xl border border-border/90 bg-background p-4 shadow-sm">
-        <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-foreground">
-          <span className="grid size-5 place-items-center rounded-full bg-primary/15 text-[11px] font-bold text-primary ring-1 ring-primary/25">1</span>
-          {t("central.categorizeRange")}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Button size="sm" className="h-auto min-h-8 whitespace-normal px-2 leading-tight" onClick={handleSelectCurrentFilter}>
-            {t("central.selectCurrentFilter")}
-          </Button>
-          <Button variant="secondary" size="sm" className="h-auto min-h-8 whitespace-normal px-2 leading-tight" onClick={handleSelectUncategorized}>
-            {t("central.selectUncategorized")}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="col-span-2 justify-start text-foreground/75 hover:text-foreground"
-            onClick={() => setSelectedSkillIds([])}
-          >
-            <X className="size-3.5" />
-            {t("central.clearSelection")}
-          </Button>
-        </div>
-        {selectedSkillIds.length > 0 && (
-          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/70 pt-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsBatchInstallDialogOpen(true)}
-              disabled={isInstalling}
-              data-testid="batch-install-central-skills"
-            >
-              <Download className="size-3.5" />
-              {t("central.batchInstallSelected", { count: selectedSkillIds.length })}
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleBatchDeleteClick}
-              disabled={isDeleting}
-              data-testid="batch-delete-central-skills"
-            >
-              <Trash2 className="size-3.5" />
-              {t("central.batchDeleteSelected", { count: selectedSkillIds.length })}
-            </Button>
-          </div>
-        )}
-      </section>
-    );
-  }
-
-  function renderManualCategorize() {
-    return (
-      <div className="space-y-3">
-        <Input
-          value={manualTagQuery}
-          onChange={(event) => setManualTagQuery(event.target.value)}
-          placeholder={t("central.searchTagsPlaceholder")}
-          aria-label={t("central.searchTagsPlaceholder")}
-          className="h-9 text-xs"
+      <>
+        <CentralSkillsShellV2
+          t={t}
+          centralSkillsDir={centralSkillsDir}
+          isLoading={isLoading}
+          isCheckingUpdates={isCheckingUpdates}
+          filterSidebarWidth={filterSidebarWidth}
+          startFilterSidebarResize={startFilterSidebarResize}
+          handleFilterSidebarResizeKeyDown={handleFilterSidebarResizeKeyDown}
+          viewState={v2ViewState}
+          setViewState={setV2ViewState}
+          queryAst={v2.queryAst}
+          facetCounts={v2.facetCounts}
+          repositories={repositories}
+          tags={tags}
+          sortFieldOptions={sortFieldOptions}
+          sortDirectionOptions={sortDirectionOptions}
+          groupByOptions={groupByOptions}
+          installedSkillsFilter={installedSkillsFilterProps}
+          listContent={v2ListContentProps}
+          categorizePanel={categorizePanelProps}
+          shouldShowCategorizePanel={skills.length > 0}
+          aiProgress={aiProgressProps}
+          updateProgress={updateProgressProps}
+          shouldShowUpdateProgress={shouldShowUpdateProgress}
+          dialogs={dialogsProps}
+          setIsGitHubImportOpen={setIsGitHubImportOpen}
+          setIsPlatformManageOpen={setIsPlatformManageOpen}
+          setIsPortabilityOpen={setIsPortabilityOpen}
+          onRefresh={() => {
+            void handleRefresh();
+          }}
+          onUpdateSkills={(skillIds) => {
+            void handleUpdateSkills(skillIds);
+          }}
+          updateAvailableSkillCount={updateAvailableSkillIds.length}
+          updateButton={updateButtonProps}
+          checkButton={checkButtonProps}
+          onSwitchToClassic={() => setV2OverrideClassic(true)}
+          onOpenPalette={() => setCommandPaletteOpen(true)}
+          savedViewsSlot={sidebarHeaderSlot}
+          tagGroups={tagGroupsBridge.tagGroups} onAssignTagToGroup={tagGroupsBridge.handleAssignTagToGroup}
         />
-        {canCreateManualTag && (
-          <Button variant="ghost" size="sm" onClick={handleCreateManualTag}>
-            <Plus className="size-3.5" />
-            {t("central.createTagInline", { name: manualTagQuery.trim() })}
-          </Button>
-        )}
-        <div className="flex max-h-52 flex-wrap gap-2 overflow-auto rounded-2xl border border-border/90 bg-muted/10 p-3 text-foreground">
-          {filteredManualTags.map((tag) => {
-            const selected = manualSelectedTagIds.includes(tag.id);
-            return (
-              <button
-                key={tag.id}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => handleToggleManualTag(tag.id)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                  selected
-                    ? "border-primary/70 bg-primary/15 text-primary shadow-sm ring-1 ring-primary/20"
-                    : "border-border bg-background text-foreground/75 hover:border-primary/40 hover:text-foreground"
-                )}
-              >
-                {selected && <Check className="size-3" />}
-                {tag.name}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  function renderAiCategorize() {
-    return (
-      <div className="space-y-3">
-        <div className="rounded-2xl border border-border/90 bg-background p-3 text-xs shadow-sm">
-          <div className="mb-1 font-medium text-foreground">{t("central.aiScopeTitle")}</div>
-          <p className="leading-relaxed text-foreground/75">
-            {t("central.aiScopeDesc", {
-              selected: selectedSkillIds.length,
-              total: sortedSkills.length,
-            })}
-          </p>
-        </div>
-        {!aiTaggingAvailable && (
-          <div className="rounded-2xl border border-border/90 bg-muted/20 p-3 text-xs text-foreground/75">
-            {t("central.aiTaggingNeedsConfig")}
-          </div>
-        )}
-        <div className="rounded-2xl border border-border/90 bg-muted/10 p-3 text-xs text-foreground/75">
-          {t("central.aiPreview", { count: selectedSkillIds.length })}
-        </div>
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-          {t("central.aiTagRateHint")}
-        </div>
-      </div>
-    );
-  }
-
-  function renderReviewQueue() {
-    return (
-      <div className="space-y-3">
-        {aiTagReviews.length > 0 && manualSelectedTagIds.length === 0 && (
-          <div className="rounded-2xl border border-border/90 bg-muted/20 p-3 text-xs text-foreground/75">
-            {t("central.reviewReplaceNeedsTags")}
-          </div>
-        )}
-        {aiTagReviews.length === 0 ? (
-          <div className="rounded-2xl border border-border/90 bg-muted/20 p-4 text-center text-xs text-foreground/70">
-            {t("central.reviewEmpty")}
-          </div>
-        ) : (
-          aiTagReviews.map((review) => (
-            <div
-              key={`${review.skill_id}:${review.tag.id}`}
-              className="rounded-2xl border border-border/90 bg-background p-3 shadow-sm"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{review.skill_name}</div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-foreground/70">
-                    <span className="rounded-full bg-muted px-2 py-0.5">
-                      {review.tag.name}
-                    </span>
-                    <span>{Math.round(review.confidence * 100)}%</span>
-                  </div>
-                </div>
-                <AlertTriangle className="size-4 shrink-0 text-amber-500" />
-              </div>
-              <p className="mt-2 text-xs leading-relaxed text-foreground/75">{review.reason}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => handleAcceptReview(review)}>
-                  {t("central.reviewAccept")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={manualSelectedTagIds.length === 0}
-                  onClick={() => handleApplyManualTagsToReview(review)}
-                >
-                  {t("central.reviewChange")}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => handleSkipReview(review)}>
-                  {t("central.reviewSkip")}
-                </Button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    );
-  }
-
-  function renderCategorizePanel() {
-    const manualDisabledReason = getManualDisabledReason();
-    const aiDisabledReason = getAiDisabledReason();
-    const isManualActionDisabled = Boolean(manualDisabledReason);
-    const isAiActionDisabled = Boolean(aiDisabledReason);
-
-    return (
-      <aside data-testid="central-categorize-sidebar" className="relative hidden min-h-0 shrink-0 border-l border-border bg-background/95 xl:flex xl:flex-col" style={{ width: categorizeSidebarWidth }}>
-        <div
-          role="separator"
-          aria-label={t("central.resizeCategorizeSidebar")}
-          aria-orientation="vertical"
-          tabIndex={0}
-          onPointerDown={startCategorizeSidebarResize}
-          onKeyDown={handleCategorizeSidebarResizeKeyDown}
-          className="absolute left-0 top-0 z-20 h-full w-2 -translate-x-1/2 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-primary/30 focus:outline-none focus-visible:bg-primary/40"
+        <CommandPaletteV2
+          open={commandPaletteOpen}
+          onOpenChange={setCommandPaletteOpen}
+          savedViews={savedViewsBridge.savedViews}
+          tags={tags}
+          repositories={repositories}
+          actions={paletteActions}
+          onSelectSavedView={savedViewsBridge.handleApplySavedView}
+          onSelectTag={(tag) => addUniqueToCentralViewState(v2ViewState, setV2ViewState, "tags", tag.id)}
+          onSelectRepository={(repo) => addUniqueToCentralViewState(v2ViewState, setV2ViewState, "repos", repo.id)}
         />
-        <div className="border-b border-border/80 bg-background p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold tracking-tight text-foreground">{t("central.categorizePanelTitle")}</h2>
-              <p className="mt-1 text-[13px] leading-5 text-foreground/75">
-                {t("central.categorizePanelDesc")}
-              </p>
-            </div>
-            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20"><ListChecks className="size-4" /></span>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-border/90 bg-muted/10 px-3 py-2 text-xs shadow-sm">
-            <span
-              className={cn(
-                "font-medium",
-                selectedSkillIds.length > 0 ? "text-primary" : "text-foreground/70"
-              )}
-            >
-              {t("central.selectedSkillSummary", { count: selectedSkillIds.length })}
-            </span>
-            <span className="h-3 w-px bg-border" />
-            <span
-              className={cn(
-                "font-medium",
-                manualSelectedTagIds.length > 0 ? "text-primary" : "text-foreground/70"
-              )}
-            >
-              {t("central.pendingTagSummary", { count: manualSelectedTagIds.length })}
-            </span>
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
-          {renderCategorizeScope()}
-
-          <section className="rounded-2xl border border-border/90 bg-background p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-foreground">
-              <span className="grid size-5 place-items-center rounded-full bg-primary/15 text-[11px] font-bold text-primary ring-1 ring-primary/25">2</span>
-              {t("central.categorizeIntent")}
-            </div>
-            <div
-              role="tablist"
-              aria-label={t("central.categorizeIntent")}
-              className="mb-3 grid grid-cols-3 rounded-xl border border-border/60 bg-muted/10 p-1"
-            >
-              {(["manual", "ai", "review"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  aria-selected={categorizeTab === tab}
-                  onClick={() => setCategorizeTab(tab)}
-                  className={cn(
-                    "h-8 rounded-lg text-xs font-medium transition-colors",
-                    categorizeTab === tab
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-foreground/70 hover:bg-background hover:text-foreground"
-                  )}
-                >
-                  {t(`central.categorizeTab.${tab}`)}
-                </button>
-              ))}
-            </div>
-            {categorizeTab === "manual" && renderManualCategorize()}
-            {categorizeTab === "ai" && renderAiCategorize()}
-            {categorizeTab === "review" && renderReviewQueue()}
-          </section>
-        </div>
-
-        <div className="border-t border-border/80 bg-background p-4 shadow-lg">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-foreground">
-            <span className="grid size-5 place-items-center rounded-full bg-primary/15 text-[11px] font-bold text-primary ring-1 ring-primary/25">3</span>
-            {t("central.categorizeApply")}
-          </div>
-          {categorizeTab === "manual" && (
-            <>
-              <Button
-                className="w-full"
-                disabled={isManualActionDisabled}
-                onClick={handleApplyManualTags}
-                data-testid="categorize-primary-action"
-              >
-                <Check className="size-3.5" />
-                {getManualPrimaryLabel()}
-              </Button>
-              {manualDisabledReason && (
-                <p className="mt-2 text-xs leading-relaxed text-foreground/75" data-testid="categorize-action-reason">
-                  {manualDisabledReason}
-                </p>
-              )}
-            </>
-          )}
-          {categorizeTab === "ai" && (
-            <>
-              <Button
-                className="w-full"
-                disabled={isAiActionDisabled}
-                onClick={handleBulkSuggestTags}
-                data-testid="categorize-primary-action"
-              >
-                <Wand2 className="size-3.5" />
-                {getAiPrimaryLabel()}
-              </Button>
-              {aiDisabledReason && (
-                <p className="mt-2 text-xs leading-relaxed text-foreground/75" data-testid="categorize-action-reason">
-                  {aiDisabledReason}
-                </p>
-              )}
-            </>
-          )}
-          {categorizeTab === "review" && (
-            <p className="text-xs leading-relaxed text-foreground/70">
-              {t("central.reviewApplyHint")}
-            </p>
-          )}
-        </div>
-      </aside>
+      </>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="border-b border-border px-6 py-4 flex items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold">{t("central.title")}</h1>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleRefresh}
-              disabled={isLoading}
-              aria-label={t("central.refresh")}
-            >
-              <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t("central.scope")}
-          </p>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {centralSkillsDir}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={handleCheckUpdates}
-            disabled={isRemoteTarget || isCheckingUpdates || updateJob.status === "running"}
-            title={isRemoteTarget ? t("targets.centralUpdatesUnsupported") : undefined}
-          >
-            <RefreshCw className={`size-3.5 ${isCheckingUpdates ? "animate-spin" : ""}`} />
-            {t("central.checkUpdates")}
-          </Button>
-          {updateAvailableSkillIds.length > 0 && (
-            <Button
-              variant="default"
-              onClick={() => void handleUpdateSkills(updateTargetSkillIds)}
-              disabled={isRemoteTarget || updateTargetSkillIds.length === 0 || updatingSkillIds.length > 0}
-              title={isRemoteTarget ? t("targets.centralUpdatesUnsupported") : undefined}
-            >
-              <Download className="size-3.5" />
-              {selectedSkillIds.length > 0
-                ? t("central.updateSelected", { count: updateTargetSkillIds.length })
-                : t("central.updateAvailable", { count: updateTargetSkillIds.length })}
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            data-testid="central-portability-open"
-            onClick={() => setIsPortabilityOpen(true)}
-          >
-            <FileJson className="size-3.5" />
-            {t("central.portabilityOpen")}
-          </Button>
-          <Button variant="outline" onClick={() => setIsGitHubImportOpen(true)}>
-            {t("marketplace.githubImportSecondaryCta")}
-          </Button>
-        </div>
-      </div>
-
-      {/* Search bar */}
-      <div className="px-6 py-3 border-b border-border">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder={t("central.searchPlaceholder")}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 bg-muted/40"
-              aria-label={t("central.searchPlaceholder")}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <ArrowUpDown className="size-3.5" />
-              <span>{t("central.sortLabel")}</span>
-            </div>
-            <div
-              role="group"
-              aria-label={t("central.sortFieldLabel")}
-              className="flex rounded-xl bg-muted/40 p-1"
-            >
-              {sortFieldOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={sortField === option.value}
-                  onClick={() => setSortField(option.value)}
-                  className={cn(
-                    "h-7 rounded-lg px-3 text-xs font-medium transition-colors cursor-pointer",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                    sortField === option.value
-                      ? "bg-background/95 text-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <div
-              role="group"
-              aria-label={t("central.sortDirectionLabel")}
-              className="flex rounded-xl bg-muted/40 p-1"
-            >
-              {sortDirectionOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={sortDirection === option.value}
-                  onClick={() => setSortDirection(option.value)}
-                  className={cn(
-                    "h-7 rounded-lg px-3 text-xs font-medium transition-colors cursor-pointer",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                    sortDirection === option.value
-                      ? "bg-background/95 text-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <select
-              value={tagFilter}
-              onChange={(event) => setTagFilter(event.target.value)}
-              aria-label={t("central.tagFilterLabel")}
-              className="h-9 rounded-xl border border-border bg-background px-3 text-xs text-foreground"
-            >
-              <option value="all">{t("central.allTags")}</option>
-              <option value="updates">{t("central.updatesAvailableOnly")}</option>
-              <option value="uncategorized">{t("central.uncategorizedOnly")}</option>
-              <option value="ai-review">{t("central.aiReviewOnly")}</option>
-              {tags.map((tag) => (
-                <option key={tag.id} value={tag.id}>
-                  {tag.name}
-                </option>
-              ))}
-            </select>
-            <Button
-              variant={repositoryFilter === "unassigned" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setRepositoryFilter(repositoryFilter === "unassigned" ? "all" : "unassigned")}
-            >
-              {t("central.unassignedOnly")}
-            </Button>
-            <Button
-              variant={tagFilter === "uncategorized" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setTagFilter(tagFilter === "uncategorized" ? "all" : "uncategorized")}
-            >
-              {t("central.uncategorizedOnly")}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex min-h-0 flex-1">
-        <aside
-          data-testid="central-filter-sidebar"
-          className="relative hidden min-h-0 shrink-0 border-r border-border/80 bg-muted/15 md:flex md:flex-col"
-          style={{ width: filterSidebarWidth }}
-        >
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4 pr-2 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
-            <FilterSection
-              icon={<FolderOpen className="size-3.5" />}
-              title={t("central.repositories")}
-            >
-              <RepositoryFilterButton
-                active={repositoryFilter === "all"}
-                count={skills.length}
-                label={t("central.allRepositories")}
-                sourceKind="all"
-                testId="repository-filter-all"
-                onClick={() => setRepositoryFilter("all")}
-              />
-              {repositories.map((repository) => {
-                const sourceKind = isGithubRepository(repository)
-                  ? "github"
-                  : "local";
-                const isActive =
-                  (repository.is_unknown && repositoryFilter === "unassigned") ||
-                  repositoryFilter === repository.id;
-
-                return (
-                  <RepositoryFilterButton
-                    key={repository.id}
-                    active={isActive}
-                    count={getRepositorySkillCount(repository)}
-                    label={repository.name}
-                    sourceKind={sourceKind}
-                    testId={`repository-filter-${repository.id}`}
-                    deleteLabel={t("central.deleteRepositoryLabel", {
-                      name: repository.name,
-                    })}
-                    deleteDisabled={isDeleting}
-                    isDeleteLoading={
-                      isRepositoryDeletePreviewLoading &&
-                      repositoryDeleteTarget?.id === repository.id
-                    }
-                    onDelete={
-                      repository.is_unknown
-                        ? undefined
-                        : () => {
-                            void handleRepositoryDeleteClick(repository);
-                          }
-                    }
-                    onClick={() =>
-                      setRepositoryFilter(repository.is_unknown ? "unassigned" : repository.id)
-                    }
-                  />
-                );
-              })}
-            </FilterSection>
-
-            <FilterSection
-              icon={<Tag className="size-3.5" />}
-              title={t("central.categoryNav")}
-            >
-              <TagFilterButton
-                active={tagFilter === "all"}
-                count={skills.length}
-                label={t("central.allTags")}
-                tone="all"
-                testId="tag-filter-all"
-                onClick={() => setTagFilter("all")}
-              />
-              <TagFilterButton
-                active={tagFilter === "uncategorized"}
-                count={uncategorizedCount}
-                label={t("central.uncategorizedOnly")}
-                tone="uncategorized"
-                testId="tag-filter-uncategorized"
-                onClick={() => setTagFilter("uncategorized")}
-              />
-              <TagFilterButton
-                active={tagFilter === "updates"}
-                count={updateAvailableSkillIds.length}
-                label={t("central.updatesAvailableOnly")}
-                tone="updates"
-                testId="tag-filter-updates"
-                onClick={() => setTagFilter("updates")}
-              />
-              <TagFilterButton
-                active={tagFilter === "ai-review"}
-                count={aiTagReviews.length}
-                label={t("central.aiReviewOnly")}
-                tone="ai"
-                testId="tag-filter-ai-review"
-                onClick={() => {
-                  setTagFilter("ai-review");
-                  setCategorizeTab("review");
-                }}
-              />
-              {tagCounts.map(({ tag, count }) => (
-                <TagFilterButton
-                  key={tag.id}
-                  active={tagFilter === tag.id}
-                  count={count}
-                  label={tag.name}
-                  tone="tag"
-                  testId={`tag-filter-${tag.id}`}
-                  onClick={() => setTagFilter(tag.id)}
-                />
-              ))}
-            </FilterSection>
-          </div>
-          <div
-            role="separator"
-            aria-label={t("central.resizeFilterSidebar")}
-            aria-orientation="vertical"
-            tabIndex={0}
-            onPointerDown={startFilterSidebarResize}
-            onKeyDown={handleFilterSidebarResizeKeyDown}
-            className="absolute right-0 top-0 z-20 h-full w-1.5 translate-x-1/2 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-primary/30 focus:outline-none focus-visible:bg-primary/40"
-          />
-        </aside>
-
-        <div ref={contentRef} className="flex-1 overflow-auto p-6">
-        {isLoading ? (
-          <EmptyState message={t("central.loading")} />
-        ) : skills.length === 0 ? (
-          <FirstVisitEmptyState />
-        ) : filteredSkills.length === 0 ? (
-          <EmptyState message={t("central.noMatch", { query: searchQuery })} />
-        ) : isSearchActive ? (
-          sortedSkills.length > 60 ? (
-            <VirtualizedList
-              items={sortedSkills}
-              itemHeight={132}
-              itemGap={12}
-              overscan={8}
-              scrollContainerRef={contentRef}
-              itemKey={(skill) => skill.id}
-              renderItem={(skill) => renderSearchResult(skill)}
-            />
-          ) : (
-            <div className="space-y-3">
-              {sortedSkills.map((skill) => renderSearchResult(skill))}
-            </div>
-          )
-        ) : sortedSkills.length > 40 ? (
-          <VirtualizedGrid
-            items={sortedSkills}
-            itemHeight={212}
-            rowGap={16}
-            columnGap={16}
-            overscanRows={3}
-            minColumnWidth={420}
-            maxColumns={2}
-            scrollContainerRef={contentRef}
-            itemKey={(skill) => skill.id}
-            renderItem={(skill) => renderGridCard(skill)}
-          />
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {sortedSkills.map((skill) => renderGridCard(skill))}
-          </div>
-        )}
-        </div>
-
-        {skills.length > 0 && renderCategorizePanel()}
-      </div>
-
-      {aiTagJob.status !== "idle" && (
-        <div className="sticky bottom-0 z-10 border-t border-border bg-background/95 px-6 py-3 shadow-lg backdrop-blur">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 font-medium text-foreground">
-              <Wand2 className="size-3.5" />
-              <span>{t("central.aiTagProgressTitle")}</span>
-              {aiTagJob.currentSkillName && aiTagJob.status === "running" && (
-                <span className="text-muted-foreground">
-                  {t("central.aiTagCurrent", { name: aiTagJob.currentSkillName })}
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
-              <span>{t("central.aiTagCompleted", { completed: aiTagJob.completed, total: aiTagJob.total })}</span>
-              <span>{t("central.aiTagSucceeded", { count: aiTagJob.succeeded })}</span>
-              <span>{t("central.aiTagFailed", { count: aiTagJob.failed })}</span>
-              <span>{t("central.aiTagLowConfidence", { count: aiTagJob.lowConfidenceCount })}</span>
-              {aiTagJob.status === "completed" && (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline"
-                  onClick={() => {
-                    setCategorizeTab("review");
-                    setTagFilter("ai-review");
-                  }}
-                >
-                  <Eye className="size-3.5" />
-                  {t("central.viewFailuresAndReviews")}
-                </button>
-              )}
-              {aiTagJob.status === "running" && (
-                <Button variant="outline" size="sm" onClick={handleCancelAiTagJob}>
-                  <X className="size-3.5" />
-                  {t("central.cancelAiTagJob")}
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full w-full origin-left rounded-full bg-primary transition-transform duration-300 ease-out"
-              style={{
-                transform: `scaleX(${aiTagJob.total > 0 ? aiTagJob.completed / aiTagJob.total : 0})`,
-              }}
-            />
-          </div>
-          {aiTagJob.error && (
-            <p className="mt-2 text-xs text-destructive">{aiTagJob.error}</p>
-          )}
-        </div>
-      )}
-
-      {shouldShowUpdateProgress && (
-        <div
-          className={cn(
-            "sticky bottom-0 z-10 border-t bg-background/95 px-6 py-3 shadow-lg backdrop-blur",
-            updateJob.status === "failed" ? "border-destructive/30" : "border-border"
-          )}
-        >
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex min-w-0 items-center gap-2 font-medium text-foreground">
-              <span
-                className={cn(
-                  "grid size-6 shrink-0 place-items-center rounded-full ring-1",
-                  updateJob.status === "failed"
-                    ? "bg-destructive/10 text-destructive ring-destructive/20"
-                    : updateJob.status === "completed"
-                      ? "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-300"
-                      : "bg-primary/10 text-primary ring-primary/20"
-                )}
-              >
-                {updateJob.status === "failed" ? (
-                  <AlertTriangle className="size-3.5" />
-                ) : updateJob.status === "completed" ? (
-                  <Check className="size-3.5" />
-                ) : (
-                  <Download className="size-3.5" />
-                )}
-              </span>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span>{t("central.updateProgressTitle")}</span>
-                  {updateJob.status === "completed" && (
-                    <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-300">
-                      {t("central.updateProgressFinished")}
-                    </span>
-                  )}
-                  {updateJob.status === "failed" && (
-                    <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] text-destructive">
-                      {t("central.updateProgressFailedStatus")}
-                    </span>
-                  )}
-                </div>
-                {updateJob.currentSkillName && updateJob.status === "running" && (
-                  <div className="mt-0.5 truncate text-muted-foreground">
-                    {t("central.updateCurrent", { name: updateJob.currentSkillName })}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-              <span className="rounded-full bg-muted/70 px-2 py-1">
-                {t("central.updateCompleted", { completed: updateJob.completed, total: updateJob.total })}
-              </span>
-              <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-emerald-700 dark:text-emerald-300">
-                {t("central.updateSucceeded", { count: updateJob.succeeded })}
-              </span>
-              <span className="rounded-full bg-amber-500/10 px-2 py-1 text-amber-700 dark:text-amber-300">
-                {t("central.updateSkipped", { count: updateJob.skipped })}
-              </span>
-              <span
-                className={cn(
-                  "rounded-full px-2 py-1",
-                  updateJob.failed > 0
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-muted/70 text-muted-foreground"
-                )}
-              >
-                {t("central.updateFailed", { count: updateJob.failed })}
-              </span>
-              {isUpdateProgressDismissible && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-7 rounded-full text-muted-foreground hover:text-foreground"
-                  aria-label={t("central.closeUpdateProgress")}
-                  title={t("central.closeUpdateProgress")}
-                  onClick={() => setDismissedUpdateProgressKey(updateProgressKey)}
-                >
-                  <X className="size-3.5" />
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn(
-                "h-full w-full origin-left rounded-full transition-transform duration-300 ease-out",
-                updateJob.status === "failed" ? "bg-destructive" : "bg-primary"
-              )}
-              style={{
-                transform: `scaleX(${updateProgressRatio})`,
-              }}
-            />
-          </div>
-          {updateJob.error && (
-            <p
-              className={cn(
-                "mt-2 text-xs",
-                updateJob.failed > 0 || updateJob.status === "failed"
-                  ? "text-destructive"
-                  : "text-amber-700 dark:text-amber-300"
-              )}
-            >
-              {updateJob.error}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Install Dialog */}
-      <InstallDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        skill={installTargetSkill}
-        agents={availableInstallAgents}
-        onInstall={handleInstall}
-      />
-
-      <BatchInstallCentralSkillsDialog
-        open={isBatchInstallDialogOpen}
-        onOpenChange={setIsBatchInstallDialogOpen}
-        skillCount={selectedSkillIds.length}
-        agents={availableInstallAgents}
-        isInstalling={isInstalling}
-        onInstall={handleBatchInstallCentralSkills}
-      />
-
-      <DeleteCentralSkillDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={handleDeleteDialogOpenChange}
-        skill={deleteTargetSkill}
-        detail={deletePreview}
-        agents={agents}
-        isPreviewLoading={isDeletePreviewLoading}
-        isDeleting={isDeleting}
-        error={deletePreviewError}
-        onConfirm={handleDeleteCentralSkill}
-      />
-
-      <BatchDeleteCentralSkillsDialog
-        open={isBatchDeleteDialogOpen}
-        onOpenChange={handleBatchDeleteDialogOpenChange}
-        skillIds={selectedSkillIds}
-        preview={batchDeletePreview}
-        agents={agents}
-        isPreviewLoading={isBatchDeletePreviewLoading}
-        isDeleting={isDeleting}
-        error={batchDeletePreviewError}
-        onConfirm={handleBatchDeleteCentralSkills}
-      />
-
-      <RemoteMissingSkillsDialog
-        open={isRemoteMissingDialogOpen}
-        onOpenChange={handleRemoteMissingDialogOpenChange}
-        states={remoteMissingStates}
-        preview={remoteMissingPreview}
-        agents={agents}
-        isPreviewLoading={isRemoteMissingPreviewLoading}
-        isApplying={isResolvingRemoteMissing || isDeleting}
-        error={remoteMissingError}
-        onConfirm={handleResolveRemoteMissing}
-      />
-
-      <BatchDeleteCentralSkillsDialog
-        open={isRepositoryDeleteDialogOpen}
-        onOpenChange={handleRepositoryDeleteDialogOpenChange}
-        skillIds={(repositoryDeletePreview?.delete_preview.previews ?? []).map((item) => item.skill_id)}
-        preview={repositoryDeletePreview?.delete_preview ?? null}
-        agents={agents}
-        isPreviewLoading={isRepositoryDeletePreviewLoading}
-        isDeleting={isDeleting}
-        error={repositoryDeletePreviewError}
-        title={t("central.deleteRepositoryTitle", {
-          name: repositoryDeleteTarget?.name ?? "",
-        })}
-        description={t("central.deleteRepositoryDesc", {
-          name: repositoryDeleteTarget?.name ?? "",
-          count: repositoryDeletePreview?.delete_preview.previews.length ?? 0,
-        })}
-        dangerTitle={t("central.deleteRepositoryCentralRequired", {
-          count: repositoryDeletePreview?.delete_preview.previews.length ?? 0,
-        })}
-        confirmLabel={t("central.confirmDeleteRepository")}
-        confirmTestId="confirm-delete-skill-repository"
-        onConfirm={handleDeleteSkillRepository}
-      />
-
-      <SkillDetailDrawer
-        open={isDrawerOpen}
-        skillId={drawerSkillId}
-        onOpenChange={(open) => {
-          setIsDrawerOpen(open);
-          if (!open) {
-            setDrawerSkillId(null);
-          }
-        }}
-        returnFocusRef={
-          drawerSkillId
-            ? {
-                current: detailButtonRefs.current[drawerSkillId] ?? null,
-              }
-            : undefined
-        }
-      />
-
-      <GitHubRepoImportWizard
-        open={isGitHubImportOpen}
-        onOpenChange={setIsGitHubImportOpen}
-        repoUrl={githubRepoUrl}
-        onRepoUrlChange={setGitHubRepoUrl}
-        preview={githubImport.preview}
-        previewError={githubImport.error}
-        isPreviewLoading={githubImport.isPreviewLoading}
-        isImporting={githubImport.isImporting}
-        importResult={githubImport.importResult}
-        onPreview={handleGitHubPreview}
-        onImport={handleGitHubImport}
-        availableAgents={availableInstallAgents}
-        installableSkills={installableImportedSkills}
-        onInstallImportedSkill={handleInstallImportedSkill}
-        onAfterImportSuccess={handleAfterImportSuccess}
-        onReset={() => {
-          resetGitHubImport();
-          setGitHubRepoUrl("");
-        }}
-        launcherLabel={t("central.title")}
-      />
-
-      <CentralStatePortabilityDialog
-        open={isPortabilityOpen}
-        onOpenChange={setIsPortabilityOpen}
-        exportState={exportSkillportState}
-        previewImport={previewSkillportStateImport}
-        importState={importSkillportState}
-        onAfterImport={async () => {
-          await Promise.all([refreshCounts(), loadCentralSkills()]);
-        }}
-      />
-    </div>
+    <CentralSkillsShell
+      centralSkillsDir={centralSkillsDir}
+      dialogs={dialogsProps}
+      filterSidebar={filterSidebarProps}
+      tagSearch={tagSearchProps}
+      isCheckingUpdates={isCheckingUpdates}
+      isLoading={isLoading}
+      listContent={listContentProps}
+      installedSkillsFilter={installedSkillsFilterProps}
+      searchQuery={searchQuery}
+      setIsGitHubImportOpen={setIsGitHubImportOpen}
+      setIsPlatformManageOpen={setIsPlatformManageOpen}
+      setIsPortabilityOpen={setIsPortabilityOpen}
+      setRepositoryFilter={setRepositoryFilter}
+      setSearchQuery={setSearchQuery}
+      setSortDirection={setSortDirection}
+      setSortField={setSortField}
+      setTagFilter={setTagFilter}
+      shouldShowCategorizePanel={skills.length > 0}
+      shouldShowUpdateProgress={shouldShowUpdateProgress}
+      sortDirection={sortDirection}
+      sortDirectionOptions={sortDirectionOptions}
+      sortField={sortField}
+      sortFieldOptions={sortFieldOptions}
+      tagFilter={tagFilter}
+      tags={tags}
+      t={t}
+      updateAvailableSkillCount={updateAvailableSkillIds.length}
+      updateButton={updateButtonProps}
+      aiProgress={aiProgressProps}
+      categorizePanel={categorizePanelProps}
+      updateProgress={updateProgressProps}
+      checkButton={checkButtonProps}
+      onRefresh={() => {
+        void handleRefresh();
+      }}
+      onUpdateSkills={(skillIds) => {
+        void handleUpdateSkills(skillIds);
+      }}
+      onSwitchToNew={v2EnabledFromFlag ? () => setV2OverrideClassic(false) : undefined}
+    />
   );
 }

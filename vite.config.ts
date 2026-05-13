@@ -23,6 +23,12 @@ export default defineConfig(async () => ({
     },
   },
 
+  // 限定依赖预扫描入口，避免 Vite 扫到 tmp/ 下的 Chrome 扩展产物
+  // （那些 polyfills.js 会 import 'chrome'，导致解析失败警告）
+  optimizeDeps: {
+    entries: ["index.html", "src/**/*.{ts,tsx,js,jsx}"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
@@ -97,5 +103,10 @@ export default defineConfig(async () => ({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    include: [
+      "src/test/**/*.test.{js,jsx,ts,tsx}",
+      "src/test/**/*.spec.{js,jsx,ts,tsx}",
+    ],
+    exclude: ["tmp/**", "dist/**"],
   },
 }));

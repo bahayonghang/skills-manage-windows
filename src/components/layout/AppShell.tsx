@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Outlet, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { GlobalSearchDialog } from "./GlobalSearchDialog";
@@ -9,6 +11,20 @@ import { useDiscoverStore } from "@/stores/discoverStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
+import { isTauriRuntime, listen } from "@/lib/tauri";
+
+type MigrationProgressPayload =
+  | { phase: "started" }
+  | { phase: "completed"; copied: number; skipped: number; failed: number }
+  | { phase: "failed"; error: string };
+
+function disposeListener(unlisten?: (() => void | Promise<void>) | null) {
+  if (!unlisten) {
+    return;
+  }
+
+  void Promise.resolve(unlisten()).catch(() => undefined);
+}
 
 /**
  * Top-level app shell: TopBar + icon sidebar + scrollable main content area.
@@ -18,6 +34,7 @@ export function AppShell() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
   const { pathname } = useLocation();
+  const { t } = useTranslation();
 
   const initialize = usePlatformStore((s) => s.initialize);
   const rescan = usePlatformStore((s) => s.rescan);
@@ -45,6 +62,7 @@ export function AppShell() {
     return () => {
       cancelled = true;
     };
+    // reason: startup bootstrap must run once; store action references are stable by convention.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -73,6 +91,7 @@ export function AppShell() {
     resetSkillsForTargetChange();
     resetMarketplaceForTargetChange();
     void handleGlobalRescan();
+    // reason: target-change reset should react only to target identity/load state, not store action references.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTargetId, hasLoadedTargets]);
 
@@ -80,6 +99,49 @@ export function AppShell() {
     if (!mainRef.current) return;
     mainRef.current.scrollTop = 0;
   }, [pathname]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    let disposed = false;
+    let unlisten: (() => void | Promise<void>) | undefined;
+
+    void listen<MigrationProgressPayload>("system://migration-progress", (event) => {
+      if (disposed) return;
+      const payload = event.payload;
+      switch (payload.phase) {
+        case "completed":
+          if (payload.copied > 0 || payload.failed > 0) {
+            toast.success(
+              t("central.migrationCompleted", {
+                copied: payload.copied,
+                skipped: payload.skipped,
+                failed: payload.failed,
+              })
+            );
+          }
+          break;
+        case "failed":
+          toast.error(t("central.migrationFailed", { error: payload.error }));
+          break;
+        default:
+          break;
+      }
+    }).then((cleanup) => {
+      if (disposed) {
+        disposeListener(cleanup);
+        return;
+      }
+      unlisten = cleanup;
+    }).catch(() => undefined);
+
+    return () => {
+      disposed = true;
+      disposeListener(unlisten);
+    };
+  }, [t]);
 
   async function handleGlobalRescan() {
     await rescan();

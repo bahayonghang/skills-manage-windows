@@ -1,20 +1,20 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, State};
-use uuid::Uuid;
 
 use crate::{
     db::{self, DbPool, Skill, SkillRepositoryAssignment, SkillUpdateState},
-    targets::ActiveTarget,
     AppState,
 };
 
-use super::{
-    github_import::{self, GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate},
-    linker,
+use super::central_updates_fs::{
+    collect_remote_skill_files, ensure_remote_skill_manifest, hash_remote_files,
+    normalize_repo_path, CentralFs, RemoteSkillFile,
 };
+use super::github_import::{self, GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
 
 const UPDATE_PROGRESS_EVENT: &str = "central://skill-update-progress";
 const STATUS_UP_TO_DATE: &str = "up_to_date";
@@ -22,6 +22,7 @@ const STATUS_UPDATE_AVAILABLE: &str = "update_available";
 const STATUS_UNSUPPORTED: &str = "unsupported";
 const STATUS_REMOTE_MISSING: &str = "remote_missing";
 const STATUS_ERROR: &str = "error";
+const STATUS_CANCELLED: &str = "cancelled";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,13 +69,6 @@ pub struct CentralSkillUpdateResult {
 struct GitHubUpdateSource {
     repo: GitHubRepoRef,
     source_path: String,
-}
-
-#[derive(Debug, Clone)]
-struct RemoteSkillFile {
-    repo_path: String,
-    relative_path: String,
-    bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -132,20 +126,35 @@ pub async fn check_central_skill_updates(
     state: State<'_, AppState>,
     skill_ids: Option<Vec<String>>,
 ) -> Result<Vec<SkillUpdateState>, String> {
-    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
-        return Err("Remote Central update checks are not supported in this version.".to_string());
-    }
+    let fs = CentralFs::from_active_target(state.active_target().await?).await?;
     let skills = load_selected_central_skills(&state.db, skill_ids.as_deref()).await?;
-    let auth = github_import::github_direct_auth_from_settings(&state.db).await?;
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await?;
     let client = github_import::github_client()?;
     let mut snapshots = HashMap::new();
     let mut counters = UpdateCounters::default();
     let mut states = Vec::with_capacity(skills.len());
     let total = skills.len();
 
+    state.central_update_cancel.store(false, Ordering::SeqCst);
+
     emit_update_progress(&app, "checking", "started", total, &counters, None, None);
 
     for skill in skills {
+        if state.central_update_cancel.load(Ordering::SeqCst) {
+            emit_update_progress(
+                &app,
+                "checking",
+                STATUS_CANCELLED,
+                total,
+                &counters,
+                None,
+                None,
+            );
+            return Ok(states);
+        }
+
         emit_update_progress(
             &app,
             "checking",
@@ -158,6 +167,7 @@ pub async fn check_central_skill_updates(
 
         let state_result = match load_remote_skill_content(
             &state.db,
+            &fs,
             &skill,
             auth.as_deref(),
             &client,
@@ -203,12 +213,12 @@ pub async fn update_central_skills(
     if skill_ids.is_empty() {
         return Err("Select at least one Central skill to update.".to_string());
     }
-    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
-        return Err("Remote Central updates are not supported in this version.".to_string());
-    }
+    let fs = CentralFs::from_active_target(state.active_target().await?).await?;
 
     let skills = load_selected_central_skills(&state.db, Some(&skill_ids)).await?;
-    let auth = github_import::github_direct_auth_from_settings(&state.db).await?;
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await?;
     let client = github_import::github_client()?;
     let mut snapshots = HashMap::new();
     let mut counters = UpdateCounters::default();
@@ -218,9 +228,29 @@ pub async fn update_central_skills(
     let mut skipped = Vec::new();
     let mut states = Vec::new();
 
+    state.central_update_cancel.store(false, Ordering::SeqCst);
+
     emit_update_progress(&app, "updating", "started", total, &counters, None, None);
 
     for skill in skills {
+        if state.central_update_cancel.load(Ordering::SeqCst) {
+            emit_update_progress(
+                &app,
+                "updating",
+                STATUS_CANCELLED,
+                total,
+                &counters,
+                None,
+                None,
+            );
+            return Ok(CentralSkillUpdateResult {
+                succeeded,
+                failed,
+                skipped,
+                states,
+            });
+        }
+
         emit_update_progress(
             &app,
             "updating",
@@ -231,8 +261,15 @@ pub async fn update_central_skills(
             None,
         );
 
-        match load_remote_skill_content(&state.db, &skill, auth.as_deref(), &client, &mut snapshots)
-            .await
+        match load_remote_skill_content(
+            &state.db,
+            &fs,
+            &skill,
+            auth.as_deref(),
+            &client,
+            &mut snapshots,
+        )
+        .await
         {
             Ok(Some(remote)) if remote.remote_hash == remote.local_hash => {
                 let state_result = state_from_remote(&skill, &remote, false);
@@ -254,7 +291,7 @@ pub async fn update_central_skills(
                 );
                 states.push(state_result);
             }
-            Ok(Some(remote)) => match update_one_skill(&state.db, &skill, remote).await {
+            Ok(Some(remote)) => match update_one_skill(&state.db, &fs, &skill, remote).await {
                 Ok(state_result) => {
                     db::upsert_skill_update_state(&state.db, &state_result).await?;
                     counters.completed += 1;
@@ -368,6 +405,12 @@ pub async fn update_central_skills(
     })
 }
 
+#[tauri::command]
+pub async fn cancel_central_skill_updates(state: State<'_, AppState>) -> Result<(), String> {
+    state.central_update_cancel.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
 pub async fn keep_remote_missing_central_skills_impl(
     pool: &DbPool,
     skill_ids: &[String],
@@ -423,11 +466,6 @@ pub async fn keep_remote_missing_central_skills(
     state: State<'_, AppState>,
     skill_ids: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    if matches!(state.active_target().await?, ActiveTarget::Ssh(_)) {
-        return Err(
-            "Remote Central update decisions are not supported in this version.".to_string(),
-        );
-    }
     let pool = state.active_db().await?;
     keep_remote_missing_central_skills_impl(&pool, &skill_ids).await
 }
@@ -449,6 +487,7 @@ async fn load_selected_central_skills(
 
 async fn load_remote_skill_content(
     pool: &DbPool,
+    fs: &CentralFs,
     skill: &Skill,
     auth_token: Option<&str>,
     client: &reqwest::Client,
@@ -476,7 +515,10 @@ async fn load_remote_skill_content(
 
     let remote_hash = hash_remote_files(snapshot, &files).map_err(RemoteSkillLoadError::other)?;
     let target_dir = skill_target_dir(skill).map_err(RemoteSkillLoadError::other)?;
-    let local_hash = hash_local_directory(&target_dir).map_err(RemoteSkillLoadError::other)?;
+    let local_hash = fs
+        .hash_directory(&target_dir)
+        .await
+        .map_err(RemoteSkillLoadError::other)?;
 
     Ok(Some(RemoteSkillContent {
         source,
@@ -728,35 +770,12 @@ fn unsupported_reason(assignment: &SkillRepositoryAssignment) -> String {
 
 async fn update_one_skill(
     pool: &DbPool,
+    fs: &CentralFs,
     skill: &Skill,
     remote: RemoteSkillContent,
 ) -> Result<SkillUpdateState, String> {
-    let parent = remote
-        .target_dir
-        .parent()
-        .ok_or_else(|| format!("Skill '{}' target directory has no parent.", skill.id))?;
-    std::fs::create_dir_all(parent).map_err(|e| {
-        format!(
-            "Failed to create parent directory '{}': {}",
-            parent.display(),
-            e
-        )
-    })?;
-
-    let temp_dir = parent.join(format!(".skillport-update-{}-{}", skill.id, Uuid::new_v4()));
-    if temp_dir.exists() {
-        std::fs::remove_dir_all(&temp_dir).map_err(|e| {
-            format!(
-                "Failed to clear stale update directory '{}': {}",
-                temp_dir.display(),
-                e
-            )
-        })?;
-    }
-    write_remote_skill_files(&remote, &temp_dir)?;
-
-    let backup_dir = parent.join(format!(".skillport-backup-{}-{}", skill.id, Uuid::new_v4()));
-    replace_target_dir(&remote.target_dir, &temp_dir, &backup_dir)?;
+    fs.write_skill_dir_atomic(&skill.id, &remote.target_dir, &remote.files)
+        .await?;
 
     let skill_md_path = remote.target_dir.join("SKILL.md");
     let updated_skill = Skill {
@@ -784,143 +803,14 @@ async fn update_one_skill(
         &remote.source.source_path,
     )
     .await?;
-    refresh_copy_installations(pool, &skill.id, &remote.target_dir).await?;
+    refresh_copy_installations(pool, fs, &skill.id, &remote.target_dir).await?;
 
     Ok(state_from_remote(skill, &remote, true))
 }
 
-fn collect_remote_skill_files(
-    snapshot: &GitHubRepoSnapshot,
-    source_path: &str,
-) -> Result<Vec<RemoteSkillFile>, String> {
-    let mut files = snapshot
-        .files
-        .iter()
-        .filter_map(|(repo_path, bytes)| {
-            let relative_path = if source_path == "." {
-                if repo_path.contains('/') {
-                    return None;
-                }
-                repo_path.clone()
-            } else {
-                let prefix = format!("{}/", source_path.trim_matches('/'));
-                let relative = repo_path.strip_prefix(&prefix)?;
-                if relative.is_empty() {
-                    return None;
-                }
-                relative.to_string()
-            };
-
-            Some(RemoteSkillFile {
-                repo_path: repo_path.clone(),
-                relative_path,
-                bytes: bytes.clone(),
-            })
-        })
-        .collect::<Vec<_>>();
-
-    files.sort_by(|left, right| left.repo_path.cmp(&right.repo_path));
-    if files.is_empty() {
-        return Err(format!(
-            "Repository path '{}' is no longer available.",
-            source_path
-        ));
-    }
-    Ok(files)
-}
-
-fn ensure_remote_skill_manifest(files: &[RemoteSkillFile]) -> Result<(), String> {
-    let has_manifest = files
-        .iter()
-        .any(|file| file.relative_path.eq_ignore_ascii_case("SKILL.md"));
-    if has_manifest {
-        Ok(())
-    } else {
-        Err("Remote skill no longer contains SKILL.md.".to_string())
-    }
-}
-
-fn write_remote_skill_files(remote: &RemoteSkillContent, target_dir: &Path) -> Result<(), String> {
-    std::fs::create_dir_all(target_dir).map_err(|e| {
-        format!(
-            "Failed to create update staging directory '{}': {}",
-            target_dir.display(),
-            e
-        )
-    })?;
-
-    for file in &remote.files {
-        if !is_safe_relative_path(&file.relative_path) {
-            return Err(format!(
-                "Repository contains an unsupported path '{}'.",
-                file.repo_path
-            ));
-        }
-
-        let destination = target_dir.join(&file.relative_path);
-        let parent = destination.parent().ok_or_else(|| {
-            format!(
-                "Failed to determine parent directory for '{}'.",
-                destination.display()
-            )
-        })?;
-        std::fs::create_dir_all(parent).map_err(|e| {
-            format!(
-                "Failed to create update file parent '{}': {}",
-                parent.display(),
-                e
-            )
-        })?;
-        std::fs::write(&destination, &file.bytes).map_err(|e| {
-            format!(
-                "Failed to write update file '{}': {}",
-                destination.display(),
-                e
-            )
-        })?;
-    }
-
-    Ok(())
-}
-
-fn replace_target_dir(target_dir: &Path, temp_dir: &Path, backup_dir: &Path) -> Result<(), String> {
-    let had_target = std::fs::symlink_metadata(target_dir).is_ok();
-    if had_target {
-        std::fs::rename(target_dir, backup_dir).map_err(|e| {
-            format!(
-                "Failed to stage existing skill directory '{}' for replacement: {}",
-                target_dir.display(),
-                e
-            )
-        })?;
-    }
-
-    if let Err(error) = std::fs::rename(temp_dir, target_dir) {
-        if had_target {
-            let _ = std::fs::rename(backup_dir, target_dir);
-        }
-        return Err(format!(
-            "Failed to replace skill directory '{}': {}",
-            target_dir.display(),
-            error
-        ));
-    }
-
-    if had_target {
-        remove_path(backup_dir).map_err(|e| {
-            format!(
-                "Updated skill directory, but failed to remove backup '{}': {}",
-                backup_dir.display(),
-                e
-            )
-        })?;
-    }
-
-    Ok(())
-}
-
 async fn refresh_copy_installations(
     pool: &DbPool,
+    fs: &CentralFs,
     skill_id: &str,
     source_dir: &Path,
 ) -> Result<(), String> {
@@ -929,17 +819,8 @@ async fn refresh_copy_installations(
         if installation.link_type != "copy" {
             continue;
         }
-        let target = PathBuf::from(&installation.installed_path);
-        if target.file_name().and_then(|value| value.to_str()) != Some(skill_id) {
-            return Err(format!(
-                "Refusing to refresh copy install outside expected skill directory '{}'.",
-                target.display()
-            ));
-        }
-        if std::fs::symlink_metadata(&target).is_ok() {
-            remove_path(&target)?;
-        }
-        linker::copy_dir_all(source_dir, &target)?;
+        fs.refresh_copy_install(skill_id, source_dir, &installation.installed_path)
+            .await?;
     }
     Ok(())
 }
@@ -951,152 +832,6 @@ fn skill_target_dir(skill: &Skill) -> Result<PathBuf, String> {
         .map(PathBuf::from)
         .or_else(|| Path::new(&skill.file_path).parent().map(Path::to_path_buf))
         .ok_or_else(|| format!("Skill '{}' has no canonical directory.", skill.id))
-}
-
-fn hash_remote_files(
-    _snapshot: &GitHubRepoSnapshot,
-    files: &[RemoteSkillFile],
-) -> Result<String, String> {
-    let mut entries = Vec::with_capacity(files.len());
-    for file in files {
-        entries.push((file.relative_path.clone(), file.bytes.clone()));
-    }
-    Ok(hash_entries(entries))
-}
-
-fn hash_local_directory(root: &Path) -> Result<String, String> {
-    let mut entries = Vec::new();
-    collect_local_hash_entries(root, root, &mut entries)?;
-    entries.sort_by(|left, right| left.0.cmp(&right.0));
-    Ok(hash_entries(entries))
-}
-
-fn collect_local_hash_entries(
-    root: &Path,
-    current: &Path,
-    entries: &mut Vec<(String, Vec<u8>)>,
-) -> Result<(), String> {
-    for entry in std::fs::read_dir(current).map_err(|e| {
-        format!(
-            "Failed to read local skill directory '{}': {}",
-            current.display(),
-            e
-        )
-    })? {
-        let entry = entry.map_err(|e| format!("Failed to read local skill entry: {}", e))?;
-        let path = entry.path();
-        let file_type = entry.file_type().map_err(|e| {
-            format!(
-                "Failed to inspect local skill entry '{}': {}",
-                path.display(),
-                e
-            )
-        })?;
-        if file_type.is_dir() {
-            collect_local_hash_entries(root, &path, entries)?;
-        } else if file_type.is_file() {
-            let relative_path = relative_path_string(root, &path)?;
-            let bytes = std::fs::read(&path).map_err(|e| {
-                format!(
-                    "Failed to read local skill file '{}': {}",
-                    path.display(),
-                    e
-                )
-            })?;
-            entries.push((relative_path, bytes));
-        }
-    }
-    Ok(())
-}
-
-fn hash_entries(mut entries: Vec<(String, Vec<u8>)>) -> String {
-    entries.sort_by(|left, right| left.0.cmp(&right.0));
-    let mut hash = 0xcbf29ce484222325u64;
-    for (path, bytes) in entries {
-        hash = fnv1a(hash, path.as_bytes());
-        hash = fnv1a(hash, &[0xff]);
-        hash = fnv1a(hash, &bytes);
-        hash = fnv1a(hash, &[0xfe]);
-    }
-    format!("fnv1a64:{hash:016x}")
-}
-
-fn fnv1a(mut hash: u64, bytes: &[u8]) -> u64 {
-    for byte in bytes {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    hash
-}
-
-fn relative_path_string(root: &Path, path: &Path) -> Result<String, String> {
-    let relative = path.strip_prefix(root).map_err(|e| {
-        format!(
-            "Failed to compute relative path for '{}': {}",
-            path.display(),
-            e
-        )
-    })?;
-    let parts = relative
-        .components()
-        .map(|component| match component {
-            Component::Normal(value) => Ok(value.to_string_lossy().into_owned()),
-            _ => Err(format!(
-                "Local skill path '{}' contains unsupported components.",
-                path.display()
-            )),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(parts.join("/"))
-}
-
-fn normalize_repo_path(path: &str) -> Result<String, String> {
-    let normalized = path.trim().trim_matches('/').replace('\\', "/");
-    let normalized = if normalized.is_empty() {
-        ".".to_string()
-    } else {
-        normalized
-    };
-    if !is_safe_repo_path(&normalized) {
-        return Err(format!("Repository path '{}' is not supported.", path));
-    }
-    Ok(normalized)
-}
-
-fn is_safe_repo_path(path: &str) -> bool {
-    path == "." || is_safe_relative_path(path)
-}
-
-fn is_safe_relative_path(path: &str) -> bool {
-    let relative = Path::new(path);
-    !relative.is_absolute()
-        && relative
-            .components()
-            .all(|component| matches!(component, Component::Normal(_)))
-}
-
-fn remove_path(path: &Path) -> Result<(), String> {
-    match std::fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() => remove_symlink_path(path),
-        Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(path)
-            .map_err(|e| format!("Failed to remove directory '{}': {}", path.display(), e)),
-        Ok(_) => std::fs::remove_file(path)
-            .map_err(|e| format!("Failed to remove file '{}': {}", path.display(), e)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("Failed to inspect '{}': {}", path.display(), error)),
-    }
-}
-
-#[cfg(windows)]
-fn remove_symlink_path(path: &Path) -> Result<(), String> {
-    std::fs::remove_dir(path)
-        .map_err(|e| format!("Failed to remove symlink '{}': {}", path.display(), e))
-}
-
-#[cfg(not(windows))]
-fn remove_symlink_path(path: &Path) -> Result<(), String> {
-    std::fs::remove_file(path)
-        .map_err(|e| format!("Failed to remove symlink '{}': {}", path.display(), e))
 }
 
 fn update_counters_for_state(counters: &mut UpdateCounters, state: &SkillUpdateState) {
@@ -1166,49 +901,6 @@ mod tests {
             branch: "main".to_string(),
             normalized_url: "https://github.com/owner/repo".to_string(),
         }
-    }
-
-    #[test]
-    fn hash_entries_is_stable_across_input_order() {
-        let left = hash_entries(vec![
-            ("b.txt".to_string(), b"two".to_vec()),
-            ("a.txt".to_string(), b"one".to_vec()),
-        ]);
-        let right = hash_entries(vec![
-            ("a.txt".to_string(), b"one".to_vec()),
-            ("b.txt".to_string(), b"two".to_vec()),
-        ]);
-
-        assert_eq!(left, right);
-    }
-
-    #[test]
-    fn local_hash_changes_when_file_content_changes() {
-        let temp = TempDir::new().unwrap();
-        let skill_dir = temp.path().join("demo");
-        std::fs::create_dir_all(&skill_dir).unwrap();
-        std::fs::write(skill_dir.join("SKILL.md"), b"one").unwrap();
-
-        let first = hash_local_directory(&skill_dir).unwrap();
-        std::fs::write(skill_dir.join("SKILL.md"), b"two").unwrap();
-        let second = hash_local_directory(&skill_dir).unwrap();
-
-        assert_ne!(first, second);
-    }
-
-    #[test]
-    fn collect_remote_skill_files_requires_source_path() {
-        let snapshot = GitHubRepoSnapshot {
-            files: HashMap::from([(
-                "skills/demo/SKILL.md".to_string(),
-                b"---\nname: Demo\n---".to_vec(),
-            )]),
-        };
-
-        let files = collect_remote_skill_files(&snapshot, "skills/demo").unwrap();
-
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].relative_path, "SKILL.md");
     }
 
     #[test]

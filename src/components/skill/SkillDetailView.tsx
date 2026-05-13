@@ -1,230 +1,48 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import {
-  Tag,
-  Plus,
-  FileText,
-  Code,
-  Bot,
-  RefreshCw,
-  Loader2,
-  ChevronDown,
-  ChevronRight,
-  Monitor,
-  FolderOpen,
-  Lock,
-  Download,
-  Copy,
-} from "lucide-react";
+import { Bot, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PlatformIcon } from "@/components/platform/PlatformIcon";
-import { SkillFrontmatterCard } from "@/components/skill/SkillFrontmatterCard";
-import { parseFrontmatter } from "@/lib/frontmatter";
-import { useSkillDetailStore } from "@/stores/skillDetailStore";
-import { usePlatformStore } from "@/stores/platformStore";
-import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
-import { useTargetStore } from "@/stores/targetStore";
+import { CentralUpdateConfirmDialog } from "@/components/central/CentralUpdateConfirmDialog";
 import { CollectionPickerDialog } from "@/components/collection/CollectionPickerDialog";
-import { AgentWithStatus, ClaudeSourceKind, SkillDetailRequest, SkillInstallation } from "@/types";
-import { cn } from "@/lib/utils";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { SkillDetailPreview } from "@/components/skill/SkillDetailPreview";
+import { SkillDetailSidebar } from "@/components/skill/SkillDetailSidebar";
+import { TabToggle } from "@/components/skill/SkillDetailViewShared";
+import { formatBackendError } from "@/lib/backendError";
+import { parseFrontmatter } from "@/lib/frontmatter";
 import { arePathsEquivalent } from "@/lib/path";
-import {
-  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-} from "@/lib/platformVisibility";
+import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import {
   getPlatformTargetGroups,
-  getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberIds,
-  getPlatformTargetMemberNames,
-  isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
+import { isTauriRuntime } from "@/lib/tauri";
+import { cn } from "@/lib/utils";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
+import { usePlatformStore } from "@/stores/platformStore";
+import { useSkillDetailStore } from "@/stores/skillDetailStore";
+import { useTargetStore } from "@/stores/targetStore";
+import type {
+  CentralSkillUpdateState,
+  SkillDetailRequest,
+  SkillInstallation,
+} from "@/types";
+import type { DiscoverMetadata, PreviewTab } from "@/components/skill/skillDetailViewTypes";
 
-// ─── Section Label ─────────────────────────────────────────────────────────────
+export type { DiscoverMetadata } from "@/components/skill/skillDetailViewTypes";
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80 mb-2">
-      {children}
-    </div>
-  );
-}
-
-// ─── MetadataRow (compact) ───────────────────────────────────────────────────
-
-function MetadataRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="space-y-0.5">
-      <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">{label}</div>
-      <div className="font-mono text-xs text-foreground break-all leading-relaxed">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function SourceOriginBadge({ originKind }: { originKind: ClaudeSourceKind }) {
-  const { t, i18n } = useTranslation();
-  const isPlugin = originKind === "plugin";
-
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
-        isPlugin
-          ? "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300"
-          : "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:text-sky-300"
-      )}
-    >
-      {isPlugin
-        ? t("platform.originPlugin", {
-            defaultValue: i18n.language.startsWith("zh") ? "插件来源" : "Plugin source",
-          })
-        : t("platform.originUser", {
-            defaultValue: i18n.language.startsWith("zh") ? "用户来源" : "User source",
-          })}
-    </span>
-  );
-}
-
-function ReadOnlySourceBadge() {
-  const { t, i18n } = useTranslation();
-
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70">
-      <Lock className="size-3 shrink-0" />
-      {t("detail.readOnlySource", {
-        defaultValue: i18n.language.startsWith("zh") ? "只读来源" : "Read-only source",
-      })}
-    </span>
-  );
-}
-
-// ─── Platform Toggle Icon (compact install/uninstall) ─────────────────────────
-
-interface PlatformToggleIconProps {
-  agent: AgentWithStatus;
-  skillName: string;
-  isInstalled: boolean;
-  isLoading: boolean;
-  isLocked: boolean;
-  onToggle: () => void;
-}
-
-function PlatformToggleIcon({ agent, skillName, isInstalled, isLoading, isLocked, onToggle }: PlatformToggleIconProps) {
-  const { t } = useTranslation();
-  const displayName = isUniversalPlatformTarget(agent)
-    ? t("platformTargets.universalShortLabel")
-    : agent.display_name;
-  const memberNames = getPlatformTargetMemberNames(agent).join(", ");
-  const title = isLocked
-    ? `${displayName} - ${t("platformTargets.alwaysIncluded")} - ${memberNames}`
-    : `${displayName}${isInstalled ? ` - ${t("central.linked")}` : ""}`;
-
-  return (
-    <button
-      className={cn(
-        "p-1.5 rounded-md transition-colors cursor-pointer",
-        isLocked
-          ? "text-primary cursor-default"
-          : isInstalled
-            ? "text-primary hover:bg-primary/15"
-            : "text-muted-foreground/40 hover:bg-muted/60 hover:text-muted-foreground",
-        isLoading && "animate-pulse pointer-events-none"
-      )}
-      title={title}
-      aria-label={
-        isLocked
-          ? title
-          : t("central.toggleInstallLabel", { platform: displayName, skill: skillName })
-      }
-      disabled={isLoading || isLocked}
-      onClick={onToggle}
-    >
-      <PlatformIcon agentId={agent.id} className="size-4 shrink-0" size={16} />
-    </button>
-  );
-}
-
-// ─── Tab Toggle ───────────────────────────────────────────────────────────────
-
-type PreviewTab = "markdown" | "raw" | "explanation";
-
-interface TabToggleProps {
-  activeTab: PreviewTab;
-  onChange: (tab: PreviewTab) => void;
-}
-
-function TabToggle({ activeTab, onChange }: TabToggleProps) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex border border-border rounded-lg p-0.5 gap-0.5 bg-muted/40">
-      <button
-        role="tab"
-        aria-selected={activeTab === "markdown"}
-        onClick={() => onChange("markdown")}
-        className={cn(
-          "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-          activeTab === "markdown"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-        )}
-      >
-        <FileText className="size-3.5" />
-        {t("detail.markdown")}
-      </button>
-      <button
-        role="tab"
-        aria-selected={activeTab === "raw"}
-        onClick={() => onChange("raw")}
-        className={cn(
-          "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-          activeTab === "raw"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-        )}
-      >
-        <Code className="size-3.5" />
-        {t("detail.rawSource")}
-      </button>
-      <button
-        role="tab"
-        aria-selected={activeTab === "explanation"}
-        onClick={() => onChange("explanation")}
-        className={cn(
-          "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-          activeTab === "explanation"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-        )}
-      >
-        <Bot className="size-3.5" />
-        {t("detail.aiExplanation")}
-      </button>
-    </div>
-  );
-}
-
-const detailTypographyClassName = cn(
-  "text-[13px] leading-6 text-foreground/90",
-  "[&_p]:text-[13px] [&_p]:leading-6",
-  "[&_li]:text-[13px] [&_li]:leading-6",
-  "[&_blockquote]:text-[13px] [&_blockquote]:leading-6",
-  "[&_h1]:text-lg [&_h1]:leading-7 [&_h1]:font-semibold",
-  "[&_h2]:text-base [&_h2]:leading-6 [&_h2]:font-semibold",
-  "[&_h3]:text-sm [&_h3]:leading-6 [&_h3]:font-semibold",
-  "[&_h4]:text-[13px] [&_h4]:leading-6 [&_h4]:font-semibold",
-  "[&_th]:text-xs [&_th]:leading-5",
-  "[&_td]:text-xs [&_td]:leading-5",
-  "[&_code]:text-[12px]",
-  "[&_pre]:text-[12px] [&_pre]:leading-5",
-  "[&_pre_code]:text-[12px] [&_pre_code]:leading-5"
-);
-
-// ─── SkillDetailView ──────────────────────────────────────────────────────────
+const NOOP_ASYNC = async () => undefined;
+const NOOP = () => undefined;
+const EMPTY_DIRECTORY_TREE: never[] = [];
 
 /**
  * Shared presentation component for skill detail. Rendered by both the
@@ -238,16 +56,6 @@ const detailTypographyClassName = cn(
  * to the outer shell. It also does NOT call `useNavigate` / `useParams`; all
  * route/shell concerns are handled outside.
  */
-export interface DiscoverMetadata {
-  name: string;
-  description?: string;
-  platformName: string;
-  projectName: string;
-  filePath: string;
-  dirPath: string;
-  isAlreadyCentral: boolean;
-}
-
 export interface SkillDetailViewProps {
   /** The skill id to load from DB. Required for central skills. */
   skillId?: string;
@@ -286,7 +94,6 @@ export function SkillDetailView({
   const { t, i18n } = useTranslation();
   const isFileMode = !skillId && !!filePath;
 
-  // Store data (used in skillId mode)
   const detail = useSkillDetailStore((s) => s.detail);
   const storeContent = useSkillDetailStore((s) => s.content);
   const storeIsLoading = useSkillDetailStore((s) => s.isLoading);
@@ -305,10 +112,21 @@ export function SkillDetailView({
   const generateExplanation = useSkillDetailStore((s) => s.generateExplanation);
   const refreshExplanation = useSkillDetailStore((s) => s.refreshExplanation);
   const reset = useSkillDetailStore((s) => s.reset);
+  const fileContent = useSkillDetailStore((s) => s.fileContent);
+  const fileIsLoading = useSkillDetailStore((s) => s.fileIsLoading);
+  const fileExplanation = useSkillDetailStore((s) => s.fileExplanation);
+  const fileIsExplaining = useSkillDetailStore((s) => s.fileIsExplaining);
+  const loadFileContent = useSkillDetailStore((s) => s.loadFileContent);
+  const explainFileContent = useSkillDetailStore((s) => s.explainFileContent);
+  const openInFileManager = useSkillDetailStore((s) => s.openInFileManager) ?? NOOP_ASYNC;
+  const directoryTree = useSkillDetailStore((s) => s.directoryTree) ?? EMPTY_DIRECTORY_TREE;
+  const isDirectoryLoading = useSkillDetailStore((s) => s.isDirectoryLoading) ?? false;
+  const loadDirectoryTree = useSkillDetailStore((s) => s.loadDirectoryTree) ?? NOOP_ASYNC;
+  const resetFileMode = useSkillDetailStore((s) => s.resetFileMode) ?? NOOP;
 
-  // Platform agents (loaded at app init)
   const agents = usePlatformStore((s) => s.agents);
-  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+  const categoryVisibility =
+    usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((s) => s.refreshCounts);
   const activeTarget = useTargetStore((s) => s.activeTarget);
   const repositories = useCentralSkillsStore((s) => s.repositories);
@@ -322,11 +140,6 @@ export function SkillDetailView({
   const assignSkillsToRepository = useCentralSkillsStore((s) => s.assignSkillsToRepository);
   const assignSkillTags = useCentralSkillsStore((s) => s.assignSkillTags);
 
-  // Local state for filePath mode
-  const [fileContent, setFileContent] = useState<string | null>(null);
-  const [fileIsLoading, setFileIsLoading] = useState(false);
-  const [fileExplanation, setFileExplanation] = useState<string | null>(null);
-  const [fileIsExplaining, setFileIsExplaining] = useState(false);
   const detailRequest = useMemo<SkillDetailRequest | null>(
     () => (skillId ? { skillId, agentId, rowId } : null),
     [skillId, agentId, rowId]
@@ -338,19 +151,19 @@ export function SkillDetailView({
     return detail?.row_id ?? rowId ?? skillId;
   }, [detail?.row_id, rowId, skillId]);
 
-  // Unified accessors
   const content = isFileMode ? fileContent : storeContent;
   const isLoading = isFileMode ? fileIsLoading : storeIsLoading;
   const explanation = isFileMode ? fileExplanation : storeExplanation;
   const isExplanationLoading = isFileMode ? fileIsExplaining : storeIsExplanationLoading;
   const isRemoteTarget = activeTarget.kind === "ssh";
 
-  // Local UI state
   const [activeTab, setActiveTab] = useState<PreviewTab>("markdown");
   const [isCollectionPickerOpen, setIsCollectionPickerOpen] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState("");
   const [selectedTagId, setSelectedTagId] = useState("");
+  const [isUpdateConfirmOpen, setIsUpdateConfirmOpen] = useState(false);
+  const [pendingUpdateStates, setPendingUpdateStates] = useState<CentralSkillUpdateState[]>([]);
   const addToCollectionButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -363,30 +176,21 @@ export function SkillDetailView({
     setSelectedRepositoryId(detail?.repository?.id ?? "");
   }, [detail?.repository?.id]);
 
-  // ── File mode: load content from path ─────────────────────────────────
   const fetchFileContent = useCallback(async () => {
-    if (!filePath) return;
-    setFileIsLoading(true);
-    try {
-      const text = await invoke<string>("read_file_by_path", { path: filePath });
-      setFileContent(text);
-    } catch {
-      setFileContent(null);
-    } finally {
-      setFileIsLoading(false);
+    if (!filePath) {
+      return;
     }
-  }, [filePath]);
+    await loadFileContent(filePath);
+  }, [filePath, loadFileContent]);
 
   useEffect(() => {
     if (isFileMode) {
-      setFileContent(null);
-      setFileExplanation(null);
+      resetFileMode();
       setActiveTab("markdown");
       void fetchFileContent();
     }
-  }, [isFileMode, fetchFileContent]);
+  }, [isFileMode, fetchFileContent, resetFileMode]);
 
-  // ── Store mode: load detail by skillId ────────────────────────────────
   useEffect(() => {
     if (detailRequest) {
       loadDetail(detailRequest);
@@ -396,17 +200,30 @@ export function SkillDetailView({
     };
   }, [detailRequest, loadDetail, reset]);
 
+  const directoryPath = useMemo(() => {
+    if (isFileMode) {
+      return discoverMetadata?.dirPath ?? null;
+    }
+    return detail?.dir_path ?? null;
+  }, [detail?.dir_path, discoverMetadata?.dirPath, isFileMode]);
+
+  useEffect(() => {
+    if (!directoryPath) {
+      void loadDirectoryTree("");
+      return;
+    }
+    void loadDirectoryTree(directoryPath);
+  }, [directoryPath, loadDirectoryTree]);
+
   useLayoutEffect(() => {
     if (explanationRequestKey && storeContent) {
       loadCachedExplanation(explanationRequestKey, i18n.language);
     }
   }, [explanationRequestKey, storeContent, i18n.language, loadCachedExplanation]);
 
-  // ── Derived values ───────────────────────────────────────────────────────
-
   const targetAgents = getPlatformTargetGroups(agents, categoryVisibility);
-  const lobsterAgents = targetAgents.filter((a) => a.category === "lobster");
-  const codingAgents = targetAgents.filter((a) => a.category !== "lobster");
+  const lobsterAgents = targetAgents.filter((agent) => agent.category === "lobster");
+  const codingAgents = targetAgents.filter((agent) => agent.category !== "lobster");
   const sharedRootAgentIds = useMemo(() => {
     if (!detail?.is_central) {
       return new Set<string>();
@@ -421,89 +238,134 @@ export function SkillDetailView({
     );
   }, [agents, detail?.is_central, targetAgents]);
 
-  const installationMap = new Map<string, SkillInstallation>(
-    (detail?.installations ?? []).map((inst) => [inst.agent_id, inst])
+  const installationMap = useMemo(
+    () => new Map<string, SkillInstallation>((detail?.installations ?? []).map((inst) => [inst.agent_id, inst])),
+    [detail?.installations]
   );
   const skillCollections = detail?.collections ?? [];
   const updateStatus = detail?.id ? updateStatuses[detail.id] : undefined;
   const isUpdatingThisSkill = detail?.id ? updatingSkillIds.includes(detail.id) : false;
 
-  // ── Handlers ─────────────────────────────────────────────────────────────
-
-  async function handleToggle(agentId: string) {
-    if (!skillId || detail?.is_read_only || sharedRootAgentIds.has(agentId)) return;
-    const isInstalled = installationMap.has(agentId);
-    try {
-      if (isInstalled) {
-        await uninstallSkill(skillId, agentId);
-      } else {
-        await installSkill(skillId, agentId);
+  const handleToggle = useCallback(
+    async (targetAgentId: string) => {
+      if (!skillId || detail?.is_read_only || sharedRootAgentIds.has(targetAgentId)) {
+        return;
       }
-      await Promise.all([
-        refreshCounts(),
-        refreshInstallations(skillId),
-      ]);
-    } catch (err) {
-      toast.error(
-        isInstalled
-          ? t("detail.uninstallError", { error: String(err) })
-          : t("detail.installError", { error: String(err) })
-      );
-    }
-  }
 
-  function handleCollectionAdded() {
+      const isInstalled = installationMap.has(targetAgentId);
+      const rowAwareUninstallId =
+        targetAgentId === "claude-code" && detail?.source_kind === "user" && !detail.is_read_only
+          ? detail.row_id
+          : undefined;
+      try {
+        if (isInstalled) {
+          if (rowAwareUninstallId) {
+            await uninstallSkill(skillId, targetAgentId, rowAwareUninstallId);
+          } else {
+            await uninstallSkill(skillId, targetAgentId);
+          }
+        } else {
+          await installSkill(skillId, targetAgentId);
+        }
+        await Promise.all([refreshCounts(), refreshInstallations(skillId)]);
+      } catch (err) {
+        toast.error(
+          isInstalled
+            ? t("detail.uninstallError", { error: String(err) })
+            : t("detail.installError", { error: String(err) })
+        );
+      }
+    },
+    [
+      detail?.is_read_only,
+      detail?.row_id,
+      detail?.source_kind,
+      installationMap,
+      installSkill,
+      refreshCounts,
+      refreshInstallations,
+      sharedRootAgentIds,
+      skillId,
+      t,
+      uninstallSkill,
+    ]
+  );
+
+  const handleCollectionAdded = useCallback(() => {
     if (detailRequest) {
       loadDetail(detailRequest);
     }
-  }
+  }, [detailRequest, loadDetail]);
 
-  function handleCollectionPickerOpenChange(open: boolean) {
+  const handleCollectionPickerOpenChange = useCallback((open: boolean) => {
     setIsCollectionPickerOpen(open);
     if (!open) {
       queueMicrotask(() => {
         addToCollectionButtonRef.current?.focus();
       });
     }
-  }
+  }, []);
 
-  async function handleAssignRepository() {
-    if (!skillId || !selectedRepositoryId || !detailRequest) return;
+  const handleAssignRepository = useCallback(async () => {
+    if (!skillId || !selectedRepositoryId || !detailRequest) {
+      return;
+    }
     try {
       await assignSkillsToRepository([skillId], selectedRepositoryId);
       await loadDetail(detailRequest);
       toast.success(t("central.repositoryAssigned", { count: 1 }));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
+      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
     }
-  }
+  }, [assignSkillsToRepository, detailRequest, loadDetail, selectedRepositoryId, skillId, t]);
 
-  async function handleAssignTag() {
-    if (!skillId || !selectedTagId || !detailRequest) return;
+  const handleAssignTag = useCallback(async () => {
+    if (!skillId || !selectedTagId || !detailRequest) {
+      return;
+    }
     try {
       await assignSkillTags([skillId], [selectedTagId]);
       await loadDetail(detailRequest);
       toast.success(t("central.tagsAssigned", { count: 1 }));
       setSelectedTagId("");
     } catch (err) {
-      toast.error(t("central.metadataError", { error: String(err) }));
+      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
     }
-  }
+  }, [assignSkillTags, detailRequest, loadDetail, selectedTagId, skillId, t]);
 
-  async function handleCheckSkillUpdate() {
-    if (!skillId) return;
+  const handleCheckSkillUpdate = useCallback(async () => {
+    if (!skillId) {
+      return;
+    }
     try {
-      await checkSkillUpdates([skillId]);
+      const states = await checkSkillUpdates([skillId]);
+      const updatableStates = states.filter(
+        (state) => state.status === "update_available"
+      );
+      if (updatableStates.length > 0) {
+        setPendingUpdateStates(updatableStates);
+        setIsUpdateConfirmOpen(true);
+      }
       toast.success(t("central.updateCheckOneFinished"));
     } catch (err) {
       toast.error(t("central.updateCheckError", { error: String(err) }));
     }
-  }
+  }, [checkSkillUpdates, skillId, t]);
 
-  async function handleUpdateSkill() {
-    if (!skillId || updateStatus?.status !== "update_available") return;
+  const handleUpdateSkill = useCallback(async () => {
+    if (!skillId || updateStatus?.status !== "update_available") {
+      return;
+    }
+    setPendingUpdateStates([updateStatus]);
+    setIsUpdateConfirmOpen(true);
+  }, [skillId, updateStatus]);
+
+  const handleConfirmUpdateSkill = useCallback(async (skillIds: string[]) => {
+    if (skillIds.length === 0) {
+      return;
+    }
     try {
-      const result = await updateSkills([skillId]);
+      const result = await updateSkills(skillIds);
       if (result.succeeded.length > 0 && detailRequest) {
         await loadDetail(detailRequest);
       }
@@ -514,27 +376,25 @@ export function SkillDetailView({
           skipped: result.skipped.length,
         })
       );
+      setIsUpdateConfirmOpen(false);
+      setPendingUpdateStates([]);
     } catch (err) {
       toast.error(t("central.updateError", { error: String(err) }));
+      throw err;
     }
-  }
+  }, [detailRequest, loadDetail, t, updateSkills]);
 
-  function handleGenerateExplanation() {
+  const handleGenerateExplanation = useCallback(() => {
     if (isFileMode && content) {
-      setFileIsExplaining(true);
-      setFileExplanation(null);
-      invoke<string>("explain_skill", { content })
-        .then(setFileExplanation)
-        .catch((err) => setFileExplanation(`Error: ${String(err)}`))
-        .finally(() => setFileIsExplaining(false));
+      void explainFileContent(content);
       return;
     }
     if (explanationRequestKey && content) {
       generateExplanation(explanationRequestKey, content, i18n.language);
     }
-  }
+  }, [content, explainFileContent, explanationRequestKey, generateExplanation, i18n.language, isFileMode]);
 
-  function handleRefreshExplanation() {
+  const handleRefreshExplanation = useCallback(() => {
     if (isFileMode && content) {
       handleGenerateExplanation();
       return;
@@ -542,21 +402,39 @@ export function SkillDetailView({
     if (explanationRequestKey && content) {
       refreshExplanation(explanationRequestKey, content, i18n.language);
     }
-  }
+  }, [content, explanationRequestKey, handleGenerateExplanation, i18n.language, isFileMode, refreshExplanation]);
 
   const handleOpenDiscoverPath = useCallback(async () => {
-    if (!discoverMetadata) return;
+    if (!discoverMetadata) {
+      return;
+    }
     try {
       if (isRemoteTarget) {
         await navigator.clipboard.writeText(discoverMetadata.dirPath);
         toast.success(t("targets.pathCopied"));
         return;
       }
-      await invoke("open_in_file_manager", { path: discoverMetadata.dirPath });
+      await openInFileManager(discoverMetadata.dirPath);
     } catch {
       // silently ignore
     }
-  }, [discoverMetadata, isRemoteTarget, t]);
+  }, [discoverMetadata, isRemoteTarget, openInFileManager, t]);
+
+  const handleOpenFileTreePath = useCallback(async (path: string) => {
+    if (!path) {
+      return;
+    }
+    try {
+      if (isRemoteTarget) {
+        await navigator.clipboard.writeText(path);
+        toast.success(t("targets.pathCopied"));
+        return;
+      }
+      await openInFileManager(path);
+    } catch {
+      // ignore opener errors inside the inspector
+    }
+  }, [isRemoteTarget, openInFileManager, t]);
 
   const { frontmatterRaw, frontmatterData, body: markdownContent } = content
     ? parseFrontmatter(content)
@@ -565,45 +443,37 @@ export function SkillDetailView({
   const effectiveName = isFileMode
     ? (discoverMetadata?.name ?? "")
     : (detail?.name ?? detailRequest?.skillId ?? "");
-  const effectiveDescription = isFileMode
-    ? discoverMetadata?.description
-    : detail?.description;
+  const effectiveDescription = isFileMode ? discoverMetadata?.description : detail?.description;
   const hasData = isFileMode ? content !== null : !!detail;
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  const previewStackClassName =
+    variant === "page" ? "mx-auto w-full max-w-5xl space-y-5" : "mx-auto w-full max-w-4xl space-y-5";
 
   return (
-    <div className={cn("flex flex-col h-full", variant === "drawer" && "min-h-0")}>
-      {/* ── ViewHeader: leading slot + title/description + TabToggle ─────── */}
-      <div className="border-b border-border px-6 py-3 flex items-center gap-3 shrink-0">
+    <div className={cn("flex h-full flex-col", variant === "drawer" && "min-h-0")}>
+      <div className="flex shrink-0 items-center gap-3 border-b border-border px-6 py-3">
         {leading}
         <div className="min-w-0 flex-1">
-          <h1 id={titleId} className="text-lg font-semibold truncate">
+          <h1 id={titleId} className="truncate text-lg font-semibold">
             {isLoading ? (skillId ?? discoverMetadata?.name ?? "") : effectiveName}
           </h1>
           {effectiveDescription && (
-            <p className="text-xs text-muted-foreground truncate mt-0.5">
-              {effectiveDescription}
-            </p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{effectiveDescription}</p>
           )}
         </div>
         <TabToggle activeTab={activeTab} onChange={setActiveTab} />
       </div>
 
-      {/* ── ContentArea ──────────────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {/* Loading state */}
+      <div className="min-h-0 flex-1 overflow-hidden">
         {isLoading && (
-          <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
+          <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
             <Loader2 className="size-5 animate-spin" />
             <span className="text-sm">{t("detail.loading")}</span>
           </div>
         )}
 
-        {/* Error state */}
         {!isLoading && error && (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-2">
+          <div className="flex h-full items-center justify-center">
+            <div className="space-y-2 text-center">
               <p className="text-sm text-destructive">{error}</p>
               <Button
                 variant="outline"
@@ -617,574 +487,77 @@ export function SkillDetailView({
         )}
 
         {!isLoading && !error && isBrowserFallback && (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-3 max-w-md px-6">
-              <Bot className="size-8 mx-auto text-muted-foreground/60" />
+          <div className="flex h-full items-center justify-center">
+            <div className="max-w-md space-y-3 px-6 text-center">
+              <Bot className="mx-auto size-8 text-muted-foreground/60" />
               <div className="space-y-1">
                 <p className="text-sm font-medium">{t("detail.browserFallbackTitle")}</p>
-                <p className="text-sm text-muted-foreground">
-                  {t("detail.browserFallbackDesc")}
-                </p>
+                <p className="text-sm text-muted-foreground">{t("detail.browserFallbackDesc")}</p>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── TwoColumnLayout: LeftPreview + RightSidebar ────────────────── */}
         {!isLoading && !error && hasData && (
-          <div
-            className="flex h-full flex-col md:flex-row"
-            data-testid="skill-detail-two-column-layout"
-          >
-            {/* ── Left: SKILL.md Preview ─────────────────────────────── */}
-            <div
-              ref={scrollContainerRef}
-              className="flex-1 min-w-0 overflow-auto"
-            >
-              {activeTab === "markdown" ? (
-                <div
-                  className="p-6 space-y-4"
-                  role="tabpanel"
-                  aria-label={t("detail.markdown")}
-                >
-                  <SkillFrontmatterCard data={frontmatterData} raw={frontmatterRaw} />
-                  {content ? (
-                    <div className={cn("markdown-body", detailTypographyClassName)}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {markdownContent}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">
-                      {t("detail.noContent")}
-                    </p>
-                  )}
-                </div>
-              ) : activeTab === "raw" ? (
-                <pre
-                  className="p-6 text-[12px] leading-5 font-mono whitespace-pre-wrap break-words text-foreground/80"
-                  role="tabpanel"
-                  aria-label={t("detail.rawSource")}
-                >
-                  {content ?? t("detail.noContent")}
-                </pre>
-              ) : (
-                <div
-                  className="p-6 space-y-4"
-                  role="tabpanel"
-                  aria-label={t("detail.aiExplanation")}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-sm font-semibold flex items-center gap-2">
-                        <Bot className="size-4 text-primary" />
-                        {t("detail.aiExplanation")}
-                      </h2>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {t("detail.aiExplanationDesc")}
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={explanation ? handleRefreshExplanation : handleGenerateExplanation}
-                      disabled={!content || isExplanationLoading || isExplanationStreaming}
-                      className="gap-1.5"
-                    >
-                      {isExplanationLoading || isExplanationStreaming ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : explanation ? (
-                        <RefreshCw className="size-3.5" />
-                      ) : (
-                        <Bot className="size-3.5" />
-                      )}
-                      {explanation ? t("detail.regenerateExplanation") : t("detail.generateExplanation")}
-                    </Button>
-                  </div>
-
-                  {explanationError && (
-                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
-                      <p className="text-sm text-destructive">
-                        {explanationErrorInfo?.message || explanationError}
-                      </p>
-                      {(explanationErrorInfo?.details || explanationError !== explanationErrorInfo?.message) && (
-                        <div>
-                          <button
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                            onClick={() => setShowErrorDetails((v) => !v)}
-                          >
-                            {showErrorDetails ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-                            {t("detail.showDetails")}
-                          </button>
-                          {showErrorDetails && (
-                            <pre className="mt-1.5 text-[11px] leading-4 font-mono text-muted-foreground whitespace-pre-wrap break-all bg-muted/30 rounded-md p-2 max-h-40 overflow-auto">
-                              {explanationErrorInfo?.details || explanationError}
-                            </pre>
-                          )}
-                        </div>
-                      )}
-                      {explanationErrorInfo?.fallbackTried && (
-                        <p className="text-xs text-muted-foreground">
-                          {t("detail.fallbackTried")}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {isExplanationLoading && !explanation ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="size-4 animate-spin" />
-                      {t("detail.explanationLoading")}
-                    </div>
-                  ) : explanation ? (
-                    <div className={cn("markdown-body rounded-lg border border-border bg-card p-4", detailTypographyClassName)}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {explanation}
-                      </ReactMarkdown>
-                      {isExplanationStreaming && (
-                        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                          <Loader2 className="size-3.5 animate-spin" />
-                          {t("detail.explanationStreaming")}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
-                      <Bot className="size-8 mx-auto text-muted-foreground/60" />
-                      <div>
-                        <p className="text-sm font-medium">{t("detail.noExplanationTitle")}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {t("detail.noExplanationDesc")}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={handleGenerateExplanation}
-                        disabled={!content || isExplanationLoading || isExplanationStreaming}
-                        className="gap-1.5"
-                      >
-                        <Bot className="size-3.5" />
-                        {t("detail.generateExplanation")}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* ── Right: Sidebar ─────────────────────────────────────── */}
-            <aside
-              data-testid="skill-detail-right-sidebar"
-              className="w-full shrink-0 border-t border-border overflow-y-auto p-4 space-y-5 md:w-64 md:border-t-0 md:border-l"
-            >
-              {isFileMode && discoverMetadata ? (
-                <>
-                  {/* Discover metadata */}
-                  <section aria-label={t("detail.metadataRegion")}>
-                    <SectionLabel>{t("detail.metadata")}</SectionLabel>
-                    <div className="space-y-2.5">
-                      <div className="space-y-0.5">
-                        <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">
-                          {t("discover.platform")}
-                        </div>
-                        <div className="font-mono text-xs text-foreground break-all leading-relaxed inline-flex items-center gap-1">
-                          <Monitor className="size-3.5" />
-                          <span>{discoverMetadata.platformName}</span>
-                        </div>
-                      </div>
-                      <div className="space-y-0.5">
-                        <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">
-                          {t("discover.project")}
-                        </div>
-                        <div className="font-mono text-xs text-foreground break-all leading-relaxed inline-flex items-center gap-1">
-                          <FolderOpen className="size-3.5" />
-                          <span>{discoverMetadata.projectName}</span>
-                        </div>
-                      </div>
-                      <div className="space-y-0.5">
-                        <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">
-                          {t("discover.filePath")}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleOpenDiscoverPath}
-                          className="font-mono text-xs text-foreground break-all leading-relaxed hover:text-primary hover:underline cursor-pointer text-left"
-                        >
-                          {isRemoteTarget && <Copy className="mr-1 inline size-3 shrink-0" />}
-                          {discoverMetadata.filePath}
-                        </button>
-                      </div>
-                    </div>
-                  </section>
-                </>
-              ) : detail ? (
-                <>
-                  {(detail.source_kind || detail.is_read_only) && (
-                    <section
-                      aria-label={t("detail.sourceStatusRegion", {
-                        defaultValue: i18n.language.startsWith("zh") ? "来源状态" : "Source status",
-                      })}
-                    >
-                      <SectionLabel>
-                        {t("detail.sourceStatus", {
-                          defaultValue: i18n.language.startsWith("zh") ? "来源状态" : "Source status",
-                        })}
-                      </SectionLabel>
-                      <div className="rounded-lg border border-border/70 bg-muted/30 p-3 space-y-2">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {detail.source_kind && (
-                            <SourceOriginBadge originKind={detail.source_kind} />
-                          )}
-                          {detail.is_read_only && <ReadOnlySourceBadge />}
-                        </div>
-                        {detail.is_read_only ? (
-                          <p className="text-xs leading-relaxed text-muted-foreground">
-                            {t("detail.readOnlyDesc", {
-                              defaultValue: i18n.language.startsWith("zh")
-                                ? "插件安装的副本仅供查看，不能在这里安装、卸载或调整技能集。"
-                                : "Plugin-installed copies are display-only here, so install, uninstall, and collection changes are unavailable.",
-                            })}
-                          </p>
-                        ) : detail.source_kind === "user" ? (
-                          <p className="text-xs leading-relaxed text-muted-foreground">
-                            {t("detail.userManagedDesc", {
-                              defaultValue: i18n.language.startsWith("zh")
-                                ? "此 Claude 用户副本会保留正常的安装状态与技能集管理能力。"
-                                : "This Claude user copy keeps the normal install-state and collection-management controls.",
-                            })}
-                          </p>
-                        ) : null}
-                      </div>
-                    </section>
-                  )}
-
-                  {/* Metadata */}
-                  <section aria-label={t("detail.metadataRegion")}>
-                    <SectionLabel>{t("detail.metadata")}</SectionLabel>
-                    <div className="space-y-2.5">
-                      <MetadataRow label={t("detail.filePath")} value={detail.file_path} />
-                      {detail.dir_path && (
-                        <MetadataRow
-                          label={t("detail.directoryPath", {
-                            defaultValue: i18n.language.startsWith("zh") ? "目录路径" : "Directory path",
-                          })}
-                          value={detail.dir_path}
-                        />
-                      )}
-                      {detail.canonical_path && (
-                        <MetadataRow label={t("detail.canonical")} value={detail.canonical_path} />
-                      )}
-                      {detail.source_root && (
-                        <MetadataRow
-                          label={t("detail.sourceRoot", {
-                            defaultValue: i18n.language.startsWith("zh") ? "来源根目录" : "Source root",
-                          })}
-                          value={detail.source_root}
-                        />
-                      )}
-                      {!detail.source_kind && detail.source && (
-                        <MetadataRow label={t("detail.source")} value={detail.source} />
-                      )}
-                      {detail.repository && (
-                        <MetadataRow
-                          label={t("detail.repository", {
-                            defaultValue: i18n.language.startsWith("zh") ? "仓库来源" : "Repository",
-                          })}
-                          value={detail.repository.name}
-                        />
-                      )}
-                      {detail.source_path && (
-                        <MetadataRow
-                          label={t("detail.sourcePath", {
-                            defaultValue: i18n.language.startsWith("zh") ? "来源路径" : "Source path",
-                          })}
-                          value={detail.source_path}
-                        />
-                      )}
-                      <MetadataRow
-                        label={t("detail.scannedAt")}
-                        value={new Date(detail.scanned_at).toLocaleString()}
-                      />
-                    </div>
-                  </section>
-
-                  {detail.is_central && !detail.is_read_only && (
-                    <section aria-label={t("detail.updateStatusRegion")}>
-                      <SectionLabel>{t("detail.updateStatus")}</SectionLabel>
-                      <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70">
-                            {updateStatus
-                              ? t(`central.updateStatus.${updateStatus.status}`)
-                              : t("central.updateStatus.not_checked")}
-                          </span>
-                          <div className="flex gap-1">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={isCheckingUpdates || isUpdatingThisSkill}
-                              onClick={handleCheckSkillUpdate}
-                            >
-                              {isCheckingUpdates ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <RefreshCw className="size-3.5" />
-                              )}
-                              {t("central.checkUpdatesShort")}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
-                              disabled={updateStatus?.status !== "update_available" || isUpdatingThisSkill}
-                              onClick={handleUpdateSkill}
-                            >
-                              {isUpdatingThisSkill ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <Download className="size-3.5" />
-                              )}
-                              {t("central.updateShort")}
-                            </Button>
-                          </div>
-                        </div>
-                        {updateStatus?.source_url && (
-                          <MetadataRow label={t("detail.updateSource")} value={updateStatus.source_url} />
-                        )}
-                        {updateStatus?.ref && (
-                          <MetadataRow label={t("detail.updateRef")} value={updateStatus.ref} />
-                        )}
-                        {updateStatus?.source_path && (
-                          <MetadataRow label={t("detail.sourcePath")} value={updateStatus.source_path} />
-                        )}
-                        {updateStatus?.last_checked_at && (
-                          <MetadataRow
-                            label={t("detail.lastCheckedAt")}
-                            value={new Date(updateStatus.last_checked_at).toLocaleString()}
-                          />
-                        )}
-                        {updateStatus?.error && (
-                          <p className="text-xs leading-relaxed text-destructive">{updateStatus.error}</p>
-                        )}
-                      </div>
-                    </section>
-                  )}
-
-                  {detail.tags && detail.tags.length > 0 && (
-                    <section aria-label={t("detail.tags", {
-                      defaultValue: i18n.language.startsWith("zh") ? "分类标签" : "Tags",
-                    })}>
-                      <SectionLabel>
-                        {t("detail.tags", {
-                          defaultValue: i18n.language.startsWith("zh") ? "分类标签" : "Tags",
-                        })}
-                      </SectionLabel>
-                      <div className="flex flex-wrap gap-1.5">
-                        {detail.tags.map((tag) => (
-                          <span
-                            key={tag.id}
-                            className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70"
-                            title={tag.description ?? tag.name}
-                          >
-                            <Tag className="size-2.5" />
-                            {tag.name}
-                          </span>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-
-                  {detail.is_central && !detail.is_read_only && (
-                    <section aria-label={t("detail.metadataManagementRegion")}>
-                      <SectionLabel>{t("detail.metadataManagement")}</SectionLabel>
-                      <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
-                        <div className="flex gap-2">
-                          <select
-                            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-                            value={selectedRepositoryId}
-                            aria-label={t("central.repositorySelectLabel")}
-                            onChange={(event) => setSelectedRepositoryId(event.target.value)}
-                          >
-                            <option value="">{t("central.chooseRepository")}</option>
-                            {repositories.map((repository) => (
-                              <option key={repository.id} value={repository.id}>
-                                {repository.name}
-                              </option>
-                            ))}
-                          </select>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            disabled={!selectedRepositoryId || isMetadataUpdating}
-                            onClick={handleAssignRepository}
-                          >
-                            {t("central.assignRepository")}
-                          </Button>
-                        </div>
-                        <div className="flex gap-2">
-                          <select
-                            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-                            value={selectedTagId}
-                            aria-label={t("central.tagSelectLabel")}
-                            onChange={(event) => setSelectedTagId(event.target.value)}
-                          >
-                            <option value="">{t("central.chooseTag")}</option>
-                            {tags.map((tag) => (
-                              <option key={tag.id} value={tag.id}>
-                                {tag.name}
-                              </option>
-                            ))}
-                          </select>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            disabled={!selectedTagId || isMetadataUpdating}
-                            onClick={handleAssignTag}
-                          >
-                            {t("central.assignTag")}
-                          </Button>
-                        </div>
-                      </div>
-                    </section>
-                  )}
-
-                  {/* Install Status — compact icon grid */}
-                  <section aria-label={t("detail.installStatusRegion")}>
-                    <SectionLabel>{t("detail.installStatus")}</SectionLabel>
-                    <div className="space-y-1.5">
-                      {detail.is_read_only ? (
-                        <p className="text-xs leading-relaxed text-muted-foreground">
-                          {t("detail.readOnlyInstallBlocked", {
-                            defaultValue: i18n.language.startsWith("zh")
-                              ? "插件来源的只读副本不可安装或卸载。"
-                              : "Install and uninstall are unavailable for read-only plugin copies.",
-                          })}
-                        </p>
-                      ) : targetAgents.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          {t("detail.noPlatforms")}
-                        </p>
-                      ) : (
-                        <>
-                          {lobsterAgents.length > 0 && (
-                            <div className="flex items-center gap-1">
-                              <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-12 shrink-0">
-                                {t("sidebar.categoryLobster")}
-                              </span>
-                              <div className="flex items-center gap-0.5 flex-wrap">
-                                {lobsterAgents.map((agent) => {
-                                  const memberIds = getPlatformTargetMemberIds(agent);
-                                  const isInstalled = memberIds.some((agentId) => installationMap.has(agentId)) ||
-                                    memberIds.some((agentId) => sharedRootAgentIds.has(agentId));
-                                  const isLocked = memberIds.some((agentId) => sharedRootAgentIds.has(agentId));
-                                  const isLoading = memberIds.some((agentId) => installingAgentId === agentId);
-
-                                  return (
-                                    <PlatformToggleIcon
-                                      key={agent.id}
-                                      agent={agent}
-                                      skillName={detail.name}
-                                      isInstalled={isInstalled}
-                                      isLoading={isLoading}
-                                      isLocked={isLocked}
-                                      onToggle={() => {
-                                        const [agentId] = getPlatformTargetInstallAgentIds(agent);
-                                        if (agentId) {
-                                          void handleToggle(agentId);
-                                        }
-                                      }}
-                                    />
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                          {codingAgents.length > 0 && (
-                            <div className="flex items-center gap-1">
-                              <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-12 shrink-0">
-                                {t("sidebar.categoryCoding")}
-                              </span>
-                              <div className="flex items-center gap-0.5 flex-wrap">
-                                {codingAgents.map((agent) => {
-                                  const memberIds = getPlatformTargetMemberIds(agent);
-                                  const isInstalled = memberIds.some((agentId) => installationMap.has(agentId)) ||
-                                    memberIds.some((agentId) => sharedRootAgentIds.has(agentId));
-                                  const isLocked = memberIds.some((agentId) => sharedRootAgentIds.has(agentId));
-                                  const isLoading = memberIds.some((agentId) => installingAgentId === agentId);
-
-                                  return (
-                                    <PlatformToggleIcon
-                                      key={agent.id}
-                                      agent={agent}
-                                      skillName={detail.name}
-                                      isInstalled={isInstalled}
-                                      isLoading={isLoading}
-                                      isLocked={isLocked}
-                                      onToggle={() => {
-                                        const [agentId] = getPlatformTargetInstallAgentIds(agent);
-                                        if (agentId) {
-                                          void handleToggle(agentId);
-                                        }
-                                      }}
-                                    />
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </section>
-
-                  {/* Collections */}
-                  <section aria-label={t("detail.collections")}>
-                    <SectionLabel>{t("detail.collections")}</SectionLabel>
-                    {detail.is_read_only ? (
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        {t("detail.readOnlyCollectionsBlocked", {
-                          defaultValue: i18n.language.startsWith("zh")
-                            ? "插件来源的只读副本不可调整技能集。"
-                            : "Collection management is unavailable for read-only plugin copies.",
-                        })}
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5 items-center">
-                        {skillCollections.map((collection) => (
-                          <span
-                            key={collection.id}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary ring-1 ring-primary/20"
-                            title={collection.description ?? collection.name}
-                          >
-                            <Tag className="size-2.5" />
-                            {collection.name}
-                          </span>
-                        ))}
-                        <Button
-                          ref={addToCollectionButtonRef}
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground md:h-6"
-                          aria-label={t("detail.addToCollection")}
-                          onClick={() => setIsCollectionPickerOpen(true)}
-                        >
-                          <Plus className="size-3" />
-                          {t("detail.addToCollection")}
-                        </Button>
-                      </div>
-                    )}
-                  </section>
-                </>
-              ) : null}
-            </aside>
+          <div className="flex h-full min-w-0 flex-col lg:flex-row" data-testid="skill-detail-two-column-layout">
+            <SkillDetailPreview
+              activeTab={activeTab}
+              scrollContainerRef={scrollContainerRef}
+              previewStackClassName={previewStackClassName}
+              frontmatterRaw={frontmatterRaw}
+              frontmatterData={frontmatterData}
+              markdownContent={markdownContent}
+              content={content}
+              explanation={explanation}
+              isExplanationLoading={isExplanationLoading}
+              isExplanationStreaming={isExplanationStreaming}
+              explanationError={explanationError}
+              explanationErrorInfo={explanationErrorInfo}
+              showErrorDetails={showErrorDetails}
+              onToggleErrorDetails={() => setShowErrorDetails((value) => !value)}
+              onGenerateExplanation={handleGenerateExplanation}
+              onRefreshExplanation={handleRefreshExplanation}
+            />
+            <SkillDetailSidebar
+              isFileMode={isFileMode}
+              discoverMetadata={discoverMetadata}
+              detail={detail}
+              isRemoteTarget={isRemoteTarget}
+              onOpenDiscoverPath={handleOpenDiscoverPath}
+              directoryTree={directoryTree}
+              isDirectoryLoading={isDirectoryLoading}
+              onOpenFileTreePath={handleOpenFileTreePath}
+              updateStatus={updateStatus}
+              isCheckingUpdates={isCheckingUpdates}
+              isUpdatingThisSkill={isUpdatingThisSkill}
+              onCheckSkillUpdate={handleCheckSkillUpdate}
+              onUpdateSkill={handleUpdateSkill}
+              repositories={repositories}
+              tags={tags}
+              isMetadataUpdating={isMetadataUpdating}
+              selectedRepositoryId={selectedRepositoryId}
+              onSelectedRepositoryChange={setSelectedRepositoryId}
+              onAssignRepository={handleAssignRepository}
+              selectedTagId={selectedTagId}
+              onSelectedTagChange={setSelectedTagId}
+              onAssignTag={handleAssignTag}
+              targetAgents={targetAgents}
+              lobsterAgents={lobsterAgents}
+              codingAgents={codingAgents}
+              installationMap={installationMap}
+              sharedRootAgentIds={sharedRootAgentIds}
+              installingAgentId={installingAgentId}
+              onToggleInstall={(targetAgentId) => {
+                void handleToggle(targetAgentId);
+              }}
+              skillCollections={skillCollections}
+              addToCollectionButtonRef={addToCollectionButtonRef}
+              onOpenCollectionPicker={() => setIsCollectionPickerOpen(true)}
+            />
           </div>
         )}
       </div>
 
-      {/* Collection Picker Dialog */}
       {skillId && !detail?.is_read_only && (
         <CollectionPickerDialog
           open={isCollectionPickerOpen}
@@ -1194,6 +567,20 @@ export function SkillDetailView({
           onAdded={handleCollectionAdded}
         />
       )}
+
+      <CentralUpdateConfirmDialog
+        open={isUpdateConfirmOpen}
+        onOpenChange={(open) => {
+          setIsUpdateConfirmOpen(open);
+          if (!open) {
+            setPendingUpdateStates([]);
+          }
+        }}
+        states={pendingUpdateStates}
+        skills={detail ? [detail] : []}
+        isApplying={isUpdatingThisSkill}
+        onConfirm={handleConfirmUpdateSkill}
+      />
     </div>
   );
 }

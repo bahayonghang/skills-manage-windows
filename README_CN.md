@@ -25,6 +25,7 @@
 - 支持 marketplace 浏览，以及带鉴权请求和重试回退的 GitHub 仓库导入。
 - 通过延迟查询、懒加载索引和虚拟列表提升大规模 skill 库搜索体验。
 - 提供中英文界面、Catppuccin 主题、强调色、首次引导和响应式导航。
+- **中央技能库 V2（默认开启）**：支持结构化查询语法（`tag:`、`repo:`、`owner:`、`has:source` 等）、URL-as-state、保存视图、命令面板（`Ctrl+K`）、标签分组、列表分组视图（不分组 / 按仓库 / 按 owner / 按标签 / 按状态）。通过 Beta 徽章旁的"切回经典布局"链接，或在 DevTools localStorage 中设 `featureFlag.central.newLayout=off`，可退回 V1 布局。
 
 ## SSH 远程模式
 
@@ -68,8 +69,8 @@ SkillPort 可以通过 SSH 管理远程 Linux 或 macOS 用户目录里的全局
 ## 下载
 
 - 最新发布：<https://github.com/bahayonghang/skills-manage-windows/releases/latest>
-- 当前已提供的预编译安装包：Windows x64（`.exe`、`.msi`、`.zip`）和 macOS Universal（`.dmg`、`.zip`、`.tar.gz`）
-- 其他平台：当前请从源码运行
+- 当前桌面发布目标：Windows x64（`.exe`、`.msi`、`.zip`）、macOS Universal（`.dmg`、`.zip`、`.tar.gz`），以及 Linux x86_64 / arm64（`.deb`、`.rpm`、`.AppImage`）
+- 当前桌面构建仍未签名；Linux arm64 产物是否可用取决于 GitHub Actions runner 矩阵
 
 ### macOS 未签名构建说明
 
@@ -175,10 +176,10 @@ just build
 just install
 ```
 
-- `just ci` 会运行前端 `typecheck`、`lint`，以及 Rust 的 `cargo test` 和 `cargo clippy`。
+- `just ci` 会运行前端 `typecheck`、`lint`、`test`、`sizecheck`，以及 Rust 的 `cargo test` 和 `cargo clippy`。
 - `just dev` 会直接启动 Tauri 开发应用。
-- `just build` 会构建桌面应用，并把 `src-tauri/target/release/bundle/nsis/` 里最新的 NSIS 安装包复制到 `outputs/`。
-- `just install` 会构建桌面应用、把最新 NSIS 安装包复制到 `outputs/`，并以 passive 模式运行安装器。
+- `just build` 会按当前平台构建桌面应用，并把最新打包产物复制到 `outputs/`（Windows 为 `.exe`，macOS 为 `.app` + `.dmg`，Linux 为 `.AppImage`/`.deb`）。
+- `just install` 会构建 Windows NSIS 安装包、复制到 `outputs/`，并以 passive 模式运行安装器；该命令仅支持 Windows。
 
 ### 启动开发环境
 
@@ -192,6 +193,7 @@ Vite 开发服务器默认使用 `24200` 端口。
 
 ```bash
 pnpm test
+pnpm sizecheck
 pnpm typecheck
 pnpm lint
 cd src-tauri && cargo test
@@ -216,7 +218,9 @@ skillport/
 │       ├── db.rs               # SQLite schema、迁移、查询
 │       ├── lib.rs              # Tauri 应用初始化
 │       └── main.rs             # 桌面入口
+├── docs/                       # VitePress 文档、产品说明和设计资源
 ├── public/                     # 静态资源
+├── scripts/                    # 构建和维护脚本
 ├── CHANGELOG.md                # 英文更新日志
 ├── CHANGELOG.zh.md             # 中文更新日志
 └── release-notes/              # GitHub release notes
@@ -242,6 +246,18 @@ SQLite 数据库位于 `~/.skillsmanage/db.sqlite`，首次启动时会自动初
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=bahayonghang/skills-manage-windows&type=Date)](https://www.star-history.com/#bahayonghang/skills-manage-windows&Date)
+
+## 文档站点
+
+`docs/` 下提供基于 VitePress 的中英双语文档站点。本地预览：
+
+```bash
+pnpm docs:dev
+pnpm docs:build
+pnpm docs:preview
+```
+
+英文入口为 `/`，中文镜像为 `/zh/`。构建产物输出到仓库根的 `dist-docs/`。
 
 ## 许可证
 

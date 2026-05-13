@@ -155,10 +155,25 @@ export function PlatformView() {
     }
   }
 
-  async function handleUninstall(skillId: string) {
+  function getPendingSkillActionKey(skill: ScannedSkill) {
+    return getClaudeUserRowId(skill) ?? (resolvedAgentId ? `${resolvedAgentId}::${skill.id}` : skill.id);
+  }
+
+  function getClaudeUserRowId(skill: ScannedSkill) {
+    return resolvedAgentId === "claude-code" && skill.source_kind === "user" && !skill.is_read_only
+      ? skill.row_id
+      : undefined;
+  }
+
+  async function handleUninstall(skill: ScannedSkill) {
     if (!resolvedAgentId) return;
+    const rowId = getClaudeUserRowId(skill);
     try {
-      await uninstallSkillFromAgent(skillId, resolvedAgentId);
+      if (rowId) {
+        await uninstallSkillFromAgent(skill.id, resolvedAgentId, rowId);
+      } else {
+        await uninstallSkillFromAgent(skill.id, resolvedAgentId);
+      }
       await refreshCounts();
       await getSkillsByAgent(resolvedAgentId);
     } catch (err) {
@@ -366,7 +381,7 @@ export function PlatformView() {
             minColumnWidth={420}
             maxColumns={2}
             scrollContainerRef={contentRef}
-            itemKey={(skill) => skill.id}
+            itemKey={(skill) => getSkillRowKey(skill)}
             renderItem={(skill) => (
               <UnifiedSkillCard
                 key={getSkillRowKey(skill)}
@@ -377,7 +392,7 @@ export function PlatformView() {
                 isReadOnly={skill.is_read_only ?? false}
                 isLoading={
                   resolvedAgentId
-                    ? (pendingSkillActionKeys[`${resolvedAgentId}::${skill.id}`] ?? false)
+                    ? (pendingSkillActionKeys[getPendingSkillActionKey(skill)] ?? false)
                     : false
                 }
                 onDetail={() => handleOpenDrawer(skill)}
@@ -389,7 +404,7 @@ export function PlatformView() {
                 onUninstallFromPlatform={
                   skill.is_read_only
                     ? undefined
-                    : () => void handleUninstall(skill.id)
+                    : () => void handleUninstall(skill)
                 }
                 uninstallFromLabel={t("platform.uninstallFromLabel", {
                   skill: skill.name,
@@ -415,7 +430,7 @@ export function PlatformView() {
                 isReadOnly={skill.is_read_only ?? false}
                 isLoading={
                   resolvedAgentId
-                    ? (pendingSkillActionKeys[`${resolvedAgentId}::${skill.id}`] ?? false)
+                    ? (pendingSkillActionKeys[getPendingSkillActionKey(skill)] ?? false)
                     : false
                 }
                 onDetail={() => handleOpenDrawer(skill)}
@@ -427,7 +442,7 @@ export function PlatformView() {
                 onUninstallFromPlatform={
                   skill.is_read_only
                     ? undefined
-                    : () => handleUninstall(skill.id)
+                    : () => handleUninstall(skill)
                 }
                 uninstallFromLabel={t("platform.uninstallFromLabel", {
                   skill: skill.name,

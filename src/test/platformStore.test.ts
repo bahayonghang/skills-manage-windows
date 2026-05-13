@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   AgentWithStatus,
   BootstrapSnapshot,
+  PlatformPathMap,
   SkillCountsSummary,
 } from "../types";
 
@@ -41,6 +42,16 @@ const mockAgents: AgentWithStatus[] = [
     is_enabled: true,
   },
 ];
+
+const mockPlatformPaths: PlatformPathMap = Object.fromEntries(
+  mockAgents.map((agent) => [
+    agent.id,
+    {
+      global_skills_dir: agent.global_skills_dir,
+      project_skills_dir: agent.project_skills_dir ?? null,
+    },
+  ])
+);
 
 const mockBootstrapSnapshot: BootstrapSnapshot = {
   agents: mockAgents,
@@ -84,7 +95,8 @@ describe("platformStore", () => {
   beforeEach(() => {
     usePlatformStore.setState({
       agents: [],
-      skillsByAgent: {},
+      platformPaths: {},
+    skillsByAgent: {},
       collectionCount: 0,
       discoveredCount: 0,
       categoryVisibility: {
@@ -123,8 +135,10 @@ describe("platformStore", () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce(mockBootstrapSnapshot)
       .mockResolvedValueOnce(JSON.stringify(mockCategoryVisibility))
+      .mockResolvedValueOnce(mockPlatformPaths)
       .mockResolvedValueOnce({ total_skills: 12, agents_scanned: 2, skills_by_agent: {} })
-      .mockResolvedValueOnce(refreshedSnapshot);
+      .mockResolvedValueOnce(refreshedSnapshot)
+      .mockResolvedValueOnce(mockPlatformPaths);
 
     await usePlatformStore.getState().initialize();
 
@@ -133,8 +147,10 @@ describe("platformStore", () => {
     expect(invoke).toHaveBeenNthCalledWith(2, "get_setting", {
       key: "platform_category_visibility",
     });
-    expect(invoke).toHaveBeenNthCalledWith(3, "scan_all_skills");
-    expect(invoke).toHaveBeenNthCalledWith(4, "get_bootstrap_snapshot");
+    expect(invoke).toHaveBeenNthCalledWith(3, "list_platform_paths");
+    expect(invoke).toHaveBeenNthCalledWith(4, "scan_all_skills");
+    expect(invoke).toHaveBeenNthCalledWith(5, "get_bootstrap_snapshot");
+    expect(invoke).toHaveBeenNthCalledWith(6, "list_platform_paths");
     expect(state.skillsByAgent).toEqual(refreshedSnapshot.cachedSkillCounts);
     expect(state.collectionCount).toBe(2);
     expect(state.discoveredCount).toBe(7);
@@ -152,8 +168,10 @@ describe("platformStore", () => {
         resolveSnapshot = resolve;
       }))
       .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(mockPlatformPaths)
       .mockResolvedValueOnce({ total_skills: 12, agents_scanned: 2, skills_by_agent: {} })
-      .mockResolvedValueOnce(refreshedSnapshot);
+      .mockResolvedValueOnce(refreshedSnapshot)
+      .mockResolvedValueOnce(mockPlatformPaths);
 
     const initPromise = usePlatformStore.getState().initialize();
     expect(usePlatformStore.getState().isLoading).toBe(true);
@@ -170,8 +188,10 @@ describe("platformStore", () => {
         resolveSnapshot = resolve;
       }))
       .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(mockPlatformPaths)
       .mockResolvedValueOnce({ total_skills: 12, agents_scanned: 2, skills_by_agent: {} })
-      .mockResolvedValueOnce(refreshedSnapshot);
+      .mockResolvedValueOnce(refreshedSnapshot)
+      .mockResolvedValueOnce(mockPlatformPaths);
 
     const firstCall = usePlatformStore.getState().initialize();
     const secondCall = usePlatformStore.getState().initialize();
@@ -179,7 +199,7 @@ describe("platformStore", () => {
     resolveSnapshot(mockBootstrapSnapshot);
     await Promise.all([firstCall, secondCall]);
 
-    expect(invoke).toHaveBeenCalledTimes(4);
+    expect(invoke).toHaveBeenCalledTimes(6);
   });
 
   it("sets error and clears isLoading when hydrateShell fails", async () => {
@@ -195,6 +215,7 @@ describe("platformStore", () => {
   it("refreshCounts updates cached counts without triggering a scan", async () => {
     usePlatformStore.setState({
       agents: mockAgents,
+      platformPaths: {},
       skillsByAgent: mockBootstrapSnapshot.cachedSkillCounts,
       collectionCount: 2,
       discoveredCount: 7,
@@ -225,6 +246,7 @@ describe("platformStore", () => {
   it("resetForTargetChange clears target-bound cached counts immediately", () => {
     usePlatformStore.setState({
       agents: mockAgents,
+      platformPaths: {},
       skillsByAgent: mockBootstrapSnapshot.cachedSkillCounts,
       collectionCount: 2,
       discoveredCount: 7,
@@ -261,7 +283,8 @@ describe("platformStore", () => {
     vi.mocked(invoke)
       .mockRejectedValueOnce(new Error("ssh scan failed"))
       .mockResolvedValueOnce(mockBootstrapSnapshot)
-      .mockResolvedValueOnce(JSON.stringify(mockCategoryVisibility));
+      .mockResolvedValueOnce(JSON.stringify(mockCategoryVisibility))
+      .mockResolvedValueOnce(mockPlatformPaths);
 
     await usePlatformStore.getState().rescan();
 
@@ -271,6 +294,7 @@ describe("platformStore", () => {
     expect(invoke).toHaveBeenNthCalledWith(3, "get_setting", {
       key: "platform_category_visibility",
     });
+    expect(invoke).toHaveBeenNthCalledWith(4, "list_platform_paths");
     expect(state.agents).toEqual(mockAgents);
     expect(state.skillsByAgent).toEqual(mockBootstrapSnapshot.cachedSkillCounts);
     expect(state.collectionCount).toBe(mockBootstrapSnapshot.collectionCount);
@@ -285,7 +309,8 @@ describe("platformStore", () => {
   it("hydrateShell applies persisted category visibility", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce(mockBootstrapSnapshot)
-      .mockResolvedValueOnce(JSON.stringify(mockCategoryVisibility));
+      .mockResolvedValueOnce(JSON.stringify(mockCategoryVisibility))
+      .mockResolvedValueOnce(mockPlatformPaths);
 
     await usePlatformStore.getState().hydrateShell();
 
@@ -312,7 +337,8 @@ describe("platformStore", () => {
   it("setAgentEnabled updates the target agent", async () => {
     usePlatformStore.setState({
       agents: mockAgents,
-      skillsByAgent: {},
+      platformPaths: {},
+    skillsByAgent: {},
       collectionCount: 0,
       discoveredCount: 0,
       categoryVisibility: {
@@ -346,7 +372,8 @@ describe("platformStore", () => {
   it("hydrateShell derives category visibility from enabled agents when nothing is saved", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce(mockBootstrapSnapshot)
-      .mockResolvedValueOnce(null);
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(mockPlatformPaths);
 
     await usePlatformStore.getState().hydrateShell();
 
@@ -354,5 +381,103 @@ describe("platformStore", () => {
       coding: true,
       lobster: false,
     });
+  });
+
+  // ── addCustomAgent ────────────────────────────────────────────────────────
+
+  it("addCustomAgent calls add_custom_agent and appends the agent to the list", async () => {
+    const created: AgentWithStatus = {
+      id: "custom-qclaw",
+      display_name: "QClaw",
+      category: "other",
+      global_skills_dir: "~/.qclaw/skills/",
+      is_detected: false,
+      is_builtin: false,
+      is_enabled: true,
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(created);
+
+    const config = {
+      display_name: "QClaw",
+      global_skills_dir: "~/.qclaw/skills/",
+    };
+
+    const result = await usePlatformStore.getState().addCustomAgent(config);
+
+    expect(result).toEqual(created);
+    expect(invoke).toHaveBeenCalledWith("add_custom_agent", { config });
+    expect(usePlatformStore.getState().agents).toContainEqual(created);
+    expect(usePlatformStore.getState().skillsByAgent["custom-qclaw"]).toBe(0);
+  });
+
+  it("addCustomAgent throws on failure", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("UNIQUE constraint"));
+
+    await expect(
+      usePlatformStore.getState().addCustomAgent({
+        display_name: "Dup",
+        global_skills_dir: "/dup",
+      })
+    ).rejects.toThrow("UNIQUE constraint");
+  });
+
+  // ── updateCustomAgent ─────────────────────────────────────────────────────
+
+  it("updateCustomAgent calls update_custom_agent and replaces the agent in the list", async () => {
+    usePlatformStore.setState({ agents: [...mockAgents] });
+
+    const updated: AgentWithStatus = {
+      ...mockAgents[0],
+      display_name: "Claude Code Pro",
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(updated);
+
+    const config = {
+      display_name: "Claude Code Pro",
+      global_skills_dir: "~/.claude/skills/",
+    };
+
+    const result = await usePlatformStore
+      .getState()
+      .updateCustomAgent("claude-code", config);
+
+    expect(result).toEqual(updated);
+    expect(invoke).toHaveBeenCalledWith("update_custom_agent", {
+      agentId: "claude-code",
+      config,
+    });
+    expect(
+      usePlatformStore.getState().agents.find((a) => a.id === "claude-code")
+        ?.display_name
+    ).toBe("Claude Code Pro");
+  });
+
+  // ── removeCustomAgent ─────────────────────────────────────────────────────
+
+  it("removeCustomAgent calls remove_custom_agent and drops the agent from the list", async () => {
+    usePlatformStore.setState({
+      agents: [...mockAgents],
+      platformPaths: {},
+      skillsByAgent: { "claude-code": 5, openclaw: 0, central: 3 },
+    });
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await usePlatformStore.getState().removeCustomAgent("openclaw");
+
+    expect(invoke).toHaveBeenCalledWith("remove_custom_agent", {
+      agentId: "openclaw",
+    });
+    expect(
+      usePlatformStore.getState().agents.find((a) => a.id === "openclaw")
+    ).toBeUndefined();
+    expect(usePlatformStore.getState().skillsByAgent.openclaw).toBeUndefined();
+  });
+
+  it("removeCustomAgent throws on failure", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("Not found"));
+
+    await expect(
+      usePlatformStore.getState().removeCustomAgent("nonexistent")
+    ).rejects.toThrow("Not found");
   });
 });

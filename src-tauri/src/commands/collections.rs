@@ -168,7 +168,7 @@ pub async fn batch_install_collection_impl(
         }
     }
 
-    Ok(BatchInstallResult { succeeded, failed })
+    Ok(BatchInstallResult { succeeded, skipped: Vec::new(), failed })
 }
 
 /// Export a collection to a JSON string matching the spec in docs/desktop-design.md.
@@ -325,7 +325,7 @@ pub async fn batch_install_collection(
                 }
             }
         }
-        return Ok(BatchInstallResult { succeeded, failed });
+        return Ok(BatchInstallResult { succeeded, skipped: Vec::new(), failed });
     }
     batch_install_collection_impl(&pool, &collection_id, &agent_ids).await
 }

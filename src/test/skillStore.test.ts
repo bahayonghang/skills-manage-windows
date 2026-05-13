@@ -184,6 +184,44 @@ describe("skillStore", () => {
     expect(useSkillStore.getState().error).toBeNull();
   });
 
+  it("passes rowId and tracks pending state by Claude row identity", async () => {
+    let resolveUninstall!: () => void;
+    vi.mocked(invoke)
+      .mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          resolveUninstall = resolve;
+        })
+      )
+      .mockResolvedValueOnce([]);
+
+    const uninstallPromise = useSkillStore
+      .getState()
+      .uninstallSkillFromAgent(
+        "shared-skill",
+        "claude-code",
+        "claude-code::user::shared-skill"
+      );
+
+    expect(
+      useSkillStore.getState().pendingSkillActionKeys["claude-code::user::shared-skill"]
+    ).toBe(true);
+    expect(
+      useSkillStore.getState().pendingSkillActionKeys["claude-code::shared-skill"]
+    ).toBeUndefined();
+
+    resolveUninstall();
+    await uninstallPromise;
+
+    expect(invoke).toHaveBeenNthCalledWith(1, "uninstall_skill_from_agent", {
+      skillId: "shared-skill",
+      agentId: "claude-code",
+      rowId: "claude-code::user::shared-skill",
+    });
+    expect(
+      useSkillStore.getState().pendingSkillActionKeys["claude-code::user::shared-skill"]
+    ).toBeUndefined();
+  });
+
   it("tracks in-flight uninstall mutations by agent and skill", async () => {
     let resolveUninstall!: () => void;
     vi.mocked(invoke)

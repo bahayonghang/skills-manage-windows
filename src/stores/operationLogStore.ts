@@ -58,6 +58,7 @@ interface OperationLogState {
   error: string | null;
 
   loadLogs: (filter?: OperationLogFilter, reset?: boolean) => Promise<OperationLogPage>;
+  loadMore: () => Promise<OperationLogPage | null>;
   loadLogDetail: (logId: string) => Promise<OperationLogEntry | null>;
   setFilter: (partial: Partial<OperationLogFilter>) => void;
   clearFilters: () => void;
@@ -172,6 +173,13 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
       set({ error: String(err), isLoading: false });
       throw err;
     }
+  },
+
+  loadMore: async () => {
+    const state = get();
+    if (state.isLoading) return null;
+    if (state.total > 0 && state.entries.length >= state.total) return null;
+    return get().loadLogs({ offset: state.entries.length }, false);
   },
 
   loadLogDetail: async (logId) => {

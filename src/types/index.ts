@@ -25,6 +25,13 @@ export interface UpdateCustomAgentConfig {
   global_skills_dir: string;
 }
 
+export interface ResolvedPlatformPaths {
+  global_skills_dir: string;
+  project_skills_dir?: string | null;
+}
+
+export type PlatformPathMap = Record<string, ResolvedPlatformPaths>;
+
 // ─── Scan Types ───────────────────────────────────────────────────────────────
 
 export interface ScanResult {
@@ -124,6 +131,14 @@ export interface SkillDetailRequest {
   rowId?: string;
 }
 
+export interface DirectoryTreeEntry {
+  name: string;
+  path: string;
+  file_type: string;
+  symlink_target?: string | null;
+  children: DirectoryTreeEntry[];
+}
+
 export interface SkillWithLinks {
   id: string;
   name: string;
@@ -147,6 +162,7 @@ export interface SkillWithLinks {
 
 export interface BatchInstallResult {
   succeeded: string[];
+  skipped?: Array<{ agent_id: string; target_path: string; reason: string }>;
   failed: Array<{ agent_id: string; error: string }>;
 }
 
@@ -162,8 +178,16 @@ export interface CentralBatchInstallFailure {
   error: string;
 }
 
+export interface CentralBatchInstallSkipped {
+  skill_id: string;
+  agent_id: string;
+  target_path: string;
+  reason: string;
+}
+
 export interface CentralBatchInstallResult {
   succeeded: CentralBatchInstallSuccess[];
+  skipped?: CentralBatchInstallSkipped[];
   failed: CentralBatchInstallFailure[];
 }
 
@@ -265,6 +289,8 @@ export interface SkillTag {
   is_builtin: boolean;
   created_at: string;
   updated_at: string;
+  /** 标签所属分组 id（M3 加入；旧数据为 null）。 */
+  group_id?: string | null;
 }
 
 export interface SkillTagSuggestion {
@@ -354,7 +380,13 @@ export type CentralSkillUpdateItemStatus =
   | "failed"
   | "skipped";
 
-export type CentralSkillUpdateJobStatus = "idle" | "running" | "completed" | "failed";
+export type CentralSkillUpdateJobStatus =
+  | "idle"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelling"
+  | "cancelled";
 
 export interface CentralSkillUpdateJob {
   phase: "checking" | "updating" | null;
@@ -377,6 +409,7 @@ export interface CentralSkillUpdateProgressPayload {
     | "started"
     | "running"
     | "completed"
+    | "cancelled"
     | CentralSkillUpdateStatus;
   total: number;
   completed: number;
@@ -449,79 +482,20 @@ export interface OperationLogPage {
   offset: number;
 }
 
-export type TargetKind = "local" | "ssh";
-export type SshAuthMethod = "key" | "password";
-export type TargetCredentialStatus = "stored" | "session" | "missing" | "unreadable";
-
-export interface TargetSummary {
-  id: string;
-  kind: TargetKind;
-  label: string;
-  host?: string | null;
-  username?: string | null;
-  port?: number | null;
-  authMethod?: SshAuthMethod | null;
-  keyPath?: string | null;
-  remoteHome?: string | null;
-  remoteOs?: string | null;
-  cacheDbPath?: string | null;
-  hasStoredPassword?: boolean | null;
-  credentialStatus?: TargetCredentialStatus | null;
-  credentialError?: string | null;
-  symlinkEnabled?: boolean | null;
-  isActive: boolean;
-}
-
-export interface CreateSshTargetRequest {
-  label: string;
-  host: string;
-  username: string;
-  port?: number | null;
-  authMethod?: SshAuthMethod | null;
-  keyPath?: string | null;
-  password?: string | null;
-  passphrase?: string | null;
-}
-
-export interface UpdateSshTargetRequest {
-  id: string;
-  label: string;
-  host: string;
-  username: string;
-  port?: number | null;
-  authMethod?: SshAuthMethod | null;
-  keyPath?: string | null;
-  password?: string | null;
-  passphrase?: string | null;
-}
-
-export interface TestSshTargetRequest {
-  id?: string | null;
-  label?: string | null;
-  host?: string | null;
-  username?: string | null;
-  port?: number | null;
-  authMethod?: SshAuthMethod | null;
-  keyPath?: string | null;
-  password?: string | null;
-  passphrase?: string | null;
-}
-
-export interface SshTargetTestResult {
-  ok: boolean;
-  remoteHome?: string | null;
-  remoteOs?: string | null;
-  credentialStatus?: TargetCredentialStatus | null;
-  credentialError?: string | null;
-  message: string;
-}
-
-export interface GitHubPatTestResult {
-  configured: boolean;
-  ok: boolean;
-  status?: number | null;
-  message: string;
-}
+export type {
+  AiApiKeyState,
+  CreateSshTargetRequest,
+  GitHubPatState,
+  GitHubPatTestResult,
+  SecretStorageState,
+  SshAuthMethod,
+  SshTargetTestResult,
+  TargetCredentialStatus,
+  TargetKind,
+  TargetSummary,
+  TestSshTargetRequest,
+  UpdateSshTargetRequest,
+} from "./credentials";
 
 // ─── Discover Types ───────────────────────────────────────────────────────────
 
@@ -530,6 +504,13 @@ export interface ScanRoot {
   label: string;
   exists: boolean;
   enabled: boolean;
+}
+
+export interface ObsidianVault {
+  id: string;
+  name: string;
+  path: string;
+  skill_count: number;
 }
 
 export interface DiscoveredSkill {
@@ -621,17 +602,59 @@ export interface MarketplaceSkill {
 
 // ─── Portable State Types ───────────────────────────────────────────────────
 
-export type SkillportStateSourceStatus = "exists" | "will_add";
-export type SkillportStateSkillStatus = "ready" | "conflict" | "missing" | "unrestorable";
+export type SkillportStateSourceStatus = "exists" | "will_add" | "duplicate";
+export type SkillportStateSkillStatus =
+  | "ready"
+  | "conflict"
+  | "missing"
+  | "unrestorable"
+  | "duplicate_skipped";
 export type SkillportStateImportResolutionType = "overwrite" | "skip" | "rename";
+
+export type SkillportStatePortabilityJobStatus =
+  | "idle"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelling"
+  | "cancelled";
+
+export type SkillportStatePortabilityPhase =
+  | "exporting"
+  | "previewing"
+  | "importing"
+  | "finalizing"
+  | null;
+
+export interface SkillportStatePortabilityJob {
+  phase: SkillportStatePortabilityPhase;
+  status: SkillportStatePortabilityJobStatus;
+  total: number;
+  completed: number;
+  message?: string;
+  currentItem?: string;
+  error?: string;
+}
+
+export interface SkillportStatePortabilityProgressPayload {
+  phase: Exclude<SkillportStatePortabilityPhase, null>;
+  status: Exclude<SkillportStatePortabilityJobStatus, "idle" | "cancelling">;
+  total: number;
+  completed: number;
+  message?: string | null;
+  currentItem?: string | null;
+  error?: string | null;
+}
 
 export interface SkillportStateImportPreviewSummary {
   sourcesToAdd: number;
   sourcesExisting: number;
+  sourcesDuplicate?: number;
   ready: number;
   conflicts: number;
   missing: number;
   unrestorable: number;
+  duplicateSkipped?: number;
 }
 
 export interface SkillportStateSourcePreview {
@@ -647,6 +670,7 @@ export interface SkillportStateSkillPreview {
   status: SkillportStateSkillStatus;
   existingSkillId?: string | null;
   reason?: string | null;
+  detail?: string | null;
 }
 
 export interface SkillportStateImportPreview {
@@ -681,6 +705,7 @@ export interface SkillportStateImportResult {
   skippedSkills: string[];
   failedSkills: SkillportStateImportFailure[];
   tagsRestored: number;
+  cancelled?: boolean;
 }
 
 export interface GitHubRepoRef {
@@ -749,3 +774,14 @@ export interface GitHubImportProgressPayload {
   completedBytes: number;
   totalBytes: number;
 }
+
+// ─── Central Skills v2 Information Architecture (M0~M6) ──────────────────
+// 类型契约移到独立文件以满足体积预算约束。
+export type {
+  CentralQueryAst,
+  CentralQueryFilter,
+  GroupByMode,
+  SavedView,
+  TagGroup,
+  ViewMode,
+} from "./centralV2";

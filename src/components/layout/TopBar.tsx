@@ -1,10 +1,10 @@
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Blocks, Search, Server, Settings } from "lucide-react";
+import { Blocks, Search, Settings } from "lucide-react";
 
 import { usePlatformStore } from "@/stores/platformStore";
 import { useDiscoverStore } from "@/stores/discoverStore";
-import { useTargetStore } from "@/stores/targetStore";
+import { TargetQuickSwitcher } from "@/components/layout/TargetQuickSwitcher";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
@@ -29,7 +29,6 @@ export function TopBar({ onSearchClick }: TopBarProps) {
     usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const totalDiscovered = usePlatformStore((s) => s.discoveredCount);
   const isScanning = useDiscoverStore((s) => s.isScanning);
-  const activeTarget = useTargetStore((s) => s.activeTarget);
   const platformTargets = getPlatformTargetGroups(agents, categoryVisibility);
 
   // Determine current view label and count
@@ -148,25 +147,7 @@ export function TopBar({ onSearchClick }: TopBarProps) {
         </div>
       )}
 
-      <button
-        onClick={() => navigate("/settings")}
-        className={cn(
-          "z-10 mr-2 hidden max-w-44 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors sm:flex",
-          activeTarget.kind === "ssh"
-            ? "bg-primary/10 text-primary hover:bg-primary/15"
-            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-        )}
-        title={
-          activeTarget.kind === "ssh"
-            ? `${activeTarget.username ?? ""}@${activeTarget.host ?? ""}`
-            : t("targets.local")
-        }
-      >
-        <Server className="size-3.5 shrink-0" />
-        <span className="truncate">
-          {activeTarget.kind === "ssh" ? activeTarget.label : t("targets.local")}
-        </span>
-      </button>
+      <TargetQuickSwitcher />
 
       {/* Settings */}
       <button

@@ -1,18 +1,23 @@
 {
   "name": "skillport",
   "private": true,
-  "version": "0.9.7",
+  "version": "0.10.1",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-server.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "vitest run",
+    "test": "node scripts/run-vitest-sequential.mjs",
     "test:watch": "vitest",
+    "sizecheck": "node scripts/check-size-budget.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --report-unused-disable-directives --max-warnings 0",
+    "docs:gen": "node scripts/build-ipc-dict.mjs && node scripts/build-schema-table.mjs",
+    "docs:dev": "pnpm docs:gen && vitepress dev docs",
+    "docs:build": "pnpm docs:gen && vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -68,6 +73,7 @@
     "tailwindcss": "^4.2.4",
     "typescript": "~6.0.3",
     "vite": "^8.0.10",
+    "vitepress": "^1.6.4",
     "vitest": "^4.1.5"
   }
 }

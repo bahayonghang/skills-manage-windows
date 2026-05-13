@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: vi.fn(),
+}));
+
 import { InstallDialog } from "../components/central/InstallDialog";
 import { AgentWithStatus, SkillWithLinks, TargetSummary } from "../types";
 import { getPlatformTargetGroups } from "../lib/platformTargetGroups";
 import { useTargetStore } from "../stores/targetStore";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -80,6 +86,7 @@ const mockOnInstall = vi.fn();
 const mockOnOpenChange = vi.fn();
 const successInstallResult = {
   succeeded: ["claude-code", "codex", "kiro"],
+  skipped: [],
   failed: [],
 };
 
@@ -116,6 +123,7 @@ function renderDialog(props: {
 describe("InstallDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(openDialog).mockResolvedValue(null);
     mockOnInstall.mockResolvedValue(successInstallResult);
     useTargetStore.setState({
       targets: [localTarget],
@@ -370,6 +378,66 @@ describe("InstallDialog", () => {
     });
   });
 
+  it("fills project path from the folder picker and submits it", async () => {
+    vi.mocked(openDialog).mockResolvedValueOnce("D:\\picked\\project");
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+    fireEvent.click(screen.getByRole("button", { name: "选择项目文件夹" }));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("D:\\Projects\\example 或 /Users/me/project"))
+        .toHaveValue("D:\\picked\\project")
+    );
+
+    fireEvent.click(screen.getByRole("button", {
+      name: /安装到 .* 个平台/i,
+    }));
+
+    await waitFor(() => {
+      expect(mockOnInstall).toHaveBeenCalledWith(
+        "frontend-design",
+        expect.any(Array),
+        "copy",
+        "D:\\picked\\project"
+      );
+    });
+    expect(openDialog).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+      defaultPath: undefined,
+      canCreateDirectories: true,
+    });
+  });
+
+  it("keeps manual project path when the folder picker is cancelled", async () => {
+    vi.mocked(openDialog).mockResolvedValueOnce(null);
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+    const input = screen.getByPlaceholderText("D:\\Projects\\example 或 /Users/me/project");
+    fireEvent.change(input, {
+      target: { value: "D:\\manual\\project" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "选择项目文件夹" }));
+
+    await waitFor(() => expect(openDialog).toHaveBeenCalled());
+    expect(input).toHaveValue("D:\\manual\\project");
+  });
+
+  it("shows a folder picker error without submitting install", async () => {
+    vi.mocked(openDialog).mockRejectedValueOnce(new Error("Dialog denied"));
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+    fireEvent.click(screen.getByRole("button", { name: "选择项目文件夹" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "无法选择项目文件夹：Error: Dialog denied"
+    );
+    expect(mockOnInstall).not.toHaveBeenCalled();
+  });
+
   it("defaults to symlink for remote targets that support symlinks", async () => {
     mockOnInstall.mockResolvedValueOnce(successInstallResult);
     const remoteTarget: TargetSummary = {
@@ -405,6 +473,7 @@ describe("InstallDialog", () => {
   it("keeps partial failures open with agent error details", async () => {
     mockOnInstall.mockResolvedValueOnce({
       succeeded: ["codex"],
+      skipped: [],
       failed: [
         { agent_id: "claude-code", error: "A remote directory already exists" },
       ],
@@ -420,6 +489,30 @@ describe("InstallDialog", () => {
       expect(screen.getByText(/claude-code: A remote directory already exists/)).toBeInTheDocument();
     });
     expect(mockOnOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("closes without an error when every selected target is skipped", async () => {
+    mockOnInstall.mockResolvedValueOnce({
+      succeeded: [],
+      skipped: [
+        {
+          agent_id: "claude-code",
+          target_path: "/Users/test/.claude/skills/frontend-design",
+          reason: "already_installed",
+        },
+      ],
+      failed: [],
+    });
+
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", {
+      name: /安装到 .* 个平台/i,
+    }));
+
+    await waitFor(() => {
+      expect(mockOnOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("calls onOpenChange(false) after successful install", async () => {

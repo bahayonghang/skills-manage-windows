@@ -38,6 +38,11 @@ const DiscoverView = lazy(() =>
     default: DiscoverView,
   }))
 );
+const ObsidianVaultView = lazy(() =>
+  import("@/pages/ObsidianVaultView").then(({ ObsidianVaultView }) => ({
+    default: ObsidianVaultView,
+  }))
+);
 const OperationLogsView = lazy(() =>
   import("@/pages/OperationLogsView").then(({ OperationLogsView }) => ({
     default: OperationLogsView,
@@ -69,7 +74,7 @@ function App() {
           path="platform/:agentId"
           element={lazyPage(<PlatformView />)}
         />
-        {/* Central Skills: canonical ~/.skillsmanage/skills/ view */}
+        {/* Central Skills: canonical SkillPort library view */}
         <Route
           path="central"
           element={lazyPage(<CentralSkillsView />)}
@@ -98,6 +103,14 @@ function App() {
         <Route
           path="discover/:projectPath"
           element={lazyPage(<DiscoverView />)}
+        />
+        <Route
+          path="obsidian"
+          element={lazyPage(<ObsidianVaultView />)}
+        />
+        <Route
+          path="obsidian/:vaultId"
+          element={lazyPage(<ObsidianVaultView />)}
         />
         {/* Operation logs */}
         <Route

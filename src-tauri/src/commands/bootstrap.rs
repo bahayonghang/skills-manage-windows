@@ -4,6 +4,9 @@ use tauri::State;
 
 use crate::commands::agents::AgentWithStatus;
 use crate::db::{self, DbPool};
+use crate::operation_log::{
+    local_target_context, record_operation_log_best_effort, OperationLogEvent,
+};
 use crate::AppState;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -53,7 +56,45 @@ fn parse_scan_state(raw: Option<String>) -> ScanState {
     }
 }
 
+async fn recover_stale_scan_state_if_needed(pool: &DbPool) -> Result<(), String> {
+    let raw_scan_state = db::get_setting(pool, "scan_state").await?;
+    if raw_scan_state.as_deref() != Some("refreshing") {
+        return Ok(());
+    }
+
+    let Some(last_scan_at) = db::get_setting(pool, "scan_last_completed_at").await? else {
+        return Ok(());
+    };
+    let Ok(last_scan_at) = chrono::DateTime::parse_from_rfc3339(&last_scan_at) else {
+        return Ok(());
+    };
+    let age = chrono::Utc::now().signed_duration_since(last_scan_at.with_timezone(&chrono::Utc));
+    if age < chrono::Duration::minutes(10) {
+        return Ok(());
+    }
+
+    db::set_setting(pool, "scan_state", "idle").await?;
+    record_operation_log_best_effort(
+        pool,
+        local_target_context(),
+        OperationLogEvent::new(
+            "scan",
+            "scan.state_recovered",
+            "succeeded",
+            "Recovered stale scan_state from refreshing to idle",
+        )
+        .details(serde_json::json!({
+            "previousState": "refreshing",
+            "nextState": "idle",
+            "lastScanCompletedAt": last_scan_at.to_rfc3339(),
+        })),
+    )
+    .await;
+    Ok(())
+}
+
 async fn load_scan_state(pool: &DbPool) -> Result<(Option<String>, ScanState), String> {
+    recover_stale_scan_state_if_needed(pool).await?;
     let last_scan_at = db::get_setting(pool, "scan_last_completed_at").await?;
     let scan_state = parse_scan_state(db::get_setting(pool, "scan_state").await?);
     Ok((last_scan_at, scan_state))
@@ -277,5 +318,22 @@ mod tests {
             Some("2026-04-23T01:05:00Z")
         );
         assert_eq!(snapshot.scan_state, ScanState::Idle);
+    }
+
+    #[tokio::test]
+    async fn test_load_scan_state_recovers_stale_refreshing_state() {
+        let pool = setup_test_db().await;
+        let stale_time = (chrono::Utc::now() - chrono::Duration::minutes(11)).to_rfc3339();
+        db::set_setting(&pool, "scan_state", "refreshing")
+            .await
+            .unwrap();
+        db::set_setting(&pool, "scan_last_completed_at", &stale_time)
+            .await
+            .unwrap();
+
+        let (last_scan_at, scan_state) = load_scan_state(&pool).await.unwrap();
+
+        assert_eq!(scan_state, ScanState::Idle);
+        assert_eq!(last_scan_at.as_deref(), Some(stale_time.as_str()));
     }
 }

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { SkillDetailView } from "../components/skill/SkillDetailView";
 import {
   AgentWithStatus,
+  CentralSkillUpdateState,
   SkillDetail as SkillDetailType,
   SkillRepositoryWithStats,
   SkillTag,
@@ -233,6 +234,8 @@ const mockRefreshCounts = vi.fn();
 const mockRefreshInstallations = vi.fn();
 const mockAssignSkillsToRepository = vi.fn();
 const mockAssignSkillTags = vi.fn();
+const mockCheckSkillUpdates = vi.fn();
+const mockUpdateSkills = vi.fn();
 
 function buildDetailStoreState(overrides = {}) {
   return {
@@ -279,6 +282,9 @@ function buildPlatformStoreState(overrides = {}) {
     applyScanSummary: vi.fn(),
     setCollectionCount: vi.fn(),
     setDiscoveredCount: vi.fn(),
+    addCustomAgent: vi.fn(),
+    updateCustomAgent: vi.fn(),
+    removeCustomAgent: vi.fn(),
     ...overrides,
   };
 }
@@ -311,6 +317,85 @@ function renderView(
   );
 }
 
+const updateStatusCases: Array<{
+  label: string;
+  updateStatuses: Record<string, CentralSkillUpdateState>;
+  expectedBadge: string;
+  updateEnabled: boolean;
+  expectedError?: string;
+}> = [
+  {
+    label: "not checked",
+    updateStatuses: {},
+    expectedBadge: "未检查",
+    updateEnabled: false,
+  },
+  {
+    label: "up to date",
+    updateStatuses: {
+      "frontend-design": {
+        skill_id: "frontend-design",
+        source_type: "github",
+        status: "up_to_date",
+        source_url: "https://github.com/openai/skills",
+        last_checked_at: "2026-04-29T01:23:45Z",
+      },
+    },
+    expectedBadge: "已是最新",
+    updateEnabled: false,
+  },
+  {
+    label: "update available",
+    updateStatuses: {
+      "frontend-design": {
+        skill_id: "frontend-design",
+        source_type: "github",
+        status: "update_available",
+        source_url: "https://github.com/openai/skills",
+        ref: "main",
+        last_checked_at: "2026-04-29T01:23:45Z",
+      },
+    },
+    expectedBadge: "有更新",
+    updateEnabled: true,
+  },
+  {
+    label: "error",
+    updateStatuses: {
+      "frontend-design": {
+        skill_id: "frontend-design",
+        source_type: "github",
+        status: "error",
+        source_url: "https://github.com/openai/skills",
+        error: "Network timeout",
+        last_checked_at: "2026-04-29T01:23:45Z",
+      },
+    },
+    expectedBadge: "检查失败",
+    updateEnabled: false,
+    expectedError: "Network timeout",
+  },
+];
+
+function makeUpdateAvailableState(
+  overrides: Partial<CentralSkillUpdateState> = {}
+): CentralSkillUpdateState {
+  return {
+    skill_id: "frontend-design",
+    source_type: "github",
+    source_url: "https://github.com/openai/skills",
+    ref: "main",
+    source_path: "skills/frontend-design",
+    last_remote_hash: "fnv1a64:old",
+    latest_remote_hash: "fnv1a64:new",
+    last_checked_at: "2026-04-29T01:23:45Z",
+    last_updated_at: null,
+    status: "update_available",
+    error: null,
+    ...overrides,
+  };
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("SkillDetailView", () => {
@@ -318,12 +403,24 @@ describe("SkillDetailView", () => {
     vi.clearAllMocks();
     mockAssignSkillsToRepository.mockResolvedValue(undefined);
     mockAssignSkillTags.mockResolvedValue(undefined);
+    mockCheckSkillUpdates.mockResolvedValue([]);
+    mockUpdateSkills.mockResolvedValue({
+      succeeded: [],
+      failed: [],
+      skipped: [],
+      states: [],
+    });
     useCentralSkillsStore.setState({
       repositories: mockRepositories,
       tags: mockTags,
       isMetadataUpdating: false,
+      updateStatuses: {},
+      isCheckingUpdates: false,
+      updatingSkillIds: [],
       assignSkillsToRepository: mockAssignSkillsToRepository,
       assignSkillTags: mockAssignSkillTags,
+      checkSkillUpdates: mockCheckSkillUpdates,
+      updateSkills: mockUpdateSkills,
     });
   });
 
@@ -378,6 +475,121 @@ describe("SkillDetailView", () => {
     expect(
       screen.getByText("~/.skillsmanage/skills/frontend-design/SKILL.md")
     ).toBeInTheDocument();
+  });
+
+  it("uses the widened inspector rail classes in page variant", () => {
+    renderView();
+
+    const layout = screen.getByTestId("skill-detail-two-column-layout");
+    const sidebar = screen.getByTestId("skill-detail-right-sidebar");
+
+    expect(layout.className).toContain("flex-col");
+    expect(layout.className).toContain("lg:flex-row");
+    expect(layout.className).not.toContain("md:flex-row");
+    expect(sidebar.className).toContain("overflow-x-hidden");
+    expect(sidebar.className).toContain("lg:w-72");
+    expect(sidebar.className).toContain("xl:w-80");
+    expect(sidebar.className).not.toContain("md:w-64");
+  });
+
+  it.each(updateStatusCases)("renders update status inspector layout for $label", ({ updateStatuses, expectedBadge, updateEnabled, expectedError }) => {
+    useCentralSkillsStore.setState({ updateStatuses });
+    renderView();
+
+    const card = screen.getByTestId("detail-update-status-card");
+    const actions = screen.getByTestId("detail-update-actions");
+    const checkButton = within(actions).getByRole("button", { name: "检查" });
+    const updateButton = within(actions).getByRole("button", { name: "更新" });
+
+    expect(card).toHaveTextContent(expectedBadge);
+    expect(actions.className).toContain("grid");
+    expect(actions.className).toContain("grid-cols-2");
+    expect(actions.className).toContain("gap-2");
+    expect(checkButton.className).toContain("w-full");
+    expect(updateButton.className).toContain("w-full");
+
+    if (updateEnabled) {
+      expect(updateButton).toBeEnabled();
+    } else {
+      expect(updateButton).toBeDisabled();
+    }
+
+    if (Object.keys(updateStatuses).length > 0) {
+      expect(card).toHaveTextContent("https://github.com/openai/skills");
+    }
+
+    if (expectedError) {
+      expect(card).toHaveTextContent(expectedError);
+    }
+  });
+
+  it("opens an update confirmation dialog after detail check finds an update", async () => {
+    const updateState = makeUpdateAvailableState();
+    mockCheckSkillUpdates.mockResolvedValueOnce([updateState]);
+    renderView();
+
+    const actions = screen.getByTestId("detail-update-actions");
+    fireEvent.click(within(actions).getByRole("button", { name: "检查" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("确认更新技能")).toBeInTheDocument();
+    expect(within(dialog).getByText("frontend-design")).toBeInTheDocument();
+    expect(mockUpdateSkills).not.toHaveBeenCalled();
+  });
+
+  it("confirms detail skill updates before applying and reloads detail on success", async () => {
+    const updateState = makeUpdateAvailableState();
+    useCentralSkillsStore.setState({
+      updateStatuses: {
+        "frontend-design": updateState,
+      },
+    });
+    mockUpdateSkills.mockResolvedValueOnce({
+      succeeded: ["frontend-design"],
+      failed: [],
+      skipped: [],
+      states: [{ ...updateState, status: "up_to_date" }],
+    });
+    renderView();
+    mockLoadDetail.mockClear();
+
+    const actions = screen.getByTestId("detail-update-actions");
+    fireEvent.click(within(actions).getByRole("button", { name: "更新" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("confirm-central-skill-updates"));
+
+    await waitFor(() => {
+      expect(mockUpdateSkills).toHaveBeenCalledWith(["frontend-design"]);
+    });
+    await waitFor(() => {
+      expect(mockLoadDetail).toHaveBeenCalledWith({
+        skillId: "frontend-design",
+        agentId: undefined,
+        rowId: undefined,
+      });
+    });
+  });
+
+  it("stacks repository and tag management into vertical field groups", () => {
+    renderView();
+
+    const repositoryGroup = screen.getByTestId("detail-repository-management");
+    const tagGroup = screen.getByTestId("detail-tag-management");
+    const repositorySelect = within(repositoryGroup).getByLabelText("仓库");
+    const repositoryButton = within(repositoryGroup).getByRole("button", { name: "归仓" });
+    const tagSelect = within(tagGroup).getByLabelText("分类");
+    const tagButton = within(tagGroup).getByRole("button", { name: "打标签" });
+
+    expect(within(repositoryGroup).getByText("仓库")).toBeInTheDocument();
+    expect(repositoryGroup.className).toContain("space-y-2");
+    expect(repositorySelect.className).toContain("w-full");
+    expect(repositoryButton.className).toContain("w-full");
+
+    expect(within(tagGroup).getByText("分类")).toBeInTheDocument();
+    expect(tagGroup.className).toContain("space-y-2");
+    expect(tagSelect.className).toContain("w-full");
+    expect(tagButton.className).toContain("w-full");
   });
 
   it("assigns repository from detail metadata controls", async () => {
@@ -555,6 +767,38 @@ describe("SkillDetailView", () => {
     expect(mockRefreshInstallations).toHaveBeenCalledWith("frontend-design");
   });
 
+  it("passes the Claude user row identity when uninstalling the active Claude row", async () => {
+    applyStoreMocks({
+      detail: mockClaudeUserDetail,
+      content: mockUserContent,
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::user::frontend-design"
+          variant="drawer"
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /切换 frontend-design 在 Claude Code 的链接状态/i,
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockUninstallSkill).toHaveBeenCalledWith(
+        "frontend-design",
+        "claude-code",
+        "claude-code::user::frontend-design"
+      );
+    });
+  });
+
   // ── Collections ───────────────────────────────────────────────────────────
 
   it("shows collections section", () => {
@@ -628,6 +872,9 @@ describe("SkillDetailView", () => {
     expect(markdownPane).toBeInTheDocument();
     expect(screen.getByTestId("react-markdown")).toBeInTheDocument();
     expect(screen.getByTestId("react-markdown")).toHaveAttribute("data-has-remark-gfm", "true");
+    expect(
+      markdownPane.querySelector('[data-skill-markdown-variant="detail"]')
+    ).not.toBeNull();
   });
 
   it("renders frontmatter card in Markdown tab", () => {
@@ -759,6 +1006,10 @@ describe("SkillDetailView", () => {
     await waitFor(() => {
       expect(screen.getByText("这是缓存的技能解释。")).toBeInTheDocument();
     });
+    const explanationPane = screen.getByRole("tabpanel", { name: /AI 解释/i });
+    expect(
+      explanationPane.querySelector('[data-skill-markdown-variant="compact"]')
+    ).not.toBeNull();
   });
 
   it("calls generateExplanation from empty AI Explanation tab", async () => {

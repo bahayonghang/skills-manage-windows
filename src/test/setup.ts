@@ -96,6 +96,25 @@ if (!window.matchMedia) {
   });
 }
 
+// Polyfill ResizeObserver for cmdk / Radix popovers in jsdom.
+if (!(globalThis as { ResizeObserver?: unknown }).ResizeObserver) {
+  class TestResizeObserver {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  Object.defineProperty(globalThis, "ResizeObserver", {
+    value: TestResizeObserver,
+    configurable: true,
+    writable: true,
+  });
+}
+
+// Polyfill Element.scrollIntoView for cmdk's auto-scroll-to-selected behavior.
+if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView(): void {};
+}
+
 function createTestStorage(): Storage {
   const values = new Map<string, string>();
 

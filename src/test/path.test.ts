@@ -4,6 +4,7 @@ import {
   describeSkillsPattern,
   formatPathForDisplay,
   getPathBasename,
+  getPlatformPathHint,
   joinPathForDisplay,
   normalizePathSeparators,
 } from "@/lib/path";
@@ -73,5 +74,10 @@ describe("path helpers", () => {
     expect(describeSkillsPattern("C:\\Users\\alice\\.cursor\\skills")).toBe(
       ".cursor/skills"
     );
+  });
+
+  it("formats platform path hints through compact home paths", () => {
+    expect(getPlatformPathHint("/home/alice/.agents/skills")).toBe("~/.agents/skills");
+    expect(getPlatformPathHint("C:\\Users\\alice\\.kiro\\skills")).toBe("~/.kiro/skills");
   });
 });

@@ -167,6 +167,12 @@ describe("centralSkillsStore", () => {
         skipped: 0,
         items: {},
       },
+      portabilityJob: {
+        phase: null,
+        status: "idle",
+        total: 0,
+        completed: 0,
+      },
       aiTaggingAvailable: false,
       isLoading: false,
       isInstalling: false,
@@ -193,6 +199,7 @@ describe("centralSkillsStore", () => {
     expect(state.aiTagJob.status).toBe("idle");
     expect(state.updateStatuses).toEqual({});
     expect(state.updateJob.status).toBe("idle");
+    expect(state.portabilityJob.status).toBe("idle");
     expect(state.aiTaggingAvailable).toBe(false);
     expect(state.isLoading).toBe(false);
     expect(state.isInstalling).toBe(false);
@@ -215,7 +222,7 @@ describe("centralSkillsStore", () => {
       .mockResolvedValueOnce(mockTags) // get_skill_tags
       .mockResolvedValueOnce([]) // get_pending_ai_tag_reviews
       .mockResolvedValueOnce([]) // get_central_skill_update_states
-      .mockResolvedValueOnce("test-key"); // get_setting
+      .mockResolvedValueOnce({ configured: true }); // get_ai_api_key_state
 
     await useCentralSkillsStore.getState().loadCentralSkills();
 
@@ -225,7 +232,7 @@ describe("centralSkillsStore", () => {
     expect(invoke).toHaveBeenCalledWith("get_skill_tags");
     expect(invoke).toHaveBeenCalledWith("get_pending_ai_tag_reviews");
     expect(invoke).toHaveBeenCalledWith("get_central_skill_update_states");
-    expect(invoke).toHaveBeenCalledWith("get_setting", { key: "ai_api_key" });
+    expect(invoke).toHaveBeenCalledWith("get_ai_api_key_state");
   });
 
   it("populates skills and agents after successful loadCentralSkills", async () => {
@@ -236,7 +243,7 @@ describe("centralSkillsStore", () => {
       .mockResolvedValueOnce(mockTags)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce(mockUpdateStates)
-      .mockResolvedValueOnce("test-key");
+      .mockResolvedValueOnce({ configured: true });
 
     await useCentralSkillsStore.getState().loadCentralSkills();
 
@@ -560,7 +567,7 @@ describe("centralSkillsStore", () => {
       .getState()
       .installSkill("frontend-design", ["cursor"], "symlink");
 
-    expect(result).toEqual(batchResult);
+    expect(result).toEqual({ ...batchResult, skipped: [] });
   });
 
   it("uses batch_install_central_skills for single-skill project installs", async () => {
@@ -570,6 +577,14 @@ describe("centralSkillsStore", () => {
           skill_id: "frontend-design",
           agent_id: "cursor",
           target_path: "D:\\work\\demo\\.cursor\\skills\\frontend-design",
+        },
+      ],
+      skipped: [
+        {
+          skill_id: "frontend-design",
+          agent_id: "codex",
+          target_path: "D:\\work\\demo\\.agents\\skills\\frontend-design",
+          reason: "already_installed",
         },
       ],
       failed: [
@@ -591,6 +606,13 @@ describe("centralSkillsStore", () => {
 
     expect(result).toEqual({
       succeeded: ["cursor"],
+      skipped: [
+        {
+          agent_id: "codex",
+          target_path: "D:\\work\\demo\\.agents\\skills\\frontend-design",
+          reason: "already_installed",
+        },
+      ],
       failed: [{ agent_id: "kiro", error: "No project pattern" }],
     });
     expect(invoke).toHaveBeenCalledWith("batch_install_central_skills", {
@@ -612,6 +634,7 @@ describe("centralSkillsStore", () => {
           target_path: "~/.cursor/skills/frontend-design",
         },
       ],
+      skipped: [],
       failed: [],
     };
     vi.mocked(invoke)
@@ -1012,6 +1035,63 @@ describe("centralSkillsStore", () => {
     state = useCentralSkillsStore.getState();
     expect(state.updateJob.status).toBe("completed");
     expect(state.updateJob.error).toBeUndefined();
+  });
+
+  it("updates SkillPort portability job state from progress events", async () => {
+    let handler: ((event: { payload: unknown }) => void) | undefined;
+    const unlisten = vi.fn();
+    vi.mocked(listen).mockImplementation(async (_event, callback) => {
+      handler = callback as (event: { payload: unknown }) => void;
+      return unlisten;
+    });
+
+    await useCentralSkillsStore.getState().subscribePortabilityProgress();
+    handler?.({
+      payload: {
+        phase: "previewing",
+        status: "running",
+        total: 3,
+        completed: 1,
+        message: "Checking GitHub source catalogs",
+      },
+    });
+
+    let state = useCentralSkillsStore.getState();
+    expect(state.portabilityJob.status).toBe("running");
+    expect(state.portabilityJob.phase).toBe("previewing");
+    expect(state.portabilityJob.completed).toBe(1);
+    expect(state.portabilityJob.message).toBe("Checking GitHub source catalogs");
+
+    handler?.({
+      payload: {
+        phase: "previewing",
+        status: "cancelled",
+        total: 3,
+        completed: 1,
+        error: "cancelled",
+      },
+    });
+
+    state = useCentralSkillsStore.getState();
+    expect(state.portabilityJob.status).toBe("cancelled");
+    expect(state.portabilityJob.error).toBe("cancelled");
+  });
+
+  it("cancels the active SkillPort portability job", async () => {
+    useCentralSkillsStore.setState({
+      portabilityJob: {
+        phase: "importing",
+        status: "running",
+        total: 2,
+        completed: 1,
+      },
+    });
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await useCentralSkillsStore.getState().cancelSkillportStatePortability();
+
+    expect(invoke).toHaveBeenCalledWith("cancel_skillport_state_portability");
+    expect(useCentralSkillsStore.getState().portabilityJob.status).toBe("cancelling");
   });
 
   it("exports the SkillPort portable state manifest", async () => {

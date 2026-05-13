@@ -16,6 +16,7 @@ export interface ExplanationCompletePayload {
 }
 
 export interface ExplanationErrorInfo {
+  code?: string;
   message: string;
   details: string;
   kind: "proxy" | "connect" | "timeout" | "dns" | "tls" | "auth" | "response" | "unknown";

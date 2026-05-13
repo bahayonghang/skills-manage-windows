@@ -216,16 +216,24 @@ export function Sidebar() {
         />
 
         {/* Discover */}
-        <NavItem
-          label={t("sidebar.discovered")}
-          isActive={pathname.startsWith("/discover")}
-          onClick={() => navigate("/discover")}
-          icon={<Radar className="size-4" />}
-          expanded={expanded}
-          count={discoveredCount}
-        />
+          <NavItem
+            label={t("sidebar.discovered")}
+            isActive={pathname.startsWith("/discover")}
+            onClick={() => navigate("/discover")}
+            icon={<Radar className="size-4" />}
+            expanded={expanded}
+            count={discoveredCount}
+          />
 
-        {/* Marketplace */}
+          <NavItem
+            label={t("sidebar.obsidian")}
+            isActive={pathname.startsWith("/obsidian")}
+            onClick={() => navigate("/obsidian")}
+            icon={<Blocks className="size-4" />}
+            expanded={expanded}
+          />
+
+          {/* Marketplace */}
         <NavItem
           label={t("marketplace.title")}
           isActive={pathname === "/marketplace"}

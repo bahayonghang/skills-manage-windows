@@ -227,6 +227,9 @@ function buildPlatformStoreState() {
     applyScanSummary: vi.fn(),
     setCollectionCount: vi.fn(),
     setDiscoveredCount: vi.fn(),
+    addCustomAgent: vi.fn(),
+    updateCustomAgent: vi.fn(),
+    removeCustomAgent: vi.fn(),
   };
 }
 

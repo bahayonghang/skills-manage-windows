@@ -26,6 +26,7 @@
 - Marketplace browsing and GitHub repository import with authenticated requests and retry fallback.
 - Fast search for large skill libraries with deferred queries, lazy indexing, and virtualization.
 - Bilingual UI, Catppuccin themes, accent colors, onboarding, and responsive navigation.
+- **Central Library V2 (default)**: structured query syntax (`tag:`, `repo:`, `owner:`, `has:source`, etc.), URL-as-state, saved views, command palette (`Ctrl+K`), tag groups, group-by views (none / repository / owner / tag / status). Use the "Switch to classic layout" link in the Beta badge area, or set `featureFlag.central.newLayout=off` in DevTools localStorage, to fall back to the V1 layout.
 
 ## SSH Remote Mode
 
@@ -69,8 +70,8 @@ Remote mode manages the selected remote user's directories only. It does not mod
 ## Download
 
 - Latest release: <https://github.com/bahayonghang/skills-manage-windows/releases/latest>
-- Current prebuilt packages: Windows x64 (`.exe`, `.msi`, `.zip`) and macOS Universal (`.dmg`, `.zip`, `.tar.gz`)
-- Other platforms: run from source for now
+- Current desktop release targets: Windows x64 (`.exe`, `.msi`, `.zip`), macOS Universal (`.dmg`, `.zip`, `.tar.gz`), and Linux x86_64 / arm64 (`.deb`, `.rpm`, `.AppImage`)
+- Desktop builds remain unsigned, and Linux arm64 availability depends on the GitHub Actions runner matrix
 
 ### macOS Unsigned Build
 
@@ -176,10 +177,10 @@ just build
 just install
 ```
 
-- `just ci` runs frontend `typecheck` + `lint`, plus Rust `cargo test` and `cargo clippy`.
+- `just ci` runs frontend `typecheck` + `lint` + `test` + `sizecheck`, plus Rust `cargo test` and `cargo clippy`.
 - `just dev` starts the Tauri development app directly.
-- `just build` builds the desktop app and copies the latest NSIS installer from `src-tauri/target/release/bundle/nsis/` to `outputs/`.
-- `just install` builds the desktop app, copies the latest NSIS installer to `outputs/`, and runs it in passive mode.
+- `just build` builds the desktop app for the current platform and copies the latest bundle artifact to `outputs/` (`.exe` on Windows, `.app` + `.dmg` on macOS, `.AppImage`/`.deb` on Linux).
+- `just install` builds the Windows NSIS installer, copies it to `outputs/`, and runs it in passive mode. This command is Windows-only.
 
 ### Run in Development
 
@@ -193,6 +194,7 @@ The Vite dev server runs on port `24200`.
 
 ```bash
 pnpm test
+pnpm sizecheck
 pnpm typecheck
 pnpm lint
 cd src-tauri && cargo test
@@ -217,7 +219,9 @@ skillport/
 │       ├── db.rs               # SQLite schema, migrations, queries
 │       ├── lib.rs              # Tauri app setup
 │       └── main.rs             # Desktop entry point
+├── docs/                       # VitePress docs, product notes, design assets
 ├── public/                     # Static assets
+├── scripts/                    # Build and maintenance helpers
 ├── CHANGELOG.md                # English changelog
 ├── CHANGELOG.zh.md             # Chinese changelog
 └── release-notes/              # GitHub release notes
@@ -243,6 +247,18 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting and data-handling not
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=bahayonghang/skills-manage-windows&type=Date)](https://www.star-history.com/#bahayonghang/skills-manage-windows&Date)
+
+## Documentation
+
+A bilingual VitePress documentation site lives under `docs/`. To preview locally:
+
+```bash
+pnpm docs:dev
+pnpm docs:build
+pnpm docs:preview
+```
+
+The English entry point is `/`, and the Chinese mirror is `/zh/`. Build output is written to `dist-docs/` at the repository root.
 
 ## License
 

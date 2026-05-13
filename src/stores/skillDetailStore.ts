@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import type { UnlistenFn } from "@tauri-apps/api/event";
-import { SkillDetail, SkillDetailRequest } from "@/types";
+import { DirectoryTreeEntry, SkillDetail, SkillDetailRequest } from "@/types";
+import { parseBackendError } from "@/lib/backendError";
 import {
   ExplanationErrorInfo,
   setupExplanationStreamListeners,
@@ -21,6 +22,13 @@ interface SkillDetailState {
   isExplanationStreaming: boolean;
   explanationError: string | null;
   explanationErrorInfo: ExplanationErrorInfo | null;
+  /** File-mode buffers (used by Discover non-central skills loaded by path). */
+  fileContent: string | null;
+  fileIsLoading: boolean;
+  fileExplanation: string | null;
+  fileIsExplaining: boolean;
+  directoryTree: DirectoryTreeEntry[];
+  isDirectoryLoading: boolean;
 
   // Actions
   loadDetail: (request: SkillDetailRequest | string) => Promise<void>;
@@ -28,8 +36,17 @@ interface SkillDetailState {
   generateExplanation: (skillId: string, content: string, lang: string) => Promise<void>;
   refreshExplanation: (skillId: string, content: string, lang: string) => Promise<void>;
   installSkill: (skillId: string, agentId: string) => Promise<void>;
-  uninstallSkill: (skillId: string, agentId: string) => Promise<void>;
+  uninstallSkill: (skillId: string, agentId: string, rowId?: string | null) => Promise<void>;
   refreshInstallations: (skillId: string) => Promise<void>;
+  /** Read SKILL.md content directly from a path (Discover file mode). */
+  loadFileContent: (path: string) => Promise<void>;
+  /** Generate a one-shot AI explanation for ad-hoc file content (no streaming). */
+  explainFileContent: (content: string) => Promise<void>;
+  /** Open the host file manager at `path`. No-op outside the Tauri runtime. */
+  openInFileManager: (path: string) => Promise<void>;
+  loadDirectoryTree: (path: string) => Promise<void>;
+  /** Reset only the file-mode buffers (used when SkillDetailView toggles modes). */
+  resetFileMode: () => void;
   cleanupExplanationListeners: () => void;
   reset: () => void;
 }
@@ -117,10 +134,20 @@ function failExplanationRequest(
     return;
   }
   cleanupExplanationListeners();
+  const parsed = parseBackendError(error);
   set({
     explanation: null,
-    explanationError: String(error),
-    explanationErrorInfo: null,
+    explanationError: parsed.message,
+    explanationErrorInfo: parsed.code
+      ? {
+          code: parsed.code,
+          message: parsed.message,
+          details: parsed.details ?? parsed.message,
+          kind: "response",
+          retryable: false,
+          fallbackTried: false,
+        }
+      : null,
     isExplanationLoading: false,
     isExplanationStreaming: false,
   });
@@ -187,6 +214,12 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
   isExplanationStreaming: false,
   explanationError: null,
   explanationErrorInfo: null,
+  fileContent: null,
+  fileIsLoading: false,
+  fileExplanation: null,
+  fileIsExplaining: false,
+  directoryTree: [],
+  isDirectoryLoading: false,
 
   /**
    * Load skill detail metadata, then read raw SKILL.md content from the
@@ -324,7 +357,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
    * Remove the skill installation from the given agent.
    * Reloads detail afterward so installation status updates.
    */
-  uninstallSkill: async (skillId: string, agentId: string) => {
+  uninstallSkill: async (skillId: string, agentId: string, rowId?: string | null) => {
     set({ installingAgentId: agentId, error: null });
     if (!isTauriRuntime()) {
       set({
@@ -334,7 +367,11 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
       return;
     }
     try {
-      await invoke("uninstall_skill_from_agent", { skillId, agentId });
+      await invoke("uninstall_skill_from_agent", {
+        skillId,
+        agentId,
+        ...(rowId ? { rowId } : {}),
+      });
       // Reload detail so the installations list reflects the removal.
       const detailRequest = getActiveDetailRequest(skillId);
       const detail = await invoke<SkillDetail>(
@@ -371,6 +408,89 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
 
   cleanupExplanationListeners,
 
+  loadFileContent: async (path: string) => {
+    if (!path) {
+      set({ fileContent: null, fileIsLoading: false });
+      return;
+    }
+    set({ fileIsLoading: true });
+    if (!isTauriRuntime()) {
+      set({ fileContent: null, fileIsLoading: false });
+      return;
+    }
+    try {
+      const text = await invoke<string>("read_file_by_path", { path });
+      set({ fileContent: text, fileIsLoading: false });
+    } catch {
+      set({ fileContent: null, fileIsLoading: false });
+    }
+  },
+
+  loadDirectoryTree: async (path: string) => {
+    if (!path) {
+      set({ directoryTree: [], isDirectoryLoading: false });
+      return;
+    }
+    set({ isDirectoryLoading: true });
+    if (!isTauriRuntime()) {
+      set({ directoryTree: [], isDirectoryLoading: false });
+      return;
+    }
+    try {
+      const directoryTree = await invoke<DirectoryTreeEntry[]>("list_directory_tree", { path });
+      set({ directoryTree: directoryTree ?? [], isDirectoryLoading: false });
+    } catch {
+      set({ directoryTree: [], isDirectoryLoading: false });
+    }
+  },
+
+  explainFileContent: async (content: string) => {
+    if (!content) {
+      set({ fileExplanation: null, fileIsExplaining: false });
+      return;
+    }
+    set({ fileIsExplaining: true, fileExplanation: null });
+    if (!isTauriRuntime()) {
+      set({
+        fileIsExplaining: false,
+        fileExplanation: "AI explanation requires the Tauri desktop runtime.",
+      });
+      return;
+    }
+    try {
+      const result = await invoke<string>("explain_skill", { content });
+      set({ fileExplanation: result, fileIsExplaining: false });
+    } catch (err) {
+      const parsed = parseBackendError(err);
+      set({
+        fileExplanation: `Error: ${parsed.message}`,
+        fileIsExplaining: false,
+      });
+    }
+  },
+
+  openInFileManager: async (path: string) => {
+    if (!path || !isTauriRuntime()) {
+      return;
+    }
+    try {
+      await invoke("open_in_file_manager", { path });
+    } catch {
+      // silently ignore — opener failure should not surface as a hard error
+    }
+  },
+
+  resetFileMode: () => {
+    set({
+      fileContent: null,
+      fileIsLoading: false,
+      fileExplanation: null,
+      fileIsExplaining: false,
+      directoryTree: [],
+      isDirectoryLoading: false,
+    });
+  },
+
   /**
    * Reset the store to its initial state (called when leaving the detail page).
    */
@@ -388,6 +508,12 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
       isExplanationStreaming: false,
       explanationError: null,
       explanationErrorInfo: null,
+      fileContent: null,
+      fileIsLoading: false,
+      fileExplanation: null,
+      fileIsExplaining: false,
+      directoryTree: [],
+      isDirectoryLoading: false,
     });
   },
 }));

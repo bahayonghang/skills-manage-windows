@@ -4,7 +4,19 @@ build/
 out/
 target/
 src-tauri/target/
-reference/
+/dist-docs/
+/docs/.vitepress/cache/
+.tmp/
+
+.agents/
+.claude/
+.codex/
+.opencode/
+.cursor/
+.trellis/
+
+
+
 .vscode/
 *.db
 *.db-shm
@@ -24,8 +36,13 @@ Thumbs.db
 
 .omx/
 .omc/
+.factory/
+.kiro/
 
 # planning with files
 task_plan.md
 findings.md
 progress.md
+
+ref/
+
