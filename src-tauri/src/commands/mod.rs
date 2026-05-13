@@ -10,6 +10,7 @@ pub mod linker;
 pub mod logs;
 pub mod marketplace;
 pub mod portable_state;
+pub mod projects;
 pub mod saved_views;
 pub mod scanner;
 pub mod settings;

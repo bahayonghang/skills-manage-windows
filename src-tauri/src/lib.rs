@@ -322,6 +322,15 @@ pub fn run() {
             commands::github_import::import_github_repo_skills,
             commands::github_import::fetch_github_skill_markdown,
             commands::github_import::discard_github_repo_preview_workspace,
+            // Projects (项目级 skill 管理)
+            commands::projects::pick_project_folder,
+            commands::projects::add_project,
+            commands::projects::list_projects,
+            commands::projects::rename_project,
+            commands::projects::set_project_pinned,
+            commands::projects::rescan_project,
+            commands::projects::get_project_skills,
+            commands::projects::remove_project,
             // Marketplace
             commands::marketplace::list_registries,
             commands::marketplace::add_registry,

@@ -37,6 +37,7 @@ pub use repos::discovered_repo::*;
 pub use repos::installations_repo::*;
 pub use repos::observations_repo::*;
 pub use repos::operation_logs_repo::*;
+pub use repos::projects_repo::*;
 pub use repos::repositories_repo::*;
 pub use repos::saved_views_repo::*;
 pub use repos::scan_dirs_repo::*;

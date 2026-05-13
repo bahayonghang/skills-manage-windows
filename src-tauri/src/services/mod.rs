@@ -12,4 +12,5 @@ pub mod github_import;
 pub mod installation;
 pub mod marketplace;
 pub mod portable_state;
+pub mod projects;
 pub mod scanner;
