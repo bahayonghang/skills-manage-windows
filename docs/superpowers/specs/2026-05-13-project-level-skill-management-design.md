@@ -166,7 +166,7 @@ pub struct ProjectSkill {
 ### 6.2 rescan_project
 
 1. 查 projects 拿 path P。
-2. 加载"已启用的 agent 列表"：以 `db::builtin_agents()` 为基础集，与 `agents` 表中 `enabled = true` 的记录取交集，再排除 `id = "central"`。enabled 字段来自用户在设置页中的开关，不是静态内置数据。
+2. 加载"已启用的 agent 列表"：`SELECT id, display_name, project_skills_dir FROM agents WHERE is_enabled = 1 AND id != 'central'`。`is_enabled` 字段已在 `src/db/schema/core.rs` 的 `agents` 表中（DEFAULT 1），由 `db/seed.rs::DEFAULT_ENABLED_PLATFORM_IDS` 在首次 seed 时决定开关状态，用户后续可在设置页切换。
 3. 对每个 agent：
    - 计算 `skill_dir = P / agent.project_skills_dir`（剥离 home 依赖，复用 `roots.rs::platform_skill_patterns` 的字符串处理逻辑）。
    - 不存在则跳过。
