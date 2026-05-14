@@ -6,11 +6,13 @@ use sqlx::SqlitePool;
 use std::path::Path;
 use tempfile::TempDir;
 
-use crate::db::{self, DbPool};
+use crate::db::{self, DbPool, Skill};
 
 use super::crud::{
-    add_project_impl, get_project_skills_impl, list_projects_impl, normalize_project_path,
+    add_project_impl, get_project_skills_impl, install_skill_to_project_impl,
+    list_projects_impl, list_projects_using_skill_impl, normalize_project_path,
     project_id_from_path, rename_project_impl, rescan_project_impl, set_project_pinned_impl,
+    uninstall_skill_from_project_impl,
 };
 
 async fn setup_test_db() -> DbPool {
@@ -239,4 +241,302 @@ async fn rescan_detects_symlinked_skills() {
         "symlinked entry should be tagged as symlink"
     );
     assert!(skills[0].symlink_target.is_some());
+}
+
+// ─── Stage 3: install / uninstall ────────────────────────────────────────────
+
+/// 准备中央 skill：在指定 canonical_dir 写 SKILL.md，并 upsert 进 skills 表。
+async fn seed_central_skill(pool: &DbPool, canonical_dir: &Path, skill_id: &str) {
+    write_skill_md(canonical_dir, skill_id, Some("seed"));
+    let skill = Skill {
+        id: skill_id.to_string(),
+        name: skill_id.to_string(),
+        description: Some("seed".to_string()),
+        file_path: canonical_dir.join("SKILL.md").to_string_lossy().into_owned(),
+        canonical_path: Some(canonical_dir.to_string_lossy().into_owned()),
+        is_central: true,
+        source: None,
+        content: None,
+        scanned_at: chrono::Utc::now().to_rfc3339(),
+    };
+    db::upsert_skill(pool, &skill).await.unwrap();
+}
+
+#[tokio::test]
+async fn install_skill_copy_writes_psi_and_copies_dir() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    // 中央 skill
+    let canonical = tmp.path().join(".agents/skills/seeded");
+    seed_central_skill(&pool, &canonical, "seeded").await;
+
+    // 项目
+    let project_root = tmp.path().join("proj");
+    std::fs::create_dir_all(&project_root).unwrap();
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+
+    let psi = install_skill_to_project_impl(
+        &pool, &project.id, "seeded", "claude-code", "copy",
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(psi.link_type, "copy");
+    assert!(psi.symlink_target.is_none());
+
+    let target = project_root.join(".claude/skills/seeded/SKILL.md");
+    assert!(target.exists(), "copy should materialise SKILL.md");
+    let meta = std::fs::symlink_metadata(project_root.join(".claude/skills/seeded")).unwrap();
+    assert!(!meta.file_type().is_symlink(), "copy target must be a real directory");
+
+    // psi 行落库
+    let row = db::get_project_skill_installation(&pool, &project.id, "seeded", "claude-code")
+        .await
+        .unwrap();
+    assert!(row.is_some(), "psi row must exist after install");
+}
+
+#[tokio::test]
+async fn install_skill_symlink_writes_psi_and_creates_link() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let canonical = tmp.path().join(".agents/skills/linker");
+    seed_central_skill(&pool, &canonical, "linker").await;
+
+    let project_root = tmp.path().join("proj");
+    std::fs::create_dir_all(&project_root).unwrap();
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+
+    let result = install_skill_to_project_impl(
+        &pool, &project.id, "linker", "claude-code", "symlink",
+    )
+    .await;
+
+    // Windows 非开发者模式下可能创建符号链接失败：把 error 当成测试预期跳过。
+    // CI 上 Linux/macOS 应当能直接拿到 Ok。
+    let psi = match result {
+        Ok(p) => p,
+        Err(err) if err.to_lowercase().contains("symlink") => return,
+        Err(err) => panic!("unexpected install error: {err}"),
+    };
+
+    assert_eq!(psi.link_type, "symlink");
+    assert!(psi.symlink_target.is_some());
+
+    let link_path = project_root.join(".claude/skills/linker");
+    let meta = std::fs::symlink_metadata(&link_path).unwrap();
+    assert!(meta.file_type().is_symlink(), "target must be a symlink");
+}
+
+#[tokio::test]
+async fn install_skill_rejects_non_central_skill() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    // 写一条非 central 的 skill 记录
+    let skill = Skill {
+        id: "ghost".to_string(),
+        name: "ghost".to_string(),
+        description: None,
+        file_path: tmp
+            .path()
+            .join("ghost/SKILL.md")
+            .to_string_lossy()
+            .into_owned(),
+        canonical_path: None,
+        is_central: false,
+        source: None,
+        content: None,
+        scanned_at: chrono::Utc::now().to_rfc3339(),
+    };
+    db::upsert_skill(&pool, &skill).await.unwrap();
+
+    let project_root = tmp.path().join("proj");
+    std::fs::create_dir_all(&project_root).unwrap();
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+
+    let result = install_skill_to_project_impl(
+        &pool, &project.id, "ghost", "claude-code", "copy",
+    )
+    .await;
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("not centralized") || err.contains("canonical_path"),
+        "expected centralization error, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn install_skill_rejects_missing_skill() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let project_root = tmp.path().join("proj");
+    std::fs::create_dir_all(&project_root).unwrap();
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+
+    let result = install_skill_to_project_impl(
+        &pool, &project.id, "no-such-skill", "claude-code", "copy",
+    )
+    .await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn install_skill_rejects_existing_real_dir_at_target() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let canonical = tmp.path().join(".agents/skills/clash");
+    seed_central_skill(&pool, &canonical, "clash").await;
+
+    let project_root = tmp.path().join("proj");
+    let target_dir = project_root.join(".claude/skills/clash");
+    std::fs::create_dir_all(&target_dir).unwrap();
+    std::fs::write(target_dir.join("dummy.txt"), "manual").unwrap();
+
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+
+    let result = install_skill_to_project_impl(
+        &pool, &project.id, "clash", "claude-code", "copy",
+    )
+    .await;
+    assert!(result.is_err(), "must refuse to overwrite existing real dir");
+}
+
+#[tokio::test]
+async fn uninstall_skill_removes_copy_and_psi() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let canonical = tmp.path().join(".agents/skills/dismantle");
+    seed_central_skill(&pool, &canonical, "dismantle").await;
+
+    let project_root = tmp.path().join("proj");
+    std::fs::create_dir_all(&project_root).unwrap();
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+
+    install_skill_to_project_impl(&pool, &project.id, "dismantle", "claude-code", "copy")
+        .await
+        .unwrap();
+    let installed_path = project_root.join(".claude/skills/dismantle");
+    assert!(installed_path.exists());
+
+    uninstall_skill_from_project_impl(&pool, &project.id, "dismantle", "claude-code")
+        .await
+        .unwrap();
+
+    assert!(!installed_path.exists(), "skill dir should be gone after uninstall");
+    let row =
+        db::get_project_skill_installation(&pool, &project.id, "dismantle", "claude-code")
+            .await
+            .unwrap();
+    assert!(row.is_none(), "psi row must be cleared after uninstall");
+}
+
+#[tokio::test]
+async fn uninstall_skill_rejects_unknown_pair() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let project_root = tmp.path().join("proj");
+    std::fs::create_dir_all(&project_root).unwrap();
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+
+    let result = uninstall_skill_from_project_impl(
+        &pool, &project.id, "never-installed", "claude-code",
+    )
+    .await;
+    assert!(result.is_err());
+}
+
+// ─── Stage 3.8 (deferred): reverse view ──────────────────────────────────────
+
+#[tokio::test]
+async fn list_projects_using_skill_returns_each_install() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let canonical = tmp.path().join(".agents/skills/cross");
+    seed_central_skill(&pool, &canonical, "cross").await;
+
+    let root_a = tmp.path().join("proj-a");
+    let root_b = tmp.path().join("proj-b");
+    std::fs::create_dir_all(&root_a).unwrap();
+    std::fs::create_dir_all(&root_b).unwrap();
+    let proj_a = add_project_impl(&pool, root_a.to_str().unwrap()).await.unwrap();
+    let proj_b = add_project_impl(&pool, root_b.to_str().unwrap()).await.unwrap();
+
+    install_skill_to_project_impl(&pool, &proj_a.id, "cross", "claude-code", "copy")
+        .await
+        .unwrap();
+    install_skill_to_project_impl(&pool, &proj_b.id, "cross", "claude-code", "copy")
+        .await
+        .unwrap();
+
+    let rows = list_projects_using_skill_impl(&pool, "cross").await.unwrap();
+    assert_eq!(rows.len(), 2);
+    let project_ids: std::collections::HashSet<_> =
+        rows.iter().map(|r| r.project_id.as_str()).collect();
+    assert!(project_ids.contains(proj_a.id.as_str()));
+    assert!(project_ids.contains(proj_b.id.as_str()));
+    assert!(rows.iter().all(|r| r.agent_display_name == "Claude Code"));
+    assert!(rows.iter().all(|r| r.link_type == "copy"));
+}
+
+#[tokio::test]
+async fn list_projects_using_skill_pinned_first() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let canonical = tmp.path().join(".agents/skills/sorted");
+    seed_central_skill(&pool, &canonical, "sorted").await;
+
+    let root_z = tmp.path().join("zproj");
+    let root_a = tmp.path().join("aproj");
+    std::fs::create_dir_all(&root_z).unwrap();
+    std::fs::create_dir_all(&root_a).unwrap();
+    let zproj = add_project_impl(&pool, root_z.to_str().unwrap()).await.unwrap();
+    let aproj = add_project_impl(&pool, root_a.to_str().unwrap()).await.unwrap();
+
+    // 给 z 项目 rename + pin，给 a 项目不 pin
+    super::crud::rename_project_impl(&pool, &zproj.id, "Zeta").await.unwrap();
+    super::crud::rename_project_impl(&pool, &aproj.id, "Alpha").await.unwrap();
+    set_project_pinned_impl(&pool, &zproj.id, true).await.unwrap();
+
+    install_skill_to_project_impl(&pool, &zproj.id, "sorted", "claude-code", "copy")
+        .await
+        .unwrap();
+    install_skill_to_project_impl(&pool, &aproj.id, "sorted", "claude-code", "copy")
+        .await
+        .unwrap();
+
+    let rows = list_projects_using_skill_impl(&pool, "sorted").await.unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].project_name, "Zeta", "pinned project must come first");
+    assert_eq!(rows[1].project_name, "Alpha");
+}
+
+#[tokio::test]
+async fn list_projects_using_skill_empty_for_unused_skill() {
+    let pool = setup_test_db().await;
+    let rows = list_projects_using_skill_impl(&pool, "ghost").await.unwrap();
+    assert!(rows.is_empty());
 }

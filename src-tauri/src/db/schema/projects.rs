@@ -3,9 +3,8 @@
 //! 替代旧 `discovered_skills` 全盘扫描模型：项目作为一等实体，由用户手动 add；
 //! `project_skill_installations` 记录每个项目下各 agent 目录中已落盘的 skill。
 //!
-//! 同时清理旧 Discover 残留：
-//! - 清空 `discovered_skills` 表（保留表结构以兼容回退）
-//! - 删除 `settings.discover_scan_roots_config` 行
+//! 旧 Discover 表结构的清理在 `schema/discovery.rs` 里完成（drop discovered_skills
+//! 与其索引）；这里只清剩下的 `settings.discover_scan_roots_config` 一行。
 
 use crate::db::DbPool;
 
@@ -52,14 +51,6 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
-
-    // 旧 Discover 残留清理：
-    // - discovered_skills 表只清空数据，保留表本身（防止回退老版本时 schema 校验挂）。
-    // - settings 里旧的扫描根配置直接删，没有兼容价值。
-    sqlx::query("DELETE FROM discovered_skills")
-        .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
 
     sqlx::query("DELETE FROM settings WHERE key = 'discover_scan_roots_config'")
         .execute(pool)

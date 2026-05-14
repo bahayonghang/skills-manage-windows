@@ -32,7 +32,6 @@ pub struct BootstrapSnapshot {
     pub cached_skill_counts: std::collections::HashMap<String, usize>,
     pub dashboard_central_summary: DashboardCentralSummary,
     pub collection_count: usize,
-    pub discovered_count: usize,
     pub last_scan_at: Option<String>,
     pub scan_state: ScanState,
 }
@@ -146,14 +145,12 @@ async fn get_bootstrap_snapshot_impl(pool: &DbPool) -> Result<BootstrapSnapshot,
     let skill_counts = get_skill_counts_summary_impl(pool).await?;
     let dashboard_central_summary = get_dashboard_central_summary_impl(pool).await?;
     let collection_count = db::get_collection_count(pool).await?;
-    let discovered_count = db::get_discovered_skill_count(pool).await?;
 
     Ok(BootstrapSnapshot {
         agents: agents.into_iter().map(to_cached_agent).collect(),
         cached_skill_counts: skill_counts.cached_skill_counts,
         dashboard_central_summary,
         collection_count,
-        discovered_count,
         last_scan_at: skill_counts.last_scan_at,
         scan_state: skill_counts.scan_state,
     })
@@ -286,20 +283,6 @@ mod tests {
         db::create_collection(&pool, "Frontend", Some("UI skills"))
             .await
             .unwrap();
-        db::insert_discovered_skill(
-            &pool,
-            "claude-code__project__deploy",
-            "deploy",
-            Some("Deploy the app"),
-            "/tmp/project/.claude/skills/deploy/SKILL.md",
-            "/tmp/project/.claude/skills/deploy",
-            "/tmp/project",
-            "project",
-            "claude-code",
-            "2026-04-23T01:00:00Z",
-        )
-        .await
-        .unwrap();
         db::set_setting(&pool, "scan_state", "idle").await.unwrap();
         db::set_setting(&pool, "scan_last_completed_at", "2026-04-23T01:05:00Z")
             .await
@@ -312,7 +295,6 @@ mod tests {
             Some(1)
         );
         assert_eq!(snapshot.collection_count, 1);
-        assert_eq!(snapshot.discovered_count, 1);
         assert_eq!(
             snapshot.last_scan_at.as_deref(),
             Some("2026-04-23T01:05:00Z")

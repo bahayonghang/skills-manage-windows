@@ -33,7 +33,6 @@ mod tests;
 pub use pool::*;
 pub use repos::agents_repo::*;
 pub use repos::collections_repo::*;
-pub use repos::discovered_repo::*;
 pub use repos::installations_repo::*;
 pub use repos::observations_repo::*;
 pub use repos::operation_logs_repo::*;

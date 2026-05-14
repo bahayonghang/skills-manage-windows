@@ -4,9 +4,8 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Emitter, State};
 
-use crate::db::Project;
 use crate::services::projects;
-use crate::services::projects::{ProjectDto, ProjectSkillDto};
+use crate::services::projects::{ProjectDto, ProjectSkillDto, ProjectUsingSkillDto};
 use crate::AppState;
 
 /// 后端异步扫完后向前端 emit 的事件 payload。
@@ -43,13 +42,14 @@ pub async fn pick_project_folder(app: AppHandle) -> Result<Option<String>, Strin
     Ok(picked.map(|p| p.to_string_lossy().into_owned()))
 }
 
-/// add 项目：立即返回 Project，扫描在后台异步执行，完成后 emit `project:scanned`。
+/// add 项目：立即返回 ProjectDto（skill_count 初始为 0），扫描在后台异步执行，
+/// 完成后 emit `project:scanned`。
 #[tauri::command]
 pub async fn add_project(
     state: State<'_, AppState>,
     app: AppHandle,
     path: String,
-) -> Result<Project, String> {
+) -> Result<ProjectDto, String> {
     let pool = state.db.clone();
     let project = projects::add_project_impl(&pool, &path).await?;
 
@@ -80,7 +80,15 @@ pub async fn add_project(
         }
     });
 
-    Ok(project)
+    Ok(ProjectDto {
+        id: project.id,
+        path: project.path,
+        name: project.name,
+        pinned: project.pinned,
+        added_at: project.added_at,
+        last_scanned_at: project.last_scanned_at,
+        skill_count: 0,
+    })
 }
 
 #[tauri::command]
@@ -138,4 +146,44 @@ pub async fn remove_project(
     uninstall_skills: bool,
 ) -> Result<(), String> {
     projects::remove_project_impl(&state.db, &id, uninstall_skills).await
+}
+
+/// 装一个中央 skill 到项目下某个 agent 目录。
+/// 返回写入的 psi 行（含真实的 link_type / symlink_target）。
+#[tauri::command]
+pub async fn install_skill_to_project(
+    state: State<'_, AppState>,
+    project_id: String,
+    skill_id: String,
+    agent_id: String,
+    method: String,
+) -> Result<crate::db::ProjectSkillInstallation, String> {
+    projects::install_skill_to_project_impl(
+        &state.db,
+        &project_id,
+        &skill_id,
+        &agent_id,
+        &method,
+    )
+    .await
+}
+
+/// 从项目下指定 agent 目录卸载 skill。
+#[tauri::command]
+pub async fn uninstall_skill_from_project(
+    state: State<'_, AppState>,
+    project_id: String,
+    skill_id: String,
+    agent_id: String,
+) -> Result<(), String> {
+    projects::uninstall_skill_from_project_impl(&state.db, &project_id, &skill_id, &agent_id).await
+}
+
+/// 反查中央 skill 装在哪些项目，供详情页 sidebar 展示。
+#[tauri::command]
+pub async fn list_projects_using_skill(
+    state: State<'_, AppState>,
+    skill_id: String,
+) -> Result<Vec<ProjectUsingSkillDto>, String> {
+    projects::list_projects_using_skill_impl(&state.db, &skill_id).await
 }
