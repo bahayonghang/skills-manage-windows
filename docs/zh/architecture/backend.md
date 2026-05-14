@@ -46,7 +46,9 @@ src-tauri/src/
 | `central_updates.rs` | 远端更新状态 + 批量应用 |
 | `collections.rs` | 集合 CRUD + 导入导出 |
 | `settings.rs` | 键值 + 扫描目录 + GitHub PAT |
-| `discover.rs` | 项目扫描 + Obsidian vault |
+| `discover.rs` | （0.10.x 移除——拆分为 `projects.rs` + `obsidian.rs`） |
+| `projects.rs` | 项目 add / list / rename / pin / scan / install / uninstall / remove |
+| `obsidian.rs` | Obsidian vault 扫描 + 源模式导入 |
 | `github_import.rs` | 仓库预览 + 导入 + raw fetch |
 | `marketplace.rs` | 源 + 缓存 + AI 解释 |
 | `portable_state.rs` | SkillPort 状态导入导出 |
@@ -60,7 +62,8 @@ src-tauri/src/
 ```text
 services/
 ├── scanner/             读盘 SKILL.md frontmatter
-├── discovery/           项目 + Obsidian 源扫描
+├── projects/            项目级 skill 管理（add / scan / install / uninstall）
+├── obsidian/            Obsidian vault 扫描 + 源模式导入
 ├── installation/        centralize / native / project / remote / batch
 ├── central_skills/      中央仓库 query / delete / 文件树
 ├── github_import/       归档下载、预览工作区、原始 HTTP

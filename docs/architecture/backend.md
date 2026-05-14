@@ -46,7 +46,9 @@ Every `#[tauri::command]` lives under `src-tauri/src/commands/`. Files are domai
 | `central_updates.rs` | Remote update status + bulk apply |
 | `collections.rs` | Collection CRUD + import / export |
 | `settings.rs` | Key/value + scan directories + GitHub PAT |
-| `discover.rs` | Project scan + Obsidian vault scan |
+| `discover.rs` | (removed in 0.10.x — replaced by `projects.rs` + `obsidian.rs`) |
+| `projects.rs` | Project add / list / rename / pin / scan / install / uninstall / remove |
+| `obsidian.rs` | Obsidian vault scan + source-only import |
 | `github_import.rs` | Repo preview + import + raw fetch |
 | `marketplace.rs` | Registries + cache + AI explanation |
 | `portable_state.rs` | SkillPort state import / export |
@@ -60,7 +62,8 @@ Services in `src-tauri/src/services/` host business logic. Commands stay thin (p
 ```text
 services/
 ├── scanner/             Read SKILL.md frontmatter on disk
-├── discovery/           Project + Obsidian source-only scans
+├── projects/            Project-level skill management (add / scan / install / uninstall)
+├── obsidian/            Obsidian vault scan + source-only import
 ├── installation/        centralize / native / project / remote / batch
 ├── central_skills/      Canonical-store query / delete / file tree
 ├── github_import/       Archive download, preview workspace, raw HTTP
@@ -68,7 +71,7 @@ services/
 └── ai_provider/         Claude + OpenAI-compatible streaming
 ```
 
-The split lets each service own its tests under the same module. Larger services (installation, discovery, github_import) further decompose into purpose-named files instead of growing one big mod.rs.
+The split lets each service own its tests under the same module. Larger services (installation, github_import) further decompose into purpose-named files instead of growing one big mod.rs.
 
 ## Targets
 
@@ -104,7 +107,7 @@ See [Data Model](./data-model.md) for the table layout.
 
 ## Logging and Errors
 
-- **Operation logs.** Long-lived, structured rows in `operation_logs`. Inserted by the linker / discover / marketplace services; surfaced in the Logs page.
+- **Operation logs.** Long-lived, structured rows in `operation_logs`. Inserted by the linker / projects / marketplace services; surfaced in the Logs page.
 - **Errors.** All commands return `Result<T, String>`. Services bubble `String` for the IPC boundary; rich error context stays inside services until the boundary collapses it for serialization.
 
 Last reviewed: 2026-05-04

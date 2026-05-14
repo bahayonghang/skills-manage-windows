@@ -15,8 +15,8 @@
 | `/collections` | `CollectionsListView` | 选中卡片 + 技能列表 |
 | `/collection/:id` | `CollectionView` | 详情变体 |
 | `/marketplace` | `MarketplaceView` | 三 Tab |
-| `/discover` | `DiscoverView` | 项目列表 + 技能详情 |
-| `/discover/:projectPath` | `DiscoverView` | 同上，按项目过滤 |
+| `/projects` | `ProjectsView` | 项目列表 + 技能详情 |
+| `/projects/:projectId` | `ProjectsView` | 同上，按项目过滤 |
 | `/obsidian` / `/obsidian/:vaultId` | `ObsidianVaultView` | Vault 列表 + 技能 |
 | `/logs` | `OperationLogsView` | 可过滤的日志表 |
 | `/settings` | `SettingsView` | 分区卡片 |
@@ -38,7 +38,7 @@
 │ platformStore                │ 平台注册表 + 可见性             │
 │ collectionStore              │ 集合 + 批量安装                 │
 │ marketplaceStore（拆分）     │ 源 + GitHub 导入                │
-│ discoverStore                │ 项目扫描根 + 结果               │
+│ projectsStore                │ 项目 + 项目内技能               │
 │ obsidianStore                │ Vault 列表 + Vault 技能         │
 │ targetStore                  │ 活动目标 + SSH 目标             │
 │ operationLogStore            │ 日志分页 + 过滤                 │
@@ -65,7 +65,7 @@ components/
 └── ui/              shadcn 基元，按设计系统封装
 ```
 
-`UnifiedSkillCard` 是 central / platform / discover / marketplace / collection 五种场景共用的技能卡。新页面通过 props 复用，不要再造内联卡。
+`UnifiedSkillCard` 是 central / platform / project / marketplace / collection 五种场景共用的技能卡。新页面通过 props 复用，不要再造内联卡。
 
 ## i18n
 

@@ -15,8 +15,8 @@ The frontend is a single Vite-bundled React 19 app served inside Tauri's webview
 | `/collections` | `CollectionsListView` | Selected card + skill list |
 | `/collection/:id` | `CollectionView` | Detail variant |
 | `/marketplace` | `MarketplaceView` | Three tabs |
-| `/discover` | `DiscoverView` | Project list + skill detail |
-| `/discover/:projectPath` | `DiscoverView` | Same view, filtered |
+| `/projects` | `ProjectsView` | Project list + skill detail |
+| `/projects/:projectId` | `ProjectsView` | Same view, filtered |
 | `/obsidian` / `/obsidian/:vaultId` | `ObsidianVaultView` | Vault list + skills |
 | `/logs` | `OperationLogsView` | Filterable log table |
 | `/settings` | `SettingsView` | Cards by section |
@@ -38,7 +38,7 @@ Zustand stores in `src/stores/` are the only place that calls `invoke()`. Each s
 │ platformStore                │ Agent registry + visibility     │
 │ collectionStore              │ Collections + batch install     │
 │ marketplaceStore (split)     │ Registries + GitHub import      │
-│ discoverStore                │ Project scan roots + results    │
+│ projectsStore                │ Projects + per-project skills   │
 │ obsidianStore                │ Vault list + vault skills       │
 │ targetStore                  │ Active target + SSH targets     │
 │ operationLogStore            │ Log paging + filters            │
@@ -65,7 +65,7 @@ components/
 └── ui/              shadcn primitives wrapped to the design system
 ```
 
-`UnifiedSkillCard` is the single skill-card surface across central / platform / discover / marketplace / collection contexts; new pages must use it via props rather than rebuilding inline cards.
+`UnifiedSkillCard` is the single skill-card surface across central / platform / project / marketplace / collection contexts; new pages must use it via props rather than rebuilding inline cards.
 
 ## Theming
 

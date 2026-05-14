@@ -1,6 +1,6 @@
 # Scanning
 
-Two services handle "find SKILL.md files on disk": `services::scanner` for the Central store and `services::discovery` for project / Obsidian sources. Both produce typed records and never touch the DB directly.
+Two services handle "find SKILL.md files on disk": `services::scanner` for the Central store and `services::projects` for project-level libraries. Both produce typed records and never touch the DB directly.
 
 ## Central Scanner
 
@@ -23,48 +23,43 @@ Source: `src-tauri/src/services/scanner/`.
 - The Claude plugin variant (`claude_plugin.rs`) understands the nested `~/.claude/plugins` layout where each plugin has its own `skills/` folder.
 - Observations are written per agent so the UI can show "this skill is also installed in X / Y / Z" without re-walking disk.
 
-## Project Discovery
+## Project-Level Scan
 
-Source: `src-tauri/src/services/discovery/`.
+Source: `src-tauri/src/services/projects/`.
 
 ```text
-discovery/
-├── roots.rs     resolve project skill patterns per platform
-├── scan.rs      walk roots, collect SKILL.md candidates
-├── query.rs     Obsidian vault scan (source-only)
-├── import.rs    promote a discovered skill into Central / a platform
-└── types.rs     ScanRoot, DiscoveredSkill, ImportRequest
+projects/
+├── crud.rs   add / list / rename / pin / remove + install / uninstall
+├── scan.rs   walk enabled-agent skill dirs under a project root
+├── types.rs  ProjectDto, ProjectSkillDto
+└── tests.rs  unit coverage
 ```
 
-Discovery solves a different problem from the scanner: scanner reads agent-installed skills, discovery reads project-level SKILL.md files that have not been promoted to a Central location yet.
+Project scan solves a different problem from the Central scanner: scanner walks global agent paths to populate the central library, while project scan walks per-project agent paths (`<project>/.claude/skills/`, etc.) for project-local SKILL.md files.
 
-### Roots and Patterns
+### Roots
 
-`roots.rs` collapses each platform's project skill patterns into a deduplicated list. Shared patterns (`.agents/skills`) are emitted once even when several platforms claim them — preventing the same SKILL.md from appearing N times in the UI.
+There are no implicit roots. Each project root is added explicitly by the user via `pick_project_folder` → `add_project`. Paths are canonicalised, separators normalised, and `sha256` hashed (first 16 hex chars) into a stable `project_id`.
 
 ### Project Scan
 
-`scan.rs` walks each root, parses frontmatter, and writes rows into `discovered_skills` keyed by `(project_path, platform_id)`. The UI renders left-panel project list + right-panel skill detail off this table.
+`scan.rs` iterates **enabled agents** (`SELECT id, project_skills_dir FROM agents WHERE is_enabled = 1 AND id != 'central'`), resolves each agent's per-project skill directory, runs the shared `services::scanner::scan_directory` walker, and upserts rows into `project_skill_installations` keyed by `(project_id, skill_id, agent_id)`. `symlink_metadata` decides `link_type` (`symlink` vs `copy`); orphan psi rows for SKILL.md folders that no longer exist on disk are deleted in the same pass.
 
-### Obsidian Source
+### Install / Uninstall
 
-`query.rs` reads Obsidian vault registries. Vault-level `.skills > .agents/skills > .claude/skills` precedence picks the canonical SKILL.md when a vault is structured for multiple platforms. Source skills do not pass through `discovered_skills`; `commands::discover::import_source_skill_to_central` and `import_source_skill_to_platform` accept the raw file/dir path so vault data does not pollute the persistent cache.
+`crud::install_skill_to_project_impl` and `uninstall_skill_from_project_impl` are the only writers for the install / uninstall transition. Install requires a centralised skill (`is_central = true && canonical_path IS NOT NULL`) and accepts a `method` of `symlink` (default) or `copy`. Symlink failure (Windows without Developer Mode) is bubbled up as a plain error string for the front-end toast.
 
-### Import Pipeline
+### Removal
 
-`import.rs` is the only writer for the discovered → installed transition:
+`remove_project_impl(id, uninstall_skills)` deletes the project row (and its psi rows). When `uninstall_skills = true`, the function walks every psi row first and removes the on-disk symlink / copy before deleting the project; per-row removal failures are logged but never abort the project deletion.
 
-| Method | Effect |
-| --- | --- |
-| `symlink` | Default; install via OS symlink. |
-| `auto` | Symlink with copy fallback when permissions block links (Windows). |
-| `copy` | Force a directory copy. |
+## Migration from Discovery
 
-When promoting to Central first, the import service calls `installation::centralize::ensure_centralized` so `canonical_path` and `is_central` are correct before the install path is taken.
+The legacy `services::discovery` module — full-disk crawl, hard-coded scan roots, `discovered_skills` table — was removed in 0.10.x. Schema migration drops `discovered_skills` and the `discover_scan_roots_config` setting on first launch. Obsidian vault scanning that previously shared the discovery module was extracted into `services::obsidian/`.
 
 ## Re-scan Performance
 
 - Scanner reuses `agent_skill_observations` rows so a clean re-scan is O(file count), not O(agent × file count).
-- Discovery prunes rows for `(project_path, platform_id)` keys that no longer exist on disk to keep the UI list bounded.
+- Project scan prunes psi rows for `(skill_id, agent_id)` pairs that no longer exist on disk to keep the UI list bounded; the IPC layer emits `project:scanned` so the front-end refreshes without a full reload.
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-05-14
