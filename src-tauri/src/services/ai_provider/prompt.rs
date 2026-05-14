@@ -5,10 +5,16 @@
 //! non-streaming paths can pick the right header/body shape.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ExplanationApiProtocol {
+pub enum ExplanationApiProtocol {
     AnthropicCompatible,
     OpenAiCompatible,
     Unknown,
+}
+
+impl ExplanationApiProtocol {
+    pub fn is_anthropic_compatible(self) -> bool {
+        matches!(self, Self::AnthropicCompatible | Self::Unknown)
+    }
 }
 
 pub(crate) fn detect_explanation_api_protocol(api_url: &str) -> ExplanationApiProtocol {
@@ -26,6 +32,50 @@ pub(crate) fn detect_explanation_api_protocol(api_url: &str) -> ExplanationApiPr
     }
 
     ExplanationApiProtocol::Unknown
+}
+
+pub(crate) fn resolve_api_protocol(
+    api_url: &str,
+    explicit_protocol: Option<&str>,
+) -> ExplanationApiProtocol {
+    match explicit_protocol.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("anthropic") => ExplanationApiProtocol::AnthropicCompatible,
+        Some("openai") => ExplanationApiProtocol::OpenAiCompatible,
+        _ => detect_explanation_api_protocol(api_url),
+    }
+}
+
+pub(crate) fn resolve_custom_url(raw_url: &str, protocol: ExplanationApiProtocol) -> String {
+    let trimmed = raw_url.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let normalized = trimmed.trim_end_matches('/');
+    let lower = normalized.to_ascii_lowercase();
+    if lower.ends_with("/v1/messages")
+        || lower.contains("/anthropic/v1/messages")
+        || lower.ends_with("/v1/chat/completions")
+    {
+        return normalized.to_string();
+    }
+
+    match protocol {
+        ExplanationApiProtocol::OpenAiCompatible => {
+            if lower.ends_with("/v1") {
+                format!("{normalized}/chat/completions")
+            } else {
+                format!("{normalized}/v1/chat/completions")
+            }
+        }
+        ExplanationApiProtocol::AnthropicCompatible | ExplanationApiProtocol::Unknown => {
+            if lower.ends_with("/v1") {
+                format!("{normalized}/messages")
+            } else {
+                format!("{normalized}/v1/messages")
+            }
+        }
+    }
 }
 
 /// Truncate skill content to 8000 chars to keep prompts within typical context limits.

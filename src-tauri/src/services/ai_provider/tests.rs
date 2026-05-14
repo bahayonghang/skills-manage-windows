@@ -4,7 +4,7 @@
 
 use super::cache::{cache_skill_explanation, load_cached_skill_explanation};
 use super::error::{classify_reqwest_error, format_reqwest_error, ExplanationErrorKind};
-use super::prompt::{detect_explanation_api_protocol, ExplanationApiProtocol};
+use super::prompt::{detect_explanation_api_protocol, resolve_api_protocol, resolve_custom_url, ExplanationApiProtocol};
 use super::stream::get_fallback_endpoint;
 use crate::db;
 use tempfile::{tempdir, TempDir};
@@ -16,6 +16,31 @@ async fn setup_test_db() -> (crate::db::DbPool, TempDir) {
     let pool = db::create_pool(&db_path).await.expect("create pool");
     db::init_database(&pool).await.expect("init db");
     (pool, dir)
+}
+
+
+#[test]
+fn explicit_protocol_overrides_url_detection() {
+    assert_eq!(
+        resolve_api_protocol("https://example.com/v1/messages", Some("openai")),
+        ExplanationApiProtocol::OpenAiCompatible
+    );
+    assert_eq!(
+        resolve_api_protocol("https://example.com/v1/chat/completions", Some("anthropic")),
+        ExplanationApiProtocol::AnthropicCompatible
+    );
+}
+
+#[test]
+fn custom_v1_url_expands_for_selected_protocol() {
+    assert_eq!(
+        resolve_custom_url("https://proxy.example.com/v1", ExplanationApiProtocol::OpenAiCompatible),
+        "https://proxy.example.com/v1/chat/completions"
+    );
+    assert_eq!(
+        resolve_custom_url("https://proxy.example.com/v1", ExplanationApiProtocol::AnthropicCompatible),
+        "https://proxy.example.com/v1/messages"
+    );
 }
 
 #[test]

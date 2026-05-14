@@ -11,6 +11,7 @@
 
 mod cache;
 mod claude;
+mod config;
 mod error;
 mod prompt;
 mod secret;
@@ -27,10 +28,13 @@ pub(crate) use error::{
     AI_RESPONSE_PARSE_FAILED, AI_RESPONSE_READ_FAILED,
 };
 pub use error::{ExplanationErrorInfo, ExplanationErrorKind};
+pub(crate) use config::resolve_ai_provider_config;
+pub use prompt::ExplanationApiProtocol;
 pub use secret::{
     clear_ai_api_key_impl, get_ai_api_key_state_impl, migrate_ai_api_key_on_startup,
     set_ai_api_key_impl, AiApiKeyState,
 };
+pub use claude::AiConnectionTestResult;
 pub use stream::{ExplanationChunkPayload, ExplanationCompletePayload};
 
 use tauri::{AppHandle, Emitter};
@@ -46,14 +50,12 @@ pub(crate) async fn get_ai_setting(pool: &crate::db::DbPool, key: &str) -> Optio
         .filter(|v| !v.trim().is_empty())
 }
 
-/// Helper: read the sensitive AI API key from secure storage. During the
-/// one-time migration window this may fall back to the legacy settings row, but
-/// all new writes must go through [`set_ai_api_key_impl`].
-pub(crate) async fn get_ai_api_key(
+pub(crate) async fn get_ai_api_key_for_provider(
     pool: &crate::db::DbPool,
     secrets: &dyn crate::secrets::SecretStore,
+    provider: &str,
 ) -> Result<Option<String>, String> {
-    secret::ai_api_key_from_secret_store(pool, secrets).await
+    secret::ai_api_key_from_secret_store(pool, secrets, Some(provider)).await
 }
 
 /// Issue a single non-streaming explanation request and return the parsed text.
@@ -63,6 +65,14 @@ pub async fn explain_skill_impl(
     content: String,
 ) -> Result<String, String> {
     claude::explain_skill(pool, secrets, content).await
+}
+
+/// Issue a minimal request to validate the current provider configuration.
+pub async fn test_ai_connection_impl(
+    pool: &crate::db::DbPool,
+    secrets: &dyn crate::secrets::SecretStore,
+) -> Result<claude::AiConnectionTestResult, String> {
+    claude::test_ai_connection(pool, secrets).await
 }
 
 /// Read a cached explanation if one exists; never triggers the AI provider.

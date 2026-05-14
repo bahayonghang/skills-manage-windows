@@ -335,6 +335,7 @@ pub fn run() {
             commands::marketplace::search_marketplace_skills,
             commands::marketplace::install_marketplace_skill,
             commands::marketplace::explain_skill,
+            commands::marketplace::test_ai_connection,
             commands::marketplace::get_skill_explanation,
             commands::marketplace::explain_skill_stream,
             commands::marketplace::refresh_skill_explanation,

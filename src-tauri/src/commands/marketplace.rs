@@ -14,7 +14,8 @@ use crate::AppState;
 
 // Re-export the types frontend code already references via this module path.
 pub use crate::services::ai_provider::{
-    ExplanationChunkPayload, ExplanationCompletePayload, ExplanationErrorInfo, ExplanationErrorKind,
+    AiConnectionTestResult, ExplanationChunkPayload, ExplanationCompletePayload,
+    ExplanationErrorInfo, ExplanationErrorKind,
 };
 pub use crate::services::marketplace::{
     MarketplaceSkill, RegistryCacheMetadata, RegistrySyncStatus, SkillRegistry, SyncRegistryOptions,
@@ -106,6 +107,14 @@ pub async fn install_marketplace_skill(
 #[tauri::command]
 pub async fn explain_skill(state: State<'_, AppState>, content: String) -> Result<String, String> {
     ai_provider::explain_skill_impl(&state.db, state.secrets.as_ref(), content).await
+}
+
+
+#[tauri::command]
+pub async fn test_ai_connection(
+    state: State<'_, AppState>,
+) -> Result<AiConnectionTestResult, String> {
+    ai_provider::test_ai_connection_impl(&state.db, state.secrets.as_ref()).await
 }
 
 #[tauri::command]

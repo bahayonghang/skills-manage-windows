@@ -26,7 +26,7 @@ use crate::{
 use prompt::suggest_skill_tags_for_skill;
 #[cfg(test)]
 pub(crate) use prompt::{map_ai_suggestions, parse_ai_tag_suggestions};
-use rate_limit::{get_ai_setting, get_ai_tag_rate_settings, is_ai_rate_limit_error};
+use rate_limit::{get_ai_tag_rate_settings, is_ai_rate_limit_error};
 pub(crate) use types::AI_TAG_PROGRESS_EVENT;
 use types::{
     AiTagCounters, AiTagRateLimiter, AiTagRunControl, AiTagRunningNotifier, AiTaggingContext,
@@ -210,7 +210,8 @@ async fn prepare_ai_tagging_context(
     pool: &DbPool,
     secrets: &dyn SecretStore,
 ) -> Result<AiTaggingContext, String> {
-    let api_key = ai_provider::get_ai_api_key(pool, secrets)
+    let config = ai_provider::resolve_ai_provider_config(pool).await;
+    let api_key = ai_provider::get_ai_api_key_for_provider(pool, secrets, &config.provider)
         .await?
         .ok_or_else(|| {
             ai_provider::coded_error(
@@ -218,12 +219,9 @@ async fn prepare_ai_tagging_context(
                 "Configure an AI API key in Settings before running AI tagging.",
             )
         })?;
-    let api_url = get_ai_setting(pool, "ai_api_url")
-        .await
-        .unwrap_or_else(|| "https://api.anthropic.com/v1/messages".to_string());
-    let model = get_ai_setting(pool, "ai_model")
-        .await
-        .unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
+    let api_url = config.api_url;
+    let protocol = config.protocol;
+    let model = config.model;
     let tags = db::get_skill_tags(pool).await?;
     if tags.is_empty() {
         return Err("No candidate tags are available.".to_string());
@@ -243,6 +241,7 @@ async fn prepare_ai_tagging_context(
         pool: pool.clone(),
         api_key,
         api_url,
+        protocol,
         model,
         tags: Arc::new(tags),
         client,

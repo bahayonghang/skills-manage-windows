@@ -18,9 +18,13 @@ use crate::AppState;
 const PROTECTED_SETTINGS_KEYS: &[&str] = &[GITHUB_PAT_SECRET_KEY, AI_API_KEY_SECRET_KEY];
 
 fn is_protected_settings_key(key: &str) -> bool {
+    let trimmed = key.trim();
     PROTECTED_SETTINGS_KEYS
         .iter()
-        .any(|protected_key| key.trim().eq_ignore_ascii_case(protected_key))
+        .any(|protected_key| trimmed.eq_ignore_ascii_case(protected_key))
+        || trimmed
+            .to_ascii_lowercase()
+            .starts_with(&format!("{}__", AI_API_KEY_SECRET_KEY))
 }
 
 fn protected_settings_error(key: &str) -> String {
@@ -298,24 +302,42 @@ pub async fn get_settings(
 #[tauri::command]
 pub async fn get_ai_api_key_state(
     state: State<'_, AppState>,
+    provider: Option<String>,
 ) -> Result<crate::services::ai_provider::AiApiKeyState, String> {
-    crate::services::ai_provider::get_ai_api_key_state_impl(&state.db, state.secrets.as_ref()).await
+    crate::services::ai_provider::get_ai_api_key_state_impl(
+        &state.db,
+        state.secrets.as_ref(),
+        provider.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn set_ai_api_key(
     state: State<'_, AppState>,
     value: String,
+    provider: Option<String>,
 ) -> Result<crate::services::ai_provider::AiApiKeyState, String> {
-    crate::services::ai_provider::set_ai_api_key_impl(&state.db, state.secrets.as_ref(), value)
-        .await
+    crate::services::ai_provider::set_ai_api_key_impl(
+        &state.db,
+        state.secrets.as_ref(),
+        value,
+        provider.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn clear_ai_api_key(
     state: State<'_, AppState>,
+    provider: Option<String>,
 ) -> Result<crate::services::ai_provider::AiApiKeyState, String> {
-    crate::services::ai_provider::clear_ai_api_key_impl(&state.db, state.secrets.as_ref()).await
+    crate::services::ai_provider::clear_ai_api_key_impl(
+        &state.db,
+        state.secrets.as_ref(),
+        provider.as_deref(),
+    )
+    .await
 }
 
 /// Tauri command: set (upsert) a settings value.
@@ -663,6 +685,12 @@ mod tests {
         assert!(set_setting_impl(&pool, "ai_api_key", "token")
             .await
             .is_err());
+        assert!(get_setting_impl(&pool, "ai_api_key__deepseek")
+            .await
+            .is_err());
+        assert!(set_setting_impl(&pool, "ai_api_key__deepseek", "token")
+            .await
+            .is_err());
     }
 
     // ── set_setting_impl ──────────────────────────────────────────────────────
@@ -714,7 +742,7 @@ mod tests {
         let pool = setup_test_db().await;
         let mut values = HashMap::new();
         values.insert("theme".to_string(), "dark".to_string());
-        values.insert("ai_api_key".to_string(), "token".to_string());
+        values.insert("ai_api_key__deepseek".to_string(), "token".to_string());
 
         assert!(set_settings_impl(&pool, &values).await.is_err());
         assert!(
@@ -722,7 +750,7 @@ mod tests {
                 .await
                 .is_err()
         );
-        assert_eq!(db::get_setting(&pool, "ai_api_key").await.unwrap(), None);
+        assert_eq!(db::get_setting(&pool, "ai_api_key__deepseek").await.unwrap(), None);
     }
 
     #[tokio::test]

@@ -9,10 +9,7 @@ use tauri::{AppHandle, Emitter};
 
 use super::cache::{cache_skill_explanation, explanation_has_content};
 use super::error::{classify_reqwest_error, ExplanationErrorInfo, ExplanationErrorKind};
-use super::prompt::{
-    build_explanation_prompt, build_stream_request_body, detect_explanation_api_protocol,
-    truncate_content, ExplanationApiProtocol,
-};
+use super::prompt::{build_explanation_prompt, build_stream_request_body, truncate_content};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExplanationChunkPayload {
@@ -112,30 +109,20 @@ pub(crate) async fn do_explain_skill_stream(
     content: &str,
     lang: &str,
 ) -> Result<(), String> {
-    let api_key = super::get_ai_api_key(pool, secrets).await?.ok_or_else(|| {
-        super::coded_error(
-            super::AI_MISSING_API_KEY,
-            "Configure an AI API key in Settings before requesting an AI explanation.",
-        )
-    })?;
+    let config = super::resolve_ai_provider_config(pool).await;
+    let api_key = super::get_ai_api_key_for_provider(pool, secrets, &config.provider)
+        .await?
+        .ok_or_else(|| {
+            super::coded_error(
+                super::AI_MISSING_API_KEY,
+                "Configure an AI API key in Settings before requesting an AI explanation.",
+            )
+        })?;
 
-    let api_url = super::get_ai_setting(pool, "ai_api_url")
-        .await
-        .unwrap_or_else(|| "https://api.anthropic.com/v1/messages".to_string());
-
-    let model = super::get_ai_setting(pool, "ai_model")
-        .await
-        .unwrap_or_else(|| "claude-sonnet-4-20250514".to_string());
-
-    let provider = super::get_ai_setting(pool, "ai_provider")
-        .await
-        .unwrap_or_default();
-
-    let protocol = detect_explanation_api_protocol(&api_url);
-    let is_anthropic = matches!(
-        protocol,
-        ExplanationApiProtocol::AnthropicCompatible | ExplanationApiProtocol::Unknown
-    );
+    let api_url = config.api_url.clone();
+    let model = config.model.clone();
+    let provider = config.provider.clone();
+    let is_anthropic = config.protocol.is_anthropic_compatible();
 
     let truncated = truncate_content(content);
     let prompt = build_explanation_prompt(&truncated, lang);
@@ -165,12 +152,8 @@ pub(crate) async fn do_explain_skill_stream(
             if err_info.retryable {
                 if let Some(fallback_url) = get_fallback_endpoint(&provider, &api_url) {
                     tracing::warn!(error_kind = ?err_info.kind, fallback_url = %fallback_url, "AI explanation primary endpoint failed; trying fallback");
-                    let fallback_protocol = detect_explanation_api_protocol(&fallback_url);
-                    let fallback_anthropic = matches!(
-                        fallback_protocol,
-                        ExplanationApiProtocol::AnthropicCompatible
-                            | ExplanationApiProtocol::Unknown
-                    );
+                    let fallback_anthropic = super::prompt::detect_explanation_api_protocol(&fallback_url)
+                        .is_anthropic_compatible();
                     match send_stream_request(
                         &client,
                         &fallback_url,
