@@ -317,6 +317,11 @@ pub struct Project {
 pub struct ProjectSkillInstallation {
     pub project_id: String,
     pub skill_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub file_path: String,
+    /// `'central'` | `'project'`：中央库安装或项目原有/手动放入。
+    pub source_origin: String,
     pub agent_id: String,
     pub installed_path: String,
     /// `'symlink'` | `'copy'`。

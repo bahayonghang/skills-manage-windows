@@ -22,6 +22,9 @@ pub struct ProjectSkillDto {
     pub skill_id: String,
     pub name: String,
     pub description: Option<String>,
+    pub file_path: String,
+    /// `'central'` | `'project'`
+    pub source_origin: String,
     pub agent_id: String,
     pub agent_display_name: String,
     pub installed_path: String,

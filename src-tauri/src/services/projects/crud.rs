@@ -23,11 +23,7 @@ pub fn normalize_project_path(input: &str) -> String {
     let trimmed = input.trim();
     let raw = PathBuf::from(trimmed);
     let resolved = raw.canonicalize().unwrap_or_else(|_| raw.clone());
-    let mut value = resolved.to_string_lossy().replace('\\', "/");
-    while value.len() > 1 && value.ends_with('/') {
-        value.pop();
-    }
-    value
+    crate::paths::normalize_stored_path(&resolved.to_string_lossy())
 }
 
 /// sha256(规范化 path) 前 16 字符（hex）。
@@ -65,6 +61,12 @@ pub async fn add_project_impl(pool: &DbPool, raw_path: &str) -> Result<Project, 
     }
 
     if let Some(existing) = db::get_project_by_path(pool, &normalized).await? {
+        return Ok(existing);
+    }
+    let legacy_extended_path = format!("//?/{}", normalized);
+    if let Some(mut existing) = db::get_project_by_path(pool, &legacy_extended_path).await? {
+        db::update_project_path(pool, &existing.id, &normalized).await?;
+        existing.path = normalized;
         return Ok(existing);
     }
 
@@ -144,8 +146,7 @@ pub async fn get_project_skills_impl(
         .map(|a| (a.id.clone(), a.display_name.clone()))
         .collect();
 
-    // 关联 skills 表拿 name/description（中央 skill 才会有），项目本地的 skill 没有
-    // 中央条目时回退到 skill_id / 空 description。后续阶段 3 可以再做强增强。
+    // psi 行保存扫描期元数据；旧 DB 行可能为空，此时再回退到中央 skills 表。
     let mut dtos = Vec::with_capacity(psi_rows.len());
     for psi in psi_rows {
         let display_name = agent_name
@@ -153,16 +154,20 @@ pub async fn get_project_skills_impl(
             .cloned()
             .unwrap_or_else(|| psi.agent_id.clone());
 
-        let (name, description) = match sqlx::query_as::<_, (String, Option<String>)>(
-            "SELECT name, description FROM skills WHERE id = ?",
-        )
-        .bind(&psi.skill_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| e.to_string())?
-        {
-            Some((n, d)) => (n, d),
-            None => (psi.skill_id.clone(), None),
+        let (name, description) = if !psi.name.trim().is_empty() {
+            (psi.name.clone(), psi.description.clone())
+        } else {
+            match sqlx::query_as::<_, (String, Option<String>)>(
+                "SELECT name, description FROM skills WHERE id = ?",
+            )
+            .bind(&psi.skill_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| e.to_string())?
+            {
+                Some((n, d)) => (n, d),
+                None => (psi.skill_id.clone(), None),
+            }
         };
 
         dtos.push(ProjectSkillDto {
@@ -170,6 +175,8 @@ pub async fn get_project_skills_impl(
             skill_id: psi.skill_id,
             name,
             description,
+            file_path: psi.file_path,
+            source_origin: psi.source_origin,
             agent_id: psi.agent_id,
             agent_display_name: display_name,
             installed_path: psi.installed_path,
@@ -384,8 +391,12 @@ pub async fn install_skill_to_project_impl(
     let psi = ProjectSkillInstallation {
         project_id: project.id.clone(),
         skill_id: skill_id.to_string(),
+        name: skill.name,
+        description: skill.description,
+        file_path: crate::paths::normalize_stored_path(&target_path.join("SKILL.md").to_string_lossy()),
+        source_origin: "central".to_string(),
         agent_id: agent_id.to_string(),
-        installed_path: target_path.to_string_lossy().into_owned(),
+        installed_path: crate::paths::normalize_stored_path(&target_path.to_string_lossy()),
         link_type,
         symlink_target: symlink_target_str,
         created_at: Utc::now().to_rfc3339(),

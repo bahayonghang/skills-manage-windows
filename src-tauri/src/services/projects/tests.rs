@@ -53,6 +53,22 @@ fn normalize_strips_trailing_slash_and_unifies_separators() {
     assert!(!n.contains('\\'));
 }
 
+#[test]
+fn normalize_strips_windows_extended_length_prefixes() {
+    assert_eq!(
+        normalize_project_path(r"\\?\D:\Documents\Code\demo\"),
+        "D:/Documents/Code/demo"
+    );
+    assert_eq!(
+        normalize_project_path("//?/D:/Documents/Code/demo/"),
+        "D:/Documents/Code/demo"
+    );
+    assert_eq!(
+        normalize_project_path(r"\\?\UNC\server\share\demo\"),
+        "//server/share/demo"
+    );
+}
+
 #[tokio::test]
 async fn add_project_returns_existing_for_duplicate_path() {
     let tmp = TempDir::new().unwrap();
@@ -95,7 +111,79 @@ async fn rescan_finds_skills_in_enabled_agent_dirs() {
     assert_eq!(skills.len(), 1);
     assert_eq!(skills[0].agent_id, "claude-code");
     assert_eq!(skills[0].skill_id, "brainstorming");
+    assert_eq!(skills[0].name, "brainstorming");
+    assert_eq!(skills[0].description.as_deref(), Some("Test skill"));
+    assert_eq!(
+        skills[0].file_path,
+        crate::paths::normalize_stored_path(&claude_skill.join("SKILL.md").to_string_lossy())
+    );
+    assert_eq!(skills[0].source_origin, "project");
     assert_eq!(skills[0].link_type, "copy", "regular dir should be 'copy'");
+}
+
+#[tokio::test]
+async fn project_schema_migration_adds_metadata_columns_with_project_default() {
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    sqlx::query(
+        "CREATE TABLE projects (
+            id              TEXT PRIMARY KEY,
+            path            TEXT NOT NULL UNIQUE,
+            name            TEXT NOT NULL,
+            pinned          BOOLEAN NOT NULL DEFAULT 0,
+            added_at        TEXT NOT NULL,
+            last_scanned_at TEXT
+        )",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TABLE project_skill_installations (
+            project_id      TEXT NOT NULL,
+            skill_id        TEXT NOT NULL,
+            agent_id        TEXT NOT NULL,
+            installed_path  TEXT NOT NULL,
+            link_type       TEXT NOT NULL,
+            symlink_target  TEXT,
+            created_at      TEXT NOT NULL,
+            PRIMARY KEY (project_id, skill_id, agent_id)
+        )",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, path, name, pinned, added_at, last_scanned_at)
+         VALUES ('p1', '//?/D:/Code/demo', 'demo', 0, 'now', NULL)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO project_skill_installations
+         (project_id, skill_id, agent_id, installed_path, link_type, symlink_target, created_at)
+         VALUES ('p1', 'legacy', 'claude-code', 'D:/Code/demo/.claude/skills/legacy', 'copy', NULL, 'now')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    db::init_database(&pool).await.unwrap();
+
+    let source_origin: String = sqlx::query_scalar(
+        "SELECT source_origin FROM project_skill_installations
+         WHERE project_id = 'p1' AND skill_id = 'legacy'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(source_origin, "project");
+
+    let project_path: String = sqlx::query_scalar("SELECT path FROM projects WHERE id = 'p1'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(project_path, "D:/Code/demo");
 }
 
 #[tokio::test]
@@ -286,6 +374,17 @@ async fn install_skill_copy_writes_psi_and_copies_dir() {
 
     assert_eq!(psi.link_type, "copy");
     assert!(psi.symlink_target.is_none());
+    assert_eq!(psi.name, "seeded");
+    assert_eq!(psi.description.as_deref(), Some("seed"));
+    assert_eq!(
+        psi.file_path,
+        crate::paths::normalize_stored_path(
+            &project_root
+                .join(".claude/skills/seeded/SKILL.md")
+                .to_string_lossy()
+        )
+    );
+    assert_eq!(psi.source_origin, "central");
 
     let target = project_root.join(".claude/skills/seeded/SKILL.md");
     assert!(target.exists(), "copy should materialise SKILL.md");
@@ -297,6 +396,44 @@ async fn install_skill_copy_writes_psi_and_copies_dir() {
         .await
         .unwrap();
     assert!(row.is_some(), "psi row must exist after install");
+    assert_eq!(row.unwrap().source_origin, "central");
+}
+
+#[tokio::test]
+async fn rescan_preserves_central_origin_for_symlinked_central_install() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let canonical = tmp.path().join(".agents/skills/central-brain");
+    seed_central_skill(&pool, &canonical, "central-brain").await;
+
+    let project_root = tmp.path().join("proj");
+    std::fs::create_dir_all(&project_root).unwrap();
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+
+    let install_result = install_skill_to_project_impl(
+        &pool,
+        &project.id,
+        "central-brain",
+        "claude-code",
+        "symlink",
+    )
+    .await;
+    if let Err(err) = install_result {
+        if err.to_lowercase().contains("symlink") {
+            return;
+        }
+        panic!("unexpected install error: {err}");
+    }
+
+    rescan_project_impl(&pool, &project.id).await.unwrap();
+    let skills = get_project_skills_impl(&pool, &project.id).await.unwrap();
+    assert_eq!(skills.len(), 1);
+    assert_eq!(skills[0].source_origin, "central");
+    assert_eq!(skills[0].name, "central-brain");
+    assert_eq!(skills[0].description.as_deref(), Some("seed"));
 }
 
 #[tokio::test]

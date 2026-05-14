@@ -74,6 +74,16 @@ pub async fn update_project_pinned(pool: &DbPool, id: &str, pinned: bool) -> Res
         .map_err(|e| e.to_string())
 }
 
+pub async fn update_project_path(pool: &DbPool, id: &str, path: &str) -> Result<(), String> {
+    sqlx::query("UPDATE projects SET path = ? WHERE id = ?")
+        .bind(path)
+        .bind(id)
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 pub async fn update_project_last_scanned(
     pool: &DbPool,
     id: &str,
@@ -116,15 +126,34 @@ pub async fn upsert_project_skill_installation(
 ) -> Result<(), String> {
     sqlx::query(
         "INSERT INTO project_skill_installations
-         (project_id, skill_id, agent_id, installed_path, link_type, symlink_target, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+         (project_id, skill_id, name, description, file_path, source_origin,
+          agent_id, installed_path, link_type, symlink_target, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(project_id, skill_id, agent_id) DO UPDATE SET
              installed_path = excluded.installed_path,
+             name           = excluded.name,
+             description    = excluded.description,
+             file_path      = excluded.file_path,
+             source_origin  = CASE
+                 WHEN project_skill_installations.source_origin = 'central'
+                      AND (
+                          excluded.source_origin = 'central'
+                          OR project_skill_installations.installed_path = excluded.installed_path
+                      )
+                 THEN 'central'
+                 WHEN excluded.source_origin = 'central'
+                 THEN 'central'
+                 ELSE 'project'
+             END,
              link_type      = excluded.link_type,
              symlink_target = excluded.symlink_target",
     )
     .bind(&psi.project_id)
     .bind(&psi.skill_id)
+    .bind(&psi.name)
+    .bind(&psi.description)
+    .bind(&psi.file_path)
+    .bind(&psi.source_origin)
     .bind(&psi.agent_id)
     .bind(&psi.installed_path)
     .bind(&psi.link_type)

@@ -195,16 +195,38 @@ pub fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
+pub fn strip_windows_extended_path_prefix(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    if normalized.len() >= "//?/UNC/".len()
+        && normalized[.."//?/UNC/".len()].eq_ignore_ascii_case("//?/UNC/")
+    {
+        return format!("//{}", &normalized["//?/UNC/".len()..]);
+    }
+
+    if normalized.len() >= "//?/".len()
+        && normalized[.."//?/".len()].eq_ignore_ascii_case("//?/")
+    {
+        return normalized["//?/".len()..].to_string();
+    }
+
+    normalized
+}
+
+pub fn normalize_stored_path(path: &str) -> String {
+    let mut value = strip_windows_extended_path_prefix(path.trim());
+    while value.len() > 1 && value.ends_with('/') {
+        value.pop();
+    }
+    value
+}
+
 pub fn paths_equivalent(left: &Path, right: &Path) -> bool {
     normalize_equivalence_path(left) == normalize_equivalence_path(right)
 }
 
 fn normalize_equivalence_path(path: &Path) -> String {
     let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let mut value = resolved.to_string_lossy().replace('\\', "/");
-    while value.len() > 1 && value.ends_with('/') {
-        value.pop();
-    }
+    let mut value = normalize_stored_path(&resolved.to_string_lossy());
 
     #[cfg(windows)]
     value.make_ascii_lowercase();

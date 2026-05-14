@@ -6,6 +6,7 @@
 //! 旧 Discover 表结构的清理在 `schema/discovery.rs` 里完成（drop discovered_skills
 //! 与其索引）；这里只清剩下的 `settings.discover_scan_roots_config` 一行。
 
+use super::super::migrations::ensure_column;
 use crate::db::DbPool;
 
 pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
@@ -31,6 +32,10 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         "CREATE TABLE IF NOT EXISTS project_skill_installations (
             project_id      TEXT NOT NULL,
             skill_id        TEXT NOT NULL,
+            name            TEXT NOT NULL DEFAULT '',
+            description     TEXT,
+            file_path       TEXT NOT NULL DEFAULT '',
+            source_origin   TEXT NOT NULL DEFAULT 'project',
             agent_id        TEXT NOT NULL,
             installed_path  TEXT NOT NULL,
             link_type       TEXT NOT NULL,
@@ -44,6 +49,34 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    let alter_specs: &[(&str, &str, &str)] = &[
+        (
+            "project_skill_installations",
+            "name",
+            "ALTER TABLE project_skill_installations ADD COLUMN name TEXT NOT NULL DEFAULT ''",
+        ),
+        (
+            "project_skill_installations",
+            "description",
+            "ALTER TABLE project_skill_installations ADD COLUMN description TEXT",
+        ),
+        (
+            "project_skill_installations",
+            "file_path",
+            "ALTER TABLE project_skill_installations ADD COLUMN file_path TEXT NOT NULL DEFAULT ''",
+        ),
+        (
+            "project_skill_installations",
+            "source_origin",
+            "ALTER TABLE project_skill_installations ADD COLUMN source_origin TEXT NOT NULL DEFAULT 'project'",
+        ),
+    ];
+    for (table, column, alter_sql) in alter_specs {
+        ensure_column(pool, table, column, alter_sql).await?;
+    }
+
+    repair_extended_project_paths(pool).await?;
+
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_psi_project
          ON project_skill_installations(project_id)",
@@ -56,6 +89,29 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+async fn repair_extended_project_paths(pool: &DbPool) -> Result<(), String> {
+    let rows = sqlx::query_as::<_, (String, String)>(
+        "SELECT id, path FROM projects WHERE path LIKE '//?/%'",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    for (id, path) in rows {
+        let cleaned = crate::paths::normalize_stored_path(&path);
+        if cleaned != path {
+            sqlx::query("UPDATE projects SET path = ? WHERE id = ?")
+                .bind(cleaned)
+                .bind(id)
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+    }
 
     Ok(())
 }

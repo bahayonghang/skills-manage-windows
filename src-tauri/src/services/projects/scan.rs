@@ -63,8 +63,12 @@ fn scan_project_blocking(
             found.push(ProjectSkillInstallation {
                 project_id: project_id.clone(),
                 skill_id: s.id,
+                name: s.name,
+                description: s.description,
+                file_path: crate::paths::normalize_stored_path(&s.file_path),
+                source_origin: "project".to_string(),
                 agent_id: agent.id.clone(),
-                installed_path: s.dir_path,
+                installed_path: crate::paths::normalize_stored_path(&s.dir_path),
                 link_type,
                 symlink_target,
                 created_at: now.clone(),
@@ -105,8 +109,12 @@ pub async fn rescan_project(pool: &DbPool, project_id: &str) -> Result<usize, St
     .map_err(|e| format!("Failed to join project scan task: {}", e))?;
 
     // 先全量 upsert，再 reconcile 掉本项目下消失的 psi。
-    for psi in &found {
-        db::upsert_project_skill_installation(pool, psi).await?;
+    for scanned in &found {
+        let mut psi = scanned.clone();
+        if has_central_match(pool, &psi).await? {
+            psi.source_origin = "central".to_string();
+        }
+        db::upsert_project_skill_installation(pool, &psi).await?;
     }
 
     let kept_pairs: Vec<(String, String)> = found
@@ -118,4 +126,38 @@ pub async fn rescan_project(pool: &DbPool, project_id: &str) -> Result<usize, St
     db::update_project_last_scanned(pool, project_id, &now).await?;
 
     Ok(found.len())
+}
+
+async fn has_central_match(pool: &DbPool, psi: &ProjectSkillInstallation) -> Result<bool, String> {
+    if psi.link_type != "symlink" {
+        return Ok(false);
+    }
+
+    let target = match psi.symlink_target.as_deref() {
+        Some(target) if !target.trim().is_empty() => target,
+        _ => return Ok(false),
+    };
+    let central_skill = match db::get_skill_by_id(pool, &psi.skill_id).await? {
+        Some(skill) if skill.is_central => skill,
+        _ => return Ok(false),
+    };
+    let Some(canonical_path) = central_skill.canonical_path else {
+        return Ok(false);
+    };
+
+    let installed_parent = Path::new(&psi.installed_path)
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    let target_path = PathBuf::from(target);
+    let target_path = if target_path.is_absolute() {
+        target_path
+    } else {
+        installed_parent.join(target_path)
+    };
+
+    Ok(crate::paths::paths_equivalent(
+        &target_path,
+        Path::new(&canonical_path),
+    ))
 }
