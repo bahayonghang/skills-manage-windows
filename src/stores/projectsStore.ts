@@ -42,6 +42,23 @@ interface ProjectsState {
 
 let unlistenScanned: UnlistenFn | null = null;
 
+async function refreshProjectSkills(
+  projectId: string,
+  set: (
+    fn:
+      | Partial<ProjectsState>
+      | ((state: ProjectsState) => Partial<ProjectsState>)
+  ) => void
+): Promise<ProjectSkill[]> {
+  const skills = await invoke<ProjectSkill[]>("get_project_skills", {
+    id: projectId,
+  });
+  set((state) => ({
+    skillsByProject: { ...state.skillsByProject, [projectId]: skills },
+  }));
+  return skills;
+}
+
 async function setupScannedListener(
   set: (
     fn:
@@ -71,6 +88,9 @@ async function setupScannedListener(
           ),
           scanningProjectIds: nextScanning,
         };
+      });
+      void refreshProjectSkills(projectId, set).catch((err) => {
+        set({ error: String(err) });
       });
     }
   );
@@ -217,10 +237,7 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
   getProjectSkills: async (id: string) => {
     if (!isTauriRuntime()) return;
     try {
-      const skills = await invoke<ProjectSkill[]>("get_project_skills", { id });
-      set((state) => ({
-        skillsByProject: { ...state.skillsByProject, [id]: skills },
-      }));
+      await refreshProjectSkills(id, set);
     } catch (err) {
       set({ error: String(err) });
     }
@@ -264,11 +281,8 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
         agentId,
         method,
       });
-      const skills = await invoke<ProjectSkill[]>("get_project_skills", {
-        id: projectId,
-      });
+      const skills = await refreshProjectSkills(projectId, set);
       set((state) => ({
-        skillsByProject: { ...state.skillsByProject, [projectId]: skills },
         projects: state.projects.map((p) =>
           p.id === projectId ? { ...p, skillCount: skills.length } : p
         ),
@@ -287,11 +301,8 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
         skillId,
         agentId,
       });
-      const skills = await invoke<ProjectSkill[]>("get_project_skills", {
-        id: projectId,
-      });
+      const skills = await refreshProjectSkills(projectId, set);
       set((state) => ({
-        skillsByProject: { ...state.skillsByProject, [projectId]: skills },
         projects: state.projects.map((p) =>
           p.id === projectId ? { ...p, skillCount: skills.length } : p
         ),

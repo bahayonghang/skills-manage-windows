@@ -97,6 +97,7 @@ export interface UnifiedSkillCardProps {
   isCentral?: boolean;
   platformBadge?: { id: string; name: string };
   projectBadge?: string;
+  originBadge?: { kind: "central" | "project" | string; label: string };
 
   // ── central variant ──
   platformIcons?: {
@@ -147,6 +148,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     isCentral,
     platformBadge,
     projectBadge,
+    originBadge,
     platformIcons,
     sourceType,
     originKind,
@@ -387,6 +389,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             {/* Source indicator (platform) */}
             {sourceType && <SourceIndicator sourceType={sourceType} />}
 
+            {originBadge && <ProjectSourceBadge originBadge={originBadge} />}
+
             {/* "Already in Central" badge */}
             {isCentral && (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
@@ -549,6 +553,28 @@ function ReadOnlyBadge() {
       {t("platform.readOnly", {
         defaultValue: i18n.language.startsWith("zh") ? "只读" : "Read-only",
       })}
+    </span>
+  );
+}
+
+function ProjectSourceBadge({
+  originBadge,
+}: {
+  originBadge: { kind: "central" | "project" | string; label: string };
+}) {
+  const isCentral = originBadge.kind === "central";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+        isCentral
+          ? "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:text-sky-300"
+          : "bg-muted text-muted-foreground ring-border/70"
+      )}
+    >
+      {isCentral ? <Globe className="size-3 shrink-0" /> : <Folder className="size-3 shrink-0" />}
+      {originBadge.label}
     </span>
   );
 }

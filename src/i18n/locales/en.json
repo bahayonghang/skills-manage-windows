@@ -1179,6 +1179,8 @@
     "noSelection": "Select a project on the left to see its skills",
     "noSkills": "No skills installed in this project yet",
     "noSkillsHint": "Install a skill from the Central library or drop one into the platform directory and re-scan.",
+    "platformSkillCount": "{{count}} skills",
+    "otherPlatforms": "Other / hidden platforms",
     "foundSummary": "{{count}} projects",
     "pinned": "Pinned",
     "rename": "Rename",
@@ -1206,23 +1208,27 @@
     "renameSuccess": "Project name updated",
     "discoverDeprecatedTitle": "Discover has moved into Projects",
     "discoverDeprecatedBody": "Full-disk scanning is retired. Add a project manually and SkillPort will scan it on the spot.",
-    "discoverDeprecatedDismiss": "Got it"
+    "discoverDeprecatedDismiss": "Got it",
+    "sourceOrigin": {
+      "central": "Central library install",
+      "project": "Project original"
+    }
   },
   "projectInstall": {
     "title": "Install Central skill into \"{{name}}\"",
-    "description": "Pick a central skill and one or more agent target directories. The skill will land under {{path}} in each agent's project skills folder.",
+    "description": "Pick a central skill and one or more platform targets. The skill will land under {{path}} in each platform's project skills folder.",
     "pickSkill": "Pick skill",
     "searchSkills": "Search central skills...",
     "noSkills": "No matching central skills",
-    "pickAgents": "Target agents",
-    "noEligibleAgents": "No enabled agent supports project-level skill directories",
+    "pickAgents": "Target platforms",
+    "noEligibleAgents": "No enabled platform supports project-level skill directories",
     "willCreate": "+ Will create",
     "willReplace": "Replaces existing {{type}}",
     "noSkillSelected": "Pick a skill first",
-    "noAgentSelected": "Select at least one target agent",
-    "confirm": "Install into {{count}} dir(s)",
-    "installedSummary": "Installed \"{{skill}}\" into {{count}} agent dir(s)",
-    "installedPartial": "Some installs failed: {{failed}}"
+    "noAgentSelected": "Select at least one target platform",
+    "confirm": "Install into {{count}} platform(s)",
+    "installedSummary": "Installed \"{{skill}}\" into {{count}} platform target(s)",
+    "installedPartial": "Some platform installs failed: {{failed}}"
   },
   "marketplace": {
     "title": "Marketplace",

@@ -513,6 +513,9 @@ export interface ProjectSkill {
   skillId: string;
   name: string;
   description?: string | null;
+  filePath: string;
+  /** `'central'` | `'project'` */
+  sourceOrigin: "central" | "project" | string;
   agentId: string;
   agentDisplayName: string;
   installedPath: string;

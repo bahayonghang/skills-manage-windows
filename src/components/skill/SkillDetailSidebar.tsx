@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Copy, Download, FolderOpen, Loader2, Monitor, Plus, RefreshCw, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatPathForDisplay } from "@/lib/path";
 import {
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberIds,
@@ -536,7 +537,10 @@ export function SkillDetailSidebar({
                     >
                       <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
                       <div className="min-w-0 flex-1 space-y-0.5">
-                        <div className="truncate text-xs font-medium text-foreground" title={row.projectPath}>
+                        <div
+                          className="truncate text-xs font-medium text-foreground"
+                          title={formatPathForDisplay(row.projectPath)}
+                        >
                           {row.projectName}
                         </div>
                         <div className="truncate text-[10px] text-muted-foreground">

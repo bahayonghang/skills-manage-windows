@@ -1179,6 +1179,8 @@
     "noSelection": "请选择左侧的项目以查看其技能",
     "noSkills": "项目下还没有装入技能",
     "noSkillsHint": "从中央技能库中选择 skill 安装到此项目，或在文件管理器里手动放入对应平台目录后重新扫描。",
+    "platformSkillCount": "{{count}} 个技能",
+    "otherPlatforms": "其他/隐藏平台",
     "foundSummary": "共 {{count}} 个项目",
     "pinned": "已置顶",
     "rename": "重命名",
@@ -1206,23 +1208,27 @@
     "renameSuccess": "已更新项目名称",
     "discoverDeprecatedTitle": "Discover 已合并到「项目」",
     "discoverDeprecatedBody": "全盘扫描已下线。手动添加项目后单点扫描即可。",
-    "discoverDeprecatedDismiss": "知道了"
+    "discoverDeprecatedDismiss": "知道了",
+    "sourceOrigin": {
+      "central": "中央库安装",
+      "project": "项目原有"
+    }
   },
   "projectInstall": {
     "title": "把中央 skill 装到项目「{{name}}」",
-    "description": "选择要安装的中央 skill 与目标 agent 目录。skill 会落在项目根 {{path}} 下对应的平台子目录。",
+    "description": "选择要安装的中央 skill 与目标平台。skill 会落在项目根 {{path}} 下对应的平台子目录。",
     "pickSkill": "选择 skill",
     "searchSkills": "搜索中央 skill...",
     "noSkills": "没有匹配的中央 skill",
-    "pickAgents": "选择目标 agent",
-    "noEligibleAgents": "当前没有任何启用且支持项目级目录的 agent",
+    "pickAgents": "选择目标平台",
+    "noEligibleAgents": "当前没有任何启用且支持项目级目录的平台",
     "willCreate": "+ 将自动创建",
     "willReplace": "替换现有 {{type}}",
     "noSkillSelected": "请先选择一个 skill",
-    "noAgentSelected": "请至少选择一个目标 agent",
-    "confirm": "安装到 {{count}} 个目录",
-    "installedSummary": "已把「{{skill}}」装入 {{count}} 个 agent 目录",
-    "installedPartial": "部分目录安装失败：{{failed}}"
+    "noAgentSelected": "请至少选择一个目标平台",
+    "confirm": "安装到 {{count}} 个平台",
+    "installedSummary": "已把「{{skill}}」装入 {{count}} 个平台目标",
+    "installedPartial": "部分平台安装失败：{{failed}}"
   },
   "marketplace": {
     "title": "技能市场",

@@ -16,7 +16,15 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
+import { formatPathForDisplay } from "@/lib/path";
+import { groupProjectSkillsByPlatform } from "@/lib/projectSkillPlatformGroups";
+import {
+  getPlatformTargetMemberNames,
+  isUniversalPlatformTarget,
+  type PlatformTarget,
+} from "@/lib/platformTargetGroups";
 import { cn } from "@/lib/utils";
 import type { Project, ProjectSkill } from "@/types";
 
@@ -24,6 +32,7 @@ interface ProjectsShellProps {
   projects: Project[];
   currentProjectId: string | null;
   skills: ProjectSkill[];
+  platformTargets: PlatformTarget[];
   isAddingProject: boolean;
   scanningProjectIds: Set<string>;
   uninstallingKeys: Set<string>;
@@ -37,6 +46,29 @@ interface ProjectsShellProps {
   onTogglePin: (project: Project) => void | Promise<void>;
   onRequestRename: (project: Project) => void;
   onRequestRemove: (project: Project) => void;
+}
+
+function getProjectPlatformDisplayName(
+  target: PlatformTarget | null,
+  t: ReturnType<typeof useTranslation>["t"]
+): string {
+  if (!target) {
+    return t("projects.otherPlatforms");
+  }
+
+  return isUniversalPlatformTarget(target)
+    ? t("platformTargets.universalShortLabel")
+    : target.display_name;
+}
+
+function getProjectPlatformTitle(
+  target: PlatformTarget | null,
+  fallback: string
+): string {
+  if (!target) return fallback;
+  return isUniversalPlatformTarget(target)
+    ? getPlatformTargetMemberNames(target).join(", ")
+    : target.global_skills_dir;
 }
 
 function midEllipsis(input: string, max = 56): string {
@@ -134,7 +166,7 @@ function ProjectList({
               >
                 <button
                   onClick={() => onSelectProject(project.id)}
-                  title={project.path}
+                  title={formatPathForDisplay(project.path)}
                   aria-current={isActive ? "true" : undefined}
                   className="flex items-center gap-2 flex-1 min-w-0 px-2.5 py-2 cursor-pointer"
                 >
@@ -209,6 +241,7 @@ function ProjectList({
 interface SkillPanelProps {
   project: Project | null;
   skills: ProjectSkill[];
+  platformTargets: PlatformTarget[];
   isScanning: boolean;
   uninstallingKeys: Set<string>;
   onRescan: () => void | Promise<void>;
@@ -219,6 +252,7 @@ interface SkillPanelProps {
 function SkillPanel({
   project,
   skills,
+  platformTargets,
   isScanning,
   uninstallingKeys,
   onRescan,
@@ -226,6 +260,10 @@ function SkillPanel({
   onUninstallSkill,
 }: SkillPanelProps) {
   const { t } = useTranslation();
+  const platformGroups = useMemo(
+    () => groupProjectSkillsByPlatform(skills, platformTargets),
+    [skills, platformTargets]
+  );
 
   if (!project) {
     return (
@@ -241,12 +279,15 @@ function SkillPanel({
       <div className="px-6 py-3 border-b border-border flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold truncate">{project.name}</h2>
-          <p
-            className="text-xs text-muted-foreground truncate"
-            title={project.path}
+          <div
+            className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-full bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground"
+            title={formatPathForDisplay(project.path)}
           >
-            {midEllipsis(project.path)}
-          </p>
+            <Folder className="size-3 shrink-0 opacity-70" />
+            <span className="min-w-0 truncate font-mono">
+              {midEllipsis(formatPathForDisplay(project.path))}
+            </span>
+          </div>
         </div>
         <Button
           variant="default"
@@ -299,28 +340,78 @@ function SkillPanel({
             </Button>
           </div>
         ) : (
-          <div className="space-y-2">
-            {skills.map((skill) => {
-              const key = `${skill.agentId}:${skill.skillId}`;
-              const isLoading = uninstallingKeys.has(key);
-              const linkSource =
-                skill.linkType === "symlink" ? "symlink" : "copy";
+          <div className="space-y-4">
+            {platformGroups.map((group) => {
+              const platformName = getProjectPlatformDisplayName(group.target, t);
+              const title = getProjectPlatformTitle(group.target, platformName);
+              const headingId = `project-platform-${group.id}`;
               return (
-                <UnifiedSkillCard
-                  key={key}
-                  name={skill.name}
-                  description={skill.description ?? undefined}
-                  sourceType={linkSource}
-                  platformBadge={{
-                    id: skill.agentId,
-                    name: skill.agentDisplayName,
-                  }}
-                  onUninstallFromPlatform={() => onUninstallSkill(skill)}
-                  uninstallFromLabel={t("projects.uninstallFromAgent", {
-                    agent: skill.agentDisplayName,
-                  })}
-                  isLoading={isLoading}
-                />
+                <section
+                  key={group.id}
+                  aria-labelledby={headingId}
+                  className="space-y-2"
+                >
+                  <div
+                    className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 py-2"
+                    title={title}
+                  >
+                    {group.target ? (
+                      <PlatformIcon
+                        agentId={group.target.id}
+                        className="size-4 shrink-0"
+                      />
+                    ) : (
+                      <Folder className="size-4 shrink-0 text-muted-foreground" />
+                    )}
+                    <h3
+                      id={headingId}
+                      className="min-w-0 flex-1 truncate text-sm font-semibold"
+                    >
+                      {platformName}
+                    </h3>
+                    <span className="rounded-full bg-background/80 px-2 py-0.5 text-[10px] font-mono tabular-nums text-muted-foreground">
+                      {t("projects.platformSkillCount", {
+                        count: group.skills.length,
+                      })}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {group.skills.map((skill) => {
+                      const key = `${skill.agentId}:${skill.skillId}`;
+                      const isLoading = uninstallingKeys.has(key);
+                      const linkSource =
+                        skill.linkType === "symlink" ? "symlink" : "copy";
+                      const sourceOrigin =
+                        skill.sourceOrigin === "central" ? "central" : "project";
+                      const badgeName = group.target
+                        ? platformName
+                        : skill.agentDisplayName;
+                      const badgeId = group.target?.id ?? skill.agentId;
+                      return (
+                        <UnifiedSkillCard
+                          key={key}
+                          name={skill.name}
+                          description={skill.description ?? undefined}
+                          sourceType={linkSource}
+                          originBadge={{
+                            kind: sourceOrigin,
+                            label: t(`projects.sourceOrigin.${sourceOrigin}`),
+                          }}
+                          platformBadge={{
+                            id: badgeId,
+                            name: badgeName,
+                          }}
+                          onUninstallFromPlatform={() => onUninstallSkill(skill)}
+                          uninstallFromLabel={t("projects.uninstallFromAgent", {
+                            agent: badgeName,
+                          })}
+                          isLoading={isLoading}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
               );
             })}
           </div>
@@ -334,6 +425,7 @@ export function ProjectsShell({
   projects,
   currentProjectId,
   skills,
+  platformTargets,
   isAddingProject,
   scanningProjectIds,
   uninstallingKeys,
@@ -442,6 +534,7 @@ export function ProjectsShell({
         <SkillPanel
           project={currentProject}
           skills={skills}
+          platformTargets={platformTargets}
           isScanning={isCurrentScanning}
           uninstallingKeys={uninstallingKeys}
           onRescan={() => {

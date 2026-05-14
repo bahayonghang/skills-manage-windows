@@ -31,6 +31,8 @@ const sampleSkill: ProjectSkill = {
   skillId: "brainstorming",
   name: "brainstorming",
   description: "explore intent",
+  filePath: "D:/Code/demo/.claude/skills/brainstorming/SKILL.md",
+  sourceOrigin: "central",
   agentId: "claude-code",
   agentDisplayName: "Claude Code",
   installedPath: "D:/Code/demo/.claude/skills/brainstorming",
@@ -87,17 +89,26 @@ describe("projectsStore", () => {
     expect(state.scanningProjectIds.has(sampleProject.id)).toBe(true);
   });
 
-  it("project:scanned event clears scanning flag and updates skillCount", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(sampleProject);
+  it("project:scanned event clears scanning flag, updates count, and refreshes skills", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(sampleProject)
+      .mockResolvedValueOnce([sampleSkill]);
     await useProjectsStore.getState().addProject("D:/Code/demo");
 
     expect(scannedHandler).not.toBeNull();
     scannedHandler!({ payload: { projectId: sampleProject.id, skillCount: 3 } });
 
+    await vi.waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("get_project_skills", {
+        id: sampleProject.id,
+      });
+    });
+
     const state = useProjectsStore.getState();
     expect(state.scanningProjectIds.has(sampleProject.id)).toBe(false);
     expect(state.projects[0].skillCount).toBe(3);
     expect(state.projects[0].lastScannedAt).not.toBeNull();
+    expect(state.skillsByProject[sampleProject.id]).toEqual([sampleSkill]);
   });
 
   it("getProjectSkills populates skillsByProject", async () => {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { ProjectInstallDialog } from "../components/projects/ProjectInstallDialog";
+import { getPlatformTargetGroups } from "../lib/platformTargetGroups";
 import type {
   AgentWithStatus,
   Project,
@@ -11,7 +12,7 @@ import type {
 
 const mockProject: Project = {
   id: "abc123",
-  path: "D:/Code/demo",
+  path: "//?/D:/Code/demo",
   name: "demo",
   pinned: false,
   addedAt: "2026-05-13T00:00:00Z",
@@ -66,13 +67,18 @@ const mockOnConfirm = vi.fn();
 const mockOnOpenChange = vi.fn();
 
 function renderDialog(overrides: { existingSkills?: ProjectSkill[] } = {}) {
+  const platformTargets = getPlatformTargetGroups(mockAgents, {
+    coding: true,
+    lobster: true,
+  });
+
   render(
     <ProjectInstallDialog
       open={true}
       onOpenChange={mockOnOpenChange}
       project={mockProject}
       centralSkills={[mockSkill]}
-      agents={mockAgents}
+      platformTargets={platformTargets}
       existingSkills={overrides.existingSkills ?? []}
       isInstalling={false}
       onConfirm={mockOnConfirm}
@@ -90,15 +96,16 @@ describe("ProjectInstallDialog", () => {
     expect(
       screen.getByText(/把中央 skill 装到项目「demo」/)
     ).toBeInTheDocument();
+    expect(screen.getByText("Universal")).toBeInTheDocument();
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
-    expect(screen.getByText("Codex")).toBeInTheDocument();
+    expect(screen.queryByText("Codex")).not.toBeInTheDocument();
     // central agent should be filtered out
     expect(screen.queryByText("Central")).not.toBeInTheDocument();
   });
 
   it("disables confirm button until a skill is picked", () => {
     renderDialog();
-    const confirm = screen.getByRole("button", { name: /安装到 2 个目录/ });
+    const confirm = screen.getByRole("button", { name: /安装到 2 个平台/ });
     expect(confirm).toBeDisabled();
 
     fireEvent.click(screen.getByText("brainstorming"));
@@ -110,12 +117,29 @@ describe("ProjectInstallDialog", () => {
     renderDialog();
 
     fireEvent.click(screen.getByText("brainstorming"));
-    fireEvent.click(screen.getByRole("button", { name: /安装到 2 个目录/ }));
+    fireEvent.click(screen.getByRole("button", { name: /安装到 2 个平台/ }));
 
     await waitFor(() => {
       expect(mockOnConfirm).toHaveBeenCalledWith(
         "brainstorming",
         expect.arrayContaining(["claude-code", "codex"]),
+        "symlink"
+      );
+    });
+  });
+
+  it("passes the Universal representative agent when only Universal is selected", async () => {
+    mockOnConfirm.mockResolvedValueOnce(undefined);
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Claude Code/ }));
+    fireEvent.click(screen.getByText("brainstorming"));
+    fireEvent.click(screen.getByRole("button", { name: /安装到 1 个平台/ }));
+
+    await waitFor(() => {
+      expect(mockOnConfirm).toHaveBeenCalledWith(
+        "brainstorming",
+        ["codex"],
         "symlink"
       );
     });
@@ -127,6 +151,8 @@ describe("ProjectInstallDialog", () => {
       skillId: "brainstorming",
       name: "brainstorming",
       description: null,
+      filePath: "D:/Code/demo/.claude/skills/brainstorming/SKILL.md",
+      sourceOrigin: "central",
       agentId: "claude-code",
       agentDisplayName: "Claude Code",
       installedPath: "D:/Code/demo/.claude/skills/brainstorming",
@@ -136,5 +162,13 @@ describe("ProjectInstallDialog", () => {
     renderDialog({ existingSkills: [existing] });
     fireEvent.click(screen.getByText("brainstorming"));
     expect(screen.getByText(/替换现有 copy/)).toBeInTheDocument();
+  });
+
+  it("renders project paths in native Windows display form", () => {
+    renderDialog();
+
+    expect(
+      screen.getByText(/skill 会落在项目根 D:\\Code\\demo 下对应的平台子目录。/)
+    ).toBeInTheDocument();
   });
 });

@@ -16,14 +16,18 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
-import { hasProjectSkillPattern } from "@/lib/platformTargetGroups";
+import { PlatformIcon } from "@/components/platform/PlatformIcon";
+import { formatPathForDisplay } from "@/lib/path";
+import {
+  getPlatformTargetInstallAgentIds,
+  getPlatformTargetMemberIds,
+  getPlatformTargetMemberNames,
+  hasProjectSkillPattern,
+  isUniversalPlatformTarget,
+  type PlatformTarget,
+} from "@/lib/platformTargetGroups";
 import { cn } from "@/lib/utils";
-import type {
-  AgentWithStatus,
-  Project,
-  ProjectSkill,
-  SkillWithLinks,
-} from "@/types";
+import type { Project, ProjectSkill, SkillWithLinks } from "@/types";
 
 type InstallMethod = "symlink" | "copy";
 
@@ -32,7 +36,7 @@ interface ProjectInstallDialogProps {
   onOpenChange: (open: boolean) => void;
   project: Project | null;
   centralSkills: SkillWithLinks[];
-  agents: AgentWithStatus[];
+  platformTargets: PlatformTarget[];
   existingSkills: ProjectSkill[];
   isInstalling: boolean;
   onConfirm: (
@@ -47,26 +51,42 @@ export function ProjectInstallDialog({
   onOpenChange,
   project,
   centralSkills,
-  agents,
+  platformTargets,
   existingSkills,
   isInstalling,
   onConfirm,
 }: ProjectInstallDialogProps) {
   const { t } = useTranslation();
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
-  const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(
+  const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(
     new Set()
   );
   const [installMethod, setInstallMethod] = useState<InstallMethod>("symlink");
   const [skillSearch, setSkillSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const eligibleAgents = useMemo(
+  const eligibleTargets = useMemo(
     () =>
-      agents.filter(
-        (a) => a.id !== "central" && a.is_enabled && hasProjectSkillPattern(a)
+      platformTargets.filter(
+        (target) =>
+          target.id !== "central" &&
+          target.is_enabled &&
+          hasProjectSkillPattern(target)
       ),
-    [agents]
+    [platformTargets]
+  );
+
+  const selectedTargets = useMemo(
+    () => eligibleTargets.filter((target) => selectedTargetIds.has(target.id)),
+    [eligibleTargets, selectedTargetIds]
+  );
+
+  const selectedInstallAgentIds = useMemo(
+    () =>
+      Array.from(
+        new Set(selectedTargets.flatMap((target) => getPlatformTargetInstallAgentIds(target)))
+      ),
+    [selectedTargets]
   );
 
   const filteredSkills = useMemo(() => {
@@ -82,20 +102,36 @@ export function ProjectInstallDialog({
   useEffect(() => {
     if (!open) return;
     setSelectedSkillId(null);
-    setSelectedAgentIds(new Set(eligibleAgents.map((a) => a.id)));
+    setSelectedTargetIds(new Set(eligibleTargets.map((target) => target.id)));
     setInstallMethod("symlink");
     setSkillSearch("");
     setError(null);
-  }, [open, eligibleAgents]);
+  }, [open, eligibleTargets]);
 
-  function existingForAgent(skillId: string, agentId: string): ProjectSkill | undefined {
+  function getTargetDisplayName(target: PlatformTarget): string {
+    return isUniversalPlatformTarget(target)
+      ? t("platformTargets.universalShortLabel")
+      : target.display_name;
+  }
+
+  function getTargetTitle(target: PlatformTarget): string {
+    return isUniversalPlatformTarget(target)
+      ? getPlatformTargetMemberNames(target).join(", ")
+      : target.global_skills_dir;
+  }
+
+  function existingForTarget(
+    skillId: string,
+    target: PlatformTarget
+  ): ProjectSkill | undefined {
+    const memberIds = new Set(getPlatformTargetMemberIds(target));
     return existingSkills.find(
-      (s) => s.skillId === skillId && s.agentId === agentId
+      (s) => s.skillId === skillId && memberIds.has(s.agentId)
     );
   }
 
-  function toggleAgent(id: string) {
-    setSelectedAgentIds((prev) => {
+  function toggleTarget(id: string) {
+    setSelectedTargetIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -108,7 +144,7 @@ export function ProjectInstallDialog({
       setError(t("projectInstall.noSkillSelected"));
       return;
     }
-    if (selectedAgentIds.size === 0) {
+    if (selectedInstallAgentIds.length === 0) {
       setError(t("projectInstall.noAgentSelected"));
       return;
     }
@@ -116,7 +152,7 @@ export function ProjectInstallDialog({
     try {
       await onConfirm(
         selectedSkillId,
-        Array.from(selectedAgentIds),
+        selectedInstallAgentIds,
         installMethod
       );
       onOpenChange(false);
@@ -139,7 +175,9 @@ export function ProjectInstallDialog({
 
         <DialogBody className="space-y-5">
           <DialogDescription>
-            {t("projectInstall.description", { path: project.path })}
+            {t("projectInstall.description", {
+              path: formatPathForDisplay(project.path),
+            })}
           </DialogDescription>
 
           <div className="space-y-2">
@@ -202,28 +240,34 @@ export function ProjectInstallDialog({
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               {t("projectInstall.pickAgents")}
             </p>
-            {eligibleAgents.length === 0 ? (
+            {eligibleTargets.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 {t("projectInstall.noEligibleAgents")}
               </p>
             ) : (
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                {eligibleAgents.map((agent) => {
+                {eligibleTargets.map((target) => {
                   const exists = selectedSkillId
-                    ? existingForAgent(selectedSkillId, agent.id)
+                    ? existingForTarget(selectedSkillId, target)
                     : undefined;
-                  const isChecked = selectedAgentIds.has(agent.id);
+                  const isChecked = selectedTargetIds.has(target.id);
+                  const displayName = getTargetDisplayName(target);
                   return (
                     <label
-                      key={agent.id}
+                      key={target.id}
+                      title={getTargetTitle(target)}
                       className="flex items-center gap-2 cursor-pointer text-sm"
                     >
                       <Checkbox
                         checked={isChecked}
-                        onCheckedChange={() => toggleAgent(agent.id)}
+                        onCheckedChange={() => toggleTarget(target.id)}
+                      />
+                      <PlatformIcon
+                        agentId={target.id}
+                        className="size-3.5 shrink-0"
                       />
                       <span className="flex-1 truncate">
-                        {agent.display_name}
+                        {displayName}
                       </span>
                       {exists ? (
                         <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
@@ -286,7 +330,7 @@ export function ProjectInstallDialog({
           <Button
             onClick={handleConfirm}
             disabled={
-              isInstalling || !selectedSkillId || selectedAgentIds.size === 0
+              isInstalling || !selectedSkillId || selectedInstallAgentIds.length === 0
             }
           >
             {isInstalling ? (
@@ -295,7 +339,7 @@ export function ProjectInstallDialog({
                 {t("installDialog.installing")}
               </>
             ) : (
-              t("projectInstall.confirm", { count: selectedAgentIds.size })
+              t("projectInstall.confirm", { count: selectedTargets.length })
             )}
           </Button>
         </DialogFooter>

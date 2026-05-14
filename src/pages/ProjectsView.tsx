@@ -8,6 +8,8 @@ import { ProjectRemoveDialog } from "@/components/projects/ProjectRemoveDialog";
 import { ProjectRenameDialog } from "@/components/projects/ProjectRenameDialog";
 import { ProjectsShell } from "@/components/projects/ProjectsShell";
 import { DiscoverDeprecationBanner } from "@/components/projects/DiscoverDeprecationBanner";
+import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
+import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useProjectsStore } from "@/stores/projectsStore";
 import { useSkillStore } from "@/stores/skillStore";
@@ -40,6 +42,9 @@ export function ProjectsView() {
   const ensureEventListener = useProjectsStore((s) => s.ensureEventListener);
   const fetchCentralSkillsList = useSkillStore((s) => s.fetchCentralSkillsList);
   const agents = usePlatformStore((s) => s.agents);
+  const categoryVisibility =
+    usePlatformStore((s) => s.categoryVisibility) ??
+    DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
 
   const [projectSearch, setProjectSearch] = useState("");
   const [isAddingProject, setIsAddingProject] = useState(false);
@@ -78,6 +83,11 @@ export function ProjectsView() {
   const currentProject = useMemo(
     () => projects.find((p) => p.id === currentProjectId) ?? null,
     [projects, currentProjectId]
+  );
+
+  const projectPlatformTargets = useMemo(
+    () => getPlatformTargetGroups(agents, categoryVisibility),
+    [agents, categoryVisibility]
   );
 
   const handleSelectProject = useCallback(
@@ -271,6 +281,7 @@ export function ProjectsView() {
           projects={projects}
           currentProjectId={currentProjectId}
           skills={currentSkills}
+          platformTargets={projectPlatformTargets}
           isAddingProject={isAddingProject}
           scanningProjectIds={scanningProjectIds}
           uninstallingKeys={uninstallingKeys}
@@ -291,7 +302,7 @@ export function ProjectsView() {
         onOpenChange={setIsInstallOpen}
         project={currentProject}
         centralSkills={centralSkills}
-        agents={agents}
+        platformTargets={projectPlatformTargets}
         existingSkills={currentSkills}
         isInstalling={isInstalling}
         onConfirm={handleConfirmInstall}
