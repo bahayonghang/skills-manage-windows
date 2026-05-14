@@ -263,6 +263,27 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("button", { name: /OpenClaw/ })).not.toBeInTheDocument();
   });
 
+  it("keeps enabled global platform entries visible when saved categories are all hidden", () => {
+    vi.mocked(usePlatformStore).mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        categoryVisibility: {
+          coding: false,
+          lobster: false,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("button", { name: /Claude Code/ })).toBeInTheDocument();
+  });
+
   it("renders Dashboard as the first top-level destination", () => {
     renderSidebar();
     const dashboardButton = screen.getByRole("button", { name: /Dashboard/ });

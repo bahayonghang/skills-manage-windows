@@ -86,8 +86,13 @@ const mockCountsSummary: SkillCountsSummary = {
 };
 
 const mockCategoryVisibility = {
-  coding: false,
+  coding: true,
   lobster: true,
+};
+
+const allHiddenCategoryVisibility = {
+  coding: false,
+  lobster: false,
 };
 
 describe("platformStore", () => {
@@ -95,7 +100,7 @@ describe("platformStore", () => {
     usePlatformStore.setState({
       agents: [],
       platformPaths: {},
-    skillsByAgent: {},
+      skillsByAgent: {},
       collectionCount: 0,
       categoryVisibility: {
         coding: true,
@@ -312,16 +317,66 @@ describe("platformStore", () => {
   });
 
   it("setCategoryVisibility persists the setting", async () => {
+    usePlatformStore.setState({
+      categoryVisibility: {
+        coding: true,
+        lobster: false,
+      },
+    });
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await usePlatformStore.getState().setCategoryVisibility("lobster", true);
+
+    expect(invoke).toHaveBeenCalledWith("set_setting", {
+      key: "platform_category_visibility",
+      value: JSON.stringify({ coding: true, lobster: true }),
+    });
+    expect(usePlatformStore.getState().categoryVisibility).toEqual({
+      coding: true,
+      lobster: true,
+    });
+  });
+
+  it("setCategoryVisibility keeps the last visible platform group enabled", async () => {
+    usePlatformStore.setState({
+      agents: mockAgents,
+      platformPaths: {},
+      skillsByAgent: {},
+      collectionCount: 0,
+      categoryVisibility: {
+        coding: true,
+        lobster: false,
+      },
+      lastScanAt: null,
+      scanState: "idle",
+      isLoading: false,
+      isRefreshing: false,
+      error: null,
+    });
     vi.mocked(invoke).mockResolvedValueOnce(undefined);
 
     await usePlatformStore.getState().setCategoryVisibility("coding", false);
 
     expect(invoke).toHaveBeenCalledWith("set_setting", {
       key: "platform_category_visibility",
-      value: JSON.stringify({ coding: false, lobster: false }),
+      value: JSON.stringify({ coding: true, lobster: false }),
     });
     expect(usePlatformStore.getState().categoryVisibility).toEqual({
-      coding: false,
+      coding: true,
+      lobster: false,
+    });
+  });
+
+  it("hydrateShell ignores persisted category visibility that hides every platform group", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(mockBootstrapSnapshot)
+      .mockResolvedValueOnce(JSON.stringify(allHiddenCategoryVisibility))
+      .mockResolvedValueOnce(mockPlatformPaths);
+
+    await usePlatformStore.getState().hydrateShell();
+
+    expect(usePlatformStore.getState().categoryVisibility).toEqual({
+      coding: true,
       lobster: false,
     });
   });
@@ -330,7 +385,7 @@ describe("platformStore", () => {
     usePlatformStore.setState({
       agents: mockAgents,
       platformPaths: {},
-    skillsByAgent: {},
+      skillsByAgent: {},
       collectionCount: 0,
       categoryVisibility: {
         coding: true,

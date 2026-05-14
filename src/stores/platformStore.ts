@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  ensureAtLeastOnePlatformCategoryVisible,
   PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY,
   resolvePlatformCategoryVisibility,
   type PlatformCategoryKey,
@@ -457,8 +458,13 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
       ...previous,
       [category]: visible,
     };
+    const guardedNext = ensureAtLeastOnePlatformCategoryVisible(
+      next,
+      previous,
+      get().agents
+    );
 
-    set({ categoryVisibility: next, error: null });
+    set({ categoryVisibility: guardedNext, error: null });
 
     if (!isTauriRuntime()) {
       return;
@@ -467,7 +473,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     try {
       await invoke("set_setting", {
         key: PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY,
-        value: JSON.stringify(next),
+        value: JSON.stringify(guardedNext),
       });
     } catch (err) {
       set({ categoryVisibility: previous, error: String(err) });

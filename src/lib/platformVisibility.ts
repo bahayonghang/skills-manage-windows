@@ -65,6 +65,22 @@ export function normalizePlatformCategoryVisibility(
   };
 }
 
+export function ensureAtLeastOnePlatformCategoryVisible(
+  value: PlatformCategoryVisibility,
+  fallback = DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
+  agents: AgentWithStatus[] = []
+): PlatformCategoryVisibility {
+  if (value.coding || value.lobster || agents.length === 0) {
+    return value;
+  }
+
+  if (fallback.coding || fallback.lobster) {
+    return fallback;
+  }
+
+  return DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+}
+
 export function resolvePlatformCategoryVisibility(
   value: string | null | undefined,
   agents: AgentWithStatus[]
@@ -77,7 +93,11 @@ export function resolvePlatformCategoryVisibility(
 
   try {
     const parsed = JSON.parse(value) as Partial<PlatformCategoryVisibility>;
-    return normalizePlatformCategoryVisibility(parsed, fallback);
+    return ensureAtLeastOnePlatformCategoryVisible(
+      normalizePlatformCategoryVisibility(parsed, fallback),
+      fallback,
+      agents
+    );
   } catch {
     return fallback;
   }
@@ -108,9 +128,18 @@ export function filterVisiblePlatformAgents(
   agents: AgentWithStatus[],
   categoryVisibility: PlatformCategoryVisibility
 ): AgentWithStatus[] {
-  return agents.filter(
+  const visibleAgents = agents.filter(
     (agent) =>
       agent.id !== "central" && isPlatformAgentVisible(agent, categoryVisibility)
+  );
+
+  if (visibleAgents.length > 0 || categoryVisibility.coding || categoryVisibility.lobster) {
+    return visibleAgents;
+  }
+
+  return agents.filter(
+    (agent) =>
+      agent.id !== "central" && isPlatformAgentVisible(agent, DEFAULT_PLATFORM_CATEGORY_VISIBILITY)
   );
 }
 
