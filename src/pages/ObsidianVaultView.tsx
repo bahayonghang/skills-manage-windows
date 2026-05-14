@@ -63,6 +63,7 @@ export function ObsidianVaultView() {
   const [installTargetSkill, setInstallTargetSkill] = useState<ObsidianSkill | null>(null);
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
+  const [drawerInstallTargetSkill, setDrawerInstallTargetSkill] = useState<ObsidianSkill | null>(null);
   const [drawerFilePath, setDrawerFilePath] = useState<string | null>(null);
   const [drawerSourceMeta, setDrawerSourceMeta] = useState<{
     name: string;
@@ -124,10 +125,12 @@ export function ObsidianVaultView() {
   function openDrawerForSkill(skill: ObsidianSkill) {
     if (skill.is_already_central) {
       setDrawerSkillId(getPathBasename(skill.dir_path) ?? skill.id);
+      setDrawerInstallTargetSkill(skill);
       setDrawerFilePath(null);
       setDrawerSourceMeta(null);
     } else {
       setDrawerSkillId(null);
+      setDrawerInstallTargetSkill(null);
       setDrawerFilePath(skill.file_path);
       setDrawerSourceMeta({
         name: skill.name,
@@ -434,6 +437,7 @@ export function ObsidianVaultView() {
           setIsDrawerOpen(open);
           if (!open) {
             setDrawerSkillId(null);
+            setDrawerInstallTargetSkill(null);
             setDrawerFilePath(null);
             setDrawerSourceMeta(null);
           }
@@ -442,6 +446,14 @@ export function ObsidianVaultView() {
           drawerSkillId || drawerFilePath
             ? {
                 current: detailButtonRefs.current[drawerSkillId ?? drawerFilePath ?? ""] ?? null,
+            }
+            : undefined
+        }
+        onInstallClick={
+          drawerInstallTargetSkill
+            ? () => {
+                setInstallTargetSkill(drawerInstallTargetSkill);
+                setIsInstallDialogOpen(true);
               }
             : undefined
         }

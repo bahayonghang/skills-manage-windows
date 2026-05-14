@@ -21,6 +21,7 @@ const {
   mockRescan,
   mockUseCentralSkillsStore,
   mockUsePlatformStore,
+  mockUseSkillDetailStore,
   localTarget,
   renderCentralSkillsView,
   useTargetStore,
@@ -473,6 +474,7 @@ describe("CentralSkillsView", () => {
     const isTauriSpy = vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(false);
     mockUseCentralSkillsStore.mockRestore();
     mockUsePlatformStore.mockRestore();
+    mockUseSkillDetailStore.mockRestore();
 
     render(
       <MemoryRouter>

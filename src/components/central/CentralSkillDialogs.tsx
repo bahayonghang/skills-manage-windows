@@ -126,6 +126,7 @@ export function CentralSkillDialogs({
   onGitHubImport,
   onGitHubPreview,
   onInstall,
+  onInstallFromDrawer,
   onInstallImportedSkill,
   onRefreshCounts,
   onConfirmUpdateSkills,
@@ -218,6 +219,7 @@ export function CentralSkillDialogs({
     method: InstallMethod,
     projectPath?: string | null
   ) => Promise<BatchInstallResult>;
+  onInstallFromDrawer: (skill: SkillWithLinks) => void;
   onInstallImportedSkill: (
     skillId: string,
     agentIds: string[],
@@ -339,6 +341,12 @@ export function CentralSkillDialogs({
               }
             : undefined
         }
+        onInstallClick={(skillId) => {
+          const skill = skills.find((item) => item.id === skillId);
+          if (skill) {
+            onInstallFromDrawer(skill);
+          }
+        }}
       />
 
       <Suspense fallback={null}>

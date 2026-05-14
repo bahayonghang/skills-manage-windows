@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
+import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { Input } from "@/components/ui/input";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
@@ -57,6 +58,8 @@ export function PlatformView() {
   const centralSkills = useCentralSkillsStore((state) => state.skills);
   const loadCentralSkills = useCentralSkillsStore((state) => state.loadCentralSkills);
   const installSkill = useCentralSkillsStore((state) => state.installSkill);
+  const currentDetail = useSkillDetailStore((state) => state.detail);
+  const refreshDetailInstallations = useSkillDetailStore((state) => state.refreshInstallations);
   const refreshCounts = usePlatformStore((state) => state.refreshCounts);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -141,6 +144,9 @@ export function PlatformView() {
       await refreshCounts();
       if (resolvedAgentId) {
         await getSkillsByAgent(resolvedAgentId);
+      }
+      if (currentDetail?.id === skillId) {
+        await refreshDetailInstallations(skillId);
       }
       if (result.failed.length > 0) {
         const failedNames = result.failed
@@ -485,6 +491,9 @@ export function PlatformView() {
               }
             : undefined
         }
+        onInstallClick={(skillId) => {
+          void handleInstallClick(skillId);
+        }}
       />
     </div>
   );

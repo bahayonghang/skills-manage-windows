@@ -15,6 +15,8 @@ export interface SkillDetailDrawerProps {
   filePath?: string | null;
   /** Metadata for non-central source skills. */
   sourceMetadata?: SourceMetadata | null;
+  /** Opens the shared install dialog for central/installable skills. */
+  onInstallClick?: (skillId: string) => void;
 }
 
 export function SkillDetailDrawer({
@@ -26,6 +28,7 @@ export function SkillDetailDrawer({
   returnFocusRef,
   filePath,
   sourceMetadata,
+  onInstallClick,
 }: SkillDetailDrawerProps) {
   const titleId = useId();
   const showContent = open && (skillId !== null || filePath != null);
@@ -51,7 +54,7 @@ export function SkillDetailDrawer({
       titleId={showContent ? titleId : undefined}
       headerActions={
         showContent && !isReadOnly && skillId
-          ? <ModalInstallButton skillId={skillId} />
+          ? <ModalInstallButton skillId={skillId} onInstallClick={onInstallClick} />
           : undefined
       }
     >

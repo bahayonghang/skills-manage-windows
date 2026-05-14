@@ -560,6 +560,7 @@ export function CollectionsListView() {
               }
             : undefined
         }
+        onInstallClick={handleInstallSingleSkillClick}
       />
     </div>
   );

@@ -10,11 +10,13 @@ const {
   mockBatchInstallSkills,
   mockAgents,
   mockSkills,
+  mockInstallSkill,
   mockLoadDeletePreview,
   mockLoadRepositoryDeletePreview,
   mockDeleteCentralSkill,
   mockDeleteSkillRepository,
   mockRescan,
+  mockRefreshInstallations,
   renderCentralSkillsView,
 } = S;
 
@@ -159,6 +161,62 @@ describe("CentralSkillsView", () => {
       name: /将 .* 安装到平台/i,
     });
     expect(installButtons).toHaveLength(2);
+  });
+
+  it("opens the shared install dialog from the detail drawer header install button", async () => {
+    mockInstallSkill.mockResolvedValueOnce({
+      succeeded: ["codex", "claude-code"],
+      skipped: [],
+      failed: [],
+    });
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByRole("button", { name: /查看 frontend-design 的详情/i }));
+
+    expect(await screen.findByTestId("skill-detail-drawer")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "drawer-install:frontend-design" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("安装 frontend-design")).toBeInTheDocument();
+    expect(within(dialog).getByText("选择此技能的安装位置。")).toBeInTheDocument();
+    expect(within(dialog).getByRole("group", { name: "选择平台" })).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /安装到 2 个平台/i }));
+
+    await waitFor(() => {
+      expect(mockInstallSkill).toHaveBeenCalledWith(
+        "frontend-design",
+        ["codex", "claude-code"],
+        "symlink",
+        null
+      );
+    });
+    expect(mockBatchInstallSkills).not.toHaveBeenCalled();
+    expect(mockRescan).toHaveBeenCalled();
+  });
+
+  it("refreshes the open detail drawer installation state after confirming install", async () => {
+    mockInstallSkill.mockResolvedValueOnce({
+      succeeded: ["codex", "claude-code"],
+      skipped: [],
+      failed: [],
+    });
+    renderCentralSkillsView({
+      skillDetailOverrides: {
+        detail: { ...mockDeletePreview, id: "frontend-design" },
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /查看 frontend-design 的详情/i }));
+    expect(await screen.findByTestId("skill-detail-drawer")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "drawer-install:frontend-design" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /安装到 2 个平台/i }));
+
+    await waitFor(() => {
+      expect(mockRefreshInstallations).toHaveBeenCalledWith("frontend-design");
+    });
   });
 
 

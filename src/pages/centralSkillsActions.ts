@@ -8,6 +8,7 @@ import { useCentralSkillsImportWorkflow } from "@/pages/centralSkillsImportWorkf
 import { useCentralSkillsUpdateWorkflow } from "@/pages/centralSkillsUpdateWorkflow";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
+import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import type {
   BatchDeleteCentralSkillPreviewResult,
   BatchInstallResult,
@@ -95,6 +96,8 @@ export function useCentralSkillsActions({
   const loadCentralSkills = useCentralSkillsStore((store) => store.loadCentralSkills);
   const skipAiTagReview = useCentralSkillsStore((store) => store.skipAiTagReview);
   const togglePlatformLink = useCentralSkillsStore((store) => store.togglePlatformLink);
+  const currentDetail = useSkillDetailStore((store) => store.detail);
+  const refreshDetailInstallations = useSkillDetailStore((store) => store.refreshInstallations);
   const refreshCounts = usePlatformStore((store) => store.refreshCounts);
 
   const {
@@ -226,6 +229,9 @@ export function useCentralSkillsActions({
     try {
       const result = await installSkill(skillId, agentIds, method, projectPath) as BatchInstallResult;
       await refreshCounts();
+      if (currentDetail?.id === skillId) {
+        await refreshDetailInstallations(skillId);
+      }
       if (result.failed.length > 0) {
         const failedNames = result.failed
           .map((failure) => `${failure.agent_id}: ${failure.error}`)

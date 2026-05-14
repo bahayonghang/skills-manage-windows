@@ -36,6 +36,10 @@ vi.mock("@/stores/marketplaceStore", () => ({
   useMarketplaceStore: vi.fn(),
 }));
 
+vi.mock("@/stores/skillDetailStore", () => ({
+  useSkillDetailStore: vi.fn(),
+}));
+
 vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
 
@@ -164,15 +168,22 @@ vi.mock("@/components/skill/SkillDetailDrawer", () => ({
     skillId,
     onOpenChange,
     returnFocusRef,
+    onInstallClick,
   }: {
     open: boolean;
     skillId: string | null;
     onOpenChange: (open: boolean) => void;
     returnFocusRef?: { current: HTMLElement | null };
+    onInstallClick?: (skillId: string) => void;
   }) =>
     open ? (
       <div data-testid="skill-detail-drawer">
         <div>drawer-skill:{skillId}</div>
+        {skillId && onInstallClick ? (
+          <button onClick={() => onInstallClick(skillId)}>
+            drawer-install:{skillId}
+          </button>
+        ) : null}
         <button
           onClick={() => {
             onOpenChange(false);
@@ -189,6 +200,7 @@ import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
+import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { useTargetStore as targetStoreHook } from "@/stores/targetStore";
 import * as tauriBridgeModule from "@/lib/tauri";
 
@@ -405,10 +417,12 @@ export const mockResetGitHubImport = vi.fn();
 export const mockExportSkillportState = vi.fn();
 export const mockPreviewSkillportStateImport = vi.fn();
 export const mockImportSkillportState = vi.fn();
+export const mockRefreshInstallations = vi.fn();
 export const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
 export const mockUsePlatformStore = vi.mocked(usePlatformStore);
 export const mockUseSkillStore = vi.mocked(useSkillStore);
 export const mockUseMarketplaceStore = vi.mocked(useMarketplaceStore);
+export const mockUseSkillDetailStore = vi.mocked(useSkillDetailStore);
 export const localTarget: TargetSummary = {
   id: "local",
   kind: "local",
@@ -517,6 +531,14 @@ export function buildSkillStoreState(overrides = {}) {
   };
 }
 
+export function buildSkillDetailStoreState(overrides = {}) {
+  return {
+    detail: null,
+    refreshInstallations: mockRefreshInstallations,
+    ...overrides,
+  };
+}
+
 export function buildMarketplaceStoreState(overrides = {}) {
   return {
     githubImport: {
@@ -538,7 +560,14 @@ export function renderCentralSkillsView({
   centralOverrides = {},
   platformOverrides = {},
   skillOverrides = {},
+  skillDetailOverrides = {},
   marketplaceOverrides = {},
+}: {
+  centralOverrides?: Record<string, unknown>;
+  platformOverrides?: Record<string, unknown>;
+  skillOverrides?: Record<string, unknown>;
+  skillDetailOverrides?: Record<string, unknown>;
+  marketplaceOverrides?: Record<string, unknown>;
 } = {}) {
   mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
     const state = buildCentralStoreState(centralOverrides);
@@ -557,6 +586,11 @@ export function renderCentralSkillsView({
   });
   mockUseMarketplaceStore.mockImplementation((selector?: unknown) => {
     const state = buildMarketplaceStoreState(marketplaceOverrides);
+    if (typeof selector === "function") return selector(state);
+    return state;
+  });
+  mockUseSkillDetailStore.mockImplementation((selector?: unknown) => {
+    const state = buildSkillDetailStoreState(skillDetailOverrides);
     if (typeof selector === "function") return selector(state);
     return state;
   });

@@ -63,6 +63,7 @@ const mockRefreshExplanation = vi.fn();
 const mockReset = vi.fn();
 const mockRefreshCounts = vi.fn();
 const mockRefreshInstallations = vi.fn();
+const mockOnInstallClick = vi.fn();
 
 function applyStoreMocks(detailOverrides = {}, platformOverrides = {}) {
   vi.mocked(useSkillDetailStore).mockImplementation((selector?: unknown) => {
@@ -120,9 +121,11 @@ function applyStoreMocks(detailOverrides = {}, platformOverrides = {}) {
 function TestHarness({
   initialOpen = true,
   skillId = "frontend-design",
+  onInstallClick,
 }: {
   initialOpen?: boolean;
   skillId?: string | null;
+  onInstallClick?: (skillId: string) => void;
 }) {
   const [open, setOpen] = React.useState(initialOpen);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -140,6 +143,7 @@ function TestHarness({
           skillId={skillId}
           onOpenChange={setOpen}
           returnFocusRef={triggerRef}
+          onInstallClick={onInstallClick}
         />
       </div>
     </MemoryRouter>
@@ -176,6 +180,7 @@ function PlatformViewLikeHarness() {
             ? triggerRef
             : undefined
         }
+        onInstallClick={mockOnInstallClick}
       />
     </MemoryRouter>
   );
@@ -342,20 +347,40 @@ describe("SkillDetailDrawer – modal shell integration", () => {
     expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
   });
 
-  it("renders ModalInstallButton in header when skill is not read-only", async () => {
+  it("renders a disabled header install button when no install callback is available", async () => {
     applyStoreMocks({ detail: { ...mockDetail, is_read_only: false } });
     render(<TestHarness />);
 
     await screen.findByTestId("skill-detail-modal");
 
-    // ModalInstallButton renders a button with aria-label "安装 {name}"
+    expect(screen.getByRole("button", { name: /安装 frontend-design/i })).toBeDisabled();
+  });
+
+  it("renders install button in header when an install callback is available", async () => {
+    applyStoreMocks({ detail: { ...mockDetail, is_read_only: false } });
+    render(<TestHarness onInstallClick={mockOnInstallClick} />);
+
+    await screen.findByTestId("skill-detail-modal");
+
     const installButton = screen.getByRole("button", { name: /安装 frontend-design/i });
     expect(installButton).toBeInTheDocument();
   });
 
+  it("fires the install callback from the header install button", async () => {
+    applyStoreMocks({ detail: { ...mockDetail, is_read_only: false } });
+    render(<TestHarness onInstallClick={mockOnInstallClick} />);
+
+    await screen.findByTestId("skill-detail-modal");
+
+    fireEvent.click(screen.getByRole("button", { name: /安装 frontend-design/i }));
+
+    expect(mockOnInstallClick).toHaveBeenCalledWith("frontend-design");
+    expect(mockInstallSkill).not.toHaveBeenCalled();
+  });
+
   it("does not render ModalInstallButton when skill is read-only", async () => {
     applyStoreMocks({ detail: { ...mockDetail, is_read_only: true } });
-    render(<TestHarness />);
+    render(<TestHarness onInstallClick={mockOnInstallClick} />);
 
     await screen.findByTestId("skill-detail-modal");
 
