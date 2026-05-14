@@ -344,8 +344,11 @@ describe("settingsStore", () => {
       .mockResolvedValueOnce({
         ai_provider: "glm",
         ai_region: "cn",
-        ai_model: "glm-5",
-        ai_api_url: "https://open.bigmodel.cn/api/anthropic/v1/messages",
+        ai_model: "legacy-model",
+        ai_api_url: "https://legacy.example.com/v1/messages",
+        ai_model__glm: "glm-5",
+        ai_api_url__glm: "https://open.bigmodel.cn/api/anthropic/v1/messages",
+        ai_protocol__glm: "anthropic",
         ai_tag_concurrency: "2",
         ai_tag_interval_ms: "5000",
         ai_tag_stop_on_rate_limit: "false",
@@ -359,15 +362,18 @@ describe("settingsStore", () => {
     await useSettingsStore.getState().loadAiSettings();
 
     expect(invoke).toHaveBeenCalledWith("get_settings", {
-      keys: [
+      keys: expect.arrayContaining([
         "ai_provider",
         "ai_region",
         "ai_model",
         "ai_api_url",
+        "ai_model__glm",
+        "ai_api_url__custom",
+        "ai_protocol__custom",
         "ai_tag_concurrency",
         "ai_tag_interval_ms",
         "ai_tag_stop_on_rate_limit",
-      ],
+      ]),
     });
     expect(useSettingsStore.getState().aiSettings).toMatchObject({
       provider: "glm",
@@ -379,6 +385,7 @@ describe("settingsStore", () => {
       tagStopOnRateLimit: false,
     });
     expect(useSettingsStore.getState().aiApiKeyState.configured).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("get_ai_api_key_state", { provider: "glm" });
   });
 
   it("debounces rapid AI setting edits into one batch save", async () => {
@@ -394,6 +401,7 @@ describe("settingsStore", () => {
         apiKey: "",
         model: "",
         customUrl: "",
+        protocol: "",
         tagConcurrency: "1",
         tagIntervalMs: "4000",
         tagStopOnRateLimit: true,
@@ -408,9 +416,14 @@ describe("settingsStore", () => {
     await vi.advanceTimersByTimeAsync(800);
 
     expect(invoke).toHaveBeenCalledTimes(2);
-    expect(invoke).toHaveBeenNthCalledWith(1, "set_ai_api_key", { value: "abc" });
+    expect(invoke).toHaveBeenNthCalledWith(1, "set_ai_api_key", {
+      provider: "claude",
+      value: "abc",
+    });
     expect(invoke).toHaveBeenNthCalledWith(2, "set_settings", {
       values: expect.objectContaining({
+        ai_region__claude: "intl",
+        ai_model__claude: "",
         ai_tag_concurrency: "1",
         ai_tag_interval_ms: "4000",
         ai_tag_stop_on_rate_limit: "true",
@@ -423,7 +436,7 @@ describe("settingsStore", () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce({ configured: true, storageState: "stored", error: null })
       .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce("OK");
+      .mockResolvedValueOnce({ ok: true, msg: "OK" });
     useSettingsStore.setState({
       aiSettingsLoaded: true,
       aiSettings: {
@@ -432,6 +445,7 @@ describe("settingsStore", () => {
         apiKey: "key",
         model: "claude-sonnet-4-20250514",
         customUrl: "",
+        protocol: "",
         tagConcurrency: "1",
         tagIntervalMs: "4000",
         tagStopOnRateLimit: true,
@@ -441,12 +455,84 @@ describe("settingsStore", () => {
     const result = await useSettingsStore.getState().testAiConnection();
 
     expect(result.ok).toBe(true);
-    expect(invoke).toHaveBeenNthCalledWith(1, "set_ai_api_key", { value: "key" });
+    expect(invoke).toHaveBeenNthCalledWith(1, "set_ai_api_key", {
+      provider: "claude",
+      value: "key",
+    });
     expect(invoke).toHaveBeenNthCalledWith(2, "set_settings", {
       values: expect.not.objectContaining({ ai_api_key: expect.any(String) }),
     });
-    expect(invoke).toHaveBeenNthCalledWith(3, "explain_skill", {
-      content: "Test connection. Reply with: OK",
+    expect(invoke).toHaveBeenNthCalledWith(3, "test_ai_connection");
+  });
+
+  it("switchAiProvider restores scoped settings and reads scoped key state", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({ configured: true, storageState: "stored", error: null })
+      .mockResolvedValueOnce(undefined);
+    useSettingsStore.setState({
+      aiSettingsLoaded: true,
+      aiRawSettings: {
+        ai_model__deepseek: "deepseek-v4-flash",
+        ai_region__deepseek: "cn",
+        ai_api_url__custom: "https://proxy.example.com/v1/chat/completions",
+        ai_custom_base_url__custom: "https://proxy.example.com/v1",
+        ai_protocol__custom: "openai",
+      },
+      aiSettings: {
+        provider: "claude",
+        region: "intl",
+        apiKey: "",
+        model: "claude-sonnet-4-20250514",
+        customUrl: "",
+        protocol: "",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+    });
+
+    await useSettingsStore.getState().switchAiProvider("deepseek");
+
+    expect(useSettingsStore.getState().aiSettings).toMatchObject({
+      provider: "deepseek",
+      region: "cn",
+      model: "deepseek-v4-flash",
+      protocol: "",
+    });
+    expect(invoke).toHaveBeenNthCalledWith(1, "get_ai_api_key_state", { provider: "deepseek" });
+    expect(invoke).toHaveBeenNthCalledWith(2, "set_settings", {
+      values: expect.objectContaining({
+        ai_provider: "deepseek",
+        ai_model__deepseek: "deepseek-v4-flash",
+      }),
+    });
+  });
+
+  it("serializes custom base URL separately from resolved OpenAI URL", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    useSettingsStore.setState({
+      aiSettingsLoaded: true,
+      aiSettings: {
+        provider: "custom",
+        region: "intl",
+        apiKey: "",
+        model: "custom-model",
+        customUrl: "https://proxy.example.com/v1",
+        protocol: "openai",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+    });
+
+    await useSettingsStore.getState().flushAiSettings();
+
+    expect(invoke).toHaveBeenCalledWith("set_settings", {
+      values: expect.objectContaining({
+        ai_api_url__custom: "https://proxy.example.com/v1/chat/completions",
+        ai_custom_base_url__custom: "https://proxy.example.com/v1",
+        ai_protocol__custom: "openai",
+      }),
     });
   });
 
@@ -462,7 +548,7 @@ describe("settingsStore", () => {
 
     await useSettingsStore.getState().clearAiApiKey();
 
-    expect(invoke).toHaveBeenCalledWith("clear_ai_api_key");
+    expect(invoke).toHaveBeenCalledWith("clear_ai_api_key", { provider: "claude" });
     expect(useSettingsStore.getState().aiApiKeyState.configured).toBe(false);
     expect(useSettingsStore.getState().aiSettings.apiKey).toBe("");
   });

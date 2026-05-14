@@ -38,6 +38,7 @@ export function useSettingsViewBindings() {
   const aiTestResult = useSettingsStore((state) => state.aiTestResult);
   const loadAiSettings = useSettingsStore((state) => state.loadAiSettings);
   const updateAiSettings = useSettingsStore((state) => state.updateAiSettings);
+  const switchAiProvider = useSettingsStore((state) => state.switchAiProvider);
   const clearAiApiKey = useSettingsStore((state) => state.clearAiApiKey);
   const testAiConnection = useSettingsStore((state) => state.testAiConnection);
 
@@ -113,6 +114,7 @@ export function useSettingsViewBindings() {
     aiTestResult,
     loadAiSettings,
     updateAiSettings,
+    switchAiProvider,
     clearAiApiKey,
     testAiConnection,
     agents,

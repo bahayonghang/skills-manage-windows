@@ -1,4 +1,5 @@
-import { Bot, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { Bot, ChevronDown, ChevronRight, Eye, EyeOff, Loader2 } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,14 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { AI_PROVIDERS, REGION_LABELS, type RegionId } from "@/data/aiProviders";
+import {
+  AI_PROVIDERS,
+  API_PROTOCOLS,
+  REGION_LABEL_KEYS,
+  REGION_LABELS,
+  type ApiProtocol,
+  type RegionId,
+} from "@/data/aiProviders";
 import { formatBackendError } from "@/lib/backendError";
 import type {
   AiConnectionTestResult,
@@ -56,7 +64,9 @@ export function AiSettingsSection({
   onUpdateAiSettings,
 }: AiSettingsSectionProps) {
   const { t } = useTranslation();
+  const [showApiKey, setShowApiKey] = useState(false);
   const currentProvider = AI_PROVIDERS.find((provider) => provider.id === aiSettings.provider);
+  const aiControlsDisabled = isLoadingAiSettings || aiSaveStatus === "saving";
 
   return (
     <Card>
@@ -83,10 +93,11 @@ export function AiSettingsSection({
                   key={provider.id}
                   type="button"
                   onClick={() => onProviderChange(provider.id)}
+                  disabled={aiControlsDisabled}
                   aria-pressed={aiSettings.provider === provider.id}
                   className={`min-h-8 px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border md:min-h-7 ${aiSettings.provider === provider.id ? "bg-primary/15 border-primary text-foreground font-medium" : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-hover-bg/10"}`}
                 >
-                  {lang === "zh" ? provider.name.zh : provider.name.en}
+                  {t(provider.labelKey)}
                 </button>
               ))}
             </div>
@@ -96,6 +107,7 @@ export function AiSettingsSection({
               lang={lang}
               region={aiSettings.region}
               regions={currentProvider.regions}
+              disabled={aiControlsDisabled}
               onChange={(region) => onUpdateAiSettings({ region })}
             />
           )}
@@ -103,13 +115,26 @@ export function AiSettingsSection({
             <label htmlFor="settings-ai-api-key" className="text-xs text-muted-foreground mb-1 block">
               {t("settings.aiApiKeyLabel")}
             </label>
-            <Input
-              id="settings-ai-api-key"
-              type="password"
-              placeholder="sk-..."
-              value={aiSettings.apiKey}
-              onChange={(event) => onUpdateAiSettings({ apiKey: event.target.value })}
-            />
+            <div className="relative">
+              <Input
+                id="settings-ai-api-key"
+                type={showApiKey ? "text" : "password"}
+                placeholder="sk-..."
+                value={aiSettings.apiKey}
+                className="pr-10"
+                disabled={aiControlsDisabled}
+                onChange={(event) => onUpdateAiSettings({ apiKey: event.target.value })}
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-50"
+                disabled={aiControlsDisabled || !aiSettings.apiKey}
+                aria-label={showApiKey ? t("settings.aiApiKeyHide") : t("settings.aiApiKeyShow")}
+                onClick={() => setShowApiKey((value) => !value)}
+              >
+                {showApiKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
             {aiApiKeyState.configured && !aiSettings.apiKey ? (
               <p className="mt-1 text-xs text-muted-foreground">
                 {t("settings.aiApiKeyConfiguredNoReveal")}
@@ -126,11 +151,7 @@ export function AiSettingsSection({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={
-                  isLoadingAiSettings ||
-                  aiSaveStatus === "saving" ||
-                  !aiApiKeyState.configured
-                }
+                disabled={aiControlsDisabled || !aiApiKeyState.configured}
                 onClick={onClearApiKey}
               >
                 {t("settings.aiApiKeyClear")}
@@ -155,19 +176,28 @@ export function AiSettingsSection({
               id="settings-ai-model"
               placeholder={t("settings.aiModelPlaceholder")}
               value={aiSettings.model}
+              disabled={aiControlsDisabled}
               onChange={(event) => onUpdateAiSettings({ model: event.target.value })}
             />
           </div>
           {aiSettings.provider === "custom" && (
-            <div>
-              <label htmlFor="settings-ai-api-url" className="text-xs text-muted-foreground mb-1 block">
-                {t("settings.aiApiUrlLabel")}
-              </label>
-              <Input
-                id="settings-ai-api-url"
-                placeholder={t("settings.aiApiUrlPlaceholder")}
-                value={aiSettings.customUrl}
-                onChange={(event) => onUpdateAiSettings({ customUrl: event.target.value })}
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="settings-ai-api-url" className="text-xs text-muted-foreground mb-1 block">
+                  {t("settings.aiApiUrlLabel")}
+                </label>
+                <Input
+                  id="settings-ai-api-url"
+                  placeholder={t("settings.aiApiUrlPlaceholder")}
+                  value={aiSettings.customUrl}
+                  disabled={aiControlsDisabled}
+                  onChange={(event) => onUpdateAiSettings({ customUrl: event.target.value })}
+                />
+              </div>
+              <AiProtocolPicker
+                protocol={aiSettings.protocol}
+                disabled={aiControlsDisabled}
+                onChange={(protocol) => onUpdateAiSettings({ protocol })}
               />
             </div>
           )}
@@ -184,7 +214,7 @@ export function AiSettingsSection({
             <Button
               variant="outline"
               size="sm"
-              disabled={aiTesting || (!aiSettings.apiKey && !aiApiKeyState.configured) || !resolvedUrl}
+              disabled={aiControlsDisabled || aiTesting || (!aiSettings.apiKey && !aiApiKeyState.configured) || !resolvedUrl}
               onClick={onTestConnection}
               className="shrink-0"
             >
@@ -198,6 +228,7 @@ export function AiSettingsSection({
               aiTestResult={aiTestResult}
               currentProviderRegionCount={currentProvider.regions.length}
               lang={lang}
+              providerLabel={t(currentProvider.labelKey)}
               showAiTestDetails={showAiTestDetails}
               onSetShowAiTestDetails={onSetShowAiTestDetails}
             />
@@ -226,10 +257,11 @@ interface AiRegionPickerProps {
   lang: string;
   region: RegionId;
   regions: RegionId[];
+  disabled?: boolean;
   onChange: (region: RegionId) => void;
 }
 
-function AiRegionPicker({ lang, region, regions, onChange }: AiRegionPickerProps) {
+function AiRegionPicker({ lang: _lang, region, regions, disabled = false, onChange }: AiRegionPickerProps) {
   const { t } = useTranslation();
 
   return (
@@ -243,10 +275,51 @@ function AiRegionPicker({ lang, region, regions, onChange }: AiRegionPickerProps
             key={item}
             type="button"
             onClick={() => onChange(item)}
+            disabled={disabled}
             aria-pressed={region === item}
             className={`min-h-8 px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border md:min-h-7 ${region === item ? "bg-primary/15 border-primary text-foreground font-medium" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}
           >
-            {lang === "zh" ? REGION_LABELS[item].zh : REGION_LABELS[item].en}
+            {t(REGION_LABEL_KEYS[item])}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface AiProtocolPickerProps {
+  protocol: ApiProtocol;
+  disabled?: boolean;
+  onChange: (protocol: ApiProtocol) => void;
+}
+
+function AiProtocolPicker({
+  protocol,
+  disabled = false,
+  onChange,
+}: AiProtocolPickerProps) {
+  const { t } = useTranslation();
+
+  return (
+    <div>
+      <div id="settings-ai-protocol-label" className="text-xs text-muted-foreground mb-2">
+        {t("settings.aiProtocolLabel")}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-labelledby="settings-ai-protocol-label">
+        {API_PROTOCOLS.map((item) => (
+          <button
+            key={item.id || "auto"}
+            type="button"
+            role="radio"
+            disabled={disabled}
+            aria-checked={protocol === item.id}
+            onClick={() => onChange(item.id)}
+            className={`rounded-md border px-3 py-2 text-left text-xs transition-colors ${protocol === item.id ? "bg-primary/15 border-primary text-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}
+          >
+            <span className="block font-medium">{t(item.labelKey)}</span>
+            <span className="mt-1 block text-[11px] text-muted-foreground">
+              {t(item.descriptionKey)}
+            </span>
           </button>
         ))}
       </div>
@@ -356,6 +429,7 @@ interface AiTestResultPanelProps {
   aiTestResult: AiConnectionTestResult;
   currentProviderRegionCount: number;
   lang: string;
+  providerLabel: string;
   showAiTestDetails: boolean;
   onSetShowAiTestDetails: (value: boolean | ((current: boolean) => boolean)) => void;
 }
@@ -365,13 +439,16 @@ function AiTestResultPanel({
   aiTestResult,
   currentProviderRegionCount,
   lang,
+  providerLabel,
   showAiTestDetails,
   onSetShowAiTestDetails,
 }: AiTestResultPanelProps) {
   const { t } = useTranslation();
-  const message = aiTestResult.code
-    ? formatBackendError(`${aiTestResult.code}:${aiTestResult.msg}`, t)
-    : aiTestResult.msg;
+  const message = aiTestResult.ok
+    ? t("settings.aiTestSuccess", { provider: providerLabel })
+    : aiTestResult.code
+      ? formatBackendError(`${aiTestResult.code}:${aiTestResult.msg}`, t)
+      : aiTestResult.msg;
 
   return (
     <div className={`text-xs rounded-md px-3 py-2 space-y-1.5 ${aiTestResult.ok ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-destructive/10 text-destructive"}`}>

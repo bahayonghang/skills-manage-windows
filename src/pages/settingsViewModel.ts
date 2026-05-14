@@ -15,6 +15,7 @@ import {
 } from "@/lib/platformTargetGroups";
 import { matchesPlatformVisibilityQuery } from "@/components/settings/platformVisibilityUtils";
 import type { AiProvider } from "@/data/aiProviders";
+import { resolveProviderApiUrl } from "@/lib/aiProviderConfig";
 import type { AgentWithStatus, TargetSummary } from "@/types";
 import type { SshTargetFormState } from "@/components/settings/RemoteTargetsSettingsSection";
 
@@ -158,16 +159,19 @@ export function getAiProviderViewModel(
   const currentProvider = providers.find(
     (provider) => provider.id === aiSettings.provider
   );
-  const resolvedUrl =
-    aiSettings.provider === "custom"
-      ? aiSettings.customUrl
-      : currentProvider?.endpoints[aiSettings.region] ?? "";
+  const resolvedUrl = resolveProviderApiUrl({
+    providerId: aiSettings.provider,
+    region: aiSettings.region,
+    customUrl: aiSettings.customUrl,
+    protocol: aiSettings.protocol,
+  });
 
   return {
     aiProvider: aiSettings.provider,
     aiRegion: aiSettings.region,
     aiModel: aiSettings.model,
     aiCustomUrl: aiSettings.customUrl,
+    aiProtocol: aiSettings.protocol,
     currentProvider,
     resolvedUrl,
   };
@@ -181,11 +185,14 @@ export function getNextAiProviderPatch(
   const provider = providers.find((item) => item.id === id);
   return {
     provider: id,
-    model: provider?.defaultModel ?? aiSettings.model,
+    apiKey: "",
+    model: provider ? provider.defaultModel : aiSettings.model,
     region:
       provider && !provider.regions.includes(aiSettings.region)
         ? provider.regions[0]
         : aiSettings.region,
+    customUrl: id === "custom" ? aiSettings.customUrl : "",
+    protocol: id === "custom" ? aiSettings.protocol : "",
   };
 }
 
