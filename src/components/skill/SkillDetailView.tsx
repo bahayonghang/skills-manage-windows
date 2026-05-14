@@ -36,9 +36,9 @@ import type {
   SkillDetailRequest,
   SkillInstallation,
 } from "@/types";
-import type { DiscoverMetadata, PreviewTab } from "@/components/skill/skillDetailViewTypes";
+import type { SourceMetadata, PreviewTab } from "@/components/skill/skillDetailViewTypes";
 
-export type { DiscoverMetadata } from "@/components/skill/skillDetailViewTypes";
+export type { SourceMetadata } from "@/components/skill/skillDetailViewTypes";
 
 const NOOP_ASYNC = async () => undefined;
 const NOOP = () => undefined;
@@ -63,10 +63,10 @@ export interface SkillDetailViewProps {
   agentId?: string;
   /** Optional stable row identity for duplicate platform rows. */
   rowId?: string;
-  /** Direct file path to load content from. Used for discover non-central skills. */
+  /** Direct file path to load content from. Used for non-central source skills. */
   filePath?: string;
-  /** Metadata for discover non-central skills (shown in sidebar). */
-  discoverMetadata?: DiscoverMetadata;
+  /** Metadata for non-central source skills (shown in sidebar). */
+  sourceMetadata?: SourceMetadata;
   /** Affects local styling only, never behavior. */
   variant: "page" | "drawer";
   /** ViewHeader leftmost slot; currently null from both shells. */
@@ -84,7 +84,7 @@ export function SkillDetailView({
   agentId,
   rowId,
   filePath,
-  discoverMetadata,
+  sourceMetadata,
   variant,
   leading = null,
   onRequestClose: _onRequestClose,
@@ -123,6 +123,11 @@ export function SkillDetailView({
   const isDirectoryLoading = useSkillDetailStore((s) => s.isDirectoryLoading) ?? false;
   const loadDirectoryTree = useSkillDetailStore((s) => s.loadDirectoryTree) ?? NOOP_ASYNC;
   const resetFileMode = useSkillDetailStore((s) => s.resetFileMode) ?? NOOP;
+  const projectsUsingSkill = useSkillDetailStore((s) => s.projectsUsingSkill) ?? [];
+  const isLoadingProjectsUsingSkill =
+    useSkillDetailStore((s) => s.isLoadingProjectsUsingSkill) ?? false;
+  const loadProjectsUsingSkill =
+    useSkillDetailStore((s) => s.loadProjectsUsingSkill) ?? NOOP_ASYNC;
 
   const agents = usePlatformStore((s) => s.agents);
   const categoryVisibility =
@@ -202,10 +207,10 @@ export function SkillDetailView({
 
   const directoryPath = useMemo(() => {
     if (isFileMode) {
-      return discoverMetadata?.dirPath ?? null;
+      return sourceMetadata?.dirPath ?? null;
     }
     return detail?.dir_path ?? null;
-  }, [detail?.dir_path, discoverMetadata?.dirPath, isFileMode]);
+  }, [detail?.dir_path, sourceMetadata?.dirPath, isFileMode]);
 
   useEffect(() => {
     if (!directoryPath) {
@@ -214,6 +219,12 @@ export function SkillDetailView({
     }
     void loadDirectoryTree(directoryPath);
   }, [directoryPath, loadDirectoryTree]);
+
+  useEffect(() => {
+    if (skillId && detail?.is_central && !detail.is_read_only) {
+      void loadProjectsUsingSkill(skillId);
+    }
+  }, [skillId, detail?.is_central, detail?.is_read_only, loadProjectsUsingSkill]);
 
   useLayoutEffect(() => {
     if (explanationRequestKey && storeContent) {
@@ -404,21 +415,21 @@ export function SkillDetailView({
     }
   }, [content, explanationRequestKey, handleGenerateExplanation, i18n.language, isFileMode, refreshExplanation]);
 
-  const handleOpenDiscoverPath = useCallback(async () => {
-    if (!discoverMetadata) {
+  const handleOpenSourcePath = useCallback(async () => {
+    if (!sourceMetadata) {
       return;
     }
     try {
       if (isRemoteTarget) {
-        await navigator.clipboard.writeText(discoverMetadata.dirPath);
+        await navigator.clipboard.writeText(sourceMetadata.dirPath);
         toast.success(t("targets.pathCopied"));
         return;
       }
-      await openInFileManager(discoverMetadata.dirPath);
+      await openInFileManager(sourceMetadata.dirPath);
     } catch {
       // silently ignore
     }
-  }, [discoverMetadata, isRemoteTarget, openInFileManager, t]);
+  }, [sourceMetadata, isRemoteTarget, openInFileManager, t]);
 
   const handleOpenFileTreePath = useCallback(async (path: string) => {
     if (!path) {
@@ -441,9 +452,9 @@ export function SkillDetailView({
     : { frontmatterRaw: "", frontmatterData: {}, body: "" };
   const isBrowserFallback = !isTauriRuntime() && !isLoading && !detail && !error && !isFileMode;
   const effectiveName = isFileMode
-    ? (discoverMetadata?.name ?? "")
+    ? (sourceMetadata?.name ?? "")
     : (detail?.name ?? detailRequest?.skillId ?? "");
-  const effectiveDescription = isFileMode ? discoverMetadata?.description : detail?.description;
+  const effectiveDescription = isFileMode ? sourceMetadata?.description : detail?.description;
   const hasData = isFileMode ? content !== null : !!detail;
   const previewStackClassName =
     variant === "page" ? "mx-auto w-full max-w-5xl space-y-5" : "mx-auto w-full max-w-4xl space-y-5";
@@ -454,7 +465,7 @@ export function SkillDetailView({
         {leading}
         <div className="min-w-0 flex-1">
           <h1 id={titleId} className="truncate text-lg font-semibold">
-            {isLoading ? (skillId ?? discoverMetadata?.name ?? "") : effectiveName}
+            {isLoading ? (skillId ?? sourceMetadata?.name ?? "") : effectiveName}
           </h1>
           {effectiveDescription && (
             <p className="mt-0.5 truncate text-xs text-muted-foreground">{effectiveDescription}</p>
@@ -520,10 +531,10 @@ export function SkillDetailView({
             />
             <SkillDetailSidebar
               isFileMode={isFileMode}
-              discoverMetadata={discoverMetadata}
+              sourceMetadata={sourceMetadata}
               detail={detail}
               isRemoteTarget={isRemoteTarget}
-              onOpenDiscoverPath={handleOpenDiscoverPath}
+              onOpenSourcePath={handleOpenSourcePath}
               directoryTree={directoryTree}
               isDirectoryLoading={isDirectoryLoading}
               onOpenFileTreePath={handleOpenFileTreePath}
@@ -553,6 +564,8 @@ export function SkillDetailView({
               skillCollections={skillCollections}
               addToCollectionButtonRef={addToCollectionButtonRef}
               onOpenCollectionPicker={() => setIsCollectionPickerOpen(true)}
+              projectsUsingSkill={projectsUsingSkill}
+              isLoadingProjectsUsingSkill={isLoadingProjectsUsingSkill}
             />
           </div>
         )}

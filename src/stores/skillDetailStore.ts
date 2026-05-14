@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import type { UnlistenFn } from "@tauri-apps/api/event";
-import { DirectoryTreeEntry, SkillDetail, SkillDetailRequest } from "@/types";
+import { DirectoryTreeEntry, ProjectUsingSkill, SkillDetail, SkillDetailRequest } from "@/types";
 import { parseBackendError } from "@/lib/backendError";
 import {
   ExplanationErrorInfo,
@@ -22,13 +22,16 @@ interface SkillDetailState {
   isExplanationStreaming: boolean;
   explanationError: string | null;
   explanationErrorInfo: ExplanationErrorInfo | null;
-  /** File-mode buffers (used by Discover non-central skills loaded by path). */
+  /** File-mode buffers (used by non-central source skills loaded by path). */
   fileContent: string | null;
   fileIsLoading: boolean;
   fileExplanation: string | null;
   fileIsExplaining: boolean;
   directoryTree: DirectoryTreeEntry[];
   isDirectoryLoading: boolean;
+  /** Projects that have this central skill installed (per agent). */
+  projectsUsingSkill: ProjectUsingSkill[];
+  isLoadingProjectsUsingSkill: boolean;
 
   // Actions
   loadDetail: (request: SkillDetailRequest | string) => Promise<void>;
@@ -38,13 +41,15 @@ interface SkillDetailState {
   installSkill: (skillId: string, agentId: string) => Promise<void>;
   uninstallSkill: (skillId: string, agentId: string, rowId?: string | null) => Promise<void>;
   refreshInstallations: (skillId: string) => Promise<void>;
-  /** Read SKILL.md content directly from a path (Discover file mode). */
+  /** Read SKILL.md content directly from a path (file mode). */
   loadFileContent: (path: string) => Promise<void>;
   /** Generate a one-shot AI explanation for ad-hoc file content (no streaming). */
   explainFileContent: (content: string) => Promise<void>;
   /** Open the host file manager at `path`. No-op outside the Tauri runtime. */
   openInFileManager: (path: string) => Promise<void>;
   loadDirectoryTree: (path: string) => Promise<void>;
+  /** Load the "this skill is installed in N projects" reverse view. */
+  loadProjectsUsingSkill: (skillId: string) => Promise<void>;
   /** Reset only the file-mode buffers (used when SkillDetailView toggles modes). */
   resetFileMode: () => void;
   cleanupExplanationListeners: () => void;
@@ -220,6 +225,8 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
   fileIsExplaining: false,
   directoryTree: [],
   isDirectoryLoading: false,
+  projectsUsingSkill: [],
+  isLoadingProjectsUsingSkill: false,
 
   /**
    * Load skill detail metadata, then read raw SKILL.md content from the
@@ -480,6 +487,26 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
     }
   },
 
+  loadProjectsUsingSkill: async (skillId: string) => {
+    if (!skillId) {
+      set({ projectsUsingSkill: [], isLoadingProjectsUsingSkill: false });
+      return;
+    }
+    if (!isTauriRuntime()) {
+      set({ projectsUsingSkill: [], isLoadingProjectsUsingSkill: false });
+      return;
+    }
+    set({ isLoadingProjectsUsingSkill: true });
+    try {
+      const rows = await invoke<ProjectUsingSkill[]>("list_projects_using_skill", {
+        skillId,
+      });
+      set({ projectsUsingSkill: rows, isLoadingProjectsUsingSkill: false });
+    } catch {
+      set({ projectsUsingSkill: [], isLoadingProjectsUsingSkill: false });
+    }
+  },
+
   resetFileMode: () => {
     set({
       fileContent: null,
@@ -514,6 +541,8 @@ export const useSkillDetailStore = create<SkillDetailState>((set) => ({
       fileIsExplaining: false,
       directoryTree: [],
       isDirectoryLoading: false,
+      projectsUsingSkill: [],
+      isLoadingProjectsUsingSkill: false,
     });
   },
 }));

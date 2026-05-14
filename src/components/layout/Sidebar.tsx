@@ -3,9 +3,9 @@ import { useNavigate, useLocation } from "react-router-dom";
 import {
   Loader2,
   Blocks,
+  FolderOpen,
   LayoutDashboard,
   Layers,
-  Radar,
   ScrollText,
   Store,
   ChevronLeft,
@@ -97,7 +97,6 @@ export function Sidebar() {
     agents,
     skillsByAgent,
     collectionCount,
-    discoveredCount,
     isLoading,
     isRefreshing,
     scanState,
@@ -215,14 +214,13 @@ export function Sidebar() {
           count={skillsByAgent["central"]}
         />
 
-        {/* Discover */}
+          {/* Projects (project-level skill management) */}
           <NavItem
-            label={t("sidebar.discovered")}
-            isActive={pathname.startsWith("/discover")}
-            onClick={() => navigate("/discover")}
-            icon={<Radar className="size-4" />}
+            label={t("sidebar.projects")}
+            isActive={pathname.startsWith("/projects")}
+            onClick={() => navigate("/projects")}
+            icon={<FolderOpen className="size-4" />}
             expanded={expanded}
-            count={discoveredCount}
           />
 
           <NavItem

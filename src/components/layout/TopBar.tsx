@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Blocks, Search, Settings } from "lucide-react";
 
 import { usePlatformStore } from "@/stores/platformStore";
-import { useDiscoverStore } from "@/stores/discoverStore";
 import { TargetQuickSwitcher } from "@/components/layout/TargetQuickSwitcher";
 import { cn } from "@/lib/utils";
 import {
@@ -27,8 +26,6 @@ export function TopBar({ onSearchClick }: TopBarProps) {
   const skillsByAgent = usePlatformStore((s) => s.skillsByAgent);
   const categoryVisibility =
     usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
-  const totalDiscovered = usePlatformStore((s) => s.discoveredCount);
-  const isScanning = useDiscoverStore((s) => s.isScanning);
   const platformTargets = getPlatformTargetGroups(agents, categoryVisibility);
 
   // Determine current view label and count
@@ -54,9 +51,6 @@ export function TopBar({ onSearchClick }: TopBarProps) {
             : agent?.display_name ?? agentId,
         count: skillsByAgent[countAgentId] ?? 0,
       };
-    }
-    if (pathname.startsWith("/discover")) {
-      return { label: t("sidebar.discovered"), count: totalDiscovered };
     }
     if (pathname === "/marketplace") {
       return { label: t("marketplace.title"), count: undefined };
@@ -135,17 +129,6 @@ export function TopBar({ onSearchClick }: TopBarProps) {
           </span>
         )}
       </div>
-
-      {/* Scan indicator */}
-      {isScanning && (
-        <div className="mr-2 flex items-center gap-1.5 text-xs text-primary shrink-0">
-          <span className="relative flex size-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-            <span className="relative inline-flex rounded-full size-2 bg-primary" />
-          </span>
-          <span className="text-primary/70">{t("discover.scanning")}</span>
-        </div>
-      )}
 
       <TargetQuickSwitcher />
 

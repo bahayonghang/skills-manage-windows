@@ -54,7 +54,6 @@ export interface DashboardViewModel {
   aiReviewCount: number;
   centralPath: string;
   centralTotal: number;
-  discoveredCount: number;
   enabledTargets: PlatformTarget[];
   hasLoadError: string | null;
   healthSummary: string;
@@ -101,7 +100,6 @@ export function useDashboardViewModel({
   platformAgents,
   skillsByAgent,
   collectionCount,
-  discoveredCount,
   dashboardCentralSummary,
   categoryVisibility,
   lastScanAt,
@@ -129,7 +127,6 @@ export function useDashboardViewModel({
   platformAgents: AgentWithStatus[];
   skillsByAgent: Record<string, number>;
   collectionCount: number;
-  discoveredCount: number;
   dashboardCentralSummary: DashboardCentralSummary | null | undefined;
   categoryVisibility: PlatformCategoryVisibility | null | undefined;
   lastScanAt: string | null | undefined;
@@ -273,7 +270,6 @@ export function useDashboardViewModel({
     aiReviewCount,
     centralPath,
     centralTotal,
-    discoveredCount,
     enabledTargets,
     hasLoadError: loadError,
     healthSummary,

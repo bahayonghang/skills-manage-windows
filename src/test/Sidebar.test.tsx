@@ -67,7 +67,6 @@ function buildPlatformStoreState(overrides = {}) {
       central: 10,
     },
     collectionCount: 2,
-    discoveredCount: 6,
     categoryVisibility: {
       coding: true,
       lobster: true,
@@ -87,7 +86,6 @@ function buildPlatformStoreState(overrides = {}) {
     setAgentEnabled: vi.fn(),
     applyScanSummary: vi.fn(),
     setCollectionCount: vi.fn(),
-    setDiscoveredCount: vi.fn(),
     addCustomAgent: vi.fn(),
     updateCustomAgent: vi.fn(),
     removeCustomAgent: vi.fn(),
@@ -155,10 +153,10 @@ describe("Sidebar", () => {
     expect(nav).toHaveStyle({ width: "224px" });
   });
 
-  it("renders central, discover, collections, and platform entries", () => {
+  it("renders central, projects, collections, and platform entries", () => {
     renderSidebar();
     expect(screen.getByRole("button", { name: /中央技能库/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /项目技能库/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^项目$/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /技能集合/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /操作日志/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Claude Code/ })).toBeInTheDocument();

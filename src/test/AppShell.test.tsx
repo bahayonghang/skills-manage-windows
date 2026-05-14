@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
-import { useDiscoverStore } from "@/stores/discoverStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
@@ -20,10 +19,6 @@ vi.mock("@/stores/platformStore", () => ({
 
 vi.mock("@/stores/centralSkillsStore", () => ({
   useCentralSkillsStore: vi.fn(),
-}));
-
-vi.mock("@/stores/discoverStore", () => ({
-  useDiscoverStore: vi.fn(),
 }));
 
 vi.mock("@/stores/targetStore", () => ({
@@ -83,7 +78,6 @@ vi.mock("@/components/layout/GlobalSearchDialog", () => ({
 
 const mockUsePlatformStore = vi.mocked(usePlatformStore);
 const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
-const mockUseDiscoverStore = vi.mocked(useDiscoverStore);
 const mockUseTargetStore = vi.mocked(useTargetStore);
 const mockUseSkillStore = vi.mocked(useSkillStore);
 const mockUseMarketplaceStore = vi.mocked(useMarketplaceStore);
@@ -111,19 +105,6 @@ function createCentralSkillsState(overrides?: Partial<{
 }>) {
   return {
     loadCentralSkills: vi.fn().mockResolvedValue(undefined),
-    resetForTargetChange: vi.fn(),
-    ...overrides,
-  };
-}
-
-function createDiscoverState(overrides?: Partial<{
-  refreshCounts: ReturnType<typeof vi.fn>;
-  rescanFromDisk: ReturnType<typeof vi.fn>;
-  resetForTargetChange: ReturnType<typeof vi.fn>;
-}>) {
-  return {
-    refreshCounts: vi.fn().mockResolvedValue(undefined),
-    rescanFromDisk: vi.fn().mockResolvedValue(undefined),
     resetForTargetChange: vi.fn(),
     ...overrides,
   };
@@ -197,11 +178,6 @@ describe("AppShell", () => {
       if (typeof selector === "function") return selector(state);
       return state;
     });
-    mockUseDiscoverStore.mockImplementation((selector?: unknown) => {
-      const state = createDiscoverState();
-      if (typeof selector === "function") return selector(state);
-      return state;
-    });
     mockUseTargetStore.mockImplementation((selector?: unknown) => {
       const state = createTargetState();
       if (typeof selector === "function") return selector(state);
@@ -252,11 +228,9 @@ describe("AppShell", () => {
     expect((main as HTMLElement).scrollTop).toBe(0);
   });
 
-  it("routes the global rescan action to the platform, central, and discover disk scan stores", async () => {
+  it("routes the global rescan action to the platform and central stores", async () => {
     const mockRescan = vi.fn().mockResolvedValue(undefined);
     const mockLoadCentralSkills = vi.fn().mockResolvedValue(undefined);
-    const mockRefreshDiscoverCounts = vi.fn().mockResolvedValue(undefined);
-    const mockRescanDiscoverFromDisk = vi.fn().mockResolvedValue(undefined);
     triggerRescanInMock = true;
 
     mockUsePlatformStore.mockImplementation((selector?: unknown) => {
@@ -269,14 +243,6 @@ describe("AppShell", () => {
     mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
       const state = createCentralSkillsState({
         loadCentralSkills: mockLoadCentralSkills,
-      });
-      if (typeof selector === "function") return selector(state);
-      return state;
-    });
-    mockUseDiscoverStore.mockImplementation((selector?: unknown) => {
-      const state = createDiscoverState({
-        refreshCounts: mockRefreshDiscoverCounts,
-        rescanFromDisk: mockRescanDiscoverFromDisk,
       });
       if (typeof selector === "function") return selector(state);
       return state;
@@ -302,19 +268,15 @@ describe("AppShell", () => {
 
     expect(mockRescan).toHaveBeenCalledTimes(1);
     expect(mockLoadCentralSkills).toHaveBeenCalledTimes(1);
-    expect(mockRescanDiscoverFromDisk).toHaveBeenCalledTimes(1);
-    expect(mockRefreshDiscoverCounts).not.toHaveBeenCalled();
   });
 
-  it("waits for the platform rescan before refreshing central and rerunning discover from disk", async () => {
+  it("waits for the platform rescan before refreshing central", async () => {
     let resolveRescan!: () => void;
     const rescanPromise = new Promise<void>((resolve) => {
       resolveRescan = () => resolve();
     });
     const mockRescan = vi.fn().mockReturnValue(rescanPromise);
     const mockLoadCentralSkills = vi.fn().mockResolvedValue(undefined);
-    const mockRefreshDiscoverCounts = vi.fn().mockResolvedValue(undefined);
-    const mockRescanDiscoverFromDisk = vi.fn().mockResolvedValue(undefined);
     triggerRescanInMock = true;
 
     mockUsePlatformStore.mockImplementation((selector?: unknown) => {
@@ -327,14 +289,6 @@ describe("AppShell", () => {
     mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
       const state = createCentralSkillsState({
         loadCentralSkills: mockLoadCentralSkills,
-      });
-      if (typeof selector === "function") return selector(state);
-      return state;
-    });
-    mockUseDiscoverStore.mockImplementation((selector?: unknown) => {
-      const state = createDiscoverState({
-        refreshCounts: mockRefreshDiscoverCounts,
-        rescanFromDisk: mockRescanDiscoverFromDisk,
       });
       if (typeof selector === "function") return selector(state);
       return state;
@@ -360,29 +314,22 @@ describe("AppShell", () => {
 
     expect(mockRescan).toHaveBeenCalledTimes(1);
     expect(mockLoadCentralSkills).not.toHaveBeenCalled();
-    expect(mockRescanDiscoverFromDisk).not.toHaveBeenCalled();
-    expect(mockRefreshDiscoverCounts).not.toHaveBeenCalled();
 
     resolveRescan();
 
     await waitFor(() => {
       expect(mockLoadCentralSkills).toHaveBeenCalledTimes(1);
-      expect(mockRescanDiscoverFromDisk).toHaveBeenCalledTimes(1);
     });
-
-    expect(mockRefreshDiscoverCounts).not.toHaveBeenCalled();
   });
 
   it("clears stale counts and reloads target-bound data after active target changes", async () => {
     const mockInitialize = vi.fn().mockResolvedValue(undefined);
     const mockResetPlatformForTargetChange = vi.fn();
     const mockResetCentralForTargetChange = vi.fn();
-    const mockResetDiscoverForTargetChange = vi.fn();
     const mockResetSkillsForTargetChange = vi.fn();
     const mockResetMarketplaceForTargetChange = vi.fn();
     const mockRescan = vi.fn().mockResolvedValue(undefined);
     const mockLoadCentralSkills = vi.fn().mockResolvedValue(undefined);
-    const mockRescanDiscoverFromDisk = vi.fn().mockResolvedValue(undefined);
     let activeTarget: TargetSummary = {
       id: "local",
       kind: "local" as const,
@@ -403,14 +350,6 @@ describe("AppShell", () => {
       const state = createCentralSkillsState({
         loadCentralSkills: mockLoadCentralSkills,
         resetForTargetChange: mockResetCentralForTargetChange,
-      });
-      if (typeof selector === "function") return selector(state);
-      return state;
-    });
-    mockUseDiscoverStore.mockImplementation((selector?: unknown) => {
-      const state = createDiscoverState({
-        rescanFromDisk: mockRescanDiscoverFromDisk,
-        resetForTargetChange: mockResetDiscoverForTargetChange,
       });
       if (typeof selector === "function") return selector(state);
       return state;
@@ -469,12 +408,10 @@ describe("AppShell", () => {
     await waitFor(() => {
       expect(mockResetPlatformForTargetChange).toHaveBeenCalledTimes(1);
       expect(mockResetCentralForTargetChange).toHaveBeenCalledTimes(1);
-      expect(mockResetDiscoverForTargetChange).toHaveBeenCalledTimes(1);
       expect(mockResetSkillsForTargetChange).toHaveBeenCalledTimes(1);
       expect(mockResetMarketplaceForTargetChange).toHaveBeenCalledTimes(1);
       expect(mockRescan).toHaveBeenCalledTimes(1);
       expect(mockLoadCentralSkills).toHaveBeenCalledTimes(1);
-      expect(mockRescanDiscoverFromDisk).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -482,7 +419,6 @@ describe("AppShell", () => {
     const mockInitialize = vi.fn().mockResolvedValue(undefined);
     const mockResetPlatformForTargetChange = vi.fn();
     const mockResetCentralForTargetChange = vi.fn();
-    const mockResetDiscoverForTargetChange = vi.fn();
     const mockResetSkillsForTargetChange = vi.fn();
     const mockResetMarketplaceForTargetChange = vi.fn();
     const mockRescan = vi.fn().mockResolvedValue(undefined);
@@ -514,13 +450,6 @@ describe("AppShell", () => {
     mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
       const state = createCentralSkillsState({
         resetForTargetChange: mockResetCentralForTargetChange,
-      });
-      if (typeof selector === "function") return selector(state);
-      return state;
-    });
-    mockUseDiscoverStore.mockImplementation((selector?: unknown) => {
-      const state = createDiscoverState({
-        resetForTargetChange: mockResetDiscoverForTargetChange,
       });
       if (typeof selector === "function") return selector(state);
       return state;
@@ -565,7 +494,6 @@ describe("AppShell", () => {
     expect(mockLoadTargets).toHaveBeenCalledTimes(1);
     expect(mockResetPlatformForTargetChange).not.toHaveBeenCalled();
     expect(mockResetCentralForTargetChange).not.toHaveBeenCalled();
-    expect(mockResetDiscoverForTargetChange).not.toHaveBeenCalled();
     expect(mockResetSkillsForTargetChange).not.toHaveBeenCalled();
     expect(mockResetMarketplaceForTargetChange).not.toHaveBeenCalled();
     expect(mockRescan).not.toHaveBeenCalled();

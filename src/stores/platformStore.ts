@@ -148,7 +148,6 @@ function applyBootstrapSnapshot(
   | "platformPaths"
   | "skillsByAgent"
   | "collectionCount"
-  | "discoveredCount"
   | "dashboardCentralSummary"
   | "lastScanAt"
   | "scanState"
@@ -167,7 +166,6 @@ function applyBootstrapSnapshot(
     platformPaths: resolvedPlatformPaths,
     skillsByAgent: buildAgentCounts(agents, snapshot.cachedSkillCounts),
     collectionCount: snapshot.collectionCount,
-    discoveredCount: snapshot.discoveredCount,
     dashboardCentralSummary:
       snapshot.dashboardCentralSummary ?? BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY,
     lastScanAt: snapshot.lastScanAt,
@@ -181,7 +179,6 @@ async function loadBootstrapState(): Promise<
     | "agents"
     | "skillsByAgent"
     | "collectionCount"
-    | "discoveredCount"
     | "dashboardCentralSummary"
     | "lastScanAt"
     | "scanState"
@@ -214,7 +211,6 @@ interface PlatformState {
   platformPaths: PlatformPathMap;
   skillsByAgent: Record<string, number>;
   collectionCount: number;
-  discoveredCount: number;
   dashboardCentralSummary?: DashboardCentralSummary;
   categoryVisibility: PlatformCategoryVisibility;
   lastScanAt: string | null;
@@ -235,7 +231,6 @@ interface PlatformState {
   setAgentEnabled: (agentId: string, enabled: boolean) => Promise<void>;
   applyScanSummary: (summary: SkillCountsSummary) => void;
   setCollectionCount: (count: number) => void;
-  setDiscoveredCount: (count: number) => void;
   addCustomAgent: (config: CustomAgentConfig) => Promise<AgentWithStatus>;
   updateCustomAgent: (
     agentId: string,
@@ -251,7 +246,6 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   platformPaths: {},
   skillsByAgent: {},
   collectionCount: 0,
-  discoveredCount: 0,
   dashboardCentralSummary: BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY,
   categoryVisibility: DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
   lastScanAt: null,
@@ -271,7 +265,6 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         platformPaths: BROWSER_PLATFORM_PATHS,
         skillsByAgent: BROWSER_FIXTURE_COUNTS.skills_by_agent,
         collectionCount: 0,
-        discoveredCount: 1,
         dashboardCentralSummary: BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY,
         categoryVisibility: resolvePlatformCategoryVisibility(
           null,
@@ -417,7 +410,6 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         isRefreshing: false,
         scanState: "idle",
         collectionCount: state.collectionCount,
-        discoveredCount: state.discoveredCount,
         isLoading: state.isLoading,
         scanGeneration: (state.scanGeneration ?? 0) + 1,
       }));
@@ -449,7 +441,6 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
       platformPaths: {},
       skillsByAgent: {},
       collectionCount: 0,
-      discoveredCount: 0,
       dashboardCentralSummary: BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY,
       lastScanAt: null,
       scanState: "idle",
@@ -522,10 +513,6 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
 
   setCollectionCount: (count) => {
     set({ collectionCount: count });
-  },
-
-  setDiscoveredCount: (count) => {
-    set({ discoveredCount: count });
   },
 
   addCustomAgent: async (config) => {

@@ -38,10 +38,6 @@ vi.mock("../stores/centralSkillsStore", () => ({
   useCentralSkillsStore: vi.fn(),
 }));
 
-vi.mock("../stores/discoverStore", () => ({
-  useDiscoverStore: vi.fn(),
-}));
-
 vi.mock("../stores/marketplaceStore", () => ({
   useMarketplaceStore: vi.fn(),
 }));
@@ -56,7 +52,6 @@ import { usePlatformStore } from "../stores/platformStore";
 import { useThemeStore } from "../stores/themeStore";
 import { useTargetStore } from "../stores/targetStore";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
-import { useDiscoverStore } from "../stores/discoverStore";
 import { useMarketplaceStore } from "../stores/marketplaceStore";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -187,7 +182,6 @@ function setupMocks({
   deleteTarget = vi.fn(),
   switchTarget = vi.fn(),
   loadCentralSkills = vi.fn(),
-  refreshDiscoverCounts = vi.fn(),
   loadMarketplaceRegistries = vi.fn(),
   loadMarketplaceSkills = vi.fn(),
   flavor = "mocha" as const,
@@ -251,7 +245,6 @@ function setupMocks({
       platformPaths: {},
     skillsByAgent: {},
       collectionCount: 0,
-      discoveredCount: 0,
       categoryVisibility,
       lastScanAt: "2026-04-23T01:00:00Z",
       scanState: "idle",
@@ -268,7 +261,6 @@ function setupMocks({
       setAgentEnabled,
       applyScanSummary: vi.fn(),
       setCollectionCount: vi.fn(),
-      setDiscoveredCount: vi.fn(),
       addCustomAgent,
       updateCustomAgent,
       removeCustomAgent,
@@ -301,12 +293,6 @@ function setupMocks({
   vi.mocked(useCentralSkillsStore).mockImplementation((selector) =>
     selector({
       loadCentralSkills,
-    } as never)
-  );
-
-  vi.mocked(useDiscoverStore).mockImplementation((selector) =>
-    selector({
-      refreshCounts: refreshDiscoverCounts,
     } as never)
   );
 
@@ -582,7 +568,6 @@ describe("SettingsView", () => {
       updateSshTarget,
       rescan: vi.fn().mockResolvedValue(undefined),
       loadCentralSkills: vi.fn().mockResolvedValue(undefined),
-      refreshDiscoverCounts: vi.fn().mockResolvedValue(undefined),
       loadMarketplaceRegistries: vi.fn().mockResolvedValue(undefined),
     });
     renderSettingsView();

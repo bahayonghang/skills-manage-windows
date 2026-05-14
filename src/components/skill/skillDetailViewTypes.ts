@@ -1,4 +1,4 @@
-export interface DiscoverMetadata {
+export interface SourceMetadata {
   name: string;
   description?: string;
   platformName: string;

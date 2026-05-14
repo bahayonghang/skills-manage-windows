@@ -11,6 +11,7 @@ import type {
   AgentWithStatus,
   CentralSkillUpdateState,
   Collection,
+  ProjectUsingSkill,
   SkillDetail,
   SkillInstallation,
   SkillRepositoryWithStats,
@@ -28,15 +29,15 @@ import {
   SourceOriginBadge,
 } from "./SkillDetailViewShared";
 import { SkillDetailFileTree } from "./SkillDetailFileTree";
-import type { DiscoverMetadata } from "./skillDetailViewTypes";
+import type { SourceMetadata } from "./skillDetailViewTypes";
 import type { DirectoryTreeEntry } from "@/types";
 
 interface SkillDetailSidebarProps {
   isFileMode: boolean;
-  discoverMetadata?: DiscoverMetadata;
+  sourceMetadata?: SourceMetadata;
   detail: SkillDetail | null;
   isRemoteTarget: boolean;
-  onOpenDiscoverPath: () => void;
+  onOpenSourcePath: () => void;
   directoryTree: DirectoryTreeEntry[];
   isDirectoryLoading: boolean;
   onOpenFileTreePath: (path: string) => void;
@@ -64,6 +65,9 @@ interface SkillDetailSidebarProps {
   skillCollections: Collection[];
   addToCollectionButtonRef: RefObject<HTMLButtonElement | null>;
   onOpenCollectionPicker: () => void;
+  /** 3.8: 反向视图——本 skill 装在哪些项目下。仅在中央非只读 skill 上有值。 */
+  projectsUsingSkill?: ProjectUsingSkill[];
+  isLoadingProjectsUsingSkill?: boolean;
 }
 
 function PlatformInstallStatusGroups({
@@ -134,14 +138,14 @@ function PlatformInstallStatusGroups({
   );
 }
 
-function DiscoverMetadataSection({
-  discoverMetadata,
+function SourceMetadataSection({
+  sourceMetadata,
   isRemoteTarget,
-  onOpenDiscoverPath,
+  onOpenSourcePath,
 }: {
-  discoverMetadata: DiscoverMetadata;
+  sourceMetadata: SourceMetadata;
   isRemoteTarget: boolean;
-  onOpenDiscoverPath: () => void;
+  onOpenSourcePath: () => void;
 }) {
   const { t } = useTranslation();
 
@@ -151,33 +155,33 @@ function DiscoverMetadataSection({
       <div className="space-y-2.5">
         <div className="space-y-0.5">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
-            {t("discover.platform")}
+            {t("common.platform")}
           </div>
           <div className="inline-flex items-center gap-1 break-all font-mono text-xs leading-relaxed text-foreground">
             <Monitor className="size-3.5" />
-            <span>{discoverMetadata.platformName}</span>
+            <span>{sourceMetadata.platformName}</span>
           </div>
         </div>
         <div className="space-y-0.5">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
-            {t("discover.project")}
+            {t("common.project")}
           </div>
           <div className="inline-flex items-center gap-1 break-all font-mono text-xs leading-relaxed text-foreground">
             <FolderOpen className="size-3.5" />
-            <span>{discoverMetadata.projectName}</span>
+            <span>{sourceMetadata.projectName}</span>
           </div>
         </div>
         <div className="space-y-0.5">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
-            {t("discover.filePath")}
+            {t("common.filePath")}
           </div>
           <button
             type="button"
-            onClick={onOpenDiscoverPath}
+            onClick={onOpenSourcePath}
             className="cursor-pointer text-left font-mono text-xs leading-relaxed text-foreground break-all hover:text-primary hover:underline"
           >
             {isRemoteTarget && <Copy className="mr-1 inline size-3 shrink-0" />}
-            {discoverMetadata.filePath}
+            {sourceMetadata.filePath}
           </button>
         </div>
       </div>
@@ -187,10 +191,10 @@ function DiscoverMetadataSection({
 
 export function SkillDetailSidebar({
   isFileMode,
-  discoverMetadata,
+  sourceMetadata,
   detail,
   isRemoteTarget,
-  onOpenDiscoverPath,
+  onOpenSourcePath,
   directoryTree,
   isDirectoryLoading,
   onOpenFileTreePath,
@@ -218,6 +222,8 @@ export function SkillDetailSidebar({
   skillCollections,
   addToCollectionButtonRef,
   onOpenCollectionPicker,
+  projectsUsingSkill = [],
+  isLoadingProjectsUsingSkill = false,
 }: SkillDetailSidebarProps) {
   const { t, i18n } = useTranslation();
 
@@ -226,11 +232,11 @@ export function SkillDetailSidebar({
       data-testid="skill-detail-right-sidebar"
       className="scrollbar-subtle w-full min-w-0 shrink-0 space-y-5 overflow-x-hidden overflow-y-auto border-t border-border p-4 lg:w-72 lg:border-t-0 lg:border-l xl:w-80"
     >
-      {isFileMode && discoverMetadata ? (
-        <DiscoverMetadataSection
-          discoverMetadata={discoverMetadata}
+      {isFileMode && sourceMetadata ? (
+        <SourceMetadataSection
+          sourceMetadata={sourceMetadata}
           isRemoteTarget={isRemoteTarget}
-          onOpenDiscoverPath={onOpenDiscoverPath}
+          onOpenSourcePath={onOpenSourcePath}
         />
       ) : detail ? (
         <>
@@ -509,6 +515,50 @@ export function SkillDetailSidebar({
               )}
             </div>
           </section>
+
+          {detail.is_central && !detail.is_read_only && (
+            <section aria-label={t("detail.projectsUsingSkillRegion")}>
+              <SectionLabel>{t("detail.projectsUsingSkill")}</SectionLabel>
+              {isLoadingProjectsUsingSkill ? (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("detail.projectsUsingSkillLoading")}
+                </p>
+              ) : projectsUsingSkill.length === 0 ? (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("detail.projectsUsingSkillEmpty")}
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {projectsUsingSkill.map((row) => (
+                    <li
+                      key={`${row.projectId}:${row.agentId}`}
+                      className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5"
+                    >
+                      <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="truncate text-xs font-medium text-foreground" title={row.projectPath}>
+                          {row.projectName}
+                        </div>
+                        <div className="truncate text-[10px] text-muted-foreground">
+                          {row.agentDisplayName}
+                        </div>
+                      </div>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1",
+                          row.linkType === "symlink"
+                            ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-300"
+                            : "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300"
+                        )}
+                      >
+                        {row.linkType}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
 
           <section aria-label={t("detail.collections")}>
             <SectionLabel>{t("detail.collections")}</SectionLabel>

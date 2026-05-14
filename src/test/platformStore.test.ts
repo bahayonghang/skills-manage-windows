@@ -61,7 +61,6 @@ const mockBootstrapSnapshot: BootstrapSnapshot = {
     central: 3,
   },
   collectionCount: 2,
-  discoveredCount: 7,
   lastScanAt: "2026-04-23T01:00:00Z",
   scanState: "idle",
 };
@@ -98,7 +97,6 @@ describe("platformStore", () => {
       platformPaths: {},
     skillsByAgent: {},
       collectionCount: 0,
-      discoveredCount: 0,
       categoryVisibility: {
         coding: true,
         lobster: false,
@@ -118,7 +116,6 @@ describe("platformStore", () => {
     expect(state.agents).toEqual([]);
     expect(state.skillsByAgent).toEqual({});
     expect(state.collectionCount).toBe(0);
-    expect(state.discoveredCount).toBe(0);
     expect(state.categoryVisibility).toEqual({
       coding: true,
       lobster: false,
@@ -153,7 +150,6 @@ describe("platformStore", () => {
     expect(invoke).toHaveBeenNthCalledWith(6, "list_platform_paths");
     expect(state.skillsByAgent).toEqual(refreshedSnapshot.cachedSkillCounts);
     expect(state.collectionCount).toBe(2);
-    expect(state.discoveredCount).toBe(7);
     expect(state.categoryVisibility).toEqual(mockCategoryVisibility);
     expect(state.scanState).toBe("idle");
     expect(state.isLoading).toBe(false);
@@ -218,7 +214,6 @@ describe("platformStore", () => {
       platformPaths: {},
       skillsByAgent: mockBootstrapSnapshot.cachedSkillCounts,
       collectionCount: 2,
-      discoveredCount: 7,
       categoryVisibility: {
         coding: true,
         lobster: false,
@@ -249,7 +244,6 @@ describe("platformStore", () => {
       platformPaths: {},
       skillsByAgent: mockBootstrapSnapshot.cachedSkillCounts,
       collectionCount: 2,
-      discoveredCount: 7,
       categoryVisibility: {
         coding: true,
         lobster: false,
@@ -268,7 +262,6 @@ describe("platformStore", () => {
     expect(state.agents).toEqual([]);
     expect(state.skillsByAgent).toEqual({});
     expect(state.collectionCount).toBe(0);
-    expect(state.discoveredCount).toBe(0);
     expect(state.lastScanAt).toBeNull();
     expect(state.scanState).toBe("idle");
     expect(state.isLoading).toBe(true);
@@ -298,7 +291,6 @@ describe("platformStore", () => {
     expect(state.agents).toEqual(mockAgents);
     expect(state.skillsByAgent).toEqual(mockBootstrapSnapshot.cachedSkillCounts);
     expect(state.collectionCount).toBe(mockBootstrapSnapshot.collectionCount);
-    expect(state.discoveredCount).toBe(mockBootstrapSnapshot.discoveredCount);
     expect(state.categoryVisibility).toEqual(mockCategoryVisibility);
     expect(state.scanState).toBe("error");
     expect(state.error).toContain("ssh scan failed");
@@ -340,7 +332,6 @@ describe("platformStore", () => {
       platformPaths: {},
     skillsByAgent: {},
       collectionCount: 0,
-      discoveredCount: 0,
       categoryVisibility: {
         coding: true,
         lobster: false,

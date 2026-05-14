@@ -242,7 +242,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             <Checkbox
               checked={checkbox.checked}
               onCheckedChange={checkbox.onChange}
-              aria-label={t("discover.selectSkill")}
+              aria-label={t("common.selectSkill")}
             />
           </div>
         )}
@@ -315,8 +315,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   <button
                     onClick={onInstallToCentral}
                     disabled={isLoading}
-                    title={t("discover.installToCentral")}
-                    aria-label={t("discover.installToCentral")}
+                    title={t("common.installToCentral")}
+                    aria-label={t("common.installToCentral")}
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
                   >
                     {isLoading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpRight className="size-4" />}
@@ -328,8 +328,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   <button
                     onClick={onInstallToPlatform}
                     disabled={isLoading}
-                    title={t("discover.installToPlatform")}
-                    aria-label={t("discover.installToPlatform")}
+                    title={t("common.installToPlatform")}
+                    aria-label={t("common.installToPlatform")}
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
                   >
                     {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
@@ -391,7 +391,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             {isCentral && (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
                 <Globe className="size-3" />
-                {t("discover.alreadyCentral")}
+                {t("common.alreadyCentral")}
               </span>
             )}
 

@@ -186,7 +186,7 @@ export function BatchInstallCentralSkillsDialog({
                 <span className="text-sm">{t("central.batchInstallTargetProject")}</span>
                 {isRemoteTarget && (
                   <span className="text-xs text-muted-foreground">
-                    {t("targets.discoverUnsupported")}
+                    {t("targets.projectModeUnsupported")}
                   </span>
                 )}
               </label>

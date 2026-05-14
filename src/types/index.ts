@@ -53,7 +53,6 @@ export interface BootstrapSnapshot {
   cachedSkillCounts: Record<string, number>;
   dashboardCentralSummary?: DashboardCentralSummary;
   collectionCount: number;
-  discoveredCount: number;
   lastScanAt: string | null;
   scanState: ScanState;
 }
@@ -497,14 +496,49 @@ export type {
   UpdateSshTargetRequest,
 } from "./credentials";
 
-// ─── Discover Types ───────────────────────────────────────────────────────────
+// ─── Project-level Skill Management ──────────────────────────────────────────
 
-export interface ScanRoot {
+export interface Project {
+  id: string;
   path: string;
-  label: string;
-  exists: boolean;
-  enabled: boolean;
+  name: string;
+  pinned: boolean;
+  addedAt: string;
+  lastScannedAt?: string | null;
+  skillCount: number;
 }
+
+export interface ProjectSkill {
+  projectId: string;
+  skillId: string;
+  name: string;
+  description?: string | null;
+  agentId: string;
+  agentDisplayName: string;
+  installedPath: string;
+  /** `'symlink'` | `'copy'` */
+  linkType: string;
+  symlinkTarget?: string | null;
+}
+
+/** 反向视图：一个 skill 装在哪些项目下，供详情页 sidebar 渲染。 */
+export interface ProjectUsingSkill {
+  projectId: string;
+  projectName: string;
+  projectPath: string;
+  agentId: string;
+  agentDisplayName: string;
+  installedPath: string;
+  /** `'symlink'` | `'copy'` */
+  linkType: string;
+}
+
+export interface ProjectScannedPayload {
+  projectId: string;
+  skillCount: number;
+}
+
+// ─── Obsidian Vault Types ─────────────────────────────────────────────────────
 
 export interface ObsidianVault {
   id: string;
@@ -513,7 +547,7 @@ export interface ObsidianVault {
   skill_count: number;
 }
 
-export interface DiscoveredSkill {
+export interface ObsidianSkill {
   id: string;
   name: string;
   description?: string;
@@ -526,44 +560,7 @@ export interface DiscoveredSkill {
   is_already_central: boolean;
 }
 
-export interface DiscoveredProject {
-  project_path: string;
-  project_name: string;
-  skills: DiscoveredSkill[];
-}
-
-export interface DiscoverResult {
-  total_projects: number;
-  total_skills: number;
-  projects: DiscoveredProject[];
-}
-
-export interface DiscoveredSummary {
-  totalSkillsFound: number;
-  totalProjectsFound: number;
-}
-
-export interface DiscoverProgressPayload {
-  percent: number;
-  current_path: string;
-  skills_found: number;
-  projects_found: number;
-}
-
-export interface DiscoverFoundPayload {
-  project: DiscoveredProject;
-}
-
-export interface DiscoverCompletePayload {
-  total_projects: number;
-  total_skills: number;
-}
-
-export type ImportTarget =
-  | { type: "central" }
-  | { type: "platform"; agent_id: string };
-
-export interface DiscoverImportResult {
+export interface ObsidianImportResult {
   skill_id: string;
   target: string;
 }

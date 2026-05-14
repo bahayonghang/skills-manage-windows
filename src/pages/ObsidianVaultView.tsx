@@ -9,20 +9,20 @@ import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { Input } from "@/components/ui/input";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
+import { invoke } from "@/lib/tauri";
 import { getPathBasename } from "@/lib/path";
 import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 import { cn } from "@/lib/utils";
-import { useDiscoverStore } from "@/stores/discoverStore";
 import {
-  importToCentralFromDiscoveredOrSource,
-  importToPlatformFromDiscoveredOrSource,
+  importObsidianSkillToCentral,
+  importObsidianSkillToPlatform,
   useObsidianStore,
 } from "@/stores/obsidianStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useTargetStore } from "@/stores/targetStore";
-import type { BatchInstallResult, DiscoveredSkill, SkillWithLinks } from "@/types";
+import type { BatchInstallResult, ObsidianSkill, SkillWithLinks } from "@/types";
 
 function EmptyState({ message }: { message: string }) {
   return (
@@ -51,9 +51,6 @@ export function ObsidianVaultView() {
   const loadVaults = useObsidianStore((state) => state.loadVaults);
   const getVaultSkills = useObsidianStore((state) => state.getVaultSkills);
 
-  const refreshDiscoverCounts = useDiscoverStore((state) => state.refreshCounts);
-  const openPathInFileManager = useDiscoverStore((state) => state.openPathInFileManager);
-
   const agents = usePlatformStore((state) => state.agents);
   const categoryVisibility =
     usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
@@ -63,11 +60,11 @@ export function ObsidianVaultView() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [importingIds, setImportingIds] = useState<Set<string>>(new Set());
-  const [installTargetSkill, setInstallTargetSkill] = useState<DiscoveredSkill | null>(null);
+  const [installTargetSkill, setInstallTargetSkill] = useState<ObsidianSkill | null>(null);
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [drawerFilePath, setDrawerFilePath] = useState<string | null>(null);
-  const [drawerDiscoverMeta, setDrawerDiscoverMeta] = useState<{
+  const [drawerSourceMeta, setDrawerSourceMeta] = useState<{
     name: string;
     description?: string;
     platformName: string;
@@ -124,15 +121,15 @@ export function ObsidianVaultView() {
     detailButtonRefs.current[skillId] = node;
   }
 
-  function openDrawerForSkill(skill: DiscoveredSkill) {
+  function openDrawerForSkill(skill: ObsidianSkill) {
     if (skill.is_already_central) {
       setDrawerSkillId(getPathBasename(skill.dir_path) ?? skill.id);
       setDrawerFilePath(null);
-      setDrawerDiscoverMeta(null);
+      setDrawerSourceMeta(null);
     } else {
       setDrawerSkillId(null);
       setDrawerFilePath(skill.file_path);
-      setDrawerDiscoverMeta({
+      setDrawerSourceMeta({
         name: skill.name,
         description: skill.description,
         platformName: skill.platform_name,
@@ -153,8 +150,8 @@ export function ObsidianVaultView() {
     }
     setImportingIds((current) => new Set(current).add(skillId));
     try {
-      await importToCentralFromDiscoveredOrSource(skill);
-      await Promise.allSettled([refreshCounts(), refreshDiscoverCounts()]);
+      await importObsidianSkillToCentral(skill);
+      await refreshCounts();
       toast.success(t("obsidian.importSuccess"));
     } catch (err) {
       toast.error(t("obsidian.importError", { error: String(err) }));
@@ -183,13 +180,13 @@ export function ObsidianVaultView() {
     try {
       for (const agentId of agentIds) {
         try {
-          await importToPlatformFromDiscoveredOrSource(installTargetSkill, agentId, method);
+          await importObsidianSkillToPlatform(installTargetSkill, agentId, method);
           succeeded.push(agentId);
         } catch (err) {
           failed.push({ agent_id: agentId, error: String(err) });
         }
       }
-      await Promise.allSettled([refreshCounts(), refreshDiscoverCounts()]);
+      await refreshCounts();
       if (failed.length === 0) {
         toast.success(t("obsidian.importSuccess"));
       }
@@ -213,9 +210,9 @@ export function ObsidianVaultView() {
         toast.success(t("targets.pathCopied"));
         return;
       }
-      await openPathInFileManager?.(path);
+      await invoke("open_in_file_manager", { path });
     } catch (err) {
-      toast.error(t("discover.openPathError", { error: String(err) }));
+      toast.error(t("obsidian.openPathError", { error: String(err) }));
     }
   }
 
@@ -258,8 +255,8 @@ export function ObsidianVaultView() {
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  aria-label={t("discover.clearSearch")}
-                  title={t("discover.clearSearch")}
+                  aria-label={t("obsidian.clearSearch")}
+                  title={t("obsidian.clearSearch")}
                   className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   <X className="size-3.5" />
@@ -316,7 +313,7 @@ export function ObsidianVaultView() {
                     type="button"
                     onClick={() => void handleOpenVaultPath(selectedVault.path)}
                     className="block max-w-full truncate text-left text-xs text-muted-foreground hover:text-primary hover:underline"
-                    title={t("discover.openInFileManager")}
+                    title={t("obsidian.openInFileManager")}
                   >
                     {selectedVault.path}
                   </button>
@@ -332,7 +329,7 @@ export function ObsidianVaultView() {
                   <EmptyState
                     message={
                       normalizedSearchQuery
-                        ? t("discover.noMatch", { query: searchQuery })
+                        ? t("obsidian.noMatch", { query: searchQuery })
                         : t("obsidian.emptySkills")
                     }
                   />
@@ -432,13 +429,13 @@ export function ObsidianVaultView() {
         open={isDrawerOpen}
         skillId={drawerSkillId}
         filePath={drawerFilePath}
-        discoverMetadata={drawerDiscoverMeta}
+        sourceMetadata={drawerSourceMeta}
         onOpenChange={(open) => {
           setIsDrawerOpen(open);
           if (!open) {
             setDrawerSkillId(null);
             setDrawerFilePath(null);
-            setDrawerDiscoverMeta(null);
+            setDrawerSourceMeta(null);
           }
         }}
         returnFocusRef={
