@@ -6,6 +6,7 @@ import {
   Routes,
   useNavigate,
 } from "react-router-dom";
+import { toast } from "sonner";
 import { PlatformView } from "../pages/PlatformView";
 import { AgentWithStatus, ScannedSkill } from "../types";
 
@@ -24,6 +25,14 @@ vi.mock("../stores/centralSkillsStore", () => ({
 
 vi.mock("../stores/skillDetailStore", () => ({
   useSkillDetailStore: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  },
 }));
 
 vi.mock("../components/skill/SkillDetailDrawer", () => ({
@@ -165,6 +174,33 @@ const mockUniversalSkills: ScannedSkill[] = [
   },
 ];
 
+const mockDuplicateUniversalSkills: ScannedSkill[] = [
+  {
+    id: "shared-skill",
+    row_id: "shared-skill",
+    name: "shared-skill",
+    description: "Universal platform copy",
+    file_path: "~/.agents/skills/shared-skill/SKILL.md",
+    dir_path: "~/.agents/skills/shared-skill",
+    link_type: "copy",
+    is_central: false,
+  },
+  {
+    id: "shared-skill",
+    row_id: "codex::~/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill",
+    name: "shared-skill",
+    description: "Codex plugin copy",
+    file_path: "~/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill/SKILL.md",
+    dir_path: "~/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill",
+    link_type: "native",
+    is_central: false,
+    source_kind: "plugin",
+    source_root: "~/.codex/plugins/cache/openai/example/1.0.0",
+    is_read_only: true,
+    conflict_count: 2,
+  },
+];
+
 const mockDuplicateClaudeSkills: ScannedSkill[] = [
   {
     id: "shared-skill",
@@ -278,6 +314,7 @@ const mockInstallSkill = vi.fn();
 const mockUninstallSkillFromAgent = vi.fn();
 const mockRefreshCounts = vi.fn();
 const mockRefreshInstallations = vi.fn();
+const mockRescan = vi.fn();
 const mockUsePlatformStore = vi.mocked(usePlatformStore);
 const mockUseSkillStore = vi.mocked(useSkillStore);
 const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
@@ -300,7 +337,7 @@ function buildPlatformStoreState(overrides = {}) {
     initialize: vi.fn(),
     hydrateShell: vi.fn(),
     refreshScanInBackground: vi.fn(),
-    rescan: vi.fn(),
+    rescan: mockRescan,
     refreshCounts: mockRefreshCounts,
     resetForTargetChange: vi.fn(),
     applyScanSummary: vi.fn(),
@@ -399,6 +436,10 @@ describe("PlatformView", () => {
     mockRefreshCounts.mockReset();
     mockRefreshInstallations.mockReset();
     mockUninstallSkillFromAgent.mockReset();
+    mockRescan.mockReset();
+    vi.mocked(toast.success).mockReset();
+    vi.mocked(toast.error).mockReset();
+    vi.mocked(toast.info).mockReset();
     installDefaultStoreMocks();
   });
 
@@ -926,6 +967,101 @@ describe("PlatformView", () => {
         "claude-code::user::shared-skill"
       );
     });
+  });
+
+  it("scans for duplicates by rescanning and reloading the current platform list", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockDuplicateClaudeSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+    mockGetSkillsByAgent.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: /扫描 Claude Code 的重复技能/ }));
+
+    await waitFor(() => {
+      expect(mockRescan).toHaveBeenCalledTimes(1);
+      expect(mockGetSkillsByAgent).toHaveBeenCalledWith("claude-code");
+    });
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText(/清理重复技能/)).toBeInTheDocument();
+  });
+
+  it("duplicate cleanup for Claude deletes only the writable user row", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockDuplicateClaudeSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    fireEvent.click(screen.getByRole("button", { name: /扫描 Claude Code 的重复技能/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).getByText("插件只读副本（不会删除）")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /删除 1 个平台副本/ }));
+
+    await waitFor(() => {
+      expect(mockUninstallSkillFromAgent).toHaveBeenCalledTimes(1);
+    });
+    expect(mockUninstallSkillFromAgent).toHaveBeenCalledWith(
+      "shared-skill",
+      "claude-code",
+      "claude-code::user::shared-skill"
+    );
+    expect(mockRefreshCounts).toHaveBeenCalled();
+  });
+
+  it("duplicate cleanup for Universal uses the Codex representative without row id", async () => {
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockCodexAgent, mockCursorAgent],
+        skillsByAgent: {
+          "claude-code": mockSkills.length,
+          codex: mockDuplicateUniversalSkills.length,
+          cursor: mockCursorSkills.length,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { codex: mockDuplicateUniversalSkills },
+        loadingByAgent: { codex: false },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView("universal-agents");
+
+    fireEvent.click(screen.getByRole("button", { name: /扫描 Universal 的重复技能/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /删除 1 个平台副本/ }));
+
+    await waitFor(() => {
+      expect(mockUninstallSkillFromAgent).toHaveBeenCalledTimes(1);
+    });
+    expect(mockUninstallSkillFromAgent.mock.calls[0]).toEqual(["shared-skill", "codex"]);
+  });
+
+  it("shows a toast and does not open the dialog when no cleanable duplicates exist", async () => {
+    renderPlatformView();
+
+    fireEvent.click(screen.getByRole("button", { name: /扫描 Claude Code 的重复技能/ }));
+
+    await waitFor(() => {
+      expect(toast.info).toHaveBeenCalledWith("未发现可清理的重复技能");
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("does not pass ordinary row ids when uninstalling non-Claude platform skills", async () => {

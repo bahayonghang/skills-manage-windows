@@ -8,9 +8,11 @@ import { useSkillStore } from "@/stores/skillStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
+import { DuplicatePlatformSkillsDialog } from "@/components/platform/DuplicatePlatformSkillsDialog";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { formatPathForDisplay } from "@/lib/path";
@@ -24,6 +26,10 @@ import {
   getPlatformTargetGroups,
   isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
+import {
+  findDuplicatePlatformSkillGroups,
+} from "@/lib/platformDuplicateSkills";
+import type { DuplicatePlatformSkillGroup } from "@/lib/platformDuplicateSkills";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
@@ -48,6 +54,7 @@ export function PlatformView() {
   const agents = usePlatformStore((state) => state.agents);
   const categoryVisibility = usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const scanGeneration = usePlatformStore((state) => state.scanGeneration ?? 0);
+  const rescan = usePlatformStore((state) => state.rescan);
 
   const skillsByAgent = useSkillStore((state) => state.skillsByAgent);
   const loadingByAgent = useSkillStore((state) => state.loadingByAgent);
@@ -68,6 +75,10 @@ export function PlatformView() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [drawerSkill, setDrawerSkill] = useState<ScannedSkill | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [duplicateGroups, setDuplicateGroups] = useState<DuplicatePlatformSkillGroup[]>([]);
+  const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false);
+  const [isDuplicateScanning, setIsDuplicateScanning] = useState(false);
+  const [isDuplicateCleaning, setIsDuplicateCleaning] = useState(false);
   const [returnFocusRowKey, setReturnFocusRowKey] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -184,6 +195,89 @@ export function PlatformView() {
       await getSkillsByAgent(resolvedAgentId);
     } catch (err) {
       toast.error(t("detail.uninstallError", { error: String(err) }));
+    }
+  }
+
+  function getLatestSkillsForAgent(agentId: string) {
+    const getState = (
+      useSkillStore as typeof useSkillStore & {
+        getState?: () => { skillsByAgent: Record<string, ScannedSkill[]> };
+      }
+    ).getState;
+    return getState?.().skillsByAgent[agentId] ?? skills;
+  }
+
+  async function handleScanDuplicates() {
+    if (!resolvedAgentId) return;
+    setIsDuplicateScanning(true);
+    try {
+      await rescan();
+      await getSkillsByAgent(resolvedAgentId);
+      const latestSkills = getLatestSkillsForAgent(resolvedAgentId);
+      const groups = findDuplicatePlatformSkillGroups(latestSkills);
+      if (groups.length === 0) {
+        setDuplicateGroups([]);
+        setIsDuplicateDialogOpen(false);
+        toast.info(t("platform.duplicatesNone"));
+        return;
+      }
+
+      setDuplicateGroups(groups);
+      setIsDuplicateDialogOpen(true);
+      toast.success(
+        t("platform.duplicatesFound", {
+          skillCount: groups.length,
+          rowCount: groups.reduce((sum, group) => sum + group.writableRows.length, 0),
+        })
+      );
+    } catch (err) {
+      toast.error(t("platform.duplicatesScanError", { error: String(err) }));
+    } finally {
+      setIsDuplicateScanning(false);
+    }
+  }
+
+  async function handleCleanDuplicates(rows: ScannedSkill[]) {
+    if (!resolvedAgentId || rows.length === 0) return;
+    setIsDuplicateCleaning(true);
+    const failures: string[] = [];
+
+    for (const row of rows) {
+      const rowId = getClaudeUserRowId(row);
+      try {
+        if (rowId) {
+          await uninstallSkillFromAgent(row.id, resolvedAgentId, rowId);
+        } else {
+          await uninstallSkillFromAgent(row.id, resolvedAgentId);
+        }
+      } catch (err) {
+        failures.push(`${row.name}: ${String(err)}`);
+      }
+    }
+
+    try {
+      await refreshCounts();
+      await getSkillsByAgent(resolvedAgentId);
+      if (currentDetail && rows.some((row) => row.id === currentDetail.id)) {
+        await refreshDetailInstallations(currentDetail.id);
+      }
+    } finally {
+      setIsDuplicateCleaning(false);
+    }
+
+    const succeeded = rows.length - failures.length;
+    if (failures.length === 0) {
+      toast.success(t("platform.duplicatesCleanSuccess", { count: succeeded }));
+      setIsDuplicateDialogOpen(false);
+      setDuplicateGroups([]);
+    } else {
+      toast.error(
+        t("platform.duplicatesCleanPartial", {
+          succeeded,
+          failed: failures.length,
+          errors: failures.join("; "),
+        })
+      );
     }
   }
   const isLoading = resolvedAgentId ? (loadingByAgent[resolvedAgentId] ?? false) : false;
@@ -344,14 +438,25 @@ export function PlatformView() {
 
       {/* Search bar */}
       <div className="px-6 py-3 border-b border-border">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder={t("platform.searchPlaceholder")}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 bg-muted/40"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder={t("platform.searchPlaceholder")}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 bg-muted/40"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!resolvedAgentId || isDuplicateScanning || isLoading}
+            onClick={() => void handleScanDuplicates()}
+            aria-label={t("platform.scanDuplicatesLabel", { platform: platformDisplayName })}
+          >
+            {isDuplicateScanning ? t("platform.scanningDuplicates") : t("platform.scanDuplicates")}
+          </Button>
         </div>
       </div>
 
@@ -471,6 +576,15 @@ export function PlatformView() {
         skill={installTargetSkill}
         agents={installTargetAgents}
         onInstall={handleInstall}
+      />
+
+      <DuplicatePlatformSkillsDialog
+        open={isDuplicateDialogOpen}
+        onOpenChange={setIsDuplicateDialogOpen}
+        groups={duplicateGroups}
+        platformName={platformDisplayName}
+        isSubmitting={isDuplicateCleaning}
+        onConfirm={handleCleanDuplicates}
       />
 
       <SkillDetailDrawer
