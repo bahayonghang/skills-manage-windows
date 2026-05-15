@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createMarketplaceBaseState } from "./marketplaceStore.shared";
 import { createMarketplaceGitHubImportSlice } from "./marketplaceStore.githubImportSlice";
 import { createMarketplaceRegistrySlice } from "./marketplaceStore.registrySlice";
+import { createMarketplaceSkillsShSlice } from "./marketplaceStore.skillsShSlice";
 import type { MarketplaceState, MarketplaceStoreContext } from "./marketplaceStore.types";
 
 export type {
@@ -25,5 +26,6 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => {
     ...createMarketplaceBaseState(),
     ...createMarketplaceRegistrySlice(context),
     ...createMarketplaceGitHubImportSlice(context),
+    ...createMarketplaceSkillsShSlice(context),
   };
 });

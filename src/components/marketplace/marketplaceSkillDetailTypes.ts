@@ -7,6 +7,11 @@ export interface MarketplaceSkillDetail {
   sourceLabel?: string;
   sourceUrl?: string | null;
   installed?: boolean;
+  source?: string;
+  skillId?: string;
+  remoteKind?: "skills_sh";
+  installs?: number;
+  stars?: number | null;
 }
 
 export type MarketplaceDetailViewMode = "markdown" | "raw";

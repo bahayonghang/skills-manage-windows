@@ -11,10 +11,11 @@ import type {
   GitHubRepoImportResult,
   MarketplaceSkill,
   SkillRegistry,
+  SkillsShSkill,
   SkillWithLinks,
 } from "@/types";
 
-export type MarketplaceTabId = "recommended" | "official";
+export type MarketplaceTabId = "recommended" | "official" | "skillssh";
 
 export type MarketplacePreviewStatus =
   | { kind: "idle" }
@@ -60,6 +61,24 @@ export function mapGitHubPreviewSkillToPreviewSkill(
     name: skill.skillName,
     description: skill.description ?? undefined,
     downloadUrl: skill.downloadUrl,
+  };
+}
+
+export function mapSkillsShSkillToDetailSkill(skill: SkillsShSkill) {
+  return {
+    id: `skills.sh:${skill.source}:${skill.skill_id}`,
+    name: skill.name,
+    description: `${skill.source}/${skill.skill_id}`,
+    downloadUrl: `https://github.com/${skill.source}`,
+    publisher: skill.source,
+    sourceLabel: "skills.sh",
+    sourceUrl: `https://github.com/${skill.source}`,
+    installed: false,
+    source: skill.source,
+    skillId: skill.skill_id,
+    remoteKind: "skills_sh" as const,
+    installs: skill.installs,
+    stars: skill.stars ?? null,
   };
 }
 
@@ -149,6 +168,10 @@ export function useMarketplaceViewModel({
       {
         id: "official" as const,
         label: lang === "zh" ? "官方源目录" : "Official Directory",
+      },
+      {
+        id: "skillssh" as const,
+        label: "skills.sh",
       },
     ],
     [lang]

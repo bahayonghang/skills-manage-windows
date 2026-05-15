@@ -42,6 +42,10 @@ describe("marketplaceStore", () => {
         skillMarkdown: {},
         aiSummaries: {},
       },
+      skillsShResults: [],
+      skillsShQuery: "",
+      isSkillsShLoading: false,
+      skillsShError: null,
     });
   });
 
@@ -600,5 +604,88 @@ describe("marketplaceStore", () => {
     await expect(importPromise).resolves.toEqual(result);
     expect(useMarketplaceStore.getState().githubImport.importProgress).toBeNull();
     expect(useMarketplaceStore.getState().githubImport.importStartedAt).toBeNull();
+  });
+
+  it("searches skills.sh and stores results", async () => {
+    const results = [
+      {
+        id: "anthropics/skills/webapp-testing",
+        skill_id: "webapp-testing",
+        name: "webapp-testing",
+        source: "anthropics/skills",
+        installs: 68897,
+        stars: 1234,
+      },
+    ];
+    mockInvoke.mockResolvedValueOnce(results);
+
+    await expect(useMarketplaceStore.getState().searchSkillsSh(" webapp ")).resolves.toEqual(
+      results
+    );
+
+    expect(mockInvoke).toHaveBeenCalledWith("search_skills_sh", {
+      query: "webapp",
+      limit: 30,
+    });
+    expect(useMarketplaceStore.getState().skillsShResults).toEqual(results);
+    expect(useMarketplaceStore.getState().isSkillsShLoading).toBe(false);
+  });
+
+  it("installs a skills.sh skill with a stable source/id loading key", async () => {
+    mockInvoke.mockResolvedValueOnce("webapp-testing");
+
+    await expect(
+      useMarketplaceStore
+        .getState()
+        .installFromSkillsSh("anthropics/skills", "webapp-testing")
+    ).resolves.toBe("webapp-testing");
+
+    expect(mockInvoke).toHaveBeenCalledWith("install_from_skills_sh", {
+      source: "anthropics/skills",
+      skillId: "webapp-testing",
+    });
+    expect(
+      useMarketplaceStore
+        .getState()
+        .installingIds.has("skills.sh:anthropics/skills:webapp-testing")
+    ).toBe(false);
+  });
+
+  it("routes skills.sh detail file commands through Tauri", async () => {
+    mockInvoke
+      .mockResolvedValueOnce("https://raw.githubusercontent.com/anthropics/skills/main/webapp-testing/SKILL.md")
+      .mockResolvedValueOnce([
+        { name: "SKILL.md", path: "webapp-testing/SKILL.md", is_dir: false },
+      ])
+      .mockResolvedValueOnce("# webapp");
+
+    await expect(
+      useMarketplaceStore
+        .getState()
+        .resolveSkillsShUrl("anthropics/skills", "webapp-testing")
+    ).resolves.toContain("raw.githubusercontent.com");
+    await expect(
+      useMarketplaceStore
+        .getState()
+        .browseSkillsShDirectory("anthropics/skills", "webapp-testing")
+    ).resolves.toHaveLength(1);
+    await expect(
+      useMarketplaceStore
+        .getState()
+        .readSkillsShFile("anthropics/skills", "webapp-testing/SKILL.md")
+    ).resolves.toBe("# webapp");
+
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "resolve_skills_sh_url", {
+      source: "anthropics/skills",
+      skillId: "webapp-testing",
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "browse_skills_sh_directory", {
+      source: "anthropics/skills",
+      skillId: "webapp-testing",
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(3, "read_skills_sh_file", {
+      source: "anthropics/skills",
+      filePath: "webapp-testing/SKILL.md",
+    });
   });
 });

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import i18n from "@/i18n";
 import { setupExplanationStreamListeners } from "@/lib/explanationStream";
+import { buildDirectoryTreeFromSkillsShEntries } from "@/lib/fileTree";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { isTauriRuntime } from "@/lib/tauri";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
+import type { DirectoryTreeEntry } from "@/types";
 import type {
   MarketplaceDetailViewMode,
   MarketplaceSkillDetail,
@@ -23,9 +25,18 @@ export function useMarketplaceSkillDetailViewModel({
   const triggerSkillExplanation = useMarketplaceStore(
     (state) => state.triggerSkillExplanation
   );
+  const browseSkillsShDirectory = useMarketplaceStore(
+    (state) => state.browseSkillsShDirectory
+  );
+  const readSkillsShFile = useMarketplaceStore((state) => state.readSkillsShFile);
+  const resolveSkillsShUrl = useMarketplaceStore((state) => state.resolveSkillsShUrl);
   const [content, setContent] = useState("");
   const [contentError, setContentError] = useState<string | null>(null);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [fileTree, setFileTree] = useState<DirectoryTreeEntry[]>([]);
+  const [isFileTreeLoading, setIsFileTreeLoading] = useState(false);
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [resolvedDownloadUrl, setResolvedDownloadUrl] = useState<string | null>(null);
   const [viewMode, setViewMode] =
     useState<MarketplaceDetailViewMode>("markdown");
   const [explanation, setExplanation] = useState<string | null>(null);
@@ -34,13 +45,14 @@ export function useMarketplaceSkillDetailViewModel({
   const explanationRequestRef = useRef(0);
   const explanationUnlistenRef = useRef<(() => void) | null>(null);
   const browserMode = !isTauriRuntime();
+  const isSkillsShDetail = skill?.remoteKind === "skills_sh" && !!skill.source && !!skill.skillId;
 
   const cleanupExplanation = useCallback(() => {
     explanationUnlistenRef.current?.();
     explanationUnlistenRef.current = null;
   }, []);
 
-  const fetchContent = useCallback(async () => {
+  const fetchContent = useCallback(async (pathOverride?: string | null) => {
     if (!open || !skill?.downloadUrl) {
       return;
     }
@@ -48,7 +60,13 @@ export function useMarketplaceSkillDetailViewModel({
     setIsLoadingContent(true);
     setContentError(null);
     try {
-      const response = await fetch(skill.downloadUrl);
+      if (isSkillsShDetail && skill.source && pathOverride) {
+        setContent(await readSkillsShFile(skill.source, pathOverride));
+        setSelectedFilePath(pathOverride);
+        return;
+      }
+
+    const response = await fetch(resolvedDownloadUrl ?? skill.downloadUrl);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -59,7 +77,14 @@ export function useMarketplaceSkillDetailViewModel({
     } finally {
       setIsLoadingContent(false);
     }
-  }, [open, skill?.downloadUrl]);
+  }, [
+    isSkillsShDetail,
+    open,
+    readSkillsShFile,
+    resolvedDownloadUrl,
+    skill?.downloadUrl,
+    skill?.source,
+  ]);
 
   useEffect(() => {
     if (!open || !skill?.downloadUrl) {
@@ -69,9 +94,63 @@ export function useMarketplaceSkillDetailViewModel({
     setContentError(null);
     setExplanation(null);
     setExplanationError(null);
+    setFileTree([]);
+    setSelectedFilePath(null);
+    setResolvedDownloadUrl(null);
     setViewMode("markdown");
-    void fetchContent();
-  }, [open, skill?.downloadUrl, fetchContent]);
+    if (!isSkillsShDetail) {
+      void fetchContent();
+    }
+  }, [fetchContent, isSkillsShDetail, open, skill?.downloadUrl]);
+
+  useEffect(() => {
+    if (!open || !isSkillsShDetail || !skill?.source || !skill.skillId) {
+      return;
+    }
+
+    let cancelled = false;
+    const source = skill.source;
+    const skillId = skill.skillId;
+    setIsFileTreeLoading(true);
+    setFileTree([]);
+
+    async function loadSkillsShFiles() {
+      try {
+        const [resolvedUrl, entries] = await Promise.all([
+          resolveSkillsShUrl(source, skillId),
+          browseSkillsShDirectory(source, skillId),
+        ]);
+        if (cancelled) return;
+        const tree = buildDirectoryTreeFromSkillsShEntries(entries);
+        setFileTree(tree);
+        setIsFileTreeLoading(false);
+        setResolvedDownloadUrl(resolvedUrl);
+        const skillMd = entries.find((entry) => /(^|\/)SKILL\.md$/i.test(entry.path));
+        if (skillMd) {
+          setSelectedFilePath(skillMd.path);
+          void fetchContent(skillMd.path);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setIsFileTreeLoading(false);
+          setContentError(String(error));
+        }
+      }
+    }
+
+    void loadSkillsShFiles();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    browseSkillsShDirectory,
+    fetchContent,
+    isSkillsShDetail,
+    open,
+    resolveSkillsShUrl,
+    skill?.skillId,
+    skill?.source,
+  ]);
 
   useEffect(() => {
     if (!open) {
@@ -160,9 +239,25 @@ export function useMarketplaceSkillDetailViewModel({
     explanation,
     explanationError,
     handleExplain,
+    fileTree,
     isExplaining,
+    isFileTreeLoading,
     isLoadingContent,
-    retryContent: fetchContent,
+    openFileTreePath: (path: string) => {
+      const findNode = (nodes: typeof fileTree): boolean =>
+        nodes.some((node) => {
+          if (node.path === path) {
+            return node.file_type !== "dir";
+          }
+          return findNode(node.children);
+        });
+      if (findNode(fileTree)) {
+        void fetchContent(path);
+      }
+    },
+    retryContent: () => fetchContent(selectedFilePath),
+    resolvedDownloadUrl,
+    selectedFilePath,
     setViewMode,
     viewMode,
   };

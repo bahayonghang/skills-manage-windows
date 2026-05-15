@@ -599,6 +599,19 @@ export interface MarketplaceSkill {
   synced_at: string;
   cache_updated_at?: string | null;
 }
+export interface SkillsShSkill {
+  id: string;
+  skill_id: string;
+  name: string;
+  source: string;
+  installs: number;
+  stars?: number | null;
+}
+export interface SkillsShFileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+}
 
 // ─── Portable State Types ───────────────────────────────────────────────────
 

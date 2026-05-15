@@ -30,7 +30,9 @@ export function MarketplaceView() {
     githubImport,
     importGitHubRepoSkills,
     installCentralSkill,
+    installFromSkillsSh,
     installingIds,
+    isSkillsShLoading,
     installSkill,
     loadCentralSkills,
     loadPreviewSkills,
@@ -41,7 +43,11 @@ export function MarketplaceView() {
     registries,
     resetGitHubImport,
     rescan,
+    searchSkillsSh,
     skillsByAgent,
+    skillsShError,
+    skillsShQuery,
+    skillsShResults,
   } = useMarketplaceBindings();
 
   const [activeTab, setActiveTab] = useState<MarketplaceTabId>("recommended");
@@ -86,6 +92,23 @@ export function MarketplaceView() {
       await rescan();
       setDetailSkill((current) =>
         current && current.id === skillId ? { ...current, installed: true } : current
+      );
+      toast.success(t("marketplace.installSuccess"));
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
+
+  async function handleInstallSkillsSh(source: string, skillId: string) {
+    try {
+      const importedSkillId = await installFromSkillsSh(source, skillId);
+      await Promise.all([rescan(), loadCentralSkills()]);
+      setDetailSkill((current) =>
+        current?.remoteKind === "skills_sh" &&
+        current.source === source &&
+        current.skillId === skillId
+          ? { ...current, id: importedSkillId || current.id, installed: true }
+          : current
       );
       toast.success(t("marketplace.installSuccess"));
     } catch (err) {
@@ -255,6 +278,7 @@ export function MarketplaceView() {
       installingIds={installingIds}
       isGitHubImportOpen={isGitHubImportOpen}
       isPreviewLoading={isPreviewLoading}
+      isSkillsShLoading={isSkillsShLoading}
       lang={lang}
       onAfterImportSuccess={handleAfterImportSuccess}
       onGitHubImport={handleGitHubImport}
@@ -262,9 +286,11 @@ export function MarketplaceView() {
       onInstallFromSource={handleInstallFromSource}
       onInstallImportedSkill={handleInstallImportedSkill}
       onInstallPreviewSkill={handleInstallPreviewSkill}
+      onInstallSkillsSh={handleInstallSkillsSh}
       onOpenDetailSkill={openDetailSkill}
       onPreviewRepo={handlePreviewRepo}
       onResetGitHubImport={handleResetGitHubImport}
+      onSearchSkillsSh={searchSkillsSh}
       previewInstallingIds={previewInstallingIds}
       previewRepo={previewRepo}
       previewSkills={previewSkills}
@@ -281,6 +307,9 @@ export function MarketplaceView() {
       setRecommendedSearch={setRecommendedSearch}
       setSelectedPublisher={setSelectedPublisher}
       setSelectedTag={setSelectedTag}
+      skillsShError={skillsShError}
+      skillsShQuery={skillsShQuery}
+      skillsShResults={skillsShResults}
       viewModel={viewModel}
     />
   );

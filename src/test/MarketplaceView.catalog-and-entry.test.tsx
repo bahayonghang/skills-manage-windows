@@ -3,8 +3,10 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import * as S from "./marketplaceViewTestSupport";
 
 const {
+  mockInstallFromSkillsSh,
   mockLoadPreviewSkills,
   mockLoadRegistries,
+  mockSearchSkillsSh,
   renderMarketplaceView,
   tauriBridge,
 } = S;
@@ -71,5 +73,35 @@ describe("MarketplaceView catalog and entry flows", () => {
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText(/GitHub repository URL|GitHub 仓库 URL/i)).toBeInTheDocument();
+  });
+
+  it("searches and installs skills.sh results through marketplace store actions", async () => {
+    mockSearchSkillsSh.mockResolvedValue(S.storeState.skillsShResults);
+    mockInstallFromSkillsSh.mockResolvedValue("webapp-testing");
+
+    renderMarketplaceView();
+
+    fireEvent.click(screen.getByRole("button", { name: /skills\.sh/i }));
+    expect(screen.getByRole("button", { name: "webapp-testing" })).toBeInTheDocument();
+    expect(screen.getByText(/68897 次安装/i)).toBeInTheDocument();
+    expect(screen.getByText(/1234 星标/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/skills\.sh/i), {
+      target: { value: "testing" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^搜索$/i }));
+
+    await waitFor(() => {
+      expect(mockSearchSkillsSh).toHaveBeenCalledWith("testing");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^安装$/i }));
+
+    await waitFor(() => {
+      expect(mockInstallFromSkillsSh).toHaveBeenCalledWith(
+        "anthropics/skills",
+        "webapp-testing"
+      );
+    });
   });
 });

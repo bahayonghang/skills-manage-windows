@@ -349,15 +349,26 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   />
                 )}
 
-                {/* Marketplace installed indicator (disabled Check icon) */}
-                {onInstall && isInstalled && (
+                {onInstall && (
                   <button
-                    disabled
-                    title={t("marketplace.installed")}
-                    aria-label={t("marketplace.installed")}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-primary cursor-default"
+                    onClick={isInstalled ? undefined : onInstall}
+                    disabled={isInstalled || isLoading}
+                    title={isInstalled ? t("marketplace.installed") : t("marketplace.install")}
+                    aria-label={isInstalled ? t("marketplace.installed") : t("marketplace.install")}
+                    className={cn(
+                      "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+                      isInstalled
+                        ? "text-primary cursor-default"
+                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
+                    )}
                   >
-                    <Check className="size-4" />
+                    {isLoading ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : isInstalled ? (
+                      <Check className="size-4" />
+                    ) : (
+                      <Download className="size-4" />
+                    )}
                   </button>
                 )}
 

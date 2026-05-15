@@ -2,6 +2,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MarketplaceSkillDetailDrawer } from "@/components/marketplace/MarketplaceSkillDetailDrawer";
 
+const mockResolveSkillsShUrl = vi.fn();
+const mockBrowseSkillsShDirectory = vi.fn();
+const mockReadSkillsShFile = vi.fn();
+
+vi.mock("@/stores/marketplaceStore", () => ({
+  useMarketplaceStore: (selector: (state: Record<string, unknown>) => unknown) =>
+    selector({
+      triggerSkillExplanation: vi.fn(),
+      resolveSkillsShUrl: mockResolveSkillsShUrl,
+      browseSkillsShDirectory: mockBrowseSkillsShDirectory,
+      readSkillsShFile: mockReadSkillsShFile,
+    }),
+}));
+
 vi.mock("react-markdown", () => ({
   default: ({
     children,
@@ -52,6 +66,24 @@ Body content.`;
 describe("MarketplaceSkillDetailDrawer", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    mockResolveSkillsShUrl.mockReset();
+    mockBrowseSkillsShDirectory.mockReset();
+    mockReadSkillsShFile.mockReset();
+    mockResolveSkillsShUrl.mockResolvedValue(
+      "https://raw.githubusercontent.com/anthropics/skills/main/webapp-testing/SKILL.md"
+    );
+    mockBrowseSkillsShDirectory.mockResolvedValue([
+      { name: "SKILL.md", path: "webapp-testing/SKILL.md", is_dir: false },
+      { name: "references", path: "webapp-testing/references", is_dir: true },
+      {
+        name: "guide.md",
+        path: "webapp-testing/references/guide.md",
+        is_dir: false,
+      },
+    ]);
+    mockReadSkillsShFile.mockImplementation(async (_source: string, path: string) =>
+      path.endsWith("guide.md") ? "# Guide" : mockContent
+    );
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -276,6 +308,51 @@ describe("MarketplaceSkillDetailDrawer", () => {
         expect(screen.getByText(/name: baoyu-imagine/i)).toBeInTheDocument();
       });
       expect(screen.getByText(/---/)).toBeInTheDocument();
+    });
+
+    it("loads a skills.sh file tree and opens remote files through store actions", async () => {
+      render(
+        <MarketplaceSkillDetailDrawer
+          open
+          skill={{
+            ...skill,
+            id: "skills.sh:anthropics/skills:webapp-testing",
+            name: "webapp-testing",
+            downloadUrl: "https://github.com/anthropics/skills",
+            source: "anthropics/skills",
+            skillId: "webapp-testing",
+            remoteKind: "skills_sh",
+            installs: 68897,
+            stars: 1234,
+          }}
+          onOpenChange={vi.fn()}
+          onInstall={vi.fn()}
+          isInstalling={false}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getAllByText("SKILL.md").length).toBeGreaterThan(0);
+      });
+      expect(mockBrowseSkillsShDirectory).toHaveBeenCalledWith(
+        "anthropics/skills",
+        "webapp-testing"
+      );
+      expect(mockReadSkillsShFile).toHaveBeenCalledWith(
+        "anthropics/skills",
+        "webapp-testing/SKILL.md"
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "展开" }));
+      fireEvent.click(await screen.findByRole("button", { name: "guide.md" }));
+
+      await waitFor(() => {
+        expect(mockReadSkillsShFile).toHaveBeenCalledWith(
+          "anthropics/skills",
+          "webapp-testing/references/guide.md"
+        );
+      });
+      expect(await screen.findByText("# Guide")).toBeInTheDocument();
     });
   });
 });
