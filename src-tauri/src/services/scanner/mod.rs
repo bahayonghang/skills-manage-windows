@@ -18,7 +18,7 @@ mod claude_plugin;
 mod ssh_batch;
 
 use claude_plugin::{
-    claude_observation_row_id, scan_roots_for_agent, AgentScanRoot, ClaudeSourceKind,
+    agent_tracks_observations, observation_row_id, scan_roots_for_agent, AgentScanRoot, SourceKind,
 };
 use ssh_batch::{
     build_batch_read_script, build_probe_script, build_scanned_skills_from_contents,
@@ -352,7 +352,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
             db::update_agent_detected(pool, &agent.id, false).await?;
             skills_by_agent.insert(agent.id.clone(), 0);
             db::delete_stale_skill_installations(pool, &agent.id, &[]).await?;
-            if agent.id == "claude-code" {
+            if agent_tracks_observations(&agent.id) {
                 db::delete_stale_agent_skill_observations(pool, &agent.id, &[]).await?;
             }
             continue;
@@ -420,9 +420,9 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
             }
 
             for skill in &root_scanned {
-                if let Some(source_kind) = root.claude_source {
+                if let Some(source_kind) = root.source_kind {
                     let observation = AgentSkillObservation {
-                        row_id: claude_observation_row_id(&agent.id, &skill.dir_path),
+                        row_id: observation_row_id(&agent.id, &skill.dir_path),
                         agent_id: agent.id.clone(),
                         skill_id: skill.id.clone(),
                         name: skill.name.clone(),
@@ -440,8 +440,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                     found_observation_row_ids.push(observation.row_id);
                 }
 
-                let should_persist_manageable_state =
-                    root.claude_source != Some(ClaudeSourceKind::Plugin);
+                let should_persist_manageable_state = root.source_kind != Some(SourceKind::Plugin);
                 if should_persist_manageable_state {
                     all_found_skill_ids.insert(skill.id.clone());
                     found_install_ids.push(skill.id.clone());
@@ -479,7 +478,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
         }
 
         db::delete_stale_skill_installations(pool, &agent.id, &found_install_ids).await?;
-        if agent.id == "claude-code" {
+        if agent_tracks_observations(&agent.id) {
             db::delete_stale_agent_skill_observations(pool, &agent.id, &found_observation_row_ids)
                 .await?;
         }
@@ -561,7 +560,7 @@ pub async fn scan_ssh_skills_impl(
                 vec![AgentScanRoot {
                     path: PathBuf::from(&agent.global_skills_dir),
                     source_root: None,
-                    claude_source: None,
+                    source_kind: None,
                 }]
             };
             (agent, scan_roots)
@@ -634,7 +633,7 @@ pub async fn scan_ssh_skills_impl(
             db::update_agent_detected(pool, &agent.id, false).await?;
             skills_by_agent.insert(agent.id.clone(), 0);
             db::delete_stale_skill_installations(pool, &agent.id, &[]).await?;
-            if agent.id == "claude-code" {
+            if agent_tracks_observations(&agent.id) {
                 db::delete_stale_agent_skill_observations(pool, &agent.id, &[]).await?;
             }
             continue;
@@ -644,7 +643,7 @@ pub async fn scan_ssh_skills_impl(
         if existing_roots.is_empty() {
             skills_by_agent.insert(agent.id.clone(), 0);
             db::delete_stale_skill_installations(pool, &agent.id, &[]).await?;
-            if agent.id == "claude-code" {
+            if agent_tracks_observations(&agent.id) {
                 db::delete_stale_agent_skill_observations(pool, &agent.id, &[]).await?;
             }
             continue;
@@ -686,9 +685,9 @@ pub async fn scan_ssh_skills_impl(
                 .into_owned();
 
             for skill in &root_scanned {
-                if let Some(source_kind) = root.claude_source {
+                if let Some(source_kind) = root.source_kind {
                     let observation = AgentSkillObservation {
-                        row_id: claude_observation_row_id(&agent.id, &skill.dir_path),
+                        row_id: observation_row_id(&agent.id, &skill.dir_path),
                         agent_id: agent.id.clone(),
                         skill_id: skill.id.clone(),
                         name: skill.name.clone(),
@@ -706,8 +705,7 @@ pub async fn scan_ssh_skills_impl(
                     found_observation_row_ids.push(observation.row_id);
                 }
 
-                let should_persist_manageable_state =
-                    root.claude_source != Some(ClaudeSourceKind::Plugin);
+                let should_persist_manageable_state = root.source_kind != Some(SourceKind::Plugin);
                 if should_persist_manageable_state {
                     all_found_skill_ids.insert(skill.id.clone());
                     found_install_ids.push(skill.id.clone());
@@ -745,7 +743,7 @@ pub async fn scan_ssh_skills_impl(
         }
 
         db::delete_stale_skill_installations(pool, &agent.id, &found_install_ids).await?;
-        if agent.id == "claude-code" {
+        if agent_tracks_observations(&agent.id) {
             db::delete_stale_agent_skill_observations(pool, &agent.id, &found_observation_row_ids)
                 .await?;
         }

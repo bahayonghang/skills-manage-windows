@@ -52,16 +52,6 @@ fn claude_conflict_group(agent_id: &str, skill_id: &str) -> String {
     format!("{agent_id}::{skill_id}")
 }
 
-pub(super) fn claude_conflict_counts(
-    observations: &[db::AgentSkillObservation],
-) -> HashMap<String, i64> {
-    let mut counts = HashMap::new();
-    for observation in observations {
-        *counts.entry(observation.skill_id.clone()).or_insert(0) += 1;
-    }
-    counts
-}
-
 pub(super) fn claude_conflict_metadata(
     agent_id: &str,
     skill_id: &str,

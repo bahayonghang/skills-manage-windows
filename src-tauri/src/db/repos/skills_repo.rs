@@ -84,14 +84,12 @@ fn observation_to_skill(observation: AgentSkillObservation) -> Skill {
 
 /// Retrieve all skills installed for a given agent.
 pub async fn get_skills_by_agent(pool: &DbPool, agent_id: &str) -> Result<Vec<Skill>, String> {
-    if agent_id == "claude-code" {
-        let observations = get_agent_skill_observations(pool, agent_id).await?;
-        if !observations.is_empty() {
-            return Ok(observations.into_iter().map(observation_to_skill).collect());
-        }
+    let observations = get_agent_skill_observations(pool, agent_id).await?;
+    if agent_id == "claude-code" && !observations.is_empty() {
+        return Ok(observations.into_iter().map(observation_to_skill).collect());
     }
 
-    sqlx::query_as::<_, Skill>(
+    let mut skills = sqlx::query_as::<_, Skill>(
         "SELECT s.* FROM skills s
          JOIN skill_installations si ON s.id = si.skill_id
          WHERE si.agent_id = ?",
@@ -99,7 +97,10 @@ pub async fn get_skills_by_agent(pool: &DbPool, agent_id: &str) -> Result<Vec<Sk
     .bind(agent_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    skills.extend(observations.into_iter().map(observation_to_skill));
+    Ok(skills)
 }
 
 /// A skill enriched with the installation-specific fields for a given agent.
@@ -138,35 +139,17 @@ pub async fn get_skills_for_agent(
     pool: &DbPool,
     agent_id: &str,
 ) -> Result<Vec<SkillForAgent>, String> {
-    if agent_id == "claude-code" {
-        let observations = get_agent_skill_observations(pool, agent_id).await?;
-        if !observations.is_empty() {
-            let mut conflict_counts = HashMap::new();
-            for observation in &observations {
-                *conflict_counts
-                    .entry(observation.skill_id.clone())
-                    .or_insert(0_i64) += 1;
-            }
-
-            return Ok(observations
-                .into_iter()
-                .map(|observation| {
-                    let conflict_count = conflict_counts
-                        .get(&observation.skill_id)
-                        .copied()
-                        .unwrap_or(0);
-                    let mut skill = observation_to_skill_for_agent(observation);
-                    if conflict_count > 1 {
-                        skill.conflict_group = Some(claude_conflict_group(agent_id, &skill.id));
-                        skill.conflict_count = conflict_count;
-                    }
-                    skill
-                })
-                .collect());
-        }
+    let observations = get_agent_skill_observations(pool, agent_id).await?;
+    if agent_id == "claude-code" && !observations.is_empty() {
+        let mut skills: Vec<SkillForAgent> = observations
+            .into_iter()
+            .map(observation_to_skill_for_agent)
+            .collect();
+        apply_conflict_metadata(agent_id, &mut skills);
+        return Ok(skills);
     }
 
-    sqlx::query_as::<_, SkillForAgent>(
+    let mut skills = sqlx::query_as::<_, SkillForAgent>(
         "SELECT s.id,
                 s.id AS row_id,
                 s.name,
@@ -188,7 +171,11 @@ pub async fn get_skills_for_agent(
     .bind(agent_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    skills.extend(observations.into_iter().map(observation_to_skill_for_agent));
+    apply_conflict_metadata(agent_id, &mut skills);
+    Ok(skills)
 }
 
 fn observation_to_skill_for_agent(observation: AgentSkillObservation) -> SkillForAgent {
@@ -210,7 +197,22 @@ fn observation_to_skill_for_agent(observation: AgentSkillObservation) -> SkillFo
     }
 }
 
-fn claude_conflict_group(agent_id: &str, skill_id: &str) -> String {
+fn apply_conflict_metadata(agent_id: &str, skills: &mut [SkillForAgent]) {
+    let mut conflict_counts = HashMap::new();
+    for skill in skills.iter() {
+        *conflict_counts.entry(skill.id.clone()).or_insert(0_i64) += 1;
+    }
+
+    for skill in skills.iter_mut() {
+        let conflict_count = conflict_counts.get(&skill.id).copied().unwrap_or(0);
+        if conflict_count > 1 {
+            skill.conflict_group = Some(conflict_group(agent_id, &skill.id));
+            skill.conflict_count = conflict_count;
+        }
+    }
+}
+
+fn conflict_group(agent_id: &str, skill_id: &str) -> String {
     format!("{agent_id}::{skill_id}")
 }
 

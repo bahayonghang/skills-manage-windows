@@ -135,17 +135,41 @@ fn make_observation(
     source_kind: &str,
     read_only: bool,
 ) -> AgentSkillObservation {
+    make_observation_for_agent(
+        "claude-code",
+        row_id,
+        skill_id,
+        name,
+        dir_path,
+        source_kind,
+        read_only,
+    )
+}
+
+fn make_observation_for_agent(
+    agent_id: &str,
+    row_id: &str,
+    skill_id: &str,
+    name: &str,
+    dir_path: &str,
+    source_kind: &str,
+    read_only: bool,
+) -> AgentSkillObservation {
     AgentSkillObservation {
         row_id: row_id.to_string(),
-        agent_id: "claude-code".to_string(),
+        agent_id: agent_id.to_string(),
         skill_id: skill_id.to_string(),
         name: name.to_string(),
         description: Some(format!("{source_kind} copy")),
         file_path: format!("{dir_path}/SKILL.md"),
         dir_path: dir_path.to_string(),
         source_kind: source_kind.to_string(),
-        source_root: if source_kind == "user" {
+        source_root: if source_kind == "user" && agent_id == "claude-code" {
             "/tmp/.claude/skills".to_string()
+        } else if source_kind == "user" {
+            format!("/tmp/.agents/skills/{agent_id}")
+        } else if agent_id == "codex" {
+            "/tmp/.codex/plugins/cache/openai/example/1.0.0".to_string()
         } else {
             "/tmp/.claude/plugins/cache/publisher/plugin-a/1.0.0".to_string()
         },
@@ -1394,6 +1418,122 @@ async fn test_get_skill_detail_with_row_impl_claude_user_row_keeps_manageable_st
     assert_eq!(detail.conflict_count, 2);
     assert_eq!(detail.installations.len(), 1);
     assert_eq!(detail.collections.len(), 1);
+}
+
+#[tokio::test]
+async fn test_get_skills_by_agent_impl_codex_merges_platform_and_plugin_rows() {
+    let pool = setup_test_db().await;
+
+    let skill = make_skill("shared-skill", "Shared Skill", false);
+    db::upsert_skill(&pool, &skill).await.unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "shared-skill".to_string(),
+            agent_id: "codex".to_string(),
+            installed_path: "/tmp/.agents/skills/shared-skill".to_string(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+    db::upsert_agent_skill_observation(
+        &pool,
+        &make_observation_for_agent(
+            "codex",
+            "codex::/tmp/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill",
+            "shared-skill",
+            "Shared Skill",
+            "/tmp/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill",
+            "plugin",
+            true,
+        ),
+    )
+    .await
+    .unwrap();
+
+    let skills = get_skills_by_agent_impl(&pool, "codex").await.unwrap();
+    let platform_row = skills
+        .iter()
+        .find(|skill| !skill.is_read_only)
+        .expect("platform row");
+    let plugin_row = skills
+        .iter()
+        .find(|skill| skill.is_read_only)
+        .expect("plugin row");
+
+    assert_eq!(skills.len(), 2);
+    assert_eq!(platform_row.row_id, "shared-skill");
+    assert_eq!(platform_row.source_kind, None);
+    assert_eq!(plugin_row.source_kind.as_deref(), Some("plugin"));
+    assert_eq!(platform_row.conflict_count, 2);
+    assert_eq!(plugin_row.conflict_count, 2);
+    assert_eq!(
+        platform_row.conflict_group.as_deref(),
+        Some("codex::shared-skill")
+    );
+    assert_eq!(
+        plugin_row.conflict_group.as_deref(),
+        Some("codex::shared-skill")
+    );
+}
+
+#[tokio::test]
+async fn test_get_skill_detail_with_row_impl_codex_plugin_row_uses_selected_observation() {
+    let pool = setup_test_db().await;
+
+    let skill = make_skill("shared-skill", "Shared Skill", false);
+    db::upsert_skill(&pool, &skill).await.unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "shared-skill".to_string(),
+            agent_id: "codex".to_string(),
+            installed_path: "/tmp/.agents/skills/shared-skill".to_string(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let row_id = "codex::/tmp/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill";
+    db::upsert_agent_skill_observation(
+        &pool,
+        &make_observation_for_agent(
+            "codex",
+            row_id,
+            "shared-skill",
+            "Shared Skill",
+            "/tmp/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill",
+            "plugin",
+            true,
+        ),
+    )
+    .await
+    .unwrap();
+
+    let detail = get_skill_detail_with_row_impl(&pool, "shared-skill", Some("codex"), Some(row_id))
+        .await
+        .unwrap();
+
+    assert_eq!(detail.row_id, row_id);
+    assert_eq!(detail.source_kind.as_deref(), Some("plugin"));
+    assert_eq!(
+        detail.source_root.as_deref(),
+        Some("/tmp/.codex/plugins/cache/openai/example/1.0.0")
+    );
+    assert!(detail.is_read_only);
+    assert_eq!(detail.conflict_count, 2);
+    assert_eq!(
+        detail.conflict_group.as_deref(),
+        Some("codex::shared-skill")
+    );
+    assert!(detail.installations.is_empty());
+    assert!(detail.collections.is_empty());
 }
 
 #[tokio::test]
