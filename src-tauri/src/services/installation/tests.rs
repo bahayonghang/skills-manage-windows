@@ -52,6 +52,22 @@ async fn setup_db(central_dir: &Path, agent_dir: &Path) -> DbPool {
     pool
 }
 
+async fn setup_db_with_codex(
+    central_dir: &Path,
+    claude_agent_dir: &Path,
+    codex_agent_dir: &Path,
+) -> DbPool {
+    let pool = setup_db(central_dir, claude_agent_dir).await;
+
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'codex'")
+        .bind(codex_agent_dir.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    pool
+}
+
 /// Create a minimal skill directory containing a valid `SKILL.md`.
 fn create_central_skill(central_dir: &Path, skill_id: &str) -> PathBuf {
     let skill_dir = central_dir.join(skill_id);
@@ -1031,6 +1047,53 @@ async fn test_project_install_creates_project_relative_skill_dir() {
         .join("project-skill");
     assert_eq!(PathBuf::from(result.symlink_path), target);
     assert!(target.join("SKILL.md").exists());
+}
+
+#[tokio::test]
+async fn test_project_install_uses_agents_dir_for_universal_representative() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let codex_agent_dir = crate::paths::resolve_home_dir()
+        .join(".agents")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let pool = setup_db_with_codex(&central_dir, &claude_agent_dir, &codex_agent_dir).await;
+    create_central_skill(&central_dir, "universal-project-skill");
+
+    let result = install_central_skill_to_project_outcome_impl(
+        &pool,
+        "universal-project-skill",
+        "codex",
+        &project_dir,
+        "copy",
+    )
+    .await
+    .unwrap();
+    let result = match result {
+        InstallOutcome::Installed(result) => result,
+        InstallOutcome::Skipped(skipped) => panic!("expected install, got skip: {:?}", skipped),
+    };
+    let target = project_dir
+        .join(".agents")
+        .join("skills")
+        .join("universal-project-skill");
+
+    assert_eq!(PathBuf::from(result.symlink_path), target);
+    assert!(target.join("SKILL.md").exists());
+    assert!(
+        !project_dir
+            .join(".codex")
+            .join("skills")
+            .join("universal-project-skill")
+            .exists(),
+        "Universal project installs must not write the legacy .codex/skills path"
+    );
 }
 
 #[tokio::test]

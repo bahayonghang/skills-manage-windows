@@ -122,6 +122,62 @@ async fn rescan_finds_skills_in_enabled_agent_dirs() {
 }
 
 #[tokio::test]
+async fn rescan_finds_universal_skills_from_agents_dir() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let universal_skill = tmp.path().join(".agents/skills/brainstorming");
+    write_skill_md(&universal_skill, "brainstorming", Some("Universal skill"));
+
+    let project = add_project_impl(&pool, tmp.path().to_str().unwrap())
+        .await
+        .unwrap();
+    let count = rescan_project_impl(&pool, &project.id).await.unwrap();
+    assert_eq!(count, 1, "expected one Universal project skill scanned");
+
+    let skills = get_project_skills_impl(&pool, &project.id).await.unwrap();
+    assert_eq!(skills.len(), 1);
+    assert_eq!(skills[0].agent_id, "codex");
+    assert_eq!(skills[0].agent_display_name, "Codex CLI");
+    assert_eq!(skills[0].skill_id, "brainstorming");
+    assert_eq!(skills[0].description.as_deref(), Some("Universal skill"));
+    assert_eq!(
+        skills[0].installed_path,
+        crate::paths::normalize_stored_path(&universal_skill.to_string_lossy())
+    );
+}
+
+#[tokio::test]
+async fn rescan_prefers_universal_agents_dir_over_legacy_member_paths() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let canonical_skill = tmp.path().join(".agents/skills/duplicate");
+    let legacy_skill = tmp.path().join(".codex/skills/duplicate");
+    write_skill_md(&canonical_skill, "duplicate", Some("Canonical Universal"));
+    write_skill_md(&legacy_skill, "duplicate", Some("Legacy Codex"));
+
+    let project = add_project_impl(&pool, tmp.path().to_str().unwrap())
+        .await
+        .unwrap();
+    let count = rescan_project_impl(&pool, &project.id).await.unwrap();
+    assert_eq!(count, 1, "duplicate Universal legacy paths should collapse");
+
+    let skills = get_project_skills_impl(&pool, &project.id).await.unwrap();
+    assert_eq!(skills.len(), 1);
+    assert_eq!(skills[0].agent_id, "codex");
+    assert_eq!(skills[0].skill_id, "duplicate");
+    assert_eq!(
+        skills[0].description.as_deref(),
+        Some("Canonical Universal")
+    );
+    assert_eq!(
+        skills[0].installed_path,
+        crate::paths::normalize_stored_path(&canonical_skill.to_string_lossy())
+    );
+}
+
+#[tokio::test]
 async fn project_schema_migration_adds_metadata_columns_with_project_default() {
     let pool = SqlitePool::connect(":memory:").await.unwrap();
     sqlx::query(

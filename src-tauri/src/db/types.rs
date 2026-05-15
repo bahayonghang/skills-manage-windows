@@ -29,6 +29,14 @@ pub const UNIVERSAL_AGENT_IDS: [&str; 12] = [
     "warp",
 ];
 
+/// Universal agents share one project-level skills directory.
+pub const UNIVERSAL_PROJECT_SKILLS_DIR: &str = ".agents/skills";
+
+/// Preferred raw agent id used when a project-level Universal directory is
+/// stored in `project_skill_installations`.
+pub const UNIVERSAL_PROJECT_REPRESENTATIVE_AGENT_IDS: [&str; 5] =
+    ["codex", "opencode", "gemini-cli", "cursor", "amp"];
+
 /// 占位仓库 ID：`local-unknown` 表示来源未知的本地技能。
 pub const LOCAL_UNKNOWN_REPOSITORY_ID: &str = "local-unknown";
 
