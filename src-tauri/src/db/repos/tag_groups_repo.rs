@@ -44,10 +44,7 @@ pub async fn get_tag_group(pool: &DbPool, id: &str) -> Result<Option<TagGroup>, 
     .map_err(|e| e.to_string())
 }
 
-pub async fn create_tag_group(
-    pool: &DbPool,
-    input: NewTagGroup<'_>,
-) -> Result<TagGroup, String> {
+pub async fn create_tag_group(pool: &DbPool, input: NewTagGroup<'_>) -> Result<TagGroup, String> {
     let id = Uuid::new_v4().to_string();
     let now = now_rfc3339();
     let next_order = next_sort_order(pool).await?;
@@ -177,11 +174,10 @@ pub async fn set_tag_group(
 }
 
 async fn next_sort_order(pool: &DbPool) -> Result<i64, String> {
-    let row =
-        sqlx::query("SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM skill_tag_groups")
-            .fetch_one(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+    let row = sqlx::query("SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM skill_tag_groups")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let next: i64 = row.try_get("next").map_err(|e| e.to_string())?;
     Ok(next)
 }

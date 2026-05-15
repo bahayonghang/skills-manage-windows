@@ -135,7 +135,6 @@ function buildPlatformStoreState(overrides = {}) {
     platformPaths: {},
     skillsByAgent: {},
     collectionCount: 0,
-    discoveredCount: 0,
     categoryVisibility: {
       coding: true,
       lobster: true,
@@ -155,7 +154,6 @@ function buildPlatformStoreState(overrides = {}) {
     setAgentEnabled: vi.fn(),
     applyScanSummary: vi.fn(),
     setCollectionCount: vi.fn(),
-    setDiscoveredCount: vi.fn(),
     addCustomAgent: vi.fn(),
     updateCustomAgent: vi.fn(),
     removeCustomAgent: vi.fn(),

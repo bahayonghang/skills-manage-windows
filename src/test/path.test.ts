@@ -49,6 +49,14 @@ describe("path helpers", () => {
     );
   });
 
+  it("renders extended windows paths without the extended-length prefix", () => {
+    expect(formatPathForDisplay("//?/D:/Code/demo")).toBe("D:\\Code\\demo");
+    expect(formatPathForDisplay("\\\\?\\D:\\Code\\demo")).toBe("D:\\Code\\demo");
+    expect(formatPathForDisplay("\\\\?\\UNC\\server\\share\\demo")).toBe(
+      "\\\\server\\share\\demo"
+    );
+  });
+
   it("derives home directories from unix and windows paths", () => {
     expect(deriveHomeDir("/Users/alice/.agents/skills")).toBe("/Users/alice");
     expect(deriveHomeDir("/home/alice/projects/demo")).toBe("/home/alice");

@@ -4,12 +4,15 @@
 
 use super::{
     add_registry_impl, central_skill_dir_for_name, is_skill_installed_in_central,
-    marketplace_skills_from_candidates, registry_has_cached_skills, search_marketplace_skills_impl,
-    sync_registry_impl, RegistryCacheMetadata, RegistrySyncStatus, SyncRegistryOptions,
+    marketplace_skills_from_candidates, registry_has_cached_skills,
+    resolve_skills_sh_candidate_from_snapshot, search_marketplace_skills_impl,
+    skills_sh_file_entries_from_snapshot, source_to_github_url, sync_registry_impl,
+    RegistryCacheMetadata, RegistrySyncStatus, SyncRegistryOptions,
 };
-use crate::commands::github_import::RemoteSkillCandidate;
+use crate::commands::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
 use crate::db;
 use crate::secrets::MockSecretStore;
+use std::collections::HashMap;
 use std::path::Path;
 use tempfile::{tempdir, TempDir};
 
@@ -375,4 +378,102 @@ fn is_skill_installed_in_central_checks_for_skill_md() {
 
     assert!(is_skill_installed_in_central(dir.path(), "demo-skill"));
     assert!(!is_skill_installed_in_central(dir.path(), "missing-skill"));
+}
+
+fn sample_skill(name: &str, description: &str) -> String {
+    format!("---\nname: {name}\ndescription: {description}\n---\n# {name}\n")
+}
+
+fn repo_snapshot(files: &[(&str, String)]) -> GitHubRepoSnapshot {
+    GitHubRepoSnapshot {
+        files: files
+            .iter()
+            .map(|(path, content)| (path.to_string(), content.as_bytes().to_vec()))
+            .collect::<HashMap<_, _>>(),
+    }
+}
+
+fn repo_ref() -> GitHubRepoRef {
+    GitHubRepoRef {
+        owner: "owner".to_string(),
+        repo: "repo".to_string(),
+        branch: "main".to_string(),
+        normalized_url: "https://github.com/owner/repo".to_string(),
+    }
+}
+
+#[test]
+fn source_to_github_url_accepts_owner_repo_only() {
+    assert_eq!(
+        source_to_github_url("owner/repo").expect("valid source"),
+        "https://github.com/owner/repo"
+    );
+    assert!(source_to_github_url("../owner/repo").is_err());
+    assert!(source_to_github_url("https://github.com/owner/repo").is_err());
+}
+
+#[test]
+fn resolve_skills_sh_candidate_matches_nested_skill_id() {
+    let snapshot = repo_snapshot(&[
+        (
+            "content/skills/development/code-auditor/SKILL.md",
+            sample_skill("code-auditor", "Audit code"),
+        ),
+        (
+            "content/skills/development/code-auditor/references/checklist.md",
+            "# checklist\n".to_string(),
+        ),
+    ]);
+
+    let candidate =
+        resolve_skills_sh_candidate_from_snapshot(&repo_ref(), &snapshot, "code-auditor")
+            .expect("candidate");
+
+    assert_eq!(candidate.skill_id, "code-auditor");
+    assert_eq!(
+        candidate.source_path,
+        "content/skills/development/code-auditor"
+    );
+    assert!(candidate
+        .download_url
+        .ends_with("/owner/repo/main/content/skills/development/code-auditor/SKILL.md"));
+}
+
+#[test]
+fn skills_sh_file_entries_from_snapshot_returns_full_directory_tree() {
+    let snapshot = repo_snapshot(&[
+        (
+            "skills/demo-skill/SKILL.md",
+            sample_skill("demo-skill", "Demo"),
+        ),
+        (
+            "skills/demo-skill/references/guide.md",
+            "# guide\n".to_string(),
+        ),
+        (
+            "skills/demo-skill/scripts/run.ps1",
+            "Write-Output demo\n".to_string(),
+        ),
+        (
+            "skills/other-skill/SKILL.md",
+            sample_skill("other-skill", "Other"),
+        ),
+    ]);
+
+    let entries = skills_sh_file_entries_from_snapshot(&snapshot, "skills/demo-skill");
+    let paths = entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry.is_dir))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        paths,
+        vec![
+            ("skills/demo-skill/SKILL.md", false),
+            ("skills/demo-skill/references", true),
+            ("skills/demo-skill/references/guide.md", false),
+            ("skills/demo-skill/scripts", true),
+            ("skills/demo-skill/scripts/run.ps1", false),
+        ]
+    );
 }

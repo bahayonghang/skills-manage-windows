@@ -30,6 +30,7 @@ pub(crate) async fn suggest_skill_tags_for_skill(
         &context.api_url,
         &context.api_key,
         &context.model,
+        context.protocol,
         &prompt,
     )
     .await?;
@@ -68,9 +69,10 @@ async fn call_ai_for_tagging(
     api_url: &str,
     api_key: &str,
     model: &str,
+    protocol: ai_provider::ExplanationApiProtocol,
     prompt: &str,
 ) -> Result<String, String> {
-    let is_openai = api_url.to_ascii_lowercase().contains("/chat/completions");
+    let is_openai = !protocol.is_anthropic_compatible();
     let body = if is_openai {
         serde_json::json!({
             "model": model,

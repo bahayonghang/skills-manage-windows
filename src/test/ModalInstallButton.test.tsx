@@ -19,6 +19,7 @@ vi.mock("@/stores/platformStore", () => ({
 }));
 
 const mockInstallSkill = vi.fn();
+const mockOnInstallClick = vi.fn();
 
 const baseAgents: AgentWithStatus[] = [
   {
@@ -136,16 +137,22 @@ describe("ModalInstallButton", () => {
     expect(button).toBeDisabled();
   });
 
-  it("renders clickable button that calls installSkill in normal state", () => {
+  it("renders clickable button that calls the install dialog callback in normal state", () => {
     applyMocks();
-    render(<ModalInstallButton skillId="test-skill" />);
+    render(
+      <ModalInstallButton
+        skillId="test-skill"
+        onInstallClick={mockOnInstallClick}
+      />
+    );
 
     const button = screen.getByRole("button");
     expect(button).not.toBeDisabled();
     expect(button).toHaveTextContent("安装");
 
     fireEvent.click(button);
-    expect(mockInstallSkill).toHaveBeenCalledWith("test-skill", "claude-code");
+    expect(mockOnInstallClick).toHaveBeenCalledWith("test-skill");
+    expect(mockInstallSkill).not.toHaveBeenCalled();
   });
 
   it("has aria-label in format '安装 {技能名称}'", () => {

@@ -22,6 +22,7 @@ pub(super) mod core;
 pub(super) mod discovery;
 pub(super) mod marketplace;
 pub(super) mod metadata;
+pub(super) mod projects;
 pub(super) mod saved_views;
 pub(super) mod settings;
 
@@ -46,6 +47,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     settings::init(pool).await?;
     marketplace::init(pool).await?;
     saved_views::init(pool).await?;
+    projects::init(pool).await?;
 
     Ok(())
 }

@@ -7,7 +7,6 @@ import { TopBar } from "./TopBar";
 import { GlobalSearchDialog } from "./GlobalSearchDialog";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
-import { useDiscoverStore } from "@/stores/discoverStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
@@ -41,8 +40,6 @@ export function AppShell() {
   const resetPlatformForTargetChange = usePlatformStore((s) => s.resetForTargetChange);
   const loadCentralSkills = useCentralSkillsStore((s) => s.loadCentralSkills);
   const resetCentralForTargetChange = useCentralSkillsStore((s) => s.resetForTargetChange);
-  const rescanDiscoverFromDisk = useDiscoverStore((s) => s.rescanFromDisk);
-  const resetDiscoverForTargetChange = useDiscoverStore((s) => s.resetForTargetChange);
   const resetSkillsForTargetChange = useSkillStore((s) => s.resetForTargetChange);
   const resetMarketplaceForTargetChange = useMarketplaceStore((s) => s.resetForTargetChange);
   const loadTargets = useTargetStore((s) => s.loadTargets);
@@ -87,7 +84,6 @@ export function AppShell() {
     lastTargetIdRef.current = activeTargetId;
     resetPlatformForTargetChange();
     resetCentralForTargetChange();
-    resetDiscoverForTargetChange();
     resetSkillsForTargetChange();
     resetMarketplaceForTargetChange();
     void handleGlobalRescan();
@@ -145,10 +141,7 @@ export function AppShell() {
 
   async function handleGlobalRescan() {
     await rescan();
-    await Promise.allSettled([
-      loadCentralSkills(),
-      rescanDiscoverFromDisk(),
-    ]);
+    await loadCentralSkills();
   }
 
   function handleAction(action: string) {

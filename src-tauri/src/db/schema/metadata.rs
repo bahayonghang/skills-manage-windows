@@ -6,8 +6,8 @@
 //! - `skill_tags` / `skill_tag_links`：本地分类标签（含手动 / AI 双 source）
 //! - `skill_ai_tag_reviews`：待审核的 AI 标签建议
 
-use crate::db::DbPool;
 use crate::db::migrations::ensure_column;
+use crate::db::DbPool;
 
 pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     // skill_repositories — local metadata for grouping Central skills by source repo.

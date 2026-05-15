@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { AgentWithStatus } from "../types";
 import {
   derivePlatformCategoryVisibility,
+  ensureAtLeastOnePlatformCategoryVisible,
+  filterVisiblePlatformAgents,
   resolvePlatformCategoryVisibility,
   sortPlatformVisibilityAgents,
 } from "../lib/platformVisibility";
@@ -75,6 +77,82 @@ describe("platformVisibility helpers", () => {
       coding: false,
       lobster: true,
     });
+  });
+
+  it("falls back when saved category visibility would hide every platform group", () => {
+    const agents: AgentWithStatus[] = [
+      {
+        ...baseAgent,
+        id: "claude-code",
+        display_name: "Claude Code",
+        category: "coding",
+        is_enabled: true,
+      },
+      {
+        ...baseAgent,
+        id: "openclaw",
+        display_name: "OpenClaw",
+        category: "lobster",
+        is_enabled: false,
+      },
+    ];
+
+    expect(
+      resolvePlatformCategoryVisibility(
+        JSON.stringify({ coding: false, lobster: false }),
+        agents
+      )
+    ).toEqual({
+      coding: true,
+      lobster: false,
+    });
+  });
+
+  it("keeps the previous visible group when toggling would hide every platform group", () => {
+    expect(
+      ensureAtLeastOnePlatformCategoryVisible(
+        { coding: false, lobster: false },
+        { coding: true, lobster: false },
+        [
+          {
+            ...baseAgent,
+            id: "claude-code",
+            display_name: "Claude Code",
+            category: "coding",
+            is_enabled: true,
+          },
+        ]
+      )
+    ).toEqual({
+      coding: true,
+      lobster: false,
+    });
+  });
+
+  it("falls back to the default visible group when filtering an all-hidden stale setting", () => {
+    const agents: AgentWithStatus[] = [
+      {
+        ...baseAgent,
+        id: "claude-code",
+        display_name: "Claude Code",
+        category: "coding",
+        is_enabled: true,
+      },
+      {
+        ...baseAgent,
+        id: "central",
+        display_name: "Central Skills",
+        category: "central",
+        is_enabled: true,
+      },
+    ];
+
+    expect(
+      filterVisiblePlatformAgents(agents, {
+        coding: false,
+        lobster: false,
+      }).map((agent) => agent.id)
+    ).toEqual(["claude-code"]);
   });
 
   it("sorts enabled tools first and keeps the five defaults at the top", () => {

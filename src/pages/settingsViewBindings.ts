@@ -2,7 +2,6 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
-import { useDiscoverStore } from "@/stores/discoverStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
@@ -39,6 +38,7 @@ export function useSettingsViewBindings() {
   const aiTestResult = useSettingsStore((state) => state.aiTestResult);
   const loadAiSettings = useSettingsStore((state) => state.loadAiSettings);
   const updateAiSettings = useSettingsStore((state) => state.updateAiSettings);
+  const switchAiProvider = useSettingsStore((state) => state.switchAiProvider);
   const clearAiApiKey = useSettingsStore((state) => state.clearAiApiKey);
   const testAiConnection = useSettingsStore((state) => state.testAiConnection);
 
@@ -54,7 +54,6 @@ export function useSettingsViewBindings() {
   const refreshCounts = usePlatformStore((state) => state.refreshCounts);
 
   const loadCentralSkills = useCentralSkillsStore((state) => state.loadCentralSkills);
-  const refreshDiscoverCounts = useDiscoverStore((state) => state.refreshCounts);
   const loadMarketplaceRegistries = useMarketplaceStore((state) => state.loadRegistries);
   const selectedMarketplaceRegistryId = useMarketplaceStore(
     (state) => state.selectedRegistryId
@@ -115,6 +114,7 @@ export function useSettingsViewBindings() {
     aiTestResult,
     loadAiSettings,
     updateAiSettings,
+    switchAiProvider,
     clearAiApiKey,
     testAiConnection,
     agents,
@@ -124,7 +124,6 @@ export function useSettingsViewBindings() {
     rescan,
     refreshCounts,
     loadCentralSkills,
-    refreshDiscoverCounts,
     loadMarketplaceRegistries,
     selectedMarketplaceRegistryId,
     loadMarketplaceSkills,

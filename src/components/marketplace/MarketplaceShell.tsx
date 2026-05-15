@@ -36,6 +36,7 @@ import type {
   BatchInstallResult,
   GitHubRepoImportResult,
   GitHubSkillImportSelection,
+  SkillsShSkill,
 } from "@/types";
 
 interface PublisherCardProps {
@@ -73,6 +74,7 @@ interface MarketplaceShellProps {
   installingIds: Set<string>;
   isGitHubImportOpen: boolean;
   isPreviewLoading: boolean;
+  isSkillsShLoading: boolean;
   lang: string;
   onAfterImportSuccess: () => Promise<void>;
   onGitHubImport: (
@@ -86,6 +88,7 @@ interface MarketplaceShellProps {
     method: "symlink" | "copy"
   ) => Promise<BatchInstallResult>;
   onInstallPreviewSkill: (skill: MarketplacePreviewSkill) => Promise<void>;
+  onInstallSkillsSh: (source: string, skillId: string) => Promise<void>;
   onOpenDetailSkill: (
     skill: MarketplaceSkillDetail,
     trigger?: EventTarget | null
@@ -96,6 +99,7 @@ interface MarketplaceShellProps {
     options?: { forceRefresh?: boolean }
   ) => Promise<void>;
   onResetGitHubImport: () => void;
+  onSearchSkillsSh: (query: string) => Promise<SkillsShSkill[]>;
   previewInstallingIds: Set<string>;
   previewRepo: string | null;
   previewSkills: MarketplacePreviewSkill[];
@@ -112,6 +116,9 @@ interface MarketplaceShellProps {
   setRecommendedSearch: (value: string) => void;
   setSelectedPublisher: (publisher: OfficialPublisher | null) => void;
   setSelectedTag: (tag: SkillTag | null) => void;
+  skillsShError: string | null;
+  skillsShQuery: string;
+  skillsShResults: SkillsShSkill[];
   viewModel: MarketplaceViewModel;
 }
 
@@ -124,6 +131,7 @@ export function MarketplaceShell({
   installingIds,
   isGitHubImportOpen,
   isPreviewLoading,
+  isSkillsShLoading,
   lang,
   onAfterImportSuccess,
   onGitHubImport,
@@ -131,9 +139,11 @@ export function MarketplaceShell({
   onInstallFromSource,
   onInstallImportedSkill,
   onInstallPreviewSkill,
+  onInstallSkillsSh,
   onOpenDetailSkill,
   onPreviewRepo,
   onResetGitHubImport,
+  onSearchSkillsSh,
   previewInstallingIds,
   previewRepo,
   previewSkills,
@@ -150,6 +160,9 @@ export function MarketplaceShell({
   setRecommendedSearch,
   setSelectedPublisher,
   setSelectedTag,
+  skillsShError,
+  skillsShQuery,
+  skillsShResults,
   viewModel,
 }: MarketplaceShellProps) {
   const { t } = useTranslation();
@@ -475,6 +488,99 @@ export function MarketplaceShell({
             </div>
           </div>
         )}
+
+        {activeTab === "skillssh" && (
+          <div className="p-6 space-y-4">
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const form = event.currentTarget;
+                const input = form.elements.namedItem("skills-sh-query");
+                const query = input instanceof HTMLInputElement ? input.value : skillsShQuery;
+                void onSearchSkillsSh(query);
+              }}
+            >
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  name="skills-sh-query"
+                  defaultValue={skillsShQuery}
+                  placeholder={t("marketplace.skillsShSearchPlaceholder")}
+                  className="pl-8 h-8 text-sm bg-muted/40"
+                />
+              </div>
+              <Button type="submit" size="sm" disabled={isSkillsShLoading}>
+                {isSkillsShLoading ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Search className="size-3.5" />
+                )}
+                {t("marketplace.skillsShSearchButton")}
+              </Button>
+            </form>
+
+            {skillsShError ? (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                {skillsShError}
+              </div>
+            ) : null}
+
+            {isSkillsShLoading ? (
+              <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                {t("marketplace.skillsShSearching")}
+              </div>
+            ) : skillsShResults.length === 0 ? (
+              <div className="text-center py-12 text-sm text-muted-foreground">
+                {skillsShQuery.trim()
+                  ? t("marketplace.skillsShSearchEmpty")
+                  : t("marketplace.skillsShSearchPrompt")}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {skillsShResults.map((skill) => {
+                  const detailSkill: MarketplaceSkillDetail = {
+                    id: `skills.sh:${skill.source}:${skill.skill_id}`,
+                    name: skill.name,
+                    description: `${skill.source}/${skill.skill_id}`,
+                    downloadUrl: `https://github.com/${skill.source}`,
+                    publisher: skill.source,
+                    sourceLabel: "skills.sh",
+                    sourceUrl: `https://github.com/${skill.source}`,
+                    installed: false,
+                    source: skill.source,
+                    skillId: skill.skill_id,
+                    remoteKind: "skills_sh",
+                    installs: skill.installs,
+                    stars: skill.stars ?? null,
+                  };
+                  const installKey = `skills.sh:${skill.source}:${skill.skill_id}`;
+                  return (
+                    <UnifiedSkillCard
+                      key={installKey}
+                      name={skill.name}
+                      description={detailSkill.description}
+                      publisher={[
+                        t("marketplace.skillsShInstalls", { count: skill.installs }),
+                        typeof skill.stars === "number"
+                          ? t("marketplace.skillsShStars", { count: skill.stars })
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                      onDetail={(event) =>
+                        onOpenDetailSkill(detailSkill, event?.currentTarget ?? null)
+                      }
+                      onInstall={() => void onInstallSkillsSh(skill.source, skill.skill_id)}
+                      isLoading={installingIds.has(installKey)}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {detailSkill && (
@@ -485,6 +591,10 @@ export function MarketplaceShell({
           }}
           skill={detailSkill}
           onInstall={() => {
+            if (detailSkill.remoteKind === "skills_sh" && detailSkill.source && detailSkill.skillId) {
+              void onInstallSkillsSh(detailSkill.source, detailSkill.skillId);
+              return;
+            }
             if (detailSkill.id.startsWith("skill-")) {
               void onInstallFromSource(detailSkill.id);
               return;
@@ -496,7 +606,12 @@ export function MarketplaceShell({
             });
           }}
           isInstalling={
-            installingIds.has(detailSkill.id) || previewInstallingIds.has(detailSkill.name)
+            installingIds.has(detailSkill.id) ||
+            (detailSkill.remoteKind === "skills_sh" &&
+              !!detailSkill.source &&
+              !!detailSkill.skillId &&
+              installingIds.has(`skills.sh:${detailSkill.source}:${detailSkill.skillId}`)) ||
+            previewInstallingIds.has(detailSkill.name)
           }
           onAfterCloseFocus={() => {
             detailTriggerRef.current?.focus();

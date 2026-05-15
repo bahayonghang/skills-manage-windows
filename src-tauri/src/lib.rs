@@ -47,6 +47,10 @@ pub struct AppState {
     /// reset to false on entry and poll between iterations; the
     /// `cancel_central_skill_updates` command stores true to request stop.
     pub central_update_cancel: Arc<AtomicBool>,
+    /// Short-lived GitHub repository snapshots shared by Central update check
+    /// and update commands. This lets "check, then update" reuse the archive
+    /// that was just downloaded without copying credentials into target DBs.
+    pub central_update_snapshots: CentralUpdateSnapshotCache,
     /// Cooperative cancel flag for the at-most-one SkillPort state
     /// portability command (export, preview, or import).
     pub portable_state_cancel: Arc<AtomicBool>,
@@ -64,6 +68,70 @@ impl AppState {
 
     pub async fn active_target(&self) -> Result<targets::ActiveTarget, String> {
         self.targets.active_target(&self.db).await
+    }
+}
+
+#[derive(Default)]
+pub struct CentralUpdateSnapshotCache {
+    snapshots: Mutex<HashMap<String, CachedGitHubSnapshot>>,
+}
+
+#[derive(Clone)]
+struct CachedGitHubSnapshot {
+    snapshot: services::github_import::GitHubRepoSnapshot,
+    cached_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl CentralUpdateSnapshotCache {
+    pub(crate) fn get_fresh(
+        &self,
+        key: &str,
+        max_age: chrono::Duration,
+    ) -> Option<services::github_import::GitHubRepoSnapshot> {
+        let now = chrono::Utc::now();
+        match self.snapshots.lock() {
+            Ok(snapshots) => snapshots.get(key).and_then(|cached| {
+                if now.signed_duration_since(cached.cached_at) <= max_age {
+                    Some(cached.snapshot.clone())
+                } else {
+                    None
+                }
+            }),
+            Err(error) => {
+                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during read");
+                None
+            }
+        }
+    }
+
+    pub(crate) fn insert(
+        &self,
+        key: String,
+        snapshot: services::github_import::GitHubRepoSnapshot,
+    ) {
+        match self.snapshots.lock() {
+            Ok(mut snapshots) => {
+                snapshots.insert(
+                    key,
+                    CachedGitHubSnapshot {
+                        snapshot,
+                        cached_at: chrono::Utc::now(),
+                    },
+                );
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during insert");
+            }
+        }
+    }
+
+    pub fn clear(&self) {
+        match self.snapshots.lock() {
+            Ok(mut snapshots) => snapshots.clear(),
+            Err(error) => {
+                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during clear");
+            }
+        }
     }
 }
 
@@ -146,6 +214,7 @@ pub fn run() {
                 db: pool.clone(),
                 ai_tag_jobs: AiTagJobRegistry::default(),
                 central_update_cancel: Arc::new(AtomicBool::new(false)),
+                central_update_snapshots: CentralUpdateSnapshotCache::default(),
                 portable_state_cancel: Arc::new(AtomicBool::new(false)),
                 secrets: Arc::clone(&secrets),
                 targets: targets::TargetRegistry::default(),
@@ -303,25 +372,29 @@ pub fn run() {
             commands::github_import::set_github_pat,
             commands::github_import::clear_github_pat,
             commands::github_import::test_github_pat,
-            // Discover
-            commands::discover::discover_scan_roots,
-            commands::discover::get_scan_roots,
-            commands::discover::get_obsidian_vaults,
-            commands::discover::get_obsidian_vault_skills,
-            commands::discover::get_discovered_summary,
-            commands::discover::set_scan_root_enabled,
-            commands::discover::start_project_scan,
-            commands::discover::stop_project_scan,
-            commands::discover::get_discovered_skills,
-            commands::discover::import_discovered_skill_to_central,
-            commands::discover::import_discovered_skill_to_platform,
-            commands::discover::import_source_skill_to_central,
-            commands::discover::import_source_skill_to_platform,
-            commands::discover::clear_discovered_skills,
+            // Discover module retired in favor of Projects (project-level skill
+            // management). Obsidian vault scanning + source-import keep working
+            // through the standalone obsidian module below.
+            commands::obsidian::get_obsidian_vaults,
+            commands::obsidian::get_obsidian_vault_skills,
+            commands::obsidian::import_obsidian_skill_to_central,
+            commands::obsidian::import_obsidian_skill_to_platform,
             commands::github_import::preview_github_repo_import,
             commands::github_import::import_github_repo_skills,
             commands::github_import::fetch_github_skill_markdown,
             commands::github_import::discard_github_repo_preview_workspace,
+            // Projects (项目级 skill 管理)
+            commands::projects::pick_project_folder,
+            commands::projects::add_project,
+            commands::projects::list_projects,
+            commands::projects::rename_project,
+            commands::projects::set_project_pinned,
+            commands::projects::rescan_project,
+            commands::projects::get_project_skills,
+            commands::projects::remove_project,
+            commands::projects::install_skill_to_project,
+            commands::projects::uninstall_skill_from_project,
+            commands::projects::list_projects_using_skill,
             // Marketplace
             commands::marketplace::list_registries,
             commands::marketplace::add_registry,
@@ -330,7 +403,13 @@ pub fn run() {
             commands::marketplace::sync_registry_with_options,
             commands::marketplace::search_marketplace_skills,
             commands::marketplace::install_marketplace_skill,
+            commands::marketplace::search_skills_sh,
+            commands::marketplace::resolve_skills_sh_url,
+            commands::marketplace::browse_skills_sh_directory,
+            commands::marketplace::read_skills_sh_file,
+            commands::marketplace::install_from_skills_sh,
             commands::marketplace::explain_skill,
+            commands::marketplace::test_ai_connection,
             commands::marketplace::get_skill_explanation,
             commands::marketplace::explain_skill_stream,
             commands::marketplace::refresh_skill_explanation,

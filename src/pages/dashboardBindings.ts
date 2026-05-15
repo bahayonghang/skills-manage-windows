@@ -24,7 +24,6 @@ export function useDashboardBindings() {
   const platformAgents = usePlatformStore((state) => state.agents) ?? [];
   const skillsByAgent = usePlatformStore((state) => state.skillsByAgent) ?? {};
   const collectionCount = usePlatformStore((state) => state.collectionCount) ?? 0;
-  const discoveredCount = usePlatformStore((state) => state.discoveredCount) ?? 0;
   const dashboardCentralSummary = usePlatformStore(
     (state) => state.dashboardCentralSummary,
   );
@@ -77,7 +76,6 @@ export function useDashboardBindings() {
     platformAgents,
     skillsByAgent,
     collectionCount,
-    discoveredCount,
     dashboardCentralSummary,
     categoryVisibility,
     lastScanAt,

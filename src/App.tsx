@@ -33,9 +33,9 @@ const SettingsView = lazy(() =>
     default: SettingsView,
   }))
 );
-const DiscoverView = lazy(() =>
-  import("@/pages/DiscoverView").then(({ DiscoverView }) => ({
-    default: DiscoverView,
+const ProjectsView = lazy(() =>
+  import("@/pages/ProjectsView").then(({ ProjectsView }) => ({
+    default: ProjectsView,
   }))
 );
 const ObsidianVaultView = lazy(() =>
@@ -94,15 +94,23 @@ function App() {
           path="marketplace"
           element={lazyPage(<MarketplaceView />)}
         />
-        {/* Discover project skills */}
+        {/* Discover removed — redirect to Projects */}
         <Route
           path="discover"
-          element={lazyPage(<DiscoverView />)}
+          element={<Navigate to="/projects" replace />}
         />
-        {/* Discover filtered by project */}
         <Route
           path="discover/:projectPath"
-          element={lazyPage(<DiscoverView />)}
+          element={<Navigate to="/projects" replace />}
+        />
+        {/* Projects (project-level skill management) */}
+        <Route
+          path="projects"
+          element={lazyPage(<ProjectsView />)}
+        />
+        <Route
+          path="projects/:projectId"
+          element={lazyPage(<ProjectsView />)}
         />
         <Route
           path="obsidian"

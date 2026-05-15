@@ -8,9 +8,10 @@ SQLite 是唯一的持久化层。`~/.skillsmanage/db.sqlite` 启动时以 WAL �
 core         skills / skill_installations / agent_skill_observations / agents
  └─ collections    collections / collection_skills
     └─ metadata    repositories / update_states / tags / tag_links / ai_reviews
-       └─ discovery   scan_directories / discovered_skills
-          └─ settings settings / operation_logs（+6 索引）
-             └─ marketplace registries / skills / explanations（+8 ALTERs）
+       └─ discovery   scan_directories
+          └─ projects   projects / project_skill_installations
+             └─ settings settings / operation_logs（+6 索引）
+                └─ marketplace registries / skills / explanations（+8 ALTERs）
 ```
 
 所有 `CREATE TABLE` 都带 `IF NOT EXISTS`，增量列通过 `migrations::ensure_column` 添加，跨版本幂等。
@@ -29,7 +30,7 @@ core         skills / skill_installations / agent_skill_observations / agents
 | `repositories_repo` | `skill_repositories`、`skill_repository_members` |
 | `update_states_repo` | `skill_update_states` |
 | `tags_repo` | `skill_tags`、`skill_tag_links`、`skill_ai_tag_reviews` |
-| `discovered_repo` | `discovered_skills` |
+| `projects_repo` | `projects`、`project_skill_installations` |
 | `scan_dirs_repo` | `scan_directories` |
 | `settings_repo` | `settings` |
 | `operation_logs_repo` | `operation_logs` |

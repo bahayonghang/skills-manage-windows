@@ -48,7 +48,6 @@ export function createSettingsViewActions({
   rescan,
   refreshCounts,
   loadCentralSkills,
-  refreshDiscoverCounts,
   loadMarketplaceRegistries,
   loadMarketplaceSkills,
   createSshTarget,
@@ -103,7 +102,6 @@ export function createSettingsViewActions({
   rescan: () => Promise<void>;
   refreshCounts: () => Promise<void>;
   loadCentralSkills: () => Promise<void>;
-  refreshDiscoverCounts: () => Promise<void>;
   loadMarketplaceRegistries: () => Promise<void>;
   loadMarketplaceSkills: (registryId: string) => Promise<void>;
   createSshTarget: (request: CreateSshTargetRequest) => Promise<TargetSummary>;
@@ -132,7 +130,6 @@ export function createSettingsViewActions({
     await rescan();
     await Promise.allSettled([
       loadCentralSkills(),
-      refreshDiscoverCounts(),
       loadMarketplaceRegistries().then(() => {
         if (selectedMarketplaceRegistryId) {
           return loadMarketplaceSkills(selectedMarketplaceRegistryId);

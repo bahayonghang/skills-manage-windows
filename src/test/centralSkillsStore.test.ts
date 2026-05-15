@@ -849,7 +849,7 @@ describe("centralSkillsStore", () => {
     );
   });
 
-  it("updates central skills and refreshes skills plus update states", async () => {
+  it("updates central skills and merges returned states without a second state refresh", async () => {
     const updatedState: CentralSkillUpdateState = {
       ...mockUpdateStates[0],
       latest_remote_hash: "fnv1a64:new",
@@ -864,9 +864,7 @@ describe("centralSkillsStore", () => {
     };
     vi.mocked(invoke)
       .mockResolvedValueOnce(updateResult)
-      .mockResolvedValueOnce(mockSkills)
-      .mockResolvedValueOnce(mockRepositories)
-      .mockResolvedValueOnce([updatedState]);
+      .mockResolvedValueOnce(mockSkills);
 
     const result = await useCentralSkillsStore
       .getState()
@@ -877,11 +875,12 @@ describe("centralSkillsStore", () => {
       skillIds: ["frontend-design"],
     });
     expect(invoke).toHaveBeenCalledWith("get_central_skills");
-    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
-    expect(invoke).toHaveBeenCalledWith("get_central_skill_update_states");
+    expect(invoke).not.toHaveBeenCalledWith("get_skill_repositories");
+    expect(invoke).not.toHaveBeenCalledWith("get_central_skill_update_states");
     expect(useCentralSkillsStore.getState().updateStatuses["frontend-design"]).toEqual(
       updatedState
     );
+    expect(useCentralSkillsStore.getState().repositories).toEqual([]);
     expect(useCentralSkillsStore.getState().updatingSkillIds).toEqual([]);
   });
 

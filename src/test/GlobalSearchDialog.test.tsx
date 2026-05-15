@@ -6,7 +6,6 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { GlobalSearchDialog } from "@/components/layout/GlobalSearchDialog";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useCollectionStore } from "@/stores/collectionStore";
-import { useDiscoverStore } from "@/stores/discoverStore";
 import { usePlatformStore } from "@/stores/platformStore";
 
 vi.mock("@/hooks/useHotkey", () => ({
@@ -68,10 +67,6 @@ vi.mock("@/stores/centralSkillsStore", () => ({
   useCentralSkillsStore: vi.fn(),
 }));
 
-vi.mock("@/stores/discoverStore", () => ({
-  useDiscoverStore: vi.fn(),
-}));
-
 vi.mock("@/stores/collectionStore", () => ({
   useCollectionStore: vi.fn(),
 }));
@@ -81,7 +76,6 @@ vi.mock("@/stores/platformStore", () => ({
 }));
 
 const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
-const mockUseDiscoverStore = vi.mocked(useDiscoverStore);
 const mockUseCollectionStore = vi.mocked(useCollectionStore);
 const mockUsePlatformStore = vi.mocked(usePlatformStore);
 
@@ -110,11 +104,6 @@ describe("GlobalSearchDialog", () => {
 
     mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
       const state = { skills: [] };
-      if (typeof selector === "function") return selector(state);
-      return state;
-    });
-    mockUseDiscoverStore.mockImplementation((selector?: unknown) => {
-      const state = { discoveredProjects: [] };
       if (typeof selector === "function") return selector(state);
       return state;
     });

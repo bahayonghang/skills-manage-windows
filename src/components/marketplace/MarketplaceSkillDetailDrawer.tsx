@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { SkillDetailModalShell } from "@/components/skill/SkillDetailModalShell";
+import { SkillDetailFileTree } from "@/components/skill/SkillDetailFileTree";
 import { Button } from "@/components/ui/button";
 import { isTauriRuntime } from "@/lib/tauri";
 import { MarketplaceSkillDetailContent } from "./MarketplaceSkillDetailContent";
@@ -46,10 +47,15 @@ export function MarketplaceSkillDetailDrawer({
     displayContent,
     explanation,
     explanationError,
+    fileTree,
     handleExplain,
     isExplaining,
+    isFileTreeLoading,
     isLoadingContent,
+    openFileTreePath,
     retryContent,
+    resolvedDownloadUrl,
+    selectedFilePath,
     setViewMode,
     viewMode,
   } = useMarketplaceSkillDetailViewModel({
@@ -109,7 +115,10 @@ export function MarketplaceSkillDetailDrawer({
           <div className="flex-1 min-h-0 overflow-hidden">
             <div className="flex h-full flex-col md:flex-row" data-testid="skill-detail-two-column-layout">
               <div className="scrollbar-subtle flex-1 min-w-0 overflow-auto p-6 space-y-4">
-                <MarketplaceSkillDetailSummary skill={skill} />
+                <MarketplaceSkillDetailSummary
+                  skill={skill}
+                  downloadUrl={resolvedDownloadUrl}
+                />
                 <MarketplaceSkillDetailContent
                   browserMode={browserMode}
                   content={content}
@@ -136,6 +145,16 @@ export function MarketplaceSkillDetailDrawer({
                     {t("detail.metadata")}
                   </div>
                   <div className="space-y-2.5">
+                    {skill.remoteKind === "skills_sh" ? (
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">
+                          {t("marketplace.skillsShInstallSource")}
+                        </div>
+                        <div className="font-mono text-xs text-foreground break-all leading-relaxed">
+                          {skill.source}/{skill.skillId}
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="space-y-0.5">
                       <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">
                         {t("marketplace.previewSourceLabel")}
@@ -167,6 +186,21 @@ export function MarketplaceSkillDetailDrawer({
                     </div>
                   </div>
                 </section>
+
+                {skill.remoteKind === "skills_sh" ? (
+                  <section>
+                    <SkillDetailFileTree
+                      entries={fileTree}
+                      isLoading={isFileTreeLoading}
+                      onOpenPath={openFileTreePath}
+                    />
+                    {selectedFilePath ? (
+                      <div className="mt-2 break-all font-mono text-[10px] text-muted-foreground">
+                        {selectedFilePath}
+                      </div>
+                    ) : null}
+                  </section>
+                ) : null}
 
                 <section>
                   <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80 mb-2">

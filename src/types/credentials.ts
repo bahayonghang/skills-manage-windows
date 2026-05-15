@@ -81,6 +81,7 @@ export interface GitHubPatState {
 }
 
 export interface AiApiKeyState {
+  provider?: string | null;
   configured: boolean;
   storageState: SecretStorageState;
   error?: string | null;

@@ -7,13 +7,13 @@ import { usePlatformStore } from "@/stores/platformStore";
 
 export interface ModalInstallButtonProps {
   skillId: string;
+  onInstallClick?: (skillId: string) => void;
 }
 
-export function ModalInstallButton({ skillId }: ModalInstallButtonProps) {
+export function ModalInstallButton({ skillId, onInstallClick }: ModalInstallButtonProps) {
   const { t } = useTranslation();
   const detail = useSkillDetailStore((s) => s.detail);
   const installingAgentId = useSkillDetailStore((s) => s.installingAgentId);
-  const installSkill = useSkillDetailStore((s) => s.installSkill);
 
   // Read activeTarget to re-render when deployment target changes (local vs SSH)
   const _activeTarget = useTargetStore((s) => s.activeTarget);
@@ -36,7 +36,8 @@ export function ModalInstallButton({ skillId }: ModalInstallButtonProps) {
     enabledAgents.every((agent) => installedAgentIds.has(agent.id));
 
   const isInstalling = installingAgentId !== null;
-  const isDisabled = isAllInstalled || isInstalling || enabledAgents.length === 0;
+  const isDisabled =
+    isAllInstalled || isInstalling || enabledAgents.length === 0 || !onInstallClick;
   const installAriaLabel = t("detail.installSkillAriaLabel", { name: skillName });
 
   // Do not render if skill is read-only
@@ -44,16 +45,11 @@ export function ModalInstallButton({ skillId }: ModalInstallButtonProps) {
     return null;
   }
 
-  // Determine which agent to install to: first enabled agent not yet installed
-  const targetAgentId =
-    enabledAgents.find((agent) => !installedAgentIds.has(agent.id))?.id ??
-    enabledAgents[0]?.id;
-
   function handleClick() {
-    if (!targetAgentId || isDisabled) {
+    if (isDisabled) {
       return;
     }
-    void installSkill(skillId, targetAgentId);
+    onInstallClick?.(skillId);
   }
 
   // Render installed state

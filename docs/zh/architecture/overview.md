@@ -16,7 +16,7 @@ SkillPort 是一个三层桌面应用：React UI 通过 Tauri IPC 与 Rust 后�
 ┌──────────────▼───────────────────────────────────────────────────┐
 │ Rust + Tauri v2（src-tauri/src/）                                 │
 │   commands/*  薄 IPC 处理函数                                     │
-│   services/*  业务逻辑（scanner / installation / discovery）      │
+│   services/*  业务逻辑（scanner / installation / projects）       │
 │   targets/*   本地 + SSH 执行适配                                  │
 │   db/*        sqlx 池 + schema + repos                            │
 └──────────────┬─────────────────────────┬─────────────────────────┘

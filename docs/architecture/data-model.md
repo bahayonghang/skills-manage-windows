@@ -10,9 +10,10 @@ Tables are created in dependency order so foreign keys land on existing primarie
 core         skills / skill_installations / agent_skill_observations / agents
  └─ collections    collections / collection_skills
     └─ metadata    repositories / update_states / tags / tag_links / ai_reviews
-       └─ discovery   scan_directories / discovered_skills
-          └─ settings settings / operation_logs (+6 indexes)
-             └─ marketplace registries / skills / explanations (+8 ALTERs)
+       └─ discovery   scan_directories
+          └─ projects   projects / project_skill_installations
+             └─ settings settings / operation_logs (+6 indexes)
+                └─ marketplace registries / skills / explanations (+8 ALTERs)
 ```
 
 Every `CREATE TABLE` is wrapped in `IF NOT EXISTS` and incremental columns are added through `migrations::ensure_column` so the schema is idempotent across versions.
@@ -31,7 +32,7 @@ Every `CREATE TABLE` is wrapped in `IF NOT EXISTS` and incremental columns are a
 | `repositories_repo` | `skill_repositories`, `skill_repository_members` |
 | `update_states_repo` | `skill_update_states` |
 | `tags_repo` | `skill_tags`, `skill_tag_links`, `skill_ai_tag_reviews` |
-| `discovered_repo` | `discovered_skills` |
+| `projects_repo` | `projects`, `project_skill_installations` |
 | `scan_dirs_repo` | `scan_directories` |
 | `settings_repo` | `settings` |
 | `operation_logs_repo` | `operation_logs` |

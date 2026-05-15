@@ -10,7 +10,6 @@ vi.mock("@/stores/platformStore", () => ({
       agents: [],
       skillsByAgent: {},
       collectionCount: 0,
-      discoveredCount: 0,
       lastScanAt: null,
       scanState: "idle",
       isLoading: false,
@@ -24,7 +23,6 @@ vi.mock("@/stores/platformStore", () => ({
       resetForTargetChange: vi.fn(),
       applyScanSummary: vi.fn(),
       setCollectionCount: vi.fn(),
-      setDiscoveredCount: vi.fn(),
       addCustomAgent: vi.fn(),
       updateCustomAgent: vi.fn(),
       removeCustomAgent: vi.fn(),
@@ -74,20 +72,6 @@ vi.mock("@/stores/centralSkillsStore", () => ({
       error: null,
       loadCentralSkills: vi.fn().mockResolvedValue(undefined),
       installSkill: vi.fn(),
-      resetForTargetChange: vi.fn(),
-    };
-    if (typeof selector === "function") {
-      return selector(state);
-    }
-    return state;
-  }),
-}));
-
-vi.mock("@/stores/discoverStore", () => ({
-  useDiscoverStore: vi.fn().mockImplementation((selector?: unknown) => {
-    const state = {
-      rescanFromDisk: vi.fn().mockResolvedValue(undefined),
-      refreshCounts: vi.fn().mockResolvedValue(undefined),
       resetForTargetChange: vi.fn(),
     };
     if (typeof selector === "function") {

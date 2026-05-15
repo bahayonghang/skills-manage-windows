@@ -54,10 +54,13 @@ fn test_ai_secret() -> MockSecretStore {
 }
 
 async fn configure_ai(pool: &DbPool, api_url: &str) {
-    db::set_setting(pool, "ai_api_url", api_url)
+    db::set_setting(pool, "ai_provider", "custom")
+        .await
+        .expect("provider");
+    db::set_setting(pool, "ai_api_url__custom", api_url)
         .await
         .expect("api url");
-    db::set_setting(pool, "ai_model", "test-model")
+    db::set_setting(pool, "ai_model__custom", "test-model")
         .await
         .expect("model");
     db::set_setting(pool, "ai_tag_concurrency", "4")

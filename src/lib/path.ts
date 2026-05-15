@@ -2,13 +2,24 @@ export function normalizePathSeparators(path: string): string {
   return path.replace(/\\/g, "/");
 }
 
+function stripWindowsExtendedPathPrefix(path: string): string {
+  const normalized = normalizePathSeparators(path.trim());
+  if (/^\/\/\?\/UNC\//i.test(normalized)) {
+    return `//${normalized.slice("//?/UNC/".length)}`;
+  }
+  if (/^\/\/\?\//i.test(normalized)) {
+    return normalized.slice("//?/".length);
+  }
+  return normalized;
+}
+
 export function arePathsEquivalent(left: string | undefined, right: string | undefined): boolean {
   if (!left || !right) {
     return false;
   }
 
   const normalize = (path: string) => {
-    const normalized = normalizePathSeparators(path.trim()).replace(/\/+$/, "");
+    const normalized = stripWindowsExtendedPathPrefix(path).replace(/\/+$/, "");
     return isWindowsPath(path) ? normalized.toLocaleLowerCase("en-US") : normalized;
   };
 
@@ -24,11 +35,12 @@ export function formatPathForDisplay(path: string): string {
   if (!path) {
     return path;
   }
-  return isWindowsPath(path) ? path.replace(/\//g, "\\") : path;
+  const normalized = stripWindowsExtendedPathPrefix(path);
+  return isWindowsPath(normalized) ? normalized.replace(/\//g, "\\") : normalized;
 }
 
 export function compactHomePath(path: string): string {
-  const normalized = normalizePathSeparators(path);
+  const normalized = stripWindowsExtendedPathPrefix(path);
   if (normalized === "~") {
     return "~";
   }
@@ -56,7 +68,7 @@ export function compactHomePath(path: string): string {
 }
 
 export function deriveHomeDir(path: string): string | undefined {
-  const normalized = normalizePathSeparators(path).replace(/\/+$/, "");
+  const normalized = stripWindowsExtendedPathPrefix(path).replace(/\/+$/, "");
   if (normalized === "~" || normalized.startsWith("~/")) {
     return "~";
   }

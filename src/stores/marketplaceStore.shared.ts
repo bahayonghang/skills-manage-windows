@@ -24,6 +24,10 @@ export function createMarketplaceBaseState() {
     installingIds: new Set<string>(),
     error: null,
     githubImport: createInitialGitHubImportState(),
+    skillsShResults: [],
+    skillsShQuery: "",
+    isSkillsShLoading: false,
+    skillsShError: null,
   };
 }
 

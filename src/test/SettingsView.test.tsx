@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { SettingsView } from "../pages/SettingsView";
+import type { AiSettings } from "../stores/settingsStore";
 import {
   AiApiKeyState,
   ScanDirectory,
@@ -38,10 +39,6 @@ vi.mock("../stores/centralSkillsStore", () => ({
   useCentralSkillsStore: vi.fn(),
 }));
 
-vi.mock("../stores/discoverStore", () => ({
-  useDiscoverStore: vi.fn(),
-}));
-
 vi.mock("../stores/marketplaceStore", () => ({
   useMarketplaceStore: vi.fn(),
 }));
@@ -56,7 +53,6 @@ import { usePlatformStore } from "../stores/platformStore";
 import { useThemeStore } from "../stores/themeStore";
 import { useTargetStore } from "../stores/targetStore";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
-import { useDiscoverStore } from "../stores/discoverStore";
 import { useMarketplaceStore } from "../stores/marketplaceStore";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -131,6 +127,18 @@ const mockLobsterAgent: AgentWithStatus = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+const defaultAiSettings: AiSettings = {
+  provider: "claude",
+  region: "intl",
+  apiKey: "",
+  model: "",
+  customUrl: "",
+  protocol: "",
+  tagConcurrency: "1",
+  tagIntervalMs: "4000",
+  tagStopOnRateLimit: true,
+};
+
 function setupMocks({
   scanDirs = [] as ScanDirectory[],
   isLoadingScanDirs = false,
@@ -150,16 +158,8 @@ function setupMocks({
   saveGitHubPat = vi.fn(),
   clearGitHubPat = vi.fn(),
   testGitHubPat = vi.fn(),
-  aiSettings = {
-    provider: "claude",
-    region: "intl" as const,
-    apiKey: "",
-    model: "",
-    customUrl: "",
-    tagConcurrency: "1",
-    tagIntervalMs: "4000",
-    tagStopOnRateLimit: true,
-  },
+  aiSettings = defaultAiSettings,
+  aiRawSettings = {} as Record<string, string | null | undefined>,
   aiApiKeyState: providedAiApiKeyState = undefined as AiApiKeyState | undefined,
   aiSettingsLoaded = true,
   isLoadingAiSettings = false,
@@ -169,6 +169,7 @@ function setupMocks({
   aiTestResult = null as { ok: boolean; msg: string; code?: string; details?: string } | null,
   loadAiSettings = vi.fn(),
   updateAiSettings = vi.fn(),
+  switchAiProvider = vi.fn(),
   clearAiApiKey = vi.fn(),
   flushAiSettings = vi.fn(),
   testAiConnection = vi.fn(),
@@ -187,7 +188,6 @@ function setupMocks({
   deleteTarget = vi.fn(),
   switchTarget = vi.fn(),
   loadCentralSkills = vi.fn(),
-  refreshDiscoverCounts = vi.fn(),
   loadMarketplaceRegistries = vi.fn(),
   loadMarketplaceSkills = vi.fn(),
   flavor = "mocha" as const,
@@ -225,6 +225,7 @@ function setupMocks({
       isTestingGitHubPat,
       githubPatTestResult: null,
       aiSettings,
+      aiRawSettings,
       aiApiKeyState,
       aiSettingsLoaded,
       isLoadingAiSettings,
@@ -238,6 +239,7 @@ function setupMocks({
       testGitHubPat,
       loadAiSettings,
       updateAiSettings,
+      switchAiProvider,
       clearAiApiKey,
       flushAiSettings,
       testAiConnection,
@@ -251,7 +253,6 @@ function setupMocks({
       platformPaths: {},
     skillsByAgent: {},
       collectionCount: 0,
-      discoveredCount: 0,
       categoryVisibility,
       lastScanAt: "2026-04-23T01:00:00Z",
       scanState: "idle",
@@ -268,7 +269,6 @@ function setupMocks({
       setAgentEnabled,
       applyScanSummary: vi.fn(),
       setCollectionCount: vi.fn(),
-      setDiscoveredCount: vi.fn(),
       addCustomAgent,
       updateCustomAgent,
       removeCustomAgent,
@@ -301,12 +301,6 @@ function setupMocks({
   vi.mocked(useCentralSkillsStore).mockImplementation((selector) =>
     selector({
       loadCentralSkills,
-    } as never)
-  );
-
-  vi.mocked(useDiscoverStore).mockImplementation((selector) =>
-    selector({
-      refreshCounts: refreshDiscoverCounts,
     } as never)
   );
 
@@ -401,6 +395,39 @@ describe("SettingsView", () => {
     renderSettingsView();
     expect(screen.getByText("已保存到安全存储")).toBeTruthy();
     expect(screen.getByText(/已配置 AI API Key/)).toBeTruthy();
+  });
+
+  it("switches AI provider through the provider-scoped store action", async () => {
+    const switchAiProvider = vi.fn().mockResolvedValue(undefined);
+    setupMocks({ switchAiProvider });
+    renderSettingsView();
+
+    fireEvent.click(screen.getByRole("button", { name: "DeepSeek" }));
+
+    await waitFor(() => {
+      expect(switchAiProvider).toHaveBeenCalledWith("deepseek");
+    });
+  });
+
+  it("shows custom protocol selector and resolved OpenAI URL", () => {
+    setupMocks({
+      aiSettings: {
+        provider: "custom",
+        region: "intl",
+        apiKey: "",
+        model: "custom-model",
+        customUrl: "https://proxy.example.com/v1",
+        protocol: "openai",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+    });
+    renderSettingsView();
+
+    expect(screen.getByText("自定义协议")).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /OpenAI/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("https://proxy.example.com/v1/chat/completions")).toBeTruthy();
   });
 
   it("clears the AI API key through the secure-storage action", async () => {
@@ -582,7 +609,6 @@ describe("SettingsView", () => {
       updateSshTarget,
       rescan: vi.fn().mockResolvedValue(undefined),
       loadCentralSkills: vi.fn().mockResolvedValue(undefined),
-      refreshDiscoverCounts: vi.fn().mockResolvedValue(undefined),
       loadMarketplaceRegistries: vi.fn().mockResolvedValue(undefined),
     });
     renderSettingsView();

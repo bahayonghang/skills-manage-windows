@@ -1,9 +1,11 @@
-use chrono::Utc;
+use chrono::{Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
+use tokio::sync::Semaphore;
 
 use crate::{
     db::{self, DbPool, Skill, SkillRepositoryAssignment, SkillUpdateState},
@@ -23,6 +25,10 @@ const STATUS_UNSUPPORTED: &str = "unsupported";
 const STATUS_REMOTE_MISSING: &str = "remote_missing";
 const STATUS_ERROR: &str = "error";
 const STATUS_CANCELLED: &str = "cancelled";
+fn snapshot_cache_ttl() -> ChronoDuration {
+    ChronoDuration::minutes(10)
+}
+const SNAPSHOT_DOWNLOAD_CONCURRENCY: usize = 4;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,6 +75,17 @@ pub struct CentralSkillUpdateResult {
 struct GitHubUpdateSource {
     repo: GitHubRepoRef,
     source_path: String,
+}
+
+#[derive(Debug, Clone)]
+struct PreparedSkillUpdate {
+    skill: Skill,
+    source: Option<GitHubUpdateSource>,
+    assignment: SkillRepositoryAssignment,
+    target_dir: Option<PathBuf>,
+    previous_state: Option<SkillUpdateState>,
+    reuse_previous_local_hash: bool,
+    local_hash: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -126,22 +143,31 @@ pub async fn check_central_skill_updates(
     state: State<'_, AppState>,
     skill_ids: Option<Vec<String>>,
 ) -> Result<Vec<SkillUpdateState>, String> {
+    let pool = state.active_db().await?;
     let fs = CentralFs::from_active_target(state.active_target().await?).await?;
-    let skills = load_selected_central_skills(&state.db, skill_ids.as_deref()).await?;
+    let skills = load_selected_central_skills(&pool, skill_ids.as_deref()).await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
             .await?;
     let client = github_import::github_client()?;
-    let mut snapshots = HashMap::new();
-    let mut counters = UpdateCounters::default();
-    let mut states = Vec::with_capacity(skills.len());
     let total = skills.len();
+    let mut counters = UpdateCounters::default();
+    let mut states = Vec::with_capacity(total);
 
     state.central_update_cancel.store(false, Ordering::SeqCst);
-
     emit_update_progress(&app, "checking", "started", total, &counters, None, None);
 
-    for skill in skills {
+    let prepared = prepare_skill_updates(&pool, &fs, skills, auth.as_deref(), false).await?;
+    let snapshots = prepare_snapshots(
+        &client,
+        auth.as_deref(),
+        &prepared,
+        &state.central_update_snapshots,
+    )
+    .await?;
+
+    for prepared_skill in prepared {
+        let skill = &prepared_skill.skill;
         if state.central_update_cancel.load(Ordering::SeqCst) {
             emit_update_progress(
                 &app,
@@ -161,31 +187,22 @@ pub async fn check_central_skill_updates(
             "running",
             total,
             &counters,
-            Some(&skill),
+            Some(skill),
             None,
         );
 
-        let state_result = match load_remote_skill_content(
-            &state.db,
-            &fs,
-            &skill,
-            auth.as_deref(),
-            &client,
-            &mut snapshots,
-        )
-        .await
-        {
-            Ok(Some(remote)) => state_from_remote(&skill, &remote, false),
-            Ok(None) => unsupported_state(&state.db, &skill, None).await?,
+        let state_result = match load_remote_skill_content(&prepared_skill, &snapshots) {
+            Ok(Some(remote)) => state_from_remote(skill, &remote, false),
+            Ok(None) => unsupported_state_from_assignment(skill, &prepared_skill.assignment, None),
             Err(RemoteSkillLoadError::RemoteMissing(reason)) => {
-                remote_missing_state(&state.db, &skill, &reason).await?
+                remote_missing_state_from_assignment(skill, &prepared_skill.assignment, &reason)
             }
             Err(RemoteSkillLoadError::Other(error)) => {
-                error_state(&state.db, &skill, &error).await?
+                error_state_from_assignment(skill, &prepared_skill.assignment, &error)
             }
         };
 
-        db::upsert_skill_update_state(&state.db, &state_result).await?;
+        db::upsert_skill_update_state(&pool, &state_result).await?;
         update_counters_for_state(&mut counters, &state_result);
         emit_update_progress(
             &app,
@@ -193,7 +210,7 @@ pub async fn check_central_skill_updates(
             &state_result.status,
             total,
             &counters,
-            Some(&skill),
+            Some(skill),
             state_result.error.as_deref(),
         );
         states.push(state_result);
@@ -213,26 +230,35 @@ pub async fn update_central_skills(
     if skill_ids.is_empty() {
         return Err("Select at least one Central skill to update.".to_string());
     }
+    let pool = state.active_db().await?;
     let fs = CentralFs::from_active_target(state.active_target().await?).await?;
 
-    let skills = load_selected_central_skills(&state.db, Some(&skill_ids)).await?;
+    let skills = load_selected_central_skills(&pool, Some(&skill_ids)).await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
             .await?;
     let client = github_import::github_client()?;
-    let mut snapshots = HashMap::new();
-    let mut counters = UpdateCounters::default();
     let total = skills.len();
+    let mut counters = UpdateCounters::default();
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
     let mut skipped = Vec::new();
     let mut states = Vec::new();
 
     state.central_update_cancel.store(false, Ordering::SeqCst);
-
     emit_update_progress(&app, "updating", "started", total, &counters, None, None);
 
-    for skill in skills {
+    let prepared = prepare_skill_updates(&pool, &fs, skills, auth.as_deref(), true).await?;
+    let snapshots = prepare_snapshots(
+        &client,
+        auth.as_deref(),
+        &prepared,
+        &state.central_update_snapshots,
+    )
+    .await?;
+
+    for prepared_skill in prepared {
+        let skill = &prepared_skill.skill;
         if state.central_update_cancel.load(Ordering::SeqCst) {
             emit_update_progress(
                 &app,
@@ -257,23 +283,14 @@ pub async fn update_central_skills(
             "running",
             total,
             &counters,
-            Some(&skill),
+            Some(skill),
             None,
         );
 
-        match load_remote_skill_content(
-            &state.db,
-            &fs,
-            &skill,
-            auth.as_deref(),
-            &client,
-            &mut snapshots,
-        )
-        .await
-        {
+        match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) if remote.remote_hash == remote.local_hash => {
-                let state_result = state_from_remote(&skill, &remote, false);
-                db::upsert_skill_update_state(&state.db, &state_result).await?;
+                let state_result = state_from_remote(skill, &remote, false);
+                db::upsert_skill_update_state(&pool, &state_result).await?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -286,14 +303,14 @@ pub async fn update_central_skills(
                     STATUS_UP_TO_DATE,
                     total,
                     &counters,
-                    Some(&skill),
+                    Some(skill),
                     None,
                 );
                 states.push(state_result);
             }
-            Ok(Some(remote)) => match update_one_skill(&state.db, &fs, &skill, remote).await {
+            Ok(Some(remote)) => match update_one_skill(&pool, &fs, skill, remote).await {
                 Ok(state_result) => {
-                    db::upsert_skill_update_state(&state.db, &state_result).await?;
+                    db::upsert_skill_update_state(&pool, &state_result).await?;
                     counters.completed += 1;
                     counters.succeeded += 1;
                     succeeded.push(skill.id.clone());
@@ -303,14 +320,15 @@ pub async fn update_central_skills(
                         STATUS_UP_TO_DATE,
                         total,
                         &counters,
-                        Some(&skill),
+                        Some(skill),
                         None,
                     );
                     states.push(state_result);
                 }
                 Err(error) => {
-                    let state_result = error_state(&state.db, &skill, &error).await?;
-                    db::upsert_skill_update_state(&state.db, &state_result).await?;
+                    let state_result =
+                        error_state_from_assignment(skill, &prepared_skill.assignment, &error);
+                    db::upsert_skill_update_state(&pool, &state_result).await?;
                     counters.completed += 1;
                     counters.failed += 1;
                     failed.push(CentralSkillUpdateFailure {
@@ -323,15 +341,16 @@ pub async fn update_central_skills(
                         STATUS_ERROR,
                         total,
                         &counters,
-                        Some(&skill),
+                        Some(skill),
                         Some(&error),
                     );
                     states.push(state_result);
                 }
             },
             Ok(None) => {
-                let state_result = unsupported_state(&state.db, &skill, None).await?;
-                db::upsert_skill_update_state(&state.db, &state_result).await?;
+                let state_result =
+                    unsupported_state_from_assignment(skill, &prepared_skill.assignment, None);
+                db::upsert_skill_update_state(&pool, &state_result).await?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -347,14 +366,18 @@ pub async fn update_central_skills(
                     STATUS_UNSUPPORTED,
                     total,
                     &counters,
-                    Some(&skill),
+                    Some(skill),
                     state_result.error.as_deref(),
                 );
                 states.push(state_result);
             }
             Err(RemoteSkillLoadError::RemoteMissing(reason)) => {
-                let state_result = remote_missing_state(&state.db, &skill, &reason).await?;
-                db::upsert_skill_update_state(&state.db, &state_result).await?;
+                let state_result = remote_missing_state_from_assignment(
+                    skill,
+                    &prepared_skill.assignment,
+                    &reason,
+                );
+                db::upsert_skill_update_state(&pool, &state_result).await?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -367,14 +390,15 @@ pub async fn update_central_skills(
                     STATUS_REMOTE_MISSING,
                     total,
                     &counters,
-                    Some(&skill),
+                    Some(skill),
                     Some(&reason),
                 );
                 states.push(state_result);
             }
             Err(RemoteSkillLoadError::Other(error)) => {
-                let state_result = error_state(&state.db, &skill, &error).await?;
-                db::upsert_skill_update_state(&state.db, &state_result).await?;
+                let state_result =
+                    error_state_from_assignment(skill, &prepared_skill.assignment, &error);
+                db::upsert_skill_update_state(&pool, &state_result).await?;
                 counters.completed += 1;
                 counters.failed += 1;
                 failed.push(CentralSkillUpdateFailure {
@@ -387,7 +411,7 @@ pub async fn update_central_skills(
                     STATUS_ERROR,
                     total,
                     &counters,
-                    Some(&skill),
+                    Some(skill),
                     Some(&error),
                 );
                 states.push(state_result);
@@ -474,35 +498,151 @@ async fn load_selected_central_skills(
     pool: &DbPool,
     skill_ids: Option<&[String]>,
 ) -> Result<Vec<Skill>, String> {
-    let mut skills = db::get_central_skills(pool).await?;
     if let Some(skill_ids) = skill_ids {
-        let requested = skill_ids
-            .iter()
-            .cloned()
-            .collect::<std::collections::HashSet<_>>();
-        skills.retain(|skill| requested.contains(&skill.id));
+        return db::get_central_skills_by_ids(pool, skill_ids).await;
     }
-    Ok(skills)
+    db::get_central_skills(pool).await
 }
 
-async fn load_remote_skill_content(
+async fn prepare_skill_updates(
     pool: &DbPool,
     fs: &CentralFs,
-    skill: &Skill,
+    skills: Vec<Skill>,
     auth_token: Option<&str>,
+    allow_fresh_state_reuse: bool,
+) -> Result<Vec<PreparedSkillUpdate>, String> {
+    let skill_ids = skills
+        .iter()
+        .map(|skill| skill.id.clone())
+        .collect::<Vec<_>>();
+    let mut assignments = db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
+    let unknown_repository = db::get_local_unknown_repository(pool).await?;
+    let previous_states = db::get_skill_update_states_for_skills(pool, &skill_ids)
+        .await?
+        .into_iter()
+        .map(|state| (state.skill_id.clone(), state))
+        .collect::<HashMap<_, _>>();
+
+    let mut prepared = Vec::with_capacity(skills.len());
+    let mut roots_to_hash = Vec::new();
+    let mut skill_ids_to_hash = Vec::new();
+
+    for skill in skills {
+        let assignment =
+            assignments
+                .remove(&skill.id)
+                .unwrap_or_else(|| SkillRepositoryAssignment {
+                    repository: unknown_repository.clone(),
+                    source_path: None,
+                    is_source_unknown: true,
+                });
+        let source =
+            resolve_github_update_source_from_assignment(&skill, &assignment, auth_token).await?;
+        let previous_state = previous_states.get(&skill.id).cloned();
+        let target_dir = if source.is_some() {
+            Some(skill_target_dir(&skill)?)
+        } else {
+            None
+        };
+        let reuse_previous_local_hash = allow_fresh_state_reuse
+            && previous_state
+                .as_ref()
+                .is_some_and(is_fresh_update_available_state);
+
+        if source.is_some() && !reuse_previous_local_hash {
+            if let Some(target_dir) = &target_dir {
+                roots_to_hash.push(target_dir.clone());
+                skill_ids_to_hash.push(skill.id.clone());
+            }
+        }
+
+        prepared.push(PreparedSkillUpdate {
+            skill,
+            source,
+            assignment,
+            target_dir,
+            previous_state,
+            reuse_previous_local_hash,
+            local_hash: None,
+        });
+    }
+
+    let hashes = fs.hash_directories(&roots_to_hash).await?;
+    let hash_by_skill_id = skill_ids_to_hash
+        .into_iter()
+        .zip(roots_to_hash)
+        .filter_map(|(skill_id, root)| hashes.get(&root).cloned().map(|hash| (skill_id, hash)))
+        .collect::<HashMap<_, _>>();
+
+    for prepared_skill in &mut prepared {
+        if let Some(hash) = hash_by_skill_id.get(&prepared_skill.skill.id) {
+            prepared_skill.local_hash = Some(hash.clone());
+        }
+    }
+
+    Ok(prepared)
+}
+
+async fn prepare_snapshots(
     client: &reqwest::Client,
-    snapshots: &mut HashMap<String, GitHubRepoSnapshot>,
+    auth_token: Option<&str>,
+    prepared: &[PreparedSkillUpdate],
+    cache: &crate::CentralUpdateSnapshotCache,
+) -> Result<HashMap<String, GitHubRepoSnapshot>, String> {
+    let mut repos = HashMap::<String, GitHubRepoRef>::new();
+    for prepared_skill in prepared {
+        if let Some(source) = &prepared_skill.source {
+            repos
+                .entry(repo_cache_key(&source.repo))
+                .or_insert_with(|| source.repo.clone());
+        }
+    }
+
+    let mut snapshots = HashMap::new();
+    let mut missing = Vec::new();
+    for (key, repo) in repos {
+        if let Some(snapshot) = cache.get_fresh(&key, snapshot_cache_ttl()) {
+            snapshots.insert(key, snapshot);
+        } else {
+            missing.push(repo);
+        }
+    }
+
+    let semaphore = Arc::new(Semaphore::new(SNAPSHOT_DOWNLOAD_CONCURRENCY));
+    let auth = auth_token.map(str::to_string);
+    let downloads = missing.into_iter().map(|repo| {
+        let client = client.clone();
+        let semaphore = Arc::clone(&semaphore);
+        let auth = auth.clone();
+        async move {
+            let _permit = semaphore
+                .acquire_owned()
+                .await
+                .map_err(|_| "Central update snapshot downloader closed.".to_string())?;
+            let snapshot =
+                github_import::download_repo_snapshot(&client, &repo, auth.as_deref()).await?;
+            Ok::<_, String>((repo_cache_key(&repo), snapshot))
+        }
+    });
+
+    for result in futures_util::future::join_all(downloads).await {
+        let (key, snapshot) = result?;
+        cache.insert(key.clone(), snapshot.clone());
+        snapshots.insert(key, snapshot);
+    }
+
+    Ok(snapshots)
+}
+
+fn load_remote_skill_content(
+    prepared: &PreparedSkillUpdate,
+    snapshots: &HashMap<String, GitHubRepoSnapshot>,
 ) -> Result<Option<RemoteSkillContent>, RemoteSkillLoadError> {
-    let Some(source) = resolve_github_update_source(pool, skill, auth_token)
-        .await
-        .map_err(RemoteSkillLoadError::other)?
-    else {
+    let skill = &prepared.skill;
+    let Some(source) = prepared.source.clone() else {
         return Ok(None);
     };
 
-    ensure_snapshot(client, &source.repo, auth_token, snapshots)
-        .await
-        .map_err(RemoteSkillLoadError::other)?;
     let snapshot = snapshots
         .get(&repo_cache_key(&source.repo))
         .ok_or_else(|| RemoteSkillLoadError::other("GitHub repository snapshot is unavailable."))?;
@@ -514,11 +654,12 @@ async fn load_remote_skill_content(
     ensure_remote_skill_manifest(&files).map_err(RemoteSkillLoadError::remote_missing)?;
 
     let remote_hash = hash_remote_files(snapshot, &files).map_err(RemoteSkillLoadError::other)?;
-    let target_dir = skill_target_dir(skill).map_err(RemoteSkillLoadError::other)?;
-    let local_hash = fs
-        .hash_directory(&target_dir)
-        .await
-        .map_err(RemoteSkillLoadError::other)?;
+    let target_dir = prepared.target_dir.clone().ok_or_else(|| {
+        RemoteSkillLoadError::other(format!("Skill '{}' has no target directory.", skill.id))
+    })?;
+    let local_hash = reused_or_prepared_local_hash(prepared).ok_or_else(|| {
+        RemoteSkillLoadError::other(format!("Skill '{}' local hash is unavailable.", skill.id))
+    })?;
 
     Ok(Some(RemoteSkillContent {
         source,
@@ -528,6 +669,16 @@ async fn load_remote_skill_content(
         local_hash,
         target_dir,
     }))
+}
+
+fn reused_or_prepared_local_hash(prepared: &PreparedSkillUpdate) -> Option<String> {
+    if prepared.reuse_previous_local_hash {
+        return prepared
+            .previous_state
+            .as_ref()
+            .and_then(|state| state.last_remote_hash.clone());
+    }
+    prepared.local_hash.clone()
 }
 
 fn find_remote_skill_candidate(
@@ -556,12 +707,11 @@ fn find_remote_skill_candidate(
         })
 }
 
-async fn resolve_github_update_source(
-    pool: &DbPool,
+async fn resolve_github_update_source_from_assignment(
     skill: &Skill,
+    assignment: &SkillRepositoryAssignment,
     auth_token: Option<&str>,
 ) -> Result<Option<GitHubUpdateSource>, String> {
-    let assignment = db::get_skill_repository_assignment(pool, &skill.id).await?;
     if assignment.is_source_unknown || assignment.repository.is_unknown {
         return Ok(None);
     }
@@ -595,7 +745,7 @@ async fn resolve_github_update_source(
                 .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}")),
         }
     } else {
-        let url = repository_url(&assignment).ok_or_else(|| {
+        let url = repository_url(assignment).ok_or_else(|| {
             format!(
                 "GitHub source for skill '{}' is missing repository URL.",
                 skill.id
@@ -616,22 +766,6 @@ fn repository_url(assignment: &SkillRepositoryAssignment) -> Option<String> {
             _ => None,
         }
     })
-}
-
-async fn ensure_snapshot(
-    client: &reqwest::Client,
-    repo: &GitHubRepoRef,
-    auth_token: Option<&str>,
-    snapshots: &mut HashMap<String, GitHubRepoSnapshot>,
-) -> Result<(), String> {
-    let key = repo_cache_key(repo);
-    if snapshots.contains_key(&key) {
-        return Ok(());
-    }
-
-    let snapshot = github_import::download_repo_snapshot(client, repo, auth_token).await?;
-    snapshots.insert(key, snapshot);
-    Ok(())
 }
 
 fn repo_cache_key(repo: &GitHubRepoRef) -> String {
@@ -673,21 +807,20 @@ fn state_from_remote(
     }
 }
 
-async fn unsupported_state(
-    pool: &DbPool,
+fn unsupported_state_from_assignment(
     skill: &Skill,
+    assignment: &SkillRepositoryAssignment,
     reason: Option<&str>,
-) -> Result<SkillUpdateState, String> {
-    let assignment = db::get_skill_repository_assignment(pool, &skill.id).await?;
-    let source_url = repository_url(&assignment);
+) -> SkillUpdateState {
+    let source_url = repository_url(assignment);
     let source_type = assignment.repository.source_type.clone();
     let ref_name = assignment.repository.branch.clone();
     let source_path = assignment.source_path.clone();
     let reason = reason
         .map(str::to_string)
-        .unwrap_or_else(|| unsupported_reason(&assignment));
+        .unwrap_or_else(|| unsupported_reason(assignment));
 
-    Ok(SkillUpdateState {
+    SkillUpdateState {
         skill_id: skill.id.clone(),
         source_type,
         source_url,
@@ -699,51 +832,64 @@ async fn unsupported_state(
         last_updated_at: None,
         status: STATUS_UNSUPPORTED.to_string(),
         error: Some(reason),
-    })
+    }
 }
 
-async fn remote_missing_state(
-    pool: &DbPool,
+fn is_fresh_update_available_state(state: &SkillUpdateState) -> bool {
+    if state.status != STATUS_UPDATE_AVAILABLE {
+        return false;
+    }
+    let Some(last_checked_at) = state.last_checked_at.as_deref() else {
+        return false;
+    };
+    let Ok(last_checked_at) = chrono::DateTime::parse_from_rfc3339(last_checked_at) else {
+        return false;
+    };
+    state.last_remote_hash.is_some()
+        && Utc::now().signed_duration_since(last_checked_at.with_timezone(&Utc))
+            <= snapshot_cache_ttl()
+}
+
+fn remote_missing_state_from_assignment(
     skill: &Skill,
+    assignment: &SkillRepositoryAssignment,
     reason: &str,
-) -> Result<SkillUpdateState, String> {
-    let assignment = db::get_skill_repository_assignment(pool, &skill.id).await?;
-    let source_url = repository_url(&assignment);
-    Ok(SkillUpdateState {
+) -> SkillUpdateState {
+    let source_url = repository_url(assignment);
+    SkillUpdateState {
         skill_id: skill.id.clone(),
-        source_type: assignment.repository.source_type,
+        source_type: assignment.repository.source_type.clone(),
         source_url,
-        ref_name: assignment.repository.branch,
-        source_path: assignment.source_path,
+        ref_name: assignment.repository.branch.clone(),
+        source_path: assignment.source_path.clone(),
         last_remote_hash: None,
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
         status: STATUS_REMOTE_MISSING.to_string(),
         error: Some(reason.to_string()),
-    })
+    }
 }
 
-async fn error_state(
-    pool: &DbPool,
+fn error_state_from_assignment(
     skill: &Skill,
+    assignment: &SkillRepositoryAssignment,
     error: &str,
-) -> Result<SkillUpdateState, String> {
-    let assignment = db::get_skill_repository_assignment(pool, &skill.id).await?;
-    let source_url = repository_url(&assignment);
-    Ok(SkillUpdateState {
+) -> SkillUpdateState {
+    let source_url = repository_url(assignment);
+    SkillUpdateState {
         skill_id: skill.id.clone(),
-        source_type: assignment.repository.source_type,
+        source_type: assignment.repository.source_type.clone(),
         source_url,
-        ref_name: assignment.repository.branch,
-        source_path: assignment.source_path,
+        ref_name: assignment.repository.branch.clone(),
+        source_path: assignment.source_path.clone(),
         last_remote_hash: None,
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
         status: STATUS_ERROR.to_string(),
         error: Some(error.to_string()),
-    })
+    }
 }
 
 fn unsupported_reason(assignment: &SkillRepositoryAssignment) -> String {
@@ -869,231 +1015,4 @@ fn emit_update_progress(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use sqlx::SqlitePool;
-    use tempfile::TempDir;
-
-    async fn setup_test_db() -> SqlitePool {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
-
-    fn make_central_skill(id: &str, dir: &Path) -> Skill {
-        Skill {
-            id: id.to_string(),
-            name: id.to_string(),
-            description: Some(format!("Desc for {id}")),
-            file_path: dir.join("SKILL.md").to_string_lossy().into_owned(),
-            canonical_path: Some(dir.to_string_lossy().into_owned()),
-            is_central: true,
-            source: Some("github:owner/repo".to_string()),
-            content: None,
-            scanned_at: Utc::now().to_rfc3339(),
-        }
-    }
-
-    fn test_repo() -> GitHubRepoRef {
-        GitHubRepoRef {
-            owner: "owner".to_string(),
-            repo: "repo".to_string(),
-            branch: "main".to_string(),
-            normalized_url: "https://github.com/owner/repo".to_string(),
-        }
-    }
-
-    #[test]
-    fn missing_candidate_is_typed_as_remote_missing() {
-        let source = GitHubUpdateSource {
-            repo: test_repo(),
-            source_path: "skills/missing".to_string(),
-        };
-        let snapshot = GitHubRepoSnapshot {
-            files: HashMap::from([(
-                "skills/other/SKILL.md".to_string(),
-                b"---\nname: Other\n---".to_vec(),
-            )]),
-        };
-
-        let error = find_remote_skill_candidate(&source, &snapshot).unwrap_err();
-
-        assert!(matches!(error, RemoteSkillLoadError::RemoteMissing(_)));
-        assert!(error
-            .message()
-            .contains("no longer contains an importable skill"));
-    }
-
-    #[test]
-    fn missing_source_path_is_remote_missing_reason() {
-        let snapshot = GitHubRepoSnapshot {
-            files: HashMap::from([(
-                "skills/other/SKILL.md".to_string(),
-                b"---\nname: Other\n---".to_vec(),
-            )]),
-        };
-
-        let reason = collect_remote_skill_files(&snapshot, "skills/missing").unwrap_err();
-        let error = RemoteSkillLoadError::remote_missing(reason);
-
-        assert!(matches!(error, RemoteSkillLoadError::RemoteMissing(_)));
-        assert!(error.message().contains("no longer available"));
-    }
-
-    #[test]
-    fn missing_skill_manifest_is_remote_missing_reason() {
-        let files = vec![RemoteSkillFile {
-            repo_path: "skills/demo/README.md".to_string(),
-            relative_path: "README.md".to_string(),
-            bytes: b"demo".to_vec(),
-        }];
-
-        let reason = ensure_remote_skill_manifest(&files).unwrap_err();
-        let error = RemoteSkillLoadError::remote_missing(reason);
-
-        assert!(matches!(error, RemoteSkillLoadError::RemoteMissing(_)));
-        assert!(error.message().contains("SKILL.md"));
-    }
-
-    #[test]
-    fn update_counters_count_remote_missing_as_skipped() {
-        let mut counters = UpdateCounters::default();
-        let state = SkillUpdateState {
-            skill_id: "missing".to_string(),
-            source_type: "github".to_string(),
-            source_url: Some("https://github.com/owner/repo".to_string()),
-            ref_name: Some("main".to_string()),
-            source_path: Some("skills/missing".to_string()),
-            last_remote_hash: None,
-            latest_remote_hash: None,
-            last_checked_at: Some(Utc::now().to_rfc3339()),
-            last_updated_at: None,
-            status: STATUS_REMOTE_MISSING.to_string(),
-            error: Some("removed remotely".to_string()),
-        };
-
-        update_counters_for_state(&mut counters, &state);
-
-        assert_eq!(counters.completed, 1);
-        assert_eq!(counters.skipped, 1);
-        assert_eq!(counters.failed, 0);
-    }
-
-    #[tokio::test]
-    async fn keep_remote_missing_detaches_source_without_deleting_skill() {
-        let pool = setup_test_db().await;
-        let temp = TempDir::new().unwrap();
-        let skill_dir = temp.path().join("keep-local");
-        std::fs::create_dir_all(&skill_dir).unwrap();
-        std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Keep Local\n---").unwrap();
-        let skill = make_central_skill("keep-local", &skill_dir);
-        db::upsert_skill(&pool, &skill).await.unwrap();
-        db::assign_github_repository_to_skill(
-            &pool,
-            "owner",
-            "repo",
-            "main",
-            "https://github.com/owner/repo",
-            "keep-local",
-            "skills/keep-local",
-        )
-        .await
-        .unwrap();
-        db::upsert_skill_update_state(
-            &pool,
-            &SkillUpdateState {
-                skill_id: "keep-local".to_string(),
-                source_type: "github".to_string(),
-                source_url: Some("https://github.com/owner/repo".to_string()),
-                ref_name: Some("main".to_string()),
-                source_path: Some("skills/keep-local".to_string()),
-                last_remote_hash: None,
-                latest_remote_hash: None,
-                last_checked_at: Some(Utc::now().to_rfc3339()),
-                last_updated_at: None,
-                status: STATUS_REMOTE_MISSING.to_string(),
-                error: Some("removed remotely".to_string()),
-            },
-        )
-        .await
-        .unwrap();
-
-        let kept = keep_remote_missing_central_skills_impl(&pool, &["keep-local".to_string()])
-            .await
-            .unwrap();
-
-        assert_eq!(kept, vec!["keep-local"]);
-        assert!(skill_dir.exists());
-        assert!(db::get_skill_by_id(&pool, "keep-local")
-            .await
-            .unwrap()
-            .is_some());
-        let assignment = db::get_skill_repository_assignment(&pool, "keep-local")
-            .await
-            .unwrap();
-        assert!(assignment.is_source_unknown);
-        assert!(
-            db::get_skill_update_states_for_skills(&pool, &["keep-local".to_string()])
-                .await
-                .unwrap()
-                .is_empty()
-        );
-    }
-
-    #[tokio::test]
-    async fn keep_remote_missing_rejects_non_remote_missing_state() {
-        let pool = setup_test_db().await;
-        let temp = TempDir::new().unwrap();
-        let skill_dir = temp.path().join("available");
-        std::fs::create_dir_all(&skill_dir).unwrap();
-        std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Available\n---").unwrap();
-        let skill = make_central_skill("available", &skill_dir);
-        db::upsert_skill(&pool, &skill).await.unwrap();
-        db::assign_github_repository_to_skill(
-            &pool,
-            "owner",
-            "repo",
-            "main",
-            "https://github.com/owner/repo",
-            "available",
-            "skills/available",
-        )
-        .await
-        .unwrap();
-        db::upsert_skill_update_state(
-            &pool,
-            &SkillUpdateState {
-                skill_id: "available".to_string(),
-                source_type: "github".to_string(),
-                source_url: Some("https://github.com/owner/repo".to_string()),
-                ref_name: Some("main".to_string()),
-                source_path: Some("skills/available".to_string()),
-                last_remote_hash: Some("fnv1a64:old".to_string()),
-                latest_remote_hash: Some("fnv1a64:new".to_string()),
-                last_checked_at: Some(Utc::now().to_rfc3339()),
-                last_updated_at: None,
-                status: STATUS_UPDATE_AVAILABLE.to_string(),
-                error: None,
-            },
-        )
-        .await
-        .unwrap();
-
-        let error = keep_remote_missing_central_skills_impl(&pool, &["available".to_string()])
-            .await
-            .unwrap_err();
-
-        assert!(error.contains("not marked as removed remotely"));
-        let assignment = db::get_skill_repository_assignment(&pool, "available")
-            .await
-            .unwrap();
-        assert!(!assignment.is_source_unknown);
-        assert_eq!(
-            db::get_skill_update_states_for_skills(&pool, &["available".to_string()])
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
-    }
-}
+mod tests;

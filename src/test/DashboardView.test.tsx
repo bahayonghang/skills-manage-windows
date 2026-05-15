@@ -367,7 +367,6 @@ describe("DashboardView", () => {
         "claude-code": 1,
       },
       collectionCount: collections.length,
-      discoveredCount: 4,
       dashboardCentralSummary: {
         centralSkillCount: 3,
         updatesAvailable: 1,
@@ -396,7 +395,6 @@ describe("DashboardView", () => {
 
     expect(screen.getByRole("heading", { name: /Dashboard/ })).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-metric-central")).toHaveTextContent("3");
-    expect(screen.getByTestId("dashboard-metric-discovered")).toHaveTextContent("4");
     expect(screen.getByTestId("dashboard-metric-collections")).toHaveTextContent("1");
     expect(screen.getByTestId("dashboard-metric-updates")).toHaveTextContent("1");
     expect(screen.getByTestId("dashboard-metric-ai")).toHaveTextContent("1");

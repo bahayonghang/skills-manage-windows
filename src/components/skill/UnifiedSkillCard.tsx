@@ -97,6 +97,7 @@ export interface UnifiedSkillCardProps {
   isCentral?: boolean;
   platformBadge?: { id: string; name: string };
   projectBadge?: string;
+  originBadge?: { kind: "central" | "project" | string; label: string };
 
   // ── central variant ──
   platformIcons?: {
@@ -147,6 +148,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     isCentral,
     platformBadge,
     projectBadge,
+    originBadge,
     platformIcons,
     sourceType,
     originKind,
@@ -242,7 +244,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             <Checkbox
               checked={checkbox.checked}
               onCheckedChange={checkbox.onChange}
-              aria-label={t("discover.selectSkill")}
+              aria-label={t("common.selectSkill")}
             />
           </div>
         )}
@@ -315,8 +317,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   <button
                     onClick={onInstallToCentral}
                     disabled={isLoading}
-                    title={t("discover.installToCentral")}
-                    aria-label={t("discover.installToCentral")}
+                    title={t("common.installToCentral")}
+                    aria-label={t("common.installToCentral")}
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
                   >
                     {isLoading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpRight className="size-4" />}
@@ -328,8 +330,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   <button
                     onClick={onInstallToPlatform}
                     disabled={isLoading}
-                    title={t("discover.installToPlatform")}
-                    aria-label={t("discover.installToPlatform")}
+                    title={t("common.installToPlatform")}
+                    aria-label={t("common.installToPlatform")}
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
                   >
                     {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
@@ -347,15 +349,26 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   />
                 )}
 
-                {/* Marketplace installed indicator (disabled Check icon) */}
-                {onInstall && isInstalled && (
+                {onInstall && (
                   <button
-                    disabled
-                    title={t("marketplace.installed")}
-                    aria-label={t("marketplace.installed")}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-primary cursor-default"
+                    onClick={isInstalled ? undefined : onInstall}
+                    disabled={isInstalled || isLoading}
+                    title={isInstalled ? t("marketplace.installed") : t("marketplace.install")}
+                    aria-label={isInstalled ? t("marketplace.installed") : t("marketplace.install")}
+                    className={cn(
+                      "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+                      isInstalled
+                        ? "text-primary cursor-default"
+                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
+                    )}
                   >
-                    <Check className="size-4" />
+                    {isLoading ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : isInstalled ? (
+                      <Check className="size-4" />
+                    ) : (
+                      <Download className="size-4" />
+                    )}
                   </button>
                 )}
 
@@ -387,11 +400,13 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             {/* Source indicator (platform) */}
             {sourceType && <SourceIndicator sourceType={sourceType} />}
 
+            {originBadge && <ProjectSourceBadge originBadge={originBadge} />}
+
             {/* "Already in Central" badge */}
             {isCentral && (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
                 <Globe className="size-3" />
-                {t("discover.alreadyCentral")}
+                {t("common.alreadyCentral")}
               </span>
             )}
 
@@ -549,6 +564,28 @@ function ReadOnlyBadge() {
       {t("platform.readOnly", {
         defaultValue: i18n.language.startsWith("zh") ? "只读" : "Read-only",
       })}
+    </span>
+  );
+}
+
+function ProjectSourceBadge({
+  originBadge,
+}: {
+  originBadge: { kind: "central" | "project" | string; label: string };
+}) {
+  const isCentral = originBadge.kind === "central";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+        isCentral
+          ? "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:text-sky-300"
+          : "bg-muted text-muted-foreground ring-border/70"
+      )}
+    >
+      {isCentral ? <Globe className="size-3 shrink-0" /> : <Folder className="size-3 shrink-0" />}
+      {originBadge.label}
     </span>
   );
 }

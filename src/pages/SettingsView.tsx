@@ -26,7 +26,6 @@ import {
   REPO_URL,
   getAiProviderViewModel,
   getCustomAgents,
-  getNextAiProviderPatch,
   getNormalizedPlatformVisibilityQuery,
   getPlatformVisibilityGroups,
   isPlatformVisibilitySearchActive,
@@ -66,6 +65,7 @@ export function SettingsView() {
     aiTestResult,
     loadAiSettings,
     updateAiSettings,
+    switchAiProvider,
     clearAiApiKey,
     testAiConnection,
     agents,
@@ -75,7 +75,6 @@ export function SettingsView() {
     rescan,
     refreshCounts,
     loadCentralSkills,
-    refreshDiscoverCounts,
     loadMarketplaceRegistries,
     selectedMarketplaceRegistryId,
     loadMarketplaceSkills,
@@ -177,7 +176,7 @@ export function SettingsView() {
     [agents, categoryVisibility, normalizedPlatformVisibilityQuery, t]
   );
   function handleProviderChange(id: string) {
-    updateAiSettings(getNextAiProviderPatch(id, AI_PROVIDERS, aiSettings));
+    void switchAiProvider(id);
   }
 
   const {
@@ -226,7 +225,6 @@ export function SettingsView() {
     rescan,
     refreshCounts,
     loadCentralSkills,
-    refreshDiscoverCounts,
     loadMarketplaceRegistries,
     loadMarketplaceSkills,
     createSshTarget,

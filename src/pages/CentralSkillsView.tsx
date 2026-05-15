@@ -160,9 +160,7 @@ export function CentralSkillsView() {
     sortDirection,
   });
 
-  // ─── Central V2 (M1) ───────────────────────────────────────────────
-  // 新布局通过 feature flag 切换。V2 view-model 与 V1 并存，state 各自维护，
-  // 保证 V1 行为完全不受影响。
+  // ─── Central V2 (M1): 新布局通过 feature flag 切换。V2 view-model 与 V1 并存，state 各自维护，保证 V1 行为完全不受影响。
   const v2EnabledFromFlag = useFeatureFlag("central.newLayout");
   const [v2OverrideClassic, setV2OverrideClassic] = useState(false);
   const v2Enabled = v2EnabledFromFlag && !v2OverrideClassic;
@@ -529,6 +527,7 @@ export function CentralSkillsView() {
         onGitHubImport: handleGitHubImport,
         onGitHubPreview: handleGitHubPreview,
         onInstall: handleInstall,
+        onInstallFromDrawer: handleInstallClick,
         onInstallImportedSkill: handleInstallImportedSkill,
         onRefreshCounts: refreshCounts,
         onConfirmUpdateSkills: handleConfirmUpdateSkills,

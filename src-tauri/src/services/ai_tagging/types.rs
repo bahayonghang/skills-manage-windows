@@ -94,6 +94,7 @@ pub(crate) struct AiTaggingContext {
     pub(crate) pool: DbPool,
     pub(crate) api_key: String,
     pub(crate) api_url: String,
+    pub(crate) protocol: crate::services::ai_provider::ExplanationApiProtocol,
     pub(crate) model: String,
     pub(crate) tags: Arc<Vec<SkillTag>>,
     pub(crate) client: Client,

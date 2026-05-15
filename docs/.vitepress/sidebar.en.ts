@@ -16,7 +16,7 @@ export const sidebarEn: DefaultTheme.SidebarMulti = {
         { text: 'Central Skills', link: '/guide/central-skills' },
         { text: 'Platforms', link: '/guide/platforms' },
         { text: 'Collections', link: '/guide/collections' },
-        { text: 'Discover', link: '/guide/discover' },
+        { text: 'Projects', link: '/guide/projects' },
       ],
     },
     {

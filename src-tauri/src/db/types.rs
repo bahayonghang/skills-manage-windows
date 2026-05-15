@@ -298,3 +298,34 @@ pub struct NewOperationLogEntry {
     pub duration_ms: Option<i64>,
     pub batch_id: Option<String>,
 }
+
+// ─── Projects (Stage 1 - 项目级 skill 管理) ───────────────────────────────────
+
+/// 用户手动 add 的项目。id = sha256(规范化 path) 前 16 字符。
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Project {
+    pub id: String,
+    pub path: String,
+    pub name: String,
+    pub pinned: bool,
+    pub added_at: String,
+    pub last_scanned_at: Option<String>,
+}
+
+/// 项目下某个 agent 目录中登记的 skill 安装。
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ProjectSkillInstallation {
+    pub project_id: String,
+    pub skill_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub file_path: String,
+    /// `'central'` | `'project'`：中央库安装或项目原有/手动放入。
+    pub source_origin: String,
+    pub agent_id: String,
+    pub installed_path: String,
+    /// `'symlink'` | `'copy'`。
+    pub link_type: String,
+    pub symlink_target: Option<String>,
+    pub created_at: String,
+}

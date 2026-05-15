@@ -61,7 +61,6 @@ const mockBootstrapSnapshot: BootstrapSnapshot = {
     central: 3,
   },
   collectionCount: 2,
-  discoveredCount: 7,
   lastScanAt: "2026-04-23T01:00:00Z",
   scanState: "idle",
 };
@@ -87,8 +86,13 @@ const mockCountsSummary: SkillCountsSummary = {
 };
 
 const mockCategoryVisibility = {
-  coding: false,
+  coding: true,
   lobster: true,
+};
+
+const allHiddenCategoryVisibility = {
+  coding: false,
+  lobster: false,
 };
 
 describe("platformStore", () => {
@@ -96,9 +100,8 @@ describe("platformStore", () => {
     usePlatformStore.setState({
       agents: [],
       platformPaths: {},
-    skillsByAgent: {},
+      skillsByAgent: {},
       collectionCount: 0,
-      discoveredCount: 0,
       categoryVisibility: {
         coding: true,
         lobster: false,
@@ -118,7 +121,6 @@ describe("platformStore", () => {
     expect(state.agents).toEqual([]);
     expect(state.skillsByAgent).toEqual({});
     expect(state.collectionCount).toBe(0);
-    expect(state.discoveredCount).toBe(0);
     expect(state.categoryVisibility).toEqual({
       coding: true,
       lobster: false,
@@ -153,7 +155,6 @@ describe("platformStore", () => {
     expect(invoke).toHaveBeenNthCalledWith(6, "list_platform_paths");
     expect(state.skillsByAgent).toEqual(refreshedSnapshot.cachedSkillCounts);
     expect(state.collectionCount).toBe(2);
-    expect(state.discoveredCount).toBe(7);
     expect(state.categoryVisibility).toEqual(mockCategoryVisibility);
     expect(state.scanState).toBe("idle");
     expect(state.isLoading).toBe(false);
@@ -218,7 +219,6 @@ describe("platformStore", () => {
       platformPaths: {},
       skillsByAgent: mockBootstrapSnapshot.cachedSkillCounts,
       collectionCount: 2,
-      discoveredCount: 7,
       categoryVisibility: {
         coding: true,
         lobster: false,
@@ -249,7 +249,6 @@ describe("platformStore", () => {
       platformPaths: {},
       skillsByAgent: mockBootstrapSnapshot.cachedSkillCounts,
       collectionCount: 2,
-      discoveredCount: 7,
       categoryVisibility: {
         coding: true,
         lobster: false,
@@ -268,7 +267,6 @@ describe("platformStore", () => {
     expect(state.agents).toEqual([]);
     expect(state.skillsByAgent).toEqual({});
     expect(state.collectionCount).toBe(0);
-    expect(state.discoveredCount).toBe(0);
     expect(state.lastScanAt).toBeNull();
     expect(state.scanState).toBe("idle");
     expect(state.isLoading).toBe(true);
@@ -298,7 +296,6 @@ describe("platformStore", () => {
     expect(state.agents).toEqual(mockAgents);
     expect(state.skillsByAgent).toEqual(mockBootstrapSnapshot.cachedSkillCounts);
     expect(state.collectionCount).toBe(mockBootstrapSnapshot.collectionCount);
-    expect(state.discoveredCount).toBe(mockBootstrapSnapshot.discoveredCount);
     expect(state.categoryVisibility).toEqual(mockCategoryVisibility);
     expect(state.scanState).toBe("error");
     expect(state.error).toContain("ssh scan failed");
@@ -320,16 +317,66 @@ describe("platformStore", () => {
   });
 
   it("setCategoryVisibility persists the setting", async () => {
+    usePlatformStore.setState({
+      categoryVisibility: {
+        coding: true,
+        lobster: false,
+      },
+    });
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await usePlatformStore.getState().setCategoryVisibility("lobster", true);
+
+    expect(invoke).toHaveBeenCalledWith("set_setting", {
+      key: "platform_category_visibility",
+      value: JSON.stringify({ coding: true, lobster: true }),
+    });
+    expect(usePlatformStore.getState().categoryVisibility).toEqual({
+      coding: true,
+      lobster: true,
+    });
+  });
+
+  it("setCategoryVisibility keeps the last visible platform group enabled", async () => {
+    usePlatformStore.setState({
+      agents: mockAgents,
+      platformPaths: {},
+      skillsByAgent: {},
+      collectionCount: 0,
+      categoryVisibility: {
+        coding: true,
+        lobster: false,
+      },
+      lastScanAt: null,
+      scanState: "idle",
+      isLoading: false,
+      isRefreshing: false,
+      error: null,
+    });
     vi.mocked(invoke).mockResolvedValueOnce(undefined);
 
     await usePlatformStore.getState().setCategoryVisibility("coding", false);
 
     expect(invoke).toHaveBeenCalledWith("set_setting", {
       key: "platform_category_visibility",
-      value: JSON.stringify({ coding: false, lobster: false }),
+      value: JSON.stringify({ coding: true, lobster: false }),
     });
     expect(usePlatformStore.getState().categoryVisibility).toEqual({
-      coding: false,
+      coding: true,
+      lobster: false,
+    });
+  });
+
+  it("hydrateShell ignores persisted category visibility that hides every platform group", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(mockBootstrapSnapshot)
+      .mockResolvedValueOnce(JSON.stringify(allHiddenCategoryVisibility))
+      .mockResolvedValueOnce(mockPlatformPaths);
+
+    await usePlatformStore.getState().hydrateShell();
+
+    expect(usePlatformStore.getState().categoryVisibility).toEqual({
+      coding: true,
       lobster: false,
     });
   });
@@ -338,9 +385,8 @@ describe("platformStore", () => {
     usePlatformStore.setState({
       agents: mockAgents,
       platformPaths: {},
-    skillsByAgent: {},
+      skillsByAgent: {},
       collectionCount: 0,
-      discoveredCount: 0,
       categoryVisibility: {
         coding: true,
         lobster: false,

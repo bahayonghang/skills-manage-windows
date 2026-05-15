@@ -16,7 +16,7 @@ SkillPort is a three-layer desktop application: a React UI talks to a Rust backe
 ┌──────────────▼───────────────────────────────────────────────────┐
 │ Rust + Tauri v2 (src-tauri/src/)                                 │
 │   commands/*  thin IPC handlers                                  │
-│   services/*  business logic (scanner / installation / discovery)│
+│   services/*  business logic (scanner / installation / projects) │
 │   targets/*   local + SSH execution adapters                     │
 │   db/*        sqlx pool + schema + repos                         │
 └──────────────┬─────────────────────────┬─────────────────────────┘
@@ -76,7 +76,8 @@ src-tauri/src/
 ├── services/          business logic split by domain
 │   ├── scanner/       SKILL.md discovery on disk
 │   ├── installation/  centralize / native / project / remote / batch
-│   ├── discovery/     project + Obsidian source-only scans
+│   ├── projects/      project-level skill management (add / scan / install / uninstall)
+│   ├── obsidian/      Obsidian vault scan + source-only import
 │   ├── github_import/ archive download, preview workspace, raw HTTP
 │   ├── marketplace/   registry sync + cache
 │   ├── central_skills/ canonical store services

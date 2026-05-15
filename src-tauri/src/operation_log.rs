@@ -566,6 +566,7 @@ mod tests {
             db: pool,
             ai_tag_jobs: crate::AiTagJobRegistry::default(),
             central_update_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            central_update_snapshots: crate::CentralUpdateSnapshotCache::default(),
             portable_state_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             secrets: std::sync::Arc::new(crate::secrets::MockSecretStore::default()),
             targets: crate::targets::TargetRegistry::default(),

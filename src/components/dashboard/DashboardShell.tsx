@@ -10,7 +10,6 @@ import {
   Layers,
   LayoutDashboard,
   Loader2,
-  Radar,
   ScrollText,
   Server,
   Store,
@@ -210,14 +209,6 @@ export function DashboardShell({
                 </div>
               </div>
               <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                <StatButton
-                  testId="dashboard-metric-discovered"
-                  icon={<Radar className="size-4" />}
-                  label={t("dashboard.metrics.discovered")}
-                  value={viewModel.discoveredCount}
-                  description={t("dashboard.metrics.discoveredDesc")}
-                  onClick={() => onNavigate("/discover")}
-                />
                 <StatButton
                   testId="dashboard-metric-collections"
                   icon={<Layers className="size-4" />}

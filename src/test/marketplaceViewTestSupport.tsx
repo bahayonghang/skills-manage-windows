@@ -8,6 +8,7 @@ import type {
   GitHubRepoPreview,
   MarketplaceSkill,
   SkillRegistry,
+  SkillsShSkill,
   TargetSummary,
 } from "@/types";
 
@@ -18,6 +19,8 @@ const mockInstallSkill = vi.fn();
 const mockPreviewGitHubRepoImport = vi.fn();
 const mockImportGitHubRepoSkills = vi.fn();
 const mockResetGitHubImport = vi.fn();
+const mockSearchSkillsSh = vi.fn<() => Promise<SkillsShSkill[]>>();
+const mockInstallFromSkillsSh = vi.fn();
 const mockRescan = vi.fn();
 const mockLoadCentralSkills = vi.fn();
 const mockInstallCentralSkill = vi.fn();
@@ -47,6 +50,10 @@ export const platformAgents: AgentWithStatus[] = [
 type StoreState = {
   registries: SkillRegistry[];
   installingIds: Set<string>;
+  skillsShResults: SkillsShSkill[];
+  skillsShQuery: string;
+  isSkillsShLoading: boolean;
+  skillsShError: string | null;
   githubImport: {
     isPreviewLoading: boolean;
     isImporting: boolean;
@@ -60,6 +67,10 @@ type StoreState = {
 export const storeState: StoreState = {
   registries: [],
   installingIds: new Set<string>(),
+  skillsShResults: [],
+  skillsShQuery: "",
+  isSkillsShLoading: false,
+  skillsShError: null,
   githubImport: {
     isPreviewLoading: false,
     isImporting: false,
@@ -123,17 +134,27 @@ vi.mock("@/components/skill/UnifiedSkillCard", () => ({
   UnifiedSkillCard: ({
     name,
     description,
-    onDetail,
+  onDetail,
+  publisher,
+  onInstall,
   }: {
     name: string;
     description?: string;
     onDetail?: () => void;
+    publisher?: string;
+    onInstall?: () => void;
   }) => (
     <div>
       <button type="button" onClick={onDetail}>
         {name}
       </button>
       {description ? <div>{description}</div> : null}
+      {publisher ? <div>{publisher}</div> : null}
+      {onInstall ? (
+        <button type="button" onClick={onInstall}>
+          安装
+        </button>
+      ) : null}
     </div>
   ),
 }));
@@ -534,11 +555,17 @@ vi.mock("@/stores/marketplaceStore", () => ({
     selector({
       registries: storeState.registries,
       installingIds: storeState.installingIds,
+      skillsShResults: storeState.skillsShResults,
+      skillsShQuery: storeState.skillsShQuery,
+      isSkillsShLoading: storeState.isSkillsShLoading,
+      skillsShError: storeState.skillsShError,
       githubImport: storeState.githubImport,
       loadRegistries: mockLoadRegistries,
       loadPreviewSkills: mockLoadPreviewSkills,
       getNormalizedRegistryIdentity: mockGetNormalizedRegistryIdentity,
       installSkill: mockInstallSkill,
+      searchSkillsSh: mockSearchSkillsSh,
+      installFromSkillsSh: mockInstallFromSkillsSh,
       previewGitHubRepoImport: mockPreviewGitHubRepoImport,
       importGitHubRepoSkills: mockImportGitHubRepoSkills,
       resetGitHubImport: mockResetGitHubImport,
@@ -603,6 +630,8 @@ export function resetMarketplaceViewTestState() {
   mockPreviewGitHubRepoImport.mockReset();
   mockImportGitHubRepoSkills.mockReset();
   mockResetGitHubImport.mockReset();
+  mockSearchSkillsSh.mockReset();
+  mockInstallFromSkillsSh.mockReset();
   mockRescan.mockReset();
   mockLoadCentralSkills.mockReset();
   mockInstallCentralSkill.mockReset();
@@ -624,6 +653,19 @@ export function resetMarketplaceViewTestState() {
 
   storeState.registries = [makeRegistry("openai", "https://github.com/openai/skills")];
   storeState.installingIds = new Set<string>();
+  storeState.skillsShResults = [
+    {
+      id: "anthropics/skills/webapp-testing",
+      skill_id: "webapp-testing",
+      name: "webapp-testing",
+      source: "anthropics/skills",
+      installs: 68897,
+      stars: 1234,
+    },
+  ];
+  storeState.skillsShQuery = "webapp";
+  storeState.isSkillsShLoading = false;
+  storeState.skillsShError = null;
   storeState.githubImport = {
     isPreviewLoading: false,
     isImporting: false,
@@ -650,6 +692,7 @@ export {
   mockGetNormalizedRegistryIdentity,
   mockGetSkillsByAgent,
   mockImportGitHubRepoSkills,
+  mockInstallFromSkillsSh,
   mockInstallCentralSkill,
   mockInstallSkill,
   mockLoadCentralSkills,
@@ -658,4 +701,5 @@ export {
   mockPreviewGitHubRepoImport,
   mockResetGitHubImport,
   mockRescan,
+  mockSearchSkillsSh,
 };

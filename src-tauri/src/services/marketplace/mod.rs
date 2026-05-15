@@ -6,10 +6,23 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::commands::github_import;
 use crate::paths;
 use crate::secrets::SecretStore;
+use crate::services::github_import;
 use crate::targets::{connect_ssh_target, remote_join, ActiveTarget};
+
+mod skills_sh;
+
+pub use skills_sh::{
+    browse_skills_sh_directory_impl, install_from_skills_sh_impl, read_skills_sh_file_impl,
+    resolve_skills_sh_url_impl, search_skills_sh_impl, SkillsShFileEntry, SkillsShSkill,
+};
+
+#[cfg(test)]
+pub(crate) use skills_sh::{
+    resolve_skills_sh_candidate_from_snapshot, skills_sh_file_entries_from_snapshot,
+    source_to_github_url,
+};
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

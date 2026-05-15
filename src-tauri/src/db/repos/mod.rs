@@ -7,10 +7,10 @@
 
 pub(crate) mod agents_repo;
 pub(crate) mod collections_repo;
-pub(crate) mod discovered_repo;
 pub(crate) mod installations_repo;
 pub(crate) mod observations_repo;
 pub(crate) mod operation_logs_repo;
+pub(crate) mod projects_repo;
 pub(crate) mod repositories_repo;
 pub(crate) mod saved_views_repo;
 pub(crate) mod scan_dirs_repo;

@@ -202,6 +202,14 @@ impl ConnectedSshTarget {
         String::from_utf8(output).map_err(|e| format!("Remote stdout is not valid UTF-8: {}", e))
     }
 
+    pub fn run_command_with_stdin_bytes(
+        &self,
+        command: &str,
+        stdin: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        self.run_command_with_stdin(command, stdin)
+    }
+
     pub async fn run_command(&self, command: &str) -> Result<String, String> {
         let output = self
             .base_command()

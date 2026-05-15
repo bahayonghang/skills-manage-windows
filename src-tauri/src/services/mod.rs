@@ -7,9 +7,10 @@
 pub mod ai_provider;
 pub mod ai_tagging;
 pub mod central_skills;
-pub mod discovery;
 pub mod github_import;
 pub mod installation;
 pub mod marketplace;
+pub mod obsidian;
 pub mod portable_state;
+pub mod projects;
 pub mod scanner;

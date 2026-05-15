@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
-import { DiscoveredSkill, ObsidianVault } from "@/types";
+import type { ObsidianSkill, ObsidianVault } from "@/types";
 
 const BROWSER_FIXTURE_VAULTS: ObsidianVault[] = [
   {
@@ -11,13 +11,14 @@ const BROWSER_FIXTURE_VAULTS: ObsidianVault[] = [
   },
 ];
 
-const BROWSER_FIXTURE_SKILLS: Record<string, DiscoveredSkill[]> = {
+const BROWSER_FIXTURE_SKILLS: Record<string, ObsidianSkill[]> = {
   "fixture-vault": [
     {
       id: "obsidian__fixture__fixture-skill",
       name: "fixture-skill",
       description: "Browser validation fixture for the Obsidian vault view.",
-      file_path: "/Users/fixture/Notes/Fixture Vault/.skills/fixture-skill/SKILL.md",
+      file_path:
+        "/Users/fixture/Notes/Fixture Vault/.skills/fixture-skill/SKILL.md",
       dir_path: "/Users/fixture/Notes/Fixture Vault/.skills/fixture-skill",
       platform_id: "obsidian",
       platform_name: "Obsidian",
@@ -30,7 +31,7 @@ const BROWSER_FIXTURE_SKILLS: Record<string, DiscoveredSkill[]> = {
 
 interface ObsidianState {
   vaults: ObsidianVault[];
-  skillsByVault: Record<string, DiscoveredSkill[]>;
+  skillsByVault: Record<string, ObsidianSkill[]>;
   isLoadingVaults: boolean;
   loadingSkillsByVault: Record<string, boolean>;
   error: string | null;
@@ -39,46 +40,22 @@ interface ObsidianState {
   resetForTargetChange: () => void;
 }
 
-async function importToCentralFromDiscoveredOrSource(skill: DiscoveredSkill) {
-  try {
-    return await invoke("import_discovered_skill_to_central", {
-      discoveredSkillId: skill.id,
-    });
-  } catch (err) {
-    const message = String(err);
-    if (!message.includes("not found")) {
-      throw err;
-    }
-    return invoke("import_source_skill_to_central", {
-      filePath: skill.file_path,
-      dirPath: skill.dir_path,
-    });
-  }
+async function importObsidianSkillToCentral(skill: ObsidianSkill) {
+  return invoke("import_obsidian_skill_to_central", {
+    dirPath: skill.dir_path,
+  });
 }
 
-async function importToPlatformFromDiscoveredOrSource(
-  skill: DiscoveredSkill,
+async function importObsidianSkillToPlatform(
+  skill: ObsidianSkill,
   agentId: string,
   method?: "symlink" | "copy"
 ) {
-  try {
-    return await invoke("import_discovered_skill_to_platform", {
-      discoveredSkillId: skill.id,
-      agentId,
-      method,
-    });
-  } catch (err) {
-    const message = String(err);
-    if (!message.includes("not found")) {
-      throw err;
-    }
-    return invoke("import_source_skill_to_platform", {
-      filePath: skill.file_path,
-      dirPath: skill.dir_path,
-      agentId,
-      method,
-    });
-  }
+  return invoke("import_obsidian_skill_to_platform", {
+    dirPath: skill.dir_path,
+    agentId,
+    method,
+  });
 }
 
 export const useObsidianStore = create<ObsidianState>((set) => ({
@@ -127,7 +104,7 @@ export const useObsidianStore = create<ObsidianState>((set) => ({
     }
 
     try {
-      const skills = await invoke<DiscoveredSkill[]>("get_obsidian_vault_skills", {
+      const skills = await invoke<ObsidianSkill[]>("get_obsidian_vault_skills", {
         vaultId,
       });
       set((state) => ({
@@ -162,4 +139,4 @@ export const useObsidianStore = create<ObsidianState>((set) => ({
   },
 }));
 
-export { importToCentralFromDiscoveredOrSource, importToPlatformFromDiscoveredOrSource };
+export { importObsidianSkillToCentral, importObsidianSkillToPlatform };

@@ -23,6 +23,12 @@ export function useMarketplaceBindings() {
     (state) => state.importGitHubRepoSkills
   );
   const resetGitHubImport = useMarketplaceStore((state) => state.resetGitHubImport);
+  const skillsShResults = useMarketplaceStore((state) => state.skillsShResults);
+  const skillsShQuery = useMarketplaceStore((state) => state.skillsShQuery);
+  const isSkillsShLoading = useMarketplaceStore((state) => state.isSkillsShLoading);
+  const skillsShError = useMarketplaceStore((state) => state.skillsShError);
+  const searchSkillsSh = useMarketplaceStore((state) => state.searchSkillsSh);
+  const installFromSkillsSh = useMarketplaceStore((state) => state.installFromSkillsSh);
 
   const rescan = usePlatformStore((state) => state.rescan);
   const platformAgents = usePlatformStore((state) => state.agents);
@@ -47,6 +53,12 @@ export function useMarketplaceBindings() {
     previewGitHubRepoImport,
     importGitHubRepoSkills,
     resetGitHubImport,
+    skillsShResults,
+    skillsShQuery,
+    isSkillsShLoading,
+    skillsShError,
+    searchSkillsSh,
+    installFromSkillsSh,
     rescan,
     platformAgents,
     centralSkills,

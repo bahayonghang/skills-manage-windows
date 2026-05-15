@@ -22,6 +22,10 @@ vi.mock("../stores/centralSkillsStore", () => ({
   useCentralSkillsStore: vi.fn(),
 }));
 
+vi.mock("../stores/skillDetailStore", () => ({
+  useSkillDetailStore: vi.fn(),
+}));
+
 vi.mock("../components/skill/SkillDetailDrawer", () => ({
   SkillDetailDrawer: ({
     open,
@@ -30,6 +34,7 @@ vi.mock("../components/skill/SkillDetailDrawer", () => ({
     rowId,
     onOpenChange,
     returnFocusRef,
+    onInstallClick,
   }: {
     open: boolean;
     skillId: string | null;
@@ -37,12 +42,18 @@ vi.mock("../components/skill/SkillDetailDrawer", () => ({
     rowId?: string | null;
     onOpenChange: (open: boolean) => void;
     returnFocusRef?: { current: HTMLElement | null };
+    onInstallClick?: (skillId: string) => void;
   }) =>
     open ? (
       <div data-testid="skill-detail-drawer">
         <div>drawer-skill:{skillId}</div>
         <div>drawer-agent:{agentId ?? "none"}</div>
         <div>drawer-row:{rowId ?? "none"}</div>
+        {skillId && onInstallClick ? (
+          <button onClick={() => onInstallClick(skillId)}>
+            drawer-install:{skillId}
+          </button>
+        ) : null}
         <button
           onClick={() => {
             onOpenChange(false);
@@ -58,6 +69,7 @@ vi.mock("../components/skill/SkillDetailDrawer", () => ({
 import { usePlatformStore } from "../stores/platformStore";
 import { useSkillStore } from "../stores/skillStore";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
+import { useSkillDetailStore } from "../stores/skillDetailStore";
 import * as tauriBridge from "@/lib/tauri";
 
 const userSourceText = /用户来源|User source/i;
@@ -265,16 +277,20 @@ const mockLoadCentralSkills = vi.fn();
 const mockInstallSkill = vi.fn();
 const mockUninstallSkillFromAgent = vi.fn();
 const mockRefreshCounts = vi.fn();
+const mockRefreshInstallations = vi.fn();
 const mockUsePlatformStore = vi.mocked(usePlatformStore);
 const mockUseSkillStore = vi.mocked(useSkillStore);
 const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
+const mockUseSkillDetailStore = vi.mocked(useSkillDetailStore);
+const centralStoreHarness = mockUseCentralSkillsStore as typeof mockUseCentralSkillsStore & {
+  setState: (nextState: Record<string, unknown>) => void;
+};
 
 function buildPlatformStoreState(overrides = {}) {
   return {
     agents: [mockAgent],
     skillsByAgent: { "claude-code": 2 },
     collectionCount: 0,
-    discoveredCount: 0,
     lastScanAt: "2026-04-23T01:00:00Z",
     scanState: "idle",
     isLoading: false,
@@ -289,7 +305,6 @@ function buildPlatformStoreState(overrides = {}) {
     resetForTargetChange: vi.fn(),
     applyScanSummary: vi.fn(),
     setCollectionCount: vi.fn(),
-    setDiscoveredCount: vi.fn(),
     addCustomAgent: vi.fn(),
     updateCustomAgent: vi.fn(),
     removeCustomAgent: vi.fn(),
@@ -319,6 +334,14 @@ function buildCentralSkillsStoreState(overrides = {}) {
   };
 }
 
+function buildSkillDetailStoreState(overrides = {}) {
+  return {
+    detail: null,
+    refreshInstallations: mockRefreshInstallations,
+    ...overrides,
+  };
+}
+
 function installDefaultStoreMocks() {
   let currentCentralState = buildCentralSkillsStoreState();
 
@@ -336,10 +359,15 @@ function installDefaultStoreMocks() {
     if (typeof selector === "function") return selector(currentCentralState);
     return currentCentralState;
   });
+  mockUseSkillDetailStore.mockImplementation((selector?: unknown) => {
+    const state = buildSkillDetailStoreState();
+    if (typeof selector === "function") return selector(state);
+    return state;
+  });
 
   Object.assign(mockUseCentralSkillsStore, {
     getState: () => currentCentralState,
-    setState: (nextState: Partial<typeof currentCentralState>) => {
+    setState: (nextState: Record<string, unknown>) => {
       currentCentralState = { ...currentCentralState, ...nextState };
     },
   });
@@ -369,6 +397,7 @@ describe("PlatformView", () => {
     vi.clearAllMocks();
     testNavigate = null;
     mockRefreshCounts.mockReset();
+    mockRefreshInstallations.mockReset();
     mockUninstallSkillFromAgent.mockReset();
     installDefaultStoreMocks();
   });
@@ -665,6 +694,85 @@ describe("PlatformView", () => {
 
     await waitFor(() => {
       expect(mockLoadCentralSkills).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("opens the install dialog from the detail drawer header install button", async () => {
+    const centralSkill = {
+      id: "frontend-design",
+      name: "frontend-design",
+      description: "Build distinctive, production-grade frontend interfaces",
+      file_path: "~/.skillsmanage/skills/frontend-design/SKILL.md",
+      is_central: true,
+      scanned_at: "2026-04-09T00:00:00Z",
+      linked_agents: ["claude-code"],
+      shared_root_agents: [],
+    };
+    mockInstallSkill.mockResolvedValueOnce({ succeeded: ["claude-code"], skipped: [], failed: [] });
+    centralStoreHarness.setState({
+      skills: [centralSkill],
+    });
+
+    renderPlatformView();
+
+    fireEvent.click(screen.getByRole("button", { name: /查看 frontend-design 的详情/i }));
+
+    expect(await screen.findByTestId("skill-detail-drawer")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "drawer-install:frontend-design" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("安装 frontend-design")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /安装到 1 个平台/i }));
+
+    await waitFor(() => {
+      expect(mockInstallSkill).toHaveBeenCalledWith(
+        "frontend-design",
+        ["claude-code"],
+        "symlink",
+        null
+      );
+    });
+  });
+
+  it("refreshes open platform detail installation state after confirming install", async () => {
+    mockInstallSkill.mockResolvedValueOnce({ succeeded: ["claude-code"], skipped: [], failed: [] });
+    centralStoreHarness.setState({
+      skills: [
+        {
+          id: "frontend-design",
+          name: "frontend-design",
+          description: "Build distinctive, production-grade frontend interfaces",
+          file_path: "~/.skillsmanage/skills/frontend-design/SKILL.md",
+          is_central: true,
+          scanned_at: "2026-04-09T00:00:00Z",
+          linked_agents: ["claude-code"],
+          shared_root_agents: [],
+        },
+      ],
+    });
+    mockUseSkillDetailStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillDetailStoreState({
+        detail: {
+          id: "frontend-design",
+          name: "frontend-design",
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    fireEvent.click(screen.getByRole("button", { name: /查看 frontend-design 的详情/i }));
+    expect(await screen.findByTestId("skill-detail-drawer")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "drawer-install:frontend-design" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /安装到 1 个平台/i }));
+
+    await waitFor(() => {
+      expect(mockRefreshInstallations).toHaveBeenCalledWith("frontend-design");
     });
   });
 

@@ -52,7 +52,7 @@ React 前端 (src/)  ──Tauri IPC──▶  Rust 后端 (src-tauri/src/)  ─
 - **平台安装**：通过符号链接（symlink）将中央技能安装到各平台目录（如 `~/.claude/skills/`）
 - **自动中央化（Auto-centralize）**：安装仅存在于某平台的技能到其他平台时，`linker.rs` 的 `ensure_centralized` 会自动将其拷贝到中央目录并更新 DB 的 `canonical_path`/`is_central`，再走正常 symlink/copy 流程。调用方（包括 `install_skill_to_agent_impl` 和 `install_skill_to_agent_copy_impl`）对此透明
 - **集合（Collection）**：技能分组，支持批量安装和 JSON 导入/导出
-- **发现（Discover）**：递归扫描磁盘上的项目级技能文件，主从分离布局（左面板项目列表 + 右面板技能详情）；`is_already_central` 在 DB 加载时根据文件系统重新计算，不是静态快照
+- **项目（Projects）**：手动 add 项目根目录，扫描项目下已启用 agent 的 skill 目录（`.claude/skills/` 等），支持装/卸/pin/重命名/移除，主从分离布局（左面板项目列表 + 右面板技能详情）
 - **技能市场（Marketplace）**：从 GitHub 仓库远程浏览和安装技能，三 Tab 页面（推荐/官方源目录/我的源）
 
 ### 页面路由
@@ -63,7 +63,8 @@ React 前端 (src/)  ──Tauri IPC──▶  Rust 后端 (src-tauri/src/)  ─
 | `/platform/:agentId` | 平台技能视图 | 技能卡片列表（两列） |
 | `/skill/:skillId` | 技能详情 | **双栏布局**：左栏 SKILL.md 预览（全高），右栏 sidebar（metadata + 紧凑图标式安装状态 + collections） |
 | `/collections` | 技能集合 | 上方卡片横排选中 + 下方技能列表 |
-| `/discover`, `/discover/:projectPath` | 项目技能库 | 左面板项目列表 + 右面板技能详情 |
+| `/discover`, `/discover/:projectPath` | （已废弃，重定向到 `/projects`） | — |
+| `/projects`, `/projects/:projectId` | 项目级技能管理 | 左面板项目列表 + 右面板技能详情 |
 | `/marketplace` | 技能市场 | 三 Tab（推荐/官方源/我的源） |
 | `/settings` | 设置 | 卡片分区 |
 
@@ -76,7 +77,8 @@ React 前端 (src/)  ──Tauri IPC──▶  Rust 后端 (src-tauri/src/)  ─
 | `linker.rs` | 符号链接/复制方式安装和卸载技能 |
 | `skills.rs` | 技能查询和 Markdown 内容读取 |
 | `collections.rs` | 集合管理、批量安装、导入导出 |
-| `discover.rs` | 全磁盘项目扫描和导入，支持 /Applications 目录 |
+| `projects.rs` | 手动 add 项目 + 扫描 + 装/卸 + pin/重命名/移除 |
+| `obsidian.rs` | Obsidian vault 扫描和源模式导入 |
 | `settings.rs` | 扫描目录和应用设置的键值存储 |
 | `marketplace.rs` | GitHub 源同步、远程技能安装、AI 技能解释（Claude/GLM/MiniMax/Kimi/DeepSeek/OpenRouter） |
 
@@ -89,7 +91,7 @@ React 前端 (src/)  ──Tauri IPC──▶  Rust 后端 (src-tauri/src/)  ─
 
 ### 共享 UI 模式
 
-- **`UnifiedSkillCard`**（`src/components/skill/UnifiedSkillCard.tsx`）：**所有页面的技能卡片唯一实现**。通过 props 自适应 5 种场景（central/platform/discover/marketplace/collection），不要在各页面重建内联卡片组件。统一样式：`rounded-xl` + `ring-1 ring-border` + `bg-card` + `shadow-sm`
+- **`UnifiedSkillCard`**（`src/components/skill/UnifiedSkillCard.tsx`）：**所有页面的技能卡片唯一实现**。通过 props 自适应 5 种场景（central/platform/project/marketplace/collection），不要在各页面重建内联卡片组件。统一样式：`rounded-xl` + `ring-1 ring-border` + `bg-card` + `shadow-sm`
 - **`InstallDialog`**（`src/components/central/InstallDialog.tsx`）：默认**勾选已链接平台**（反映当前状态），宽度 `sm:max-w-2xl`，平台列表两列网格。`CollectionInstallDialog` 同宽度布局但默认勾选所有 detected 平台（批量首装场景）
 - **平台图标切换**：`UnifiedSkillCard` 的 `platformIcons` prop 分 LOBSTER/CODING 两行显示，点击图标即时切换安装/卸载（symlink 方式），走 `centralSkillsStore.togglePlatformLink`
 

@@ -5,6 +5,8 @@ import {
   GitHubSkillImportSelection,
   MarketplaceSkill,
   SkillRegistry,
+  SkillsShFileEntry,
+  SkillsShSkill,
 } from "@/types";
 
 export interface GitHubImportState {
@@ -43,6 +45,10 @@ export interface MarketplaceState {
   installingIds: Set<string>;
   error: string | null;
   githubImport: GitHubImportState;
+  skillsShResults: SkillsShSkill[];
+  skillsShQuery: string;
+  isSkillsShLoading: boolean;
+  skillsShError: string | null;
 
   loadRegistries: () => Promise<void>;
   selectRegistry: (id: string) => void;
@@ -57,6 +63,14 @@ export interface MarketplaceState {
   removeRegistry: (registryId: string) => Promise<void>;
   getNormalizedRegistryIdentity: (url: string) => string | null;
   findDuplicateRegistry: (url: string) => SkillRegistry | null;
+  searchSkillsSh: (query: string) => Promise<SkillsShSkill[]>;
+  resolveSkillsShUrl: (source: string, skillId: string) => Promise<string>;
+  browseSkillsShDirectory: (
+    source: string,
+    skillId: string
+  ) => Promise<SkillsShFileEntry[]>;
+  readSkillsShFile: (source: string, filePath: string) => Promise<string>;
+  installFromSkillsSh: (source: string, skillId: string) => Promise<string>;
   previewGitHubRepoSkills: (repoUrl: string) => Promise<GitHubRepoPreview>;
   previewGitHubRepoImport: (repoUrl: string) => Promise<GitHubRepoPreview>;
   importGitHubRepoSkills: (
