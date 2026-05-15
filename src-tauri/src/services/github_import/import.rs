@@ -318,7 +318,7 @@ pub(super) async fn plan_import_staging(
     Ok((staging_ops, skipped_skills))
 }
 
-pub(super) async fn import_github_repo_skills_from_snapshot_partially(
+pub(crate) async fn import_github_repo_skills_from_snapshot_partially(
     pool: &DbPool,
     repo: &GitHubRepoRef,
     snapshot: &GitHubRepoSnapshot,
@@ -628,7 +628,7 @@ pub(super) fn cleanup_created_directories(paths: &[PathBuf]) {
     }
 }
 
-pub(super) async fn central_skills_root(pool: &DbPool) -> Result<PathBuf, String> {
+pub(crate) async fn central_skills_root(pool: &DbPool) -> Result<PathBuf, String> {
     let central = db::get_agent_by_id(pool, "central")
         .await?
         .ok_or_else(|| "Central agent not found in database".to_string())?;

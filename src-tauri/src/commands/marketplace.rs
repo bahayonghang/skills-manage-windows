@@ -18,7 +18,8 @@ pub use crate::services::ai_provider::{
     ExplanationErrorInfo, ExplanationErrorKind,
 };
 pub use crate::services::marketplace::{
-    MarketplaceSkill, RegistryCacheMetadata, RegistrySyncStatus, SkillRegistry, SyncRegistryOptions,
+    MarketplaceSkill, RegistryCacheMetadata, RegistrySyncStatus, SkillRegistry, SkillsShFileEntry,
+    SkillsShSkill, SyncRegistryOptions,
 };
 
 // ─── Registry CRUD ───────────────────────────────────────────────────────────
@@ -102,13 +103,74 @@ pub async fn install_marketplace_skill(
     marketplace::install_marketplace_skill_impl(&pool, active_target, skill_id).await
 }
 
+#[tauri::command]
+pub async fn search_skills_sh(
+    state: State<'_, AppState>,
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<SkillsShSkill>, String> {
+    marketplace::search_skills_sh_impl(&state.db, state.secrets.as_ref(), query, limit).await
+}
+
+#[tauri::command]
+pub async fn resolve_skills_sh_url(
+    state: State<'_, AppState>,
+    source: String,
+    skill_id: String,
+) -> Result<String, String> {
+    marketplace::resolve_skills_sh_url_impl(&state.db, state.secrets.as_ref(), source, skill_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn browse_skills_sh_directory(
+    state: State<'_, AppState>,
+    source: String,
+    skill_id: String,
+) -> Result<Vec<SkillsShFileEntry>, String> {
+    marketplace::browse_skills_sh_directory_impl(
+        &state.db,
+        state.secrets.as_ref(),
+        source,
+        skill_id,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn read_skills_sh_file(
+    state: State<'_, AppState>,
+    source: String,
+    file_path: String,
+) -> Result<String, String> {
+    marketplace::read_skills_sh_file_impl(&state.db, state.secrets.as_ref(), source, file_path)
+        .await
+}
+
+#[tauri::command]
+pub async fn install_from_skills_sh(
+    state: State<'_, AppState>,
+    source: String,
+    skill_id: String,
+) -> Result<String, String> {
+    let active_target = state.active_target().await?;
+    let pool = state.active_db().await?;
+    marketplace::install_from_skills_sh_impl(
+        &pool,
+        state.secrets.as_ref(),
+        active_target,
+        source,
+        skill_id,
+    )
+    .await
+}
+
 // ─── AI Explanation ──────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn explain_skill(state: State<'_, AppState>, content: String) -> Result<String, String> {
     ai_provider::explain_skill_impl(&state.db, state.secrets.as_ref(), content).await
 }
-
 
 #[tauri::command]
 pub async fn test_ai_connection(

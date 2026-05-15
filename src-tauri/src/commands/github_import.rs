@@ -11,9 +11,9 @@ use crate::targets::ActiveTarget;
 use crate::AppState;
 
 pub(crate) use crate::services::github_import::{
-    build_repo_skill_candidates_from_snapshot_at_path, download_repo_snapshot,
-    fetch_repo_skill_candidates_from_source, github_client, github_direct_auth_from_secret_store,
-    resolve_repo_source, GitHubRepoSnapshot, RemoteSkillCandidate,
+    build_repo_skill_candidates_from_snapshot_at_path, download_repo_snapshot, github_client,
+    github_direct_auth_from_secret_store, resolve_repo_source, GitHubRepoSnapshot,
+    RemoteSkillCandidate,
 };
 pub use crate::services::github_import::{
     DuplicateResolution, GitHubImportProgressPayload, GitHubImportProgressPhase, GitHubPatState,
