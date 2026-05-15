@@ -47,7 +47,7 @@ const mockAgents: AgentWithStatus[] = [
     display_name: "Codex",
     category: "coding",
     global_skills_dir: "~/.agents/skills/",
-    project_skills_dir: "~/.agents/skills/",
+    project_skills_dir: ".agents/skills",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,

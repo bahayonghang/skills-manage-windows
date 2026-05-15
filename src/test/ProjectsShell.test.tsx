@@ -92,20 +92,65 @@ function renderShell(overrides: Partial<Parameters<typeof ProjectsShell>[0]> = {
 }
 
 describe("ProjectsShell", () => {
-  it("renders current project skills grouped by Sidebar platform targets", () => {
+  it("defaults to the first Sidebar platform target", () => {
     renderShell();
 
     expect(
       screen.getByRole("heading", { name: "Universal" })
     ).toBeInTheDocument();
+    expect(screen.getByText("universal-helper")).toBeInTheDocument();
+    expect(screen.queryByText("claude-helper")).not.toBeInTheDocument();
+    expect(screen.queryByText("kiro-helper")).not.toBeInTheDocument();
+  });
+
+  it("renders the CLI sidebar with skill counts", () => {
+    renderShell();
+
+    const cliNav = screen.getByRole("navigation", { name: "项目 CLI 筛选" });
+    expect(cliNav).toHaveTextContent("Universal");
+    expect(cliNav).toHaveTextContent("Claude Code");
+    expect(cliNav).toHaveTextContent("Kiro");
+    expect(cliNav).not.toHaveTextContent("全部");
+
     expect(
-      screen.getByRole("heading", { name: "Claude Code" })
+      screen.getByRole("button", { name: /Universal1/ })
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Kiro" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Claude Code1/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Kiro1/ })
+    ).toBeInTheDocument();
+  });
+
+  it("filters the skill list to Universal when that CLI is selected", () => {
+    renderShell();
+
+    fireEvent.click(screen.getByRole("button", { name: /Claude Code1/ }));
+    expect(screen.getByText("claude-helper")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Universal1/ }));
 
     expect(screen.getByText("universal-helper")).toBeInTheDocument();
-    expect(screen.getByText("claude-helper")).toBeInTheDocument();
-    expect(screen.getByText("kiro-helper")).toBeInTheDocument();
+    expect(screen.queryByText("claude-helper")).not.toBeInTheDocument();
+    expect(screen.queryByText("kiro-helper")).not.toBeInTheDocument();
+  });
+
+  it("keeps zero-count project-capable CLI entries and shows their empty state", () => {
+    renderShell({
+      skills: [skill("universal-helper", "codex", "Codex CLI")],
+    });
+
+    expect(
+      screen.getByRole("button", { name: /Claude Code0/ })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Claude Code0/ }));
+
+    expect(
+      screen.getByText("该项目的 Claude Code 下还没有装入技能")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("universal-helper")).not.toBeInTheDocument();
   });
 
   it("uses the grouped Universal label while uninstalling the raw project skill", async () => {

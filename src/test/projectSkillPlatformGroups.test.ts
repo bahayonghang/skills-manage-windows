@@ -96,6 +96,33 @@ describe("groupProjectSkillsByPlatform", () => {
     expect(groups[0].rawAgentIds).toEqual(["codex", "cursor", "opencode"]);
   });
 
+  it("folds the Universal representative and legacy raw member ids into Universal", () => {
+    const targets = getPlatformTargetGroups(
+      [
+        agent("codex", "Codex CLI"),
+        agent("opencode", "OpenCode"),
+        agent("claude-code", "Claude Code"),
+      ],
+      { coding: true, lobster: true }
+    );
+
+    const groups = groupProjectSkillsByPlatform(
+      [
+        projectSkill("canonical-agents-skill", "codex", "Codex CLI"),
+        projectSkill("legacy-opencode-skill", "opencode", "OpenCode"),
+      ],
+      targets
+    );
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].id).toBe("universal-agents");
+    expect(groups[0].rawAgentIds).toEqual(["codex", "opencode"]);
+    expect(groups[0].skills.map((skill) => skill.skillId)).toEqual([
+      "canonical-agents-skill",
+      "legacy-opencode-skill",
+    ]);
+  });
+
   it("keeps hidden or unknown platform skills visible in a fallback group", () => {
     const targets = getPlatformTargetGroups(
       [agent("claude-code", "Claude Code")],
