@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Folder,
   Loader2,
@@ -22,6 +22,8 @@ import { formatPathForDisplay } from "@/lib/path";
 import { groupProjectSkillsByPlatform } from "@/lib/projectSkillPlatformGroups";
 import {
   getPlatformTargetMemberNames,
+  getPlatformTargetMemberIds,
+  hasProjectSkillPattern,
   isUniversalPlatformTarget,
   type PlatformTarget,
 } from "@/lib/platformTargetGroups";
@@ -69,6 +71,32 @@ function getProjectPlatformTitle(
   return isUniversalPlatformTarget(target)
     ? getPlatformTargetMemberNames(target).join(", ")
     : target.global_skills_dir;
+}
+
+interface ProjectCliSidebarItem {
+  id: string;
+  target: PlatformTarget | null;
+  label: string;
+  title: string;
+  count: number;
+  disabled: boolean;
+  rawAgentIds: string[];
+}
+
+function getSkillCountForTarget(
+  skills: readonly ProjectSkill[],
+  target: PlatformTarget
+): number {
+  const memberIds = new Set(getPlatformTargetMemberIds(target));
+  return skills.filter((skill) => memberIds.has(skill.agentId)).length;
+}
+
+function getSkillCountForRawAgentIds(
+  skills: readonly ProjectSkill[],
+  rawAgentIds: readonly string[]
+): number {
+  const memberIds = new Set(rawAgentIds);
+  return skills.filter((skill) => memberIds.has(skill.agentId)).length;
 }
 
 function midEllipsis(input: string, max = 56): string {
@@ -238,10 +266,74 @@ function ProjectList({
   );
 }
 
+interface ProjectCliSidebarProps {
+  items: ProjectCliSidebarItem[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}
+
+function ProjectCliSidebar({
+  items,
+  selectedId,
+  onSelect,
+}: ProjectCliSidebarProps) {
+  const { t } = useTranslation();
+
+  return (
+    <aside className="w-44 shrink-0 border-r border-border bg-muted/10 flex flex-col">
+      <div className="px-3 py-2 border-b border-border">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("projects.cliSidebarTitle")}
+        </p>
+      </div>
+      <nav
+        aria-label={t("projects.cliSidebarAria")}
+        className="flex-1 overflow-y-auto p-1.5 space-y-1"
+      >
+        {items.map((item) => {
+          const isActive = selectedId === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelect(item.id)}
+              disabled={item.disabled}
+              title={item.title}
+              aria-current={isActive ? "true" : undefined}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition-colors",
+                isActive
+                  ? "border-primary/60 bg-primary/10 text-foreground shadow-sm"
+                  : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50",
+                item.disabled && "cursor-not-allowed opacity-50 hover:border-transparent hover:bg-transparent"
+              )}
+            >
+              {item.target ? (
+                <PlatformIcon
+                  agentId={item.target.id}
+                  className="size-3.5 shrink-0"
+                />
+              ) : (
+                <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+              )}
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              <span className="rounded-full bg-background/80 px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-muted-foreground">
+                {item.count}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+    </aside>
+  );
+}
+
 interface SkillPanelProps {
   project: Project | null;
   skills: ProjectSkill[];
   platformTargets: PlatformTarget[];
+  platformGroups: ReturnType<typeof groupProjectSkillsByPlatform>;
+  selectedCliId: string;
   isScanning: boolean;
   uninstallingKeys: Set<string>;
   onRescan: () => void | Promise<void>;
@@ -253,6 +345,8 @@ function SkillPanel({
   project,
   skills,
   platformTargets,
+  platformGroups,
+  selectedCliId,
   isScanning,
   uninstallingKeys,
   onRescan,
@@ -260,10 +354,16 @@ function SkillPanel({
   onUninstallSkill,
 }: SkillPanelProps) {
   const { t } = useTranslation();
-  const platformGroups = useMemo(
-    () => groupProjectSkillsByPlatform(skills, platformTargets),
-    [skills, platformTargets]
-  );
+  const selectedGroup =
+    platformGroups.find((group) => group.id === selectedCliId) ?? null;
+  const selectedTarget =
+    platformTargets.find((target) => target.id === selectedCliId) ?? null;
+  const selectedPlatformName = selectedGroup
+    ? getProjectPlatformDisplayName(selectedGroup.target, t)
+    : selectedTarget
+      ? getProjectPlatformDisplayName(selectedTarget, t)
+      : t("projects.otherPlatforms");
+  const visibleGroups = selectedGroup ? [selectedGroup] : [];
 
   if (!project) {
     return (
@@ -339,9 +439,23 @@ function SkillPanel({
               {t("projects.installFromCentral")}
             </Button>
           </div>
+        ) : visibleGroups.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-2 py-12">
+            <Folder className="size-8 text-muted-foreground opacity-40" />
+            <p className="text-sm text-muted-foreground">
+              {t("projects.noSkillsForCli", { cli: selectedPlatformName })}
+            </p>
+            <p className="text-xs text-muted-foreground text-center max-w-sm">
+              {t("projects.noSkillsForCliHint", { cli: selectedPlatformName })}
+            </p>
+            <Button variant="outline" size="sm" onClick={onOpenInstallDialog}>
+              <PackagePlus className="size-3.5 mr-1" />
+              {t("projects.installFromCentral")}
+            </Button>
+          </div>
         ) : (
           <div className="space-y-4">
-            {platformGroups.map((group) => {
+            {visibleGroups.map((group) => {
               const platformName = getProjectPlatformDisplayName(group.target, t);
               const title = getProjectPlatformTitle(group.target, platformName);
               const headingId = `project-platform-${group.id}`;
@@ -446,6 +560,68 @@ export function ProjectsShell({
   const isCurrentScanning = currentProject
     ? scanningProjectIds.has(currentProject.id)
     : false;
+  const [selectedCliIdByProject, setSelectedCliIdByProject] = useState<
+    Record<string, string>
+  >({});
+  const platformGroups = useMemo(
+    () => groupProjectSkillsByPlatform(skills, platformTargets),
+    [skills, platformTargets]
+  );
+  const cliSidebarItems = useMemo<ProjectCliSidebarItem[]>(() => {
+    const items: ProjectCliSidebarItem[] = [];
+
+    for (const target of platformTargets) {
+      if (!hasProjectSkillPattern(target)) {
+        continue;
+      }
+
+      const label = getProjectPlatformDisplayName(target, t);
+      items.push({
+        id: target.id,
+        target,
+        label,
+        title: getProjectPlatformTitle(target, label),
+        count: getSkillCountForTarget(skills, target),
+        disabled: false,
+        rawAgentIds: getPlatformTargetMemberIds(target),
+      });
+    }
+
+    for (const group of platformGroups) {
+      if (group.target || items.some((item) => item.id === group.id)) {
+        continue;
+      }
+
+      const label = getProjectPlatformDisplayName(group.target, t);
+      items.push({
+        id: group.id,
+        target: null,
+        label,
+        title: group.rawAgentIds.join(", "),
+        count: getSkillCountForRawAgentIds(skills, group.rawAgentIds),
+        disabled: false,
+        rawAgentIds: group.rawAgentIds,
+      });
+    }
+
+    return items;
+  }, [platformGroups, platformTargets, skills, t]);
+
+  const selectedCliId = currentProject
+    ? cliSidebarItems.some(
+        (item) => item.id === selectedCliIdByProject[currentProject.id]
+      )
+      ? selectedCliIdByProject[currentProject.id]
+      : cliSidebarItems[0]?.id ?? ""
+    : "";
+
+  const handleSelectCli = (id: string) => {
+    if (!currentProject) return;
+    setSelectedCliIdByProject((previous) => ({
+      ...previous,
+      [currentProject.id]: id,
+    }));
+  };
 
   if (projects.length === 0) {
     return (
@@ -531,10 +707,19 @@ export function ProjectsShell({
           onRequestRename={onRequestRename}
           onRequestRemove={onRequestRemove}
         />
+        {currentProject && (
+          <ProjectCliSidebar
+            items={cliSidebarItems}
+            selectedId={selectedCliId}
+            onSelect={handleSelectCli}
+          />
+        )}
         <SkillPanel
           project={currentProject}
           skills={skills}
           platformTargets={platformTargets}
+          platformGroups={platformGroups}
+          selectedCliId={selectedCliId}
           isScanning={isCurrentScanning}
           uninstallingKeys={uninstallingKeys}
           onRescan={() => {

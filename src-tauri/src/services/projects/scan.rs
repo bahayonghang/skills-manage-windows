@@ -5,6 +5,7 @@
 //! - 不再走 `discovered_skills` 表，直接 UPSERT 到 `project_skill_installations`
 //! - reconcile 范围限制在当前 project_id，不影响其它项目
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
@@ -12,6 +13,15 @@ use chrono::Utc;
 use crate::db::{self, DbPool, ProjectSkillInstallation};
 use crate::services::installation::project::project_relative_skills_dir;
 use crate::services::scanner::scan_directory;
+
+const UNIVERSAL_LEGACY_PROJECT_SKILLS_DIRS: [&str; 2] = [".codex/skills", ".opencode/skills"];
+
+#[derive(Clone)]
+struct ProjectScanTarget {
+    agent: db::Agent,
+    rel: PathBuf,
+    priority: usize,
+}
 
 /// 检测目录项的 link_type。
 ///
@@ -29,6 +39,112 @@ fn detect_project_link_type(path: &Path) -> (String, Option<String>) {
     }
 }
 
+fn select_universal_representative(agents: &[db::Agent]) -> Option<db::Agent> {
+    for preferred_id in db::UNIVERSAL_PROJECT_REPRESENTATIVE_AGENT_IDS {
+        if let Some(agent) = agents.iter().find(|agent| agent.id == preferred_id) {
+            return Some(agent.clone());
+        }
+    }
+
+    agents
+        .iter()
+        .find(|agent| db::is_universal_agent(&agent.id))
+        .cloned()
+}
+
+fn build_project_scan_targets(enabled_agents: &[db::Agent]) -> Vec<ProjectScanTarget> {
+    let mut targets = Vec::new();
+    let mut seen = HashSet::<(String, PathBuf)>::new();
+    let universal_representative = select_universal_representative(enabled_agents);
+
+    for agent in enabled_agents {
+        if agent.id == "central" {
+            continue;
+        }
+
+        if db::is_universal_agent(&agent.id) {
+            continue;
+        }
+
+        let rel = match project_relative_skills_dir(agent) {
+            Ok(rel) => rel,
+            Err(_) => continue,
+        };
+        let key = (agent.id.clone(), rel.clone());
+        if seen.insert(key) {
+            targets.push(ProjectScanTarget {
+                agent: agent.clone(),
+                rel,
+                priority: 0,
+            });
+        }
+    }
+
+    let Some(universal_agent) = universal_representative else {
+        return targets;
+    };
+
+    let canonical = PathBuf::from(db::UNIVERSAL_PROJECT_SKILLS_DIR);
+    if seen.insert((universal_agent.id.clone(), canonical.clone())) {
+        targets.push(ProjectScanTarget {
+            agent: universal_agent.clone(),
+            rel: canonical,
+            priority: 0,
+        });
+    }
+
+    for (index, legacy_rel) in UNIVERSAL_LEGACY_PROJECT_SKILLS_DIRS.iter().enumerate() {
+        let rel = PathBuf::from(legacy_rel);
+        if seen.insert((universal_agent.id.clone(), rel.clone())) {
+            targets.push(ProjectScanTarget {
+                agent: universal_agent.clone(),
+                rel,
+                priority: index + 1,
+            });
+        }
+    }
+
+    targets
+}
+
+fn scan_project_target(
+    project_id: &str,
+    project_root: &Path,
+    target: &ProjectScanTarget,
+    now: &str,
+) -> Vec<ProjectSkillInstallation> {
+    let skill_dir = project_root.join(&target.rel);
+    if !skill_dir.exists() {
+        return Vec::new();
+    }
+
+    // is_central=false：项目级目录下永远不是中央存储。
+    let skills = scan_directory(&skill_dir, false);
+    skills
+        .into_iter()
+        .map(|s| {
+            // 用 symlink_metadata 重新核一遍 link_type，scan_directory 也做了但拿不到
+            // 我们想要的精确字段；这里就近读一次保证 psi 字段权威。
+            let entry_path = Path::new(&s.dir_path);
+            let (link_type, symlink_target) = detect_project_link_type(entry_path);
+
+            ProjectSkillInstallation {
+                project_id: project_id.to_string(),
+                skill_id: s.id,
+                name: s.name,
+                description: s.description,
+                file_path: crate::paths::normalize_stored_path(&s.file_path),
+                source_origin: "project".to_string(),
+                agent_id: target.agent.id.clone(),
+                installed_path: crate::paths::normalize_stored_path(&s.dir_path),
+                link_type,
+                symlink_target,
+                created_at: now.to_string(),
+            }
+        })
+        .collect()
+}
+
 /// 阻塞地扫一个项目根：遍历已启用 agent，逐个 agent 的 project_skills_dir 做扫描。
 ///
 /// 返回该项目下所有 (psi_row, agent_id_seen) 的列表，调用方负责落库与 reconcile。
@@ -38,44 +154,23 @@ fn scan_project_blocking(
     enabled_agents: Vec<db::Agent>,
     now: String,
 ) -> Vec<ProjectSkillInstallation> {
-    let mut found = Vec::new();
-    for agent in &enabled_agents {
-        if agent.id == "central" {
-            continue;
-        }
-        let rel = match project_relative_skills_dir(agent) {
-            Ok(rel) => rel,
-            Err(_) => continue,
-        };
-        let skill_dir = project_root.join(&rel);
-        if !skill_dir.exists() {
-            continue;
-        }
+    let targets = build_project_scan_targets(&enabled_agents);
+    let mut found_by_key = HashMap::<(String, String), (usize, ProjectSkillInstallation)>::new();
 
-        // is_central=false：项目级目录下永远不是中央存储。
-        let skills = scan_directory(&skill_dir, false);
-        for s in skills {
-            // 用 symlink_metadata 重新核一遍 link_type，scan_directory 也做了但拿不到
-            // 我们想要的精确字段；这里就近读一次保证 psi 字段权威。
-            let entry_path = Path::new(&s.dir_path);
-            let (link_type, symlink_target) = detect_project_link_type(entry_path);
-
-            found.push(ProjectSkillInstallation {
-                project_id: project_id.clone(),
-                skill_id: s.id,
-                name: s.name,
-                description: s.description,
-                file_path: crate::paths::normalize_stored_path(&s.file_path),
-                source_origin: "project".to_string(),
-                agent_id: agent.id.clone(),
-                installed_path: crate::paths::normalize_stored_path(&s.dir_path),
-                link_type,
-                symlink_target,
-                created_at: now.clone(),
-            });
+    for target in targets {
+        for psi in scan_project_target(&project_id, &project_root, &target, &now) {
+            let key = (psi.skill_id.clone(), psi.agent_id.clone());
+            let should_replace = match found_by_key.get(&key) {
+                Some((existing_priority, _existing)) => target.priority < *existing_priority,
+                None => true,
+            };
+            if should_replace {
+                found_by_key.insert(key, (target.priority, psi));
+            }
         }
     }
-    found
+
+    found_by_key.into_values().map(|(_, psi)| psi).collect()
 }
 
 /// 扫描指定项目并落 psi。
