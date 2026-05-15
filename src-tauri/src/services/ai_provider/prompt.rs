@@ -38,7 +38,11 @@ pub(crate) fn resolve_api_protocol(
     api_url: &str,
     explicit_protocol: Option<&str>,
 ) -> ExplanationApiProtocol {
-    match explicit_protocol.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+    match explicit_protocol
+        .map(str::trim)
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
         Some("anthropic") => ExplanationApiProtocol::AnthropicCompatible,
         Some("openai") => ExplanationApiProtocol::OpenAiCompatible,
         _ => detect_explanation_api_protocol(api_url),

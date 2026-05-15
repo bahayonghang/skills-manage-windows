@@ -168,7 +168,11 @@ pub async fn batch_install_collection_impl(
         }
     }
 
-    Ok(BatchInstallResult { succeeded, skipped: Vec::new(), failed })
+    Ok(BatchInstallResult {
+        succeeded,
+        skipped: Vec::new(),
+        failed,
+    })
 }
 
 /// Export a collection to a JSON string matching the spec in docs/desktop-design.md.
@@ -325,7 +329,11 @@ pub async fn batch_install_collection(
                 }
             }
         }
-        return Ok(BatchInstallResult { succeeded, skipped: Vec::new(), failed });
+        return Ok(BatchInstallResult {
+            succeeded,
+            skipped: Vec::new(),
+            failed,
+        });
     }
     batch_install_collection_impl(&pool, &collection_id, &agent_ids).await
 }
@@ -361,8 +369,6 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
     async fn setup_test_db() -> SqlitePool {
         let pool = SqlitePool::connect(":memory:").await.unwrap();
         db::init_database(&pool).await.unwrap();
@@ -382,8 +388,6 @@ mod tests {
             scanned_at: Utc::now().to_rfc3339(),
         }
     }
-
-    // ── create_collection ─────────────────────────────────────────────────────
 
     #[tokio::test]
     async fn test_create_collection_returns_collection() {
@@ -419,8 +423,6 @@ mod tests {
         assert!(result.is_err(), "whitespace-only name should be rejected");
     }
 
-    // ── get_collections ───────────────────────────────────────────────────────
-
     #[tokio::test]
     async fn test_get_collections_returns_all() {
         let pool = setup_test_db().await;
@@ -442,8 +444,6 @@ mod tests {
         let all = get_collections_impl(&pool).await.unwrap();
         assert!(all.is_empty(), "should be empty when no collections exist");
     }
-
-    // ── get_collection_detail ─────────────────────────────────────────────────
 
     #[tokio::test]
     async fn test_get_collection_detail_includes_skills() {
@@ -489,8 +489,6 @@ mod tests {
         let result = get_collection_detail_impl(&pool, "nonexistent-id").await;
         assert!(result.is_err(), "should error for unknown collection_id");
     }
-
-    // ── add_skill_to_collection ───────────────────────────────────────────────
 
     #[tokio::test]
     async fn test_add_skill_to_collection_success() {
@@ -543,8 +541,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ── remove_skill_from_collection ──────────────────────────────────────────
-
     #[tokio::test]
     async fn test_remove_skill_from_collection_success() {
         let pool = setup_test_db().await;
@@ -573,8 +569,6 @@ mod tests {
         let result = remove_skill_from_collection_impl(&pool, "bad-id", "some-skill").await;
         assert!(result.is_err());
     }
-
-    // ── delete_collection ─────────────────────────────────────────────────────
 
     #[tokio::test]
     async fn test_delete_collection_removes_it() {
@@ -646,8 +640,6 @@ mod tests {
         assert!(found.is_some(), "underlying skill must NOT be deleted");
     }
 
-    // ── update_collection ─────────────────────────────────────────────────────
-
     #[tokio::test]
     async fn test_update_collection_name_and_description() {
         let pool = setup_test_db().await;
@@ -679,8 +671,6 @@ mod tests {
         let result = update_collection_impl(&pool, "no-such-id", "Name", None).await;
         assert!(result.is_err());
     }
-
-    // ── export_collection ─────────────────────────────────────────────────────
 
     #[tokio::test]
     async fn test_export_collection_produces_valid_json() {
@@ -750,8 +740,6 @@ mod tests {
         let result = export_collection_impl(&pool, "no-such-id").await;
         assert!(result.is_err());
     }
-
-    // ── import_collection ─────────────────────────────────────────────────────
 
     #[tokio::test]
     async fn test_import_collection_creates_collection() {
@@ -860,8 +848,6 @@ mod tests {
         assert_eq!(detail.skills.len(), 1);
         assert_eq!(detail.skills[0].id, "roundtrip-skill");
     }
-
-    // ── batch_install_collection ──────────────────────────────────────────────
 
     #[tokio::test]
     async fn test_batch_install_collection_creates_symlinks() {

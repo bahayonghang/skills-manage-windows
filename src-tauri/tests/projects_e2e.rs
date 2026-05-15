@@ -14,9 +14,8 @@ use tempfile::TempDir;
 
 use skillport_lib::db::{self, DbPool, Skill};
 use skillport_lib::services::projects::{
-    add_project_impl, get_project_skills_impl, install_skill_to_project_impl,
-    list_projects_impl, remove_project_impl, rescan_project_impl,
-    uninstall_skill_from_project_impl,
+    add_project_impl, get_project_skills_impl, install_skill_to_project_impl, list_projects_impl,
+    remove_project_impl, rescan_project_impl, uninstall_skill_from_project_impl,
 };
 
 async fn fresh_db() -> DbPool {
@@ -27,9 +26,7 @@ async fn fresh_db() -> DbPool {
 
 fn write_skill_md(dir: &Path, name: &str, description: &str) {
     std::fs::create_dir_all(dir).unwrap();
-    let body = format!(
-        "---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n"
-    );
+    let body = format!("---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n");
     std::fs::write(dir.join("SKILL.md"), body).unwrap();
 }
 
@@ -39,7 +36,10 @@ async fn seed_central_skill(pool: &DbPool, canonical_dir: &Path, skill_id: &str)
         id: skill_id.to_string(),
         name: skill_id.to_string(),
         description: Some("e2e seed".to_string()),
-        file_path: canonical_dir.join("SKILL.md").to_string_lossy().into_owned(),
+        file_path: canonical_dir
+            .join("SKILL.md")
+            .to_string_lossy()
+            .into_owned(),
         canonical_path: Some(canonical_dir.to_string_lossy().into_owned()),
         is_central: true,
         source: None,
@@ -72,11 +72,9 @@ async fn e2e_copy_full_lifecycle() {
     assert_eq!(initial, 0, "fresh project should scan zero skills");
 
     // 3. install copy
-    let psi = install_skill_to_project_impl(
-        &pool, &project.id, "copykid", "claude-code", "copy",
-    )
-    .await
-    .unwrap();
+    let psi = install_skill_to_project_impl(&pool, &project.id, "copykid", "claude-code", "copy")
+        .await
+        .unwrap();
     assert_eq!(psi.link_type, "copy");
     let installed_path = project_root.join(".claude/skills/copykid");
     assert!(installed_path.exists(), "copy must materialise dir");
@@ -95,13 +93,18 @@ async fn e2e_copy_full_lifecycle() {
         .unwrap();
     assert!(!installed_path.exists(), "uninstall must remove copy dir");
     assert_eq!(
-        get_project_skills_impl(&pool, &project.id).await.unwrap().len(),
+        get_project_skills_impl(&pool, &project.id)
+            .await
+            .unwrap()
+            .len(),
         0,
         "psi cleared after uninstall"
     );
 
     // 6. remove project
-    remove_project_impl(&pool, &project.id, false).await.unwrap();
+    remove_project_impl(&pool, &project.id, false)
+        .await
+        .unwrap();
     assert!(
         list_projects_impl(&pool).await.unwrap().is_empty(),
         "project must be gone"
@@ -123,10 +126,9 @@ async fn e2e_symlink_full_lifecycle() {
         .await
         .unwrap();
 
-    let install_result = install_skill_to_project_impl(
-        &pool, &project.id, "linkkid", "claude-code", "symlink",
-    )
-    .await;
+    let install_result =
+        install_skill_to_project_impl(&pool, &project.id, "linkkid", "claude-code", "symlink")
+            .await;
     let psi = match install_result {
         Ok(p) => p,
         Err(e) if e.to_lowercase().contains("symlink") => return, // Windows 非开发者模式
@@ -153,7 +155,9 @@ async fn e2e_symlink_full_lifecycle() {
     );
 
     // remove project（保留磁盘）
-    remove_project_impl(&pool, &project.id, false).await.unwrap();
+    remove_project_impl(&pool, &project.id, false)
+        .await
+        .unwrap();
     assert!(list_projects_impl(&pool).await.unwrap().is_empty());
 }
 
@@ -212,7 +216,9 @@ async fn e2e_remove_without_uninstall_preserves_disk() {
     let installed = project_root.join(".claude/skills/keepme");
     assert!(installed.exists());
 
-    remove_project_impl(&pool, &project.id, false).await.unwrap();
+    remove_project_impl(&pool, &project.id, false)
+        .await
+        .unwrap();
     assert!(
         installed.exists(),
         "disk must be untouched when uninstall_skills=false"
@@ -260,12 +266,18 @@ async fn e2e_two_projects_share_skill() {
     assert!(!a_path.exists());
     assert!(b_path.exists());
     assert_eq!(
-        get_project_skills_impl(&pool, &proj_b.id).await.unwrap().len(),
+        get_project_skills_impl(&pool, &proj_b.id)
+            .await
+            .unwrap()
+            .len(),
         1
     );
 
     // remove A 不连带清 B
     remove_project_impl(&pool, &proj_a.id, true).await.unwrap();
-    assert!(b_path.exists(), "removing project A must not touch project B");
+    assert!(
+        b_path.exists(),
+        "removing project A must not touch project B"
+    );
     assert_eq!(list_projects_impl(&pool).await.unwrap().len(), 1);
 }

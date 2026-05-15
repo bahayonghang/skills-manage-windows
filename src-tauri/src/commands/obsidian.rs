@@ -3,9 +3,7 @@
 
 use tauri::State;
 
-use crate::services::obsidian::{
-    self, ObsidianImportResult, ObsidianSkill, ObsidianVault,
-};
+use crate::services::obsidian::{self, ObsidianImportResult, ObsidianSkill, ObsidianVault};
 use crate::targets::ActiveTarget;
 use crate::AppState;
 

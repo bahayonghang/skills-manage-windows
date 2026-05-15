@@ -12,11 +12,7 @@ fn provider_scoped_key(name: &str, provider: &str) -> String {
     format!("{name}__{provider}")
 }
 
-async fn scoped_ai_setting(
-    pool: &crate::db::DbPool,
-    provider: &str,
-    name: &str,
-) -> Option<String> {
+async fn scoped_ai_setting(pool: &crate::db::DbPool, provider: &str, name: &str) -> Option<String> {
     let scoped = provider_scoped_key(name, provider);
     if let Some(value) = super::get_ai_setting(pool, &scoped).await {
         Some(value)
@@ -25,9 +21,7 @@ async fn scoped_ai_setting(
     }
 }
 
-pub(crate) async fn resolve_ai_provider_config(
-    pool: &crate::db::DbPool,
-) -> AiProviderConfig {
+pub(crate) async fn resolve_ai_provider_config(pool: &crate::db::DbPool) -> AiProviderConfig {
     let provider = super::get_ai_setting(pool, "ai_provider")
         .await
         .unwrap_or_else(|| "claude".to_string());
@@ -95,9 +89,19 @@ mod tests {
     #[tokio::test]
     async fn resolver_falls_back_to_legacy_unsuffixed_settings() {
         let pool = setup_test_db().await;
-        db::set_setting(&pool, "ai_provider", "deepseek").await.unwrap();
-        db::set_setting(&pool, "ai_model", "legacy-model").await.unwrap();
-        db::set_setting(&pool, "ai_api_url", "https://legacy.example.com/v1/messages").await.unwrap();
+        db::set_setting(&pool, "ai_provider", "deepseek")
+            .await
+            .unwrap();
+        db::set_setting(&pool, "ai_model", "legacy-model")
+            .await
+            .unwrap();
+        db::set_setting(
+            &pool,
+            "ai_api_url",
+            "https://legacy.example.com/v1/messages",
+        )
+        .await
+        .unwrap();
 
         let config = resolve_ai_provider_config(&pool).await;
 
@@ -109,16 +113,33 @@ mod tests {
     #[tokio::test]
     async fn resolver_prefers_provider_scoped_settings() {
         let pool = setup_test_db().await;
-        db::set_setting(&pool, "ai_provider", "custom").await.unwrap();
-        db::set_setting(&pool, "ai_model", "legacy-model").await.unwrap();
-        db::set_setting(&pool, "ai_model__custom", "custom-model").await.unwrap();
-        db::set_setting(&pool, "ai_custom_base_url__custom", "https://proxy.example.com/v1").await.unwrap();
-        db::set_setting(&pool, "ai_protocol__custom", "openai").await.unwrap();
+        db::set_setting(&pool, "ai_provider", "custom")
+            .await
+            .unwrap();
+        db::set_setting(&pool, "ai_model", "legacy-model")
+            .await
+            .unwrap();
+        db::set_setting(&pool, "ai_model__custom", "custom-model")
+            .await
+            .unwrap();
+        db::set_setting(
+            &pool,
+            "ai_custom_base_url__custom",
+            "https://proxy.example.com/v1",
+        )
+        .await
+        .unwrap();
+        db::set_setting(&pool, "ai_protocol__custom", "openai")
+            .await
+            .unwrap();
 
         let config = resolve_ai_provider_config(&pool).await;
 
         assert_eq!(config.model, "custom-model");
-        assert_eq!(config.api_url, "https://proxy.example.com/v1/chat/completions");
+        assert_eq!(
+            config.api_url,
+            "https://proxy.example.com/v1/chat/completions"
+        );
         assert_eq!(config.protocol, ExplanationApiProtocol::OpenAiCompatible);
     }
 }

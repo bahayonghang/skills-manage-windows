@@ -18,9 +18,9 @@ pub mod types;
 mod tests;
 
 pub use crud::{
-    add_project_impl, get_project_skills_impl, install_skill_to_project_impl,
-    list_projects_impl, list_projects_using_skill_impl, normalize_project_path,
-    project_id_from_path, remove_project_impl, rename_project_impl, rescan_project_impl,
-    set_project_pinned_impl, uninstall_skill_from_project_impl,
+    add_project_impl, get_project_skills_impl, install_skill_to_project_impl, list_projects_impl,
+    list_projects_using_skill_impl, normalize_project_path, project_id_from_path,
+    remove_project_impl, rename_project_impl, rescan_project_impl, set_project_pinned_impl,
+    uninstall_skill_from_project_impl,
 };
 pub use types::{ProjectDto, ProjectSkillDto, ProjectUsingSkillDto};

@@ -160,10 +160,11 @@ pub async fn reorder_saved_views(pool: &DbPool, ids: &[String]) -> Result<(), St
 }
 
 async fn next_sort_order(pool: &DbPool) -> Result<i64, String> {
-    let row = sqlx::query("SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM skill_saved_views")
-        .fetch_one(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let row =
+        sqlx::query("SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM skill_saved_views")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| e.to_string())?;
     let next: i64 = row.try_get("next").map_err(|e| e.to_string())?;
     Ok(next)
 }

@@ -34,7 +34,8 @@ pub async fn pick_project_folder(app: AppHandle) -> Result<Option<String>, Strin
         });
 
     let picked = tauri::async_runtime::spawn_blocking(move || {
-        rx.recv().map_err(|e| format!("Dialog channel closed: {}", e))
+        rx.recv()
+            .map_err(|e| format!("Dialog channel closed: {}", e))
     })
     .await
     .map_err(|e| format!("Failed to await folder pick: {}", e))??;
@@ -158,14 +159,8 @@ pub async fn install_skill_to_project(
     agent_id: String,
     method: String,
 ) -> Result<crate::db::ProjectSkillInstallation, String> {
-    projects::install_skill_to_project_impl(
-        &state.db,
-        &project_id,
-        &skill_id,
-        &agent_id,
-        &method,
-    )
-    .await
+    projects::install_skill_to_project_impl(&state.db, &project_id, &skill_id, &agent_id, &method)
+        .await
 }
 
 /// 从项目下指定 agent 目录卸载 skill。

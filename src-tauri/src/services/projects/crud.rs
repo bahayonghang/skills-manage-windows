@@ -9,9 +9,7 @@ use sha2::{Digest, Sha256};
 
 use crate::db::{self, DbPool, Project, ProjectSkillInstallation};
 use crate::services::installation::centralize::ensure_replaceable_target;
-use crate::services::installation::fs_util::{
-    copy_dir_all_blocking, run_blocking_fs,
-};
+use crate::services::installation::fs_util::{copy_dir_all_blocking, run_blocking_fs};
 use crate::services::installation::project::project_relative_skills_dir;
 use crate::services::installation::{create_symlink, symlink_target_path};
 
@@ -29,7 +27,10 @@ pub fn normalize_project_path(input: &str) -> String {
 /// sha256(规范化 path) 前 16 字符（hex）。
 pub fn project_id_from_path(normalized_path: &str) -> String {
     let digest = Sha256::digest(normalized_path.as_bytes());
-    let hex = digest.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+    let hex = digest
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<String>();
     hex[..16].to_string()
 }
 
@@ -114,11 +115,7 @@ pub async fn rename_project_impl(pool: &DbPool, id: &str, name: &str) -> Result<
     db::update_project_name(pool, id, trimmed).await
 }
 
-pub async fn set_project_pinned_impl(
-    pool: &DbPool,
-    id: &str,
-    pinned: bool,
-) -> Result<(), String> {
+pub async fn set_project_pinned_impl(pool: &DbPool, id: &str, pinned: bool) -> Result<(), String> {
     if db::get_project_by_id(pool, id).await?.is_none() {
         return Err(format!("Project '{}' not found", id));
     }
@@ -265,21 +262,31 @@ pub async fn list_projects_using_skill_impl(
 
     Ok(rows
         .into_iter()
-        .map(|(project_id, project_name, project_path, _pinned, agent_id, installed_path, link_type)| {
-            let agent_display_name = agent_name
-                .get(&agent_id)
-                .cloned()
-                .unwrap_or_else(|| agent_id.clone());
-            ProjectUsingSkillDto {
+        .map(
+            |(
                 project_id,
                 project_name,
                 project_path,
+                _pinned,
                 agent_id,
-                agent_display_name,
                 installed_path,
                 link_type,
-            }
-        })
+            )| {
+                let agent_display_name = agent_name
+                    .get(&agent_id)
+                    .cloned()
+                    .unwrap_or_else(|| agent_id.clone());
+                ProjectUsingSkillDto {
+                    project_id,
+                    project_name,
+                    project_path,
+                    agent_id,
+                    agent_display_name,
+                    installed_path,
+                    link_type,
+                }
+            },
+        )
         .collect())
 }
 
@@ -393,7 +400,9 @@ pub async fn install_skill_to_project_impl(
         skill_id: skill_id.to_string(),
         name: skill.name,
         description: skill.description,
-        file_path: crate::paths::normalize_stored_path(&target_path.join("SKILL.md").to_string_lossy()),
+        file_path: crate::paths::normalize_stored_path(
+            &target_path.join("SKILL.md").to_string_lossy(),
+        ),
         source_origin: "central".to_string(),
         agent_id: agent_id.to_string(),
         installed_path: crate::paths::normalize_stored_path(&target_path.to_string_lossy()),
@@ -459,13 +468,8 @@ pub async fn uninstall_skill_from_project_impl(
                 })
             }
         } else {
-            std::fs::remove_dir_all(&target_for_remove).map_err(|e| {
-                format!(
-                    "Failed to remove '{}': {}",
-                    target_for_remove.display(),
-                    e
-                )
-            })
+            std::fs::remove_dir_all(&target_for_remove)
+                .map_err(|e| format!("Failed to remove '{}': {}", target_for_remove.display(), e))
         }
     })
     .await?;

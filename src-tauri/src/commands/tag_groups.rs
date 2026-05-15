@@ -176,7 +176,9 @@ mod tests {
     #[tokio::test]
     async fn create_tag_group_returns_row_with_generated_id() {
         let pool = setup_test_db().await;
-        let group = create_tag_group_impl(&pool, make_input("Status")).await.unwrap();
+        let group = create_tag_group_impl(&pool, make_input("Status"))
+            .await
+            .unwrap();
         assert_eq!(group.name, "Status");
         assert!(!group.id.is_empty());
         assert_eq!(group.sort_order, 0);
@@ -187,7 +189,9 @@ mod tests {
     #[tokio::test]
     async fn create_tag_group_rejects_empty_name() {
         let pool = setup_test_db().await;
-        let err = create_tag_group_impl(&pool, make_input("   ")).await.unwrap_err();
+        let err = create_tag_group_impl(&pool, make_input("   "))
+            .await
+            .unwrap_err();
         assert!(err.contains("name"));
     }
 
@@ -216,7 +220,9 @@ mod tests {
     #[tokio::test]
     async fn update_tag_group_changes_name_and_color() {
         let pool = setup_test_db().await;
-        let g = create_tag_group_impl(&pool, make_input("Old")).await.unwrap();
+        let g = create_tag_group_impl(&pool, make_input("Old"))
+            .await
+            .unwrap();
         let updated = update_tag_group_impl(
             &pool,
             &g.id,
@@ -276,13 +282,20 @@ mod tests {
     async fn delete_tag_group_removes_row_and_clears_member_tags_group_id() {
         let pool = setup_test_db().await;
         let group = create_tag_group_impl(&pool, make_input("G")).await.unwrap();
-        let tag = db::create_skill_tag(&pool, "team-a", None, None).await.unwrap();
-        set_tag_group_impl(&pool, &tag.id, Some(&group.id)).await.unwrap();
+        let tag = db::create_skill_tag(&pool, "team-a", None, None)
+            .await
+            .unwrap();
+        set_tag_group_impl(&pool, &tag.id, Some(&group.id))
+            .await
+            .unwrap();
 
         delete_tag_group_impl(&pool, &group.id).await.unwrap();
 
         // 删除后 tag 仍存在但 group_id 应为 NULL
-        let tag_after = db::get_skill_tag_by_id(&pool, &tag.id).await.unwrap().unwrap();
+        let tag_after = db::get_skill_tag_by_id(&pool, &tag.id)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(tag_after.group_id.is_none(), "tag.group_id must be cleared");
         assert!(list_tag_groups_impl(&pool).await.unwrap().is_empty());
     }
@@ -313,9 +326,16 @@ mod tests {
     async fn set_tag_group_assigns_tag_to_group() {
         let pool = setup_test_db().await;
         let group = create_tag_group_impl(&pool, make_input("G")).await.unwrap();
-        let tag = db::create_skill_tag(&pool, "demo", None, None).await.unwrap();
-        set_tag_group_impl(&pool, &tag.id, Some(&group.id)).await.unwrap();
-        let after = db::get_skill_tag_by_id(&pool, &tag.id).await.unwrap().unwrap();
+        let tag = db::create_skill_tag(&pool, "demo", None, None)
+            .await
+            .unwrap();
+        set_tag_group_impl(&pool, &tag.id, Some(&group.id))
+            .await
+            .unwrap();
+        let after = db::get_skill_tag_by_id(&pool, &tag.id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(after.group_id.as_deref(), Some(group.id.as_str()));
     }
 
@@ -323,19 +343,30 @@ mod tests {
     async fn set_tag_group_can_clear_assignment() {
         let pool = setup_test_db().await;
         let group = create_tag_group_impl(&pool, make_input("G")).await.unwrap();
-        let tag = db::create_skill_tag(&pool, "demo2", None, None).await.unwrap();
-        set_tag_group_impl(&pool, &tag.id, Some(&group.id)).await.unwrap();
+        let tag = db::create_skill_tag(&pool, "demo2", None, None)
+            .await
+            .unwrap();
+        set_tag_group_impl(&pool, &tag.id, Some(&group.id))
+            .await
+            .unwrap();
         set_tag_group_impl(&pool, &tag.id, None).await.unwrap();
-        let after = db::get_skill_tag_by_id(&pool, &tag.id).await.unwrap().unwrap();
+        let after = db::get_skill_tag_by_id(&pool, &tag.id)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(after.group_id.is_none());
     }
 
     #[tokio::test]
     async fn set_tag_group_rejects_unknown_tag_or_group() {
         let pool = setup_test_db().await;
-        let err1 = set_tag_group_impl(&pool, "missing-tag", None).await.unwrap_err();
+        let err1 = set_tag_group_impl(&pool, "missing-tag", None)
+            .await
+            .unwrap_err();
         assert!(err1.contains("Tag"));
-        let tag = db::create_skill_tag(&pool, "demo3", None, None).await.unwrap();
+        let tag = db::create_skill_tag(&pool, "demo3", None, None)
+            .await
+            .unwrap();
         let err2 = set_tag_group_impl(&pool, &tag.id, Some("missing-group"))
             .await
             .unwrap_err();

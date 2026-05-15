@@ -8,9 +8,7 @@ mod import;
 mod query;
 mod types;
 
-pub use import::{
-    import_obsidian_skill_to_central_impl, import_obsidian_skill_to_platform_impl,
-};
+pub use import::{import_obsidian_skill_to_central_impl, import_obsidian_skill_to_platform_impl};
 pub use query::{get_obsidian_vault_skills_impl, get_obsidian_vaults_impl};
 pub use types::{
     ObsidianImportResult, ObsidianSkill, ObsidianVault, OBSIDIAN_PLATFORM_ID,

@@ -20,6 +20,8 @@ mod stream;
 #[cfg(test)]
 mod tests;
 
+pub use claude::AiConnectionTestResult;
+pub(crate) use config::resolve_ai_provider_config;
 #[cfg(test)]
 pub(crate) use error::AI_CONNECT;
 pub(crate) use error::{
@@ -28,13 +30,11 @@ pub(crate) use error::{
     AI_RESPONSE_PARSE_FAILED, AI_RESPONSE_READ_FAILED,
 };
 pub use error::{ExplanationErrorInfo, ExplanationErrorKind};
-pub(crate) use config::resolve_ai_provider_config;
 pub use prompt::ExplanationApiProtocol;
 pub use secret::{
     clear_ai_api_key_impl, get_ai_api_key_state_impl, migrate_ai_api_key_on_startup,
     set_ai_api_key_impl, AiApiKeyState,
 };
-pub use claude::AiConnectionTestResult;
 pub use stream::{ExplanationChunkPayload, ExplanationCompletePayload};
 
 use tauri::{AppHandle, Emitter};

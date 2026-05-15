@@ -7,9 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 use super::error::format_reqwest_error;
-use super::prompt::{
-    build_explanation_prompt, truncate_content, ExplanationApiProtocol,
-};
+use super::prompt::{build_explanation_prompt, truncate_content, ExplanationApiProtocol};
 
 #[derive(Serialize)]
 struct ClaudeRequest {
@@ -223,7 +221,10 @@ pub(crate) async fn test_ai_connection(
             ok: false,
             msg: "Configure an AI API key in Settings before testing the connection.".to_string(),
             code: Some(super::AI_MISSING_API_KEY.to_string()),
-            details: Some(format!("No API key saved for provider '{}'.", config.provider)),
+            details: Some(format!(
+                "No API key saved for provider '{}'.",
+                config.provider
+            )),
         });
     };
 
@@ -276,7 +277,9 @@ pub(crate) async fn test_ai_connection(
         });
     }
 
-    if parse_response_text(&body).is_some() || serde_json::from_str::<serde_json::Value>(&body).is_ok() {
+    if parse_response_text(&body).is_some()
+        || serde_json::from_str::<serde_json::Value>(&body).is_ok()
+    {
         Ok(AiConnectionTestResult {
             ok: true,
             msg: format!("AI connection test succeeded for {}.", config.provider),
@@ -308,9 +311,7 @@ mod tests {
         pool
     }
 
-    async fn spawn_connection_test_server(
-        body: &'static str,
-    ) -> (String, Arc<Mutex<Vec<String>>>) {
+    async fn spawn_connection_test_server(body: &'static str) -> (String, Arc<Mutex<Vec<String>>>) {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let address = listener.local_addr().expect("addr");
         let requests = Arc::new(Mutex::new(Vec::new()));
@@ -347,8 +348,12 @@ mod tests {
         let secrets = MockSecretStore::with_value(AI_API_KEY_SECRET_KEY, "sk-test");
         let (base_url, requests) =
             spawn_connection_test_server(r#"{"content":[{"type":"text","text":"ok"}]}"#).await;
-        db::set_setting(&pool, "ai_provider", "custom").await.unwrap();
-        db::set_setting(&pool, "ai_model__custom", "test-model").await.unwrap();
+        db::set_setting(&pool, "ai_provider", "custom")
+            .await
+            .unwrap();
+        db::set_setting(&pool, "ai_model__custom", "test-model")
+            .await
+            .unwrap();
         db::set_setting(&pool, "ai_custom_base_url__custom", &base_url)
             .await
             .unwrap();
@@ -369,15 +374,21 @@ mod tests {
     async fn test_ai_connection_accepts_openai_minimal_response() {
         let pool = setup_test_db().await;
         let secrets = MockSecretStore::with_value("ai_api_key__custom", "sk-openai");
-        let (base_url, requests) = spawn_connection_test_server(
-            r#"{"choices":[{"message":{"content":"ok"}}]}"#,
-        )
-        .await;
-        db::set_setting(&pool, "ai_provider", "custom").await.unwrap();
-        db::set_setting(&pool, "ai_model__custom", "test-model").await.unwrap();
-        db::set_setting(&pool, "ai_custom_base_url__custom", &format!("{base_url}/v1"))
+        let (base_url, requests) =
+            spawn_connection_test_server(r#"{"choices":[{"message":{"content":"ok"}}]}"#).await;
+        db::set_setting(&pool, "ai_provider", "custom")
             .await
             .unwrap();
+        db::set_setting(&pool, "ai_model__custom", "test-model")
+            .await
+            .unwrap();
+        db::set_setting(
+            &pool,
+            "ai_custom_base_url__custom",
+            &format!("{base_url}/v1"),
+        )
+        .await
+        .unwrap();
         db::set_setting(&pool, "ai_protocol__custom", "openai")
             .await
             .unwrap();
@@ -387,7 +398,10 @@ mod tests {
         assert!(result.ok, "{result:?}");
         let request = requests.lock().expect("requests").join("\n");
         assert!(request.contains("POST /v1/chat/completions"), "{request}");
-        assert!(request.contains("authorization: Bearer sk-openai"), "{request}");
+        assert!(
+            request.contains("authorization: Bearer sk-openai"),
+            "{request}"
+        );
         assert!(request.contains(r#""max_tokens":1"#), "{request}");
     }
 }

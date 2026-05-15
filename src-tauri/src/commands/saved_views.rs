@@ -90,8 +90,7 @@ pub async fn update_saved_view_impl(
             return Err("Saved view query cannot be empty".to_string());
         }
     }
-    let icon_patch: Option<Option<&str>> =
-        input.icon.as_ref().map(|opt| opt.as_deref());
+    let icon_patch: Option<Option<&str>> = input.icon.as_ref().map(|opt| opt.as_deref());
     db::update_saved_view(
         pool,
         id,
@@ -144,10 +143,7 @@ pub async fn update_saved_view(
 }
 
 #[tauri::command]
-pub async fn delete_saved_view(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), String> {
+pub async fn delete_saved_view(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let pool = state.active_db().await?;
     delete_saved_view_impl(&pool, &id).await
 }
@@ -219,9 +215,15 @@ mod tests {
     #[tokio::test]
     async fn list_saved_views_orders_pinned_first_then_sort_order() {
         let pool = setup_test_db().await;
-        let a = create_saved_view_impl(&pool, make_input("A", "{}")).await.unwrap();
-        let b = create_saved_view_impl(&pool, make_input("B", "{}")).await.unwrap();
-        let c = create_saved_view_impl(&pool, make_input("C", "{}")).await.unwrap();
+        let a = create_saved_view_impl(&pool, make_input("A", "{}"))
+            .await
+            .unwrap();
+        let b = create_saved_view_impl(&pool, make_input("B", "{}"))
+            .await
+            .unwrap();
+        let c = create_saved_view_impl(&pool, make_input("C", "{}"))
+            .await
+            .unwrap();
 
         // Pin B
         update_saved_view_impl(
@@ -246,9 +248,15 @@ mod tests {
     #[tokio::test]
     async fn create_saved_view_assigns_increasing_sort_order() {
         let pool = setup_test_db().await;
-        let a = create_saved_view_impl(&pool, make_input("A", "{}")).await.unwrap();
-        let b = create_saved_view_impl(&pool, make_input("B", "{}")).await.unwrap();
-        let c = create_saved_view_impl(&pool, make_input("C", "{}")).await.unwrap();
+        let a = create_saved_view_impl(&pool, make_input("A", "{}"))
+            .await
+            .unwrap();
+        let b = create_saved_view_impl(&pool, make_input("B", "{}"))
+            .await
+            .unwrap();
+        let c = create_saved_view_impl(&pool, make_input("C", "{}"))
+            .await
+            .unwrap();
         assert_eq!(a.sort_order, 0);
         assert_eq!(b.sort_order, 1);
         assert_eq!(c.sort_order, 2);
@@ -257,7 +265,9 @@ mod tests {
     #[tokio::test]
     async fn update_saved_view_changes_name_query_icon_pinned() {
         let pool = setup_test_db().await;
-        let v = create_saved_view_impl(&pool, make_input("Old", "{}")).await.unwrap();
+        let v = create_saved_view_impl(&pool, make_input("Old", "{}"))
+            .await
+            .unwrap();
 
         let updated = update_saved_view_impl(
             &pool,
@@ -312,7 +322,9 @@ mod tests {
     #[tokio::test]
     async fn update_saved_view_rejects_empty_name() {
         let pool = setup_test_db().await;
-        let v = create_saved_view_impl(&pool, make_input("V", "{}")).await.unwrap();
+        let v = create_saved_view_impl(&pool, make_input("V", "{}"))
+            .await
+            .unwrap();
         let err = update_saved_view_impl(
             &pool,
             &v.id,
@@ -365,9 +377,15 @@ mod tests {
     #[tokio::test]
     async fn reorder_saved_views_updates_sort_order_to_index() {
         let pool = setup_test_db().await;
-        let a = create_saved_view_impl(&pool, make_input("A", "{}")).await.unwrap();
-        let b = create_saved_view_impl(&pool, make_input("B", "{}")).await.unwrap();
-        let c = create_saved_view_impl(&pool, make_input("C", "{}")).await.unwrap();
+        let a = create_saved_view_impl(&pool, make_input("A", "{}"))
+            .await
+            .unwrap();
+        let b = create_saved_view_impl(&pool, make_input("B", "{}"))
+            .await
+            .unwrap();
+        let c = create_saved_view_impl(&pool, make_input("C", "{}"))
+            .await
+            .unwrap();
 
         // 翻转顺序：C, B, A
         reorder_saved_views_impl(&pool, vec![c.id.clone(), b.id.clone(), a.id.clone()])
@@ -386,9 +404,15 @@ mod tests {
     #[tokio::test]
     async fn reorder_partial_list_only_updates_listed_ids() {
         let pool = setup_test_db().await;
-        let a = create_saved_view_impl(&pool, make_input("A", "{}")).await.unwrap();
-        let _b = create_saved_view_impl(&pool, make_input("B", "{}")).await.unwrap();
-        let c = create_saved_view_impl(&pool, make_input("C", "{}")).await.unwrap();
+        let a = create_saved_view_impl(&pool, make_input("A", "{}"))
+            .await
+            .unwrap();
+        let _b = create_saved_view_impl(&pool, make_input("B", "{}"))
+            .await
+            .unwrap();
+        let c = create_saved_view_impl(&pool, make_input("C", "{}"))
+            .await
+            .unwrap();
 
         // 只把 C 提到最前，A 退到位置 1。B 保持原 sort_order=1。
         reorder_saved_views_impl(&pool, vec![c.id.clone(), a.id.clone()])

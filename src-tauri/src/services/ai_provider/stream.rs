@@ -152,8 +152,9 @@ pub(crate) async fn do_explain_skill_stream(
             if err_info.retryable {
                 if let Some(fallback_url) = get_fallback_endpoint(&provider, &api_url) {
                     tracing::warn!(error_kind = ?err_info.kind, fallback_url = %fallback_url, "AI explanation primary endpoint failed; trying fallback");
-                    let fallback_anthropic = super::prompt::detect_explanation_api_protocol(&fallback_url)
-                        .is_anthropic_compatible();
+                    let fallback_anthropic =
+                        super::prompt::detect_explanation_api_protocol(&fallback_url)
+                            .is_anthropic_compatible();
                     match send_stream_request(
                         &client,
                         &fallback_url,

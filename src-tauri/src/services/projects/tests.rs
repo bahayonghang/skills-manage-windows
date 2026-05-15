@@ -9,9 +9,9 @@ use tempfile::TempDir;
 use crate::db::{self, DbPool, Skill};
 
 use super::crud::{
-    add_project_impl, get_project_skills_impl, install_skill_to_project_impl,
-    list_projects_impl, list_projects_using_skill_impl, normalize_project_path,
-    project_id_from_path, rename_project_impl, rescan_project_impl, set_project_pinned_impl,
+    add_project_impl, get_project_skills_impl, install_skill_to_project_impl, list_projects_impl,
+    list_projects_using_skill_impl, normalize_project_path, project_id_from_path,
+    rename_project_impl, rescan_project_impl, set_project_pinned_impl,
     uninstall_skill_from_project_impl,
 };
 
@@ -214,17 +214,11 @@ async fn rescan_reconciles_psi_after_disk_removal() {
     let project = add_project_impl(&pool, tmp.path().to_str().unwrap())
         .await
         .unwrap();
-    assert_eq!(
-        rescan_project_impl(&pool, &project.id).await.unwrap(),
-        1
-    );
+    assert_eq!(rescan_project_impl(&pool, &project.id).await.unwrap(), 1);
 
     // 磁盘移除后再次扫描，psi 应被清空。
     std::fs::remove_dir_all(&claude_skill).unwrap();
-    assert_eq!(
-        rescan_project_impl(&pool, &project.id).await.unwrap(),
-        0
-    );
+    assert_eq!(rescan_project_impl(&pool, &project.id).await.unwrap(), 0);
     let skills = get_project_skills_impl(&pool, &project.id).await.unwrap();
     assert!(skills.is_empty(), "psi should be reconciled after removal");
 }
@@ -289,14 +283,16 @@ async fn cleanup_removes_old_discover_settings() {
         .unwrap();
     db::init_database(&pool).await.unwrap();
 
-    let row =
-        sqlx::query_scalar::<_, Option<String>>(
-            "SELECT value FROM settings WHERE key = 'discover_scan_roots_config'",
-        )
-        .fetch_optional(&pool)
-        .await
-        .unwrap();
-    assert!(row.is_none(), "old discover scan roots config should be gone");
+    let row = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT value FROM settings WHERE key = 'discover_scan_roots_config'",
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert!(
+        row.is_none(),
+        "old discover scan roots config should be gone"
+    );
 }
 
 #[tokio::test]
@@ -340,7 +336,10 @@ async fn seed_central_skill(pool: &DbPool, canonical_dir: &Path, skill_id: &str)
         id: skill_id.to_string(),
         name: skill_id.to_string(),
         description: Some("seed".to_string()),
-        file_path: canonical_dir.join("SKILL.md").to_string_lossy().into_owned(),
+        file_path: canonical_dir
+            .join("SKILL.md")
+            .to_string_lossy()
+            .into_owned(),
         canonical_path: Some(canonical_dir.to_string_lossy().into_owned()),
         is_central: true,
         source: None,
@@ -366,11 +365,9 @@ async fn install_skill_copy_writes_psi_and_copies_dir() {
         .await
         .unwrap();
 
-    let psi = install_skill_to_project_impl(
-        &pool, &project.id, "seeded", "claude-code", "copy",
-    )
-    .await
-    .unwrap();
+    let psi = install_skill_to_project_impl(&pool, &project.id, "seeded", "claude-code", "copy")
+        .await
+        .unwrap();
 
     assert_eq!(psi.link_type, "copy");
     assert!(psi.symlink_target.is_none());
@@ -389,7 +386,10 @@ async fn install_skill_copy_writes_psi_and_copies_dir() {
     let target = project_root.join(".claude/skills/seeded/SKILL.md");
     assert!(target.exists(), "copy should materialise SKILL.md");
     let meta = std::fs::symlink_metadata(project_root.join(".claude/skills/seeded")).unwrap();
-    assert!(!meta.file_type().is_symlink(), "copy target must be a real directory");
+    assert!(
+        !meta.file_type().is_symlink(),
+        "copy target must be a real directory"
+    );
 
     // psi 行落库
     let row = db::get_project_skill_installation(&pool, &project.id, "seeded", "claude-code")
@@ -450,10 +450,8 @@ async fn install_skill_symlink_writes_psi_and_creates_link() {
         .await
         .unwrap();
 
-    let result = install_skill_to_project_impl(
-        &pool, &project.id, "linker", "claude-code", "symlink",
-    )
-    .await;
+    let result =
+        install_skill_to_project_impl(&pool, &project.id, "linker", "claude-code", "symlink").await;
 
     // Windows 非开发者模式下可能创建符号链接失败：把 error 当成测试预期跳过。
     // CI 上 Linux/macOS 应当能直接拿到 Ok。
@@ -500,10 +498,8 @@ async fn install_skill_rejects_non_central_skill() {
         .await
         .unwrap();
 
-    let result = install_skill_to_project_impl(
-        &pool, &project.id, "ghost", "claude-code", "copy",
-    )
-    .await;
+    let result =
+        install_skill_to_project_impl(&pool, &project.id, "ghost", "claude-code", "copy").await;
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert!(
@@ -523,10 +519,9 @@ async fn install_skill_rejects_missing_skill() {
         .await
         .unwrap();
 
-    let result = install_skill_to_project_impl(
-        &pool, &project.id, "no-such-skill", "claude-code", "copy",
-    )
-    .await;
+    let result =
+        install_skill_to_project_impl(&pool, &project.id, "no-such-skill", "claude-code", "copy")
+            .await;
     assert!(result.is_err());
 }
 
@@ -547,11 +542,12 @@ async fn install_skill_rejects_existing_real_dir_at_target() {
         .await
         .unwrap();
 
-    let result = install_skill_to_project_impl(
-        &pool, &project.id, "clash", "claude-code", "copy",
-    )
-    .await;
-    assert!(result.is_err(), "must refuse to overwrite existing real dir");
+    let result =
+        install_skill_to_project_impl(&pool, &project.id, "clash", "claude-code", "copy").await;
+    assert!(
+        result.is_err(),
+        "must refuse to overwrite existing real dir"
+    );
 }
 
 #[tokio::test]
@@ -578,11 +574,13 @@ async fn uninstall_skill_removes_copy_and_psi() {
         .await
         .unwrap();
 
-    assert!(!installed_path.exists(), "skill dir should be gone after uninstall");
-    let row =
-        db::get_project_skill_installation(&pool, &project.id, "dismantle", "claude-code")
-            .await
-            .unwrap();
+    assert!(
+        !installed_path.exists(),
+        "skill dir should be gone after uninstall"
+    );
+    let row = db::get_project_skill_installation(&pool, &project.id, "dismantle", "claude-code")
+        .await
+        .unwrap();
     assert!(row.is_none(), "psi row must be cleared after uninstall");
 }
 
@@ -597,10 +595,9 @@ async fn uninstall_skill_rejects_unknown_pair() {
         .await
         .unwrap();
 
-    let result = uninstall_skill_from_project_impl(
-        &pool, &project.id, "never-installed", "claude-code",
-    )
-    .await;
+    let result =
+        uninstall_skill_from_project_impl(&pool, &project.id, "never-installed", "claude-code")
+            .await;
     assert!(result.is_err());
 }
 
@@ -618,8 +615,12 @@ async fn list_projects_using_skill_returns_each_install() {
     let root_b = tmp.path().join("proj-b");
     std::fs::create_dir_all(&root_a).unwrap();
     std::fs::create_dir_all(&root_b).unwrap();
-    let proj_a = add_project_impl(&pool, root_a.to_str().unwrap()).await.unwrap();
-    let proj_b = add_project_impl(&pool, root_b.to_str().unwrap()).await.unwrap();
+    let proj_a = add_project_impl(&pool, root_a.to_str().unwrap())
+        .await
+        .unwrap();
+    let proj_b = add_project_impl(&pool, root_b.to_str().unwrap())
+        .await
+        .unwrap();
 
     install_skill_to_project_impl(&pool, &proj_a.id, "cross", "claude-code", "copy")
         .await
@@ -628,7 +629,9 @@ async fn list_projects_using_skill_returns_each_install() {
         .await
         .unwrap();
 
-    let rows = list_projects_using_skill_impl(&pool, "cross").await.unwrap();
+    let rows = list_projects_using_skill_impl(&pool, "cross")
+        .await
+        .unwrap();
     assert_eq!(rows.len(), 2);
     let project_ids: std::collections::HashSet<_> =
         rows.iter().map(|r| r.project_id.as_str()).collect();
@@ -650,13 +653,23 @@ async fn list_projects_using_skill_pinned_first() {
     let root_a = tmp.path().join("aproj");
     std::fs::create_dir_all(&root_z).unwrap();
     std::fs::create_dir_all(&root_a).unwrap();
-    let zproj = add_project_impl(&pool, root_z.to_str().unwrap()).await.unwrap();
-    let aproj = add_project_impl(&pool, root_a.to_str().unwrap()).await.unwrap();
+    let zproj = add_project_impl(&pool, root_z.to_str().unwrap())
+        .await
+        .unwrap();
+    let aproj = add_project_impl(&pool, root_a.to_str().unwrap())
+        .await
+        .unwrap();
 
     // 给 z 项目 rename + pin，给 a 项目不 pin
-    super::crud::rename_project_impl(&pool, &zproj.id, "Zeta").await.unwrap();
-    super::crud::rename_project_impl(&pool, &aproj.id, "Alpha").await.unwrap();
-    set_project_pinned_impl(&pool, &zproj.id, true).await.unwrap();
+    super::crud::rename_project_impl(&pool, &zproj.id, "Zeta")
+        .await
+        .unwrap();
+    super::crud::rename_project_impl(&pool, &aproj.id, "Alpha")
+        .await
+        .unwrap();
+    set_project_pinned_impl(&pool, &zproj.id, true)
+        .await
+        .unwrap();
 
     install_skill_to_project_impl(&pool, &zproj.id, "sorted", "claude-code", "copy")
         .await
@@ -665,15 +678,22 @@ async fn list_projects_using_skill_pinned_first() {
         .await
         .unwrap();
 
-    let rows = list_projects_using_skill_impl(&pool, "sorted").await.unwrap();
+    let rows = list_projects_using_skill_impl(&pool, "sorted")
+        .await
+        .unwrap();
     assert_eq!(rows.len(), 2);
-    assert_eq!(rows[0].project_name, "Zeta", "pinned project must come first");
+    assert_eq!(
+        rows[0].project_name, "Zeta",
+        "pinned project must come first"
+    );
     assert_eq!(rows[1].project_name, "Alpha");
 }
 
 #[tokio::test]
 async fn list_projects_using_skill_empty_for_unused_skill() {
     let pool = setup_test_db().await;
-    let rows = list_projects_using_skill_impl(&pool, "ghost").await.unwrap();
+    let rows = list_projects_using_skill_impl(&pool, "ghost")
+        .await
+        .unwrap();
     assert!(rows.is_empty());
 }

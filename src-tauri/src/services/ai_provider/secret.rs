@@ -190,8 +190,12 @@ async fn migrate_ai_api_key_to_provider_secret_store(
             "AI API key migration to provider secret did not produce an available secret state: {:?}",
             storage_state
         ));
-        record_ai_api_key_migration_failure(pool, &mapped_error, "provider_unavailable_storage_state")
-            .await;
+        record_ai_api_key_migration_failure(
+            pool,
+            &mapped_error,
+            "provider_unavailable_storage_state",
+        )
+        .await;
         return Ok(Some(mapped_error));
     }
 
@@ -477,7 +481,9 @@ mod tests {
             .await
             .unwrap();
 
-        let state = get_ai_api_key_state_impl(&pool, &secrets, None).await.unwrap();
+        let state = get_ai_api_key_state_impl(&pool, &secrets, None)
+            .await
+            .unwrap();
 
         assert!(state.configured);
         assert!(state
@@ -559,14 +565,10 @@ mod tests {
             Some("sk-legacy")
         );
 
-        let state = set_ai_api_key_impl(
-            &pool,
-            &secrets,
-            "sk-deepseek".to_string(),
-            Some("deepseek"),
-        )
-        .await
-        .unwrap();
+        let state =
+            set_ai_api_key_impl(&pool, &secrets, "sk-deepseek".to_string(), Some("deepseek"))
+                .await
+                .unwrap();
 
         assert_eq!(state.provider, "deepseek");
         assert_eq!(
@@ -603,7 +605,9 @@ mod tests {
             .set("ai_api_key__deepseek", "sk-deepseek")
             .expect("provider secret");
 
-        let state = get_ai_api_key_state_impl(&pool, &secrets, None).await.unwrap();
+        let state = get_ai_api_key_state_impl(&pool, &secrets, None)
+            .await
+            .unwrap();
 
         assert_eq!(state.provider, "deepseek");
         assert!(state.configured);

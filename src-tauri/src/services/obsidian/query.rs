@@ -263,5 +263,8 @@ pub async fn get_obsidian_vault_skills_impl(
         })
         .ok_or_else(|| format!("Obsidian vault '{}' not found", vault_id))?;
 
-    Ok(scan_obsidian_vault(&vault_path, &paths::central_skills_dir()))
+    Ok(scan_obsidian_vault(
+        &vault_path,
+        &paths::central_skills_dir(),
+    ))
 }

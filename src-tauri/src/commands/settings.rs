@@ -750,7 +750,12 @@ mod tests {
                 .await
                 .is_err()
         );
-        assert_eq!(db::get_setting(&pool, "ai_api_key__deepseek").await.unwrap(), None);
+        assert_eq!(
+            db::get_setting(&pool, "ai_api_key__deepseek")
+                .await
+                .unwrap(),
+            None
+        );
     }
 
     #[tokio::test]

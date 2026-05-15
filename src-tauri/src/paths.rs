@@ -203,9 +203,7 @@ pub fn strip_windows_extended_path_prefix(path: &str) -> String {
         return format!("//{}", &normalized["//?/UNC/".len()..]);
     }
 
-    if normalized.len() >= "//?/".len()
-        && normalized[.."//?/".len()].eq_ignore_ascii_case("//?/")
-    {
+    if normalized.len() >= "//?/".len() && normalized[.."//?/".len()].eq_ignore_ascii_case("//?/") {
         return normalized["//?/".len()..].to_string();
     }
 

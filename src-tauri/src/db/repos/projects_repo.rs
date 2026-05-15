@@ -223,23 +223,23 @@ pub async fn delete_stale_project_skill_installations(
     kept_pairs: &[(String, String)],
 ) -> Result<(), String> {
     if kept_pairs.is_empty() {
-        return sqlx::query(
-            "DELETE FROM project_skill_installations WHERE project_id = ?",
-        )
-        .bind(project_id)
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string());
+        return sqlx::query("DELETE FROM project_skill_installations WHERE project_id = ?")
+            .bind(project_id)
+            .execute(pool)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string());
     }
 
     // 拉全量行，应用侧筛掉 kept 的，逐行删除。psi 表预期单项目下行数有限（<几千），
     // 这种简单方案足够，避免拼 `NOT IN (?,?,?...)` 的双列变体。
-    let rows = sqlx::query("SELECT skill_id, agent_id FROM project_skill_installations WHERE project_id = ?")
-        .bind(project_id)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let rows = sqlx::query(
+        "SELECT skill_id, agent_id FROM project_skill_installations WHERE project_id = ?",
+    )
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
 
     let kept: std::collections::HashSet<(String, String)> = kept_pairs.iter().cloned().collect();
     for row in rows {
