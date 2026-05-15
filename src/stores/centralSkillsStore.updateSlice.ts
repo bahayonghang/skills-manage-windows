@@ -102,15 +102,10 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       const result = await invoke<CentralSkillUpdateResult>("update_central_skills", {
         skillIds,
       });
-      const [skills, repositories, updateStates] = await Promise.all([
-        invoke<SkillWithLinks[]>("get_central_skills"),
-        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
-        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
-      ]);
+      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
       set((state) => ({
         skills: skills ?? [],
-        repositories: repositories ?? state.repositories,
-        updateStatuses: indexUpdateStates(updateStates ?? result.states ?? []),
+        updateStatuses: mergeUpdateStates(state.updateStatuses, result.states ?? []),
         updatingSkillIds: [],
         updateJob:
           state.updateJob.status === "running"
