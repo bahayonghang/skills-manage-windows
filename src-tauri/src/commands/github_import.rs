@@ -130,12 +130,20 @@ pub async fn set_github_pat(
     state: State<'_, AppState>,
     value: String,
 ) -> Result<GitHubPatState, String> {
-    github_import::set_github_pat_impl(&state.db, state.secrets.as_ref(), value).await
+    let result = github_import::set_github_pat_impl(&state.db, state.secrets.as_ref(), value).await;
+    if result.is_ok() {
+        state.central_update_snapshots.clear();
+    }
+    result
 }
 
 #[tauri::command]
 pub async fn clear_github_pat(state: State<'_, AppState>) -> Result<GitHubPatState, String> {
-    github_import::clear_github_pat_impl(&state.db, state.secrets.as_ref()).await
+    let result = github_import::clear_github_pat_impl(&state.db, state.secrets.as_ref()).await;
+    if result.is_ok() {
+        state.central_update_snapshots.clear();
+    }
+    result
 }
 
 #[tauri::command]

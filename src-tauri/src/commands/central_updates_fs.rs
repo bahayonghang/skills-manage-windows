@@ -4,39 +4,26 @@
 //! `central_updates.rs` 专注于 commands 与 orchestration。两侧（本地与
 //! 远程）共享同一组接口，避免上层在 target 类型上分支。
 
-use std::collections::VecDeque;
+use flate2::{write::GzEncoder, Compression};
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, VecDeque};
 use std::path::{Component, Path, PathBuf};
 
 use uuid::Uuid;
 
-use crate::targets::{connect_ssh_target, remote_parent, ActiveTarget, ConnectedSshTarget};
+use crate::targets::{
+    connect_ssh_target, remote_parent, shell_quote, ActiveTarget, ConnectedSshTarget,
+};
 
 use super::github_import::GitHubRepoSnapshot;
 use super::linker;
 
-/// Atomically replace a remote skill directory with newly written staging
-/// content. `$1` is the canonical directory; `$2` is the staging directory
-/// already populated with new files; `$3` is a backup path used to roll back
-/// when `mv` fails.
-const REMOTE_CENTRAL_UPDATE_SCRIPT: &str = r#"
-set -eu
+mod remote_scripts;
 
-target_dir=$1
-staging_dir=$2
-backup_dir=$3
-
-if [ -e "$target_dir" ]; then
-  mv "$target_dir" "$backup_dir"
-fi
-
-if mv "$staging_dir" "$target_dir"; then
-  rm -rf -- "$backup_dir" 2>/dev/null || true
-else
-  rc=$?
-  if [ -e "$backup_dir" ]; then mv "$backup_dir" "$target_dir"; fi
-  exit "$rc"
-fi
-"#;
+use remote_scripts::{
+    REMOTE_CENTRAL_UPDATE_SCRIPT, REMOTE_HASH_SCRIPT, REMOTE_HASH_UNSUPPORTED_EXIT_CODE,
+    REMOTE_REFRESH_COPY_SCRIPT,
+};
 
 #[derive(Debug, Clone)]
 pub(super) struct RemoteSkillFile {
@@ -67,15 +54,21 @@ impl CentralFs {
         }
     }
 
-    /// Compute a stable hash over every regular file under `root`.
-    ///
-    /// The remote variant only reads `file` entries (skipping symlinks and
-    /// directories) and feeds them through the shared [`hash_entries`] helper
-    /// so local and remote skills produce comparable digests.
-    pub(super) async fn hash_directory(&self, root: &Path) -> Result<String, String> {
+    /// Compute hashes for many skill directories. SSH mode batches roots into
+    /// one remote script per chunk; local mode stays simple and deterministic.
+    pub(super) async fn hash_directories(
+        &self,
+        roots: &[PathBuf],
+    ) -> Result<HashMap<PathBuf, String>, String> {
         match self {
-            Self::Local => hash_local_directory(root),
-            Self::Remote(conn) => hash_remote_directory(conn, &posix_path(root)).await,
+            Self::Local => {
+                let mut hashes = HashMap::with_capacity(roots.len());
+                for root in roots {
+                    hashes.insert(root.clone(), hash_local_directory(root)?);
+                }
+                Ok(hashes)
+            }
+            Self::Remote(conn) => hash_remote_directories(conn, roots).await,
         }
     }
 
@@ -297,7 +290,6 @@ async fn write_skill_dir_atomic_remote(
             skill_id, target_dir
         )
     })?;
-    conn.mkdir_p(&parent).await?;
 
     let staging_dir = format!(
         "{}/.skillport-update-{}-{}",
@@ -312,39 +304,20 @@ async fn write_skill_dir_atomic_remote(
         Uuid::new_v4()
     );
 
-    if conn.exists(&staging_dir).await? {
-        conn.remove_tree(&staging_dir).await?;
-    }
-    conn.mkdir_p(&staging_dir).await?;
-
     for file in files {
         if !is_safe_relative_path(&file.relative_path) {
-            // Best-effort cleanup before bailing out so we never leave a half
-            // populated staging directory behind.
-            let _ = conn.remove_tree(&staging_dir).await;
             return Err(format!(
                 "Repository contains an unsupported path '{}'.",
                 file.repo_path
             ));
         }
-        let destination = format!(
-            "{}/{}",
-            staging_dir.trim_end_matches('/'),
-            file.relative_path.trim_start_matches('/')
-        );
-        // `write_file` already mkdir_p's the parent, but we call it here too
-        // so a missing intermediate segment surfaces a helpful error.
-        if let Some(file_parent) = remote_parent(&destination) {
-            conn.mkdir_p(&file_parent).await?;
-        }
-        conn.write_file(&destination, &file.bytes).await?;
     }
 
-    conn.run_script(
-        REMOTE_CENTRAL_UPDATE_SCRIPT,
-        &[target_dir, &staging_dir, &backup_dir],
+    let archive = build_skill_archive(files)?;
+    conn.run_command_with_stdin_bytes(
+        &remote_update_command(target_dir, &parent, &staging_dir, &backup_dir),
+        &archive,
     )
-    .await
     .map(|_| ())
     .map_err(|err| {
         // The script aborts before staging touches `target_dir`, so the
@@ -384,10 +357,58 @@ async fn refresh_copy_install_remote(
             target
         ));
     }
-    if conn.exists(target).await? {
-        conn.remove_tree(target).await?;
+    conn.run_script(REMOTE_REFRESH_COPY_SCRIPT, &[source_dir, target, skill_id])
+        .await
+        .map(|_| ())
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn build_skill_archive(files: &[RemoteSkillFile]) -> Result<Vec<u8>, String> {
+    let encoder = GzEncoder::new(Vec::new(), Compression::default());
+    let mut builder = tar::Builder::new(encoder);
+    for file in files {
+        if !is_safe_relative_path(&file.relative_path) {
+            return Err(format!(
+                "Repository contains an unsupported path '{}'.",
+                file.repo_path
+            ));
+        }
+        let mut header = tar::Header::new_gnu();
+        header.set_size(file.bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, &file.relative_path, file.bytes.as_slice())
+            .map_err(|e| {
+                format!(
+                    "Failed to build update archive entry '{}': {}",
+                    file.repo_path, e
+                )
+            })?;
     }
-    conn.copy_dir(source_dir, target).await
+    let encoder = builder
+        .into_inner()
+        .map_err(|e| format!("Failed to finalize update archive: {}", e))?;
+    encoder
+        .finish()
+        .map_err(|e| format!("Failed to compress update archive: {}", e))
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn remote_update_command(
+    target_dir: &str,
+    parent_dir: &str,
+    staging_dir: &str,
+    backup_dir: &str,
+) -> String {
+    format!(
+        "sh -c {} -- {} {} {} {}",
+        shell_quote(REMOTE_CENTRAL_UPDATE_SCRIPT),
+        shell_quote(target_dir),
+        shell_quote(parent_dir),
+        shell_quote(staging_dir),
+        shell_quote(backup_dir)
+    )
 }
 
 pub(super) fn hash_remote_files(
@@ -396,12 +417,16 @@ pub(super) fn hash_remote_files(
 ) -> Result<String, String> {
     let mut entries = Vec::with_capacity(files.len());
     for file in files {
-        entries.push((file.relative_path.clone(), file.bytes.clone()));
+        let digest = Sha256::digest(&file.bytes);
+        entries.push((file.relative_path.clone(), hex_digest(&digest)));
     }
     Ok(hash_entries(entries))
 }
 
 fn hash_local_directory(root: &Path) -> Result<String, String> {
+    if !root.exists() {
+        return Ok(hash_entries(Vec::new()));
+    }
     let mut entries = Vec::new();
     collect_local_hash_entries(root, root, &mut entries)?;
     entries.sort_by(|left, right| left.0.cmp(&right.0));
@@ -418,7 +443,7 @@ async fn hash_remote_directory(conn: &ConnectedSshTarget, root: &str) -> Result<
         return Ok(hash_entries(Vec::new()));
     }
 
-    let mut entries: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut entries: Vec<(String, String)> = Vec::new();
     let mut queue: VecDeque<String> = VecDeque::new();
     queue.push_back(root.to_string());
 
@@ -437,7 +462,8 @@ async fn hash_remote_directory(conn: &ConnectedSshTarget, root: &str) -> Result<
                         ));
                     }
                     let bytes = conn.read_file(&child_path).await?;
-                    entries.push((relative, bytes));
+                    let digest = Sha256::digest(&bytes);
+                    entries.push((relative, hex_digest(&digest)));
                 }
                 // Skip symlinks and `other` entries — they should not exist
                 // inside a managed central skill, and ignoring them keeps the
@@ -449,6 +475,114 @@ async fn hash_remote_directory(conn: &ConnectedSshTarget, root: &str) -> Result<
 
     entries.sort_by(|left, right| left.0.cmp(&right.0));
     Ok(hash_entries(entries))
+}
+
+async fn hash_remote_directories(
+    conn: &ConnectedSshTarget,
+    roots: &[PathBuf],
+) -> Result<HashMap<PathBuf, String>, String> {
+    let mut hashes = HashMap::with_capacity(roots.len());
+    for chunk in roots.chunks(32) {
+        let root_args = chunk
+            .iter()
+            .map(|root| posix_path(root))
+            .collect::<Vec<_>>();
+        match conn
+            .run_script(
+                REMOTE_HASH_SCRIPT,
+                &root_args.iter().map(String::as_str).collect::<Vec<_>>(),
+            )
+            .await
+        {
+            Ok(output) => {
+                let parsed = parse_remote_hash_output(&output)?;
+                for (root, hash) in chunk.iter().zip(root_args.iter().map(|arg| {
+                    parsed
+                        .get(arg)
+                        .cloned()
+                        .unwrap_or_else(|| hash_entries(Vec::new()))
+                })) {
+                    hashes.insert(root.clone(), hash);
+                }
+            }
+            Err(error) if error.contains(REMOTE_HASH_UNSUPPORTED_EXIT_CODE) => {
+                tracing::warn!(
+                    error = %error,
+                    "Remote target has no sha256 tool; falling back to per-file SSH hashing"
+                );
+                for root in chunk {
+                    hashes.insert(
+                        root.clone(),
+                        hash_remote_directory(conn, &posix_path(root)).await?,
+                    );
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(hashes)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn parse_remote_hash_output(output: &str) -> Result<HashMap<String, String>, String> {
+    let mut hashes = HashMap::new();
+    let mut current_root: Option<String> = None;
+    let mut entries: Vec<(String, String)> = Vec::new();
+
+    for line in output.lines() {
+        if let Some(root) = line.strip_prefix("ROOT\t") {
+            if let Some(previous) = current_root.replace(root.to_string()) {
+                hashes.insert(previous, hash_entries(std::mem::take(&mut entries)));
+            }
+            continue;
+        }
+        if let Some(root) = line.strip_prefix("END\t") {
+            let active = current_root.take().ok_or_else(|| {
+                format!(
+                    "Remote hash output ended root '{}' before it started.",
+                    root
+                )
+            })?;
+            if active != root {
+                return Err(format!(
+                    "Remote hash output root mismatch: started '{}', ended '{}'.",
+                    active, root
+                ));
+            }
+            hashes.insert(active, hash_entries(std::mem::take(&mut entries)));
+            continue;
+        }
+        if current_root.is_none() || line.trim().is_empty() {
+            continue;
+        }
+        if let Some((digest, path)) = parse_remote_hash_line(line) {
+            entries.push((path, digest));
+        }
+    }
+
+    if let Some(root) = current_root {
+        hashes.insert(root, hash_entries(entries));
+    }
+
+    Ok(hashes)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn parse_remote_hash_line(line: &str) -> Option<(String, String)> {
+    let (digest, path) = line.split_once('\t').or_else(|| line.split_once("  "))?;
+    let digest = digest.trim().trim_start_matches("(stdin)=").to_string();
+    if digest.len() != 64 || !digest.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return None;
+    }
+    let path = path
+        .trim()
+        .trim_start_matches('*')
+        .trim_start_matches("./")
+        .to_string();
+    if path.is_empty() || !is_safe_relative_path(&path) {
+        return None;
+    }
+    Some((digest.to_ascii_lowercase(), path))
 }
 
 fn remote_relative_path(root: &str, child: &str) -> Result<String, String> {
@@ -477,7 +611,7 @@ fn remote_relative_path(root: &str, child: &str) -> Result<String, String> {
 fn collect_local_hash_entries(
     root: &Path,
     current: &Path,
-    entries: &mut Vec<(String, Vec<u8>)>,
+    entries: &mut Vec<(String, String)>,
 ) -> Result<(), String> {
     for entry in std::fs::read_dir(current).map_err(|e| {
         format!(
@@ -506,30 +640,28 @@ fn collect_local_hash_entries(
                     e
                 )
             })?;
-            entries.push((relative_path, bytes));
+            let digest = Sha256::digest(&bytes);
+            entries.push((relative_path, hex_digest(&digest)));
         }
     }
     Ok(())
 }
 
-fn hash_entries(mut entries: Vec<(String, Vec<u8>)>) -> String {
+fn hash_entries(mut entries: Vec<(String, String)>) -> String {
     entries.sort_by(|left, right| left.0.cmp(&right.0));
-    let mut hash = 0xcbf29ce484222325u64;
-    for (path, bytes) in entries {
-        hash = fnv1a(hash, path.as_bytes());
-        hash = fnv1a(hash, &[0xff]);
-        hash = fnv1a(hash, &bytes);
-        hash = fnv1a(hash, &[0xfe]);
+    let mut hasher = Sha256::new();
+    for (path, digest) in entries {
+        hasher.update(path.as_bytes());
+        hasher.update([0xff]);
+        hasher.update(digest.as_bytes());
+        hasher.update([0xfe]);
     }
-    format!("fnv1a64:{hash:016x}")
+    let digest = hasher.finalize();
+    format!("sha256-manifest:{}", hex_digest(&digest))
 }
 
-fn fnv1a(mut hash: u64, bytes: &[u8]) -> u64 {
-    for byte in bytes {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    hash
+fn hex_digest(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn relative_path_string(root: &Path, path: &Path) -> Result<String, String> {
@@ -603,51 +735,4 @@ fn remove_symlink_path(path: &Path) -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashMap;
-    use tempfile::TempDir;
-
-    #[test]
-    fn hash_entries_is_stable_across_input_order() {
-        let left = hash_entries(vec![
-            ("b.txt".to_string(), b"two".to_vec()),
-            ("a.txt".to_string(), b"one".to_vec()),
-        ]);
-        let right = hash_entries(vec![
-            ("a.txt".to_string(), b"one".to_vec()),
-            ("b.txt".to_string(), b"two".to_vec()),
-        ]);
-
-        assert_eq!(left, right);
-    }
-
-    #[test]
-    fn local_hash_changes_when_file_content_changes() {
-        let temp = TempDir::new().unwrap();
-        let skill_dir = temp.path().join("demo");
-        std::fs::create_dir_all(&skill_dir).unwrap();
-        std::fs::write(skill_dir.join("SKILL.md"), b"one").unwrap();
-
-        let first = hash_local_directory(&skill_dir).unwrap();
-        std::fs::write(skill_dir.join("SKILL.md"), b"two").unwrap();
-        let second = hash_local_directory(&skill_dir).unwrap();
-
-        assert_ne!(first, second);
-    }
-
-    #[test]
-    fn collect_remote_skill_files_requires_source_path() {
-        let snapshot = GitHubRepoSnapshot {
-            files: HashMap::from([(
-                "skills/demo/SKILL.md".to_string(),
-                b"---\nname: Demo\n---".to_vec(),
-            )]),
-        };
-
-        let files = collect_remote_skill_files(&snapshot, "skills/demo").unwrap();
-
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].relative_path, "SKILL.md");
-    }
-}
+mod tests;

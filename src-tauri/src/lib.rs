@@ -47,6 +47,10 @@ pub struct AppState {
     /// reset to false on entry and poll between iterations; the
     /// `cancel_central_skill_updates` command stores true to request stop.
     pub central_update_cancel: Arc<AtomicBool>,
+    /// Short-lived GitHub repository snapshots shared by Central update check
+    /// and update commands. This lets "check, then update" reuse the archive
+    /// that was just downloaded without copying credentials into target DBs.
+    pub central_update_snapshots: CentralUpdateSnapshotCache,
     /// Cooperative cancel flag for the at-most-one SkillPort state
     /// portability command (export, preview, or import).
     pub portable_state_cancel: Arc<AtomicBool>,
@@ -64,6 +68,70 @@ impl AppState {
 
     pub async fn active_target(&self) -> Result<targets::ActiveTarget, String> {
         self.targets.active_target(&self.db).await
+    }
+}
+
+#[derive(Default)]
+pub struct CentralUpdateSnapshotCache {
+    snapshots: Mutex<HashMap<String, CachedGitHubSnapshot>>,
+}
+
+#[derive(Clone)]
+struct CachedGitHubSnapshot {
+    snapshot: services::github_import::GitHubRepoSnapshot,
+    cached_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl CentralUpdateSnapshotCache {
+    pub(crate) fn get_fresh(
+        &self,
+        key: &str,
+        max_age: chrono::Duration,
+    ) -> Option<services::github_import::GitHubRepoSnapshot> {
+        let now = chrono::Utc::now();
+        match self.snapshots.lock() {
+            Ok(snapshots) => snapshots.get(key).and_then(|cached| {
+                if now.signed_duration_since(cached.cached_at) <= max_age {
+                    Some(cached.snapshot.clone())
+                } else {
+                    None
+                }
+            }),
+            Err(error) => {
+                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during read");
+                None
+            }
+        }
+    }
+
+    pub(crate) fn insert(
+        &self,
+        key: String,
+        snapshot: services::github_import::GitHubRepoSnapshot,
+    ) {
+        match self.snapshots.lock() {
+            Ok(mut snapshots) => {
+                snapshots.insert(
+                    key,
+                    CachedGitHubSnapshot {
+                        snapshot,
+                        cached_at: chrono::Utc::now(),
+                    },
+                );
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during insert");
+            }
+        }
+    }
+
+    pub fn clear(&self) {
+        match self.snapshots.lock() {
+            Ok(mut snapshots) => snapshots.clear(),
+            Err(error) => {
+                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during clear");
+            }
+        }
     }
 }
 
@@ -146,6 +214,7 @@ pub fn run() {
                 db: pool.clone(),
                 ai_tag_jobs: AiTagJobRegistry::default(),
                 central_update_cancel: Arc::new(AtomicBool::new(false)),
+                central_update_snapshots: CentralUpdateSnapshotCache::default(),
                 portable_state_cancel: Arc::new(AtomicBool::new(false)),
                 secrets: Arc::clone(&secrets),
                 targets: targets::TargetRegistry::default(),
