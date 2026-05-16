@@ -79,6 +79,7 @@ export function CentralSkillListContent({
         onUpdateCentral={() => onUpdateCentral([skill.id])}
         onDeleteFromCentral={() => onDelete(skill)}
         detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
+        density="compact"
         className="h-[132px]"
       />
     );
@@ -117,6 +118,7 @@ export function CentralSkillListContent({
           onToggle: onTogglePlatform,
           togglingAgentId,
         }}
+        density="compact"
         className="h-[212px]"
       />
     );

@@ -102,7 +102,7 @@ function compareSkillsForSort(
 /**
  * 派生 V2 视图所需的数据。纯函数 + memo，可在 React render 中安全调用。
  */
-export function useCentralSkillsViewModelV2(
+export function useCentralSkillsFacets(
   input: CentralViewModelV2Input
 ): CentralViewModelV2Output {
   const { skills, repositories, tags, aiTagReviews, updateStatuses, state } = input;

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 import type { TFunction } from "i18next";
 
-import { useCentralV2PaletteActions } from "../pages/centralV2PaletteActions";
+import { useCentralPaletteActions } from "../pages/centralPaletteActions";
 import {
   defaultCentralViewState,
   type CentralViewState,
@@ -28,17 +28,15 @@ function setup(overrides: {
   const setViewState = vi.fn();
   const onSaveCurrentView = vi.fn();
   const onCreateTagGroup = vi.fn();
-  const onSwitchToClassic = vi.fn();
 
   const { result } = renderHook(() =>
-    useCentralV2PaletteActions({
+    useCentralPaletteActions({
       t: fakeT as unknown as TFunction,
       viewState: overrides.viewState ?? defaultCentralViewState(),
       setViewState,
       canSaveCurrent: overrides.canSaveCurrent ?? true,
       onSaveCurrentView,
       onCreateTagGroup,
-      onSwitchToClassic,
       groupByOptions,
     }),
   );
@@ -49,11 +47,10 @@ function setup(overrides: {
     setViewState,
     onSaveCurrentView,
     onCreateTagGroup,
-    onSwitchToClassic,
   };
 }
 
-describe("useCentralV2PaletteActions", () => {
+describe("useCentralPaletteActions", () => {
   it("includes save-current when canSaveCurrent is true", () => {
     const { actions } = setup({ canSaveCurrent: true });
     expect(actions.some((a) => a.id === "save-current-view")).toBe(true);
@@ -64,10 +61,9 @@ describe("useCentralV2PaletteActions", () => {
     expect(actions.some((a) => a.id === "save-current-view")).toBe(false);
   });
 
-  it("always includes create-tag-group and switch-to-classic", () => {
+  it("always includes create-tag-group", () => {
     const { actions } = setup();
     expect(actions.some((a) => a.id === "create-tag-group")).toBe(true);
-    expect(actions.some((a) => a.id === "switch-to-classic")).toBe(true);
   });
 
   it("emits group-by entries for all modes except current", () => {
@@ -96,12 +92,6 @@ describe("useCentralV2PaletteActions", () => {
     expect(onSaveCurrentView).toHaveBeenCalledWith("central.v2.savedViewsNamePlaceholder");
   });
 
-  it("switch-to-classic calls onSwitchToClassic", () => {
-    const { actions, onSwitchToClassic } = setup();
-    actions.find((a) => a.id === "switch-to-classic")?.onSelect();
-    expect(onSwitchToClassic).toHaveBeenCalledOnce();
-  });
-
   it("create-tag-group calls onCreateTagGroup", () => {
     const { actions, onCreateTagGroup } = setup();
     actions.find((a) => a.id === "create-tag-group")?.onSelect();
@@ -111,14 +101,13 @@ describe("useCentralV2PaletteActions", () => {
   it("derives default groupByOptions from t when not provided", () => {
     const setViewState = vi.fn();
     const { result } = renderHook(() =>
-      useCentralV2PaletteActions({
+      useCentralPaletteActions({
         t: fakeT as unknown as TFunction,
         viewState: defaultCentralViewState(),
         setViewState,
         canSaveCurrent: false,
         onSaveCurrentView: vi.fn(),
         onCreateTagGroup: vi.fn(),
-        onSwitchToClassic: vi.fn(),
       }),
     );
     const values = result.current.groupByOptions.map((o) => o.value);

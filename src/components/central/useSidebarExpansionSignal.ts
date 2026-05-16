@@ -1,6 +1,6 @@
 import { useContext } from "react";
 
-import { SidebarExpansionContext } from "@/components/central/v2/sidebarExpansionContext";
+import { SidebarExpansionContext } from "@/components/central/sidebarExpansionContext";
 
 export function useSidebarExpansionSignal() {
   return useContext(SidebarExpansionContext);

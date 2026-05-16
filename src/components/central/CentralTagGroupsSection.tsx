@@ -20,7 +20,7 @@ export interface CentralTagGroupsSectionProps {
  * 底部 "+ 创建新分组" 触发外部 prompt（在 bridge hook 中处理）。
  *
  * 此段落不参与 facet 选择，仅做 CRUD 入口。Sidebar Tags 段落的分组渲染由
- * CentralSidebarV2 通过 tagGroups prop 自行处理。
+ * CentralSidebar 通过 tagGroups prop 自行处理。
  */
 export function CentralTagGroupsSection({
   tagGroups,

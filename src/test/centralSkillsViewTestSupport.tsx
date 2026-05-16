@@ -3,7 +3,6 @@ import { vi } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { CentralSkillsView as CentralSkillsViewComponent } from "../pages/CentralSkillsView";
-import { setFeatureFlag } from "../lib/featureFlags";
 import type {
   AgentWithStatus,
   SkillDetail,
@@ -611,9 +610,11 @@ export const tauriBridge = tauriBridgeModule;
 
 export function resetCentralSkillsViewTestState() {
   vi.clearAllMocks();
-  // M6: V2 现在默认 ON，但这些测试是 V1 UI 的回归测试。
-  // 显式关闭以保留 V1 行为；要测 V2 的用例自行 setFeatureFlag(..., true)。
-  setFeatureFlag("central.newLayout", false);
+  // 重置 jsdom URL：CentralSkillsView 用 useCentralViewStateUrl 把 viewState（搜索/筛选/排序）写到 location.search，
+  // 测试间共享 jsdom 的 window.location 会导致前一个 case 的搜索文本污染下一个 case 的初始 state。
+  if (typeof window !== "undefined" && window.history && typeof window.history.replaceState === "function") {
+    window.history.replaceState({}, "", "/");
+  }
   useTargetStore.setState({
     targets: [localTarget],
     activeTarget: localTarget,

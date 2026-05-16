@@ -1,9 +1,9 @@
 import { CentralSavedViewsSection } from "./CentralSavedViewsSection";
 import { CentralTagGroupsSection } from "./CentralTagGroupsSection";
-import type { UseCentralV2SavedViewsBridgeResult } from "@/pages/centralV2SavedViewsBridge";
-import type { UseCentralV2TagGroupsBridgeResult } from "@/pages/centralV2TagGroupsBridge";
+import type { UseCentralV2SavedViewsBridgeResult } from "@/pages/centralSavedViewsBridge";
+import type { UseCentralV2TagGroupsBridgeResult } from "@/pages/centralTagGroupsBridge";
 
-interface CentralSidebarV2HeaderProps {
+interface CentralSidebarHeaderProps {
   savedViewsBridge: UseCentralV2SavedViewsBridgeResult;
   tagGroupsBridge: UseCentralV2TagGroupsBridgeResult;
 }
@@ -12,10 +12,10 @@ interface CentralSidebarV2HeaderProps {
  * Sidebar 顶部组合段落（M3）。把 Saved Views + Tag Groups 收成一个 slot，
  * 让父层只传一个 `sidebarHeaderSlot` 即可。每段内部仍是独立的 FacetSection。
  */
-export function CentralSidebarV2Header({
+export function CentralSidebarHeader({
   savedViewsBridge,
   tagGroupsBridge,
-}: CentralSidebarV2HeaderProps) {
+}: CentralSidebarHeaderProps) {
   return (
     <>
       <CentralSavedViewsSection

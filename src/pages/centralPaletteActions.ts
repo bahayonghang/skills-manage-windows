@@ -1,17 +1,16 @@
 /**
- * `useCentralV2PaletteActions` —— 把 V2 命令面板的 quick actions 组装在一处。
+ * `useCentralPaletteActions` —— 把 V2 命令面板的 quick actions 组装在一处。
  *
  * 当前提供：
  * 1. 保存当前视图（仅当 saved-view 桥允许时）
  * 2. 创建标签分组
  * 3. 切换 group-by 模式（5 选其余 4）
- * 4. 切回经典布局
  */
 
 import { useMemo } from "react";
 import type { TFunction } from "i18next";
 
-import type { CommandPaletteAction } from "@/components/central/v2/CommandPaletteV2";
+import type { CommandPaletteAction } from "@/components/central/CommandPalette";
 import type { CentralViewState, GroupByMode } from "@/lib/centralViewState";
 
 export interface GroupByOption {
@@ -26,7 +25,6 @@ export interface UseCentralV2PaletteActionsArgs {
   canSaveCurrent: boolean;
   onSaveCurrentView: (defaultName: string) => void;
   onCreateTagGroup: () => void;
-  onSwitchToClassic: () => void;
   /** 可选注入 group-by 选项；默认从 t 派生 5 种内置模式。 */
   groupByOptions?: ReadonlyArray<GroupByOption>;
 }
@@ -36,14 +34,13 @@ export interface UseCentralV2PaletteActionsResult {
   groupByOptions: GroupByOption[];
 }
 
-export function useCentralV2PaletteActions({
+export function useCentralPaletteActions({
   t,
   viewState,
   setViewState,
   canSaveCurrent,
   onSaveCurrentView,
   onCreateTagGroup,
-  onSwitchToClassic,
   groupByOptions: groupByOptionsArg,
 }: UseCentralV2PaletteActionsArgs): UseCentralV2PaletteActionsResult {
   const groupByOptions = useMemo<GroupByOption[]>(
@@ -87,12 +84,6 @@ export function useCentralV2PaletteActions({
       });
     }
 
-    items.push({
-      id: "switch-to-classic",
-      label: t("central.v2.paletteActionSwitchToClassic"),
-      onSelect: onSwitchToClassic,
-    });
-
     return items;
   }, [
     t,
@@ -101,7 +92,6 @@ export function useCentralV2PaletteActions({
     canSaveCurrent,
     onSaveCurrentView,
     onCreateTagGroup,
-    onSwitchToClassic,
     groupByOptions,
   ]);
 

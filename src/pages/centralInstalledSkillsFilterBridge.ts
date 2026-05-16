@@ -28,7 +28,6 @@ export function useCentralInstalledSkillsFilterBridge({
   selectedSkillIds,
   setIsBatchInstallDialogOpen,
   setSelectedSkillIds,
-  v2FilteredSkills,
 }: {
   availableInstallAgents: readonly PlatformTarget[];
   currentViewSkills: SkillWithLinks[];
@@ -36,7 +35,6 @@ export function useCentralInstalledSkillsFilterBridge({
   selectedSkillIds: string[];
   setIsBatchInstallDialogOpen: (open: boolean) => void;
   setSelectedSkillIds: (skillIds: string[]) => void;
-  v2FilteredSkills: SkillWithLinks[];
 }) {
   const [installedSkillsFilter, setInstalledSkillsFilter] =
     useState<InstalledSkillsFilterValue>("all");
@@ -83,11 +81,6 @@ export function useCentralInstalledSkillsFilterBridge({
     visibleCurrentViewSkills,
     visibleFilteredSkills: filterInstalledSkills(
       filteredSkills,
-      installedSkillsFilter,
-      availableInstallAgents
-    ),
-    visibleV2FilteredSkills: filterInstalledSkills(
-      v2FilteredSkills,
       installedSkillsFilter,
       availableInstallAgents
     ),

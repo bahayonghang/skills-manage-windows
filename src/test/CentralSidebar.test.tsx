@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { TFunction } from "i18next";
 
-import { CentralSidebarV2 } from "../components/central/v2/CentralSidebarV2";
-import { FacetSection } from "../components/central/v2/FacetSection";
+import { CentralSidebar } from "../components/central/CentralSidebar";
+import { FacetSection } from "../components/central/FacetSection";
 import type { FacetCounts } from "../lib/centralFacetCounts";
 import type { SkillRepositoryWithStats, SkillTag, TagGroup } from "../types";
 import zh from "../i18n/locales/zh.json";
@@ -113,8 +113,12 @@ function renderSidebar() {
     onSelectSmartView: vi.fn(),
   };
 
+  // M4：sidebar 默认折叠为 48px rail。本套测试断言展开后的 facet 内容，
+  // 通过 localStorage 提前 pin，使首次渲染即处于 expanded 状态。
+  window.localStorage.setItem("central.sidebarPinned", "true");
+
   render(
-    <CentralSidebarV2
+    <CentralSidebar
       t={t}
       width={286}
       facetCounts={facetCounts}
@@ -143,7 +147,11 @@ function renderSidebar() {
   };
 }
 
-describe("CentralSidebarV2", () => {
+describe("CentralSidebar", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it("renders a distinct global expand and collapse control", () => {
     const { sidebar } = renderSidebar();
 

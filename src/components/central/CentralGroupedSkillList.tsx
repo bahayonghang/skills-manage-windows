@@ -120,6 +120,7 @@ export function CentralGroupedSkillList({
                         onToggle: onTogglePlatform,
                         togglingAgentId,
                       }}
+                      density="compact"
                       className="h-[212px]"
                     />
                   ))}

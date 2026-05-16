@@ -1,5 +1,5 @@
 /**
- * `useCentralV2TagGroupsBridge` —— Tag Groups store 与 V2 UI 的桥接。
+ * `useCentralTagGroupsBridge` —— Tag Groups store 与 V2 UI 的桥接。
  *
  * 把 prompt/confirm 风格的命令式 CRUD 收口到一个 hook，CentralSkillsView 只
  * 关心是否启用与 t 注入。
@@ -24,7 +24,7 @@ export interface UseCentralV2TagGroupsBridgeResult {
   handleAssignTagToGroup: (tagId: string, groupId: string | null) => void;
 }
 
-export function useCentralV2TagGroupsBridge({
+export function useCentralTagGroupsBridge({
   enabled,
   t,
 }: UseCentralV2TagGroupsBridgeArgs): UseCentralV2TagGroupsBridgeResult {

@@ -1,5 +1,5 @@
 /**
- * `useCentralV2SavedViewsBridge` —— 把 saved views store 与 V2 view-state 之间的
+ * `useCentralSavedViewsBridge` —— 把 saved views store 与 V2 view-state 之间的
  * 协作（计算当前 query / 命中哪条 saved view / 各种 CRUD handler）封装为单一
  * hook，CentralSkillsView 只负责注入 viewState/setViewState 与启用开关。
  */
@@ -38,7 +38,7 @@ export interface UseCentralV2SavedViewsBridgeResult {
   handleTogglePinSavedView: (view: SavedView) => void;
 }
 
-export function useCentralV2SavedViewsBridge({
+export function useCentralSavedViewsBridge({
   enabled,
   v2ViewState,
   setV2ViewState,

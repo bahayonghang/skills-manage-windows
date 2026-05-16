@@ -22,7 +22,7 @@ export interface CommandPaletteAction {
   icon?: React.ReactNode;
 }
 
-export interface CommandPaletteV2Props {
+export interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 
@@ -42,7 +42,7 @@ export interface CommandPaletteV2Props {
  * 三段：Saved views / Tags / Repositories / Actions。每段限制 8 项避免列表过长。
  * 选中后自动关闭。
  */
-export function CommandPaletteV2({
+export function CommandPalette({
   open,
   onOpenChange,
   savedViews,
@@ -52,7 +52,7 @@ export function CommandPaletteV2({
   onSelectSavedView,
   onSelectTag,
   onSelectRepository,
-}: CommandPaletteV2Props) {
+}: CommandPaletteProps) {
   const { t } = useTranslation();
 
   // 全局快捷键 ⌘K / Ctrl+K

@@ -13,9 +13,11 @@ import {
   Lock,
   Trash2,
   Download,
+  MoreHorizontal,
 } from "lucide-react";
 import { memo, useMemo, type MouseEventHandler, type Ref } from "react";
 import { useTranslation } from "react-i18next";
+import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
@@ -133,6 +135,13 @@ export interface UnifiedSkillCardProps {
   onRemove?: () => void;
   isLoading?: boolean;
   detailButtonRef?: Ref<HTMLButtonElement>;
+  /**
+   * 视觉密度。
+   * - `default`：所有元素始终可见（platform / project / marketplace / collection 默认值）。
+   * - `compact`：central 变体优化。idle 时一级动作隐藏、平台图标条收成「已链接 N」徽章；
+   *   hover/focus-within 时露出完整图标条 + 动作；删除从一级图标行收进 `⋯` popover。
+   */
+  density?: "default" | "compact";
 }
 
 // ─── UnifiedSkillCard ─────────────────────────────────────────────────────────
@@ -169,6 +178,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     onRemove,
     isLoading,
     detailButtonRef,
+    density = "default",
   } = props;
 
   // Determine variant features
@@ -198,6 +208,17 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     () => new Set(platformIcons?.lockedAgentIds ?? []),
     [platformIcons?.lockedAgentIds]
   );
+
+  const isCompact = density === "compact";
+  const linkedTargetCount = useMemo(
+    () =>
+      targetAgents.filter((agent) =>
+        getPlatformTargetMemberIds(agent).some((agentId) => linkedAgentSet.has(agentId))
+      ).length,
+    [targetAgents, linkedAgentSet]
+  );
+  // compact 模式：删除从一级图标行收进 ⋯ popover。其他卡片动作（onRemove / onUninstall）保持现状。
+  const compactMoreMenuItems = isCompact && onDeleteFromCentral ? { onDeleteFromCentral } : null;
 
   // ── Platform variant: clickable card style ──
   if (onClick && !hasActions && !hasCheckbox && !hasPlatformIcons) {
@@ -231,13 +252,14 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   return (
     <div
       className={cn(
-        "rounded-xl bg-card ring-1 ring-border shadow-sm p-3 flex flex-col transition-colors",
+        "rounded-xl bg-card ring-1 ring-border shadow-sm flex flex-col transition-colors",
+        isCompact ? "group/skill-card p-4" : "p-3",
         checkbox?.checked && "ring-primary/40 bg-primary/5",
         isLoading && "opacity-50",
         className
       )}
     >
-      <div className="flex items-start gap-2.5">
+      <div className={cn("flex items-start", isCompact ? "gap-2" : "gap-2.5")}>
         {/* Optional checkbox (discover) */}
         {hasCheckbox && (
           <div className="pt-0.5">
@@ -250,7 +272,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
         )}
 
         {/* Main content */}
-        <div className="flex-1 min-w-0 space-y-1.5">
+        <div className={cn("flex-1 min-w-0", isCompact ? "space-y-2" : "space-y-1.5")}>
           {/* Row 1: Name + icon actions */}
           <div className="flex items-center justify-between gap-2">
             {/* Skill name — clickable if onDetail provided */}
@@ -269,7 +291,13 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
 
             {/* Icon action buttons */}
             {hasActions && (
-              <div className="flex items-center gap-0.5 shrink-0">
+              <div
+                className={cn(
+                  "flex items-center gap-0.5 shrink-0",
+                  isCompact &&
+                    "opacity-0 transition-opacity duration-150 group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100"
+                )}
+              >
                 {/* Install To... (central / platform / collection / marketplace) */}
                 {onInstallTo && (
                   <button
@@ -299,7 +327,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   </button>
                 )}
 
-                {onDeleteFromCentral && (
+                {/* Delete — compact 模式收进下面的 ⋯ popover，default 保持一级图标。 */}
+                {onDeleteFromCentral && !isCompact && (
                   <button
                     onClick={onDeleteFromCentral}
                     disabled={isLoading}
@@ -383,6 +412,15 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                     icon={<X className="size-4" />}
                   />
                 )}
+
+                {/* compact 模式 ⋯ popover：承载 destructive 删除 */}
+                {compactMoreMenuItems && (
+                  <CompactCardMoreMenu
+                    skillName={name}
+                    isLoading={Boolean(isLoading)}
+                    onDeleteFromCentral={compactMoreMenuItems.onDeleteFromCentral}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -463,11 +501,33 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
 
           {/* Row 3: Platform toggle icons (central) */}
           {hasPlatformIcons && targetAgents.length > 0 && (
-            <div className="space-y-1 mt-auto pt-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-14 shrink-0">
-                  {t("central.platformTargetsLabel")}
+            <div className={cn("mt-auto", isCompact ? "pt-2" : "space-y-1 pt-1")}>
+              {isCompact && (
+                <span
+                  data-testid={`skill-card-linked-summary-${platformIcons.skillId}`}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground",
+                    "group-hover/skill-card:hidden group-focus-within/skill-card:hidden"
+                  )}
+                >
+                  <Link2 className="size-3" aria-hidden />
+                  {linkedTargetCount > 0
+                    ? t("common.skillCardLinkedSummary", { count: linkedTargetCount })
+                    : t("common.skillCardLinkedSummaryNone")}
                 </span>
+              )}
+              <div
+                className={cn(
+                  "flex items-center gap-1.5",
+                  isCompact &&
+                    "hidden group-hover/skill-card:flex group-focus-within/skill-card:flex"
+                )}
+              >
+                {!isCompact && (
+                  <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-14 shrink-0">
+                    {t("central.platformTargetsLabel")}
+                  </span>
+                )}
                 <div className="flex items-center gap-0.5 flex-wrap">
                   {targetAgents.map((agent) => (
                     <PlatformToggleIcon
@@ -587,5 +647,58 @@ function ProjectSourceBadge({
       {isCentral ? <Globe className="size-3 shrink-0" /> : <Folder className="size-3 shrink-0" />}
       {originBadge.label}
     </span>
+  );
+}
+
+// ─── Compact ⋯ menu (internal) ────────────────────────────────────────────────
+
+function CompactCardMoreMenu({
+  skillName,
+  isLoading,
+  onDeleteFromCentral,
+}: {
+  skillName: string;
+  isLoading: boolean;
+  onDeleteFromCentral: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <MenuPrimitive.Root>
+      <MenuPrimitive.Trigger
+        render={
+          <button
+            type="button"
+            disabled={isLoading}
+            aria-label={t("common.skillCardMoreActions")}
+            title={t("common.skillCardMoreActions")}
+            data-testid={`skill-card-more-${skillName}`}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:opacity-50 disabled:cursor-default"
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        }
+      />
+      <MenuPrimitive.Portal>
+        <MenuPrimitive.Positioner align="end" sideOffset={4} className="z-50 outline-none">
+          <MenuPrimitive.Popup
+            className={cn(
+              "min-w-[180px] rounded-lg bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none",
+              "data-[starting-style]:animate-in data-[starting-style]:fade-in-0 data-[starting-style]:zoom-in-95",
+              "data-[ending-style]:animate-out data-[ending-style]:fade-out-0 data-[ending-style]:zoom-out-95",
+              "animation-duration-100"
+            )}
+          >
+            <MenuPrimitive.Item
+              onClick={onDeleteFromCentral}
+              data-testid={`delete-central-skill-${skillName}`}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-destructive outline-none data-[highlighted]:bg-destructive/10"
+            >
+              <Trash2 className="size-3.5 shrink-0" />
+              {t("central.deleteSkill")}
+            </MenuPrimitive.Item>
+          </MenuPrimitive.Popup>
+        </MenuPrimitive.Positioner>
+      </MenuPrimitive.Portal>
+    </MenuPrimitive.Root>
   );
 }

@@ -48,7 +48,9 @@ describe("CentralSkillsView GitHub import error", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /从 GitHub 导入|GitHub/i }));
+    // V2：GitHub 导入入口从 toolbar 收进「⋯ 更多」menu。
+    fireEvent.click(screen.getByTestId("central-toolbar-more"));
+    fireEvent.click(await screen.findByText("从 GitHub 导入"));
     fireEvent.click(await screen.findByRole("button", { name: /检查导入内容|Review import/i }));
     fireEvent.click(await screen.findByRole("button", { name: /^导入$|^Import$/i }));
 

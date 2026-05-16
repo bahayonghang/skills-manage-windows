@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import {
   SidebarExpansionContext,
   type SidebarExpansionSignal,
-} from "@/components/central/v2/sidebarExpansionContext";
+} from "@/components/central/sidebarExpansionContext";
 
 export function SidebarExpansionProvider({
   signal,

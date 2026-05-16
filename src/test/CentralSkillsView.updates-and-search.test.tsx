@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter } from "react-router-dom";
 import type { AgentWithStatus, CentralSkillUpdateState, SkillWithLinks, TargetSummary } from "../types";
 import * as S from "./centralSkillsViewTestSupport";
-import { setFeatureFlag } from "../lib/featureFlags";
 
 const {
   CentralSkillsView,
@@ -27,8 +26,11 @@ const {
   useTargetStore,
 } = S;
 
-describe("CentralSkillsView", () => {
-  beforeEach(S.resetCentralSkillsViewTestState);
+describe("CentralSkillsView updates + search（V2 markup）", () => {
+  beforeEach(() => {
+    S.resetCentralSkillsViewTestState();
+    window.localStorage.clear();
+  });
   afterEach(S.cleanupCentralSkillsViewTestState);
 
   it("defaults remote batch install to symlink when the target supports symlinks", async () => {
@@ -54,7 +56,7 @@ describe("CentralSkillsView", () => {
     renderCentralSkillsView();
 
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-install"));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /将 1 个技能安装到 2 个平台/i }));
@@ -113,7 +115,7 @@ describe("CentralSkillsView", () => {
     screen.getAllByRole("checkbox").forEach((checkbox) => {
       fireEvent.click(checkbox);
     });
-    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-install"));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /将 7 个技能安装到 3 个平台/i }));
@@ -148,7 +150,7 @@ describe("CentralSkillsView", () => {
     const selectionCheckboxes = screen.getAllByRole("checkbox");
     fireEvent.click(selectionCheckboxes[0]);
     fireEvent.click(selectionCheckboxes[1]);
-    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-install"));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /将 2 个技能安装到 2 个平台/i }));
@@ -174,7 +176,7 @@ describe("CentralSkillsView", () => {
     renderCentralSkillsView();
 
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-install"));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByText("项目目录"));
@@ -245,7 +247,7 @@ describe("CentralSkillsView", () => {
     const selectionCheckboxes = screen.getAllByRole("checkbox");
     fireEvent.click(selectionCheckboxes[0]);
     fireEvent.click(selectionCheckboxes[1]);
-    fireEvent.click(screen.getByTestId("batch-delete-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-delete"));
 
     await waitFor(() => {
       expect(mockLoadBatchDeletePreview).toHaveBeenCalledWith([
@@ -301,7 +303,7 @@ describe("CentralSkillsView", () => {
     renderCentralSkillsView();
 
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    fireEvent.click(screen.getByTestId("batch-delete-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-delete"));
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("已安装的平台链接会自动移除")).toBeInTheDocument();
@@ -339,7 +341,7 @@ describe("CentralSkillsView", () => {
     renderCentralSkillsView();
 
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    fireEvent.click(screen.getByTestId("batch-delete-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-delete"));
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/Universal/)).toBeInTheDocument();
@@ -698,8 +700,8 @@ describe("CentralSkillsView", () => {
   });
 
   it("V2 selects only the current repository results for batch check updates", async () => {
-    setFeatureFlag("central.newLayout", true);
     window.history.replaceState(null, "", "/");
+    window.localStorage.setItem("central.sidebarPinned", "true");
     const githubRepo = mockRepositories[1]!;
     const localRepo = mockRepositories[0]!;
     const skills: SkillWithLinks[] = [
@@ -719,7 +721,10 @@ describe("CentralSkillsView", () => {
       expect(screen.getByRole("button", { name: "检查当前结果（2）" })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "选择当前结果" }));
+    // V2：在批量条出现前先选两张卡片
+    const checkboxes = screen.getAllByLabelText("选择技能");
+    fireEvent.click(checkboxes[0]);
+    fireEvent.click(checkboxes[1]);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "检查所选（2）" })).toBeInTheDocument();
@@ -733,8 +738,8 @@ describe("CentralSkillsView", () => {
   });
 
   it("V2 checks current filtered results when nothing is manually selected", async () => {
-    setFeatureFlag("central.newLayout", true);
     window.history.replaceState(null, "", "/");
+    window.localStorage.setItem("central.sidebarPinned", "true");
     const githubRepo = mockRepositories[1]!;
     const localRepo = mockRepositories[0]!;
     const skills: SkillWithLinks[] = [

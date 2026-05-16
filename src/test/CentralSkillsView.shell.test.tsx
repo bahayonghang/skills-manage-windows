@@ -1,0 +1,230 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanupCentralSkillsViewTestState,
+  renderCentralSkillsView,
+  resetCentralSkillsViewTestState,
+} from "./centralSkillsViewTestSupport";
+
+describe("CentralSkillsView shell（V2 markup）", () => {
+  beforeEach(() => {
+    resetCentralSkillsViewTestState();
+    window.localStorage.clear();
+  });
+
+  afterEach(cleanupCentralSkillsViewTestState);
+
+  // ─── Header ────────────────────────────────────────────────────────
+
+  it("渲染标题、路径副标题、检查更新主 CTA、「⋯ 更多」按钮", () => {
+    renderCentralSkillsView();
+    expect(screen.getByText("中央技能库")).toBeInTheDocument();
+    expect(screen.getByText("/Users/test/.skillsmanage/skills/")).toBeInTheDocument();
+    expect(screen.getByTestId("central-check-updates")).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-more")).toBeInTheDocument();
+  });
+
+  it("「⋯ 更多」menu 展开后含任务中心 / 平台管理 / 状态导出 / GitHub 导入 四项", async () => {
+    renderCentralSkillsView();
+    fireEvent.click(screen.getByTestId("central-toolbar-more"));
+    expect(
+      await screen.findByTestId("central-toolbar-task-center")
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("central-portability-open")).toBeInTheDocument();
+    expect(screen.getByText("管理平台")).toBeInTheDocument();
+    expect(screen.getByText("从 GitHub 导入")).toBeInTheDocument();
+  });
+
+  it("无可更新时不展示可更新 chip 与「更新 N 个」按钮", () => {
+    renderCentralSkillsView();
+    expect(screen.queryByTestId("central-update-count-chip")).not.toBeInTheDocument();
+  });
+
+  it("updateStatuses 含 update_available 时展示可更新 chip", () => {
+    renderCentralSkillsView({
+      centralOverrides: {
+        updateStatuses: {
+          "frontend-design": {
+            skill_id: "frontend-design",
+            source_type: "github",
+            status: "update_available",
+          },
+        },
+      },
+    });
+    expect(screen.getByTestId("central-update-count-chip")).toHaveTextContent("+1");
+  });
+
+  // ─── Search + toolbar ─────────────────────────────────────────────
+
+  it("二级工具条含搜索框、排序 menu、视图 menu", () => {
+    renderCentralSkillsView();
+    expect(screen.getByTestId("central-toolbar-sort")).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-view")).toBeInTheDocument();
+    // 搜索框 input 存在
+    const search = screen.getByRole("textbox");
+    expect(search).toBeInTheDocument();
+  });
+
+  it("排序 menu 展开后含 6 个 (field × dir) 选项", async () => {
+    renderCentralSkillsView();
+    fireEvent.click(screen.getByTestId("central-toolbar-sort"));
+    expect(
+      await screen.findByTestId("central-toolbar-sort-name-asc")
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-sort-name-desc")).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-sort-createdAt-asc")).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-sort-createdAt-desc")).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-sort-updatedAt-asc")).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-sort-updatedAt-desc")).toBeInTheDocument();
+  });
+
+  it("视图 menu 展开后含 group / installed / quick filters 段", async () => {
+    renderCentralSkillsView();
+    fireEvent.click(screen.getByTestId("central-toolbar-view"));
+    expect(
+      await screen.findByTestId("central-toolbar-view-installed-all")
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-view-installed-any")).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-view-uncategorized")).toBeInTheDocument();
+  });
+
+  // ─── Sidebar rail vs pinned ───────────────────────────────────────
+
+  it("默认是 collapsed rail（unpinned）", () => {
+    renderCentralSkillsView();
+    const sidebar = screen.getByTestId("central-sidebar-v2");
+    expect(sidebar).toHaveAttribute("data-pinned", "false");
+    expect(sidebar).toHaveAttribute("data-expanded", "false");
+    expect(screen.getByTestId("central-sidebar-rail")).toBeInTheDocument();
+  });
+
+  it("pin 后切换为 expanded 状态", () => {
+    window.localStorage.setItem("central.sidebarPinned", "true");
+    renderCentralSkillsView();
+    const sidebar = screen.getByTestId("central-sidebar-v2");
+    expect(sidebar).toHaveAttribute("data-pinned", "true");
+    expect(sidebar).toHaveAttribute("data-expanded", "true");
+  });
+
+  // ─── 任务中心 + 进度顶线 ──────────────────────────────────────────
+
+  it("默认无活跃任务时不渲染 1px 进度顶线、不渲染 chip", () => {
+    renderCentralSkillsView();
+    expect(screen.queryByTestId("central-progress-top-line")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("central-toolbar-task-center-chip")).not.toBeInTheDocument();
+  });
+
+  it("aiTagJob running 时渲染 1px 顶线 + 工具栏「任务进行中」chip", () => {
+    renderCentralSkillsView({
+      centralOverrides: {
+        aiTagJob: {
+          jobId: "ai-1",
+          status: "running",
+          total: 10,
+          completed: 4,
+          succeeded: 3,
+          failed: 0,
+          lowConfidenceCount: 1,
+          items: {},
+        },
+      },
+    });
+    expect(screen.getByTestId("central-progress-top-line")).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-task-center-chip")).toBeInTheDocument();
+  });
+
+  it("「⋯ 更多」menu 任务中心点击后打开抽屉并展示任务中心标题", async () => {
+    renderCentralSkillsView({
+      centralOverrides: {
+        aiTagJob: {
+          jobId: "ai-1",
+          status: "running",
+          total: 10,
+          completed: 4,
+          succeeded: 3,
+          failed: 0,
+          lowConfidenceCount: 1,
+          items: {},
+        },
+      },
+    });
+    fireEvent.click(screen.getByTestId("central-toolbar-more"));
+    const menuItem = await screen.findByTestId("central-toolbar-task-center");
+    expect(within(menuItem).getByText("1")).toBeInTheDocument(); // active badge
+    fireEvent.click(menuItem);
+    expect(
+      await screen.findByTestId("central-task-center-drawer")
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("central-task-row-ai-tag")).toBeInTheDocument();
+  });
+
+  it("任务中心 chip 点击同样打开抽屉", async () => {
+    renderCentralSkillsView({
+      centralOverrides: {
+        aiTagJob: {
+          jobId: "ai-1",
+          status: "running",
+          total: 5,
+          completed: 1,
+          succeeded: 1,
+          failed: 0,
+          lowConfidenceCount: 0,
+          items: {},
+        },
+      },
+    });
+    fireEvent.click(screen.getByTestId("central-toolbar-task-center-chip"));
+    expect(
+      await screen.findByTestId("central-task-center-drawer")
+    ).toBeInTheDocument();
+  });
+
+  it("无任务时抽屉打开后展示 empty 状态", async () => {
+    renderCentralSkillsView();
+    fireEvent.click(screen.getByTestId("central-toolbar-more"));
+    fireEvent.click(await screen.findByTestId("central-toolbar-task-center"));
+    expect(
+      await screen.findByTestId("central-task-center-empty")
+    ).toBeInTheDocument();
+  });
+
+  // ─── BulkActionBar / CategorizeDrawer ────────────────────────────
+
+  it("无选中时不渲染批量操作条", () => {
+    renderCentralSkillsView();
+    expect(screen.queryByTestId("central-bulk-action-bar")).not.toBeInTheDocument();
+  });
+
+  it("选中一张卡片后浮出底部批量条，含批装 / 打标签 / AI 建议 / 批删 / 取消选择", async () => {
+    renderCentralSkillsView();
+    const [firstCheckbox] = screen.getAllByLabelText("选择技能");
+    fireEvent.click(firstCheckbox);
+    expect(
+      await screen.findByTestId("central-bulk-action-bar")
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-bar-batch-install")).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-bar-open-categorize")).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-bar-open-ai-suggest")).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-bar-batch-delete")).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-bar-clear-selection")).toBeInTheDocument();
+  });
+
+  it("批量条「打标签」按钮触发 Categorize 抽屉", async () => {
+    renderCentralSkillsView();
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    fireEvent.click(await screen.findByTestId("bulk-bar-open-categorize"));
+    expect(
+      await screen.findByTestId("central-categorize-drawer")
+    ).toBeInTheDocument();
+  });
+
+  it("批量条「取消选择」清空选中并关闭批量条", async () => {
+    renderCentralSkillsView();
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    fireEvent.click(await screen.findByTestId("bulk-bar-clear-selection"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("central-bulk-action-bar")).not.toBeInTheDocument();
+    });
+  });
+});
