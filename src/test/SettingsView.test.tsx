@@ -1082,6 +1082,39 @@ describe("SettingsView", () => {
     expect(screen.queryByText("OpenClaw")).toBeNull();
   });
 
+  it("collapses coding platform details without hiding the group", () => {
+    setupMocks({
+      agents: [mockBuiltinAgent, mockOpenCodeAgent, mockCursorAgent],
+      categoryVisibility: { coding: true, lobster: false },
+    });
+    renderSettingsView();
+
+    fireEvent.click(screen.getByRole("button", { name: "收起 编程类 分组的平台详情" }));
+
+    expect(screen.queryByText("Claude Code")).toBeNull();
+    expect(screen.getByText("已折叠 · 2 / 3 已启用 · 分组显示中")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开 编程类 分组的平台详情" }));
+
+    expect(screen.getByText("Claude Code")).toBeTruthy();
+  });
+
+  it("keeps search results visible even when a platform group was collapsed", () => {
+    setupMocks({
+      agents: [mockBuiltinAgent, mockOpenCodeAgent, mockCursorAgent],
+      categoryVisibility: { coding: true, lobster: false },
+    });
+    renderSettingsView();
+
+    fireEvent.click(screen.getByRole("button", { name: "收起 编程类 分组的平台详情" }));
+    fireEvent.change(screen.getByLabelText("搜索平台"), {
+      target: { value: "cursor" },
+    });
+
+    expect(screen.getByText("Cursor")).toBeTruthy();
+    expect(screen.queryByText(/已折叠/)).toBeNull();
+  });
+
   it("filters platform groups by the local search box", () => {
     setupMocks({
       agents: [mockBuiltinAgent, mockOpenCodeAgent, mockCursorAgent, mockLobsterAgent],
