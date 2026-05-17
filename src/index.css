@@ -15,6 +15,110 @@
     --scrollbar-track: color-mix(in srgb, var(--muted) 22%, transparent);
 }
 
+/* Static boot surface rendered from index.html before React chunks load. */
+.startup-shell {
+    display: flex;
+    min-height: 100%;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 50% 35%, rgba(180, 190, 254, 0.16), transparent 34rem),
+        linear-gradient(135deg, #1e1e2e 0%, #181825 58%, #11111b 100%);
+    color: #cdd6f4;
+    font-family: 'JetBrains Mono Variable', 'Geist Variable', ui-monospace, monospace;
+}
+
+.startup-card {
+    display: grid;
+    width: min(22rem, calc(100vw - 3rem));
+    gap: 1.25rem;
+    justify-items: center;
+    border: 1px solid rgba(180, 190, 254, 0.18);
+    border-radius: 1.5rem;
+    background: rgba(24, 24, 37, 0.76);
+    padding: 2rem;
+    box-shadow:
+        inset 0 1px 0 rgba(205, 214, 244, 0.08),
+        0 24px 80px rgba(17, 17, 27, 0.5);
+    backdrop-filter: blur(18px);
+}
+
+.startup-mark {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.startup-mark span {
+    display: block;
+    width: 0.7rem;
+    height: 2.25rem;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #b4befe 0%, #89b4fa 100%);
+    animation: startup-pulse 900ms ease-in-out infinite;
+}
+
+.startup-mark span:nth-child(2) {
+    height: 3rem;
+    animation-delay: 120ms;
+}
+
+.startup-mark span:nth-child(3) {
+    animation-delay: 240ms;
+}
+
+.startup-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+}
+
+.startup-progress {
+    position: relative;
+    height: 0.2rem;
+    width: 12rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(69, 71, 90, 0.8);
+}
+
+.startup-progress span {
+    position: absolute;
+    inset-block: 0;
+    width: 38%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, transparent, #b4befe, transparent);
+    animation: startup-progress 1.2s ease-in-out infinite;
+}
+
+@keyframes startup-pulse {
+    0%, 100% {
+        transform: scaleY(0.72);
+        opacity: 0.62;
+    }
+    50% {
+        transform: scaleY(1);
+        opacity: 1;
+    }
+}
+
+@keyframes startup-progress {
+    0% {
+        left: -38%;
+    }
+    100% {
+        left: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .startup-mark span,
+    .startup-progress span {
+        animation: none;
+    }
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'JetBrains Mono Variable', 'Geist Variable', monospace;

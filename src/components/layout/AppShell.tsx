@@ -10,7 +10,7 @@ import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
-import { isTauriRuntime, listen } from "@/lib/tauri";
+import { isTauriRuntime, listen, showMainWindowWhenReady } from "@/lib/tauri";
 
 type MigrationProgressPayload =
   | { phase: "started" }
@@ -47,6 +47,10 @@ export function AppShell() {
   const [hasLoadedTargets, setHasLoadedTargets] = useState(false);
   const lastTargetIdRef = useRef<string | null>(null);
   const isInitialTargetLoadRef = useRef(true);
+
+  useEffect(() => {
+    void showMainWindowWhenReady().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

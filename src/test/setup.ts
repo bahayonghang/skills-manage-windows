@@ -172,6 +172,7 @@ Object.defineProperty(window, "__TAURI__", {
       invoke: vi.fn(),
     },
   },
+  configurable: true,
   writable: true,
 });
 
@@ -181,5 +182,6 @@ Object.defineProperty(window, "__TAURI_INTERNALS__", {
     transformCallback: vi.fn(),
     postMessage: vi.fn(),
   },
+  configurable: true,
   writable: true,
 });

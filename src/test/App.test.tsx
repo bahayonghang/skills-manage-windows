@@ -142,6 +142,10 @@ vi.mock("@/pages/CentralSkillsView", () => ({
   CentralSkillsView: () => <div>central-page</div>,
 }));
 
+vi.mock("@/pages/SettingsView", () => ({
+  SettingsView: () => new Promise(() => null),
+}));
+
 describe("App", () => {
   it("renders the app shell with top bar", async () => {
     await act(async () => {
@@ -191,5 +195,17 @@ describe("App", () => {
     });
 
     expect(await screen.findByText("central-page")).toBeInTheDocument();
+  });
+
+  it("shows a page-level fallback while a lazy route chunk is loading", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/settings"]}>
+          <App />
+        </MemoryRouter>
+      );
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("加载中...");
   });
 });
