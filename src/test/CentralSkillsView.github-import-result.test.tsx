@@ -40,8 +40,7 @@ describe("CentralSkillsView GitHub import result", () => {
       },
     });
 
-    fireEvent.click(screen.getByTestId("central-toolbar-more"));
-    fireEvent.click(await screen.findByText("从 GitHub 导入"));
+    fireEvent.click(screen.getByTestId("central-github-import-open"));
 
     const dialog = await screen.findByRole("dialog", { name: /GitHub import wizard/i });
     expect(

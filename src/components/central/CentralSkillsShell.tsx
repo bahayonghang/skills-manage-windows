@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import {
   ActivityIcon,
   Download,
+  GitBranch,
   RefreshCw,
 } from "lucide-react";
 import type { TFunction } from "i18next";
@@ -251,6 +252,16 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* 核心入口：GitHub 导入 ─────────────────────────────────── */}
+          <Button
+            variant="outline"
+            onClick={() => setIsGitHubImportOpen(true)}
+            data-testid="central-github-import-open"
+          >
+            <GitBranch className="size-3.5" />
+            {t("marketplace.githubImportSecondaryCta")}
+          </Button>
+
           {/* 主 CTA：检查更新 ────────────────────────────────────── */}
           <Button
             variant="default"
@@ -282,14 +293,13 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
             </Button>
           )}
 
-          {/* 更多 dropdown：平台管理 / 状态导出 / GitHub 导入 ───── */}
+          {/* 更多 dropdown：任务中心 / 平台管理 / 状态导入导出 ─────── */}
           <ToolbarMoreMenu
             t={t}
             activeTaskCount={activeTaskCount}
             onOpenTaskCenter={() => taskCenter.onOpenChange(true)}
             onOpenPlatformManage={() => setIsPlatformManageOpen(true)}
             onOpenPortability={() => setIsPortabilityOpen(true)}
-            onOpenGitHubImport={() => setIsGitHubImportOpen(true)}
           />
         </div>
       </div>

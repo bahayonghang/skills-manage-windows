@@ -34,10 +34,9 @@ describe("CentralSkillsView overview（V2 markup）", () => {
     await waitFor(() => expect(mockExportSkillportState).toHaveBeenCalled());
   });
 
-  it("从「⋯ 更多」menu 暴露 GitHub 导入入口", async () => {
+  it("在顶部直接暴露 GitHub 导入入口", () => {
     renderCentralSkillsView();
-    fireEvent.click(screen.getByTestId("central-toolbar-more"));
-    expect(await screen.findByText("从 GitHub 导入")).toBeInTheDocument();
+    expect(screen.getByTestId("central-github-import-open")).toHaveTextContent("从 GitHub 导入");
   });
 
   it("搜索框可输入并触发列表过滤（按名称）", async () => {

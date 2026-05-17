@@ -16,23 +16,23 @@ describe("CentralSkillsView shell（V2 markup）", () => {
 
   // ─── Header ────────────────────────────────────────────────────────
 
-  it("渲染标题、路径副标题、检查更新主 CTA、「⋯ 更多」按钮", () => {
+  it("渲染标题、路径副标题、GitHub 导入按钮、检查更新主 CTA、「⋯ 更多」按钮", () => {
     renderCentralSkillsView();
     expect(screen.getByText("中央技能库")).toBeInTheDocument();
     expect(screen.getByText("/Users/test/.skillsmanage/skills/")).toBeInTheDocument();
+    expect(screen.getByTestId("central-github-import-open")).toHaveTextContent("从 GitHub 导入");
     expect(screen.getByTestId("central-check-updates")).toBeInTheDocument();
     expect(screen.getByTestId("central-toolbar-more")).toBeInTheDocument();
   });
 
-  it("「⋯ 更多」menu 展开后含任务中心 / 平台管理 / 状态导出 / GitHub 导入 四项", async () => {
+  it("「⋯ 更多」menu 展开后只保留任务中心 / 平台管理 / 状态导入导出", async () => {
     renderCentralSkillsView();
     fireEvent.click(screen.getByTestId("central-toolbar-more"));
-    expect(
-      await screen.findByTestId("central-toolbar-task-center")
-    ).toBeInTheDocument();
+    const menu = await screen.findByTestId("central-toolbar-more-menu");
+    expect(screen.getByTestId("central-toolbar-task-center")).toBeInTheDocument();
     expect(screen.getByTestId("central-portability-open")).toBeInTheDocument();
     expect(screen.getByText("管理平台")).toBeInTheDocument();
-    expect(screen.getByText("从 GitHub 导入")).toBeInTheDocument();
+    expect(within(menu).queryByText("从 GitHub 导入")).not.toBeInTheDocument();
   });
 
   it("无可更新时不展示可更新 chip 与「更新 N 个」按钮", () => {

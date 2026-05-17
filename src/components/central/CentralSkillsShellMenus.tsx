@@ -10,14 +10,12 @@ export function ToolbarMoreMenu({
   onOpenTaskCenter,
   onOpenPlatformManage,
   onOpenPortability,
-  onOpenGitHubImport,
 }: {
   t: TFunction;
   activeTaskCount: number;
   onOpenTaskCenter: () => void;
   onOpenPlatformManage: () => void;
   onOpenPortability: () => void;
-  onOpenGitHubImport: () => void;
 }) {
   return (
     <MenuPrimitive.Root>
@@ -35,7 +33,7 @@ export function ToolbarMoreMenu({
       />
       <MenuPrimitive.Portal>
         <MenuPrimitive.Positioner align="end" sideOffset={6} className="z-50 outline-none">
-          <MenuPrimitive.Popup className={menuPopupClassName()}>
+          <MenuPrimitive.Popup data-testid="central-toolbar-more-menu" className={menuPopupClassName()}>
             <MenuPrimitive.Item
               data-testid="central-toolbar-task-center"
               onClick={onOpenTaskCenter}
@@ -66,12 +64,6 @@ export function ToolbarMoreMenu({
             >
               <FileJson className="size-3.5 shrink-0" />
               {t("central.portabilityOpen")}
-            </MenuPrimitive.Item>
-            <MenuPrimitive.Item
-              onClick={onOpenGitHubImport}
-              className={menuItemClassName()}
-            >
-              {t("marketplace.githubImportSecondaryCta")}
             </MenuPrimitive.Item>
           </MenuPrimitive.Popup>
         </MenuPrimitive.Positioner>
