@@ -76,6 +76,13 @@ export interface ScannedSkill {
   link_type: string;
   symlink_target?: string;
   is_central: boolean;
+  scanned_at?: string;
+  installed_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  repository?: SkillRepository | null;
+  source_path?: string | null;
+  is_source_unknown?: boolean;
   source_kind?: ClaudeSourceKind | null;
   source_root?: string | null;
   is_read_only?: boolean;
@@ -123,13 +130,11 @@ export interface SkillDetail extends Omit<Skill, "content"> {
   source_path?: string;
   is_source_unknown?: boolean;
 }
-
 export interface SkillDetailRequest {
   skillId: string;
   agentId?: string;
   rowId?: string;
 }
-
 export interface DirectoryTreeEntry {
   name: string;
   path: string;
@@ -137,7 +142,6 @@ export interface DirectoryTreeEntry {
   symlink_target?: string | null;
   children: DirectoryTreeEntry[];
 }
-
 export interface SkillWithLinks {
   id: string;
   name: string;
@@ -158,25 +162,21 @@ export interface SkillWithLinks {
   source_path?: string;
   is_source_unknown?: boolean;
 }
-
 export interface BatchInstallResult {
   succeeded: string[];
   skipped?: Array<{ agent_id: string; target_path: string; reason: string }>;
   failed: Array<{ agent_id: string; error: string }>;
 }
-
 export interface CentralBatchInstallSuccess {
   skill_id: string;
   agent_id: string;
   target_path: string;
 }
-
 export interface CentralBatchInstallFailure {
   skill_id: string;
   agent_id: string;
   error: string;
 }
-
 export interface CentralBatchInstallSkipped {
   skill_id: string;
   agent_id: string;

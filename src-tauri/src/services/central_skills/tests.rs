@@ -1091,6 +1091,7 @@ async fn test_get_skills_by_agent_impl_includes_installation_metadata() {
 
     let skill = make_skill("meta-skill", "Meta Skill", false);
     db::upsert_skill(&pool, &skill).await.unwrap();
+    let installed_at = Utc::now().to_rfc3339();
 
     db::upsert_skill_installation(
         &pool,
@@ -1100,7 +1101,7 @@ async fn test_get_skills_by_agent_impl_includes_installation_metadata() {
             installed_path: "/tmp/claude/meta-skill".to_string(),
             link_type: "symlink".to_string(),
             symlink_target: Some("/tmp/central/meta-skill".to_string()),
-            created_at: Utc::now().to_rfc3339(),
+            created_at: installed_at.clone(),
         },
     )
     .await
@@ -1126,6 +1127,73 @@ async fn test_get_skills_by_agent_impl_includes_installation_metadata() {
         Some("/tmp/central/meta-skill"),
         "symlink_target must be forwarded from installation record"
     );
+    assert_eq!(
+        s.installed_at.as_deref(),
+        Some(installed_at.as_str()),
+        "installed_at must expose skill_installations.created_at"
+    );
+    assert_eq!(s.scanned_at, skill.scanned_at);
+    assert_eq!(
+        s.created_at.as_deref(),
+        Some(skill.scanned_at.as_str()),
+        "missing filesystem metadata falls back to scanned_at"
+    );
+    assert_eq!(
+        s.updated_at.as_deref(),
+        Some(skill.scanned_at.as_str()),
+        "missing filesystem metadata falls back to scanned_at"
+    );
+}
+
+#[tokio::test]
+async fn test_get_skills_by_agent_impl_includes_repository_metadata_for_installations() {
+    let pool = setup_test_db().await;
+
+    let skill = make_skill("repo-skill", "Repo Skill", true);
+    db::upsert_skill(&pool, &skill).await.unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "repo-skill".to_string(),
+            agent_id: "cursor".to_string(),
+            installed_path: "/tmp/cursor/repo-skill".to_string(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+    let repository = db::create_or_update_skill_repository(
+        &pool,
+        Some("github-owner-repo-main"),
+        "owner/repo",
+        "github",
+        Some("owner"),
+        Some("repo"),
+        Some("main"),
+        Some("https://github.com/owner/repo"),
+        false,
+    )
+    .await
+    .unwrap();
+    db::assign_skills_to_repository(
+        &pool,
+        &repository.id,
+        &["repo-skill".to_string()],
+        Some("skills/repo-skill"),
+    )
+    .await
+    .unwrap();
+
+    let skills = get_skills_by_agent_impl(&pool, "cursor").await.unwrap();
+    assert_eq!(skills.len(), 1);
+    let row = &skills[0];
+    let repository = row.repository.as_ref().expect("repository metadata");
+    assert_eq!(repository.id, "github-owner-repo-main");
+    assert_eq!(repository.name, "owner/repo");
+    assert_eq!(row.source_path.as_deref(), Some("skills/repo-skill"));
+    assert!(!row.is_source_unknown);
 }
 
 #[tokio::test]
@@ -1251,6 +1319,10 @@ async fn test_get_skills_by_agent_impl_claude_includes_source_identity_and_confl
     );
     assert_eq!(skills[0].conflict_count, 2);
     assert_eq!(skills[1].conflict_count, 2);
+    assert!(skills[0].installed_at.is_none());
+    assert_eq!(skills[0].created_at, Some(skills[0].scanned_at.clone()));
+    assert_eq!(skills[0].updated_at, Some(skills[0].scanned_at.clone()));
+    assert!(skills[0].repository.is_none());
 }
 
 #[tokio::test]
@@ -1467,7 +1539,12 @@ async fn test_get_skills_by_agent_impl_codex_merges_platform_and_plugin_rows() {
     assert_eq!(skills.len(), 2);
     assert_eq!(platform_row.row_id, "shared-skill");
     assert_eq!(platform_row.source_kind, None);
+    assert!(platform_row.installed_at.is_some());
     assert_eq!(plugin_row.source_kind.as_deref(), Some("plugin"));
+    assert!(plugin_row.installed_at.is_none());
+    assert_eq!(plugin_row.created_at, Some(plugin_row.scanned_at.clone()));
+    assert_eq!(plugin_row.updated_at, Some(plugin_row.scanned_at.clone()));
+    assert!(plugin_row.repository.is_none());
     assert_eq!(platform_row.conflict_count, 2);
     assert_eq!(plugin_row.conflict_count, 2);
     assert_eq!(

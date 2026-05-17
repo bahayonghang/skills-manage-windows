@@ -6,6 +6,7 @@ pub mod operation_log;
 pub mod paths;
 pub mod secrets;
 pub mod services;
+pub mod skill_time;
 pub mod targets;
 
 use db::DbPool;
