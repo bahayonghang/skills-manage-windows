@@ -382,7 +382,33 @@
     "duplicatesSourceRoot": "Source root: {{path}}",
     "duplicatesCancel": "Cancel",
     "duplicatesConfirm": "Delete {{count}} platform copy/copies",
-    "duplicatesCleaning": "Deleting..."
+    "duplicatesCleaning": "Deleting...",
+    "toolbarSortAriaLabel": "Sort platform skills",
+    "toolbarSortCurrent": "Current sort: {{field}}, {{direction}}",
+    "sortFields": {
+      "repository": "Repository",
+      "name": "Name",
+      "installedAt": "Installed",
+      "updatedAt": "Updated"
+    },
+    "sortDirections": {
+      "asc": "Ascending",
+      "desc": "Descending"
+    },
+    "toolbarViewAriaLabel": "Platform skill view options",
+    "toolbarView": "View",
+    "toolbarViewBadgeActive": "Grouped view enabled",
+    "toolbarViewSectionGroup": "Group by",
+    "groupBy": {
+      "none": "None",
+      "repository": "Repository / source"
+    },
+    "group": {
+      "all": "All skills",
+      "localSource": "Local / user source",
+      "pluginSource": "Plugin source",
+      "unknownSource": "Unknown source"
+    }
   },
   "central": {
     "title": "Central Skills",

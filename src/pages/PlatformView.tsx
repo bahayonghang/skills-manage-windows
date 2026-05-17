@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { Search, Blocks } from "lucide-react";
+import { Search, Blocks, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { usePlatformStore } from "@/stores/platformStore";
@@ -13,6 +13,10 @@ import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { DuplicatePlatformSkillsDialog } from "@/components/platform/DuplicatePlatformSkillsDialog";
+import {
+  PlatformSkillSortMenu,
+  PlatformSkillViewMenu,
+} from "@/components/platform/PlatformSkillToolbarMenus";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
@@ -31,6 +35,13 @@ import {
   findDuplicatePlatformSkillGroups,
 } from "@/lib/platformDuplicateSkills";
 import type { DuplicatePlatformSkillGroup } from "@/lib/platformDuplicateSkills";
+import {
+  derivePlatformSkillRows,
+  type PlatformGroupBy,
+  type PlatformSkillGroup,
+  type PlatformSortDirection,
+  type PlatformSortField,
+} from "@/lib/platformSkillViewModel";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
@@ -46,6 +57,52 @@ function EmptyState({ message }: { message: string }) {
 }
 
 type ClaudeSourceFilter = "all" | "user" | "plugin";
+
+function PlatformGroupedSkillList({
+  groups,
+  renderSkillCard,
+}: {
+  groups: PlatformSkillGroup[];
+  renderSkillCard: (skill: ScannedSkill) => ReactNode;
+}) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  return (
+    <div className="space-y-6">
+      {groups.map((group) => {
+        const isCollapsed = collapsed[group.key] ?? false;
+        const Caret = isCollapsed ? ChevronRight : ChevronDown;
+        return (
+          <section key={group.key} aria-label={group.label}>
+            <button
+              type="button"
+              onClick={() =>
+                setCollapsed((prev) => ({ ...prev, [group.key]: !isCollapsed }))
+              }
+              aria-expanded={!isCollapsed}
+              data-testid={`platform-group-header-${group.key}`}
+              className="sticky top-0 z-10 mb-3 flex w-full items-center gap-2 rounded-md border border-border/60 bg-background/95 px-3 py-2 text-left text-sm font-medium backdrop-blur"
+            >
+              <Caret className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{group.label}</span>
+              <span className="shrink-0 rounded-md border border-border/80 bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+                {group.skills.length}
+              </span>
+            </button>
+            {!isCollapsed && (
+              <div
+                className="grid grid-cols-1 gap-4 lg:grid-cols-2"
+                data-testid={`platform-group-body-${group.key}`}
+              >
+                {group.skills.map((skill) => renderSkillCard(skill))}
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
 
 // ─── PlatformView ─────────────────────────────────────────────────────────────
 
@@ -72,6 +129,9 @@ export function PlatformView() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<ClaudeSourceFilter>("all");
+  const [sortField, setSortField] = useState<PlatformSortField>("name");
+  const [sortDirection, setSortDirection] = useState<PlatformSortDirection>("asc");
+  const [groupBy, setGroupBy] = useState<PlatformGroupBy>("none");
   const [installTargetSkill, setInstallTargetSkill] = useState<SkillWithLinks | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [drawerSkill, setDrawerSkill] = useState<ScannedSkill | null>(null);
@@ -293,13 +353,6 @@ export function PlatformView() {
     [resolvedAgentId, skillsByAgent]
   );
 
-  const sourceFilteredSkills = useMemo(() => {
-    if (!isClaudePage || sourceFilter === "all") {
-      return skills;
-    }
-    return skills.filter((skill) => skill.source_kind === sourceFilter);
-  }, [isClaudePage, skills, sourceFilter]);
-
   const sourceCounts = useMemo(() => {
     const counts: Record<ClaudeSourceFilter, number> = {
       all: skills.length,
@@ -318,17 +371,38 @@ export function PlatformView() {
     return counts;
   }, [skills]);
 
-  // Filter skills by search query using useMemo
-  const filteredSkills = useMemo(() => {
-    if (!searchQuery.trim()) return sourceFilteredSkills;
-    const q = searchQuery.toLowerCase();
-    return sourceFilteredSkills.filter(
-      (skill) =>
-        skill.id.toLowerCase().includes(q) ||
-        skill.name.toLowerCase().includes(q) ||
-        skill.description?.toLowerCase().includes(q)
-    );
-  }, [sourceFilteredSkills, searchQuery]);
+  const platformGroupLabels = useMemo(
+    () => ({
+      all: t("platform.group.all"),
+      localSource: t("platform.group.localSource"),
+      pluginSource: t("platform.group.pluginSource"),
+      unknownSource: t("platform.group.unknownSource"),
+    }),
+    [t]
+  );
+  const platformRows = useMemo(
+    () =>
+      derivePlatformSkillRows({
+        skills,
+        searchQuery,
+        sourceFilter: isClaudePage ? sourceFilter : "all",
+        sort: { field: sortField, direction: sortDirection },
+        groupBy,
+        labels: platformGroupLabels,
+      }),
+    [
+      groupBy,
+      isClaudePage,
+      platformGroupLabels,
+      searchQuery,
+      skills,
+      sortDirection,
+      sortField,
+      sourceFilter,
+    ]
+  );
+  const sourceFilteredSkills = platformRows.sourceFilteredSkills;
+  const filteredSkills = platformRows.sortedSkills;
   const summarySkillIds = useMemo(
     () => filteredSkills.flatMap((skill) => getSkillSummaryKeys(skill)),
     [filteredSkills]
@@ -402,6 +476,58 @@ export function PlatformView() {
     },
   ];
   const activeSourceLabel = sourceTabs.find((tab) => tab.id === sourceFilter)?.label ?? sourceTabs[0].label;
+  const sortFieldOptions: Array<{ value: PlatformSortField; label: string }> = [
+    { value: "repository", label: t("platform.sortFields.repository") },
+    { value: "name", label: t("platform.sortFields.name") },
+    { value: "installedAt", label: t("platform.sortFields.installedAt") },
+    { value: "updatedAt", label: t("platform.sortFields.updatedAt") },
+  ];
+  const sortDirectionOptions: Array<{ value: PlatformSortDirection; label: string }> = [
+    { value: "asc", label: t("platform.sortDirections.asc") },
+    { value: "desc", label: t("platform.sortDirections.desc") },
+  ];
+  const groupByOptions: Array<{ value: PlatformGroupBy; label: string }> = [
+    { value: "none", label: t("platform.groupBy.none") },
+    { value: "repository", label: t("platform.groupBy.repository") },
+  ];
+
+  const renderSkillCard = (skill: ScannedSkill, className?: string) => (
+    <UnifiedSkillCard
+      key={getSkillRowKey(skill)}
+      name={skill.name}
+      description={skill.description}
+      aiSummary={getAiSummary(skill)}
+      sourceType={skill.link_type as "symlink" | "copy" | "native"}
+      originKind={skill.source_kind ?? null}
+      isReadOnly={skill.is_read_only ?? false}
+      publisher={skill.repository?.name}
+      isLoading={
+        resolvedAgentId
+          ? (pendingSkillActionKeys[getPendingSkillActionKey(skill)] ?? false)
+          : false
+      }
+      onDetail={() => handleOpenDrawer(skill)}
+      onInstallTo={
+        skill.is_read_only
+          ? undefined
+          : () => void handleInstallClick(skill.id)
+      }
+      onUninstallFromPlatform={
+        skill.is_read_only
+          ? undefined
+          : () => void handleUninstall(skill)
+      }
+      uninstallFromLabel={t("platform.uninstallFromLabel", {
+        skill: skill.name,
+        platform: platformDisplayName,
+        defaultValue: i18n.language.startsWith("zh")
+          ? `从 ${platformDisplayName} 卸载 ${skill.name}`
+          : `Uninstall ${skill.name} from ${platformDisplayName}`,
+      })}
+      detailButtonRef={(node) => setDetailButtonRef(getSkillRowKey(skill), node)}
+      className={className}
+    />
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -462,6 +588,23 @@ export function PlatformView() {
               className="pl-8 bg-muted/40"
             />
           </div>
+          <PlatformSkillSortMenu
+            t={t}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            sortFieldOptions={sortFieldOptions}
+            sortDirectionOptions={sortDirectionOptions}
+            onChange={(next) => {
+              setSortField(next.field);
+              setSortDirection(next.direction);
+            }}
+          />
+          <PlatformSkillViewMenu
+            t={t}
+            groupBy={groupBy}
+            groupByOptions={groupByOptions}
+            onChangeGroupBy={setGroupBy}
+          />
           <Button
             type="button"
             variant="outline"
@@ -496,6 +639,11 @@ export function PlatformView() {
           <EmptyState
             message={t("platform.noMatch", { query: searchQuery })}
           />
+        ) : groupBy === "repository" ? (
+          <PlatformGroupedSkillList
+            groups={platformRows.groups}
+            renderSkillCard={(skill) => renderSkillCard(skill)}
+          />
         ) : filteredSkills.length > 40 ? (
           <VirtualizedGrid
             items={filteredSkills}
@@ -507,80 +655,11 @@ export function PlatformView() {
             maxColumns={2}
             scrollContainerRef={contentRef}
             itemKey={(skill) => getSkillRowKey(skill)}
-            renderItem={(skill) => (
-              <UnifiedSkillCard
-                key={getSkillRowKey(skill)}
-                name={skill.name}
-                description={skill.description}
-                aiSummary={getAiSummary(skill)}
-                sourceType={skill.link_type as "symlink" | "copy" | "native"}
-                originKind={skill.source_kind ?? null}
-                isReadOnly={skill.is_read_only ?? false}
-                isLoading={
-                  resolvedAgentId
-                    ? (pendingSkillActionKeys[getPendingSkillActionKey(skill)] ?? false)
-                    : false
-                }
-                onDetail={() => handleOpenDrawer(skill)}
-                onInstallTo={
-                  skill.is_read_only
-                    ? undefined
-                    : () => void handleInstallClick(skill.id)
-                }
-                onUninstallFromPlatform={
-                  skill.is_read_only
-                    ? undefined
-                    : () => void handleUninstall(skill)
-                }
-                uninstallFromLabel={t("platform.uninstallFromLabel", {
-                  skill: skill.name,
-                  platform: platformDisplayName,
-                  defaultValue: i18n.language.startsWith("zh")
-                    ? `从 ${platformDisplayName} 卸载 ${skill.name}`
-                    : `Uninstall ${skill.name} from ${platformDisplayName}`,
-                })}
-                detailButtonRef={(node) => setDetailButtonRef(getSkillRowKey(skill), node)}
-                className="h-[132px]"
-              />
-            )}
+            renderItem={(skill) => renderSkillCard(skill, "h-[132px]")}
           />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {filteredSkills.map((skill) => (
-              <UnifiedSkillCard
-                key={getSkillRowKey(skill)}
-                name={skill.name}
-                description={skill.description}
-                aiSummary={getAiSummary(skill)}
-                sourceType={skill.link_type as "symlink" | "copy" | "native"}
-                originKind={skill.source_kind ?? null}
-                isReadOnly={skill.is_read_only ?? false}
-                isLoading={
-                  resolvedAgentId
-                    ? (pendingSkillActionKeys[getPendingSkillActionKey(skill)] ?? false)
-                    : false
-                }
-                onDetail={() => handleOpenDrawer(skill)}
-                onInstallTo={
-                  skill.is_read_only
-                    ? undefined
-                    : () => handleInstallClick(skill.id)
-                }
-                onUninstallFromPlatform={
-                  skill.is_read_only
-                    ? undefined
-                    : () => handleUninstall(skill)
-                }
-                uninstallFromLabel={t("platform.uninstallFromLabel", {
-                  skill: skill.name,
-                  platform: platformDisplayName,
-                  defaultValue: i18n.language.startsWith("zh")
-                    ? `从 ${platformDisplayName} 卸载 ${skill.name}`
-                    : `Uninstall ${skill.name} from ${platformDisplayName}`,
-                })}
-                detailButtonRef={(node) => setDetailButtonRef(getSkillRowKey(skill), node)}
-              />
-            ))}
+            {filteredSkills.map((skill) => renderSkillCard(skill))}
           </div>
         )}
       </div>

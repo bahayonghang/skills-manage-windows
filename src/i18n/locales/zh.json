@@ -382,7 +382,33 @@
     "duplicatesSourceRoot": "来源根目录：{{path}}",
     "duplicatesCancel": "取消",
     "duplicatesConfirm": "删除 {{count}} 个平台副本",
-    "duplicatesCleaning": "正在删除..."
+    "duplicatesCleaning": "正在删除...",
+    "toolbarSortAriaLabel": "平台技能排序",
+    "toolbarSortCurrent": "当前排序：{{field}}，{{direction}}",
+    "sortFields": {
+      "repository": "仓库",
+      "name": "名称",
+      "installedAt": "安装时间",
+      "updatedAt": "更新时间"
+    },
+    "sortDirections": {
+      "asc": "升序",
+      "desc": "降序"
+    },
+    "toolbarViewAriaLabel": "平台技能视图选项",
+    "toolbarView": "视图",
+    "toolbarViewBadgeActive": "已启用分组视图",
+    "toolbarViewSectionGroup": "分组方式",
+    "groupBy": {
+      "none": "不分组",
+      "repository": "按仓库/来源分组"
+    },
+    "group": {
+      "all": "全部技能",
+      "localSource": "本地/用户来源",
+      "pluginSource": "插件来源",
+      "unknownSource": "未知来源"
+    }
   },
   "central": {
     "title": "中央技能库",

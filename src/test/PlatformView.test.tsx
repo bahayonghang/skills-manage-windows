@@ -308,6 +308,65 @@ const mockClaudePluginSliceDuplicates: ScannedSkill[] = [
   },
 ];
 
+const mockSortablePlatformSkills: ScannedSkill[] = [
+  {
+    id: "beta-skill",
+    row_id: "beta-skill",
+    name: "Beta Skill",
+    description: "Second skill from a repository",
+    file_path: "~/.claude/skills/beta-skill/SKILL.md",
+    dir_path: "~/.claude/skills/beta-skill",
+    link_type: "symlink",
+    symlink_target: "~/.skillsmanage/skills/beta-skill",
+    is_central: true,
+    scanned_at: "2026-01-01T00:00:00Z",
+    installed_at: "2026-01-02T00:00:00Z",
+    updated_at: "2026-01-04T00:00:00Z",
+    repository: {
+      id: "github-owner-beta-main",
+      name: "owner/beta",
+      source_type: "github",
+      owner: "owner",
+      repo: "beta",
+      branch: "main",
+      url: "https://github.com/owner/beta",
+      is_unknown: false,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    },
+  },
+  {
+    id: "alpha-skill",
+    row_id: "claude-code::plugin::publisher-a::alpha-skill",
+    name: "Alpha Skill",
+    description: "First plugin skill",
+    file_path: "~/.claude/plugins/cache/publisher-a/plugin-a/1.0.0/skills/alpha-skill/SKILL.md",
+    dir_path: "~/.claude/plugins/cache/publisher-a/plugin-a/1.0.0/skills/alpha-skill",
+    link_type: "native",
+    is_central: false,
+    scanned_at: "2026-01-03T00:00:00Z",
+    updated_at: "2026-01-03T00:00:00Z",
+    source_kind: "plugin",
+    source_root: "~/.claude/plugins/cache/publisher-a/plugin-a/1.0.0",
+    is_read_only: true,
+  },
+  {
+    id: "gamma-skill",
+    row_id: "gamma-skill",
+    name: "Gamma Skill",
+    description: "Local user skill",
+    file_path: "~/.claude/skills/gamma-skill/SKILL.md",
+    dir_path: "~/.claude/skills/gamma-skill",
+    link_type: "copy",
+    is_central: false,
+    scanned_at: "2026-01-05T00:00:00Z",
+    installed_at: "2026-01-05T00:00:00Z",
+    updated_at: "2026-01-05T00:00:00Z",
+    source_kind: "user",
+    source_root: "~/.claude/skills",
+  },
+];
+
 const mockGetSkillsByAgent = vi.fn();
 const mockLoadCentralSkills = vi.fn();
 const mockInstallSkill = vi.fn();
@@ -418,6 +477,12 @@ function renderPlatformView(agentId = "claude-code") {
       </Routes>
     </MemoryRouter>
   );
+}
+
+function visibleSkillNames() {
+  return screen
+    .getAllByRole("button", { name: /查看 .* 的详情/i })
+    .map((button) => button.textContent?.trim());
 }
 
 let testNavigate: ReturnType<typeof useNavigate> | null = null;
@@ -714,6 +779,86 @@ describe("PlatformView", () => {
     await waitFor(() => {
       expect(screen.getByText(/没有匹配的技能/)).toBeInTheDocument();
     });
+  });
+
+  it("sorts platform skills by selected name direction", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockSortablePlatformSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    expect(visibleSkillNames()).toEqual(["Alpha Skill", "Beta Skill", "Gamma Skill"]);
+
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort"));
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort-name-desc"));
+
+    await waitFor(() => {
+      expect(visibleSkillNames()).toEqual(["Gamma Skill", "Beta Skill", "Alpha Skill"]);
+    });
+  });
+
+  it("combines Claude source tabs, search, and timestamp sorting", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockSortablePlatformSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    fireEvent.click(screen.getByRole("tab", { name: claudeTabName("用户来源", 1) }));
+    fireEvent.change(screen.getByPlaceholderText(/搜索技能/), {
+      target: { value: "claude/skills" },
+    });
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort"));
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort-installedAt-desc"));
+
+    await waitFor(() => {
+      expect(visibleSkillNames()).toEqual(["Gamma Skill"]);
+    });
+    expect(getCardBadgeMatches(userSourceText)).toHaveLength(1);
+    expect(getCardBadgeMatches(pluginSourceText)).toHaveLength(0);
+  });
+
+  it("groups by repository/source while keeping read-only drawer row identity", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockSortablePlatformSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    fireEvent.click(screen.getByTestId("platform-toolbar-view"));
+    fireEvent.click(screen.getByTestId("platform-toolbar-view-group-repository"));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("owner/beta").length).toBeGreaterThan(0);
+      expect(screen.getByText("publisher-a/plugin-a")).toBeInTheDocument();
+      expect(screen.getByText("本地/用户来源")).toBeInTheDocument();
+    });
+    expect(screen.getAllByText("owner/beta")[0].nextSibling?.textContent).toBe("1");
+
+    fireEvent.click(screen.getByRole("button", { name: /查看 Alpha Skill 的详情/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("skill-detail-drawer")).toBeInTheDocument();
+    });
+    expect(screen.getByText("drawer-row:claude-code::plugin::publisher-a::alpha-skill")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: /从 Claude Code 卸载 Alpha Skill/i,
+      })
+    ).not.toBeInTheDocument();
   });
 
   // ── Data Loading ──────────────────────────────────────────────────────────
