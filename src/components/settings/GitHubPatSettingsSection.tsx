@@ -3,14 +3,8 @@ import { useTranslation } from "react-i18next";
 import type { GitHubPatState, SecretStorageState } from "@/types";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
 
 type GitHubPatMessage = {
   type: "success" | "error";
@@ -51,19 +45,12 @@ export function GitHubPatSettingsSection({
   const storageTone = githubPatStorageTone(githubPatState.storageState);
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <KeyRound className="size-5 text-muted-foreground" />
-          <div>
-            <CardTitle>{t("settings.githubPatTitle")}</CardTitle>
-            <CardDescription className="mt-1">
-              {t("settings.githubPatDesc")}
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <SettingsCollapsibleCard
+      sectionId="github-pat"
+      title={t("settings.githubPatTitle")}
+      description={t("settings.githubPatDesc")}
+      icon={<KeyRound className="size-5 shrink-0 text-muted-foreground" />}
+    >
         <div className="space-y-4">
           <div>
             <label htmlFor="github-pat" className="mb-1 block text-xs text-muted-foreground">
@@ -158,8 +145,7 @@ export function GitHubPatSettingsSection({
             ) : null}
           </div>
         </div>
-      </CardContent>
-    </Card>
+    </SettingsCollapsibleCard>
   );
 }
 

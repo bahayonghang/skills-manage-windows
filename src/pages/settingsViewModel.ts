@@ -192,7 +192,7 @@ export function getNextAiProviderPatch(
         ? provider.regions[0]
         : aiSettings.region,
     customUrl: id === "custom" ? aiSettings.customUrl : "",
-    protocol: id === "custom" ? aiSettings.protocol : "",
+    protocol: id === "custom" ? aiSettings.protocol : provider?.defaultProtocol ?? "",
   };
 }
 

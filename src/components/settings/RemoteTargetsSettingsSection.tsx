@@ -2,15 +2,9 @@ import { Loader2, Pencil, Plus, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { Input } from "@/components/ui/input";
+import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
 import type { SshAuthMethod, TargetSummary } from "@/types";
 
 export type SshTargetFormState = {
@@ -109,19 +103,12 @@ export function RemoteTargetsSettingsSection({
   const { t } = useTranslation();
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Server className="size-5 text-muted-foreground" />
-          <div>
-            <CardTitle>{t("targets.title")}</CardTitle>
-            <CardDescription className="mt-1">
-              {t("targets.description")}
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <SettingsCollapsibleCard
+      sectionId="remote-targets"
+      title={t("targets.title")}
+      description={t("targets.description")}
+      icon={<Server className="size-5 shrink-0 text-muted-foreground" />}
+    >
         <div className="space-y-4">
           {targetMessage && (
             <p
@@ -175,8 +162,7 @@ export function RemoteTargetsSettingsSection({
             <p>{t("targets.sshKeyPathHelp")}</p>
           </div>
         </div>
-      </CardContent>
-    </Card>
+    </SettingsCollapsibleCard>
   );
 }
 

@@ -1082,6 +1082,8 @@
   },
   "settings": {
     "title": "Settings",
+    "expandSection": "Expand {{title}} section",
+    "collapseSection": "Collapse {{title}} section",
     "scanDirs": "Scan Directories",
     "scanDirsDesc": "Manage the list of directories scanned for skills. Built-in directories cannot be deleted.",
     "addDirectory": "Add Directory",
@@ -1171,6 +1173,8 @@
     "aiApiKeyActiveMissing": "not configured",
     "aiApiKeyActiveUnavailable": "secure storage unavailable",
     "aiApiKeyUsageHint": "This key is used for skill explanations and AI tag review.",
+    "aiApiKeyPlaceholder": "Enter API key",
+    "aiApiKeyReplacePlaceholder": "Enter a new key to replace the saved key",
     "aiApiKeyWillReplace": "Saving will replace the current {{provider}} key.",
     "aiApiKeyFingerprint": "Key fingerprint: {{fingerprint}}",
     "aiApiKeyConfiguredNoReveal": "An AI API key is configured. Enter a new key here only when you want to replace it; the saved key is not revealed.",

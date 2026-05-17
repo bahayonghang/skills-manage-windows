@@ -3,13 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -73,19 +67,12 @@ export function AiSettingsSection({
   const canRevealNewApiKeyInput = !aiControlsDisabled && hasNewApiKeyInput;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Bot className="size-5 text-muted-foreground" />
-          <div>
-            <CardTitle>{t("settings.aiProviderTitle")}</CardTitle>
-            <CardDescription className="mt-1">
-              {t("settings.aiProviderDesc")}
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <SettingsCollapsibleCard
+      sectionId="ai-provider"
+      title={t("settings.aiProviderTitle")}
+      description={t("settings.aiProviderDesc")}
+      icon={<Bot className="size-5 shrink-0 text-muted-foreground" />}
+    >
         <div className="space-y-4">
           <div>
             <div id="settings-ai-provider-label" className="text-xs text-muted-foreground mb-2">
@@ -141,7 +128,11 @@ export function AiSettingsSection({
               <Input
                 id="settings-ai-api-key"
                 type={showApiKey ? "text" : "password"}
-                placeholder="sk-..."
+                placeholder={
+                  aiApiKeyState.configured
+                    ? t("settings.aiApiKeyReplacePlaceholder")
+                    : t("settings.aiApiKeyPlaceholder")
+                }
                 value={aiSettings.apiKey}
                 className="pr-10"
                 disabled={aiControlsDisabled}
@@ -273,8 +264,7 @@ export function AiSettingsSection({
             />
           )}
         </div>
-      </CardContent>
-    </Card>
+    </SettingsCollapsibleCard>
   );
 }
 

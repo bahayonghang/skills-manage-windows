@@ -2,14 +2,8 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
 import { Switch } from "@/components/ui/switch";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import {
@@ -53,16 +47,11 @@ export function PlatformVisibilitySettingsSection({
   const { t } = useTranslation();
 
   return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>{t("settings.platformVisibility")}</CardTitle>
-          <CardDescription className="mt-1">
-            {t("settings.platformVisibilityDesc")}
-          </CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <SettingsCollapsibleCard
+      sectionId="platform-visibility"
+      title={t("settings.platformVisibility")}
+      description={t("settings.platformVisibilityDesc")}
+    >
         <div className="space-y-4">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -104,8 +93,7 @@ export function PlatformVisibilitySettingsSection({
             ))
           )}
         </div>
-      </CardContent>
-    </Card>
+    </SettingsCollapsibleCard>
   );
 }
 

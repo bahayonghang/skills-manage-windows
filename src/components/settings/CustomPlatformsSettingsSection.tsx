@@ -2,14 +2,8 @@ import { Cpu, Pencil, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
+import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
 import { formatPathForDisplay } from "@/lib/path";
 import type { AgentWithStatus } from "@/types";
 
@@ -33,28 +27,22 @@ export function CustomPlatformsSettingsSection({
   const { t } = useTranslation();
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>{t("settings.customPlatforms")}</CardTitle>
-            <CardDescription className="mt-1">
-              {t("settings.customPlatformsDesc")}
-            </CardDescription>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onAddPlatform}
-            aria-label={t("settings.addPlatformAriaLabel")}
-          >
-            <Plus className="size-3.5" />
-            <span>{t("settings.addPlatform")}</span>
-          </Button>
-        </div>
-      </CardHeader>
-
-      <CardContent>
+    <SettingsCollapsibleCard
+      sectionId="custom-platforms"
+      title={t("settings.customPlatforms")}
+      description={t("settings.customPlatformsDesc")}
+      action={
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onAddPlatform}
+          aria-label={t("settings.addPlatformAriaLabel")}
+        >
+          <Plus className="size-3.5" />
+          <span>{t("settings.addPlatform")}</span>
+        </Button>
+      }
+    >
         {platformError && (
           <p className="text-xs text-destructive mb-3" role="alert">
             {platformError}
@@ -78,8 +66,7 @@ export function CustomPlatformsSettingsSection({
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </SettingsCollapsibleCard>
   );
 }
 

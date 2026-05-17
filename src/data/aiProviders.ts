@@ -32,6 +32,7 @@ export interface AiProvider {
   regions: RegionId[]; // which regions are supported
   endpoints: Partial<Record<RegionId, string>>; // API base URL per region
   defaultModel: string;
+  defaultProtocol?: ApiProtocol;
 }
 
 export const AI_PROVIDERS: AiProvider[] = [
@@ -93,9 +94,10 @@ export const AI_PROVIDERS: AiProvider[] = [
     name: { zh: "OpenRouter", en: "OpenRouter" },
     regions: ["intl"],
     endpoints: {
-      intl: "https://openrouter.ai/api/v1/messages",
+      intl: "https://openrouter.ai/api/v1/chat/completions",
     },
     defaultModel: "anthropic/claude-sonnet-4.6",
+    defaultProtocol: "openai",
   },
   {
     id: "custom",

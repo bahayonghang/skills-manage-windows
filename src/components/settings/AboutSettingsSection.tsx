@@ -2,12 +2,7 @@ import { Database, Droplets, Globe, Info, Palette } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
 import i18n from "@/i18n";
 import type { CatppuccinAccent, ThemeFlavor } from "@/stores/themeStore";
 
@@ -41,11 +36,7 @@ export function AboutSettingsSection({
   const { t } = useTranslation();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("settings.about")}</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <SettingsCollapsibleCard sectionId="about" title={t("settings.about")}>
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <Info className="size-4 text-muted-foreground shrink-0" />
@@ -152,7 +143,6 @@ export function AboutSettingsSection({
             </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+    </SettingsCollapsibleCard>
   );
 }

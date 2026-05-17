@@ -2,14 +2,8 @@ import { FolderOpen, Loader2, Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
+import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
 import { Switch } from "@/components/ui/switch";
 import { formatPathForDisplay } from "@/lib/path";
 import type { ScanDirectory } from "@/types";
@@ -42,25 +36,22 @@ export function ScanDirectoriesSettingsSection({
   const builtinDirs = scanDirectories.filter((dir) => dir.is_builtin);
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>{t("settings.scanDirs")}</CardTitle>
-            <CardDescription className="mt-1">{t("settings.scanDirsDesc")}</CardDescription>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onAddDirectory}
-            aria-label={t("settings.addDirAriaLabel")}
-          >
-            <Plus className="size-3.5" />
-            <span>{t("settings.addDirectory")}</span>
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <SettingsCollapsibleCard
+      sectionId="scan-directories"
+      title={t("settings.scanDirs")}
+      description={t("settings.scanDirsDesc")}
+      action={
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onAddDirectory}
+          aria-label={t("settings.addDirAriaLabel")}
+        >
+          <Plus className="size-3.5" />
+          <span>{t("settings.addDirectory")}</span>
+        </Button>
+      }
+    >
         {scanDirError && (
           <p className="text-xs text-destructive mb-3" role="alert">
             {scanDirError}
@@ -118,8 +109,7 @@ export function ScanDirectoriesSettingsSection({
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </SettingsCollapsibleCard>
   );
 }
 

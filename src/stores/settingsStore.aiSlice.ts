@@ -137,6 +137,14 @@ function scopedValue(
   return values[providerScopedSettingKey(name, providerId)] ?? values[name];
 }
 
+function normalizeProviderApiUrl(providerId: string, value: string): string {
+  const normalized = value.trim().replace(/\/+$/, "");
+  if (providerId === "openrouter" && normalized === "https://openrouter.ai/api/v1/messages") {
+    return "https://openrouter.ai/api/v1/chat/completions";
+  }
+  return value;
+}
+
 function normalizeAiSettings(values: Record<string, string | null | undefined>): AiSettings {
   const provider = values.ai_provider || DEFAULT_AI_SETTINGS.provider;
   const providerMeta = AI_PROVIDERS.find((item) => item.id === provider);
@@ -145,7 +153,9 @@ function normalizeAiSettings(values: Record<string, string | null | undefined>):
     scopedValue(values, provider, "ai_custom_base_url") ??
     scopedValue(values, provider, "ai_api_url") ??
     DEFAULT_AI_SETTINGS.customUrl;
-  const protocol = normalizeApiProtocol(scopedValue(values, provider, "ai_protocol"));
+  const protocol =
+    providerMeta?.defaultProtocol ??
+    normalizeApiProtocol(scopedValue(values, provider, "ai_protocol"));
 
   return {
     provider,
@@ -155,8 +165,8 @@ function normalizeAiSettings(values: Record<string, string | null | undefined>):
       scopedValue(values, provider, "ai_model") ??
       providerMeta?.defaultModel ??
       DEFAULT_AI_SETTINGS.model,
-    customUrl,
-    protocol,
+    customUrl: normalizeProviderApiUrl(provider, customUrl),
+    protocol: protocol || DEFAULT_AI_SETTINGS.protocol,
     tagConcurrency: values.ai_tag_concurrency ?? DEFAULT_AI_SETTINGS.tagConcurrency,
     tagIntervalMs: values.ai_tag_interval_ms ?? DEFAULT_AI_SETTINGS.tagIntervalMs,
     tagStopOnRateLimit:

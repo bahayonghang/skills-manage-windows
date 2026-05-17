@@ -543,6 +543,91 @@ describe("settingsStore", () => {
     });
   });
 
+  it("switchAiProvider uses OpenRouter OpenAI-compatible defaults", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({
+        configured: false,
+        storageState: "missing",
+        fingerprint: null,
+        provider: "openrouter",
+        error: null,
+      })
+      .mockResolvedValueOnce(undefined);
+    useSettingsStore.setState({
+      aiSettingsLoaded: true,
+      aiRawSettings: {},
+      aiSettings: {
+        provider: "claude",
+        region: "intl",
+        apiKey: "",
+        model: "claude-sonnet-4-20250514",
+        customUrl: "",
+        protocol: "",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+    });
+
+    await useSettingsStore.getState().switchAiProvider("openrouter");
+
+    expect(useSettingsStore.getState().aiSettings).toMatchObject({
+      provider: "openrouter",
+      region: "intl",
+      model: "anthropic/claude-sonnet-4.6",
+      protocol: "openai",
+    });
+    expect(invoke).toHaveBeenNthCalledWith(2, "set_settings", {
+      values: expect.objectContaining({
+        ai_provider: "openrouter",
+        ai_api_url__openrouter: "https://openrouter.ai/api/v1/chat/completions",
+        ai_protocol__openrouter: "openai",
+      }),
+    });
+  });
+
+  it("normalizes the legacy OpenRouter messages endpoint to chat completions", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({
+        ai_provider: "openrouter",
+        ai_api_url__openrouter: "https://openrouter.ai/api/v1/messages",
+      })
+      .mockResolvedValueOnce({
+        configured: false,
+        storageState: "missing",
+        fingerprint: null,
+        provider: "openrouter",
+        error: null,
+      });
+
+    await useSettingsStore.getState().loadAiSettings();
+
+    expect(useSettingsStore.getState().aiSettings).toMatchObject({
+      provider: "openrouter",
+      customUrl: "https://openrouter.ai/api/v1/chat/completions",
+      protocol: "openai",
+    });
+  });
+
+  it("forces OpenRouter to OpenAI protocol even with legacy scoped protocol", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({
+        ai_provider: "openrouter",
+        ai_protocol__openrouter: "anthropic",
+      })
+      .mockResolvedValueOnce({
+        configured: false,
+        storageState: "missing",
+        fingerprint: null,
+        provider: "openrouter",
+        error: null,
+      });
+
+    await useSettingsStore.getState().loadAiSettings();
+
+    expect(useSettingsStore.getState().aiSettings.protocol).toBe("openai");
+  });
+
   it("serializes custom base URL separately from resolved OpenAI URL", async () => {
     vi.mocked(invoke).mockResolvedValueOnce(undefined);
     useSettingsStore.setState({

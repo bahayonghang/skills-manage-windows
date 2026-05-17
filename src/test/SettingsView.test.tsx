@@ -339,6 +339,7 @@ function renderSettingsView() {
 describe("SettingsView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.removeItem("settings.sectionCollapsed.v1");
     vi.mocked(invoke).mockResolvedValue(null);
   });
 
@@ -411,6 +412,8 @@ describe("SettingsView", () => {
     expect(screen.getByText("已保存到安全存储")).toBeTruthy();
     expect(screen.getByText(/已配置 AI API Key/)).toBeTruthy();
     expect(screen.getByLabelText("API Key")).toHaveValue("");
+    expect(screen.getByPlaceholderText("输入新 Key 以替换已保存 Key")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("sk-...")).toBeNull();
     const revealButton = screen.getByLabelText("已保存的 API Key 被隐藏，不能在这里查看");
     expect(revealButton).toBeDisabled();
     expect(revealButton.querySelector("svg")).toBeTruthy();
@@ -482,6 +485,21 @@ describe("SettingsView", () => {
     expect(screen.getByText("https://proxy.example.com/v1/chat/completions")).toBeTruthy();
   });
 
+  it("resolves OpenRouter as OpenAI-compatible chat completions", () => {
+    setupMocks({
+      aiSettings: {
+        ...defaultAiSettings,
+        provider: "openrouter",
+        model: "anthropic/claude-sonnet-4.6",
+        protocol: "openai",
+      },
+    });
+    renderSettingsView();
+
+    expect(screen.getByText("https://openrouter.ai/api/v1/chat/completions")).toBeTruthy();
+    expect(screen.queryByText("https://openrouter.ai/api/v1/messages")).toBeNull();
+  });
+
   it("clears the AI API key through the secure-storage action", async () => {
     const clearAiApiKey = vi.fn().mockResolvedValue(undefined);
     setupMocks({
@@ -509,6 +527,37 @@ describe("SettingsView", () => {
     expect(screen.getByText("自定义平台")).toBeTruthy();
     expect(screen.getByText("平台可见性")).toBeTruthy();
     expect(screen.getByText("关于")).toBeTruthy();
+  });
+
+  it("persists collapsed settings sections in localStorage", () => {
+    setupMocks();
+    const { unmount } = renderSettingsView();
+    const scanToggle = screen.getByRole("button", { name: "折叠 扫描目录 栏目" });
+
+    expect(scanToggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("暂无扫描目录")).toBeTruthy();
+
+    fireEvent.click(scanToggle);
+
+    expect(screen.queryByText("暂无扫描目录")).toBeNull();
+    expect(window.localStorage.getItem("settings.sectionCollapsed.v1")).toBe(
+      JSON.stringify({ "scan-directories": true })
+    );
+
+    unmount();
+    setupMocks();
+    renderSettingsView();
+
+    const restoredToggle = screen.getByRole("button", { name: "展开 扫描目录 栏目" });
+    expect(restoredToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("暂无扫描目录")).toBeNull();
+
+    fireEvent.click(restoredToggle);
+
+    expect(screen.getByText("暂无扫描目录")).toBeTruthy();
+    expect(window.localStorage.getItem("settings.sectionCollapsed.v1")).toBe(
+      JSON.stringify({ "scan-directories": false })
+    );
   });
 
   it("renders the repository url in about", () => {
