@@ -2,6 +2,7 @@ use crate::db::{self, DbPool};
 use crate::secrets::{SecretStorageState, SecretStore, AI_API_KEY_SECRET_KEY};
 use serde::Serialize;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 
 const LEGACY_AI_API_KEY_SETTING_KEY: &str = AI_API_KEY_SECRET_KEY;
 const DEFAULT_AI_PROVIDER: &str = "claude";
@@ -14,12 +15,40 @@ pub struct AiApiKeyState {
     pub configured: bool,
     pub storage_state: SecretStorageState,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
 fn normalize_ai_api_key(value: impl AsRef<str>) -> Option<String> {
     let token = value.as_ref().trim().to_string();
     (!token.is_empty()).then_some(token)
+}
+
+fn fingerprint_for_token(value: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let digest = Sha256::digest(value.as_bytes());
+    let mut prefix = String::with_capacity(8);
+    for byte in digest.iter().take(4) {
+        prefix.push(HEX[(byte >> 4) as usize] as char);
+        prefix.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    format!("sha256:{prefix}")
+}
+
+fn secret_fingerprint(
+    secrets: &dyn SecretStore,
+    key: &str,
+    action: &str,
+) -> Result<Option<String>, String> {
+    secrets
+        .get(key)
+        .map_err(|error| map_secret_error(action, error))
+        .map(|value| {
+            value
+                .and_then(normalize_ai_api_key)
+                .map(|token| fingerprint_for_token(&token))
+        })
 }
 
 fn normalize_provider(provider: Option<&str>) -> &str {
@@ -320,11 +349,17 @@ pub async fn get_ai_api_key_state_impl(
 
     match available_secret_state(secrets, &key, "inspect") {
         Ok(Some(storage_state)) => {
+            let (fingerprint, fingerprint_error) =
+                match secret_fingerprint(secrets, &key, "fingerprint") {
+                    Ok(fingerprint) => (fingerprint, None),
+                    Err(error) => (None, Some(error)),
+                };
             return Ok(AiApiKeyState {
                 provider: provider_id,
                 configured: true,
                 storage_state,
-                error: migration_error,
+                fingerprint,
+                error: migration_error.or(fingerprint_error),
             });
         }
         Ok(None) => {}
@@ -333,11 +368,17 @@ pub async fn get_ai_api_key_state_impl(
 
     match available_secret_state(secrets, AI_API_KEY_SECRET_KEY, "inspect legacy") {
         Ok(Some(storage_state)) => {
+            let (fingerprint, fingerprint_error) =
+                match secret_fingerprint(secrets, AI_API_KEY_SECRET_KEY, "fingerprint legacy") {
+                    Ok(fingerprint) => (fingerprint, None),
+                    Err(error) => (None, Some(error)),
+                };
             return Ok(AiApiKeyState {
                 provider: provider_id,
                 configured: true,
                 storage_state,
-                error: migration_error,
+                fingerprint,
+                error: migration_error.or(fingerprint_error),
             });
         }
         Ok(None) => {}
@@ -347,11 +388,19 @@ pub async fn get_ai_api_key_state_impl(
     };
 
     let legacy_token = legacy_ai_api_key_from_settings(pool).await?;
-    if legacy_token.is_some() {
+    if let Some(token) = legacy_token.as_deref() {
         if let Some(error) =
             migrate_ai_api_key_to_provider_secret_store(pool, secrets, &provider_id).await?
         {
             migration_error = migration_error.or(Some(error));
+        } else if let Ok(Some(storage_state)) = available_secret_state(secrets, &key, "inspect") {
+            return Ok(AiApiKeyState {
+                provider: provider_id,
+                configured: true,
+                storage_state,
+                fingerprint: Some(fingerprint_for_token(token)),
+                error: migration_error,
+            });
         }
     }
     Ok(AiApiKeyState {
@@ -362,6 +411,10 @@ pub async fn get_ai_api_key_state_impl(
         } else {
             SecretStorageState::Missing
         },
+        fingerprint: legacy_token
+            .as_deref()
+            .map(fingerprint_for_token)
+            .filter(|_| state_error.is_none()),
         error: migration_error.or(state_error),
     })
 }
@@ -400,6 +453,7 @@ pub async fn set_ai_api_key_impl(
         provider: provider_id,
         configured: true,
         storage_state,
+        fingerprint: Some(fingerprint_for_token(&token)),
         error: None,
     })
 }
@@ -423,6 +477,7 @@ pub async fn clear_ai_api_key_impl(
         provider: provider_id,
         configured: false,
         storage_state: SecretStorageState::Missing,
+        fingerprint: None,
         error: None,
     })
 }
@@ -527,6 +582,8 @@ mod tests {
 
         assert!(state.configured);
         assert_eq!(state.provider, DEFAULT_AI_PROVIDER);
+        assert_eq!(state.storage_state, SecretStorageState::Stored);
+        assert_eq!(state.fingerprint.as_deref(), Some("sha256:8da9a7ef"));
         assert_eq!(
             secrets
                 .get("ai_api_key__claude")
@@ -547,6 +604,15 @@ mod tests {
                 .unwrap(),
             None
         );
+
+        let state = get_ai_api_key_state_impl(&pool, &secrets, Some("claude"))
+            .await
+            .unwrap();
+
+        assert!(state.configured);
+        assert_eq!(state.provider, DEFAULT_AI_PROVIDER);
+        assert_eq!(state.storage_state, SecretStorageState::Stored);
+        assert_eq!(state.fingerprint.as_deref(), Some("sha256:8da9a7ef"));
     }
 
     #[tokio::test]
@@ -571,6 +637,7 @@ mod tests {
                 .unwrap();
 
         assert_eq!(state.provider, "deepseek");
+        assert_eq!(state.fingerprint.as_deref(), Some("sha256:bc63eb80"));
         assert_eq!(
             secrets
                 .get("ai_api_key__deepseek")
@@ -592,6 +659,34 @@ mod tests {
                 .as_deref(),
             Some("sk-deepseek")
         );
+    }
+
+    #[tokio::test]
+    async fn clear_ai_api_key_removes_fingerprint() {
+        let pool = setup_test_db().await;
+        let secrets = MockSecretStore::default();
+        let state = set_ai_api_key_impl(&pool, &secrets, "sk-new".to_string(), Some("openrouter"))
+            .await
+            .unwrap();
+
+        assert_eq!(state.provider, "openrouter");
+        assert_eq!(state.fingerprint.as_deref(), Some("sha256:8da9a7ef"));
+
+        let state = clear_ai_api_key_impl(&pool, &secrets, Some("openrouter"))
+            .await
+            .unwrap();
+
+        assert_eq!(state.provider, "openrouter");
+        assert!(!state.configured);
+        assert_eq!(state.storage_state, SecretStorageState::Missing);
+        assert_eq!(state.fingerprint, None);
+
+        let state = get_ai_api_key_state_impl(&pool, &secrets, Some("openrouter"))
+            .await
+            .unwrap();
+
+        assert!(!state.configured);
+        assert_eq!(state.fingerprint, None);
     }
 
     #[tokio::test]
