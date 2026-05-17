@@ -207,6 +207,7 @@ function setupMocks({
     ({
       configured: false,
       storageState: "missing",
+      fingerprint: null,
       error: null,
     } satisfies AiApiKeyState);
 
@@ -390,11 +391,62 @@ describe("SettingsView", () => {
 
   it("shows configured AI API key status without revealing the saved key", () => {
     setupMocks({
-      aiApiKeyState: { configured: true, storageState: "stored", error: null },
+      aiApiKeyState: {
+        provider: "openrouter",
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:abcd1234",
+        error: null,
+      },
+      aiSettings: {
+        ...defaultAiSettings,
+        provider: "openrouter",
+        model: "openrouter/auto",
+      },
     });
     renderSettingsView();
+    expect(screen.getByText("当前 OpenRouter Key：已配置")).toBeTruthy();
+    expect(screen.getByText("此 Key 将用于技能解释和 AI 标注复核。")).toBeTruthy();
+    expect(screen.getByText("Key 指纹：sha256:abcd1234")).toBeTruthy();
     expect(screen.getByText("已保存到安全存储")).toBeTruthy();
     expect(screen.getByText(/已配置 AI API Key/)).toBeTruthy();
+    expect(screen.getByLabelText("API Key")).toHaveValue("");
+    const revealButton = screen.getByLabelText("已保存的 API Key 被隐藏，不能在这里查看");
+    expect(revealButton).toBeDisabled();
+    expect(revealButton.querySelector("svg")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "测试当前 Key" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "清除 Key" })).toBeEnabled();
+  });
+
+  it("enables the AI API key eye button only for the current input", () => {
+    const updateAiSettings = vi.fn();
+    setupMocks({
+      aiSettings: {
+        ...defaultAiSettings,
+        apiKey: "sk-new-input",
+        provider: "openrouter",
+      },
+      aiApiKeyState: {
+        provider: "openrouter",
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:abcd1234",
+        error: null,
+      },
+      updateAiSettings,
+    });
+    renderSettingsView();
+
+    expect(screen.getByText("保存后将替换当前 OpenRouter Key。")).toBeTruthy();
+    const input = screen.getByLabelText("API Key");
+    expect(input).toHaveAttribute("type", "password");
+    const revealButton = screen.getByRole("button", { name: "显示本次输入的 Key" });
+    expect(revealButton).toBeEnabled();
+
+    fireEvent.click(revealButton);
+
+    expect(input).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "隐藏本次输入的 Key" })).toBeTruthy();
   });
 
   it("switches AI provider through the provider-scoped store action", async () => {
@@ -434,7 +486,12 @@ describe("SettingsView", () => {
     const clearAiApiKey = vi.fn().mockResolvedValue(undefined);
     setupMocks({
       clearAiApiKey,
-      aiApiKeyState: { configured: true, storageState: "stored", error: null },
+      aiApiKeyState: {
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:oldkey12",
+        error: null,
+      },
     });
     renderSettingsView();
 

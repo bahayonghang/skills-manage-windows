@@ -84,5 +84,6 @@ export interface AiApiKeyState {
   provider?: string | null;
   configured: boolean;
   storageState: SecretStorageState;
+  fingerprint?: string | null;
   error?: string | null;
 }

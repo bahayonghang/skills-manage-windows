@@ -356,6 +356,8 @@ describe("settingsStore", () => {
       .mockResolvedValueOnce({
         configured: true,
         storageState: "stored",
+        fingerprint: "sha256:1234abcd",
+        provider: "glm",
         error: null,
       });
 
@@ -385,13 +387,23 @@ describe("settingsStore", () => {
       tagStopOnRateLimit: false,
     });
     expect(useSettingsStore.getState().aiApiKeyState.configured).toBe(true);
+    expect(useSettingsStore.getState().aiApiKeyState).toMatchObject({
+      provider: "glm",
+      fingerprint: "sha256:1234abcd",
+    });
     expect(invoke).toHaveBeenCalledWith("get_ai_api_key_state", { provider: "glm" });
   });
 
   it("debounces rapid AI setting edits into one batch save", async () => {
     vi.useFakeTimers();
     vi.mocked(invoke)
-      .mockResolvedValueOnce({ configured: true, storageState: "stored", error: null })
+      .mockResolvedValueOnce({
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:savedabc",
+        provider: "claude",
+        error: null,
+      })
       .mockResolvedValueOnce(undefined);
     useSettingsStore.setState({
       aiSettingsLoaded: true,
@@ -430,11 +442,21 @@ describe("settingsStore", () => {
       }),
     });
     expect(useSettingsStore.getState().aiSettings.apiKey).toBe("");
+    expect(useSettingsStore.getState().aiApiKeyState).toMatchObject({
+      configured: true,
+      fingerprint: "sha256:savedabc",
+    });
   });
 
   it("flushes AI settings before testing the connection", async () => {
     vi.mocked(invoke)
-      .mockResolvedValueOnce({ configured: true, storageState: "stored", error: null })
+      .mockResolvedValueOnce({
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:testabcd",
+        provider: "claude",
+        error: null,
+      })
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ ok: true, msg: "OK" });
     useSettingsStore.setState({
@@ -463,11 +485,19 @@ describe("settingsStore", () => {
       values: expect.not.objectContaining({ ai_api_key: expect.any(String) }),
     });
     expect(invoke).toHaveBeenNthCalledWith(3, "test_ai_connection");
+    expect(useSettingsStore.getState().aiSettings.apiKey).toBe("");
+    expect(useSettingsStore.getState().aiApiKeyState.fingerprint).toBe("sha256:testabcd");
   });
 
   it("switchAiProvider restores scoped settings and reads scoped key state", async () => {
     vi.mocked(invoke)
-      .mockResolvedValueOnce({ configured: true, storageState: "stored", error: null })
+      .mockResolvedValueOnce({
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:deepabcd",
+        provider: "deepseek",
+        error: null,
+      })
       .mockResolvedValueOnce(undefined);
     useSettingsStore.setState({
       aiSettingsLoaded: true,
@@ -498,6 +528,11 @@ describe("settingsStore", () => {
       region: "cn",
       model: "deepseek-v4-flash",
       protocol: "",
+    });
+    expect(useSettingsStore.getState().aiApiKeyState).toMatchObject({
+      provider: "deepseek",
+      configured: true,
+      fingerprint: "sha256:deepabcd",
     });
     expect(invoke).toHaveBeenNthCalledWith(1, "get_ai_api_key_state", { provider: "deepseek" });
     expect(invoke).toHaveBeenNthCalledWith(2, "set_settings", {
@@ -538,11 +573,17 @@ describe("settingsStore", () => {
 
   it("clearAiApiKey clears the secure AI key state without touching other settings", async () => {
     useSettingsStore.setState({
-      aiApiKeyState: { configured: true, storageState: "stored", error: null },
+      aiApiKeyState: {
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:oldkey12",
+        error: null,
+      },
     });
     vi.mocked(invoke).mockResolvedValueOnce({
       configured: false,
       storageState: "missing",
+      fingerprint: null,
       error: null,
     });
 
@@ -550,6 +591,7 @@ describe("settingsStore", () => {
 
     expect(invoke).toHaveBeenCalledWith("clear_ai_api_key", { provider: "claude" });
     expect(useSettingsStore.getState().aiApiKeyState.configured).toBe(false);
+    expect(useSettingsStore.getState().aiApiKeyState.fingerprint).toBeNull();
     expect(useSettingsStore.getState().aiSettings.apiKey).toBe("");
   });
 });

@@ -1,4 +1,4 @@
-import { Bot, ChevronDown, ChevronRight, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Bot, ChevronDown, ChevronRight, Eye, EyeOff, Loader2, LockKeyhole } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -21,6 +21,7 @@ import {
   type RegionId,
 } from "@/data/aiProviders";
 import { formatBackendError } from "@/lib/backendError";
+import type { TFunction } from "i18next";
 import type {
   AiConnectionTestResult,
   AiSaveStatus,
@@ -66,7 +67,10 @@ export function AiSettingsSection({
   const { t } = useTranslation();
   const [showApiKey, setShowApiKey] = useState(false);
   const currentProvider = AI_PROVIDERS.find((provider) => provider.id === aiSettings.provider);
+  const currentProviderLabel = currentProvider ? t(currentProvider.labelKey) : aiSettings.provider;
   const aiControlsDisabled = isLoadingAiSettings || aiSaveStatus === "saving";
+  const hasNewApiKeyInput = aiSettings.apiKey.trim().length > 0;
+  const canRevealNewApiKeyInput = !aiControlsDisabled && hasNewApiKeyInput;
 
   return (
     <Card>
@@ -115,6 +119,24 @@ export function AiSettingsSection({
             <label htmlFor="settings-ai-api-key" className="text-xs text-muted-foreground mb-1 block">
               {t("settings.aiApiKeyLabel")}
             </label>
+            <div className="mb-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+              <div className="text-xs font-medium text-foreground">
+                {t("settings.aiApiKeyActiveState", {
+                  provider: currentProviderLabel,
+                  state: getAiApiKeyActiveStateLabel(t, aiApiKeyState),
+                })}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("settings.aiApiKeyUsageHint")}
+              </p>
+              {aiApiKeyState.configured && aiApiKeyState.fingerprint ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("settings.aiApiKeyFingerprint", {
+                    fingerprint: aiApiKeyState.fingerprint,
+                  })}
+                </p>
+              ) : null}
+            </div>
             <div className="relative">
               <Input
                 id="settings-ai-api-key"
@@ -128,13 +150,30 @@ export function AiSettingsSection({
               <button
                 type="button"
                 className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-50"
-                disabled={aiControlsDisabled || !aiSettings.apiKey}
-                aria-label={showApiKey ? t("settings.aiApiKeyHide") : t("settings.aiApiKeyShow")}
+                disabled={!canRevealNewApiKeyInput}
+                aria-label={
+                  hasNewApiKeyInput
+                    ? showApiKey
+                      ? t("settings.aiApiKeyHide")
+                      : t("settings.aiApiKeyShow")
+                    : t("settings.aiApiKeySavedHidden")
+                }
                 onClick={() => setShowApiKey((value) => !value)}
               >
-                {showApiKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                {!hasNewApiKeyInput && aiApiKeyState.configured ? (
+                  <LockKeyhole className="size-4" />
+                ) : showApiKey ? (
+                  <EyeOff className="size-4" />
+                ) : (
+                  <Eye className="size-4" />
+                )}
               </button>
             </div>
+            {hasNewApiKeyInput ? (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                {t("settings.aiApiKeyWillReplace", { provider: currentProviderLabel })}
+              </p>
+            ) : null}
             {aiApiKeyState.configured && !aiSettings.apiKey ? (
               <p className="mt-1 text-xs text-muted-foreground">
                 {t("settings.aiApiKeyConfiguredNoReveal")}
@@ -251,6 +290,18 @@ function secretStorageTone(state: SecretStorageState) {
     default:
       return "bg-muted text-muted-foreground";
   }
+}
+
+function getAiApiKeyActiveStateLabel(
+  t: TFunction,
+  aiApiKeyState: AiApiKeyState
+) {
+  if (aiApiKeyState.storageState === "unreadable") {
+    return t("settings.aiApiKeyActiveUnavailable");
+  }
+  return aiApiKeyState.configured
+    ? t("settings.aiApiKeyActiveConfigured")
+    : t("settings.aiApiKeyActiveMissing");
 }
 
 interface AiRegionPickerProps {

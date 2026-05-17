@@ -95,6 +95,7 @@ const AI_SAVE_DEBOUNCE_MS = 800;
 const BROWSER_FIXTURE_AI_API_KEY_STATE: AiApiKeyState = {
   configured: false,
   storageState: "missing",
+  fingerprint: null,
   error: null,
 };
 
@@ -206,6 +207,7 @@ export function createAiSettingsInitialState(): AiSettingsSliceState {
     aiApiKeyState: {
       configured: false,
       storageState: "missing",
+      fingerprint: null,
       error: null,
     },
     aiSettingsLoaded: false,
@@ -399,7 +401,7 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
               ...serializeAiSettings(settings),
             },
             aiApiKeyState: settings.apiKey.trim()
-              ? { configured: true, storageState: "session", error: null }
+              ? { configured: true, storageState: "session", fingerprint: null, error: null }
               : get().aiApiKeyState,
             aiSaveStatus: "saved",
             aiSaveError: null,
