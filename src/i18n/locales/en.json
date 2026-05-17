@@ -33,7 +33,8 @@
     "filePath": "File path",
     "skillCardLinkedSummary": "Linked {{count}}",
     "skillCardLinkedSummaryNone": "No installs",
-    "skillCardMoreActions": "More actions"
+    "skillCardMoreActions": "More actions",
+    "aiSummaryLabel": "AI summary"
   },
   "backendErrors": {
     "ai": {

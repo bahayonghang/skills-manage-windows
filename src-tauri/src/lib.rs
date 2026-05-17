@@ -411,6 +411,7 @@ pub fn run() {
             commands::marketplace::explain_skill,
             commands::marketplace::test_ai_connection,
             commands::marketplace::get_skill_explanation,
+            commands::marketplace::get_skill_explanation_summaries,
             commands::marketplace::explain_skill_stream,
             commands::marketplace::refresh_skill_explanation,
             commands::portable_state::export_skillport_state,

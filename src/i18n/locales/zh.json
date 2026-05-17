@@ -33,7 +33,8 @@
     "filePath": "文件路径",
     "skillCardLinkedSummary": "已链接 {{count}}",
     "skillCardLinkedSummaryNone": "未安装",
-    "skillCardMoreActions": "更多操作"
+    "skillCardMoreActions": "更多操作",
+    "aiSummaryLabel": "AI 摘要"
   },
   "backendErrors": {
     "ai": {

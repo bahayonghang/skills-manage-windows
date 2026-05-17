@@ -1,10 +1,11 @@
-import type { RefObject } from "react";
+import { useMemo, type RefObject } from "react";
 import type { TFunction } from "i18next";
 
 import { CentralSkillEmptyState, CentralSkillFirstVisitEmptyState } from "@/components/central/CentralSkillEmptyStates";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
+import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type {
   CentralSkillUpdateState,
@@ -54,12 +55,19 @@ export function CentralSkillListContent({
   updateStatuses: Record<string, CentralSkillUpdateState>;
   updatingSkillIds: string[];
 }) {
+  const summarySkillIds = useMemo(
+    () => sortedSkills.map((skill) => skill.id),
+    [sortedSkills]
+  );
+  const aiSummaries = useSkillExplanationSummaries(summarySkillIds, "zh");
+
   function renderSearchResult(skill: SkillWithLinks) {
     return (
       <UnifiedSkillCard
         key={skill.id}
         name={skill.name}
         description={skill.description}
+        aiSummary={aiSummaries[skill.id]}
         checkbox={{
           checked: selectedSkillIdSet.has(skill.id),
           onChange: () => onToggleSelection(skill.id),
@@ -91,6 +99,7 @@ export function CentralSkillListContent({
         key={skill.id}
         name={skill.name}
         description={skill.description}
+        aiSummary={aiSummaries[skill.id]}
         checkbox={{
           checked: selectedSkillIdSet.has(skill.id),
           onChange: () => onToggleSelection(skill.id),

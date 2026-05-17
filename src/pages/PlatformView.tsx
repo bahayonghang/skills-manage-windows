@@ -15,6 +15,7 @@ import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { DuplicatePlatformSkillsDialog } from "@/components/platform/DuplicatePlatformSkillsDialog";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
+import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { formatPathForDisplay } from "@/lib/path";
 import { cn } from "@/lib/utils";
 import { ScannedSkill, SkillWithLinks } from "@/types";
@@ -85,6 +86,10 @@ export function PlatformView() {
 
   function getSkillRowKey(skill: ScannedSkill) {
     return skill.row_id ?? skill.id;
+  }
+
+  function getSkillSummaryKeys(skill: ScannedSkill) {
+    return skill.row_id ? [skill.row_id, skill.id] : [skill.id];
   }
 
   const platformTargets = useMemo(
@@ -324,6 +329,15 @@ export function PlatformView() {
         skill.description?.toLowerCase().includes(q)
     );
   }, [sourceFilteredSkills, searchQuery]);
+  const summarySkillIds = useMemo(
+    () => filteredSkills.flatMap((skill) => getSkillSummaryKeys(skill)),
+    [filteredSkills]
+  );
+  const aiSummaries = useSkillExplanationSummaries(summarySkillIds, "zh");
+
+  function getAiSummary(skill: ScannedSkill) {
+    return (skill.row_id ? aiSummaries[skill.row_id] : undefined) ?? aiSummaries[skill.id];
+  }
 
   useEffect(() => {
     if (!drawerSkill) return;
@@ -498,6 +512,7 @@ export function PlatformView() {
                 key={getSkillRowKey(skill)}
                 name={skill.name}
                 description={skill.description}
+                aiSummary={getAiSummary(skill)}
                 sourceType={skill.link_type as "symlink" | "copy" | "native"}
                 originKind={skill.source_kind ?? null}
                 isReadOnly={skill.is_read_only ?? false}
@@ -536,6 +551,7 @@ export function PlatformView() {
                 key={getSkillRowKey(skill)}
                 name={skill.name}
                 description={skill.description}
+                aiSummary={getAiSummary(skill)}
                 sourceType={skill.link_type as "symlink" | "copy" | "native"}
                 originKind={skill.source_kind ?? null}
                 isReadOnly={skill.is_read_only ?? false}

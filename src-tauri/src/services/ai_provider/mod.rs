@@ -20,6 +20,8 @@ mod stream;
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashMap;
+
 pub use claude::AiConnectionTestResult;
 pub(crate) use config::resolve_ai_provider_config;
 #[cfg(test)]
@@ -82,6 +84,15 @@ pub async fn get_skill_explanation_impl(
     lang: String,
 ) -> Result<Option<String>, String> {
     cache::load_cached_skill_explanation(pool, &skill_id, &lang).await
+}
+
+/// Read cached explanations for many skills. Never triggers the AI provider.
+pub async fn get_skill_explanation_summaries_impl(
+    pool: &crate::db::DbPool,
+    skill_ids: Vec<String>,
+    lang: String,
+) -> Result<HashMap<String, String>, String> {
+    cache::load_cached_skill_explanation_summaries(pool, &skill_ids, &lang).await
 }
 
 /// Stream an AI-generated explanation. Cache hits are emitted as a single chunk

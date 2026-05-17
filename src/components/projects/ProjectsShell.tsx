@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
+import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { formatPathForDisplay } from "@/lib/path";
 import { groupProjectSkillsByPlatform } from "@/lib/projectSkillPlatformGroups";
 import {
@@ -363,7 +364,20 @@ function SkillPanel({
     : selectedTarget
       ? getProjectPlatformDisplayName(selectedTarget, t)
       : t("projects.otherPlatforms");
-  const visibleGroups = selectedGroup ? [selectedGroup] : [];
+  const visibleGroups = useMemo(
+    () => (selectedGroup ? [selectedGroup] : []),
+    [selectedGroup]
+  );
+  const centralSkillIds = useMemo(
+    () =>
+      visibleGroups.flatMap((group) =>
+        group.skills
+          .filter((skill) => skill.sourceOrigin === "central")
+          .map((skill) => skill.skillId)
+      ),
+    [visibleGroups]
+  );
+  const aiSummaries = useSkillExplanationSummaries(centralSkillIds, "zh");
 
   if (!project) {
     return (
@@ -507,6 +521,11 @@ function SkillPanel({
                           key={key}
                           name={skill.name}
                           description={skill.description ?? undefined}
+                          aiSummary={
+                            skill.sourceOrigin === "central"
+                              ? aiSummaries[skill.skillId]
+                              : undefined
+                          }
                           sourceType={linkSource}
                           originBadge={{
                             kind: sourceOrigin,

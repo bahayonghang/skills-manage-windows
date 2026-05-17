@@ -89,6 +89,8 @@ export interface UnifiedSkillCardProps {
   /** Core data — always required. */
   name: string;
   description?: string;
+  aiSummary?: string | null;
+  summaryLabel?: string;
   className?: string;
 
   /** Click the card itself (platform variant navigates to detail). */
@@ -151,6 +153,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   const {
     name,
     description,
+    aiSummary,
+    summaryLabel,
     className,
     onClick,
     checkbox,
@@ -195,6 +199,10 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     onInstall ||
     onRemove
   );
+  const trimmedAiSummary = aiSummary?.trim() ?? "";
+  const hasAiSummary = trimmedAiSummary.length > 0;
+  const summaryText = hasAiSummary ? trimmedAiSummary : description;
+  const resolvedSummaryLabel = summaryLabel ?? t("common.aiSummaryLabel");
 
   const targetAgents = useMemo(
     () => platformIcons?.agents.filter((a) => a.id !== "central") ?? [],
@@ -236,8 +244,11 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
           <div className="flex flex-1 items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="font-medium text-sm text-foreground truncate">{name}</div>
-              {description && (
-                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{description}</p>
+              {summaryText && (
+                <SkillCardSummary
+                  text={summaryText}
+                  label={hasAiSummary ? resolvedSummaryLabel : undefined}
+                />
               )}
               {sourceType && <SourceIndicator sourceType={sourceType} />}
             </div>
@@ -426,8 +437,11 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
           </div>
 
           {/* Row 2: Description — full width, not compressed by actions */}
-          {description && (
-            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{description}</p>
+          {summaryText && (
+            <SkillCardSummary
+              text={summaryText}
+              label={hasAiSummary ? resolvedSummaryLabel : undefined}
+            />
           )}
 
           {/* Row 3: Info badges */}
@@ -557,6 +571,25 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
 
 export const UnifiedSkillCard = memo(UnifiedSkillCardComponent);
 UnifiedSkillCard.displayName = "UnifiedSkillCard";
+
+function SkillCardSummary({
+  text,
+  label,
+}: {
+  text: string;
+  label?: string;
+}) {
+  return (
+    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+      {label && (
+        <span className="mr-1 inline-flex align-baseline rounded-sm bg-primary/10 px-1 py-0.5 text-[9px] font-medium leading-none text-primary ring-1 ring-primary/15">
+          {label}
+        </span>
+      )}
+      {text}
+    </p>
+  );
+}
 
 // ─── Source Indicator (internal) ──────────────────────────────────────────────
 

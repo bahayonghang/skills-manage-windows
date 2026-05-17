@@ -9,6 +9,7 @@ import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { Input } from "@/components/ui/input";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
+import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { invoke } from "@/lib/tauri";
 import { getPathBasename } from "@/lib/path";
 import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
@@ -113,6 +114,14 @@ export function ObsidianVaultView() {
       buildSearchText([skill.name, skill.description]).includes(normalizedSearchQuery)
     );
   }, [normalizedSearchQuery, selectedSkills]);
+  const summarySkillIds = useMemo(
+    () =>
+      filteredSkills
+        .filter((skill) => skill.is_already_central)
+        .map((skill) => getPathBasename(skill.dir_path) ?? skill.id),
+    [filteredSkills]
+  );
+  const aiSummaries = useSkillExplanationSummaries(summarySkillIds, "zh");
   const platformAgents = useMemo(
     () => getPlatformTargetGroups(agents, categoryVisibility),
     [agents, categoryVisibility]
@@ -349,6 +358,11 @@ export function ObsidianVaultView() {
                         key={skill.id}
                         name={skill.name}
                         description={skill.description}
+                        aiSummary={
+                          skill.is_already_central
+                            ? aiSummaries[getPathBasename(skill.dir_path) ?? skill.id]
+                            : undefined
+                        }
                         isCentral={skill.is_already_central}
                         platformBadge={{ id: skill.platform_id, name: skill.platform_name }}
                         projectBadge={skill.project_name}
@@ -376,6 +390,11 @@ export function ObsidianVaultView() {
                         key={skill.id}
                         name={skill.name}
                         description={skill.description}
+                        aiSummary={
+                          skill.is_already_central
+                            ? aiSummaries[getPathBasename(skill.dir_path) ?? skill.id]
+                            : undefined
+                        }
                         isCentral={skill.is_already_central}
                         platformBadge={{ id: skill.platform_id, name: skill.platform_name }}
                         projectBadge={skill.project_name}

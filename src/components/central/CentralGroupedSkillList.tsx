@@ -1,9 +1,10 @@
 import type { RefObject } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
+import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type { SkillGroup } from "@/lib/centralGrouping";
 import type { CentralSkillUpdateState, SkillWithLinks } from "@/types";
@@ -54,6 +55,14 @@ export function CentralGroupedSkillList({
   t,
 }: CentralGroupedSkillListProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const visibleSkillIds = useMemo(
+    () =>
+      groups.flatMap((group) =>
+        collapsed[group.key] ? [] : group.skills.map((skill) => skill.id)
+      ),
+    [collapsed, groups]
+  );
+  const aiSummaries = useSkillExplanationSummaries(visibleSkillIds, "zh");
 
   return (
     <div ref={contentRef} className="scrollbar-subtle flex-1 overflow-auto p-6">
@@ -88,6 +97,7 @@ export function CentralGroupedSkillList({
                       key={skill.id}
                       name={skill.name}
                       description={skill.description}
+                      aiSummary={aiSummaries[skill.id]}
                       checkbox={{
                         checked: selectedSkillIdSet.has(skill.id),
                         onChange: () => onToggleSelection(skill.id),

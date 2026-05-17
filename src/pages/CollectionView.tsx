@@ -23,6 +23,7 @@ import { SkillPickerDialog } from "@/components/collection/SkillPickerDialog";
 import { CollectionInstallDialog } from "@/components/collection/CollectionInstallDialog";
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { SkillWithLinks } from "@/types";
+import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import {
   consumeScrollPosition,
   createScrollRestorationState,
@@ -129,6 +130,11 @@ export function CollectionView() {
       loadCentralSkills();
     }
   }, [centralSkills.length, loadCentralSkills]);
+  const collectionSkillIds = useMemo(
+    () => currentDetail?.skills.map((skill) => skill.id) ?? [],
+    [currentDetail?.skills]
+  );
+  const aiSummaries = useSkillExplanationSummaries(collectionSkillIds, "zh");
 
   // Scroll restoration: once the collection detail for this route's
   // collectionId has finished hydrating, restore the previously recorded
@@ -413,6 +419,7 @@ export function CollectionView() {
                 key={skill.id}
                 name={skill.name}
                 description={skill.description}
+                aiSummary={aiSummaries[skill.id]}
                 onDetail={() =>
                   navigate(`/skill/${skill.id}`, {
                     state: {
