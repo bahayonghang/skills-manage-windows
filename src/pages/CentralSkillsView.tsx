@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 
 import { BatchDeleteCentralSkillPreviewResult, CentralSkillUpdateState, DeleteSkillRepositoryPreview, SkillDetail, SkillRepositoryWithStats, SkillWithLinks } from "@/types";
+import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
 import { markAppPerformance } from "@/lib/performance";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { CentralSidebarHeader } from "@/components/central/CentralSidebarHeader";
@@ -80,6 +81,12 @@ export function CentralSkillsView() {
   const [remoteMissingStates, setRemoteMissingStates] = useState<CentralSkillUpdateState[]>([]);
   const [remoteMissingPreview, setRemoteMissingPreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
+  const [repositorySyncPreview, setRepositorySyncPreview] =
+    useState<CentralRepositorySyncPreview | null>(null);
+  const [queuedRepositorySyncPreview, setQueuedRepositorySyncPreview] =
+    useState<CentralRepositorySyncPreview | null>(null);
+  const [repositorySyncDeletePreview, setRepositorySyncDeletePreview] =
+    useState<BatchDeleteCentralSkillPreviewResult | null>(null);
   const [repositoryDeleteTarget, setRepositoryDeleteTarget] =
     useState<SkillRepositoryWithStats | null>(null);
   const [repositoryDeletePreview, setRepositoryDeletePreview] =
@@ -92,11 +99,14 @@ export function CentralSkillsView() {
   const [isDeletePreviewLoading, setIsDeletePreviewLoading] = useState(false);
   const [isBatchDeletePreviewLoading, setIsBatchDeletePreviewLoading] = useState(false);
   const [isRemoteMissingPreviewLoading, setIsRemoteMissingPreviewLoading] = useState(false);
+  const [isRepositorySyncPreviewLoading, setIsRepositorySyncPreviewLoading] = useState(false);
   const [isResolvingRemoteMissing, setIsResolvingRemoteMissing] = useState(false);
+  const [isApplyingRepositorySync, setIsApplyingRepositorySync] = useState(false);
   const [isRepositoryDeletePreviewLoading, setIsRepositoryDeletePreviewLoading] = useState(false);
   const [deletePreviewError, setDeletePreviewError] = useState<string | null>(null);
   const [batchDeletePreviewError, setBatchDeletePreviewError] = useState<string | null>(null);
   const [remoteMissingError, setRemoteMissingError] = useState<string | null>(null);
+  const [repositorySyncError, setRepositorySyncError] = useState<string | null>(null);
   const [repositoryDeletePreviewError, setRepositoryDeletePreviewError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -104,6 +114,7 @@ export function CentralSkillsView() {
   const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
   const [isUpdateConfirmDialogOpen, setIsUpdateConfirmDialogOpen] = useState(false);
   const [isRemoteMissingDialogOpen, setIsRemoteMissingDialogOpen] = useState(false);
+  const [isRepositorySyncDialogOpen, setIsRepositorySyncDialogOpen] = useState(false);
   const [isRepositoryDeleteDialogOpen, setIsRepositoryDeleteDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -212,10 +223,15 @@ export function CentralSkillsView() {
     viewState.tags.length > 0 ||
     v2.isSearchActive ||
     isInstalledSkillsFilterActive;
+  const hasNonRepositoryFilters =
+    viewState.tags.length > 0 || v2.isSearchActive || isInstalledSkillsFilterActive;
   const checkButtonState = getCentralSkillsCheckButtonState({
     currentViewSkills: visibleCurrentViewSkills,
     hasCurrentFilters,
+    hasNonRepositoryFilters,
+    repositories,
     selectedSkillIds,
+    selectedRepoIds: viewState.repos,
     sortedSkills: visibleCurrentViewSkills,
     t,
     totalSkillCount: skills.length,
@@ -327,6 +343,9 @@ export function CentralSkillsView() {
     handleCancelAiTagJob,
     handleCancelCentralUpdates,
     handleCheckUpdates,
+    handleCheckRepositorySync,
+    handleRepositorySyncDialogOpenChange,
+    handleApplyRepositorySync,
     handleConfirmUpdateSkills,
     handleCreateManualTag,
     handleDeleteCentralSkill,
@@ -361,6 +380,7 @@ export function CentralSkillsView() {
       repositoryDeleteTarget,
       repositoryFilter: viewState.repos[0] ?? "all",
       queuedRemoteMissingStates,
+      queuedRepositorySyncPreview,
       selectedSkillIds,
       currentViewSkills: visibleCurrentViewSkills,
     },
@@ -380,6 +400,9 @@ export function CentralSkillsView() {
       setIsDrawerOpen,
       setIsRemoteMissingDialogOpen,
       setIsRemoteMissingPreviewLoading,
+      setIsRepositorySyncDialogOpen,
+      setIsRepositorySyncPreviewLoading,
+      setIsApplyingRepositorySync,
       setIsRepositoryDeleteDialogOpen,
       setIsRepositoryDeletePreviewLoading,
       setIsResolvingRemoteMissing,
@@ -388,9 +411,13 @@ export function CentralSkillsView() {
       setManualTagQuery,
       setPendingUpdateStates,
       setQueuedRemoteMissingStates,
+      setQueuedRepositorySyncPreview,
       setRemoteMissingError,
       setRemoteMissingPreview,
       setRemoteMissingStates,
+      setRepositorySyncDeletePreview,
+      setRepositorySyncError,
+      setRepositorySyncPreview,
       setRepositoryDeletePreview,
       setRepositoryDeletePreviewError,
       setRepositoryDeleteTarget,
@@ -429,6 +456,9 @@ export function CentralSkillsView() {
         isPortabilityOpen,
         isRemoteMissingDialogOpen,
         isRemoteMissingPreviewLoading,
+        isRepositorySyncDialogOpen,
+        isRepositorySyncPreviewLoading,
+        isApplyingRepositorySync,
         isRepositoryDeleteDialogOpen,
         isRepositoryDeletePreviewLoading,
         isResolvingRemoteMissing,
@@ -440,6 +470,9 @@ export function CentralSkillsView() {
         remoteMissingError,
         remoteMissingPreview,
         remoteMissingStates,
+        repositorySyncError,
+        repositorySyncPreview,
+        repositorySyncDeletePreview,
         repositoryDeletePreview,
         repositoryDeletePreviewError,
         repositoryDeleteTarget,
@@ -484,6 +517,8 @@ export function CentralSkillsView() {
         onRefreshCounts: refreshCounts,
         onConfirmUpdateSkills: handleConfirmUpdateSkills,
         onRemoteMissingDialogOpenChange: handleRemoteMissingDialogOpenChange,
+        onRepositorySyncDialogOpenChange: handleRepositorySyncDialogOpenChange,
+        onApplyRepositorySync: handleApplyRepositorySync,
         onUpdateConfirmDialogOpenChange: handleUpdateConfirmDialogOpenChange,
         onRepositoryDeleteDialogOpenChange: handleRepositoryDeleteDialogOpenChange,
         onResetGitHubImport: resetGitHubImport,
@@ -623,6 +658,13 @@ export function CentralSkillsView() {
       updateJob.status === "cancelling" ||
       checkButtonState.targetSkillIds.length === 0,
     onClick: () => {
+      if (checkButtonState.mode === "repository-sync") {
+        void handleCheckRepositorySync(
+          checkButtonState.repositoryIds ?? [],
+          checkButtonState.scopedSkillIds
+        );
+        return;
+      }
       void handleCheckUpdates(checkButtonState.scopedSkillIds);
     },
   };

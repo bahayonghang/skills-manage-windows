@@ -12,6 +12,10 @@ import {
   SkillTag,
   SkillWithLinks,
 } from "@/types";
+import type {
+  CentralRepositorySyncApplyResult,
+  CentralRepositorySyncPreview,
+} from "@/types/centralRepositorySync";
 import {
   AI_TAG_PROGRESS_EVENT,
   CENTRAL_UPDATE_PROGRESS_EVENT,
@@ -29,6 +33,8 @@ import type { CentralSkillsState, CentralStoreContext } from "./centralSkillsSto
 
 export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralStoreContext): Pick<CentralSkillsState,
   | "checkSkillUpdates"
+  | "checkRepositorySync"
+  | "applyRepositorySync"
   | "updateSkills"
   | "cancelCentralUpdates"
   | "keepRemoteMissingSkills"
@@ -75,6 +81,136 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       set((state) => ({
         error: String(err),
         isCheckingUpdates: false,
+        updateJob: {
+          ...state.updateJob,
+          status: "failed",
+          error: String(err),
+        },
+      }));
+      throw err;
+    }
+  },
+
+  checkRepositorySync: async (repositoryIds, skillIds) => {
+    if (repositoryIds.length === 0) {
+      return {
+        states: [],
+        remoteAdded: [],
+        remoteMissing: [],
+        repositories: [],
+        failedRepositories: [],
+      };
+    }
+    if (!isTauriRuntime()) {
+      throw new Error("Desktop-only feature: repository sync is available in the Tauri app.");
+    }
+
+    const targetIds = skillIds ?? get().skills.map((skill) => skill.id);
+    set({
+      isCheckingUpdates: true,
+      error: null,
+      updateJob: createRunningUpdateJob("checking", targetIds),
+    });
+    try {
+      const preview = await invoke<CentralRepositorySyncPreview>(
+        "check_central_repository_sync",
+        {
+          repositoryIds,
+          skillIds: skillIds ?? null,
+        }
+      );
+      set((state) => ({
+        updateStatuses: mergeUpdateStates(state.updateStatuses, preview.states ?? []),
+        isCheckingUpdates: false,
+        updateJob:
+          state.updateJob.status === "running"
+            ? {
+                ...state.updateJob,
+                status:
+                  preview.failedRepositories.length > 0 ? "failed" : "completed",
+                completed: preview.states.length,
+                failed: preview.failedRepositories.length,
+              }
+            : state.updateJob,
+      }));
+      return preview;
+    } catch (err) {
+      set((state) => ({
+        error: String(err),
+        isCheckingUpdates: false,
+        updateJob: {
+          ...state.updateJob,
+          status: "failed",
+          error: String(err),
+        },
+      }));
+      throw err;
+    }
+  },
+
+  applyRepositorySync: async (decisions) => {
+    if (!isTauriRuntime()) {
+      throw new Error("Desktop-only feature: repository sync is available in the Tauri app.");
+    }
+
+    const targetIds = [
+      ...decisions.keepSkillIds,
+      ...decisions.deleteRequests.map((request) => request.skill_id),
+      ...decisions.additions.flatMap((item) =>
+        item.selections.map((selection) => selection.sourcePath)
+      ),
+    ];
+    set({
+      updatingSkillIds: targetIds,
+      error: null,
+      updateJob: createRunningUpdateJob("updating", targetIds),
+    });
+    try {
+      const result = await invoke<CentralRepositorySyncApplyResult>(
+        "apply_central_repository_sync",
+        { decisions }
+      );
+      const [skills, repositories, tags, updateStates] = await Promise.all([
+        invoke<SkillWithLinks[]>("get_central_skills"),
+        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+        invoke<SkillTag[]>("get_skill_tags"),
+        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+      ]);
+      const failed =
+        result.deleteResult.failed.length + result.failedRepositories.length;
+      const imported = result.importResults.reduce(
+        (count, item) => count + item.importedSkills.length,
+        0
+      );
+      set((state) => ({
+        skills: skills ?? [],
+        repositories: repositories ?? state.repositories,
+        tags: tags ?? state.tags,
+        updateStatuses: indexUpdateStates(updateStates ?? result.states ?? []),
+        updatingSkillIds: [],
+        updateJob:
+          state.updateJob.status === "running"
+            ? {
+                ...state.updateJob,
+                status: failed > 0 ? "failed" : "completed",
+                completed:
+                  result.keptSkillIds.length +
+                  result.deleteResult.succeeded.length +
+                  imported +
+                  failed,
+                succeeded:
+                  result.keptSkillIds.length +
+                  result.deleteResult.succeeded.length +
+                  imported,
+                failed,
+              }
+            : state.updateJob,
+      }));
+      return result;
+    } catch (err) {
+      set((state) => ({
+        error: String(err),
+        updatingSkillIds: [],
         updateJob: {
           ...state.updateJob,
           status: "failed",

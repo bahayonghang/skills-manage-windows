@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AgentWithStatus, CentralSkillUpdateState, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
+import type {
+  CentralRepositorySyncApplyResult,
+  CentralRepositorySyncPreview,
+} from "@/types/centralRepositorySync";
 import * as tauriBridge from "@/lib/tauri";
 
 // Mock Tauri core before importing the store
@@ -886,6 +890,51 @@ describe("centralSkillsStore", () => {
     );
   });
 
+  it("checks repository sync and merges checked states without storing remote additions", async () => {
+    const preview: CentralRepositorySyncPreview = {
+      states: mockUpdateStates,
+      remoteAdded: [
+        {
+          repositoryId: "github-owner-repo-main",
+          repo: {
+            owner: "owner",
+            repo: "repo",
+            branch: "main",
+            normalizedUrl: "https://github.com/owner/repo",
+          },
+          preview: {
+            sourcePath: "skills/new-skill",
+            skillId: "new-skill",
+            skillName: "New Skill",
+            description: null,
+            rootDirectory: "skills",
+            skillDirectoryName: "new-skill",
+            downloadUrl: "https://raw.githubusercontent.com/owner/repo/main/skills/new-skill/SKILL.md",
+            conflict: null,
+          },
+        },
+      ],
+      remoteMissing: [],
+      repositories: [],
+      failedRepositories: [],
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(preview);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .checkRepositorySync(["github-owner-repo-main"], ["frontend-design"]);
+
+    expect(result).toEqual(preview);
+    expect(invoke).toHaveBeenCalledWith("check_central_repository_sync", {
+      repositoryIds: ["github-owner-repo-main"],
+      skillIds: ["frontend-design"],
+    });
+    expect(useCentralSkillsStore.getState().updateStatuses["frontend-design"]).toEqual(
+      mockUpdateStates[0]
+    );
+    expect(useCentralSkillsStore.getState().updateStatuses["new-skill"]).toBeUndefined();
+  });
+
   it("updates central skills and merges returned states without a second state refresh", async () => {
     const updatedState: CentralSkillUpdateState = {
       ...mockUpdateStates[0],
@@ -942,6 +991,86 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().skills).toEqual(mockSkills);
     expect(useCentralSkillsStore.getState().repositories).toEqual(mockRepositories);
     expect(useCentralSkillsStore.getState().updateStatuses).toEqual({});
+  });
+
+  it("applies repository sync and refreshes skills, repositories, tags, and update states", async () => {
+    const applyResult: CentralRepositorySyncApplyResult = {
+      keptSkillIds: ["code-reviewer"],
+      deleteResult: { succeeded: [], failed: [] },
+      importResults: [
+        {
+          repo: {
+            owner: "owner",
+            repo: "repo",
+            branch: "main",
+            normalizedUrl: "https://github.com/owner/repo",
+          },
+          importedSkills: [
+            {
+              sourcePath: "skills/new-skill",
+              originalSkillId: "new-skill",
+              importedSkillId: "new-skill",
+              skillName: "New Skill",
+              targetDirectory: "~/.skillsmanage/skills/new-skill",
+              resolution: "overwrite",
+            },
+          ],
+          skippedSkills: [],
+        },
+      ],
+      failedRepositories: [],
+      states: mockUpdateStates,
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(applyResult)
+      .mockResolvedValueOnce(mockSkills)
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce(mockUpdateStates);
+
+    const result = await useCentralSkillsStore.getState().applyRepositorySync({
+      keepSkillIds: ["code-reviewer"],
+      deleteRequests: [],
+      additions: [
+        {
+          repositoryId: "github-owner-repo-main",
+          selections: [
+            {
+              sourcePath: "skills/new-skill",
+              resolution: "overwrite",
+              renamedSkillId: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result).toEqual(applyResult);
+    expect(invoke).toHaveBeenCalledWith("apply_central_repository_sync", {
+      decisions: {
+        keepSkillIds: ["code-reviewer"],
+        deleteRequests: [],
+        additions: [
+          {
+            repositoryId: "github-owner-repo-main",
+            selections: [
+              {
+                sourcePath: "skills/new-skill",
+                resolution: "overwrite",
+                renamedSkillId: null,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+    expect(invoke).toHaveBeenCalledWith("get_skill_tags");
+    expect(invoke).toHaveBeenCalledWith("get_central_skill_update_states");
+    expect(useCentralSkillsStore.getState().updateStatuses["frontend-design"]).toEqual(
+      mockUpdateStates[0]
+    );
   });
 
   it("updates AI tag job state from progress events", async () => {

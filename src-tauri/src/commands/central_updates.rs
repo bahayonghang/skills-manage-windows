@@ -32,6 +32,16 @@ fn snapshot_cache_ttl() -> ChronoDuration {
 const SNAPSHOT_DOWNLOAD_CONCURRENCY: usize = 4;
 const COPY_INSTALL_REFRESH_CONCURRENCY: usize = 4;
 
+pub mod repository_sync;
+#[cfg(test)]
+pub(crate) use repository_sync::collect_remote_added_skills;
+pub use repository_sync::{
+    apply_central_repository_sync, check_central_repository_sync, CentralRemoteAddedSkill,
+    CentralRepositoryAddedSkillSelection, CentralRepositorySyncApplyResult,
+    CentralRepositorySyncDecisions, CentralRepositorySyncFailure, CentralRepositorySyncPreview,
+    CentralRepositorySyncSummary,
+};
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralSkillUpdateProgressPayload {
@@ -591,18 +601,33 @@ async fn prepare_snapshots(
     prepared: &[PreparedSkillUpdate],
     cache: &crate::CentralUpdateSnapshotCache,
 ) -> Result<HashMap<String, GitHubRepoSnapshot>, String> {
-    let mut repos = HashMap::<String, GitHubRepoRef>::new();
-    for prepared_skill in prepared {
-        if let Some(source) = &prepared_skill.source {
-            repos
-                .entry(repo_cache_key(&source.repo))
-                .or_insert_with(|| source.repo.clone());
-        }
-    }
+    let repos = prepared
+        .iter()
+        .filter_map(|prepared_skill| {
+            prepared_skill
+                .source
+                .as_ref()
+                .map(|source| source.repo.clone())
+        })
+        .collect::<Vec<_>>();
+    prepare_snapshots_for_repo_refs(client, auth_token, &repos, cache).await
+}
 
+async fn prepare_snapshots_for_repo_refs(
+    client: &reqwest::Client,
+    auth_token: Option<&str>,
+    repos: &[GitHubRepoRef],
+    cache: &crate::CentralUpdateSnapshotCache,
+) -> Result<HashMap<String, GitHubRepoSnapshot>, String> {
+    let mut repos_by_key = HashMap::<String, GitHubRepoRef>::new();
+    for repo in repos {
+        repos_by_key
+            .entry(repo_cache_key(repo))
+            .or_insert_with(|| repo.clone());
+    }
     let mut snapshots = HashMap::new();
     let mut missing = Vec::new();
-    for (key, repo) in repos {
+    for (key, repo) in repos_by_key {
         if let Some(snapshot) = cache.get_fresh(&key, snapshot_cache_ttl()) {
             snapshots.insert(key, snapshot);
         } else {

@@ -650,7 +650,7 @@ pub(super) async fn current_central_skill_ids(pool: &DbPool) -> Result<HashSet<S
         .collect::<HashSet<_>>())
 }
 
-pub(super) async fn build_preview_skills(
+pub(crate) async fn build_preview_skills(
     pool: &DbPool,
     candidates: &[RemoteSkillCandidate],
 ) -> Result<Vec<GitHubSkillPreview>, String> {

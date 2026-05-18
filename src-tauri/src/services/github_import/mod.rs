@@ -50,7 +50,7 @@ pub(crate) use archive::download_repo_snapshot;
 #[cfg(test)]
 pub(crate) use import::import_github_repo_skills_impl;
 pub(crate) use import::{
-    central_skills_root, import_github_repo_skills_from_snapshot_partially,
+    build_preview_skills, central_skills_root, import_github_repo_skills_from_snapshot_partially,
     import_github_repo_skills_partially_with_auth, import_github_repo_skills_with_auth,
 };
 pub(crate) use pat::{
@@ -70,7 +70,8 @@ pub(crate) use remote::{
 };
 pub(crate) use source::{
     build_repo_skill_candidates_from_snapshot_at_path, fetch_repo_skill_candidates_from_source,
-    inspect_github_repo_skills_with_auth, resolve_repo_source,
+    inspect_github_repo_skills_with_auth, inspect_repo_skill_candidates_from_snapshot_at_path,
+    resolve_repo_source,
 };
 pub use types::{
     DuplicateResolution, GitHubImportProgressPayload, GitHubImportProgressPhase, GitHubPatState,
@@ -79,7 +80,8 @@ pub use types::{
     ImportedGitHubSkillSummary,
 };
 pub(crate) use types::{
-    GitHubRepoSnapshot, InspectedGitHubRepoSkills, RemoteSkillCandidate, ResolvedGitHubRepoSource,
+    GitHubRepoSnapshot, InspectedGitHubRepoSkills, InvalidRemoteSkillCandidate,
+    RemoteSkillCandidate, ResolvedGitHubRepoSource,
 };
 
 pub(crate) type Duration = ChronoDuration;

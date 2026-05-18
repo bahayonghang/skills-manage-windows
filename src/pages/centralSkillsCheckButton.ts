@@ -1,13 +1,17 @@
 import type { TFunction } from "i18next";
 
-import type { SkillWithLinks } from "@/types";
+import type { SkillRepositoryWithStats, SkillWithLinks } from "@/types";
 
 type CheckButtonScope = "selected" | "current-results" | "all";
+type CheckButtonMode = "skill" | "repository-sync";
 
 export interface CentralSkillsCheckButtonInput {
   currentViewSkills: SkillWithLinks[];
   hasCurrentFilters: boolean;
+  hasNonRepositoryFilters: boolean;
+  repositories: SkillRepositoryWithStats[];
   selectedSkillIds: string[];
+  selectedRepoIds: string[];
   sortedSkills: SkillWithLinks[];
   t: TFunction;
   totalSkillCount: number;
@@ -15,6 +19,8 @@ export interface CentralSkillsCheckButtonInput {
 
 export interface CentralSkillsCheckButtonState {
   label: string;
+  mode: CheckButtonMode;
+  repositoryIds?: string[];
   scopedSkillIds?: string[];
   targetSkillIds: string[];
 }
@@ -22,7 +28,10 @@ export interface CentralSkillsCheckButtonState {
 export function getCentralSkillsCheckButtonState({
   currentViewSkills,
   hasCurrentFilters,
+  hasNonRepositoryFilters,
+  repositories,
   selectedSkillIds,
+  selectedRepoIds,
   sortedSkills,
   t,
   totalSkillCount,
@@ -34,9 +43,26 @@ export function getCentralSkillsCheckButtonState({
     selectedSkillIds,
     sortedSkills,
   });
+  const syncableRepoIds = getSyncableRepositoryIds(repositories);
+  const isSingleRepoScope =
+    scope === "current-results" &&
+    selectedRepoIds.length === 1 &&
+    !hasNonRepositoryFilters;
+  const repositoryIds =
+    scope === "all" ? syncableRepoIds : isSingleRepoScope ? selectedRepoIds : [];
+  const mode: CheckButtonMode = repositoryIds.length > 0 ? "repository-sync" : "skill";
+  const selectedRepository = repositories.find((repo) => repo.id === selectedRepoIds[0]);
 
   return {
-    label: getCheckButtonLabel({ scope, t, targetSkillIds, totalSkillCount }),
+    label: getCheckButtonLabel({
+      scope,
+      t,
+      targetSkillIds,
+      totalSkillCount,
+      repositoryName: isSingleRepoScope ? selectedRepository?.name : undefined,
+    }),
+    mode,
+    repositoryIds,
     scopedSkillIds: scope === "all" ? undefined : targetSkillIds,
     targetSkillIds,
   };
@@ -70,12 +96,20 @@ function getCheckButtonTargetSkillIds({
   return sortedSkills.map((skill) => skill.id);
 }
 
+function getSyncableRepositoryIds(repositories: SkillRepositoryWithStats[]): string[] {
+  return repositories
+    .filter((repo) => repo.source_type === "github" && !repo.is_unknown)
+    .map((repo) => repo.id);
+}
+
 function getCheckButtonLabel({
+  repositoryName,
   scope,
   t,
   targetSkillIds,
   totalSkillCount,
 }: {
+  repositoryName?: string;
   scope: CheckButtonScope;
   t: TFunction;
   targetSkillIds: string[];
@@ -85,6 +119,12 @@ function getCheckButtonLabel({
     return t("central.checkUpdatesSelected", { count: targetSkillIds.length });
   }
   if (scope === "current-results") {
+    if (repositoryName) {
+      return t("central.checkUpdatesRepository", {
+        repo: repositoryName,
+        count: targetSkillIds.length,
+      });
+    }
     return t("central.checkUpdatesCurrentResults", { count: targetSkillIds.length });
   }
   return t("central.checkUpdatesAll", { count: totalSkillCount });

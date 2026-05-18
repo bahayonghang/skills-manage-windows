@@ -15,6 +15,8 @@ const {
   mockLoadBatchDeletePreview,
   mockDeleteCentralSkills,
   mockCheckSkillUpdates,
+  mockCheckRepositorySync,
+  mockApplyRepositorySync,
   mockUpdateSkills,
   mockKeepRemoteMissingSkills,
   mockRescan,
@@ -380,6 +382,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     mockKeepRemoteMissingSkills.mockResolvedValueOnce(["frontend-design"]);
     renderCentralSkillsView();
 
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
     fireEvent.click(screen.getByRole("button", { name: /检查/i }));
 
     await waitFor(() => {
@@ -452,6 +455,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     });
     renderCentralSkillsView();
 
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
     fireEvent.click(screen.getByRole("button", { name: /检查/i }));
 
     const dialog = await screen.findByRole("dialog");
@@ -503,7 +507,13 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
       targets: [localTarget, remoteTarget],
       activeTarget: remoteTarget,
     });
-    mockCheckSkillUpdates.mockResolvedValueOnce([]);
+    mockCheckRepositorySync.mockResolvedValueOnce({
+      states: [],
+      remoteAdded: [],
+      remoteMissing: [],
+      repositories: [],
+      failedRepositories: [],
+    });
     renderCentralSkillsView();
 
     const checkButton = screen.getByRole("button", { name: /检查/i });
@@ -512,7 +522,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     fireEvent.click(checkButton);
 
     await waitFor(() => {
-      expect(mockCheckSkillUpdates).toHaveBeenCalled();
+      expect(mockCheckRepositorySync).toHaveBeenCalled();
     });
   });
 
@@ -539,6 +549,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     });
     renderCentralSkillsView();
 
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
     fireEvent.click(screen.getByRole("button", { name: /检查/i }));
 
     const dialog = await screen.findByRole("dialog");
@@ -600,6 +611,8 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     });
     renderCentralSkillsView();
 
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    fireEvent.click(screen.getAllByLabelText("选择技能")[1]);
     fireEvent.click(screen.getByRole("button", { name: /检查/i }));
 
     const updateDialog = await screen.findByRole("dialog");
@@ -718,7 +731,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     fireEvent.click(screen.getByTestId(`repo-${githubRepo.id}`));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "检查当前结果（2）" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "检查 openai/skills（2）" })).toBeInTheDocument();
     });
 
     // V2：在批量条出现前先选两张卡片
@@ -735,9 +748,10 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     await waitFor(() => {
       expect(mockCheckSkillUpdates).toHaveBeenCalledWith(["github-one", "github-two"]);
     });
+    expect(mockCheckRepositorySync).not.toHaveBeenCalled();
   });
 
-  it("V2 checks current filtered results when nothing is manually selected", async () => {
+  it("V2 uses repository sync for a single repository filter when nothing is manually selected", async () => {
     window.history.replaceState(null, "", "/");
     window.localStorage.setItem("central.sidebarPinned", "true");
     const githubRepo = mockRepositories[1]!;
@@ -755,12 +769,111 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     fireEvent.click(screen.getByTestId(`repo-${githubRepo.id}`));
 
     const checkCurrentResults = await screen.findByRole("button", {
-      name: "检查当前结果（2）",
+      name: "检查 openai/skills（2）",
     });
     fireEvent.click(checkCurrentResults);
 
     await waitFor(() => {
-      expect(mockCheckSkillUpdates).toHaveBeenCalledWith(["github-one", "github-two"]);
+      expect(mockCheckRepositorySync).toHaveBeenCalledWith(
+        [githubRepo.id],
+        ["github-one", "github-two"]
+      );
+    });
+  });
+
+  it("opens repository sync dialog for remote-added skills", async () => {
+    window.history.replaceState(null, "", "/");
+    window.localStorage.setItem("central.sidebarPinned", "true");
+    const githubRepo = mockRepositories[1]!;
+    const skills: SkillWithLinks[] = [
+      { ...mockSkills[0]!, id: "github-one", name: "github-one", repository: githubRepo },
+    ];
+    mockCheckRepositorySync.mockResolvedValueOnce({
+      states: [],
+      remoteAdded: [
+        {
+          repositoryId: githubRepo.id,
+          repo: {
+            owner: "openai",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/openai/skills",
+          },
+          preview: {
+            sourcePath: "skills/new-skill",
+            skillId: "new-skill",
+            skillName: "New Skill",
+            description: null,
+            rootDirectory: "skills",
+            skillDirectoryName: "new-skill",
+            downloadUrl: "https://raw.githubusercontent.com/openai/skills/main/skills/new-skill/SKILL.md",
+            conflict: null,
+          },
+        },
+      ],
+      remoteMissing: [],
+      repositories: [],
+      failedRepositories: [],
+    });
+    mockApplyRepositorySync.mockResolvedValueOnce({
+      keptSkillIds: [],
+      deleteResult: { succeeded: [], failed: [] },
+      importResults: [
+        {
+          repo: {
+            owner: "openai",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/openai/skills",
+          },
+          importedSkills: [
+            {
+              sourcePath: "skills/new-skill",
+              originalSkillId: "new-skill",
+              importedSkillId: "new-skill",
+              skillName: "New Skill",
+              targetDirectory: "~/.skillsmanage/skills/new-skill",
+              resolution: "overwrite",
+            },
+          ],
+          skippedSkills: [],
+        },
+      ],
+      failedRepositories: [],
+      states: [],
+    });
+
+    renderCentralSkillsView({
+      centralOverrides: { skills },
+    });
+
+    fireEvent.click(screen.getByTestId(`repo-${githubRepo.id}`));
+    fireEvent.click(await screen.findByRole("button", { name: "检查 openai/skills（1）" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("仓库同步预览")).toBeInTheDocument();
+    expect(within(dialog).getByText("New Skill")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByTestId("confirm-repo-sync"));
+
+    await waitFor(() => {
+      expect(mockApplyRepositorySync).toHaveBeenCalledWith({
+        keepSkillIds: [],
+        deleteRequests: [],
+        additions: [
+          {
+            repositoryId: githubRepo.id,
+            previewWorkspaceId: null,
+            selections: [
+              {
+                sourcePath: "skills/new-skill",
+                resolution: "overwrite",
+                renamedSkillId: null,
+              },
+            ],
+          },
+        ],
+      });
     });
   });
 });

@@ -9,6 +9,10 @@ import type {
   BatchDeleteCentralSkillRequest,
   CentralSkillUpdateState,
 } from "@/types";
+import type {
+  CentralRepositoryAddedSkillSelection,
+  CentralRepositorySyncPreview,
+} from "@/types/centralRepositorySync";
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
@@ -16,12 +20,19 @@ export interface CentralSkillsUpdateWorkflowSetters {
   setIsUpdateConfirmDialogOpen: StateSetter<boolean>;
   setIsRemoteMissingDialogOpen: StateSetter<boolean>;
   setIsRemoteMissingPreviewLoading: StateSetter<boolean>;
+  setIsRepositorySyncDialogOpen: StateSetter<boolean>;
+  setIsRepositorySyncPreviewLoading: StateSetter<boolean>;
+  setIsApplyingRepositorySync: StateSetter<boolean>;
   setIsResolvingRemoteMissing: StateSetter<boolean>;
   setPendingUpdateStates: StateSetter<CentralSkillUpdateState[]>;
   setQueuedRemoteMissingStates: StateSetter<CentralSkillUpdateState[]>;
+  setQueuedRepositorySyncPreview: StateSetter<CentralRepositorySyncPreview | null>;
   setRemoteMissingError: StateSetter<string | null>;
   setRemoteMissingPreview: StateSetter<BatchDeleteCentralSkillPreviewResult | null>;
   setRemoteMissingStates: StateSetter<CentralSkillUpdateState[]>;
+  setRepositorySyncDeletePreview: StateSetter<BatchDeleteCentralSkillPreviewResult | null>;
+  setRepositorySyncError: StateSetter<string | null>;
+  setRepositorySyncPreview: StateSetter<CentralRepositorySyncPreview | null>;
   setSelectedSkillIds: StateSetter<string[]>;
 }
 
@@ -29,6 +40,7 @@ export interface CentralSkillsUpdateWorkflowDeps {
   t: TFunction;
   state: {
     queuedRemoteMissingStates: CentralSkillUpdateState[];
+    queuedRepositorySyncPreview: CentralRepositorySyncPreview | null;
   };
   setters: CentralSkillsUpdateWorkflowSetters;
 }
@@ -39,7 +51,9 @@ export function useCentralSkillsUpdateWorkflow({
   setters,
 }: CentralSkillsUpdateWorkflowDeps) {
   const cancelCentralUpdates = useCentralSkillsStore((store) => store.cancelCentralUpdates);
+  const applyRepositorySync = useCentralSkillsStore((store) => store.applyRepositorySync);
   const checkSkillUpdates = useCentralSkillsStore((store) => store.checkSkillUpdates);
+  const checkRepositorySync = useCentralSkillsStore((store) => store.checkRepositorySync);
   const deleteCentralSkills = useCentralSkillsStore((store) => store.deleteCentralSkills);
   const keepRemoteMissingSkills = useCentralSkillsStore((store) => store.keepRemoteMissingSkills);
   const loadBatchDeletePreview = useCentralSkillsStore((store) => store.loadBatchDeletePreview);
@@ -51,12 +65,19 @@ export function useCentralSkillsUpdateWorkflow({
     setIsUpdateConfirmDialogOpen,
     setIsRemoteMissingDialogOpen,
     setIsRemoteMissingPreviewLoading,
+    setIsRepositorySyncDialogOpen,
+    setIsRepositorySyncPreviewLoading,
+    setIsApplyingRepositorySync,
     setIsResolvingRemoteMissing,
     setPendingUpdateStates,
     setQueuedRemoteMissingStates,
+    setQueuedRepositorySyncPreview,
     setRemoteMissingError,
     setRemoteMissingPreview,
     setRemoteMissingStates,
+    setRepositorySyncDeletePreview,
+    setRepositorySyncError,
+    setRepositorySyncPreview,
     setSelectedSkillIds,
   } = setters;
 
@@ -82,6 +103,33 @@ export function useCentralSkillsUpdateWorkflow({
     }
   }
 
+  async function openRepositorySyncDialog(preview: CentralRepositorySyncPreview) {
+    if (preview.remoteAdded.length === 0 && preview.remoteMissing.length === 0) {
+      return;
+    }
+    setRepositorySyncPreview(preview);
+    setRepositorySyncDeletePreview(null);
+    setRepositorySyncError(null);
+    setIsRepositorySyncDialogOpen(true);
+    if (preview.remoteMissing.length === 0) {
+      setIsRepositorySyncPreviewLoading(false);
+      return;
+    }
+    setIsRepositorySyncPreviewLoading(true);
+    try {
+      const deletePreview = await loadBatchDeletePreview(
+        preview.remoteMissing.map((item) => item.skill_id)
+      );
+      setRepositorySyncDeletePreview(deletePreview);
+    } catch (err) {
+      const message = String(err);
+      setRepositorySyncError(message);
+      toast.error(t("central.batchDeletePreviewError", { error: message }));
+    } finally {
+      setIsRepositorySyncPreviewLoading(false);
+    }
+  }
+
   function openUpdateConfirmDialog(states: CentralSkillUpdateState[]) {
     const updatableStates = states.filter((item) => item.status === "update_available");
     if (updatableStates.length === 0) {
@@ -98,9 +146,26 @@ export function useCentralSkillsUpdateWorkflow({
     }
     setPendingUpdateStates([]);
     const queued = state.queuedRemoteMissingStates;
+    const queuedRepoSync = state.queuedRepositorySyncPreview;
+    if (queuedRepoSync) {
+      setQueuedRepositorySyncPreview(null);
+      void openRepositorySyncDialog(queuedRepoSync);
+      return;
+    }
     if (queued.length > 0) {
       setQueuedRemoteMissingStates([]);
       void openRemoteMissingDialog(queued);
+    }
+  }
+
+  function handleRepositorySyncDialogOpenChange(open: boolean) {
+    setIsRepositorySyncDialogOpen(open);
+    if (!open) {
+      setRepositorySyncPreview(null);
+      setRepositorySyncDeletePreview(null);
+      setRepositorySyncError(null);
+      setIsRepositorySyncPreviewLoading(false);
+      setIsApplyingRepositorySync(false);
     }
   }
 
@@ -153,6 +218,35 @@ export function useCentralSkillsUpdateWorkflow({
           setQueuedRemoteMissingStates(remoteMissing);
         } else {
           await openRemoteMissingDialog(remoteMissing);
+        }
+      }
+      openUpdateConfirmDialog(availableStates);
+    } catch (err) {
+      toast.error(t("central.updateCheckError", { error: String(err) }));
+    }
+  }
+
+  async function handleCheckRepositorySync(repositoryIds: string[], skillIds?: string[]) {
+    try {
+      const preview = await checkRepositorySync(repositoryIds, skillIds);
+      const states = preview.states;
+      const availableStates = states.filter((state) => state.status === "update_available");
+      const unsupported = states.filter((state) => state.status === "unsupported").length;
+      const failed = states.filter((state) => state.status === "error").length;
+      toast.success(
+        t("central.repositorySyncCheckFinished", {
+          available: availableStates.length,
+          unsupported,
+          remoteMissing: preview.remoteMissing.length,
+          remoteAdded: preview.remoteAdded.length,
+          failed: failed + preview.failedRepositories.length,
+        })
+      );
+      if (preview.remoteAdded.length > 0 || preview.remoteMissing.length > 0) {
+        if (availableStates.length > 0) {
+          setQueuedRepositorySyncPreview(preview);
+        } else {
+          await openRepositorySyncDialog(preview);
         }
       }
       openUpdateConfirmDialog(availableStates);
@@ -239,11 +333,65 @@ export function useCentralSkillsUpdateWorkflow({
     }
   }
 
+  async function handleApplyRepositorySync(
+    keepSkillIds: string[],
+    deleteRequests: BatchDeleteCentralSkillRequest[],
+    additions: CentralRepositoryAddedSkillSelection[]
+  ) {
+    setIsApplyingRepositorySync(true);
+    setRepositorySyncError(null);
+    try {
+      const result = await applyRepositorySync({
+        keepSkillIds,
+        deleteRequests,
+        additions,
+      });
+      await refreshCounts();
+      const deletedIds = new Set(result.deleteResult.succeeded.map((item) => item.skill_id));
+      setSelectedSkillIds((current) => current.filter((skillId) => !deletedIds.has(skillId)));
+      const imported = result.importResults.reduce(
+        (count, item) => count + item.importedSkills.length,
+        0
+      );
+      const skipped = result.importResults.reduce(
+        (count, item) => count + item.skippedSkills.length,
+        0
+      );
+      const failed = result.deleteResult.failed.length + result.failedRepositories.length;
+      const message = t(
+        failed > 0 ? "central.repositorySyncApplyPartial" : "central.repositorySyncApplySuccess",
+        {
+          kept: result.keptSkillIds.length,
+          deleted: result.deleteResult.succeeded.length,
+          imported,
+          skipped,
+          failed,
+        }
+      );
+      if (failed > 0) {
+        toast.error(message);
+      } else {
+        toast.success(message);
+      }
+      handleRepositorySyncDialogOpenChange(false);
+    } catch (err) {
+      const message = String(err);
+      setRepositorySyncError(message);
+      toast.error(t("central.repositorySyncApplyError", { error: message }));
+      throw err;
+    } finally {
+      setIsApplyingRepositorySync(false);
+    }
+  }
+
   return {
     handleCancelCentralUpdates,
     handleCheckUpdates,
+    handleCheckRepositorySync,
     handleConfirmUpdateSkills,
+    handleApplyRepositorySync,
     handleUpdateConfirmDialogOpenChange,
+    handleRepositorySyncDialogOpenChange,
     handleRemoteMissingDialogOpenChange,
     handleResolveRemoteMissing,
     handleUpdateSkills,

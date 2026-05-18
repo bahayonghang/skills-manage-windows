@@ -9,8 +9,8 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::db::types::{
-    DbPool, SkillRepository, SkillRepositoryAssignment, SkillRepositoryWithStats,
-    LOCAL_UNKNOWN_REPOSITORY_ID,
+    DbPool, SkillRepository, SkillRepositoryAssignment, SkillRepositoryMember,
+    SkillRepositoryWithStats, LOCAL_UNKNOWN_REPOSITORY_ID,
 };
 use crate::db::util::now_rfc3339;
 
@@ -73,6 +73,88 @@ pub async fn get_central_skill_ids_by_repository(
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())
+}
+
+pub async fn get_central_repository_members_by_repositories(
+    pool: &DbPool,
+    repository_ids: &[String],
+) -> Result<Vec<SkillRepositoryMember>, String> {
+    if repository_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = repository_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT
+            m.skill_id AS skill_id,
+            m.source_path AS source_path,
+            r.id AS repository_id,
+            r.name AS repository_name,
+            r.source_type AS repository_source_type,
+            r.owner AS repository_owner,
+            r.repo AS repository_repo,
+            r.branch AS repository_branch,
+            r.url AS repository_url,
+            r.pinned AS repository_pinned,
+            r.is_unknown AS repository_is_unknown,
+            r.created_at AS repository_created_at,
+            r.updated_at AS repository_updated_at
+         FROM skill_repository_members m
+         JOIN skill_repositories r ON r.id = m.repository_id
+         JOIN skills s ON s.id = m.skill_id
+         WHERE m.repository_id IN ({})
+           AND s.is_central = 1
+           AND r.id <> ?
+           AND r.is_unknown = 0
+         ORDER BY r.name, s.name, s.id",
+        placeholders
+    );
+    let mut query = sqlx::query(&sql);
+    for repository_id in repository_ids {
+        query = query.bind(repository_id);
+    }
+    query = query.bind(LOCAL_UNKNOWN_REPOSITORY_ID);
+
+    let rows = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let mut members = Vec::with_capacity(rows.len());
+    for row in rows {
+        let repository = SkillRepository {
+            id: row.try_get("repository_id").map_err(|e| e.to_string())?,
+            name: row.try_get("repository_name").map_err(|e| e.to_string())?,
+            source_type: row
+                .try_get("repository_source_type")
+                .map_err(|e| e.to_string())?,
+            owner: row.try_get("repository_owner").map_err(|e| e.to_string())?,
+            repo: row.try_get("repository_repo").map_err(|e| e.to_string())?,
+            branch: row
+                .try_get("repository_branch")
+                .map_err(|e| e.to_string())?,
+            url: row.try_get("repository_url").map_err(|e| e.to_string())?,
+            pinned: row
+                .try_get("repository_pinned")
+                .map_err(|e| e.to_string())?,
+            is_unknown: row
+                .try_get("repository_is_unknown")
+                .map_err(|e| e.to_string())?,
+            created_at: row
+                .try_get("repository_created_at")
+                .map_err(|e| e.to_string())?,
+            updated_at: row
+                .try_get("repository_updated_at")
+                .map_err(|e| e.to_string())?,
+        };
+        members.push(SkillRepositoryMember {
+            skill_id: row.try_get("skill_id").map_err(|e| e.to_string())?,
+            source_path: row.try_get("source_path").map_err(|e| e.to_string())?,
+            repository,
+        });
+    }
+
+    Ok(members)
 }
 
 pub async fn detach_skill_remote_source(pool: &DbPool, skill_id: &str) -> Result<(), String> {

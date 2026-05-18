@@ -23,6 +23,11 @@ import {
   SkillTagSuggestionResult,
   SkillWithLinks,
 } from "@/types";
+import type {
+  CentralRepositorySyncApplyResult,
+  CentralRepositorySyncDecisions,
+  CentralRepositorySyncPreview,
+} from "@/types/centralRepositorySync";
 
 export interface CentralSkillsState {
   skills: SkillWithLinks[];
@@ -79,6 +84,13 @@ export interface CentralSkillsState {
   assignSkillTags: (skillIds: string[], tagIds: string[]) => Promise<void>;
   bulkSuggestSkillTags: (skillIds: string[]) => Promise<SkillTagSuggestionResult[]>;
   checkSkillUpdates: (skillIds?: string[]) => Promise<CentralSkillUpdateState[]>;
+  checkRepositorySync: (
+    repositoryIds: string[],
+    skillIds?: string[]
+  ) => Promise<CentralRepositorySyncPreview>;
+  applyRepositorySync: (
+    decisions: CentralRepositorySyncDecisions
+  ) => Promise<CentralRepositorySyncApplyResult>;
   updateSkills: (skillIds: string[]) => Promise<CentralSkillUpdateResult>;
   cancelCentralUpdates: () => Promise<void>;
   keepRemoteMissingSkills: (skillIds: string[]) => Promise<string[]>;

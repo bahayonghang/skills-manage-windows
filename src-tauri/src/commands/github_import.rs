@@ -11,8 +11,10 @@ use crate::targets::ActiveTarget;
 use crate::AppState;
 
 pub(crate) use crate::services::github_import::{
-    build_repo_skill_candidates_from_snapshot_at_path, download_repo_snapshot, github_client,
-    github_direct_auth_from_secret_store, resolve_repo_source, GitHubRepoSnapshot,
+    build_preview_skills, build_repo_skill_candidates_from_snapshot_at_path,
+    download_repo_snapshot, github_client, github_direct_auth_from_secret_store,
+    import_github_repo_skills_ssh_with_auth, import_github_repo_skills_with_auth,
+    inspect_repo_skill_candidates_from_snapshot_at_path, resolve_repo_source, GitHubRepoSnapshot,
     RemoteSkillCandidate,
 };
 pub use crate::services::github_import::{

@@ -345,6 +345,8 @@ pub fn run() {
             // Central updates
             commands::central_updates::get_central_skill_update_states,
             commands::central_updates::check_central_skill_updates,
+            commands::central_updates::repository_sync::check_central_repository_sync,
+            commands::central_updates::repository_sync::apply_central_repository_sync,
             commands::central_updates::update_central_skills,
             commands::central_updates::cancel_central_skill_updates,
             commands::central_updates::keep_remote_missing_central_skills,

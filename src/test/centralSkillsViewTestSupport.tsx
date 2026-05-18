@@ -405,6 +405,8 @@ export const mockCreateTag = vi.fn();
 export const mockAssignSkillTags = vi.fn();
 export const mockBulkSuggestSkillTags = vi.fn();
 export const mockCheckSkillUpdates = vi.fn();
+export const mockCheckRepositorySync = vi.fn();
+export const mockApplyRepositorySync = vi.fn();
 export const mockUpdateSkills = vi.fn();
 export const mockKeepRemoteMissingSkills = vi.fn();
 export const mockCancelAiTagJob = vi.fn();
@@ -487,6 +489,8 @@ export function buildCentralStoreState(overrides = {}) {
     assignSkillTags: mockAssignSkillTags,
     bulkSuggestSkillTags: mockBulkSuggestSkillTags,
     checkSkillUpdates: mockCheckSkillUpdates,
+    checkRepositorySync: mockCheckRepositorySync,
+    applyRepositorySync: mockApplyRepositorySync,
     updateSkills: mockUpdateSkills,
     keepRemoteMissingSkills: mockKeepRemoteMissingSkills,
     cancelAiTagJob: mockCancelAiTagJob,
@@ -624,6 +628,20 @@ export function resetCentralSkillsViewTestState() {
     activeTarget: localTarget,
   });
   mockCheckSkillUpdates.mockResolvedValue([]);
+  mockCheckRepositorySync.mockResolvedValue({
+    states: [],
+    remoteAdded: [],
+    remoteMissing: [],
+    repositories: [],
+    failedRepositories: [],
+  });
+  mockApplyRepositorySync.mockResolvedValue({
+    keptSkillIds: [],
+    deleteResult: { succeeded: [], failed: [] },
+    importResults: [],
+    failedRepositories: [],
+    states: [],
+  });
   mockUpdateSkills.mockResolvedValue({ succeeded: [], failed: [], skipped: [], states: [] });
   mockKeepRemoteMissingSkills.mockResolvedValue([]);
   mockExportSkillportState.mockResolvedValue(

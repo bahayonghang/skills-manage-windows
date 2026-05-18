@@ -132,6 +132,55 @@ fn update_counters_count_remote_missing_as_skipped() {
 }
 
 #[tokio::test]
+async fn collect_remote_added_skills_detects_repo_candidates_not_in_local_members() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("existing");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Existing\n---").unwrap();
+    let skill = make_central_skill("existing", &skill_dir);
+    db::upsert_skill(&pool, &skill).await.unwrap();
+    assign_test_repo(&pool, "existing", "skills/existing").await;
+    let assignment = db::get_skill_repository_assignment(&pool, "existing")
+        .await
+        .unwrap();
+    let repository = assignment.repository;
+    let repository_ids = vec![repository.id.clone()];
+    let repo = test_repo();
+    let snapshots = HashMap::from([(
+        repo_cache_key(&repo),
+        GitHubRepoSnapshot {
+            files: HashMap::from([
+                (
+                    "skills/existing/SKILL.md".to_string(),
+                    b"---\nname: Existing\n---".to_vec(),
+                ),
+                (
+                    "skills/new-skill/SKILL.md".to_string(),
+                    b"---\nname: New Skill\n---".to_vec(),
+                ),
+            ]),
+        },
+    )]);
+    let mut failures = Vec::new();
+
+    let added = collect_remote_added_skills(
+        &pool,
+        &repository_ids,
+        &[(repository, repo)],
+        &snapshots,
+        &mut failures,
+    )
+    .await
+    .unwrap();
+
+    assert!(failures.is_empty());
+    assert_eq!(added.len(), 1);
+    assert_eq!(added[0].preview.skill_id, "new-skill");
+    assert_eq!(added[0].preview.source_path, "skills/new-skill");
+}
+
+#[tokio::test]
 async fn keep_remote_missing_detaches_source_without_deleting_skill() {
     let pool = setup_test_db().await;
     let temp = TempDir::new().unwrap();

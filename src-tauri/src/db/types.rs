@@ -148,6 +148,13 @@ pub struct SkillRepositoryAssignment {
     pub is_source_unknown: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct SkillRepositoryMember {
+    pub skill_id: String,
+    pub source_path: Option<String>,
+    pub repository: SkillRepository,
+}
+
 // ─── Update State ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
