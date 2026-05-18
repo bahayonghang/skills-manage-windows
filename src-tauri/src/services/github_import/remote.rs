@@ -272,6 +272,8 @@ pub(crate) async fn import_github_repo_skills_ssh_with_auth(
             )),
             content: None,
             scanned_at: Utc::now().to_rfc3339(),
+            fs_created_at: None,
+            fs_updated_at: None,
         };
         db::upsert_skill(pool, &db_skill).await?;
         db::assign_github_repository_to_skill(

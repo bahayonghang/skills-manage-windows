@@ -156,63 +156,45 @@ async fn get_bootstrap_snapshot_impl(pool: &DbPool) -> Result<BootstrapSnapshot,
     })
 }
 
-async fn get_count(pool: &DbPool, sql: &str) -> Result<usize, String> {
-    let row = sqlx::query(sql)
-        .fetch_one(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let count: i64 = row.try_get("cnt").map_err(|e| e.to_string())?;
-    Ok(count.max(0) as usize)
-}
-
 async fn get_dashboard_central_summary_impl(
     pool: &DbPool,
 ) -> Result<DashboardCentralSummary, String> {
-    let central_skill_count = get_count(
-        pool,
-        "SELECT COUNT(*) AS cnt FROM skills WHERE is_central = 1",
+    let row = sqlx::query(
+        "SELECT
+           (SELECT COUNT(*) FROM skills WHERE is_central = 1) AS central_skill_count,
+           (SELECT COUNT(*) FROM skill_update_states WHERE status = 'update_available') AS updates_available,
+           (SELECT COUNT(DISTINCT skill_id) FROM skill_ai_tag_reviews WHERE status = 'pending') AS ai_review_count,
+           (SELECT COUNT(*)
+            FROM skills s
+            WHERE s.is_central = 1
+              AND (
+                NOT EXISTS (
+                  SELECT 1 FROM skill_tag_links l WHERE l.skill_id = s.id
+                )
+                OR EXISTS (
+                  SELECT 1 FROM skill_tag_links l
+                  WHERE l.skill_id = s.id AND l.tag_id = 'uncategorized'
+                )
+              )) AS uncategorized_count,
+           (SELECT COUNT(*)
+            FROM skills s
+            LEFT JOIN skill_repository_members m ON s.id = m.skill_id
+            LEFT JOIN skill_repositories r ON r.id = m.repository_id
+            WHERE s.is_central = 1
+              AND (m.skill_id IS NULL OR r.is_unknown = 1)) AS unassigned_source_count",
     )
-    .await?;
-    let updates_available = get_count(
-        pool,
-        "SELECT COUNT(*) AS cnt
-         FROM skill_update_states
-         WHERE status = 'update_available'",
-    )
-    .await?;
-    let ai_review_count = get_count(
-        pool,
-        "SELECT COUNT(DISTINCT skill_id) AS cnt
-         FROM skill_ai_tag_reviews
-         WHERE status = 'pending'",
-    )
-    .await?;
-    let uncategorized_count = get_count(
-        pool,
-        "SELECT COUNT(*) AS cnt
-         FROM skills s
-         WHERE s.is_central = 1
-           AND (
-             NOT EXISTS (
-               SELECT 1 FROM skill_tag_links l WHERE l.skill_id = s.id
-             )
-             OR EXISTS (
-               SELECT 1 FROM skill_tag_links l
-               WHERE l.skill_id = s.id AND l.tag_id = 'uncategorized'
-             )
-           )",
-    )
-    .await?;
-    let unassigned_source_count = get_count(
-        pool,
-        "SELECT COUNT(*) AS cnt
-         FROM skills s
-         LEFT JOIN skill_repository_members m ON s.id = m.skill_id
-         LEFT JOIN skill_repositories r ON r.id = m.repository_id
-         WHERE s.is_central = 1
-           AND (m.skill_id IS NULL OR r.is_unknown = 1)",
-    )
-    .await?;
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    let read_count = |column: &str| -> Result<usize, String> {
+        let count: i64 = row.try_get(column).map_err(|e| e.to_string())?;
+        Ok(count.max(0) as usize)
+    };
+    let central_skill_count = read_count("central_skill_count")?;
+    let updates_available = read_count("updates_available")?;
+    let ai_review_count = read_count("ai_review_count")?;
+    let uncategorized_count = read_count("uncategorized_count")?;
+    let unassigned_source_count = read_count("unassigned_source_count")?;
     let source_repositories = db::get_skill_repositories_with_stats(pool).await?;
 
     Ok(DashboardCentralSummary {
@@ -263,6 +245,8 @@ mod tests {
                 source: Some("native".to_string()),
                 content: None,
                 scanned_at: "2026-04-23T01:00:00Z".to_string(),
+                fs_created_at: None,
+                fs_updated_at: None,
             },
         )
         .await

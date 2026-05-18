@@ -37,6 +37,8 @@ fn make_skill(id: &str, name: &str) -> Skill {
         source: Some("test".to_string()),
         content: Some(format!("# {name}\nTest skill content")),
         scanned_at: "2026-04-24T00:00:00Z".to_string(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 

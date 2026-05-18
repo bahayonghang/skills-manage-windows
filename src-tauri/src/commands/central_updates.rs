@@ -1,4 +1,5 @@
 use chrono::{Duration as ChronoDuration, Utc};
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -29,6 +30,7 @@ fn snapshot_cache_ttl() -> ChronoDuration {
     ChronoDuration::minutes(10)
 }
 const SNAPSHOT_DOWNLOAD_CONCURRENCY: usize = 4;
+const COPY_INSTALL_REFRESH_CONCURRENCY: usize = 4;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -937,6 +939,8 @@ async fn update_one_skill(
         )),
         content: skill.content.clone(),
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(pool, &updated_skill).await?;
     db::assign_github_repository_to_skill(
@@ -961,12 +965,25 @@ async fn refresh_copy_installations(
     source_dir: &Path,
 ) -> Result<(), String> {
     let installations = db::get_skill_installations(pool, skill_id).await?;
-    for installation in installations {
-        if installation.link_type != "copy" {
-            continue;
-        }
-        fs.refresh_copy_install(skill_id, source_dir, &installation.installed_path)
-            .await?;
+    let mut seen_targets = HashSet::new();
+    let copy_targets = installations
+        .into_iter()
+        .filter(|installation| installation.link_type == "copy")
+        .filter_map(|installation| {
+            if seen_targets.insert(installation.installed_path.clone()) {
+                Some(installation.installed_path)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let mut results = futures_util::stream::iter(copy_targets)
+        .map(|target| async move { fs.refresh_copy_install(skill_id, source_dir, &target).await })
+        .buffer_unordered(COPY_INSTALL_REFRESH_CONCURRENCY);
+
+    while let Some(result) = futures_util::StreamExt::next(&mut results).await {
+        result?;
     }
     Ok(())
 }

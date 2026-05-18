@@ -136,6 +136,8 @@ fn claude_observation(
         symlink_target: None,
         is_read_only,
         scanned_at: chrono::Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 

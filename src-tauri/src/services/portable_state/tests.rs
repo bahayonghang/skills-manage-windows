@@ -85,6 +85,8 @@ async fn export_includes_github_skill_and_unrestorable_local_skill() {
         source: Some("github:openai/skills".to_string()),
         content: None,
         scanned_at: "2026-04-25T00:00:00Z".to_string(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(&pool, &github).await.unwrap();
     db::assign_github_repository_to_skill(
@@ -121,6 +123,8 @@ async fn export_includes_github_skill_and_unrestorable_local_skill() {
         source: None,
         content: None,
         scanned_at: "2026-04-25T00:00:00Z".to_string(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(&pool, &local).await.unwrap();
 
@@ -166,6 +170,8 @@ async fn export_counts_distinct_github_repositories_backing_central_skills() {
                 source: Some("github:test/source".to_string()),
                 content: None,
                 scanned_at: "2026-04-25T00:00:00Z".to_string(),
+                fs_created_at: None,
+                fs_updated_at: None,
             },
         )
         .await
@@ -285,6 +291,8 @@ async fn preview_reports_ready_conflict_missing_and_unrestorable() {
         source: None,
         content: None,
         scanned_at: "2026-04-25T00:00:00Z".to_string(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(&pool, &existing).await.unwrap();
 
@@ -622,6 +630,8 @@ async fn restore_skill_tags_creates_and_assigns_tags() {
         source: None,
         content: None,
         scanned_at: "2026-04-25T00:00:00Z".to_string(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(&pool, &skill).await.unwrap();
 

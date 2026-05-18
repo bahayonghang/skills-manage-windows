@@ -27,6 +27,8 @@ fn make_central_skill(id: &str, dir: &Path) -> Skill {
         source: Some("github:owner/repo".to_string()),
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 

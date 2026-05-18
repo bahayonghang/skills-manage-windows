@@ -141,6 +141,8 @@ pub(crate) async fn import_github_repo_skills_with_auth(
             )),
             content: None,
             scanned_at: Utc::now().to_rfc3339(),
+            fs_created_at: None,
+            fs_updated_at: None,
         };
         db::upsert_skill(pool, &db_skill).await?;
         db::assign_github_repository_to_skill(
@@ -545,6 +547,8 @@ pub(super) async fn import_single_staged_skill(
         source: Some(format!("github:{}/{}", repo.owner, repo.repo)),
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     if let Err(error) = db::upsert_skill(pool, &db_skill).await {
         restore_or_cleanup_target_dir(&target_dir, existing_backup);

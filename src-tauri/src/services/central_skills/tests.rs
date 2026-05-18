@@ -55,6 +55,8 @@ fn make_central_skill_at(id: &str, name: &str, dir: &Path) -> Skill {
         source: Some("native".to_string()),
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 
@@ -94,6 +96,8 @@ fn make_skill(id: &str, name: &str, is_central: bool) -> Skill {
         },
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 
@@ -108,6 +112,8 @@ fn make_remote_central_skill(id: &str, dir: &str) -> Skill {
         source: Some("native".to_string()),
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 
@@ -177,6 +183,8 @@ fn make_observation_for_agent(
         symlink_target: None,
         is_read_only: read_only,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 
@@ -463,6 +471,37 @@ async fn test_get_central_skills_excludes_non_central() {
         "only central skills should be returned"
     );
     assert_eq!(skills_with_links[0].id, "c-skill");
+}
+
+#[tokio::test]
+async fn test_get_central_skills_page_filters_sorts_and_counts_total() {
+    let pool = setup_test_db().await;
+
+    let mut alpha = make_skill("alpha", "Alpha Tool", true);
+    alpha.fs_updated_at = Some("2026-05-17T01:00:00Z".to_string());
+    let mut beta = make_skill("beta", "Beta Tool", true);
+    beta.fs_updated_at = Some("2026-05-18T01:00:00Z".to_string());
+    let ignored = make_skill("gamma", "Gamma Tool", false);
+    db::upsert_skill(&pool, &alpha).await.unwrap();
+    db::upsert_skill(&pool, &beta).await.unwrap();
+    db::upsert_skill(&pool, &ignored).await.unwrap();
+
+    let page = get_central_skills_page_impl(
+        &pool,
+        CentralSkillsPageRequest {
+            query: Some("tool".to_string()),
+            sort: Some("updatedAt:desc".to_string()),
+            limit: Some(1),
+            offset: Some(0),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(page.total, 2);
+    assert_eq!(page.items.len(), 1);
+    assert_eq!(page.items[0].id, "beta");
 }
 
 // ── get_skill_detail ──────────────────────────────────────────────────────
@@ -1033,6 +1072,8 @@ async fn test_read_skill_content_returns_file_content() {
         source: None,
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(&pool, &skill).await.unwrap();
 
@@ -1054,6 +1095,8 @@ async fn test_read_skill_content_file_not_found() {
         source: None,
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(&pool, &skill).await.unwrap();
 

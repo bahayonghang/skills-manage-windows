@@ -28,8 +28,9 @@ use crate::skill_time::skill_filesystem_timestamps;
 pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
     sqlx::query(
         "INSERT INTO skills
-         (id, name, description, file_path, canonical_path, is_central, source, content, scanned_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (id, name, description, file_path, canonical_path, is_central, source, content,
+          scanned_at, fs_created_at, fs_updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name           = CASE
                               WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.name
@@ -56,7 +57,15 @@ pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
                               WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.content
                               ELSE excluded.content
                             END,
-           scanned_at     = excluded.scanned_at",
+           scanned_at     = excluded.scanned_at,
+           fs_created_at  = CASE
+                              WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.fs_created_at
+                              ELSE COALESCE(excluded.fs_created_at, skills.fs_created_at)
+                            END,
+           fs_updated_at  = CASE
+                              WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.fs_updated_at
+                              ELSE COALESCE(excluded.fs_updated_at, skills.fs_updated_at)
+                            END",
     )
     .bind(&skill.id)
     .bind(&skill.name)
@@ -67,6 +76,8 @@ pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
     .bind(&skill.source)
     .bind(&skill.content)
     .bind(&skill.scanned_at)
+    .bind(&skill.fs_created_at)
+    .bind(&skill.fs_updated_at)
     .execute(pool)
     .await
     .map(|_| ())
@@ -84,6 +95,8 @@ fn observation_to_skill(observation: AgentSkillObservation) -> Skill {
         source: Some(observation.link_type),
         content: None,
         scanned_at: observation.scanned_at,
+        fs_created_at: observation.fs_created_at,
+        fs_updated_at: observation.fs_updated_at,
     }
 }
 
@@ -159,6 +172,8 @@ struct InstalledSkillForAgentRow {
     is_central: bool,
     source: Option<String>,
     scanned_at: String,
+    fs_created_at: Option<String>,
+    fs_updated_at: Option<String>,
     dir_path: String,
     link_type: String,
     symlink_target: Option<String>,
@@ -198,6 +213,8 @@ pub async fn get_skills_for_agent(
                 s.canonical_path,
                 s.source,
                 s.scanned_at,
+                s.fs_created_at,
+                s.fs_updated_at,
                 si.installed_path AS dir_path,
                 si.link_type,
                 si.symlink_target,
@@ -234,7 +251,9 @@ pub async fn get_skills_for_agent(
     Ok(skills)
 }
 
-fn installed_row_to_skill_for_agent(row: InstalledSkillForAgentRow) -> Result<SkillForAgent, String> {
+fn installed_row_to_skill_for_agent(
+    row: InstalledSkillForAgentRow,
+) -> Result<SkillForAgent, String> {
     let skill = Skill {
         id: row.id.clone(),
         name: row.name.clone(),
@@ -245,6 +264,8 @@ fn installed_row_to_skill_for_agent(row: InstalledSkillForAgentRow) -> Result<Sk
         source: row.source.clone(),
         content: None,
         scanned_at: row.scanned_at.clone(),
+        fs_created_at: row.fs_created_at.clone(),
+        fs_updated_at: row.fs_updated_at.clone(),
     };
     let (created_at, updated_at) = skill_filesystem_timestamps(&skill);
     let repository = repository_from_installed_row(&row)?;
@@ -332,9 +353,21 @@ async fn observations_to_skills_for_agent(
         .into_iter()
         .map(|observation| {
             let skill = skills_by_id.get(&observation.skill_id);
-            let (created_at, updated_at) = skill
-                .map(skill_filesystem_timestamps)
-                .unwrap_or_else(|| (observation.scanned_at.clone(), observation.scanned_at.clone()));
+            let (fallback_created_at, fallback_updated_at) =
+                skill.map(skill_filesystem_timestamps).unwrap_or_else(|| {
+                    (
+                        observation.scanned_at.clone(),
+                        observation.scanned_at.clone(),
+                    )
+                });
+            let created_at = observation
+                .fs_created_at
+                .clone()
+                .unwrap_or(fallback_created_at);
+            let updated_at = observation
+                .fs_updated_at
+                .clone()
+                .unwrap_or(fallback_updated_at);
             let repository_assignment = if observation.is_read_only {
                 None
             } else {

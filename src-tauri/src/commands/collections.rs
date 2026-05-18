@@ -386,6 +386,8 @@ mod tests {
             source: Some("native".to_string()),
             content: None,
             scanned_at: Utc::now().to_rfc3339(),
+            fs_created_at: None,
+            fs_updated_at: None,
         }
     }
 
@@ -891,6 +893,8 @@ mod tests {
                 source: Some("native".to_string()),
                 content: None,
                 scanned_at: Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
             };
             db::upsert_skill(&pool, &skill).await.unwrap();
         }
@@ -968,6 +972,8 @@ mod tests {
                 source: None,
                 content: None,
                 scanned_at: Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
             };
             db::upsert_skill(&pool, &skill).await.unwrap();
         }

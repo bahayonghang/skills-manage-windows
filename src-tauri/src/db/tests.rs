@@ -66,6 +66,47 @@ async fn test_init_is_idempotent() {
     assert!(result.is_ok(), "Second init should be idempotent");
 }
 
+#[tokio::test]
+async fn test_init_adds_performance_timestamp_columns_and_indexes() {
+    let pool = setup_test_db().await;
+
+    let skill_columns = table_columns(&pool, "skills").await;
+    assert!(skill_columns.contains(&"fs_created_at".to_string()));
+    assert!(skill_columns.contains(&"fs_updated_at".to_string()));
+
+    let observation_columns = table_columns(&pool, "agent_skill_observations").await;
+    assert!(observation_columns.contains(&"fs_created_at".to_string()));
+    assert!(observation_columns.contains(&"fs_updated_at".to_string()));
+
+    let observation_indexes = table_indexes(&pool, "agent_skill_observations").await;
+    assert!(
+        observation_indexes.contains(&"idx_agent_skill_observations_agent_name_dir".to_string())
+    );
+
+    let update_state_indexes = table_indexes(&pool, "skill_update_states").await;
+    assert!(update_state_indexes.contains(&"idx_skill_update_states_status_skill".to_string()));
+}
+
+async fn table_columns(pool: &DbPool, table: &str) -> Vec<String> {
+    sqlx::query(&format!("PRAGMA table_info({table})"))
+        .fetch_all(pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.try_get::<String, _>("name").unwrap())
+        .collect()
+}
+
+async fn table_indexes(pool: &DbPool, table: &str) -> Vec<String> {
+    sqlx::query(&format!("PRAGMA index_list({table})"))
+        .fetch_all(pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.try_get::<String, _>("name").unwrap())
+        .collect()
+}
+
 fn test_operation_log_entry(
     action: &str,
     level: &str,
@@ -441,6 +482,8 @@ fn make_skill(id: &str, name: &str, is_central: bool) -> Skill {
         source: None,
         content: Some("# Test Skill\n\nContent here.".to_string()),
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 

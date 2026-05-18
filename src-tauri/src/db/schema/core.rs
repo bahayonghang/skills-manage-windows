@@ -9,6 +9,7 @@
 
 use sqlx::Row;
 
+use crate::db::migrations::ensure_column;
 use crate::db::DbPool;
 
 pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
@@ -23,7 +24,9 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
             is_central     BOOLEAN NOT NULL DEFAULT 0,
             source         TEXT,
             content        TEXT,
-            scanned_at     TEXT NOT NULL
+            scanned_at     TEXT NOT NULL,
+            fs_created_at  TEXT,
+            fs_updated_at  TEXT
         )",
     )
     .execute(pool)
@@ -78,7 +81,9 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
             link_type      TEXT NOT NULL,
             symlink_target TEXT,
             is_read_only   BOOLEAN NOT NULL DEFAULT 0,
-            scanned_at     TEXT NOT NULL
+            scanned_at     TEXT NOT NULL,
+            fs_created_at  TEXT,
+            fs_updated_at  TEXT
         )",
     )
     .execute(pool)
@@ -92,6 +97,43 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_agent_skill_observations_agent_name_dir
+         ON agent_skill_observations(agent_id, name, dir_path)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    ensure_column(
+        pool,
+        "skills",
+        "fs_created_at",
+        "ALTER TABLE skills ADD COLUMN fs_created_at TEXT",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "skills",
+        "fs_updated_at",
+        "ALTER TABLE skills ADD COLUMN fs_updated_at TEXT",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "agent_skill_observations",
+        "fs_created_at",
+        "ALTER TABLE agent_skill_observations ADD COLUMN fs_created_at TEXT",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "agent_skill_observations",
+        "fs_updated_at",
+        "ALTER TABLE agent_skill_observations ADD COLUMN fs_updated_at TEXT",
+    )
+    .await?;
 
     // 增量迁移：老 db 的 skill_installations 缺 created_at。两步走避免 SQLite
     // 在某些构建（如 Apple-modified SQLite）不支持非常量 DEFAULT 表达式：

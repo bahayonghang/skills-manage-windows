@@ -89,6 +89,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_update_states_status_skill
+         ON skill_update_states(status, skill_id)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     // skill_tag_groups — 标签分组（M3）。一级，不允许嵌套（D4）。tag.group_id 是
     // skill_tag_groups.id 的 nullable 引用；group 被删除时由 commands 把成员的
     // group_id 置 NULL，不在 DB 层做级联（保证 tag 本身不丢）。

@@ -56,6 +56,8 @@ pub struct Skill {
     pub source: Option<String>,
     pub content: Option<String>,
     pub scanned_at: String,
+    pub fs_created_at: Option<String>,
+    pub fs_updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -84,6 +86,8 @@ pub struct AgentSkillObservation {
     pub symlink_target: Option<String>,
     pub is_read_only: bool,
     pub scanned_at: String,
+    pub fs_created_at: Option<String>,
+    pub fs_updated_at: Option<String>,
 }
 
 // ─── Agent ───────────────────────────────────────────────────────────────────
