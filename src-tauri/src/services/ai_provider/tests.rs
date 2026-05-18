@@ -3,8 +3,7 @@
 //! routing, and explanation cache behavior.
 
 use super::cache::{
-    cache_skill_explanation, load_cached_skill_explanation,
-    load_cached_skill_explanation_summaries,
+    cache_skill_explanation, load_cached_skill_explanation, load_cached_skill_explanation_summaries,
 };
 use super::error::{classify_reqwest_error, format_reqwest_error, ExplanationErrorKind};
 use super::prompt::{
@@ -275,7 +274,10 @@ async fn load_cached_skill_explanation_summaries_returns_nonblank_lang_matches()
     .expect("load explanation summaries");
 
     assert_eq!(summaries.len(), 2);
-    assert_eq!(summaries.get("defuddle").map(String::as_str), Some("中文解释"));
+    assert_eq!(
+        summaries.get("defuddle").map(String::as_str),
+        Some("中文解释")
+    );
     assert_eq!(
         summaries.get("task-planner").map(String::as_str),
         Some("有空白也应修剪")
