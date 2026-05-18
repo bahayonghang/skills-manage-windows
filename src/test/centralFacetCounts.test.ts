@@ -19,6 +19,7 @@ function repo(
     id,
     name: id,
     source_type: "github",
+    pinned: false,
     is_unknown: false,
     skill_count: 0,
     unknown_skill_count: 0,

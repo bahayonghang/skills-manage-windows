@@ -83,6 +83,7 @@ interface CommonSidebarProps {
   onAssignTagToGroup?: (tagId: string, groupId: string | null) => void;
   /** 删除仓库（M4 回填）。 */
   onDeleteRepository?: (repository: SkillRepositoryWithStats) => void;
+  onToggleRepositoryPin?: (repository: SkillRepositoryWithStats) => void;
   /** Sidebar 顶部插槽。 */
   savedViewsSlot?: ReactNode;
 }
@@ -104,6 +105,7 @@ export function CentralSidebar({
   onSelectSmartView,
   onAssignTagToGroup,
   onDeleteRepository,
+  onToggleRepositoryPin,
   savedViewsSlot,
 }: CommonSidebarProps) {
   const [isPinned, setIsPinned] = useState<boolean>(() => readPinnedFromStorage());
@@ -223,6 +225,7 @@ export function CentralSidebar({
             repoSelectionSet={repoSelectionSet}
             onToggleRepo={onToggleRepo}
             onDeleteRepository={onDeleteRepository}
+            onToggleRepositoryPin={onToggleRepositoryPin}
             tagsSorted={tagsSorted}
             tagGroupSorted={tagGroupSorted}
             tagsByGroup={tagsByGroup}
@@ -286,6 +289,7 @@ interface ExpandedSidebarContentProps {
   repoSelectionSet: Set<string>;
   onToggleRepo: (id: string) => void;
   onDeleteRepository?: (repository: SkillRepositoryWithStats) => void;
+  onToggleRepositoryPin?: (repository: SkillRepositoryWithStats) => void;
   tagsSorted: SkillTag[];
   tagGroupSorted: TagGroup[];
   tagsByGroup: Map<string, SkillTag[]>;
@@ -314,6 +318,7 @@ function ExpandedSidebarContent({
   repoSelectionSet,
   onToggleRepo,
   onDeleteRepository,
+  onToggleRepositoryPin,
   tagsSorted,
   tagGroupSorted,
   tagsByGroup,
@@ -441,6 +446,7 @@ function ExpandedSidebarContent({
                     selectionSet={repoSelectionSet}
                     onToggleRepo={onToggleRepo}
                     onDeleteRepository={onDeleteRepository}
+                    onToggleRepositoryPin={onToggleRepositoryPin}
                     t={t}
                   />
                 ))

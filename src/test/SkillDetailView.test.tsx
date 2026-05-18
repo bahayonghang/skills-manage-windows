@@ -108,6 +108,7 @@ const mockRepositories: SkillRepositoryWithStats[] = [
     id: "local-unknown",
     name: "本地 / 未知来源",
     source_type: "local",
+    pinned: false,
     is_unknown: true,
     created_at: "2026-04-10T00:00:00Z",
     updated_at: "2026-04-10T00:00:00Z",
@@ -122,6 +123,7 @@ const mockRepositories: SkillRepositoryWithStats[] = [
     repo: "skills",
     branch: "main",
     url: "https://github.com/openai/skills",
+    pinned: false,
     is_unknown: false,
     created_at: "2026-04-10T00:00:00Z",
     updated_at: "2026-04-10T00:00:00Z",
@@ -236,6 +238,8 @@ const mockAssignSkillsToRepository = vi.fn();
 const mockAssignSkillTags = vi.fn();
 const mockCheckSkillUpdates = vi.fn();
 const mockUpdateSkills = vi.fn();
+const mockOpenInFileManager = vi.fn();
+const mockLoadDirectoryTree = vi.fn();
 
 function buildDetailStoreState(overrides = {}) {
   return {
@@ -256,6 +260,10 @@ function buildDetailStoreState(overrides = {}) {
     installSkill: mockInstallSkill,
     uninstallSkill: mockUninstallSkill,
     refreshInstallations: mockRefreshInstallations,
+    openInFileManager: mockOpenInFileManager,
+    directoryTree: [],
+    isDirectoryLoading: false,
+    loadDirectoryTree: mockLoadDirectoryTree,
     cleanupExplanationListeners: mockCleanupExplanationListeners,
     reset: mockReset,
     ...overrides,
@@ -402,6 +410,8 @@ describe("SkillDetailView", () => {
     mockAssignSkillsToRepository.mockResolvedValue(undefined);
     mockAssignSkillTags.mockResolvedValue(undefined);
     mockCheckSkillUpdates.mockResolvedValue([]);
+    mockOpenInFileManager.mockResolvedValue(undefined);
+    mockLoadDirectoryTree.mockResolvedValue(undefined);
     mockUpdateSkills.mockResolvedValue({
       succeeded: [],
       failed: [],
@@ -627,6 +637,18 @@ describe("SkillDetailView", () => {
   it("shows canonical path", () => {
     renderView();
     expect(screen.getAllByText("~/.skillsmanage/skills/frontend-design").length).toBeGreaterThan(0);
+  });
+
+  it("opens the central skill directory from metadata controls", async () => {
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "打开文件夹" }));
+
+    await waitFor(() => {
+      expect(mockOpenInFileManager).toHaveBeenCalledWith(
+        "~/.skillsmanage/skills/frontend-design"
+      );
+    });
   });
 
   it("shows source", () => {

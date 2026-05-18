@@ -158,8 +158,8 @@ pub async fn create_or_update_skill_repository(
 
     sqlx::query(
         "INSERT INTO skill_repositories
-         (id, name, source_type, owner, repo, branch, url, is_unknown, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (id, name, source_type, owner, repo, branch, url, pinned, is_unknown, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            source_type = excluded.source_type,
@@ -167,6 +167,7 @@ pub async fn create_or_update_skill_repository(
            repo = excluded.repo,
            branch = excluded.branch,
            url = excluded.url,
+           pinned = skill_repositories.pinned,
            is_unknown = excluded.is_unknown,
            updated_at = excluded.updated_at",
     )
@@ -221,6 +222,37 @@ pub async fn assign_github_repository_to_skill(
     )
     .await?;
     Ok(repository)
+}
+
+pub async fn set_skill_repository_pinned(
+    pool: &DbPool,
+    repository_id: &str,
+    pinned: bool,
+) -> Result<SkillRepository, String> {
+    let repository = get_skill_repository_by_id(pool, repository_id)
+        .await?
+        .ok_or_else(|| format!("Repository '{}' not found", repository_id))?;
+    if repository.id == LOCAL_UNKNOWN_REPOSITORY_ID || repository.is_unknown {
+        return Err("The system unknown-source repository cannot be pinned".to_string());
+    }
+
+    let now = now_rfc3339();
+    sqlx::query(
+        "UPDATE skill_repositories
+         SET pinned = ?, updated_at = ?
+         WHERE id = ? AND id <> ? AND is_unknown = 0",
+    )
+    .bind(pinned)
+    .bind(&now)
+    .bind(repository_id)
+    .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    get_skill_repository_by_id(pool, repository_id)
+        .await?
+        .ok_or_else(|| "Failed to retrieve repository metadata".to_string())
 }
 
 pub async fn assign_skills_to_repository(
@@ -315,6 +347,7 @@ pub async fn get_skill_repository_assignments_for_skills(
             r.repo AS repository_repo,
             r.branch AS repository_branch,
             r.url AS repository_url,
+            r.pinned AS repository_pinned,
             r.is_unknown AS repository_is_unknown,
             r.created_at AS repository_created_at,
             r.updated_at AS repository_updated_at
@@ -344,6 +377,9 @@ pub async fn get_skill_repository_assignments_for_skills(
                 .try_get("repository_branch")
                 .map_err(|e| e.to_string())?,
             url: row.try_get("repository_url").map_err(|e| e.to_string())?,
+            pinned: row
+                .try_get("repository_pinned")
+                .map_err(|e| e.to_string())?,
             is_unknown: row
                 .try_get("repository_is_unknown")
                 .map_err(|e| e.to_string())?,
@@ -373,7 +409,7 @@ pub async fn get_skill_repositories_with_stats(
     let rows = sqlx::query(
         "SELECT
             r.id, r.name, r.source_type, r.owner, r.repo, r.branch, r.url,
-            r.is_unknown, r.created_at, r.updated_at,
+            r.pinned, r.is_unknown, r.created_at, r.updated_at,
             CASE
               WHEN r.id = ? THEN (
                 SELECT COUNT(*)
@@ -398,7 +434,7 @@ pub async fn get_skill_repositories_with_stats(
          LEFT JOIN skill_repository_members m ON r.id = m.repository_id
          LEFT JOIN skills s ON s.id = m.skill_id AND s.is_central = 1
          GROUP BY r.id
-         ORDER BY r.is_unknown DESC, r.name",
+         ORDER BY r.is_unknown DESC, r.pinned DESC, r.name",
     )
     .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
     .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
@@ -416,6 +452,7 @@ pub async fn get_skill_repositories_with_stats(
             repo: row.try_get("repo").map_err(|e| e.to_string())?,
             branch: row.try_get("branch").map_err(|e| e.to_string())?,
             url: row.try_get("url").map_err(|e| e.to_string())?,
+            pinned: row.try_get("pinned").map_err(|e| e.to_string())?,
             is_unknown: row.try_get("is_unknown").map_err(|e| e.to_string())?,
             created_at: row.try_get("created_at").map_err(|e| e.to_string())?,
             updated_at: row.try_get("updated_at").map_err(|e| e.to_string())?,

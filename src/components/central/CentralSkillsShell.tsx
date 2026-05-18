@@ -54,7 +54,7 @@ import type {
  * 设计原则：
  * - **复用** V1 的 list / dialogs / progress / categorize 渲染（不重写已稳定的部分）
  * - **替换** sidebar (CentralSidebar) 与 search bar (CentralSearchBar)
- * - 通过 viewState / setViewState 驱动新视图状态（多选 + URL state 同步）
+ * - 通过 viewState / setViewState 驱动新视图状态（repo 单选、tag 多选 + URL state 同步）
  */
 
 type ListContentProps = Omit<ComponentProps<typeof CentralSkillListContent>, "t">;
@@ -140,6 +140,7 @@ export interface CentralSkillsShellProps {
 
   /** 仓库删除（M4 回填）。 */
   onDeleteRepository?: (repository: SkillRepositoryWithStats) => void;
+  onToggleRepositoryPin?: (repository: SkillRepositoryWithStats) => void;
 
   /** 命令面板触发。 */
   onOpenPalette?: () => void;
@@ -181,12 +182,13 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
     updateButton,
     checkButton,
     onDeleteRepository,
+    onToggleRepositoryPin,
     onOpenPalette,
     savedViewsSlot,
   } = props;
 
   const handleToggleRepo = (repoId: string) => {
-    const next = toggleId(viewState.repos, repoId);
+    const next = viewState.repos[0] === repoId ? [] : [repoId];
     setViewState({ ...viewState, repos: next });
   };
 
@@ -381,6 +383,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           tagGroups={tagGroups}
           onAssignTagToGroup={onAssignTagToGroup}
           onDeleteRepository={onDeleteRepository}
+          onToggleRepositoryPin={onToggleRepositoryPin}
           selectedRepos={viewState.repos}
           selectedTags={viewState.tags}
           onToggleRepo={handleToggleRepo}

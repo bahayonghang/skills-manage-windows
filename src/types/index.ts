@@ -270,6 +270,7 @@ export interface SkillRepository {
   repo?: string;
   branch?: string;
   url?: string;
+  pinned: boolean;
   is_unknown: boolean;
   created_at: string;
   updated_at: string;
@@ -288,7 +289,6 @@ export interface SkillTag {
   is_builtin: boolean;
   created_at: string;
   updated_at: string;
-  /** 标签所属分组 id（M3 加入；旧数据为 null）。 */
   group_id?: string | null;
 }
 

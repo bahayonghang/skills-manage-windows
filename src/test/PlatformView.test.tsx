@@ -330,6 +330,7 @@ const mockSortablePlatformSkills: ScannedSkill[] = [
       repo: "beta",
       branch: "main",
       url: "https://github.com/owner/beta",
+      pinned: false,
       is_unknown: false,
       created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",

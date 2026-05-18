@@ -1109,6 +1109,87 @@ async fn test_assign_github_repository_to_skill_records_source_path() {
 }
 
 #[tokio::test]
+async fn test_skill_repository_pinned_defaults_false_and_can_be_updated() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("github-pin-skill", "GitHub Pin Skill", true);
+    upsert_skill(&pool, &skill).await.unwrap();
+
+    let repository = assign_github_repository_to_skill(
+        &pool,
+        "openai",
+        "skills",
+        "main",
+        "https://github.com/openai/skills",
+        "github-pin-skill",
+        "skills/github-pin-skill",
+    )
+    .await
+    .unwrap();
+    assert!(!repository.pinned);
+
+    let updated = set_skill_repository_pinned(&pool, &repository.id, true)
+        .await
+        .unwrap();
+    assert!(updated.pinned);
+
+    let repositories = get_skill_repositories_with_stats(&pool).await.unwrap();
+    let listed = repositories
+        .iter()
+        .find(|entry| entry.repository.id == repository.id)
+        .unwrap();
+    assert!(listed.repository.pinned);
+}
+
+#[tokio::test]
+async fn test_create_or_update_skill_repository_preserves_pinned_state() {
+    let pool = setup_test_db().await;
+    let repository = create_or_update_skill_repository(
+        &pool,
+        Some("github-openai-skills-main"),
+        "openai/skills",
+        "github",
+        Some("openai"),
+        Some("skills"),
+        Some("main"),
+        Some("https://github.com/openai/skills"),
+        false,
+    )
+    .await
+    .unwrap();
+
+    set_skill_repository_pinned(&pool, &repository.id, true)
+        .await
+        .unwrap();
+    let refreshed = create_or_update_skill_repository(
+        &pool,
+        Some("github-openai-skills-main"),
+        "openai/skills-renamed",
+        "github",
+        Some("openai"),
+        Some("skills"),
+        Some("main"),
+        Some("https://github.com/openai/skills"),
+        false,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(refreshed.name, "openai/skills-renamed");
+    assert!(refreshed.pinned);
+}
+
+#[tokio::test]
+async fn test_set_skill_repository_pinned_rejects_unknown_repository() {
+    let pool = setup_test_db().await;
+
+    let error = set_skill_repository_pinned(&pool, LOCAL_UNKNOWN_REPOSITORY_ID, true)
+        .await
+        .unwrap_err();
+
+    assert!(error.contains("cannot be pinned"));
+}
+
+#[tokio::test]
 async fn test_delete_last_repository_skill_prunes_repository() {
     let pool = setup_test_db().await;
     let skill = make_skill("github-prune-skill", "GitHub Prune Skill", true);

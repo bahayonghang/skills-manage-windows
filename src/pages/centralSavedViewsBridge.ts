@@ -107,8 +107,8 @@ export function useCentralSavedViewsBridge({
 }
 
 /**
- * 把一个 id 加入 viewState 中的 `tags` 或 `repos` 列表（去重）。
- * 用于命令面板等需要追加单个 facet 的场景。
+ * 把一个 id 应用到 viewState 中的 `tags` 或 `repos`。
+ * `tags` 是追加去重；`repos` 是单选替换，用于命令面板等 facet 场景。
  */
 export function addUniqueToCentralViewState(
   state: CentralViewState,
@@ -116,6 +116,12 @@ export function addUniqueToCentralViewState(
   kind: "tags" | "repos",
   id: string,
 ): void {
+  if (kind === "repos") {
+    if (state.repos[0] === id && state.repos.length === 1) return;
+    setState({ ...state, repos: [id] });
+    return;
+  }
+
   const existing = state[kind];
   if (existing.includes(id)) return;
   setState({ ...state, [kind]: [...existing, id] });

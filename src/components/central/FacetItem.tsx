@@ -22,6 +22,8 @@ export interface FacetItemProps {
   disabled?: boolean;
   description?: string;
   testId?: string;
+  className?: string;
+  "data-pinned"?: boolean;
   onClick: () => void;
   /** Hover 时显示的右侧操作（如 delete）。 */
   trailingAction?: ReactNode;
@@ -36,6 +38,8 @@ export function FacetItem({
   disabled = false,
   description,
   testId,
+  className,
+  "data-pinned": dataPinned,
   onClick,
   trailingAction,
 }: FacetItemProps) {
@@ -47,8 +51,10 @@ export function FacetItem({
         active
           ? "border-primary/25 bg-background text-foreground shadow-sm ring-1 ring-primary/10"
           : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-background/70 hover:text-foreground",
-        disabled && "pointer-events-none opacity-50"
+        disabled && "pointer-events-none opacity-50",
+        className
       )}
+      data-pinned={dataPinned}
     >
       <button
         type="button"

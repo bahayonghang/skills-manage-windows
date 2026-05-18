@@ -74,6 +74,7 @@ export interface CentralSkillsState {
   togglePlatformLink: (skillId: string, agentId: string) => Promise<void>;
   createRepository: (name: string) => Promise<SkillRepository>;
   assignSkillsToRepository: (skillIds: string[], repositoryId: string) => Promise<void>;
+  setRepositoryPinned: (repositoryId: string, pinned: boolean) => Promise<void>;
   createTag: (name: string) => Promise<SkillTag>;
   assignSkillTags: (skillIds: string[], tagIds: string[]) => Promise<void>;
   bulkSuggestSkillTags: (skillIds: string[]) => Promise<SkillTagSuggestionResult[]>;

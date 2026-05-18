@@ -221,6 +221,7 @@ export function useCentralSkillsStoreBindings(t: TFunction) {
       noopPreviewSkillportStateImport,
     importSkillportState:
       useCentralSkillsStore((state) => state.importSkillportState) ?? noopImportSkillportState,
+    setRepositoryPinned: useCentralSkillsStore((state) => state.setRepositoryPinned) ?? noopAsync,
   };
 }
 

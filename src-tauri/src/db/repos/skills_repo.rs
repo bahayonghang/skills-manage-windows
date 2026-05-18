@@ -185,6 +185,7 @@ struct InstalledSkillForAgentRow {
     repository_repo: Option<String>,
     repository_branch: Option<String>,
     repository_url: Option<String>,
+    repository_pinned: Option<bool>,
     repository_is_unknown: Option<bool>,
     repository_created_at: Option<String>,
     repository_updated_at: Option<String>,
@@ -227,6 +228,7 @@ pub async fn get_skills_for_agent(
                 r.repo AS repository_repo,
                 r.branch AS repository_branch,
                 r.url AS repository_url,
+                r.pinned AS repository_pinned,
                 r.is_unknown AS repository_is_unknown,
                 r.created_at AS repository_created_at,
                 r.updated_at AS repository_updated_at,
@@ -320,6 +322,7 @@ fn repository_from_installed_row(
         repo: row.repository_repo.clone(),
         branch: row.repository_branch.clone(),
         url: row.repository_url.clone(),
+        pinned: row.repository_pinned.unwrap_or(false),
         is_unknown: row.repository_is_unknown.unwrap_or(true),
         created_at: row
             .repository_created_at

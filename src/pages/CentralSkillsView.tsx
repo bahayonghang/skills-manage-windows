@@ -60,6 +60,7 @@ export function CentralSkillsView() {
     exportSkillportState,
     previewSkillportStateImport,
     importSkillportState,
+    setRepositoryPinned,
   } = useCentralSkillsStoreBindings(t);
 
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
@@ -673,6 +674,9 @@ export function CentralSkillsView() {
         onAssignTagToGroup={tagGroupsBridge.handleAssignTagToGroup}
         onDeleteRepository={(repo) => {
           void handleRepositoryDeleteClick(repo);
+        }}
+        onToggleRepositoryPin={(repo) => {
+          void setRepositoryPinned(repo.id, !repo.pinned);
         }}
       />
       <CommandPalette

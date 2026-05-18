@@ -20,6 +20,7 @@ function repo(overrides: Partial<SkillRepository> & { id: string; name: string }
     repo: "repo",
     branch: "main",
     url: "https://github.com/owner/repo",
+    pinned: false,
     is_unknown: false,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",

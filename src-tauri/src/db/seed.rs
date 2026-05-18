@@ -181,8 +181,8 @@ async fn seed_builtin_skill_metadata(pool: &DbPool) -> Result<(), String> {
     let now = Utc::now().to_rfc3339();
     sqlx::query(
         "INSERT INTO skill_repositories
-         (id, name, source_type, owner, repo, branch, url, is_unknown, created_at, updated_at)
-         VALUES (?, ?, 'local', NULL, NULL, NULL, NULL, 1, ?, ?)
+         (id, name, source_type, owner, repo, branch, url, pinned, is_unknown, created_at, updated_at)
+         VALUES (?, ?, 'local', NULL, NULL, NULL, NULL, 0, 1, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            source_type = excluded.source_type,

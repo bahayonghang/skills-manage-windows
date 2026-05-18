@@ -125,6 +125,30 @@ describe("CentralSkillsView repositories + installs（V2 markup）", () => {
     expect(screen.getByText("code-reviewer")).toBeInTheDocument();
   });
 
+  it("treats repository facet selection as single-select", async () => {
+    window.localStorage.setItem("central.sidebarPinned", "true");
+    renderCentralSkillsView();
+
+    const sidebar = screen.getByTestId("central-sidebar-v2");
+    fireEvent.click(within(sidebar).getByTestId("repo-github-openai-skills-main"));
+    await waitFor(() => {
+      expect(screen.getByText("frontend-design")).toBeInTheDocument();
+      expect(screen.queryByText("code-reviewer")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(within(sidebar).getByTestId("repo-local-unknown"));
+    await waitFor(() => {
+      expect(screen.queryByText("frontend-design")).not.toBeInTheDocument();
+      expect(screen.getByText("code-reviewer")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(sidebar).getByTestId("repo-local-unknown"));
+    await waitFor(() => {
+      expect(screen.getByText("frontend-design")).toBeInTheDocument();
+      expect(screen.getByText("code-reviewer")).toBeInTheDocument();
+    });
+  });
+
 
   it("sorts by modified time and reverses direction explicitly", async () => {
     renderCentralSkillsView();

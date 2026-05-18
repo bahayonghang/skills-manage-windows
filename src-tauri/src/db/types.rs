@@ -127,6 +127,7 @@ pub struct SkillRepository {
     pub repo: Option<String>,
     pub branch: Option<String>,
     pub url: Option<String>,
+    pub pinned: bool,
     pub is_unknown: bool,
     pub created_at: String,
     pub updated_at: String,

@@ -28,9 +28,9 @@ describe("centralViewState", () => {
     expect(s).toEqual(defaultCentralViewState());
   });
 
-  it("parses csv arrays", () => {
+  it("parses repo csv as a single selection and keeps tag csv multi-select", () => {
     const s = parseCentralViewState(new URLSearchParams("repos=r1,r2&tags=t1"));
-    expect(s.repos).toEqual(["r1", "r2"]);
+    expect(s.repos).toEqual(["r1"]);
     expect(s.tags).toEqual(["t1"]);
   });
 
@@ -62,10 +62,10 @@ describe("centralViewState", () => {
       q: "tag:editor",
       repos: ["r1", "r2"],
     });
-    expect(params.toString()).toBe("q=tag%3Aeditor&repos=r1%2Cr2");
+    expect(params.toString()).toBe("q=tag%3Aeditor&repos=r1");
   });
 
-  it("round-trips through URL", () => {
+  it("round-trips through URL with normalized repo single-select state", () => {
     const original = updateCentralViewState(defaultCentralViewState(), {
       q: "tag:editor paper",
       repos: ["r1", "r2"],
@@ -77,7 +77,10 @@ describe("centralViewState", () => {
     });
     const url = `https://app.local/${toQueryString(original)}`;
     const parsed = parseCentralViewStateFromUrl(url);
-    expect(parsed).toEqual(original);
+    expect(parsed).toEqual({
+      ...original,
+      repos: ["r1"],
+    });
   });
 
   it("toQueryString returns empty string for default state", () => {
@@ -86,6 +89,13 @@ describe("centralViewState", () => {
 
   it("trims and drops empty csv parts", () => {
     const s = parseCentralViewState(new URLSearchParams("repos= r1 , ,r2 "));
-    expect(s.repos).toEqual(["r1", "r2"]);
+    expect(s.repos).toEqual(["r1"]);
+  });
+
+  it("normalizes repo patches to the first non-empty repository", () => {
+    const s = updateCentralViewState(defaultCentralViewState(), {
+      repos: ["", "r2", "r3"],
+    });
+    expect(s.repos).toEqual(["r2"]);
   });
 });

@@ -332,6 +332,7 @@ pub fn run() {
             commands::central_metadata::get_skill_repositories,
             commands::central_metadata::create_or_update_skill_repository,
             commands::central_metadata::assign_skills_to_repository,
+            commands::central_metadata::set_skill_repository_pinned,
             commands::central_metadata::get_skill_tags,
             commands::central_metadata::create_skill_tag,
             commands::central_metadata::assign_skill_tags,

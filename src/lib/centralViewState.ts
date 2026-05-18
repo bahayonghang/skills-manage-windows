@@ -1,7 +1,7 @@
 /**
  * Central Skills 视图状态序列化（URL-as-state）。
  *
- * 把搜索 / 多选筛选 / 排序 / 视图模式 / 分组方式都编码到 URLSearchParams，
+ * 把搜索 / 筛选 / 排序 / 视图模式 / 分组方式都编码到 URLSearchParams，
  * 供 URL 分享、刷新保留上下文、Saved View 恢复使用。
  *
  * D2：不引入第三方依赖，全部纯函数 + URLSearchParams。
@@ -19,7 +19,7 @@ export type GroupByMode = "none" | "repository" | "owner" | "tag" | "status";
 export interface CentralViewState {
   /** 搜索框原文（含结构化语法） */
   q: string;
-  /** 多选仓库 id（保留特殊值 "unassigned"） */
+  /** 单选仓库 id（数组形状用于兼容旧 URL / Saved View，保留特殊值 "unassigned"） */
   repos: string[];
   /** 多选 tag id（保留特殊值 "uncategorized"） */
   tags: string[];
@@ -89,6 +89,19 @@ function joinCsv(values: readonly string[]): string {
     .join(",");
 }
 
+export function normalizeSingleRepoSelection(values: readonly string[]): string[] {
+  const first = values.map((value) => value.trim()).find((value) => value.length > 0);
+  return first ? [first] : [];
+}
+
+export function normalizeCentralViewState(state: CentralViewState): CentralViewState {
+  return {
+    ...state,
+    repos: normalizeSingleRepoSelection(state.repos),
+    tags: state.tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0),
+  };
+}
+
 /**
  * 把 URLSearchParams 解析为 CentralViewState。
  * 任何字段缺失 / 非法都回退到默认值，不抛错。
@@ -107,7 +120,7 @@ export function parseCentralViewState(params: URLSearchParams): CentralViewState
 
   return {
     q: params.get("q") ?? "",
-    repos: splitCsv(params.get("repos")),
+    repos: normalizeSingleRepoSelection(splitCsv(params.get("repos"))),
     tags: splitCsv(params.get("tags")),
     view: pickEnum(params.get("view"), VIEW_MODES, DEFAULT_STATE.view),
     group: pickEnum(params.get("group"), GROUP_BY_MODES, DEFAULT_STATE.group),
@@ -122,19 +135,20 @@ export function parseCentralViewState(params: URLSearchParams): CentralViewState
  * 仅写入与默认值不同的字段，避免 URL 噪音。
  */
 export function serializeCentralViewState(state: CentralViewState): URLSearchParams {
+  const normalized = normalizeCentralViewState(state);
   const params = new URLSearchParams();
-  if (state.q) params.set("q", state.q);
-  if (state.repos.length > 0) params.set("repos", joinCsv(state.repos));
-  if (state.tags.length > 0) params.set("tags", joinCsv(state.tags));
-  if (state.view !== DEFAULT_STATE.view) params.set("view", state.view);
-  if (state.group !== DEFAULT_STATE.group) params.set("group", state.group);
+  if (normalized.q) params.set("q", normalized.q);
+  if (normalized.repos.length > 0) params.set("repos", joinCsv(normalized.repos));
+  if (normalized.tags.length > 0) params.set("tags", joinCsv(normalized.tags));
+  if (normalized.view !== DEFAULT_STATE.view) params.set("view", normalized.view);
+  if (normalized.group !== DEFAULT_STATE.group) params.set("group", normalized.group);
   if (
-    state.sortField !== DEFAULT_STATE.sortField
-    || state.sortDir !== DEFAULT_STATE.sortDir
+    normalized.sortField !== DEFAULT_STATE.sortField
+    || normalized.sortDir !== DEFAULT_STATE.sortDir
   ) {
-    params.set("sort", `${state.sortField}:${state.sortDir}`);
+    params.set("sort", `${normalized.sortField}:${normalized.sortDir}`);
   }
-  if (state.savedView) params.set("savedView", state.savedView);
+  if (normalized.savedView) params.set("savedView", normalized.savedView);
   return params;
 }
 
@@ -161,5 +175,5 @@ export function updateCentralViewState(
   state: CentralViewState,
   patch: Partial<CentralViewState>
 ): CentralViewState {
-  return { ...state, ...patch };
+  return normalizeCentralViewState({ ...state, ...patch });
 }

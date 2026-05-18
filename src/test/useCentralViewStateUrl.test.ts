@@ -24,7 +24,7 @@ describe("useCentralViewStateUrl", () => {
     const { result } = renderHook(() => useCentralViewStateUrl());
     const [state] = result.current;
     expect(state.q).toBe("hello");
-    expect(state.repos).toEqual(["r1", "r2"]);
+    expect(state.repos).toEqual(["r1"]);
     expect(state.tags).toEqual(["t1"]);
     expect(state.view).toBe("list");
     expect(state.group).toBe("tag");

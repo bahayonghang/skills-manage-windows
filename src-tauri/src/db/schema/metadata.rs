@@ -20,6 +20,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
             repo        TEXT,
             branch      TEXT,
             url         TEXT,
+            pinned      BOOLEAN NOT NULL DEFAULT 0,
             is_unknown  BOOLEAN NOT NULL DEFAULT 0,
             created_at  TEXT NOT NULL,
             updated_at  TEXT NOT NULL
@@ -28,6 +29,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    ensure_column(
+        pool,
+        "skill_repositories",
+        "pinned",
+        "ALTER TABLE skill_repositories ADD COLUMN pinned BOOLEAN NOT NULL DEFAULT 0",
+    )
+    .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_repository_members (

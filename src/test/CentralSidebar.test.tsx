@@ -36,6 +36,7 @@ const repositories: SkillRepositoryWithStats[] = [
     repo: "skills",
     branch: "main",
     url: "https://github.com/openai/skills",
+    pinned: false,
     is_unknown: false,
     created_at: "2026-04-10T00:00:00Z",
     updated_at: "2026-04-10T00:00:00Z",
@@ -46,6 +47,7 @@ const repositories: SkillRepositoryWithStats[] = [
     id: "local-unknown",
     name: "本地 / 未知来源",
     source_type: "local",
+    pinned: false,
     is_unknown: true,
     created_at: "2026-04-10T00:00:00Z",
     updated_at: "2026-04-10T00:00:00Z",
@@ -103,7 +105,13 @@ const facetCounts: FacetCounts = {
   },
 };
 
-function renderSidebar() {
+function renderSidebar(
+  overrides: Partial<{
+    repositories: SkillRepositoryWithStats[];
+    selectedRepos: string[];
+    onToggleRepositoryPin: (repository: SkillRepositoryWithStats) => void;
+  }> = {}
+) {
   const handlers = {
     startResize: vi.fn(),
     handleResizeKeyDown: vi.fn(),
@@ -111,6 +119,7 @@ function renderSidebar() {
     onToggleTag: vi.fn(),
     onClearAll: vi.fn(),
     onSelectSmartView: vi.fn(),
+    onToggleRepositoryPin: vi.fn(),
   };
 
   // M4：sidebar 默认折叠为 48px rail。本套测试断言展开后的 facet 内容，
@@ -122,10 +131,10 @@ function renderSidebar() {
       t={t}
       width={286}
       facetCounts={facetCounts}
-      repositories={repositories}
+      repositories={overrides.repositories ?? repositories}
       tags={tags}
       tagGroups={tagGroups}
-      selectedRepos={[]}
+      selectedRepos={overrides.selectedRepos ?? []}
       selectedTags={[]}
       savedViewsSlot={
         <>
@@ -138,6 +147,7 @@ function renderSidebar() {
         </>
       }
       {...handlers}
+      onToggleRepositoryPin={overrides.onToggleRepositoryPin ?? handlers.onToggleRepositoryPin}
     />
   );
 
@@ -217,6 +227,30 @@ describe("CentralSidebar", () => {
     fireEvent.click(within(sidebar).getByRole("button", { name: "收起 openai" }));
     expect(within(sidebar).queryByTestId("repo-github-openai-skills-main")).not.toBeInTheDocument();
     expect(within(sidebar).getByTestId("sidebar-section-tags-content")).not.toHaveClass("hidden");
+  });
+
+  it("shows pinned repository styling and does not select the row when pin is clicked", () => {
+    const pinnedRepositories = repositories.map((repo) =>
+      repo.id === "github-openai-skills-main" ? { ...repo, pinned: true } : repo
+    );
+    const onToggleRepositoryPin = vi.fn();
+    const { sidebar, handlers } = renderSidebar({
+      repositories: pinnedRepositories,
+      onToggleRepositoryPin,
+    });
+
+    const repoButton = within(sidebar).getByTestId("repo-github-openai-skills-main");
+    const repoRow = repoButton.closest("[data-pinned]");
+    expect(repoRow).toHaveAttribute("data-pinned", "true");
+
+    const pinButton = within(sidebar).getByTestId("repo-pin-github-openai-skills-main");
+    expect(pinButton).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(pinButton);
+
+    expect(onToggleRepositoryPin).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "github-openai-skills-main", pinned: true })
+    );
+    expect(handlers.onToggleRepo).not.toHaveBeenCalled();
   });
 });
 

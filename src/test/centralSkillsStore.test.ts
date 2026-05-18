@@ -77,6 +77,7 @@ const mockRepositories: SkillRepositoryWithStats[] = [
     id: "local-unknown",
     name: "本地 / 未知来源",
     source_type: "local",
+    pinned: false,
     is_unknown: true,
     created_at: "2026-04-17T00:00:00.000Z",
     updated_at: "2026-04-17T00:00:00.000Z",
@@ -409,6 +410,7 @@ describe("centralSkillsStore", () => {
       repo: "skills",
       branch: "main",
       url: "https://github.com/openai/skills",
+      pinned: false,
       is_unknown: false,
       created_at: "2026-04-17T00:00:00.000Z",
       updated_at: "2026-04-17T00:00:00.000Z",
@@ -452,6 +454,7 @@ describe("centralSkillsStore", () => {
         repo: "skills",
         branch: "main",
         url: "https://github.com/openai/skills",
+        pinned: false,
         is_unknown: false,
         created_at: "2026-04-17T00:00:00.000Z",
         updated_at: "2026-04-17T00:00:00.000Z",
@@ -764,6 +767,40 @@ describe("centralSkillsStore", () => {
     });
     expect(invoke).toHaveBeenCalledWith("get_central_skills");
     expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+    expect(useCentralSkillsStore.getState().isMetadataUpdating).toBe(false);
+  });
+
+  it("sets repository pin state and refreshes repositories", async () => {
+    const pinnedRepository: SkillRepositoryWithStats = {
+      id: "github-openai-skills-main",
+      name: "openai/skills",
+      source_type: "github",
+      owner: "openai",
+      repo: "skills",
+      branch: "main",
+      url: "https://github.com/openai/skills",
+      pinned: true,
+      is_unknown: false,
+      created_at: "2026-04-17T00:00:00.000Z",
+      updated_at: "2026-04-17T00:00:00.000Z",
+      skill_count: 1,
+      unknown_skill_count: 0,
+    };
+    const pinnedRepositories = [mockRepositories[0], pinnedRepository];
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(pinnedRepository)
+      .mockResolvedValueOnce(pinnedRepositories);
+
+    await useCentralSkillsStore
+      .getState()
+      .setRepositoryPinned("github-openai-skills-main", true);
+
+    expect(invoke).toHaveBeenCalledWith("set_skill_repository_pinned", {
+      repositoryId: "github-openai-skills-main",
+      pinned: true,
+    });
+    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+    expect(useCentralSkillsStore.getState().repositories).toEqual(pinnedRepositories);
     expect(useCentralSkillsStore.getState().isMetadataUpdating).toBe(false);
   });
 

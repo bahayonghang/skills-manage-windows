@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, FolderGit2, FolderOpen, Tag, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderGit2, FolderOpen, Pin, PinOff, Tag, Trash2 } from "lucide-react";
 import type { TFunction } from "i18next";
 
 import { FacetItem } from "@/components/central/FacetItem";
@@ -17,6 +17,7 @@ interface RepositorySectionBlockProps {
   selectionSet: Set<string>;
   onToggleRepo: (id: string) => void;
   onDeleteRepository?: (repository: SkillRepositoryWithStats) => void;
+  onToggleRepositoryPin?: (repository: SkillRepositoryWithStats) => void;
   t: TFunction;
 }
 
@@ -26,6 +27,7 @@ export function RepositorySectionBlock({
   selectionSet,
   onToggleRepo,
   onDeleteRepository,
+  onToggleRepositoryPin,
   t,
 }: RepositorySectionBlockProps) {
   const sectionLabel =
@@ -46,9 +48,10 @@ export function RepositorySectionBlock({
               totalCount={group.totalSkillCount}
               facetCounts={facetCounts}
               selectionSet={selectionSet}
-              onToggleRepo={onToggleRepo}
-              onDeleteRepository={onDeleteRepository}
-              t={t}
+                    onToggleRepo={onToggleRepo}
+                    onDeleteRepository={onDeleteRepository}
+                    onToggleRepositoryPin={onToggleRepositoryPin}
+                    t={t}
             />
           );
         }
@@ -60,11 +63,18 @@ export function RepositorySectionBlock({
             count={facetCounts.repositories[repo.id] ?? 0}
             icon={<FolderOpen className="size-3.5" />}
             testId={`repo-${repo.id}`}
+            data-pinned={repo.pinned}
+            className={
+              repo.pinned
+                ? "border-primary/20 bg-primary/5 text-foreground"
+                : undefined
+            }
             onClick={() => onToggleRepo(repo.is_unknown ? "unassigned" : repo.id)}
             trailingAction={
-              onDeleteRepository && !repo.is_unknown ? (
-                <RepoDeleteTrailingAction
+              !repo.is_unknown && (onToggleRepositoryPin || onDeleteRepository) ? (
+                <RepoTrailingActions
                   repository={repo}
+                  onTogglePin={onToggleRepositoryPin}
                   onDelete={onDeleteRepository}
                   t={t}
                 />
@@ -85,6 +95,7 @@ interface OwnerGroupProps {
   selectionSet: Set<string>;
   onToggleRepo: (id: string) => void;
   onDeleteRepository?: (repository: SkillRepositoryWithStats) => void;
+  onToggleRepositoryPin?: (repository: SkillRepositoryWithStats) => void;
   t: TFunction;
 }
 
@@ -96,6 +107,7 @@ function OwnerGroup({
   selectionSet,
   onToggleRepo,
   onDeleteRepository,
+  onToggleRepositoryPin,
   t,
 }: OwnerGroupProps) {
   const [expanded, setExpanded] = useState(true);
@@ -143,11 +155,18 @@ function OwnerGroup({
               icon={<FolderOpen className="size-3 text-muted-foreground/70" />}
               indentLevel={1}
               testId={`repo-${repo.id}`}
+              data-pinned={repo.pinned}
+              className={
+                repo.pinned
+                  ? "border-primary/20 bg-primary/5 text-foreground"
+                  : undefined
+              }
               onClick={() => onToggleRepo(repo.id)}
               trailingAction={
-                onDeleteRepository ? (
-                  <RepoDeleteTrailingAction
+                onToggleRepositoryPin || onDeleteRepository ? (
+                  <RepoTrailingActions
                     repository={repo}
+                    onTogglePin={onToggleRepositoryPin}
                     onDelete={onDeleteRepository}
                     t={t}
                   />
@@ -161,30 +180,65 @@ function OwnerGroup({
   );
 }
 
-function RepoDeleteTrailingAction({
+function RepoTrailingActions({
   repository,
+  onTogglePin,
   onDelete,
   t,
 }: {
   repository: SkillRepositoryWithStats;
-  onDelete: (repository: SkillRepositoryWithStats) => void;
+  onTogglePin?: (repository: SkillRepositoryWithStats) => void;
+  onDelete?: (repository: SkillRepositoryWithStats) => void;
   t: TFunction;
 }) {
   const displayName = repository.repo ?? repository.name ?? repository.id;
   return (
-    <button
-      type="button"
-      data-testid={`repo-delete-${repository.id}`}
-      aria-label={t("central.v2.sidebarDeleteRepoLabel", { name: displayName })}
-      title={t("central.v2.sidebarDeleteRepo")}
-      onClick={(event) => {
-        event.stopPropagation();
-        onDelete(repository);
-      }}
-      className="ml-1 grid size-6 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
-    >
-      <Trash2 className="size-3" />
-    </button>
+    <span className="ml-1 inline-flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+      {onTogglePin && (
+        <button
+          type="button"
+          data-testid={`repo-pin-${repository.id}`}
+          data-pinned={repository.pinned}
+          aria-pressed={repository.pinned}
+          aria-label={t(
+            repository.pinned
+              ? "central.v2.sidebarUnpinRepoLabel"
+              : "central.v2.sidebarPinRepoLabel",
+            { name: displayName }
+          )}
+          title={t(
+            repository.pinned ? "central.v2.sidebarUnpinRepo" : "central.v2.sidebarPinRepo"
+          )}
+          onClick={(event) => {
+            event.stopPropagation();
+            onTogglePin(repository);
+          }}
+          className={cn(
+            "grid size-6 place-items-center rounded-md transition-colors",
+            repository.pinned
+              ? "text-primary hover:bg-primary/10"
+              : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+          )}
+        >
+          {repository.pinned ? <PinOff className="size-3" /> : <Pin className="size-3" />}
+        </button>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          data-testid={`repo-delete-${repository.id}`}
+          aria-label={t("central.v2.sidebarDeleteRepoLabel", { name: displayName })}
+          title={t("central.v2.sidebarDeleteRepo")}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete(repository);
+          }}
+          className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        >
+          <Trash2 className="size-3" />
+        </button>
+      )}
+    </span>
   );
 }
 

@@ -66,6 +66,16 @@ pub async fn assign_skills_to_repository(
 }
 
 #[tauri::command]
+pub async fn set_skill_repository_pinned(
+    state: State<'_, AppState>,
+    repository_id: String,
+    pinned: bool,
+) -> Result<SkillRepository, String> {
+    let pool = state.active_db().await?;
+    db::set_skill_repository_pinned(&pool, &repository_id, pinned).await
+}
+
+#[tauri::command]
 pub async fn get_skill_tags(state: State<'_, AppState>) -> Result<Vec<SkillTag>, String> {
     let pool = state.active_db().await?;
     db::get_skill_tags(&pool).await
