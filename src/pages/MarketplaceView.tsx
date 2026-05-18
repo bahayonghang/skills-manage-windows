@@ -3,11 +3,13 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 
+import { InstallDialog } from "@/components/central/InstallDialog";
 import { MarketplaceShell } from "@/components/marketplace/MarketplaceShell";
 import type { MarketplaceSkillDetail } from "@/components/marketplace/marketplaceSkillDetailTypes";
 import type { OfficialPublisher, SkillTag } from "@/data/officialSources";
 import { isTauriRuntime } from "@/lib/tauri";
 import { useMarketplaceBindings } from "@/pages/marketplaceBindings";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import {
   findPreviewRegistryId,
   mapGitHubPreviewSkillToPreviewSkill,
@@ -17,7 +19,7 @@ import {
   type MarketplaceTabId,
   useMarketplaceViewModel,
 } from "@/pages/marketplaceViewModel";
-import type { GitHubSkillImportSelection } from "@/types";
+import type { GitHubSkillImportSelection, SkillWithLinks } from "@/types";
 
 export function MarketplaceView() {
   const { t } = useTranslation();
@@ -64,6 +66,8 @@ export function MarketplaceView() {
     new Set()
   );
   const [detailSkill, setDetailSkill] = useState<MarketplaceSkillDetail | null>(null);
+  const [centralInstallTarget, setCentralInstallTarget] = useState<SkillWithLinks | null>(null);
+  const [isCentralInstallOpen, setIsCentralInstallOpen] = useState(false);
   const [previewStatus, setPreviewStatus] = useState<MarketplacePreviewStatus>({
     kind: "idle",
   });
@@ -103,6 +107,11 @@ export function MarketplaceView() {
     try {
       const importedSkillId = await installFromSkillsSh(source, skillId);
       await Promise.all([rescan(), loadCentralSkills()]);
+      const refreshedCentralSkills = useCentralSkillsStore.getState().skills;
+      const importedCentralSkill =
+        refreshedCentralSkills.find((skill) => skill.id === importedSkillId) ??
+        refreshedCentralSkills.find((skill) => skill.id === skillId || skill.name === skillId) ??
+        null;
       setDetailSkill((current) =>
         current?.remoteKind === "skills_sh" &&
         current.source === source &&
@@ -110,7 +119,11 @@ export function MarketplaceView() {
           ? { ...current, id: importedSkillId || current.id, installed: true }
           : current
       );
-      toast.success(t("marketplace.installSuccess"));
+      if (importedCentralSkill) {
+        setCentralInstallTarget(importedCentralSkill);
+        setIsCentralInstallOpen(true);
+      }
+      toast.success(t("marketplace.skillsShCentralImportSuccess"));
     } catch (err) {
       toast.error(String(err));
     }
@@ -246,9 +259,10 @@ export function MarketplaceView() {
   async function handleInstallImportedSkill(
     skillId: string,
     agentIds: string[],
-    method: "symlink" | "copy"
+    method: "symlink" | "copy",
+    projectPath?: string | null
   ) {
-    const result = await installCentralSkill(skillId, agentIds, method);
+    const result = await installCentralSkill(skillId, agentIds, method, projectPath);
     await Promise.all([
       rescan(),
       loadCentralSkills(),
@@ -269,6 +283,7 @@ export function MarketplaceView() {
   }
 
   return (
+    <>
     <MarketplaceShell
       activeTab={activeTab}
       detailSkill={detailSkill}
@@ -312,5 +327,13 @@ export function MarketplaceView() {
       skillsShResults={skillsShResults}
       viewModel={viewModel}
     />
+    <InstallDialog
+      open={isCentralInstallOpen}
+      onOpenChange={setIsCentralInstallOpen}
+      skill={centralInstallTarget}
+      agents={viewModel.availableInstallAgents}
+      onInstall={handleInstallImportedSkill}
+    />
+    </>
   );
 }

@@ -4,6 +4,7 @@ import * as S from "./marketplaceViewTestSupport";
 
 const {
   mockInstallFromSkillsSh,
+  mockLoadCentralSkills,
   mockLoadPreviewSkills,
   mockLoadRegistries,
   mockSearchSkillsSh,
@@ -78,6 +79,21 @@ describe("MarketplaceView catalog and entry flows", () => {
   it("searches and installs skills.sh results through marketplace store actions", async () => {
     mockSearchSkillsSh.mockResolvedValue(S.storeState.skillsShResults);
     mockInstallFromSkillsSh.mockResolvedValue("webapp-testing");
+    mockLoadCentralSkills.mockImplementation(async () => {
+      S.storeState.centralSkills = [
+        {
+          id: "webapp-testing",
+          name: "webapp-testing",
+          description: "Imported from skills.sh",
+          file_path: "~/.agents/skills/webapp-testing/SKILL.md",
+          is_central: true,
+          source: "skills.sh",
+          scanned_at: "2026-05-18T00:00:00Z",
+          linked_agents: [],
+          shared_root_agents: [],
+        },
+      ];
+    });
 
     renderMarketplaceView();
 
@@ -95,7 +111,7 @@ describe("MarketplaceView catalog and entry flows", () => {
       expect(mockSearchSkillsSh).toHaveBeenCalledWith("testing");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /^安装$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /添加到中央技能库|Add to Central/i }));
 
     await waitFor(() => {
       expect(mockInstallFromSkillsSh).toHaveBeenCalledWith(
@@ -103,5 +119,9 @@ describe("MarketplaceView catalog and entry flows", () => {
         "webapp-testing"
       );
     });
+    expect(mockLoadCentralSkills).toHaveBeenCalled();
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      /Central install webapp-testing/i
+    );
   });
 });

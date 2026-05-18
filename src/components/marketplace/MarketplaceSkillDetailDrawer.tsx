@@ -41,6 +41,16 @@ export function MarketplaceSkillDetailDrawer({
   const { t } = useTranslation();
   const browserMode = !isTauriRuntime();
   const titleId = skill ? `marketplace-detail-title-${skill.id}` : undefined;
+  const isSkillsShDetail = skill?.remoteKind === "skills_sh";
+  const installLabel = isSkillsShDetail
+    ? skill?.installed
+      ? t("marketplace.skillsShAddedToCentral")
+      : isInstalling
+        ? t("marketplace.skillsShAddingToCentral")
+        : t("marketplace.skillsShAddToCentral")
+    : skill?.installed
+      ? t("marketplace.installed")
+      : t("marketplace.install");
   const {
     content,
     contentError,
@@ -80,7 +90,7 @@ export function MarketplaceSkillDetailDrawer({
             ) : (
               <FileText className="size-3.5" />
             )}
-            <span>{skill.installed ? t("marketplace.installed") : t("marketplace.install")}</span>
+            <span>{installLabel}</span>
           </Button>
         ) : undefined
       }
@@ -214,7 +224,7 @@ export function MarketplaceSkillDetailDrawer({
                     ) : (
                       <FileText className="size-3.5" />
                     )}
-                    <span>{skill.installed ? t("marketplace.installed") : t("marketplace.install")}</span>
+                    <span>{installLabel}</span>
                   </Button>
                 </section>
               </aside>

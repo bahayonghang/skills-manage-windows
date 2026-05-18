@@ -342,6 +342,8 @@ describe("MarketplaceSkillDetailDrawer", () => {
         "anthropics/skills",
         "webapp-testing/SKILL.md"
       );
+      expect(mockBrowseSkillsShDirectory).toHaveBeenCalledTimes(1);
+      expect(mockReadSkillsShFile).toHaveBeenCalledTimes(1);
 
       fireEvent.click(screen.getByRole("button", { name: "展开" }));
       fireEvent.click(await screen.findByRole("button", { name: "guide.md" }));
@@ -352,7 +354,33 @@ describe("MarketplaceSkillDetailDrawer", () => {
           "webapp-testing/references/guide.md"
         );
       });
+      expect(mockReadSkillsShFile).toHaveBeenCalledTimes(2);
       expect(await screen.findByText("# Guide")).toBeInTheDocument();
+    });
+
+    it("labels skills.sh install action as adding to Central", async () => {
+      render(
+        <MarketplaceSkillDetailDrawer
+          open
+          skill={{
+            ...skill,
+            id: "skills.sh:anthropics/skills:webapp-testing",
+            name: "webapp-testing",
+            downloadUrl: "https://github.com/anthropics/skills",
+            source: "anthropics/skills",
+            skillId: "webapp-testing",
+            remoteKind: "skills_sh",
+          }}
+          onOpenChange={vi.fn()}
+          onInstall={vi.fn()}
+          isInstalling={false}
+        />
+      );
+
+      await screen.findByTestId("skill-detail-modal");
+      expect(
+        screen.getAllByRole("button", { name: /添加到中央技能库|Add to Central/i }).length
+      ).toBeGreaterThan(0);
     });
   });
 });

@@ -122,6 +122,7 @@ export interface UnifiedSkillCardProps {
   isInstalled?: boolean;
   tags?: { key: string; label: string }[];
   publisher?: string;
+  installLabel?: string;
 
   // ── actions (pass only the ones relevant to the context) ──
   onDetail?: MouseEventHandler<HTMLButtonElement>;
@@ -169,6 +170,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     isInstalled,
     tags,
     publisher,
+    installLabel,
     onDetail,
     onInstallTo,
     onUpdateCentral,
@@ -393,8 +395,16 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   <button
                     onClick={isInstalled ? undefined : onInstall}
                     disabled={isInstalled || isLoading}
-                    title={isInstalled ? t("marketplace.installed") : t("marketplace.install")}
-                    aria-label={isInstalled ? t("marketplace.installed") : t("marketplace.install")}
+                    title={
+                      isInstalled
+                        ? t("marketplace.installed")
+                        : installLabel ?? t("marketplace.install")
+                    }
+                    aria-label={
+                      isInstalled
+                        ? t("marketplace.installed")
+                        : installLabel ?? t("marketplace.install")
+                    }
                     className={cn(
                       "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
                       isInstalled
