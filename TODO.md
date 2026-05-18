@@ -3,3 +3,7 @@
 - [x] 优化启动白屏问题，添加启动动画
 - [x] skill卡片展示AI中文总结
 - [x] claude code等平台界面添加筛选排序功能，支持按repo分组排序，名称，安装/更新时间等
+- [ ] 在skills详情页面添加一个查看open folder的功能（目前支持本地，不支持ssh）
+- [ ] 添加wsl支持，不需要使用ssh连接wsl
+- [ ] repo 支持pin并添加样式
+- [ ] 修改repo查看模式，不是批量选中，而是单独选中某个repo，只查看这个repo中的skills
