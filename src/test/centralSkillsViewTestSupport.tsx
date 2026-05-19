@@ -631,6 +631,7 @@ export function resetCentralSkillsViewTestState() {
   mockCheckRepositorySync.mockResolvedValue({
     states: [],
     remoteAdded: [],
+    skippedRemoteAdded: [],
     remoteMissing: [],
     repositories: [],
     failedRepositories: [],
@@ -639,6 +640,8 @@ export function resetCentralSkillsViewTestState() {
     keptSkillIds: [],
     deleteResult: { succeeded: [], failed: [] },
     importResults: [],
+    skippedAdditions: [],
+    unskippedAdditions: [],
     failedRepositories: [],
     states: [],
   });

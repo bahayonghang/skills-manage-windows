@@ -30,6 +30,7 @@ export interface CentralRepositorySyncSummary {
   unsupported: number;
   failed: number;
   remoteAdded: number;
+  skippedRemoteAdded: number;
 }
 
 export interface CentralRepositorySyncFailure {
@@ -41,6 +42,7 @@ export interface CentralRepositorySyncFailure {
 export interface CentralRepositorySyncPreview {
   states: CentralSkillUpdateState[];
   remoteAdded: CentralRemoteAddedSkill[];
+  skippedRemoteAdded: CentralRemoteAddedSkill[];
   remoteMissing: CentralRemoteMissingSkill[];
   repositories: CentralRepositorySyncSummary[];
   failedRepositories: CentralRepositorySyncFailure[];
@@ -52,16 +54,32 @@ export interface CentralRepositoryAddedSkillSelection {
   previewWorkspaceId?: string | null;
 }
 
+export interface CentralRepositoryAdditionSkipRequest {
+  repositoryId: string;
+  sourcePath: string;
+  skillId: string;
+  skillName: string;
+}
+
+export interface CentralRepositoryAdditionUnskipRequest {
+  repositoryId: string;
+  sourcePath: string;
+}
+
 export interface CentralRepositorySyncDecisions {
   keepSkillIds: string[];
   deleteRequests: BatchDeleteCentralSkillRequest[];
   additions: CentralRepositoryAddedSkillSelection[];
+  skipAdditions: CentralRepositoryAdditionSkipRequest[];
+  unskipAdditions: CentralRepositoryAdditionUnskipRequest[];
 }
 
 export interface CentralRepositorySyncApplyResult {
   keptSkillIds: string[];
   deleteResult: BatchDeleteCentralSkillResult;
   importResults: GitHubRepoImportResult[];
+  skippedAdditions: CentralRepositoryAdditionSkipRequest[];
+  unskippedAdditions: CentralRepositoryAdditionUnskipRequest[];
   failedRepositories: CentralRepositorySyncFailure[];
   states: CentralSkillUpdateState[];
 }

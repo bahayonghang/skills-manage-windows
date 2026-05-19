@@ -36,6 +36,7 @@ pub mod repository_sync;
 pub use repository_sync::{
     apply_central_repository_sync, check_central_repository_sync, CentralRemoteAddedSkill,
     CentralRemoteMissingSkill, CentralRepositoryAddedSkillSelection,
+    CentralRepositoryAdditionSkipRequest, CentralRepositoryAdditionUnskipRequest,
     CentralRepositorySyncApplyResult, CentralRepositorySyncDecisions, CentralRepositorySyncFailure,
     CentralRepositorySyncPreview, CentralRepositorySyncSummary,
 };

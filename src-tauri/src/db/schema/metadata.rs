@@ -67,6 +67,30 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
 
     sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_repository_sync_skips (
+            repository_id TEXT NOT NULL,
+            source_path   TEXT NOT NULL,
+            skill_id      TEXT NOT NULL,
+            skill_name    TEXT NOT NULL,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL,
+            last_seen_at  TEXT NOT NULL,
+            PRIMARY KEY (repository_id, source_path)
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_repository_sync_skips_repository_seen
+         ON skill_repository_sync_skips(repository_id, last_seen_at DESC)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_update_states (
             skill_id           TEXT PRIMARY KEY,
             source_type        TEXT NOT NULL,

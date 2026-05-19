@@ -176,9 +176,85 @@ async fn collect_remote_added_skills_detects_repo_candidates_not_in_local_member
     .unwrap();
 
     assert!(failures.is_empty());
-    assert_eq!(added.len(), 1);
-    assert_eq!(added[0].preview.skill_id, "new-skill");
-    assert_eq!(added[0].preview.source_path, "skills/new-skill");
+    assert_eq!(added.remote_added.len(), 1);
+    assert!(added.skipped_remote_added.is_empty());
+    assert_eq!(added.remote_added[0].preview.skill_id, "new-skill");
+    assert_eq!(
+        added.remote_added[0].preview.source_path,
+        "skills/new-skill"
+    );
+}
+
+#[tokio::test]
+async fn collect_remote_added_skills_splits_persisted_skips() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("existing");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Existing\n---").unwrap();
+    let skill = make_central_skill("existing", &skill_dir);
+    db::upsert_skill(&pool, &skill).await.unwrap();
+    assign_test_repo(&pool, "existing", "skills/existing").await;
+    let assignment = db::get_skill_repository_assignment(&pool, "existing")
+        .await
+        .unwrap();
+    let repository = assignment.repository;
+    db::upsert_skill_repository_sync_skip(
+        &pool,
+        &repository.id,
+        "skills/skipped-skill",
+        "old-skipped-id",
+        "Old Skipped Name",
+    )
+    .await
+    .unwrap();
+    let repository_ids = vec![repository.id.clone()];
+    let repo = test_repo();
+    let snapshots = HashMap::from([(
+        repo_cache_key(&repo),
+        GitHubRepoSnapshot {
+            files: HashMap::from([
+                (
+                    "skills/existing/SKILL.md".to_string(),
+                    b"---\nname: Existing\n---".to_vec(),
+                ),
+                (
+                    "skills/new-skill/SKILL.md".to_string(),
+                    b"---\nname: New Skill\n---".to_vec(),
+                ),
+                (
+                    "skills/skipped-skill/SKILL.md".to_string(),
+                    b"---\nname: Skipped Skill\n---".to_vec(),
+                ),
+            ]),
+        },
+    )]);
+    let mut failures = Vec::new();
+
+    let added = collect_remote_added_skills(
+        &pool,
+        &repository_ids,
+        &[(repository.clone(), repo)],
+        &snapshots,
+        &mut failures,
+    )
+    .await
+    .unwrap();
+
+    assert!(failures.is_empty());
+    assert_eq!(added.remote_added.len(), 1);
+    assert_eq!(added.remote_added[0].preview.skill_id, "new-skill");
+    assert_eq!(added.skipped_remote_added.len(), 1);
+    assert_eq!(
+        added.skipped_remote_added[0].preview.source_path,
+        "skills/skipped-skill"
+    );
+    let skips = db::get_skill_repository_sync_skips(&pool, &[repository.id])
+        .await
+        .unwrap();
+    assert_eq!(skips.len(), 1);
+    assert_eq!(skips[0].skill_id, "skipped-skill");
+    assert_eq!(skips[0].skill_name, "Skipped Skill");
 }
 
 #[test]

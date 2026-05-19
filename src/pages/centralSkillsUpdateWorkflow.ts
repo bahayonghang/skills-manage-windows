@@ -10,6 +10,8 @@ import type {
   CentralSkillUpdateState,
 } from "@/types";
 import type {
+  CentralRepositoryAdditionSkipRequest,
+  CentralRepositoryAdditionUnskipRequest,
   CentralRepositoryAddedSkillSelection,
   CentralRepositorySyncPreview,
 } from "@/types/centralRepositorySync";
@@ -104,7 +106,11 @@ export function useCentralSkillsUpdateWorkflow({
   }
 
   async function openRepositorySyncDialog(preview: CentralRepositorySyncPreview) {
-    if (preview.remoteAdded.length === 0 && preview.remoteMissing.length === 0) {
+    if (
+      preview.remoteAdded.length === 0 &&
+      preview.skippedRemoteAdded.length === 0 &&
+      preview.remoteMissing.length === 0
+    ) {
       return;
     }
     setRepositorySyncPreview(preview);
@@ -239,10 +245,15 @@ export function useCentralSkillsUpdateWorkflow({
           unsupported,
           remoteMissing: preview.remoteMissing.length,
           remoteAdded: preview.remoteAdded.length,
+          skippedRemoteAdded: preview.skippedRemoteAdded.length,
           failed: failed + preview.failedRepositories.length,
         })
       );
-      if (preview.remoteAdded.length > 0 || preview.remoteMissing.length > 0) {
+      if (
+        preview.remoteAdded.length > 0 ||
+        preview.skippedRemoteAdded.length > 0 ||
+        preview.remoteMissing.length > 0
+      ) {
         if (availableStates.length > 0) {
           setQueuedRepositorySyncPreview(preview);
         } else {
@@ -336,7 +347,9 @@ export function useCentralSkillsUpdateWorkflow({
   async function handleApplyRepositorySync(
     keepSkillIds: string[],
     deleteRequests: BatchDeleteCentralSkillRequest[],
-    additions: CentralRepositoryAddedSkillSelection[]
+    additions: CentralRepositoryAddedSkillSelection[],
+    skipAdditions: CentralRepositoryAdditionSkipRequest[],
+    unskipAdditions: CentralRepositoryAdditionUnskipRequest[]
   ) {
     setIsApplyingRepositorySync(true);
     setRepositorySyncError(null);
@@ -345,6 +358,8 @@ export function useCentralSkillsUpdateWorkflow({
         keepSkillIds,
         deleteRequests,
         additions,
+        skipAdditions,
+        unskipAdditions,
       });
       await refreshCounts();
       const deletedIds = new Set(result.deleteResult.succeeded.map((item) => item.skill_id));
@@ -356,7 +371,8 @@ export function useCentralSkillsUpdateWorkflow({
       const skipped = result.importResults.reduce(
         (count, item) => count + item.skippedSkills.length,
         0
-      );
+      ) + (result.skippedAdditions?.length ?? 0);
+      const unskipped = result.unskippedAdditions?.length ?? 0;
       const failed = result.deleteResult.failed.length + result.failedRepositories.length;
       const message = t(
         failed > 0 ? "central.repositorySyncApplyPartial" : "central.repositorySyncApplySuccess",
@@ -365,6 +381,7 @@ export function useCentralSkillsUpdateWorkflow({
           deleted: result.deleteResult.succeeded.length,
           imported,
           skipped,
+          unskipped,
           failed,
         }
       );

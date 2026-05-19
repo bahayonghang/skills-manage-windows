@@ -33,9 +33,32 @@ function remoteMissingState(skillId: string, sourcePath: string, url = "https://
   };
 }
 
+function remoteAddedSkill(sourcePath: string, skillId: string, skillName: string) {
+  return {
+    repositoryId: "github-openai-skills-main",
+    repo: {
+      owner: "openai",
+      repo: "skills",
+      branch: "main",
+      normalizedUrl: "https://github.com/openai/skills",
+    },
+    preview: {
+      sourcePath,
+      skillId,
+      skillName,
+      description: null,
+      rootDirectory: "skills",
+      skillDirectoryName: skillId,
+      downloadUrl: `https://raw.githubusercontent.com/openai/skills/main/${sourcePath}/SKILL.md`,
+      conflict: null,
+    },
+  };
+}
+
 const preview: CentralRepositorySyncPreview = {
   states: [],
   remoteAdded: [],
+  skippedRemoteAdded: [],
   remoteMissing: [
     {
       state: remoteMissingState("frontend-design", "skills/frontend-design"),
@@ -132,6 +155,8 @@ describe("CentralRepositorySyncDialog", () => {
       expect(onConfirm).toHaveBeenCalledWith(
         ["frontend-design", "code-reviewer", "unknown-source"],
         [],
+        [],
+        [],
         []
       );
     });
@@ -161,6 +186,8 @@ describe("CentralRepositorySyncDialog", () => {
             remove_agent_ids: [],
           },
         ],
+        [],
+        [],
         []
       );
     });
@@ -178,7 +205,126 @@ describe("CentralRepositorySyncDialog", () => {
       expect(onConfirm).toHaveBeenCalledWith(
         ["frontend-design", "code-reviewer", "unknown-source"],
         [],
+        [],
+        [],
         []
+      );
+    });
+  });
+
+  it("submits active remote additions selected as Skip through skipAdditions", async () => {
+    const onConfirm = vi.fn();
+    render(
+      <CentralRepositorySyncDialog
+        open
+        onOpenChange={vi.fn()}
+        preview={{
+          ...preview,
+          remoteAdded: [remoteAddedSkill("skills/planning-with-files-ar", "planning-with-files-ar", "Planning AR")],
+          remoteMissing: [],
+        }}
+        deletePreview={{ previews: [], failed: [] }}
+        agents={agents}
+        isPreviewLoading={false}
+        isApplying={false}
+        error={null}
+        onConfirm={onConfirm}
+      />
+    );
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "跳过" }));
+    fireEvent.click(within(dialog).getByTestId("confirm-repo-sync"));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledWith(
+        [],
+        [],
+        [],
+        [
+          {
+            repositoryId: "github-openai-skills-main",
+            sourcePath: "skills/planning-with-files-ar",
+            skillId: "planning-with-files-ar",
+            skillName: "Planning AR",
+          },
+        ],
+        []
+      );
+    });
+  });
+
+  it("shows skipped remote additions separately and can import, rename, or re-show them", async () => {
+    const onConfirm = vi.fn();
+    render(
+      <CentralRepositorySyncDialog
+        open
+        onOpenChange={vi.fn()}
+        preview={{
+          ...preview,
+          remoteAdded: [],
+          skippedRemoteAdded: [
+            remoteAddedSkill("skills/skipped-import", "skipped-import", "Skipped Import"),
+            remoteAddedSkill("skills/skipped-rename", "skipped-rename", "Skipped Rename"),
+            remoteAddedSkill("skills/skipped-unskip", "skipped-unskip", "Skipped Unskip"),
+          ],
+          remoteMissing: [],
+        }}
+        deletePreview={{ previews: [], failed: [] }}
+        agents={agents}
+        isPreviewLoading={false}
+        isApplying={false}
+        error={null}
+        onConfirm={onConfirm}
+      />
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("上次检测已跳过（3）")).toBeInTheDocument();
+
+    const importRow = within(dialog).getByText("Skipped Import").closest("article")!;
+    fireEvent.click(within(importRow).getByRole("button", { name: "导入" }));
+
+    const renameRow = within(dialog).getByText("Skipped Rename").closest("article")!;
+    fireEvent.click(within(renameRow).getByRole("button", { name: "重命名" }));
+    fireEvent.change(within(renameRow).getByLabelText("重命名后的技能 ID"), {
+      target: { value: "skipped-rename-cn" },
+    });
+
+    const unskipRow = within(dialog).getByText("Skipped Unskip").closest("article")!;
+    fireEvent.click(within(unskipRow).getByRole("button", { name: "重新显示" }));
+
+    fireEvent.click(within(dialog).getByTestId("confirm-repo-sync"));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledWith(
+        [],
+        [],
+        [
+          {
+            repositoryId: "github-openai-skills-main",
+            previewWorkspaceId: null,
+            selections: [
+              {
+                sourcePath: "skills/skipped-import",
+                resolution: "overwrite",
+                renamedSkillId: null,
+              },
+              {
+                sourcePath: "skills/skipped-rename",
+                resolution: "rename",
+                renamedSkillId: "skipped-rename-cn",
+              },
+            ],
+          },
+        ],
+        [],
+        [
+          {
+            repositoryId: "github-openai-skills-main",
+            sourcePath: "skills/skipped-unskip",
+          },
+        ]
       );
     });
   });

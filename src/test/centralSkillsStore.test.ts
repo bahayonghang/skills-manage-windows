@@ -914,6 +914,7 @@ describe("centralSkillsStore", () => {
           },
         },
       ],
+      skippedRemoteAdded: [],
       remoteMissing: [],
       repositories: [],
       failedRepositories: [],
@@ -968,6 +969,7 @@ describe("centralSkillsStore", () => {
           },
         },
       ],
+      skippedRemoteAdded: [],
       remoteMissing: [
         {
           state: remoteMissingState,
@@ -1080,6 +1082,8 @@ describe("centralSkillsStore", () => {
           skippedSkills: [],
         },
       ],
+      skippedAdditions: [],
+      unskippedAdditions: [],
       failedRepositories: [],
       states: mockUpdateStates,
     };
@@ -1105,6 +1109,8 @@ describe("centralSkillsStore", () => {
           ],
         },
       ],
+      skipAdditions: [],
+      unskipAdditions: [],
     });
 
     expect(result).toEqual(applyResult);
@@ -1124,6 +1130,8 @@ describe("centralSkillsStore", () => {
             ],
           },
         ],
+        skipAdditions: [],
+        unskipAdditions: [],
       },
     });
     expect(invoke).toHaveBeenCalledWith("get_central_skills");

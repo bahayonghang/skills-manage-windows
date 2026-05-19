@@ -155,6 +155,17 @@ pub struct SkillRepositoryMember {
     pub repository: SkillRepository,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SkillRepositorySyncSkip {
+    pub repository_id: String,
+    pub source_path: String,
+    pub skill_id: String,
+    pub skill_name: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub last_seen_at: String,
+}
+
 // ─── Update State ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

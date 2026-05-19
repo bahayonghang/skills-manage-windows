@@ -510,6 +510,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     mockCheckRepositorySync.mockResolvedValueOnce({
       states: [],
       remoteAdded: [],
+      skippedRemoteAdded: [],
       remoteMissing: [],
       repositories: [],
       failedRepositories: [],
@@ -811,6 +812,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
           },
         },
       ],
+      skippedRemoteAdded: [],
       remoteMissing: [],
       repositories: [],
       failedRepositories: [],
@@ -839,6 +841,8 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
           skippedSkills: [],
         },
       ],
+      skippedAdditions: [],
+      unskippedAdditions: [],
       failedRepositories: [],
       states: [],
     });
@@ -873,6 +877,8 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
             ],
           },
         ],
+        skipAdditions: [],
+        unskipAdditions: [],
       });
     });
   });

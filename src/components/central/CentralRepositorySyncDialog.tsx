@@ -21,12 +21,19 @@ import type {
   DuplicateResolution,
 } from "@/types";
 import type {
+  CentralRepositoryAdditionSkipRequest,
+  CentralRepositoryAdditionUnskipRequest,
   CentralRepositoryAddedSkillSelection,
+  CentralRemoteAddedSkill,
   CentralRemoteMissingSkill,
   CentralRepositorySyncPreview,
 } from "@/types/centralRepositorySync";
 
 type MissingDecision = "keep" | "delete";
+type SkippedDecision = {
+  action: "keep" | "import" | "rename" | "unskip";
+  renamedSkillId: string;
+};
 type AddedDecision = {
   selected: boolean;
   resolution: DuplicateResolution;
@@ -45,7 +52,9 @@ interface CentralRepositorySyncDialogProps {
   onConfirm: (
     keepSkillIds: string[],
     deleteRequests: BatchDeleteCentralSkillRequest[],
-    additions: CentralRepositoryAddedSkillSelection[]
+    additions: CentralRepositoryAddedSkillSelection[],
+    skipAdditions: CentralRepositoryAdditionSkipRequest[],
+    unskipAdditions: CentralRepositoryAdditionUnskipRequest[]
   ) => Promise<void>;
 }
 
@@ -79,11 +88,15 @@ export function CentralRepositorySyncDialog({
   const { t } = useTranslation();
   const [missingDecisions, setMissingDecisions] = useState<Record<string, MissingDecision>>({});
   const [addedDecisions, setAddedDecisions] = useState<Record<string, AddedDecision>>({});
+  const [skippedDecisions, setSkippedDecisions] = useState<Record<string, SkippedDecision>>({});
   const [selectedCopyKeys, setSelectedCopyKeys] = useState<Set<string>>(new Set());
   const previewKey = useMemo(
     () =>
       [
         ...(preview?.remoteAdded ?? []).map((item) =>
+          addedKey(item.repositoryId, item.preview.sourcePath)
+        ),
+        ...(preview?.skippedRemoteAdded ?? []).map((item) =>
           addedKey(item.repositoryId, item.preview.sourcePath)
         ),
         ...(preview?.remoteMissing ?? []).map(missingSkillId),
@@ -103,6 +116,17 @@ export function CentralRepositorySyncDialog({
           {
             selected: true,
             resolution: item.preview.conflict ? "skip" : "overwrite",
+            renamedSkillId: item.preview.skillId,
+          },
+        ])
+      )
+    );
+    setSkippedDecisions(
+      Object.fromEntries(
+        preview.skippedRemoteAdded.map((item) => [
+          addedKey(item.repositoryId, item.preview.sourcePath),
+          {
+            action: "keep",
             renamedSkillId: item.preview.skillId,
           },
         ])
@@ -132,6 +156,37 @@ export function CentralRepositorySyncDialog({
         ...patch,
       },
     }));
+  }
+
+  function updateSkippedDecision(key: string, patch: Partial<SkippedDecision>) {
+    setSkippedDecisions((current) => ({
+      ...current,
+      [key]: {
+        ...(current[key] ?? { action: "keep", renamedSkillId: "" }),
+        ...patch,
+      },
+    }));
+  }
+
+  function pushAdditionSelection(
+    additionsByRepo: Map<string, CentralRepositoryAddedSkillSelection>,
+    item: CentralRemoteAddedSkill,
+    resolution: Exclude<DuplicateResolution, "skip">,
+    renamedSkillId: string
+  ) {
+    const entry =
+      additionsByRepo.get(item.repositoryId) ??
+      {
+        repositoryId: item.repositoryId,
+        previewWorkspaceId: null,
+        selections: [],
+      };
+    entry.selections.push({
+      sourcePath: item.preview.sourcePath,
+      resolution,
+      renamedSkillId: resolution === "rename" ? renamedSkillId.trim() : null,
+    });
+    additionsByRepo.set(item.repositoryId, entry);
   }
 
   function toggleCopy(skillId: string, agentId: string, checked: boolean) {
@@ -184,29 +239,62 @@ export function CentralRepositorySyncDialog({
         ];
       });
     const additionsByRepo = new Map<string, CentralRepositoryAddedSkillSelection>();
+    const skipAdditions: CentralRepositoryAdditionSkipRequest[] = [];
+    const unskipAdditions: CentralRepositoryAdditionUnskipRequest[] = [];
     for (const item of preview.remoteAdded) {
       const key = addedKey(item.repositoryId, item.preview.sourcePath);
       const decision = addedDecisions[key];
       if (!decision?.selected) continue;
-      const entry =
-        additionsByRepo.get(item.repositoryId) ??
-        {
+      if (decision.resolution === "skip") {
+        skipAdditions.push({
           repositoryId: item.repositoryId,
-          previewWorkspaceId: null,
-          selections: [],
-        };
-      entry.selections.push({
-        sourcePath: item.preview.sourcePath,
-        resolution: decision.resolution,
-        renamedSkillId:
-          decision.resolution === "rename" ? decision.renamedSkillId.trim() : null,
-      });
-      additionsByRepo.set(item.repositoryId, entry);
+          sourcePath: item.preview.sourcePath,
+          skillId: item.preview.skillId,
+          skillName: item.preview.skillName,
+        });
+        continue;
+      }
+      pushAdditionSelection(
+        additionsByRepo,
+        item,
+        decision.resolution,
+        decision.renamedSkillId
+      );
     }
-    await onConfirm(keepSkillIds, deleteRequests, Array.from(additionsByRepo.values()));
+    for (const item of preview.skippedRemoteAdded) {
+      const key = addedKey(item.repositoryId, item.preview.sourcePath);
+      const decision = skippedDecisions[key] ?? {
+        action: "keep",
+        renamedSkillId: item.preview.skillId,
+      };
+      if (decision.action === "unskip") {
+        unskipAdditions.push({
+          repositoryId: item.repositoryId,
+          sourcePath: item.preview.sourcePath,
+        });
+      }
+      if (decision.action === "import" || decision.action === "rename") {
+        pushAdditionSelection(
+          additionsByRepo,
+          item,
+          decision.action === "rename" ? "rename" : "overwrite",
+          decision.renamedSkillId
+        );
+      }
+    }
+    await onConfirm(
+      keepSkillIds,
+      deleteRequests,
+      Array.from(additionsByRepo.values()),
+      skipAdditions,
+      unskipAdditions
+    );
   }
 
   const canApply = Boolean(preview) && !isPreviewLoading && !isApplying;
+  const remoteAddedCount = preview?.remoteAdded.length ?? 0;
+  const skippedRemoteAddedCount = preview?.skippedRemoteAdded.length ?? 0;
+  const failedRepositoryCount = preview?.failedRepositories.length ?? 0;
   const remoteMissingCount = preview?.remoteMissing.length ?? 0;
   const selectedRemoteMissingCount =
     preview?.remoteMissing.filter(
@@ -218,32 +306,48 @@ export function CentralRepositorySyncDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl">
+      <DialogContent className="sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>{t("central.repositorySyncTitle")}</DialogTitle>
           <DialogClose />
         </DialogHeader>
-        <DialogBody className="space-y-4">
+        <DialogBody className="max-h-[75vh] space-y-4">
           <DialogDescription>
             {t("central.repositorySyncDesc", {
-              added: preview?.remoteAdded.length ?? 0,
-              missing: preview?.remoteMissing.length ?? 0,
+              added: remoteAddedCount,
+              skipped: skippedRemoteAddedCount,
+              missing: remoteMissingCount,
             })}
           </DialogDescription>
 
-          {(preview?.failedRepositories.length ?? 0) > 0 && (
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 font-medium text-primary">
+              {t("central.repositorySyncPendingChip", { count: remoteAddedCount })}
+            </span>
+            <span className="rounded-full border border-muted-foreground/20 bg-muted/40 px-2.5 py-1 font-medium text-muted-foreground">
+              {t("central.repositorySyncSkippedChip", { count: skippedRemoteAddedCount })}
+            </span>
+            <span className="rounded-full border border-destructive/20 bg-destructive/10 px-2.5 py-1 font-medium text-destructive">
+              {t("central.repositorySyncMissingChip", { count: remoteMissingCount })}
+            </span>
+            <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 font-medium text-amber-700 dark:text-amber-300">
+              {t("central.repositorySyncFailedChip", { count: failedRepositoryCount })}
+            </span>
+          </div>
+
+          {failedRepositoryCount > 0 && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
               <AlertTriangle className="mr-1 inline size-3.5" />
               {preview?.failedRepositories.map((item) => item.error).join("; ")}
             </div>
           )}
 
-          {(preview?.remoteAdded.length ?? 0) > 0 && (
+          {remoteAddedCount > 0 && (
             <section className="space-y-2">
               <h3 className="text-sm font-semibold text-foreground">
                 <Download className="mr-1 inline size-4" />
                 {t("central.repositorySyncAddedTitle", {
-                  count: preview?.remoteAdded.length ?? 0,
+                  count: remoteAddedCount,
                 })}
               </h3>
               <div className="max-h-56 space-y-2 overflow-auto pr-1">
@@ -306,6 +410,79 @@ export function CentralRepositorySyncDialog({
                           value={decision.renamedSkillId}
                           onChange={(event) =>
                             updateAddedDecision(key, { renamedSkillId: event.target.value })
+                          }
+                          aria-label={t("central.repositorySyncRenameLabel")}
+                        />
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {skippedRemoteAddedCount > 0 && (
+            <section className="space-y-2 rounded-xl border border-dashed border-border bg-muted/20 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {t("central.repositorySyncSkippedTitle", {
+                      count: skippedRemoteAddedCount,
+                    })}
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("central.repositorySyncSkippedDesc")}
+                  </p>
+                </div>
+              </div>
+              <div className="max-h-56 space-y-2 overflow-auto pr-1">
+                {preview?.skippedRemoteAdded.map((item) => {
+                  const key = addedKey(item.repositoryId, item.preview.sourcePath);
+                  const decision = skippedDecisions[key] ?? {
+                    action: "keep",
+                    renamedSkillId: item.preview.skillId,
+                  };
+                  return (
+                    <article key={key} className="rounded-xl border border-border bg-background p-3">
+                      <div className="flex flex-wrap items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-foreground">
+                            {item.preview.skillName}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {item.repo.owner}/{item.repo.repo} · {item.preview.sourcePath}
+                          </div>
+                          {item.preview.conflict && (
+                            <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                              {t("central.repositorySyncConflict", {
+                                skill: item.preview.conflict.existingName,
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1 text-xs">
+                          {(["keep", "import", "rename", "unskip"] as const).map((action) => (
+                            <button
+                              key={action}
+                              type="button"
+                              className={`rounded-lg border px-2 py-1 ${
+                                decision.action === action
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border text-muted-foreground"
+                              }`}
+                              onClick={() => updateSkippedDecision(key, { action })}
+                            >
+                              {t(`central.repositorySyncSkippedAction.${action}`)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {decision.action === "rename" && (
+                        <input
+                          className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                          value={decision.renamedSkillId}
+                          onChange={(event) =>
+                            updateSkippedDecision(key, { renamedSkillId: event.target.value })
                           }
                           aria-label={t("central.repositorySyncRenameLabel")}
                         />

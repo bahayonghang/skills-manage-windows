@@ -31,6 +31,8 @@ import type {
   SkillportStatePortabilityJob,
 } from "@/types";
 import type {
+  CentralRepositoryAdditionSkipRequest,
+  CentralRepositoryAdditionUnskipRequest,
   CentralRepositoryAddedSkillSelection,
   CentralRepositorySyncPreview,
 } from "@/types/centralRepositorySync";
@@ -252,7 +254,9 @@ export function CentralSkillDialogs({
   onApplyRepositorySync: (
     keepSkillIds: string[],
     deleteRequests: BatchDeleteCentralSkillRequest[],
-    additions: CentralRepositoryAddedSkillSelection[]
+    additions: CentralRepositoryAddedSkillSelection[],
+    skipAdditions: CentralRepositoryAdditionSkipRequest[],
+    unskipAdditions: CentralRepositoryAdditionUnskipRequest[]
   ) => Promise<void>;
   onUpdateConfirmDialogOpenChange: (open: boolean) => void;
   onRepositoryDeleteDialogOpenChange: (open: boolean) => void;

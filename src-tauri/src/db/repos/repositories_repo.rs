@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::db::types::{
     DbPool, SkillRepository, SkillRepositoryAssignment, SkillRepositoryMember,
-    SkillRepositoryWithStats, LOCAL_UNKNOWN_REPOSITORY_ID,
+    SkillRepositorySyncSkip, SkillRepositoryWithStats, LOCAL_UNKNOWN_REPOSITORY_ID,
 };
 use crate::db::util::now_rfc3339;
 
@@ -155,6 +155,94 @@ pub async fn get_central_repository_members_by_repositories(
     }
 
     Ok(members)
+}
+
+pub async fn get_skill_repository_sync_skips(
+    pool: &DbPool,
+    repository_ids: &[String],
+) -> Result<Vec<SkillRepositorySyncSkip>, String> {
+    if repository_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = repository_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT *
+         FROM skill_repository_sync_skips
+         WHERE repository_id IN ({})
+         ORDER BY repository_id, source_path",
+        placeholders
+    );
+    let mut query = sqlx::query_as::<_, SkillRepositorySyncSkip>(&sql);
+    for repository_id in repository_ids {
+        query = query.bind(repository_id);
+    }
+
+    query.fetch_all(pool).await.map_err(|e| e.to_string())
+}
+
+pub async fn upsert_skill_repository_sync_skip(
+    pool: &DbPool,
+    repository_id: &str,
+    source_path: &str,
+    skill_id: &str,
+    skill_name: &str,
+) -> Result<SkillRepositorySyncSkip, String> {
+    let now = now_rfc3339();
+    sqlx::query(
+        "INSERT INTO skill_repository_sync_skips
+         (repository_id, source_path, skill_id, skill_name, created_at, updated_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(repository_id, source_path) DO UPDATE SET
+           skill_id = excluded.skill_id,
+           skill_name = excluded.skill_name,
+           updated_at = excluded.updated_at,
+           last_seen_at = excluded.last_seen_at",
+    )
+    .bind(repository_id)
+    .bind(source_path)
+    .bind(skill_id)
+    .bind(skill_name)
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query_as::<_, SkillRepositorySyncSkip>(
+        "SELECT *
+         FROM skill_repository_sync_skips
+         WHERE repository_id = ? AND source_path = ?",
+    )
+    .bind(repository_id)
+    .bind(source_path)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "Failed to retrieve repository sync skip".to_string())
+}
+
+pub async fn delete_skill_repository_sync_skip(
+    pool: &DbPool,
+    repository_id: &str,
+    source_path: &str,
+) -> Result<bool, String> {
+    let result = sqlx::query(
+        "DELETE FROM skill_repository_sync_skips
+         WHERE repository_id = ? AND source_path = ?",
+    )
+    .bind(repository_id)
+    .bind(source_path)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(result.rows_affected() > 0)
 }
 
 pub async fn detach_skill_remote_source(pool: &DbPool, skill_id: &str) -> Result<(), String> {

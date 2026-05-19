@@ -96,6 +96,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       return {
         states: [],
         remoteAdded: [],
+        skippedRemoteAdded: [],
         remoteMissing: [],
         repositories: [],
         failedRepositories: [],
@@ -153,13 +154,15 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       throw new Error("Desktop-only feature: repository sync is available in the Tauri app.");
     }
 
-    const targetIds = [
-      ...decisions.keepSkillIds,
-      ...decisions.deleteRequests.map((request) => request.skill_id),
-      ...decisions.additions.flatMap((item) =>
-        item.selections.map((selection) => selection.sourcePath)
-      ),
-    ];
+      const targetIds = [
+        ...decisions.keepSkillIds,
+        ...decisions.deleteRequests.map((request) => request.skill_id),
+        ...decisions.additions.flatMap((item) =>
+          item.selections.map((selection) => selection.sourcePath)
+        ),
+        ...(decisions.skipAdditions ?? []).map((item) => item.sourcePath),
+        ...(decisions.unskipAdditions ?? []).map((item) => item.sourcePath),
+      ];
     set({
       updatingSkillIds: targetIds,
       error: null,
@@ -197,11 +200,15 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
                   result.keptSkillIds.length +
                   result.deleteResult.succeeded.length +
                   imported +
+                  (result.skippedAdditions?.length ?? 0) +
+                  (result.unskippedAdditions?.length ?? 0) +
                   failed,
                 succeeded:
                   result.keptSkillIds.length +
                   result.deleteResult.succeeded.length +
-                  imported,
+                  imported +
+                  (result.skippedAdditions?.length ?? 0) +
+                  (result.unskippedAdditions?.length ?? 0),
                 failed,
               }
             : state.updateJob,

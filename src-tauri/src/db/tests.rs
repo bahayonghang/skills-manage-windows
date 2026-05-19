@@ -41,6 +41,7 @@ async fn test_init_creates_all_tables() {
         "collection_skills",
         "skill_repositories",
         "skill_repository_members",
+        "skill_repository_sync_skips",
         "skill_update_states",
         "skill_tags",
         "skill_tag_links",
@@ -1106,6 +1107,69 @@ async fn test_assign_github_repository_to_skill_records_source_path() {
         Some("skills/.curated/github-skill")
     );
     assert!(!assignment.is_source_unknown);
+}
+
+#[tokio::test]
+async fn test_skill_repository_sync_skip_upsert_list_and_delete() {
+    let pool = setup_test_db().await;
+    let repository = create_or_update_skill_repository(
+        &pool,
+        Some("github-openai-skills-main"),
+        "openai/skills",
+        "github",
+        Some("openai"),
+        Some("skills"),
+        Some("main"),
+        Some("https://github.com/openai/skills"),
+        false,
+    )
+    .await
+    .unwrap();
+
+    let created = upsert_skill_repository_sync_skip(
+        &pool,
+        &repository.id,
+        "skills/planning-with-files-ar",
+        "planning-with-files-ar",
+        "Planning with Files AR",
+    )
+    .await
+    .unwrap();
+    assert_eq!(created.repository_id, repository.id);
+    assert_eq!(created.source_path, "skills/planning-with-files-ar");
+
+    let updated = upsert_skill_repository_sync_skip(
+        &pool,
+        &repository.id,
+        "skills/planning-with-files-ar",
+        "planning-files-ar",
+        "Planning Files Arabic",
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated.created_at, created.created_at);
+    assert_eq!(updated.skill_id, "planning-files-ar");
+    assert_eq!(updated.skill_name, "Planning Files Arabic");
+
+    let skips = get_skill_repository_sync_skips(&pool, std::slice::from_ref(&repository.id))
+        .await
+        .unwrap();
+    assert_eq!(skips.len(), 1);
+    assert_eq!(skips[0].source_path, "skills/planning-with-files-ar");
+
+    assert!(delete_skill_repository_sync_skip(
+        &pool,
+        &repository.id,
+        "skills/planning-with-files-ar"
+    )
+    .await
+    .unwrap());
+    assert!(
+        get_skill_repository_sync_skips(&pool, std::slice::from_ref(&repository.id))
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
