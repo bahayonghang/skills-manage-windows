@@ -14,6 +14,13 @@ export interface CentralRemoteAddedSkill {
   preview: GitHubSkillPreview;
 }
 
+export interface CentralRemoteMissingSkill {
+  state: CentralSkillUpdateState;
+  repositoryId?: string | null;
+  repositoryName: string;
+  repo?: GitHubRepoRef | null;
+}
+
 export interface CentralRepositorySyncSummary {
   repositoryId: string;
   name: string;
@@ -34,7 +41,7 @@ export interface CentralRepositorySyncFailure {
 export interface CentralRepositorySyncPreview {
   states: CentralSkillUpdateState[];
   remoteAdded: CentralRemoteAddedSkill[];
-  remoteMissing: CentralSkillUpdateState[];
+  remoteMissing: CentralRemoteMissingSkill[];
   repositories: CentralRepositorySyncSummary[];
   failedRepositories: CentralRepositorySyncFailure[];
 }

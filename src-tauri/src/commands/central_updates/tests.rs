@@ -1,4 +1,5 @@
 use super::*;
+use crate::db::SkillRepository;
 use sqlx::SqlitePool;
 use tempfile::TempDir;
 
@@ -178,6 +179,76 @@ async fn collect_remote_added_skills_detects_repo_candidates_not_in_local_member
     assert_eq!(added.len(), 1);
     assert_eq!(added[0].preview.skill_id, "new-skill");
     assert_eq!(added[0].preview.source_path, "skills/new-skill");
+}
+
+#[test]
+fn remote_missing_skills_include_repository_display_metadata() {
+    let repository = SkillRepository {
+        id: "github:owner-repo-main".to_string(),
+        name: "fallback name".to_string(),
+        source_type: "github".to_string(),
+        owner: Some("owner".to_string()),
+        repo: Some("repo".to_string()),
+        branch: Some("main".to_string()),
+        url: Some("https://github.com/owner/repo".to_string()),
+        pinned: false,
+        is_unknown: false,
+        created_at: Utc::now().to_rfc3339(),
+        updated_at: Utc::now().to_rfc3339(),
+    };
+    let state = SkillUpdateState {
+        skill_id: "missing".to_string(),
+        source_type: "github".to_string(),
+        source_url: Some("https://github.com/owner/repo".to_string()),
+        ref_name: Some("main".to_string()),
+        source_path: Some("skills/missing".to_string()),
+        last_remote_hash: None,
+        latest_remote_hash: None,
+        last_checked_at: Some(Utc::now().to_rfc3339()),
+        last_updated_at: None,
+        status: STATUS_REMOTE_MISSING.to_string(),
+        error: Some("removed remotely".to_string()),
+    };
+    let repo_by_id = HashMap::from([(repository.id.clone(), repository)]);
+
+    let missing = build_remote_missing_skills(&repo_by_id, vec![state]);
+
+    assert_eq!(missing.len(), 1);
+    assert_eq!(
+        missing[0].repository_id.as_deref(),
+        Some("github:owner-repo-main")
+    );
+    assert_eq!(missing[0].repository_name, "owner/repo");
+    assert_eq!(
+        missing[0].repo.as_ref().map(|repo| repo.branch.as_str()),
+        Some("main")
+    );
+    assert_eq!(missing[0].state.skill_id, "missing");
+}
+
+#[test]
+fn remote_missing_skills_allow_unmapped_repository_source() {
+    let state = SkillUpdateState {
+        skill_id: "missing".to_string(),
+        source_type: "github".to_string(),
+        source_url: Some("https://github.com/unknown/source".to_string()),
+        ref_name: Some("main".to_string()),
+        source_path: Some("skills/missing".to_string()),
+        last_remote_hash: None,
+        latest_remote_hash: None,
+        last_checked_at: Some(Utc::now().to_rfc3339()),
+        last_updated_at: None,
+        status: STATUS_REMOTE_MISSING.to_string(),
+        error: Some("removed remotely".to_string()),
+    };
+
+    let missing = build_remote_missing_skills(&HashMap::new(), vec![state]);
+
+    assert_eq!(missing.len(), 1);
+    assert!(missing[0].repository_id.is_none());
+    assert_eq!(missing[0].repository_name, "Unknown source");
+    assert!(missing[0].repo.is_none());
+    assert_eq!(missing[0].state.skill_id, "missing");
 }
 
 #[tokio::test]

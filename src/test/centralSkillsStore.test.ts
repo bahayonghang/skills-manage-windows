@@ -935,6 +935,68 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().updateStatuses["new-skill"]).toBeUndefined();
   });
 
+  it("checks repository sync with wrapped remote-missing payload and still only indexes checked states", async () => {
+    const remoteMissingState: CentralSkillUpdateState = {
+      ...mockUpdateStates[0],
+      skill_id: "code-reviewer",
+      source_path: "skills/code-reviewer",
+      last_remote_hash: null,
+      latest_remote_hash: null,
+      status: "remote_missing",
+      error: "removed remotely",
+    };
+    const preview: CentralRepositorySyncPreview = {
+      states: [remoteMissingState],
+      remoteAdded: [
+        {
+          repositoryId: "github-owner-repo-main",
+          repo: {
+            owner: "owner",
+            repo: "repo",
+            branch: "main",
+            normalizedUrl: "https://github.com/owner/repo",
+          },
+          preview: {
+            sourcePath: "skills/new-skill",
+            skillId: "new-skill",
+            skillName: "New Skill",
+            description: null,
+            rootDirectory: "skills",
+            skillDirectoryName: "new-skill",
+            downloadUrl: "https://raw.githubusercontent.com/owner/repo/main/skills/new-skill/SKILL.md",
+            conflict: null,
+          },
+        },
+      ],
+      remoteMissing: [
+        {
+          state: remoteMissingState,
+          repositoryId: "github-owner-repo-main",
+          repositoryName: "owner/repo",
+          repo: {
+            owner: "owner",
+            repo: "repo",
+            branch: "main",
+            normalizedUrl: "https://github.com/owner/repo",
+          },
+        },
+      ],
+      repositories: [],
+      failedRepositories: [],
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(preview);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .checkRepositorySync(["github-owner-repo-main"], ["code-reviewer"]);
+
+    expect(result).toEqual(preview);
+    expect(useCentralSkillsStore.getState().updateStatuses["code-reviewer"]).toEqual(
+      remoteMissingState
+    );
+    expect(useCentralSkillsStore.getState().updateStatuses["new-skill"]).toBeUndefined();
+  });
+
   it("updates central skills and merges returned states without a second state refresh", async () => {
     const updatedState: CentralSkillUpdateState = {
       ...mockUpdateStates[0],

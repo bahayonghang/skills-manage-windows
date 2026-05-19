@@ -33,14 +33,14 @@ const SNAPSHOT_DOWNLOAD_CONCURRENCY: usize = 4;
 const COPY_INSTALL_REFRESH_CONCURRENCY: usize = 4;
 
 pub mod repository_sync;
-#[cfg(test)]
-pub(crate) use repository_sync::collect_remote_added_skills;
 pub use repository_sync::{
     apply_central_repository_sync, check_central_repository_sync, CentralRemoteAddedSkill,
-    CentralRepositoryAddedSkillSelection, CentralRepositorySyncApplyResult,
-    CentralRepositorySyncDecisions, CentralRepositorySyncFailure, CentralRepositorySyncPreview,
-    CentralRepositorySyncSummary,
+    CentralRemoteMissingSkill, CentralRepositoryAddedSkillSelection,
+    CentralRepositorySyncApplyResult, CentralRepositorySyncDecisions, CentralRepositorySyncFailure,
+    CentralRepositorySyncPreview, CentralRepositorySyncSummary,
 };
+#[cfg(test)]
+pub(crate) use repository_sync::{build_remote_missing_skills, collect_remote_added_skills};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

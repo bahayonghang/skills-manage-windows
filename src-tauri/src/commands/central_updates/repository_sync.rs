@@ -37,6 +37,15 @@ pub struct CentralRemoteAddedSkill {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CentralRemoteMissingSkill {
+    pub state: SkillUpdateState,
+    pub repository_id: Option<String>,
+    pub repository_name: String,
+    pub repo: Option<GitHubRepoRef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CentralRepositorySyncSummary {
     pub repository_id: String,
     pub name: String,
@@ -61,7 +70,7 @@ pub struct CentralRepositorySyncFailure {
 pub struct CentralRepositorySyncPreview {
     pub states: Vec<SkillUpdateState>,
     pub remote_added: Vec<CentralRemoteAddedSkill>,
-    pub remote_missing: Vec<SkillUpdateState>,
+    pub remote_missing: Vec<CentralRemoteMissingSkill>,
     pub repositories: Vec<CentralRepositorySyncSummary>,
     pub failed_repositories: Vec<CentralRepositorySyncFailure>,
 }
@@ -205,11 +214,12 @@ pub async fn check_central_repository_sync(
         &mut failed_repositories,
     )
     .await?;
-    let remote_missing = states
+    let remote_missing_states = states
         .iter()
         .filter(|state| state.status == STATUS_REMOTE_MISSING)
         .cloned()
         .collect::<Vec<_>>();
+    let remote_missing = build_remote_missing_skills(&repo_by_id, remote_missing_states);
     let repositories =
         build_repository_sync_summaries(&repo_by_id, &states, &remote_added, &remote_missing);
 
@@ -512,7 +522,7 @@ fn build_repository_sync_summaries(
     repo_by_id: &HashMap<String, SkillRepository>,
     states: &[SkillUpdateState],
     remote_added: &[CentralRemoteAddedSkill],
-    remote_missing: &[SkillUpdateState],
+    remote_missing: &[CentralRemoteMissingSkill],
 ) -> Vec<CentralRepositorySyncSummary> {
     let mut checked_by_repo = HashMap::<String, usize>::new();
     let mut update_available_by_repo = HashMap::<String, usize>::new();
@@ -538,9 +548,9 @@ fn build_repository_sync_summaries(
     }
 
     let mut remote_missing_by_repo = HashMap::<String, usize>::new();
-    for state in remote_missing {
-        if let Some(repo_id) = repository_id_for_update_state(repo_by_id, state) {
-            *remote_missing_by_repo.entry(repo_id).or_default() += 1;
+    for item in remote_missing {
+        if let Some(repo_id) = &item.repository_id {
+            *remote_missing_by_repo.entry(repo_id.clone()).or_default() += 1;
         }
     }
     let mut remote_added_by_repo = HashMap::<String, usize>::new();
@@ -576,16 +586,71 @@ fn build_repository_sync_summaries(
     summaries
 }
 
+pub(crate) fn build_remote_missing_skills(
+    repo_by_id: &HashMap<String, SkillRepository>,
+    states: Vec<SkillUpdateState>,
+) -> Vec<CentralRemoteMissingSkill> {
+    states
+        .into_iter()
+        .map(|state| {
+            let repository = repository_for_update_state(repo_by_id, &state);
+            CentralRemoteMissingSkill {
+                repository_id: repository.map(|(id, _)| id.clone()),
+                repository_name: repository
+                    .map(|(_, repository)| repository_display_name(repository))
+                    .unwrap_or_else(|| "Unknown source".to_string()),
+                repo: repository.and_then(|(_, repository)| repo_ref_for_repository(repository)),
+                state,
+            }
+        })
+        .collect()
+}
+
+fn repository_display_name(repository: &SkillRepository) -> String {
+    match (&repository.owner, &repository.repo) {
+        (Some(owner), Some(repo)) if !owner.is_empty() && !repo.is_empty() => {
+            format!("{owner}/{repo}")
+        }
+        _ => repository.name.clone(),
+    }
+}
+
+fn repo_ref_for_repository(repository: &SkillRepository) -> Option<GitHubRepoRef> {
+    if repository.source_type != "github" || repository.is_unknown {
+        return None;
+    }
+    let (Some(owner), Some(repo), Some(branch)) = (
+        repository.owner.as_ref(),
+        repository.repo.as_ref(),
+        repository.branch.as_ref(),
+    ) else {
+        return None;
+    };
+    Some(GitHubRepoRef {
+        owner: owner.clone(),
+        repo: repo.clone(),
+        branch: branch.clone(),
+        normalized_url: repository
+            .url
+            .clone()
+            .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}")),
+    })
+}
+
 fn repository_id_for_update_state(
     repo_by_id: &HashMap<String, SkillRepository>,
     state: &SkillUpdateState,
 ) -> Option<String> {
-    repo_by_id
-        .iter()
-        .find(|(_, repository)| {
-            repository.source_type == state.source_type
-                && repository.url == state.source_url
-                && repository.branch == state.ref_name
-        })
-        .map(|(id, _)| id.clone())
+    repository_for_update_state(repo_by_id, state).map(|(id, _)| id.clone())
+}
+
+fn repository_for_update_state<'a>(
+    repo_by_id: &'a HashMap<String, SkillRepository>,
+    state: &SkillUpdateState,
+) -> Option<(&'a String, &'a SkillRepository)> {
+    repo_by_id.iter().find(|(_, repository)| {
+        repository.source_type == state.source_type
+            && repository.url == state.source_url
+            && repository.branch == state.ref_name
+    })
 }

@@ -22,6 +22,7 @@ import type {
 } from "@/types";
 import type {
   CentralRepositoryAddedSkillSelection,
+  CentralRemoteMissingSkill,
   CentralRepositorySyncPreview,
 } from "@/types/centralRepositorySync";
 
@@ -60,6 +61,10 @@ function addedKey(repositoryId: string, sourcePath: string): string {
   return `${repositoryId}\0${sourcePath}`;
 }
 
+function missingSkillId(item: CentralRemoteMissingSkill): string {
+  return item.state.skill_id;
+}
+
 export function CentralRepositorySyncDialog({
   open,
   onOpenChange,
@@ -81,7 +86,7 @@ export function CentralRepositorySyncDialog({
         ...(preview?.remoteAdded ?? []).map((item) =>
           addedKey(item.repositoryId, item.preview.sourcePath)
         ),
-        ...(preview?.remoteMissing ?? []).map((item) => item.skill_id),
+        ...(preview?.remoteMissing ?? []).map(missingSkillId),
       ].join("\0"),
     [preview]
   );
@@ -89,7 +94,7 @@ export function CentralRepositorySyncDialog({
   useEffect(() => {
     if (!open || !preview) return;
     setMissingDecisions(
-      Object.fromEntries(preview.remoteMissing.map((state) => [state.skill_id, "keep"]))
+      Object.fromEntries(preview.remoteMissing.map((item) => [missingSkillId(item), "keep"]))
     );
     setAddedDecisions(
       Object.fromEntries(
@@ -142,15 +147,30 @@ export function CentralRepositorySyncDialog({
     });
   }
 
+  function setAllRemovableMissingDecisions(next: MissingDecision) {
+    setMissingDecisions((current) => {
+      if (!preview) return current;
+      const decisions = { ...current };
+      for (const missing of preview.remoteMissing) {
+        const skillId = missingSkillId(missing);
+        if (next === "delete" && !deletePreviewBySkillId.has(skillId)) {
+          continue;
+        }
+        decisions[skillId] = next;
+      }
+      return decisions;
+    });
+  }
+
   async function handleConfirm() {
     if (!preview) return;
     const keepSkillIds = preview.remoteMissing
-      .filter((state) => missingDecisions[state.skill_id] !== "delete")
-      .map((state) => state.skill_id);
+      .filter((item) => missingDecisions[missingSkillId(item)] !== "delete")
+      .map(missingSkillId);
     const deleteRequests = preview.remoteMissing
-      .filter((state) => missingDecisions[state.skill_id] === "delete")
-      .flatMap((state) => {
-        const item = deletePreviewBySkillId.get(state.skill_id);
+      .filter((missing) => missingDecisions[missingSkillId(missing)] === "delete")
+      .flatMap((missing) => {
+        const item = deletePreviewBySkillId.get(missingSkillId(missing));
         if (!item) return [];
         return [
           {
@@ -187,6 +207,14 @@ export function CentralRepositorySyncDialog({
   }
 
   const canApply = Boolean(preview) && !isPreviewLoading && !isApplying;
+  const remoteMissingCount = preview?.remoteMissing.length ?? 0;
+  const selectedRemoteMissingCount =
+    preview?.remoteMissing.filter(
+      (item) => missingDecisions[missingSkillId(item)] === "delete"
+    ).length ?? 0;
+  const unavailableRemoteMissingCount =
+    preview?.remoteMissing.filter((item) => !deletePreviewBySkillId.has(missingSkillId(item)))
+      .length ?? 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -289,14 +317,43 @@ export function CentralRepositorySyncDialog({
             </section>
           )}
 
-          {(preview?.remoteMissing.length ?? 0) > 0 && (
+          {remoteMissingCount > 0 && (
             <section className="space-y-2">
-              <h3 className="text-sm font-semibold text-foreground">
-                <Trash2 className="mr-1 inline size-4" />
-                {t("central.repositorySyncMissingTitle", {
-                  count: preview?.remoteMissing.length ?? 0,
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-foreground">
+                  <Trash2 className="mr-1 inline size-4" />
+                  {t("central.repositorySyncMissingTitle", {
+                    count: remoteMissingCount,
+                  })}
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAllRemovableMissingDecisions("delete")}
+                    disabled={isPreviewLoading || isApplying || deletePreviewBySkillId.size === 0}
+                  >
+                    {t("central.repositorySyncDeleteAllRemovable")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAllRemovableMissingDecisions("keep")}
+                    disabled={isPreviewLoading || isApplying}
+                  >
+                    {t("central.repositorySyncKeepAll")}
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("central.repositorySyncMissingSelectionSummary", {
+                  total: remoteMissingCount,
+                  selected: selectedRemoteMissingCount,
+                  unavailable: unavailableRemoteMissingCount,
                 })}
-              </h3>
+              </p>
               {isPreviewLoading ? (
                 <div className="flex items-center gap-2 rounded-xl border border-border p-3 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
@@ -304,19 +361,31 @@ export function CentralRepositorySyncDialog({
                 </div>
               ) : (
                 <div className="max-h-64 space-y-2 overflow-auto pr-1">
-                  {preview?.remoteMissing.map((state) => {
-                    const item = deletePreviewBySkillId.get(state.skill_id);
-                    const previewError = failedDeletePreviewBySkillId.get(state.skill_id);
-                    const decision = missingDecisions[state.skill_id] ?? "keep";
+                  {preview?.remoteMissing.map((missing) => {
+                    const state = missing.state;
+                    const skillId = missingSkillId(missing);
+                    const item = deletePreviewBySkillId.get(skillId);
+                    const previewError = failedDeletePreviewBySkillId.get(skillId);
+                    const decision = missingDecisions[skillId] ?? "keep";
                     return (
-                      <article key={state.skill_id} className="rounded-xl border border-border p-3">
+                      <article key={skillId} className="rounded-xl border border-border p-3">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <div className="font-medium text-foreground">{state.skill_id}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {state.source_path
-                                ? t("central.remoteMissingSource", { path: state.source_path })
-                                : t("central.remoteMissingSourceUnknown")}
+                            <div className="font-medium text-foreground">{skillId}</div>
+                            <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                              <div>
+                                {missing.repo
+                                  ? t("central.remoteMissingRepository", {
+                                      repository: `${missing.repo.owner}/${missing.repo.repo}`,
+                                      branch: missing.repo.branch,
+                                    })
+                                  : t("central.remoteMissingRepositoryUnknown")}
+                              </div>
+                              <div>
+                                {state.source_path
+                                  ? t("central.remoteMissingSource", { path: state.source_path })
+                                  : t("central.remoteMissingSourceUnknown")}
+                              </div>
                             </div>
                           </div>
                           <div className="grid grid-cols-2 rounded-xl border border-border/70 bg-muted/20 p-1 text-xs">
@@ -335,7 +404,7 @@ export function CentralRepositorySyncDialog({
                                 onClick={() =>
                                   setMissingDecisions((current) => ({
                                     ...current,
-                                    [state.skill_id]: next,
+                                    [skillId]: next,
                                   }))
                                 }
                               >

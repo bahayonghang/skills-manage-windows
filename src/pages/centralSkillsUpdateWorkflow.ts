@@ -118,7 +118,7 @@ export function useCentralSkillsUpdateWorkflow({
     setIsRepositorySyncPreviewLoading(true);
     try {
       const deletePreview = await loadBatchDeletePreview(
-        preview.remoteMissing.map((item) => item.skill_id)
+        preview.remoteMissing.map((item) => item.state.skill_id)
       );
       setRepositorySyncDeletePreview(deletePreview);
     } catch (err) {
