@@ -560,10 +560,10 @@ describe("SettingsView", () => {
   it("renders the existing settings sections", () => {
     setupMocks();
     renderSettingsView();
-    expect(screen.getByText("扫描目录")).toBeTruthy();
-    expect(screen.getByText("自定义平台")).toBeTruthy();
-    expect(screen.getByText("平台可见性")).toBeTruthy();
-    expect(screen.getByText("关于")).toBeTruthy();
+    expect(screen.getAllByText("扫描目录").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("自定义平台").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("平台可见性").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("关于").length).toBeGreaterThan(0);
   });
 
   it("persists collapsed settings sections in localStorage", () => {

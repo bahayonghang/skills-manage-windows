@@ -395,7 +395,7 @@ describe("DashboardView", () => {
   it("renders dashboard summaries from existing stores", () => {
     renderDashboard();
 
-    expect(screen.getByRole("heading", { name: /Dashboard/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-metric-central")).toHaveTextContent("3");
     expect(screen.getByTestId("dashboard-metric-collections")).toHaveTextContent("1");
     expect(screen.getByTestId("dashboard-metric-updates")).toHaveTextContent("1");

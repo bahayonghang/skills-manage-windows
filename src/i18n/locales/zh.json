@@ -134,6 +134,11 @@
       "empty": "尚未配置远程目标。"
     }
   },
+  "topbar": {
+    "importSkill": "导入技能",
+    "themeToggleLight": "切换到浅色主题",
+    "themeToggleDark": "切换到深色主题"
+  },
   "sidebar": {
     "byTool": "按工具",
     "dashboard": "Dashboard",
@@ -162,6 +167,45 @@
     "title": "Dashboard",
     "localScope": "本机",
     "description": "查看当前目标、中央库状态、待处理队列和最近本地操作，不在后台启动网络任务。",
+    "hero": {
+      "eyebrow": "技能管理驾驶舱",
+      "title": "发现、复核、安装 AI 技能，全程在本地受控。",
+      "description": "下一步动作一目了然：Central 已索引、安装目标已就绪，唯一阻塞工作是复核质量，而非后台网络任务。",
+      "ctaBrowse": "浏览中央技能",
+      "ctaReview": "复核 {{count}} 个未分类",
+      "ctaMarketplace": "打开市场"
+    },
+    "readiness": {
+      "label": "就绪度",
+      "ariaLabel": "技能库就绪度 {{score}} 分（满分 100）",
+      "miniCentral": "中央",
+      "miniSources": "来源",
+      "miniAgents": "Agents"
+    },
+    "metricStrip": {
+      "ariaLabel": "技能库指标",
+      "central": "中央技能",
+      "centralDesc": "已索引到 ~/.agents/skills 的规范化技能。",
+      "aiReviews": "AI 复核",
+      "aiReviewsDesc": "等待人工确认的标签建议。",
+      "sources": "来源",
+      "sourcesDesc": "连接到中央条目的仓库记录。",
+      "collections": "技能集合",
+      "collectionsDesc": "用于批量安装流程的已保存集合。"
+    },
+    "sparkline": {
+      "ariaLabel": "最近 14 天操作趋势",
+      "empty": "暂无操作"
+    },
+    "agents": {
+      "title": "启用平台 · {{enabled}} / {{total}}",
+      "description": "当前目标下中央技能可安装到的位置。",
+      "manage": "管理",
+      "enabled": "启用",
+      "hidden": "隐藏",
+      "noPath": "尚未配置路径",
+      "openLabel": "打开 Agent {{name}}"
+    },
     "target": "目标",
     "centralPath": "中央库路径",
     "lastScan": "上次扫描",
@@ -226,7 +270,13 @@
       "uncategorizedDesc": "在中央分类面板中分配标签。",
       "unassigned": "未知来源",
       "unassignedDesc": "来源明确后关联到对应仓库。",
-      "empty": "当前没有待处理的中央复核队列。"
+      "empty": "当前没有待处理的中央复核队列。",
+      "tabs": {
+        "ariaLabel": "队列过滤",
+        "all": "全部",
+        "review": "复核",
+        "metadata": "元数据"
+      }
     },
     "activeJobs": "运行中任务",
     "jobProgress": "已完成 {{completed}} / {{total}}",
@@ -1153,6 +1203,50 @@
     "title": "设置",
     "expandSection": "展开 {{title}} 栏目",
     "collapseSection": "折叠 {{title}} 栏目",
+    "appearance": {
+      "title": "外观",
+      "description": "选择应用使用的标题字体、正文字体与字号缩放。",
+      "displayFont": "标题字体",
+      "displayCustomLabel": "自定义标题字体族",
+      "bodyFont": "正文字体",
+      "bodyCustomLabel": "自定义正文字体族",
+      "customPlaceholder": "输入 CSS 字体族名",
+      "scale": "字号缩放",
+      "scaleCompact": "紧凑",
+      "scaleNormal": "默认",
+      "scaleSpacious": "宽松",
+      "preview": "预览",
+      "previewTitle": "发现、复核、安装 AI 技能。",
+      "previewBody": "正文使用 body 字体，标题与指标数字使用 display 字体。",
+      "displayFontOption": {
+        "geist": "Geist Sans",
+        "jetbrains": "JetBrains Mono",
+        "inter": "Inter",
+        "serif": "Instrument Serif",
+        "system": "系统字体",
+        "custom": "自定义"
+      },
+      "bodyFontOption": {
+        "geist": "Geist Sans",
+        "jetbrains": "JetBrains Mono",
+        "inter": "Inter",
+        "system": "系统字体",
+        "custom": "自定义"
+      }
+    },
+    "toc": {
+      "ariaLabel": "设置目录",
+      "entries": {
+        "appearance": "外观",
+        "remoteTargets": "远程目标",
+        "customPlatforms": "自定义平台",
+        "platformVisibility": "平台可见性",
+        "githubPat": "GitHub PAT",
+        "ai": "AI",
+        "scanDirectories": "扫描目录",
+        "about": "关于"
+      }
+    },
     "scanDirs": "扫描目录",
     "scanDirsDesc": "管理技能扫描的目录列表。内置目录不可删除。",
     "addDirectory": "添加目录",

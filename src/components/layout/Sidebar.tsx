@@ -56,7 +56,8 @@ function NavItem({
         className={cn(
           "flex items-center w-full rounded-md transition-colors cursor-pointer",
           !isActive && "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-          isActive && "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm",
+          isActive &&
+            "bg-sidebar-primary text-sidebar-primary-foreground shadow-[inset_0_1px_0_color-mix(in_oklch,white_22%,transparent),0_10px_28px_color-mix(in_oklch,var(--sidebar-primary)_22%,transparent)] bg-[linear-gradient(145deg,color-mix(in_oklch,var(--sidebar-primary)_94%,white_12%),color-mix(in_oklch,var(--sidebar-primary)_82%,black_14%))]",
           expanded ? "gap-2.5 px-2.5 py-1.5 text-sm" : "justify-center py-2 px-1.5"
         )}
       >

@@ -3,6 +3,8 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/inter";
+@import "@fontsource/instrument-serif";
 
 @custom-variant dark (&:is([data-theme='mocha'] *, [data-theme='macchiato'] *, [data-theme='frappe'] *, [data-theme='claude-dark'] *));
 
@@ -1013,4 +1015,128 @@
 
 .scrollbar-subtle::-webkit-scrollbar-thumb:active {
   background-color: var(--scrollbar-thumb-active);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dashboard 玻璃态层 — PR2 设计系统增量
+   ═══════════════════════════════════════════════════════════════════════════
+   - --font-display / --font-body：用户可在 Settings 切换的字体（默认 Geist / JBM）
+   - --font-scale：基础字号缩放（0.875 / 1 / 1.125）
+   - html[data-display-font='...']：按 key 切换字体族；自定义走内联 style 注入
+   - .surface-glass / .surface-glass-strong：dashboard 卡片背景层
+   - .bg-orbit：Dashboard <main> 装饰径向背景
+   - .ring-readiness：score ring，通过 style 内 `--score: 86%` 驱动
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+    --font-display: 'Geist Variable', 'JetBrains Mono Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-body: 'JetBrains Mono Variable', 'Geist Variable', ui-monospace, monospace;
+    --font-scale: 1;
+    --shadow-orbit: 0 24px 70px color-mix(in oklch, var(--background) 86%, transparent);
+}
+
+html[data-display-font='geist'] {
+    --font-display: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+}
+html[data-display-font='jetbrains'] {
+    --font-display: 'JetBrains Mono Variable', ui-monospace, monospace;
+}
+html[data-display-font='inter'] {
+    --font-display: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+}
+html[data-display-font='serif'] {
+    --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+}
+html[data-display-font='system'] {
+    --font-display: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+html[data-body-font='jetbrains'] {
+    --font-body: 'JetBrains Mono Variable', ui-monospace, monospace;
+}
+html[data-body-font='geist'] {
+    --font-body: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+}
+html[data-body-font='inter'] {
+    --font-body: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+}
+html[data-body-font='system'] {
+    --font-body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.font-display {
+    font-family: var(--font-display);
+}
+
+.font-body {
+    font-family: var(--font-body);
+}
+
+/* ── 玻璃态卡片层（基于现有 --card token，不引入 OKLCH 字面值） ─────────── */
+
+.surface-glass {
+    background: linear-gradient(
+        145deg,
+        color-mix(in oklch, var(--card) 92%, white 4%),
+        color-mix(in oklch, var(--card) 84%, transparent 12%)
+    );
+    border: 1px solid color-mix(in oklch, var(--border) 88%, transparent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--foreground) 6%, transparent),
+        var(--shadow-orbit);
+    backdrop-filter: blur(26px) saturate(155%);
+    -webkit-backdrop-filter: blur(26px) saturate(155%);
+}
+
+.surface-glass-strong {
+    background: linear-gradient(
+        145deg,
+        color-mix(in oklch, var(--card) 96%, white 6%),
+        color-mix(in oklch, var(--card) 88%, transparent 8%)
+    );
+    border: 1px solid color-mix(in oklch, var(--border) 96%, transparent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--foreground) 8%, transparent),
+        0 28px 90px color-mix(in oklch, var(--background) 80%, transparent);
+    backdrop-filter: blur(30px) saturate(160%);
+    -webkit-backdrop-filter: blur(30px) saturate(160%);
+}
+
+.bg-orbit {
+    background:
+        radial-gradient(circle at 16% 4%, color-mix(in oklch, var(--primary) 28%, transparent), transparent 34rem),
+        radial-gradient(circle at 80% 2%, color-mix(in oklch, var(--ring) 20%, transparent), transparent 30rem),
+        linear-gradient(145deg, color-mix(in oklch, var(--background) 96%, black 4%), var(--background));
+}
+
+/* ── Score ring (conic gradient driven by inline `--score: 86%`) ───────────── */
+
+.ring-readiness {
+    position: relative;
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: conic-gradient(
+        from 215deg,
+        var(--chart-1) 0 var(--score, 0%),
+        color-mix(in oklch, var(--muted) 80%, transparent) var(--score, 0%) 100%
+    );
+    box-shadow:
+        inset 0 0 0 1px color-mix(in oklch, var(--border) 88%, transparent),
+        0 28px 70px color-mix(in oklch, var(--background) 78%, transparent);
+}
+
+.ring-readiness::before {
+    content: '';
+    position: absolute;
+    inset: clamp(0.8rem, 6%, 1.2rem);
+    border-radius: 50%;
+    background: color-mix(in oklch, var(--card) 96%, black 4%);
+    border: 1px solid color-mix(in oklch, var(--border) 90%, transparent);
+}
+
+.ring-readiness > * {
+    position: relative;
+    text-align: center;
 }

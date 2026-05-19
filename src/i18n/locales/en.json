@@ -134,6 +134,11 @@
       "empty": "No remote targets configured."
     }
   },
+  "topbar": {
+    "importSkill": "Import skill",
+    "themeToggleLight": "Switch to light theme",
+    "themeToggleDark": "Switch to dark theme"
+  },
   "sidebar": {
     "byTool": "By Tool",
     "dashboard": "Dashboard",
@@ -162,6 +167,45 @@
     "title": "Dashboard",
     "localScope": "local",
     "description": "Review the active target, Central library health, pending queues, and recent local activity without starting background network operations.",
+    "hero": {
+      "eyebrow": "Community skill cockpit",
+      "title": "Discover, review, and install AI skills without losing local control.",
+      "description": "Make the next action obvious: Central is indexed, install targets are ready, and the only blocking work is review quality rather than background network operations.",
+      "ctaBrowse": "Browse Central Skills",
+      "ctaReview": "Review {{count}} uncategorized",
+      "ctaMarketplace": "Open Marketplace"
+    },
+    "readiness": {
+      "label": "Readiness",
+      "ariaLabel": "Library readiness score {{score}} of 100",
+      "miniCentral": "Central",
+      "miniSources": "Sources",
+      "miniAgents": "Agents"
+    },
+    "metricStrip": {
+      "ariaLabel": "Library metrics",
+      "central": "Central skills",
+      "centralDesc": "Canonical skills indexed under ~/.agents/skills.",
+      "aiReviews": "AI reviews",
+      "aiReviewsDesc": "Tag suggestions waiting for human acceptance.",
+      "sources": "Sources",
+      "sourcesDesc": "Repository records connected to Central entries.",
+      "collections": "Collections",
+      "collectionsDesc": "Saved skill sets for batch install flows."
+    },
+    "sparkline": {
+      "ariaLabel": "Operations trend, last 14 days",
+      "empty": "No operations yet"
+    },
+    "agents": {
+      "title": "Enabled platforms · {{enabled}} of {{total}}",
+      "description": "Where Central skills can be installed from this target.",
+      "manage": "Manage",
+      "enabled": "enabled",
+      "hidden": "hidden",
+      "noPath": "No path configured",
+      "openLabel": "Open agent {{name}}"
+    },
     "target": "Target",
     "centralPath": "Central path",
     "lastScan": "Last scan",
@@ -226,7 +270,13 @@
       "uncategorizedDesc": "Assign tags from the Central categorize panel.",
       "unassigned": "Unknown source",
       "unassignedDesc": "Attach skills to a repository source when known.",
-      "empty": "No pending Central review queue right now."
+      "empty": "No pending Central review queue right now.",
+      "tabs": {
+        "ariaLabel": "Queue filters",
+        "all": "All",
+        "review": "Review",
+        "metadata": "Metadata"
+      }
     },
     "activeJobs": "Active job",
     "jobProgress": "{{completed}} / {{total}} complete",
@@ -1153,6 +1203,50 @@
     "title": "Settings",
     "expandSection": "Expand {{title}} section",
     "collapseSection": "Collapse {{title}} section",
+    "appearance": {
+      "title": "Appearance",
+      "description": "Choose the display and body fonts plus size scale used across the app.",
+      "displayFont": "Display font",
+      "displayCustomLabel": "Custom display font family",
+      "bodyFont": "Body font",
+      "bodyCustomLabel": "Custom body font family",
+      "customPlaceholder": "Type a CSS font family name",
+      "scale": "Font scale",
+      "scaleCompact": "Compact",
+      "scaleNormal": "Default",
+      "scaleSpacious": "Spacious",
+      "preview": "Preview",
+      "previewTitle": "Discover, review, and install AI skills.",
+      "previewBody": "Body text uses the body font; metric numbers and headings use the display font.",
+      "displayFontOption": {
+        "geist": "Geist Sans",
+        "jetbrains": "JetBrains Mono",
+        "inter": "Inter",
+        "serif": "Instrument Serif",
+        "system": "System",
+        "custom": "Custom"
+      },
+      "bodyFontOption": {
+        "geist": "Geist Sans",
+        "jetbrains": "JetBrains Mono",
+        "inter": "Inter",
+        "system": "System",
+        "custom": "Custom"
+      }
+    },
+    "toc": {
+      "ariaLabel": "Settings sections",
+      "entries": {
+        "appearance": "Appearance",
+        "remoteTargets": "Remote targets",
+        "customPlatforms": "Custom platforms",
+        "platformVisibility": "Platform visibility",
+        "githubPat": "GitHub PAT",
+        "ai": "AI",
+        "scanDirectories": "Scan directories",
+        "about": "About"
+      }
+    },
     "scanDirs": "Scan Directories",
     "scanDirsDesc": "Manage the list of directories scanned for skills. Built-in directories cannot be deleted.",
     "addDirectory": "Add Directory",

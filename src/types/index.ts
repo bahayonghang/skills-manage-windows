@@ -62,7 +62,16 @@ export interface DashboardCentralSummary {
   aiReviewCount: number;
   uncategorizedCount: number;
   unassignedSourceCount: number;
+  readiness: DashboardReadiness;
   sourceRepositories: SkillRepositoryWithStats[];
+}
+
+export interface DashboardReadiness {
+  score: number;
+  categorizedRatio: number;
+  describedRatio: number;
+  sourcedRatio: number;
+  installHealthRatio: number;
 }
 export type ClaudeSourceKind = "user" | "plugin";
 

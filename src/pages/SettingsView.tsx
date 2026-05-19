@@ -6,6 +6,7 @@ import { ACCENT_NAMES } from "@/stores/themeStore";
 import { AddDirectoryDialog } from "@/components/settings/AddDirectoryDialog";
 import { AboutSettingsSection } from "@/components/settings/AboutSettingsSection";
 import { AiSettingsSection } from "@/components/settings/AiSettingsSection";
+import { AppearanceSettingsSection } from "@/components/settings/AppearanceSettingsSection";
 import { CustomPlatformsSettingsSection } from "@/components/settings/CustomPlatformsSettingsSection";
 import { GitHubPatSettingsSection } from "@/components/settings/GitHubPatSettingsSection";
 import { PlatformDialog } from "@/components/settings/PlatformDialog";
@@ -16,6 +17,10 @@ import {
   type WslTargetFormState,
 } from "@/components/settings/RemoteTargetsSettingsSection";
 import { ScanDirectoriesSettingsSection } from "@/components/settings/ScanDirectoriesSettingsSection";
+import {
+  SettingsTableOfContents,
+  type TocEntry,
+} from "@/components/settings/SettingsTableOfContents";
 import { AI_PROVIDERS } from "@/data/aiProviders";
 import { createSettingsViewActions } from "@/pages/settingsViewActions";
 import { useSettingsViewBindings } from "@/pages/settingsViewBindings";
@@ -36,6 +41,17 @@ import {
 import type { AgentWithStatus } from "@/types";
 
 const APP_VERSION = __APP_VERSION__;
+
+const SETTINGS_TOC_ENTRIES: readonly TocEntry[] = [
+  { id: "appearance-section", labelKey: "appearance" },
+  { id: "remote-targets-section", labelKey: "remoteTargets" },
+  { id: "custom-platforms-section", labelKey: "customPlatforms" },
+  { id: "platform-visibility-section", labelKey: "platformVisibility" },
+  { id: "github-pat-section", labelKey: "githubPat" },
+  { id: "ai-section", labelKey: "ai" },
+  { id: "scan-directories-section", labelKey: "scanDirectories" },
+  { id: "about-section", labelKey: "about" },
+];
 
 export function SettingsView() {
   const { t } = useTranslation();
@@ -298,164 +314,184 @@ export function SettingsView() {
       </div>
 
       <div className="flex-1 overflow-auto p-6 space-y-6">
-        <RemoteTargetsSettingsSection
-          activeTarget={resolvedActiveTarget}
-          deletingTargetId={deletingTargetId}
-          editingTargetId={editingTargetId}
-          isCreatingTarget={isCreatingTarget}
-          isLoadingTargets={isLoadingTargets}
-          isLoadingWslDistributions={isLoadingWslDistributions}
-          switchingTargetId={switchingTargetId}
-          sshTargetEditForm={sshTargetEditForm}
-          sshTargetForm={sshTargetForm}
-          sshTargetPasswordUpdates={sshTargetPasswordUpdates}
-          targetMessage={targetMessage}
-          targets={targets}
-          testingTargetId={testingTargetId}
-          updatingPasswordTargetId={updatingPasswordTargetId}
-          updatingTargetId={updatingTargetId}
-          wslDistributionError={wslDistributionError}
-          wslDistributions={wslDistributions}
-          wslTargetEditForm={wslTargetEditForm}
-          wslTargetForm={wslTargetForm}
-          onCancelEditTarget={handleCancelEditTarget}
-          onCreateSshTarget={() => {
-            void handleCreateSshTarget();
-          }}
-          onCreateWslTarget={() => {
-            void handleCreateWslTarget();
-          }}
-          onDeleteTarget={(targetId) => {
-            void handleDeleteTarget(targetId);
-          }}
-          onRefreshWslDistributions={() => {
-            void loadWslDistributions().catch(() => undefined);
-          }}
-          onStartEditTarget={handleStartEditTarget}
-          onSwitchTarget={(targetId) => {
-            void handleSwitchTarget(targetId);
-          }}
-          onTestExistingTarget={(target) => {
-            void handleTestExistingTarget(target);
-          }}
-          onTestNewSshTarget={() => {
-            void handleTestNewSshTarget();
-          }}
-          onTestNewWslTarget={() => {
-            void handleTestNewWslTarget();
-          }}
-          onUpdateExistingTargetPassword={updateExistingTargetPassword}
-          onUpdateSshTarget={(target) => {
-            void handleUpdateSshTarget(target);
-          }}
-          onUpdateSshTargetEditForm={updateSshTargetEditFormField}
-          onUpdateSshTargetForm={updateSshTargetFormField}
-          onUpdateTargetPassword={(target) => {
-            void handleUpdateTargetPassword(target);
-          }}
-          onUpdateWslTarget={(target) => {
-            void handleUpdateWslTarget(target);
-          }}
-          onUpdateWslTargetEditForm={updateWslTargetEditFormField}
-          onUpdateWslTargetForm={updateWslTargetFormField}
-        />
+        <SettingsTableOfContents entries={SETTINGS_TOC_ENTRIES} />
 
-        <CustomPlatformsSettingsSection
-          customAgents={customAgents}
-          platformError={platformError}
-          removingAgent={removingAgent}
-          onAddPlatform={handleOpenAddPlatform}
-          onEditPlatform={handleOpenEditPlatform}
-          onRemovePlatform={(agentId) => {
-            void handleRemovePlatform(agentId);
-          }}
-        />
+        <section id="appearance-section" className="scroll-mt-24">
+          <AppearanceSettingsSection />
+        </section>
 
-        <PlatformVisibilitySettingsSection
-          groups={platformVisibilityGroups}
-          isSearchActive={platformVisibilitySearchActive}
-          normalizedQuery={normalizedPlatformVisibilityQuery}
-          query={platformVisibilityQuery}
-          onQueryChange={setPlatformVisibilityQuery}
-          onToggleCategory={(category, visible) => {
-            void handleToggleCategory(category, visible);
-          }}
-          onTogglePlatform={(agentId, enabled) => {
-            void handleTogglePlatformVisibility(agentId, enabled);
-          }}
-        />
+        <section id="remote-targets-section" className="scroll-mt-24">
+          <RemoteTargetsSettingsSection
+            activeTarget={resolvedActiveTarget}
+            deletingTargetId={deletingTargetId}
+            editingTargetId={editingTargetId}
+            isCreatingTarget={isCreatingTarget}
+            isLoadingTargets={isLoadingTargets}
+            isLoadingWslDistributions={isLoadingWslDistributions}
+            switchingTargetId={switchingTargetId}
+            sshTargetEditForm={sshTargetEditForm}
+            sshTargetForm={sshTargetForm}
+            sshTargetPasswordUpdates={sshTargetPasswordUpdates}
+            targetMessage={targetMessage}
+            targets={targets}
+            testingTargetId={testingTargetId}
+            updatingPasswordTargetId={updatingPasswordTargetId}
+            updatingTargetId={updatingTargetId}
+            wslDistributionError={wslDistributionError}
+            wslDistributions={wslDistributions}
+            wslTargetEditForm={wslTargetEditForm}
+            wslTargetForm={wslTargetForm}
+            onCancelEditTarget={handleCancelEditTarget}
+            onCreateSshTarget={() => {
+              void handleCreateSshTarget();
+            }}
+            onCreateWslTarget={() => {
+              void handleCreateWslTarget();
+            }}
+            onDeleteTarget={(targetId) => {
+              void handleDeleteTarget(targetId);
+            }}
+            onRefreshWslDistributions={() => {
+              void loadWslDistributions().catch(() => undefined);
+            }}
+            onStartEditTarget={handleStartEditTarget}
+            onSwitchTarget={(targetId) => {
+              void handleSwitchTarget(targetId);
+            }}
+            onTestExistingTarget={(target) => {
+              void handleTestExistingTarget(target);
+            }}
+            onTestNewSshTarget={() => {
+              void handleTestNewSshTarget();
+            }}
+            onTestNewWslTarget={() => {
+              void handleTestNewWslTarget();
+            }}
+            onUpdateExistingTargetPassword={updateExistingTargetPassword}
+            onUpdateSshTarget={(target) => {
+              void handleUpdateSshTarget(target);
+            }}
+            onUpdateSshTargetEditForm={updateSshTargetEditFormField}
+            onUpdateSshTargetForm={updateSshTargetFormField}
+            onUpdateTargetPassword={(target) => {
+              void handleUpdateTargetPassword(target);
+            }}
+            onUpdateWslTarget={(target) => {
+              void handleUpdateWslTarget(target);
+            }}
+            onUpdateWslTargetEditForm={updateWslTargetEditFormField}
+            onUpdateWslTargetForm={updateWslTargetFormField}
+          />
+        </section>
 
-        <GitHubPatSettingsSection
-          githubPatState={githubPatState}
-          githubPatInput={githubPatInput}
-          githubPatMessage={githubPatMessage}
-          isLoadingGitHubPat={isLoadingGitHubPat}
-          isSavingGitHubPat={isSavingGitHubPat}
-          isTestingGitHubPat={isTestingGitHubPat}
-          onClear={() => {
-            void handleClearGitHubPat();
-          }}
-          onInputChange={setGitHubPatInput}
-          onSave={() => {
-            void handleSaveGitHubPat();
-          }}
-          onTest={() => {
-            void handleTestGitHubPat();
-          }}
-        />
+        <section id="custom-platforms-section" className="scroll-mt-24">
+          <CustomPlatformsSettingsSection
+            customAgents={customAgents}
+            platformError={platformError}
+            removingAgent={removingAgent}
+            onAddPlatform={handleOpenAddPlatform}
+            onEditPlatform={handleOpenEditPlatform}
+            onRemovePlatform={(agentId) => {
+              void handleRemovePlatform(agentId);
+            }}
+          />
+        </section>
 
-        <AiSettingsSection
-          aiSaveError={aiSaveError}
-          aiSaveStatus={aiSaveStatus}
-          aiApiKeyState={aiApiKeyState}
-          aiSettings={aiSettings}
-          aiTestResult={aiTestResult}
-          aiTesting={aiTesting}
-          isLoadingAiSettings={isLoadingAiSettings}
-          lang={lang}
-          resolvedUrl={resolvedUrl}
-          showAiTestDetails={showAiTestDetails}
-          onClearApiKey={() => {
-            void clearAiApiKey();
-          }}
-          onProviderChange={handleProviderChange}
-          onSetShowAiTestDetails={setShowAiTestDetails}
-          onTestConnection={async () => {
-            setShowAiTestDetails(false);
-            await testAiConnection();
-          }}
-          onUpdateAiSettings={updateAiSettings}
-        />
+        <section id="platform-visibility-section" className="scroll-mt-24">
+          <PlatformVisibilitySettingsSection
+            groups={platformVisibilityGroups}
+            isSearchActive={platformVisibilitySearchActive}
+            normalizedQuery={normalizedPlatformVisibilityQuery}
+            query={platformVisibilityQuery}
+            onQueryChange={setPlatformVisibilityQuery}
+            onToggleCategory={(category, visible) => {
+              void handleToggleCategory(category, visible);
+            }}
+            onTogglePlatform={(agentId, enabled) => {
+              void handleTogglePlatformVisibility(agentId, enabled);
+            }}
+          />
+        </section>
 
-        <ScanDirectoriesSettingsSection
-          isLoadingScanDirs={isLoadingScanDirs}
-          removingDir={removingDir}
-          scanDirError={scanDirError}
-          scanDirectories={scanDirectories}
-          showBuiltinDirs={showBuiltinDirs}
-          onAddDirectory={() => setIsAddDirOpen(true)}
-          onRemoveDirectory={(path) => {
-            void handleRemoveDirectory(path);
-          }}
-          onToggleBuiltinDirs={() => setShowBuiltinDirs((value) => !value)}
-          onToggleDirectory={(path, active) => {
-            void handleToggleDirectory(path, active);
-          }}
-        />
+        <section id="github-pat-section" className="scroll-mt-24">
+          <GitHubPatSettingsSection
+            githubPatState={githubPatState}
+            githubPatInput={githubPatInput}
+            githubPatMessage={githubPatMessage}
+            isLoadingGitHubPat={isLoadingGitHubPat}
+            isSavingGitHubPat={isSavingGitHubPat}
+            isTestingGitHubPat={isTestingGitHubPat}
+            onClear={() => {
+              void handleClearGitHubPat();
+            }}
+            onInputChange={setGitHubPatInput}
+            onSave={() => {
+              void handleSaveGitHubPat();
+            }}
+            onTest={() => {
+              void handleTestGitHubPat();
+            }}
+          />
+        </section>
 
-        <AboutSettingsSection
-          accent={accent}
-          accentNames={ACCENT_NAMES}
-          appVersion={APP_VERSION}
-          ctpVarMap={CTP_VAR_MAP}
-          dbPathDisplay={dbPathDisplay}
-          flavor={flavor}
-          flavorColors={FLAVOR_COLORS}
-          flavorOrder={FLAVOR_ORDER}
-          repoUrl={REPO_URL}
-          onSetAccent={setAccent}
-          onSetFlavor={setFlavor}
-        />
+        <section id="ai-section" className="scroll-mt-24">
+          <AiSettingsSection
+            aiSaveError={aiSaveError}
+            aiSaveStatus={aiSaveStatus}
+            aiApiKeyState={aiApiKeyState}
+            aiSettings={aiSettings}
+            aiTestResult={aiTestResult}
+            aiTesting={aiTesting}
+            isLoadingAiSettings={isLoadingAiSettings}
+            lang={lang}
+            resolvedUrl={resolvedUrl}
+            showAiTestDetails={showAiTestDetails}
+            onClearApiKey={() => {
+              void clearAiApiKey();
+            }}
+            onProviderChange={handleProviderChange}
+            onSetShowAiTestDetails={setShowAiTestDetails}
+            onTestConnection={async () => {
+              setShowAiTestDetails(false);
+              await testAiConnection();
+            }}
+            onUpdateAiSettings={updateAiSettings}
+          />
+        </section>
+
+        <section id="scan-directories-section" className="scroll-mt-24">
+          <ScanDirectoriesSettingsSection
+            isLoadingScanDirs={isLoadingScanDirs}
+            removingDir={removingDir}
+            scanDirError={scanDirError}
+            scanDirectories={scanDirectories}
+            showBuiltinDirs={showBuiltinDirs}
+            onAddDirectory={() => setIsAddDirOpen(true)}
+            onRemoveDirectory={(path) => {
+              void handleRemoveDirectory(path);
+            }}
+            onToggleBuiltinDirs={() => setShowBuiltinDirs((value) => !value)}
+            onToggleDirectory={(path, active) => {
+              void handleToggleDirectory(path, active);
+            }}
+          />
+        </section>
+
+        <section id="about-section" className="scroll-mt-24">
+          <AboutSettingsSection
+            accent={accent}
+            accentNames={ACCENT_NAMES}
+            appVersion={APP_VERSION}
+            ctpVarMap={CTP_VAR_MAP}
+            dbPathDisplay={dbPathDisplay}
+            flavor={flavor}
+            flavorColors={FLAVOR_COLORS}
+            flavorOrder={FLAVOR_ORDER}
+            repoUrl={REPO_URL}
+            onSetAccent={setAccent}
+            onSetFlavor={setFlavor}
+          />
+        </section>
       </div>
 
       <AddDirectoryDialog

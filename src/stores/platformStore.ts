@@ -122,6 +122,13 @@ const BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY: DashboardCentralSummary = {
   aiReviewCount: 0,
   uncategorizedCount: 0,
   unassignedSourceCount: 0,
+  readiness: {
+    score: 0,
+    categorizedRatio: 0,
+    describedRatio: 0,
+    sourcedRatio: 0,
+    installHealthRatio: 0,
+  },
   sourceRepositories: [],
 };
 

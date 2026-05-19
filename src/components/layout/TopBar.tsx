@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Blocks, Search, Settings } from "lucide-react";
+import { Blocks, Moon, Plus, Search, Settings, Sun } from "lucide-react";
 
 import { usePlatformStore } from "@/stores/platformStore";
+import { useThemeStore, type ThemeFlavor } from "@/stores/themeStore";
 import { TargetQuickSwitcher } from "@/components/layout/TargetQuickSwitcher";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
@@ -17,16 +19,30 @@ interface TopBarProps {
   onSearchClick: () => void;
 }
 
+const LIGHT_FLAVORS: ThemeFlavor[] = ["latte", "claude-light"];
+const FLAVOR_TOGGLE_MAP: Record<ThemeFlavor, ThemeFlavor> = {
+  mocha: "latte",
+  macchiato: "latte",
+  frappe: "latte",
+  "claude-dark": "claude-light",
+  latte: "mocha",
+  "claude-light": "claude-dark",
+};
+
 export function TopBar({ onSearchClick }: TopBarProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const flavor = useThemeStore((s) => s.flavor);
+  const setFlavor = useThemeStore((s) => s.setFlavor);
 
   const agents = usePlatformStore((s) => s.agents);
   const skillsByAgent = usePlatformStore((s) => s.skillsByAgent);
   const categoryVisibility =
     usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const platformTargets = getPlatformTargetGroups(agents, categoryVisibility);
+
+  const isLightFlavor = LIGHT_FLAVORS.includes(flavor);
 
   // Determine current view label and count
   const viewInfo = (() => {
@@ -73,6 +89,10 @@ export function TopBar({ onSearchClick }: TopBarProps) {
   const isMac =
     typeof navigator !== "undefined" &&
     navigator.platform.toUpperCase().includes("MAC");
+
+  function handleToggleTheme() {
+    setFlavor(FLAVOR_TOGGLE_MAP[flavor] ?? "latte");
+  }
 
   return (
     <header className="relative flex items-center h-12 px-4 border-b border-border bg-sidebar text-sidebar-foreground shrink-0">
@@ -130,7 +150,37 @@ export function TopBar({ onSearchClick }: TopBarProps) {
         )}
       </div>
 
+      <Button
+        size="sm"
+        className="ml-2 hidden lg:inline-flex"
+        onClick={() => navigate("/marketplace")}
+        title={t("topbar.importSkill")}
+      >
+        <Plus className="size-3.5" />
+        <span>{t("topbar.importSkill")}</span>
+      </Button>
+
       <TargetQuickSwitcher />
+
+      <button
+        onClick={handleToggleTheme}
+        className={cn(
+          "z-10 p-1.5 rounded-md transition-colors cursor-pointer shrink-0",
+          "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+        )}
+        aria-label={
+          isLightFlavor ? t("topbar.themeToggleDark") : t("topbar.themeToggleLight")
+        }
+        title={
+          isLightFlavor ? t("topbar.themeToggleDark") : t("topbar.themeToggleLight")
+        }
+      >
+        {isLightFlavor ? (
+          <Moon className="size-4" />
+        ) : (
+          <Sun className="size-4" />
+        )}
+      </button>
 
       {/* Settings */}
       <button
