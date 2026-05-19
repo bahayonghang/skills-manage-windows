@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, Row};
 
 use crate::db::repos::observations_repo::get_agent_skill_observations;
 use crate::db::repos::repositories_repo::{
@@ -657,4 +657,71 @@ pub async fn delete_skills_not_in_scope(
     q2.execute(pool).await.map_err(|e| e.to_string())?;
     prune_empty_skill_repositories(pool).await?;
     Ok(())
+}
+
+/// 仪表盘 readiness 评分的原始计数。
+///
+/// 对每个 central skill 维度独立计数，避免在 Rust 侧再做 join。
+/// `total` 为 0 时上层应将所有 ratio 视为 0（空仓库 = 未准备）。
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardReadinessCounts {
+    /// 中央技能总数。
+    pub total: u32,
+    /// 至少持有一个非 `uncategorized` tag 的中央技能数。
+    pub categorized: u32,
+    /// `description` 非空白的中央技能数。
+    pub described: u32,
+    /// 关联到非 unknown 源仓库的中央技能数。
+    pub sourced: u32,
+    /// 至少有一条 `skill_installations` 记录的中央技能数。
+    pub installed: u32,
+}
+
+/// 单次聚合，返回 readiness 四个分子 + 一个分母。
+pub async fn count_central_readiness_inputs(
+    pool: &DbPool,
+) -> Result<DashboardReadinessCounts, String> {
+    let row = sqlx::query(
+        "SELECT
+           (SELECT COUNT(*) FROM skills WHERE is_central = 1) AS total,
+           (SELECT COUNT(*) FROM skills s
+            WHERE s.is_central = 1
+              AND EXISTS (
+                SELECT 1 FROM skill_tag_links l
+                WHERE l.skill_id = s.id AND l.tag_id != 'uncategorized'
+              )) AS categorized,
+           (SELECT COUNT(*) FROM skills s
+            WHERE s.is_central = 1
+              AND s.description IS NOT NULL
+              AND TRIM(s.description) != '') AS described,
+           (SELECT COUNT(*) FROM skills s
+            WHERE s.is_central = 1
+              AND EXISTS (
+                SELECT 1 FROM skill_repository_members m
+                JOIN skill_repositories r ON r.id = m.repository_id
+                WHERE m.skill_id = s.id AND r.is_unknown = 0
+              )) AS sourced,
+           (SELECT COUNT(*) FROM skills s
+            WHERE s.is_central = 1
+              AND EXISTS (
+                SELECT 1 FROM skill_installations i WHERE i.skill_id = s.id
+              )) AS installed",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let read = |col: &str| -> Result<u32, String> {
+        let v: i64 = row.try_get(col).map_err(|e| e.to_string())?;
+        Ok(v.max(0) as u32)
+    };
+
+    Ok(DashboardReadinessCounts {
+        total: read("total")?,
+        categorized: read("categorized")?,
+        described: read("described")?,
+        sourced: read("sourced")?,
+        installed: read("installed")?,
+    })
 }

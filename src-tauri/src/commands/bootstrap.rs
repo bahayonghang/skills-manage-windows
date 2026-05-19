@@ -44,7 +44,70 @@ pub struct DashboardCentralSummary {
     pub ai_review_count: usize,
     pub uncategorized_count: usize,
     pub unassigned_source_count: usize,
+    pub readiness: DashboardReadiness,
     pub source_repositories: Vec<db::SkillRepositoryWithStats>,
+}
+
+/// 仪表盘 readiness 评分，4 项加权后归一到 0..=100。
+///
+/// 计算依据见 `DashboardReadiness::from_counts`；权重为常量，本期暂不开放在
+/// 设置中调整。空仓库（`total == 0`）所有 ratio 与 score 均为 0。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardReadiness {
+    pub score: u32,
+    pub categorized_ratio: f32,
+    pub described_ratio: f32,
+    pub sourced_ratio: f32,
+    pub install_health_ratio: f32,
+}
+
+impl DashboardReadiness {
+    pub const WEIGHT_CATEGORIZED: f32 = 0.35;
+    pub const WEIGHT_DESCRIBED: f32 = 0.25;
+    pub const WEIGHT_SOURCED: f32 = 0.20;
+    pub const WEIGHT_INSTALL: f32 = 0.20;
+
+    pub fn from_counts(counts: db::DashboardReadinessCounts) -> Self {
+        if counts.total == 0 {
+            return Self {
+                score: 0,
+                categorized_ratio: 0.0,
+                described_ratio: 0.0,
+                sourced_ratio: 0.0,
+                install_health_ratio: 0.0,
+            };
+        }
+        let total = counts.total as f32;
+        let categorized_ratio = counts.categorized as f32 / total;
+        let described_ratio = counts.described as f32 / total;
+        let sourced_ratio = counts.sourced as f32 / total;
+        let install_health_ratio = counts.installed as f32 / total;
+        let raw = Self::WEIGHT_CATEGORIZED * categorized_ratio
+            + Self::WEIGHT_DESCRIBED * described_ratio
+            + Self::WEIGHT_SOURCED * sourced_ratio
+            + Self::WEIGHT_INSTALL * install_health_ratio;
+        let score = (raw * 100.0).round().clamp(0.0, 100.0) as u32;
+        Self {
+            score,
+            categorized_ratio,
+            described_ratio,
+            sourced_ratio,
+            install_health_ratio,
+        }
+    }
+}
+
+impl Default for DashboardReadiness {
+    fn default() -> Self {
+        Self {
+            score: 0,
+            categorized_ratio: 0.0,
+            described_ratio: 0.0,
+            sourced_ratio: 0.0,
+            install_health_ratio: 0.0,
+        }
+    }
 }
 
 fn parse_scan_state(raw: Option<String>) -> ScanState {
@@ -196,6 +259,8 @@ async fn get_dashboard_central_summary_impl(
     let uncategorized_count = read_count("uncategorized_count")?;
     let unassigned_source_count = read_count("unassigned_source_count")?;
     let source_repositories = db::get_skill_repositories_with_stats(pool).await?;
+    let readiness_counts = db::count_central_readiness_inputs(pool).await?;
+    let readiness = DashboardReadiness::from_counts(readiness_counts);
 
     Ok(DashboardCentralSummary {
         central_skill_count,
@@ -203,6 +268,7 @@ async fn get_dashboard_central_summary_impl(
         ai_review_count,
         uncategorized_count,
         unassigned_source_count,
+        readiness,
         source_repositories,
     })
 }
@@ -301,5 +367,185 @@ mod tests {
 
         assert_eq!(scan_state, ScanState::Idle);
         assert_eq!(last_scan_at.as_deref(), Some(stale_time.as_str()));
+    }
+
+    async fn insert_central_skill(pool: &DbPool, id: &str, description: Option<&str>) {
+        db::upsert_skill(
+            pool,
+            &Skill {
+                id: id.to_string(),
+                name: id.to_string(),
+                description: description.map(str::to_string),
+                file_path: format!("/tmp/{id}/SKILL.md"),
+                canonical_path: Some(format!("/tmp/{id}")),
+                is_central: true,
+                source: Some("native".to_string()),
+                content: None,
+                scanned_at: "2026-04-23T01:00:00Z".to_string(),
+                fs_created_at: None,
+                fs_updated_at: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_readiness_zero_when_no_central_skills() {
+        let pool = setup_test_db().await;
+
+        let summary = get_dashboard_central_summary_impl(&pool).await.unwrap();
+
+        assert_eq!(summary.readiness.score, 0);
+        assert_eq!(summary.readiness.categorized_ratio, 0.0);
+        assert_eq!(summary.readiness.described_ratio, 0.0);
+        assert_eq!(summary.readiness.sourced_ratio, 0.0);
+        assert_eq!(summary.readiness.install_health_ratio, 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_readiness_full_score_when_all_inputs_satisfied() {
+        let pool = setup_test_db().await;
+        insert_central_skill(&pool, "frontend-design", Some("Build UI")).await;
+
+        let tag = db::create_skill_tag(&pool, "ui", None, None).await.unwrap();
+        db::assign_skill_tags(
+            &pool,
+            &["frontend-design".to_string()],
+            &[tag.id.clone()],
+            "manual",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let repo = db::create_or_update_skill_repository(
+            &pool,
+            Some("acme/ui"),
+            "acme/ui",
+            "github",
+            Some("acme"),
+            Some("ui"),
+            Some("main"),
+            Some("https://github.com/acme/ui"),
+            false,
+        )
+        .await
+        .unwrap();
+        db::assign_skills_to_repository(
+            &pool,
+            &repo.id,
+            &["frontend-design".to_string()],
+            Some("skills/frontend-design"),
+        )
+        .await
+        .unwrap();
+
+        db::upsert_skill_installation(
+            &pool,
+            &SkillInstallation {
+                skill_id: "frontend-design".to_string(),
+                agent_id: "central".to_string(),
+                installed_path: "/tmp/frontend-design".to_string(),
+                link_type: "native".to_string(),
+                symlink_target: None,
+                created_at: "2026-04-23T01:00:00Z".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let summary = get_dashboard_central_summary_impl(&pool).await.unwrap();
+
+        assert_eq!(summary.readiness.score, 100);
+        assert!((summary.readiness.categorized_ratio - 1.0).abs() < f32::EPSILON);
+        assert!((summary.readiness.described_ratio - 1.0).abs() < f32::EPSILON);
+        assert!((summary.readiness.sourced_ratio - 1.0).abs() < f32::EPSILON);
+        assert!((summary.readiness.install_health_ratio - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn test_readiness_partial_score_applies_weighted_formula() {
+        let pool = setup_test_db().await;
+        // 4 个 central skill：1 个全 4 项满足，1 个只有 description，1 个只有 install，1 个完全空。
+        insert_central_skill(&pool, "full", Some("Has everything")).await;
+        insert_central_skill(&pool, "described-only", Some("Just words")).await;
+        insert_central_skill(&pool, "installed-only", None).await;
+        insert_central_skill(&pool, "blank", None).await;
+
+        let tag = db::create_skill_tag(&pool, "ui", None, None).await.unwrap();
+        db::assign_skill_tags(
+            &pool,
+            &["full".to_string()],
+            &[tag.id.clone()],
+            "manual",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let repo = db::create_or_update_skill_repository(
+            &pool,
+            Some("acme/ui"),
+            "acme/ui",
+            "github",
+            Some("acme"),
+            Some("ui"),
+            Some("main"),
+            Some("https://github.com/acme/ui"),
+            false,
+        )
+        .await
+        .unwrap();
+        db::assign_skills_to_repository(
+            &pool,
+            &repo.id,
+            &["full".to_string()],
+            Some("skills/full"),
+        )
+        .await
+        .unwrap();
+
+        for skill_id in ["full", "installed-only"] {
+            db::upsert_skill_installation(
+                &pool,
+                &SkillInstallation {
+                    skill_id: skill_id.to_string(),
+                    agent_id: "central".to_string(),
+                    installed_path: format!("/tmp/{skill_id}"),
+                    link_type: "native".to_string(),
+                    symlink_target: None,
+                    created_at: "2026-04-23T01:00:00Z".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let summary = get_dashboard_central_summary_impl(&pool).await.unwrap();
+
+        // 期望比率：分类 1/4、描述 2/4、有源 1/4、安装 2/4
+        assert!((summary.readiness.categorized_ratio - 0.25).abs() < 1e-5);
+        assert!((summary.readiness.described_ratio - 0.5).abs() < 1e-5);
+        assert!((summary.readiness.sourced_ratio - 0.25).abs() < 1e-5);
+        assert!((summary.readiness.install_health_ratio - 0.5).abs() < 1e-5);
+
+        // 加权:0.35*0.25 + 0.25*0.5 + 0.20*0.25 + 0.20*0.5 = 0.3625 -> 36
+        assert_eq!(summary.readiness.score, 36);
+    }
+
+    #[test]
+    fn test_readiness_from_counts_handles_zero_total() {
+        let readiness = DashboardReadiness::from_counts(db::DashboardReadinessCounts {
+            total: 0,
+            categorized: 9,
+            described: 9,
+            sourced: 9,
+            installed: 9,
+        });
+        assert_eq!(readiness.score, 0);
+        assert_eq!(readiness.categorized_ratio, 0.0);
     }
 }
