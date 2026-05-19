@@ -12,6 +12,7 @@ import type {
   SkillsShSkill,
   TargetSummary,
 } from "@/types";
+import { isRemoteLikeTarget, requiresSshPasswordRepair } from "@/lib/targetKind";
 
 const mockLoadRegistries = vi.fn();
 const mockLoadPreviewSkills = vi.fn<() => Promise<MarketplaceSkill[]>>();
@@ -290,13 +291,12 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
         (skill) => selectionState[skill.sourcePath]?.selected ?? false,
       );
       const showRemoteWorkspaceHint =
-        Boolean(preview?.previewWorkspaceId) && activeTarget.kind === "ssh";
-      const requiresSshPasswordRepair =
+        Boolean(preview?.previewWorkspaceId) && isRemoteLikeTarget(activeTarget);
+      const needsSshPasswordRepair =
         step === "confirm" &&
-        activeTarget.kind === "ssh" &&
-        activeTarget.authMethod === "password" &&
+        requiresSshPasswordRepair(activeTarget) &&
         !activeTarget.hasStoredPassword;
-      const showSshPasswordRepair = requiresSshPasswordRepair || Boolean(statusMessage);
+      const showSshPasswordRepair = needsSshPasswordRepair || Boolean(statusMessage);
       const footerMode = step === "confirm" ? "confirm" : "preview";
 
       async function handleImportConfirm() {
@@ -535,7 +535,7 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
             {step === "confirm" ? (
               <button
                 type="button"
-                disabled={requiresSshPasswordRepair || selectedSkills.length === 0}
+                disabled={needsSshPasswordRepair || selectedSkills.length === 0}
                 onClick={() => {
                   void handleImportConfirm();
                 }}

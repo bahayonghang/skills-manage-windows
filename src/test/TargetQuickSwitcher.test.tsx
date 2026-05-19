@@ -30,6 +30,16 @@ const sshTarget: TargetSummary = {
   isActive: false,
 };
 
+const wslTarget: TargetSummary = {
+  id: "wsl-ubuntu",
+  kind: "wsl",
+  label: "Ubuntu",
+  distribution: "Ubuntu-24.04",
+  remoteHome: "/home/lyh",
+  remoteOs: "Linux",
+  isActive: false,
+};
+
 function setupStore(overrides?: {
   targets?: TargetSummary[];
   activeTarget?: TargetSummary;
@@ -103,6 +113,16 @@ describe("TargetQuickSwitcher", () => {
     expect(trigger).toHaveTextContent("dckj");
   });
 
+  it("renders WSL label when a WSL target is active", () => {
+    setupStore({
+      activeTarget: { ...wslTarget, isActive: true },
+      targets: [localTarget, sshTarget, { ...wslTarget, isActive: true }],
+    });
+    renderSwitcher();
+    const trigger = screen.getByRole("button", { name: /切换当前目标/ });
+    expect(trigger).toHaveTextContent("Ubuntu");
+  });
+
   it("opens the menu and lists every target", () => {
     setupStore();
     renderSwitcher();
@@ -112,6 +132,28 @@ describe("TargetQuickSwitcher", () => {
     expect(menu).toHaveTextContent("本机");
     expect(menu).toHaveTextContent("dckj");
     expect(menu).toHaveTextContent("管理目标…");
+  });
+
+  it("lists WSL distribution details and switches to WSL", async () => {
+    const switchTarget = vi.fn().mockResolvedValue(wslTarget);
+    setupStore({
+      targets: [localTarget, sshTarget, wslTarget],
+      switchTarget,
+    });
+    renderSwitcher();
+    fireEvent.click(screen.getByRole("button", { name: /切换当前目标/ }));
+
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveTextContent("Ubuntu-24.04");
+    const wslRow = Array.from(menu.querySelectorAll("button")).find((btn) =>
+      btn.textContent?.includes("Ubuntu")
+    );
+
+    await act(async () => {
+      wslRow?.click();
+    });
+
+    expect(switchTarget).toHaveBeenCalledWith("wsl-ubuntu");
   });
 
   it("calls switchTarget when picking a non-active row", async () => {

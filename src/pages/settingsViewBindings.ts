@@ -62,7 +62,11 @@ export function useSettingsViewBindings() {
 
   const targets = useTargetStore((state) => state.targets);
   const activeTarget = useTargetStore((state) => state.activeTarget);
+  const wslDistributions = useTargetStore((state) => state.wslDistributions);
   const isLoadingTargets = useTargetStore((state) => state.isLoading);
+  const isLoadingWslDistributions = useTargetStore(
+    (state) => state.isLoadingWslDistributions
+  );
   const isCreatingTarget = useTargetStore((state) => state.isCreating);
   const updatingTargetId = useTargetStore((state) => state.updatingTargetId);
   const testingTargetId = useTargetStore((state) => state.testingTargetId);
@@ -71,10 +75,19 @@ export function useSettingsViewBindings() {
   );
   const switchingTargetId = useTargetStore((state) => state.switchingTargetId);
   const deletingTargetId = useTargetStore((state) => state.deletingTargetId);
+  const wslDistributionError = useTargetStore(
+    (state) => state.wslDistributionError
+  );
   const loadTargets = useTargetStore((state) => state.loadTargets);
+  const loadWslDistributions = useTargetStore(
+    (state) => state.loadWslDistributions
+  );
   const createSshTarget = useTargetStore((state) => state.createSshTarget);
   const updateSshTarget = useTargetStore((state) => state.updateSshTarget);
   const testSshTarget = useTargetStore((state) => state.testSshTarget);
+  const createWslTarget = useTargetStore((state) => state.createWslTarget);
+  const updateWslTarget = useTargetStore((state) => state.updateWslTarget);
+  const testWslTarget = useTargetStore((state) => state.testWslTarget);
   const updateSshTargetPassword = useTargetStore(
     (state) => state.updateSshTargetPassword
   );
@@ -129,17 +142,24 @@ export function useSettingsViewBindings() {
     loadMarketplaceSkills,
     targets,
     activeTarget,
+    wslDistributions,
     isLoadingTargets,
+    isLoadingWslDistributions,
     isCreatingTarget,
     updatingTargetId,
     testingTargetId,
     updatingPasswordTargetId,
     switchingTargetId,
     deletingTargetId,
+    wslDistributionError,
     loadTargets,
+    loadWslDistributions,
     createSshTarget,
     updateSshTarget,
     testSshTarget,
+    createWslTarget,
+    updateWslTarget,
+    testWslTarget,
     updateSshTargetPassword,
     deleteTarget,
     switchTarget,

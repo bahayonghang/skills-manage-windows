@@ -13,6 +13,7 @@ import { PlatformVisibilitySettingsSection } from "@/components/settings/Platfor
 import {
   RemoteTargetsSettingsSection,
   type SshTargetFormState,
+  type WslTargetFormState,
 } from "@/components/settings/RemoteTargetsSettingsSection";
 import { ScanDirectoriesSettingsSection } from "@/components/settings/ScanDirectoriesSettingsSection";
 import { AI_PROVIDERS } from "@/data/aiProviders";
@@ -21,6 +22,7 @@ import { useSettingsViewBindings } from "@/pages/settingsViewBindings";
 import {
   CTP_VAR_MAP,
   EMPTY_SSH_TARGET_FORM,
+  EMPTY_WSL_TARGET_FORM,
   FLAVOR_COLORS,
   FLAVOR_ORDER,
   REPO_URL,
@@ -80,17 +82,24 @@ export function SettingsView() {
     loadMarketplaceSkills,
     targets,
     activeTarget,
+    wslDistributions,
     isLoadingTargets,
+    isLoadingWslDistributions,
     isCreatingTarget,
     updatingTargetId,
     testingTargetId,
     updatingPasswordTargetId,
     switchingTargetId,
     deletingTargetId,
+    wslDistributionError,
     loadTargets,
+    loadWslDistributions,
     createSshTarget,
     updateSshTarget,
     testSshTarget,
+    createWslTarget,
+    updateWslTarget,
+    testWslTarget,
     updateSshTargetPassword,
     deleteTarget,
     switchTarget,
@@ -124,9 +133,13 @@ export function SettingsView() {
   } | null>(null);
   const [sshTargetForm, setSshTargetForm] =
     useState<SshTargetFormState>(EMPTY_SSH_TARGET_FORM);
+  const [wslTargetForm, setWslTargetForm] =
+    useState<WslTargetFormState>(EMPTY_WSL_TARGET_FORM);
   const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
   const [sshTargetEditForm, setSshTargetEditForm] =
     useState<SshTargetFormState>(EMPTY_SSH_TARGET_FORM);
+  const [wslTargetEditForm, setWslTargetEditForm] =
+    useState<WslTargetFormState>(EMPTY_WSL_TARGET_FORM);
   const [sshTargetPasswordUpdates, setSshTargetPasswordUpdates] = useState<
     Record<string, string>
   >({});
@@ -151,7 +164,21 @@ export function SettingsView() {
     loadScanDirectories();
     loadGitHubPat();
     loadTargets();
-  }, [loadScanDirectories, loadGitHubPat, loadTargets]);
+    void loadWslDistributions().catch(() => undefined);
+  }, [loadScanDirectories, loadGitHubPat, loadTargets, loadWslDistributions]);
+
+  useEffect(() => {
+    if (wslTargetForm.distribution.trim() || wslDistributions.length !== 1) {
+      return;
+    }
+
+    const [distribution] = wslDistributions;
+    setWslTargetForm((current) => ({
+      ...current,
+      distribution: distribution.name,
+      label: current.label.trim() ? current.label : distribution.name,
+    }));
+  }, [wslDistributions, wslTargetForm.distribution]);
 
   useEffect(() => {
     setGitHubPatInput("");
@@ -182,13 +209,18 @@ export function SettingsView() {
   const {
     updateSshTargetFormField,
     updateSshTargetEditFormField,
+    updateWslTargetFormField,
+    updateWslTargetEditFormField,
     updateExistingTargetPassword,
     handleStartEditTarget,
     handleCancelEditTarget,
     handleCreateSshTarget,
+    handleCreateWslTarget,
     handleTestNewSshTarget,
+    handleTestNewWslTarget,
     handleTestExistingTarget,
     handleUpdateSshTarget,
+    handleUpdateWslTarget,
     handleUpdateTargetPassword,
     handleSwitchTarget,
     handleDeleteTarget,
@@ -210,6 +242,8 @@ export function SettingsView() {
     githubPatInput,
     sshTargetForm,
     sshTargetEditForm,
+    wslTargetForm,
+    wslTargetEditForm,
     sshTargetPasswordUpdates,
     editingPlatform,
     selectedMarketplaceRegistryId,
@@ -230,6 +264,9 @@ export function SettingsView() {
     createSshTarget,
     updateSshTarget,
     testSshTarget,
+    createWslTarget,
+    updateWslTarget,
+    testWslTarget,
     updateSshTargetPassword,
     deleteTarget,
     switchTarget,
@@ -247,6 +284,8 @@ export function SettingsView() {
     setSshTargetForm,
     setEditingTargetId,
     setSshTargetEditForm,
+    setWslTargetForm,
+    setWslTargetEditForm,
     setSshTargetPasswordUpdates,
   });
 
@@ -265,6 +304,7 @@ export function SettingsView() {
           editingTargetId={editingTargetId}
           isCreatingTarget={isCreatingTarget}
           isLoadingTargets={isLoadingTargets}
+          isLoadingWslDistributions={isLoadingWslDistributions}
           switchingTargetId={switchingTargetId}
           sshTargetEditForm={sshTargetEditForm}
           sshTargetForm={sshTargetForm}
@@ -274,22 +314,35 @@ export function SettingsView() {
           testingTargetId={testingTargetId}
           updatingPasswordTargetId={updatingPasswordTargetId}
           updatingTargetId={updatingTargetId}
+          wslDistributionError={wslDistributionError}
+          wslDistributions={wslDistributions}
+          wslTargetEditForm={wslTargetEditForm}
+          wslTargetForm={wslTargetForm}
           onCancelEditTarget={handleCancelEditTarget}
           onCreateSshTarget={() => {
             void handleCreateSshTarget();
           }}
+          onCreateWslTarget={() => {
+            void handleCreateWslTarget();
+          }}
           onDeleteTarget={(targetId) => {
             void handleDeleteTarget(targetId);
+          }}
+          onRefreshWslDistributions={() => {
+            void loadWslDistributions().catch(() => undefined);
           }}
           onStartEditTarget={handleStartEditTarget}
           onSwitchTarget={(targetId) => {
             void handleSwitchTarget(targetId);
           }}
-          onTestExistingTarget={(targetId) => {
-            void handleTestExistingTarget(targetId);
+          onTestExistingTarget={(target) => {
+            void handleTestExistingTarget(target);
           }}
           onTestNewSshTarget={() => {
             void handleTestNewSshTarget();
+          }}
+          onTestNewWslTarget={() => {
+            void handleTestNewWslTarget();
           }}
           onUpdateExistingTargetPassword={updateExistingTargetPassword}
           onUpdateSshTarget={(target) => {
@@ -300,6 +353,11 @@ export function SettingsView() {
           onUpdateTargetPassword={(target) => {
             void handleUpdateTargetPassword(target);
           }}
+          onUpdateWslTarget={(target) => {
+            void handleUpdateWslTarget(target);
+          }}
+          onUpdateWslTargetEditForm={updateWslTargetEditFormField}
+          onUpdateWslTargetForm={updateWslTargetFormField}
         />
 
         <CustomPlatformsSettingsSection

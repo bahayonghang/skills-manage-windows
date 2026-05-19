@@ -15,6 +15,7 @@ import { getPathBasename } from "@/lib/path";
 import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
+import { isRemoteLikeTarget } from "@/lib/targetKind";
 import { cn } from "@/lib/utils";
 import {
   importObsidianSkillToCentral,
@@ -57,7 +58,7 @@ export function ObsidianVaultView() {
     usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((state) => state.refreshCounts);
   const activeTarget = useTargetStore((state) => state.activeTarget);
-  const isRemoteTarget = activeTarget.kind === "ssh";
+  const isRemoteTarget = isRemoteLikeTarget(activeTarget);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [importingIds, setImportingIds] = useState<Set<string>>(new Set());

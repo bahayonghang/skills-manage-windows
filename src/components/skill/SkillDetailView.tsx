@@ -21,6 +21,7 @@ import { formatBackendError } from "@/lib/backendError";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { arePathsEquivalent } from "@/lib/path";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
+import { isRemoteLikeTarget } from "@/lib/targetKind";
 import {
   getPlatformTargetGroups,
   getPlatformTargetMemberIds,
@@ -160,7 +161,7 @@ export function SkillDetailView({
   const isLoading = isFileMode ? fileIsLoading : storeIsLoading;
   const explanation = isFileMode ? fileExplanation : storeExplanation;
   const isExplanationLoading = isFileMode ? fileIsExplaining : storeIsExplanationLoading;
-  const isRemoteTarget = activeTarget.kind === "ssh";
+  const isRemoteTarget = isRemoteLikeTarget(activeTarget);
 
   const [activeTab, setActiveTab] = useState<PreviewTab>("markdown");
   const [isCollectionPickerOpen, setIsCollectionPickerOpen] = useState(false);

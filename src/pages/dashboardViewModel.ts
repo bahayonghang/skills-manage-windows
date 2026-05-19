@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { TFunction } from "i18next";
 
 import { isTauriRuntime } from "@/lib/tauri";
+import { isRemoteLikeTarget, isWslTarget } from "@/lib/targetKind";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
   type PlatformCategoryVisibility,
@@ -194,19 +195,21 @@ export function useDashboardViewModel({
     repositories.length > 0
       ? repositories.length
       : resolvedSummary.sourceRepositories.length;
-  const targetDescription =
-    resolvedTarget.kind === "ssh"
-      ? [
-          resolvedTarget.username && resolvedTarget.host
+  const targetDescription = isRemoteLikeTarget(resolvedTarget)
+    ? [
+        isWslTarget(resolvedTarget)
+          ? resolvedTarget.distribution
+          : resolvedTarget.username && resolvedTarget.host
             ? `${resolvedTarget.username}@${resolvedTarget.host}`
             : resolvedTarget.host,
-          resolvedTarget.remoteHome,
-        ]
-          .filter(Boolean)
-          .join(" / ")
-      : t("targets.localDescription");
-  const targetLabel =
-    resolvedTarget.kind === "ssh" ? resolvedTarget.label : t("targets.local");
+        resolvedTarget.remoteHome,
+      ]
+        .filter(Boolean)
+        .join(" / ")
+    : t("targets.localDescription");
+  const targetLabel = isRemoteLikeTarget(resolvedTarget)
+    ? resolvedTarget.label
+    : t("targets.local");
   const scanStateLabel =
     isPlatformLoading || isPlatformRefreshing
       ? t("dashboard.scanState.loading")

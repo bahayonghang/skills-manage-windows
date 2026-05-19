@@ -9,6 +9,7 @@ import {
   AgentWithStatus,
   TargetSummary,
   GitHubPatState,
+  WslDistributionSummary,
 } from "../types";
 import { invoke } from "@/lib/tauri";
 
@@ -180,10 +181,17 @@ function setupMocks({
   setAgentEnabled = vi.fn(),
   targets = [{ id: "local", kind: "local" as const, label: "Local", isActive: true }] as TargetSummary[],
   activeTarget = { id: "local", kind: "local" as const, label: "Local", isActive: true } as TargetSummary,
+  wslDistributions = [] as WslDistributionSummary[],
   loadTargets = vi.fn(),
+  loadWslDistributions = vi.fn().mockResolvedValue(undefined),
+  isLoadingWslDistributions = false,
+  wslDistributionError = null as string | null,
   createSshTarget = vi.fn(),
   updateSshTarget = vi.fn(),
   testSshTarget = vi.fn(),
+  createWslTarget = vi.fn(),
+  updateWslTarget = vi.fn(),
+  testWslTarget = vi.fn(),
   updateSshTargetPassword = vi.fn(),
   deleteTarget = vi.fn(),
   switchTarget = vi.fn(),
@@ -280,7 +288,9 @@ function setupMocks({
     selector({
       targets,
       activeTarget,
+      wslDistributions,
       isLoading: false,
+      isLoadingWslDistributions,
       isCreating: false,
       updatingTargetId: null,
       testingTargetId: null,
@@ -288,10 +298,15 @@ function setupMocks({
       switchingTargetId: null,
       deletingTargetId: null,
       error: null,
+      wslDistributionError,
       loadTargets,
+      loadWslDistributions,
       createSshTarget,
       updateSshTarget,
       testSshTarget,
+      createWslTarget,
+      updateWslTarget,
+      testWslTarget,
       updateSshTargetPassword,
       deleteTarget,
       switchTarget,
@@ -372,6 +387,28 @@ describe("SettingsView", () => {
     expect(screen.getByLabelText("用户")).toBeTruthy();
     expect(screen.getByLabelText("端口")).toBeTruthy();
     expect(screen.getByLabelText("SSH 密钥路径")).toBeTruthy();
+  });
+
+  it("renders SSH and WSL add flows as separate cards", () => {
+    setupMocks({
+      wslDistributions: [
+        {
+          name: "Ubuntu-24.04",
+          isDefault: true,
+          state: "Stopped",
+          version: "2",
+        },
+      ],
+    });
+    renderSettingsView();
+
+    expect(screen.getByText("新增 SSH 目标")).toBeTruthy();
+    expect(screen.getByText("新增 WSL 发行版")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "WSL" })).toBeNull();
+    expect(screen.getByLabelText("主机")).toBeTruthy();
+    expect(screen.getByLabelText("WSL 别名")).toBeTruthy();
+    expect(screen.getByLabelText("WSL 发行版")).toBeTruthy();
+    expect(screen.getByText(/不需要 SSH 主机或凭据/)).toBeTruthy();
   });
 
   it("marks the selected SSH auth method", () => {
@@ -584,6 +621,13 @@ describe("SettingsView", () => {
     expect(loadGitHubPat).toHaveBeenCalled();
   });
 
+  it("loads WSL distributions on mount", () => {
+    const loadWslDistributions = vi.fn().mockResolvedValue(undefined);
+    setupMocks({ loadWslDistributions });
+    renderSettingsView();
+    expect(loadWslDistributions).toHaveBeenCalled();
+  });
+
   it("renders the saved github pat status without revealing the token", () => {
     setupMocks({
       githubPatState: { configured: true, storageState: "stored", error: null },
@@ -741,6 +785,153 @@ describe("SettingsView", () => {
       });
     });
     expect(await screen.findByText("已更新目标 Lab")).toBeTruthy();
+  });
+
+  it("tests and creates a WSL target from settings", async () => {
+    const createWslTarget = vi.fn().mockResolvedValue({
+      id: "wsl-ubuntu",
+      kind: "wsl" as const,
+      label: "Ubuntu",
+      distribution: "Ubuntu-24.04",
+      remoteHome: "/home/lyh",
+      remoteOs: "Linux",
+      isActive: false,
+    });
+    const testWslTarget = vi.fn().mockResolvedValue({
+      ok: true,
+      remoteHome: "/home/lyh",
+      remoteOs: "Linux",
+      message: "ok",
+    });
+    setupMocks({
+      createWslTarget,
+      testWslTarget,
+      wslDistributions: [
+        {
+          name: "Ubuntu-24.04",
+          isDefault: true,
+          state: "Stopped",
+          version: "2",
+        },
+      ],
+    });
+    renderSettingsView();
+
+    fireEvent.change(screen.getByLabelText("WSL 别名"), {
+      target: { value: "Ubuntu" },
+    });
+    fireEvent.change(screen.getByLabelText("WSL 发行版"), {
+      target: { value: "Ubuntu-24.04" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "测试" })[1]);
+
+    await waitFor(() => {
+      expect(testWslTarget).toHaveBeenCalledWith({
+        label: "Ubuntu",
+        distribution: "Ubuntu-24.04",
+      });
+    });
+    expect(await screen.findByText("连接成功：Linux /home/lyh")).toBeTruthy();
+    expect(screen.getByText("状态: Stopped")).toBeTruthy();
+    expect(screen.getByText("版本: 2")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "新增 WSL" }));
+
+    await waitFor(() => {
+      expect(createWslTarget).toHaveBeenCalledWith({
+        label: "Ubuntu",
+        distribution: "Ubuntu-24.04",
+      });
+    });
+    expect(await screen.findByText("已创建目标 Ubuntu")).toBeTruthy();
+  });
+
+  it("marks already-added WSL distributions in the add card", () => {
+    setupMocks({
+      targets: [
+        { id: "local", kind: "local" as const, label: "Local", isActive: true },
+        {
+          id: "wsl-ubuntu",
+          kind: "wsl" as const,
+          label: "Ubuntu",
+          distribution: "Ubuntu-24.04",
+          isActive: false,
+        },
+      ],
+      wslDistributions: [
+        {
+          name: "Ubuntu-24.04",
+          isDefault: true,
+          state: "Stopped",
+          version: "2",
+        },
+      ],
+    });
+    renderSettingsView();
+
+    const option = screen.getByRole("option", {
+      name: /Ubuntu-24\.04.*已添加/,
+    });
+    expect(option).toBeDisabled();
+    expect(screen.getByRole("button", { name: "新增 WSL" })).toBeDisabled();
+  });
+
+  it("updates an existing WSL target without SSH credentials", async () => {
+    const updateWslTarget = vi.fn().mockResolvedValue({
+      id: "wsl-ubuntu",
+      kind: "wsl" as const,
+      label: "Ubuntu Work",
+      distribution: "Ubuntu",
+      remoteHome: "/home/lyh",
+      remoteOs: "Linux",
+      isActive: true,
+    });
+    setupMocks({
+      targets: [
+        { id: "local", kind: "local" as const, label: "Local", isActive: false },
+        {
+          id: "wsl-ubuntu",
+          kind: "wsl" as const,
+          label: "Ubuntu",
+          distribution: "Ubuntu-24.04",
+          remoteHome: "/home/lyh",
+          remoteOs: "Linux",
+          cacheDbPath: "targets/wsl-ubuntu/db.sqlite",
+          isActive: true,
+        },
+      ],
+      activeTarget: {
+        id: "wsl-ubuntu",
+        kind: "wsl" as const,
+        label: "Ubuntu",
+        distribution: "Ubuntu-24.04",
+        isActive: true,
+      },
+      updateWslTarget,
+      rescan: vi.fn().mockResolvedValue(undefined),
+      loadCentralSkills: vi.fn().mockResolvedValue(undefined),
+      loadMarketplaceRegistries: vi.fn().mockResolvedValue(undefined),
+    });
+    renderSettingsView();
+
+    expect(screen.queryByText(/需要密码|Password needed/i)).toBeNull();
+    fireEvent.click(screen.getByLabelText("编辑目标 Ubuntu"));
+    fireEvent.change(screen.getByDisplayValue("Ubuntu"), {
+      target: { value: "Ubuntu Work" },
+    });
+    fireEvent.change(screen.getByDisplayValue("Ubuntu-24.04"), {
+      target: { value: "Ubuntu" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+
+    await waitFor(() => {
+      expect(updateWslTarget).toHaveBeenCalledWith({
+        id: "wsl-ubuntu",
+        label: "Ubuntu Work",
+        distribution: "Ubuntu",
+      });
+    });
+    expect(await screen.findByText("已更新目标 Ubuntu Work")).toBeTruthy();
   });
 
   it("shows loading state for scan directories", () => {

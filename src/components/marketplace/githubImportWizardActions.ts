@@ -16,6 +16,7 @@ import {
   type WizardStep,
 } from "@/components/marketplace/githubImportWizardUtils";
 import type { GitHubImportWizardStatusMessage } from "@/components/marketplace/githubImportWizardViewModel";
+import { isSshTarget } from "@/lib/targetKind";
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
@@ -183,7 +184,7 @@ export function createGitHubImportWizardActions({
   }
 
   async function handleSaveSshPasswordForImport() {
-    if (activeTarget.kind !== "ssh") return;
+    if (!isSshTarget(activeTarget)) return;
     const password = sshPasswordRepairValue.trim();
     if (!password) {
       setSshPasswordRepairMessage({

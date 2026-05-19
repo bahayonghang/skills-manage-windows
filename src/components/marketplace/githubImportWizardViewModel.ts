@@ -14,6 +14,7 @@ import {
   type SelectionState,
   type WizardStep,
 } from "@/components/marketplace/githubImportWizardUtils";
+import { requiresSshPasswordRepair } from "@/lib/targetKind";
 
 export interface GitHubImportDecisionCounts {
   write: number;
@@ -211,18 +212,15 @@ export function getGitHubImportWizardShellState({
     importProgressPercent,
     progressNow,
   });
-  const activePasswordCredentialStatus =
-    activeTarget.kind === "ssh" && activeTarget.authMethod === "password"
-      ? (activeTarget.credentialStatus ??
-        (activeTarget.hasStoredPassword ? "stored" : "missing"))
-      : null;
+  const activePasswordCredentialStatus = requiresSshPasswordRepair(activeTarget)
+    ? (activeTarget.credentialStatus ??
+      (activeTarget.hasStoredPassword ? "stored" : "missing"))
+    : null;
   const activePasswordCredentialAvailable =
     activePasswordCredentialStatus === "stored" ||
     activePasswordCredentialStatus === "session";
   const activePasswordTargetNeedsPassword =
-    activeTarget.kind === "ssh" &&
-    activeTarget.authMethod === "password" &&
-    !activePasswordCredentialAvailable;
+    requiresSshPasswordRepair(activeTarget) && !activePasswordCredentialAvailable;
   const showSshPasswordRepairSuccess = sshPasswordRepairMessage?.type === "success";
   const missingSshPasswordError =
     previewError && looksLikeMissingSshPassword(previewError);

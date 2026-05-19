@@ -6,17 +6,28 @@ import type { PlatformCategoryKey } from "@/lib/platformVisibility";
 import type {
   AgentWithStatus,
   CreateSshTargetRequest,
+  CreateWslTargetRequest,
   GitHubPatTestResult,
   SshTargetTestResult,
   TargetSummary,
   TestSshTargetRequest,
+  TestWslTargetRequest,
   UpdateSshTargetRequest,
+  UpdateWslTargetRequest,
+  WslTargetTestResult,
 } from "@/types";
-import type { SshTargetFormState } from "@/components/settings/RemoteTargetsSettingsSection";
+import type {
+  SshTargetFormState,
+  WslTargetFormState,
+} from "@/components/settings/RemoteTargetsSettingsSection";
+import { isSshTarget, isWslTarget } from "@/lib/targetKind";
 import {
   EMPTY_SSH_TARGET_FORM,
+  EMPTY_WSL_TARGET_FORM,
   sshTargetPayload,
   targetToSshTargetForm,
+  targetToWslTargetForm,
+  wslTargetPayload,
 } from "@/pages/settingsViewModel";
 import { createPlatformManagementActions } from "@/pages/platformManagementActions";
 
@@ -33,6 +44,8 @@ export function createSettingsViewActions({
   githubPatInput,
   sshTargetForm,
   sshTargetEditForm,
+  wslTargetForm,
+  wslTargetEditForm,
   sshTargetPasswordUpdates,
   editingPlatform,
   selectedMarketplaceRegistryId,
@@ -53,6 +66,9 @@ export function createSettingsViewActions({
   createSshTarget,
   updateSshTarget,
   testSshTarget,
+  createWslTarget,
+  updateWslTarget,
+  testWslTarget,
   updateSshTargetPassword,
   deleteTarget,
   switchTarget,
@@ -70,12 +86,16 @@ export function createSettingsViewActions({
   setSshTargetForm,
   setEditingTargetId,
   setSshTargetEditForm,
+  setWslTargetForm,
+  setWslTargetEditForm,
   setSshTargetPasswordUpdates,
 }: {
   t: TFunction;
   githubPatInput: string;
   sshTargetForm: SshTargetFormState;
   sshTargetEditForm: SshTargetFormState;
+  wslTargetForm: WslTargetFormState;
+  wslTargetEditForm: WslTargetFormState;
   sshTargetPasswordUpdates: Record<string, string>;
   editingPlatform: AgentWithStatus | null;
   selectedMarketplaceRegistryId: string | null;
@@ -107,6 +127,9 @@ export function createSettingsViewActions({
   createSshTarget: (request: CreateSshTargetRequest) => Promise<TargetSummary>;
   updateSshTarget: (request: UpdateSshTargetRequest) => Promise<TargetSummary>;
   testSshTarget: (request: TestSshTargetRequest) => Promise<SshTargetTestResult>;
+  createWslTarget: (request: CreateWslTargetRequest) => Promise<TargetSummary>;
+  updateWslTarget: (request: UpdateWslTargetRequest) => Promise<TargetSummary>;
+  testWslTarget: (request: TestWslTargetRequest) => Promise<WslTargetTestResult>;
   updateSshTargetPassword: (targetId: string, password: string) => Promise<SshTargetTestResult>;
   deleteTarget: (targetId: string) => Promise<void>;
   switchTarget: (targetId: string) => Promise<TargetSummary>;
@@ -124,6 +147,8 @@ export function createSettingsViewActions({
   setSshTargetForm: StateSetter<SshTargetFormState>;
   setEditingTargetId: StateSetter<string | null>;
   setSshTargetEditForm: StateSetter<SshTargetFormState>;
+  setWslTargetForm: StateSetter<WslTargetFormState>;
+  setWslTargetEditForm: StateSetter<WslTargetFormState>;
   setSshTargetPasswordUpdates: StateSetter<Record<string, string>>;
 }) {
   async function refreshAfterTargetChange() {
@@ -154,6 +179,33 @@ export function createSettingsViewActions({
     setSshTargetEditForm((current) => ({ ...current, [field]: value }));
   }
 
+  function updateWslTargetFormField(
+    field: keyof WslTargetFormState,
+    value: string
+  ) {
+    setWslTargetForm((current) => {
+      if (field !== "distribution") {
+        return { ...current, [field]: value };
+      }
+
+      const shouldDefaultLabel =
+        !current.label.trim() || current.label === current.distribution;
+
+      return {
+        ...current,
+        distribution: value,
+        label: shouldDefaultLabel ? value : current.label,
+      };
+    });
+  }
+
+  function updateWslTargetEditFormField(
+    field: keyof WslTargetFormState,
+    value: string
+  ) {
+    setWslTargetEditForm((current) => ({ ...current, [field]: value }));
+  }
+
   function updateExistingTargetPassword(targetId: string, value: string) {
     setSshTargetPasswordUpdates((current) => ({ ...current, [targetId]: value }));
   }
@@ -161,12 +213,19 @@ export function createSettingsViewActions({
   function handleStartEditTarget(target: TargetSummary) {
     setTargetMessage(null);
     setEditingTargetId(target.id);
-    setSshTargetEditForm(targetToSshTargetForm(target));
+    if (isWslTarget(target)) {
+      setWslTargetEditForm(targetToWslTargetForm(target));
+      setSshTargetEditForm(EMPTY_SSH_TARGET_FORM);
+    } else {
+      setSshTargetEditForm(targetToSshTargetForm(target));
+      setWslTargetEditForm(EMPTY_WSL_TARGET_FORM);
+    }
   }
 
   function handleCancelEditTarget() {
     setEditingTargetId(null);
     setSshTargetEditForm(EMPTY_SSH_TARGET_FORM);
+    setWslTargetEditForm(EMPTY_WSL_TARGET_FORM);
   }
 
   async function handleCreateSshTarget() {
@@ -209,14 +268,57 @@ export function createSettingsViewActions({
     }
   }
 
-  async function handleTestExistingTarget(targetId: string) {
+  async function handleCreateWslTarget() {
     setTargetMessage(null);
     try {
-      const password = sshTargetPasswordUpdates[targetId];
-      const result = await testSshTarget({
-        id: targetId,
-        password: password?.trim() ? password : null,
+      const target = await createWslTarget(wslTargetPayload(wslTargetForm));
+      setWslTargetForm(EMPTY_WSL_TARGET_FORM);
+      setTargetMessage({
+        type: "success",
+        text: t("targets.created", { label: target.label }),
       });
+      toast.success(t("targets.created", { label: target.label }));
+    } catch (err) {
+      const text = String(err);
+      setTargetMessage({ type: "error", text });
+      toast.error(text);
+    }
+  }
+
+  async function handleTestNewWslTarget() {
+    setTargetMessage(null);
+    try {
+      const result = await testWslTarget(wslTargetPayload(wslTargetForm));
+      const text = result.ok
+        ? t("targets.testSucceeded", {
+            home: result.remoteHome ?? "",
+            os: result.remoteOs ?? "",
+          })
+        : result.message;
+      setTargetMessage({ type: result.ok ? "success" : "error", text });
+      if (result.ok) {
+        toast.success(text);
+      } else {
+        toast.error(text);
+      }
+    } catch (err) {
+      const text = String(err);
+      setTargetMessage({ type: "error", text });
+      toast.error(text);
+    }
+  }
+
+  async function handleTestExistingTarget(target: TargetSummary) {
+    setTargetMessage(null);
+    try {
+      const result = isWslTarget(target)
+        ? await testWslTarget({ id: target.id })
+        : await testSshTarget({
+            id: target.id,
+            password: sshTargetPasswordUpdates[target.id]?.trim()
+              ? sshTargetPasswordUpdates[target.id]
+              : null,
+          });
       const text = result.ok
         ? t("targets.testSucceeded", {
             home: result.remoteHome ?? "",
@@ -238,6 +340,7 @@ export function createSettingsViewActions({
 
   async function handleUpdateSshTarget(target: TargetSummary) {
     setTargetMessage(null);
+    if (!isSshTarget(target)) return;
     try {
       const updatedTarget = await updateSshTarget({
         id: target.id,
@@ -246,6 +349,27 @@ export function createSettingsViewActions({
       setEditingTargetId(null);
       setSshTargetEditForm(EMPTY_SSH_TARGET_FORM);
       updateExistingTargetPassword(target.id, "");
+      await refreshAfterTargetChange();
+      const text = t("targets.updated", { label: updatedTarget.label });
+      setTargetMessage({ type: "success", text });
+      toast.success(text);
+    } catch (err) {
+      const text = String(err);
+      setTargetMessage({ type: "error", text });
+      toast.error(text);
+    }
+  }
+
+  async function handleUpdateWslTarget(target: TargetSummary) {
+    setTargetMessage(null);
+    if (!isWslTarget(target)) return;
+    try {
+      const updatedTarget = await updateWslTarget({
+        id: target.id,
+        ...wslTargetPayload(wslTargetEditForm),
+      });
+      setEditingTargetId(null);
+      setWslTargetEditForm(EMPTY_WSL_TARGET_FORM);
       await refreshAfterTargetChange();
       const text = t("targets.updated", { label: updatedTarget.label });
       setTargetMessage({ type: "success", text });
@@ -438,13 +562,18 @@ export function createSettingsViewActions({
   return {
     updateSshTargetFormField,
     updateSshTargetEditFormField,
+    updateWslTargetFormField,
+    updateWslTargetEditFormField,
     updateExistingTargetPassword,
     handleStartEditTarget,
     handleCancelEditTarget,
     handleCreateSshTarget,
+    handleCreateWslTarget,
     handleTestNewSshTarget,
+    handleTestNewWslTarget,
     handleTestExistingTarget,
     handleUpdateSshTarget,
+    handleUpdateWslTarget,
     handleUpdateTargetPassword,
     handleSwitchTarget,
     handleDeleteTarget,

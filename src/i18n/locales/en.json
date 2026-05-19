@@ -34,7 +34,8 @@
     "skillCardLinkedSummary": "Linked {{count}}",
     "skillCardLinkedSummaryNone": "No installs",
     "skillCardMoreActions": "More actions",
-    "aiSummaryLabel": "AI summary"
+    "aiSummaryLabel": "AI summary",
+    "unknown": "Unknown"
   },
   "backendErrors": {
     "ai": {
@@ -56,13 +57,24 @@
     }
   },
   "targets": {
-    "title": "Remote Targets",
-    "description": "Switch between local skills and SSH-managed remote user directories.",
+    "title": "Targets",
+    "description": "Switch between local skills, SSH-managed remote user directories, and WSL distributions.",
     "local": "Local",
     "localDescription": "Manage skills on this computer.",
+    "kind": {
+      "ssh": "SSH",
+      "wsl": "WSL"
+    },
     "active": "Active",
     "activate": "Activate",
     "add": "Add target",
+    "addDescription": "Choose SSH for a remote machine, or WSL for a local Linux distribution without SSH.",
+    "addSshTitle": "Add SSH target",
+    "addSshDescription": "Connect to a remote machine with SSH host, user, port, and key or password.",
+    "addWslTitle": "Add WSL distribution",
+    "addWslDescription": "Select a local Windows WSL distribution discovered by wsl.exe. No SSH host or credentials are required.",
+    "addSsh": "Add SSH",
+    "addWsl": "Add WSL",
     "test": "Test",
     "created": "Target {{label}} created",
     "updated": "Target {{label}} updated",
@@ -97,6 +109,20 @@
     "passwordRepairHint": "For password targets, use Save password after recreating Windows credentials or moving the app to another machine.",
     "sshHint": "SkillPort supports SSH key and password login. Key mode stores only the local key path. Password mode stores the password in the system credential store, not in the SQLite config.",
     "sshKeyPathHelp": "SSH key path is usually C:\\Users\\<you>\\.ssh\\id_ed25519 or id_rsa on Windows. Check it with PowerShell: Get-ChildItem ~/.ssh. Host is the server IP or domain, usually from your cloud console, router DHCP list, or hostname -I on the remote host.",
+    "wslHint": "WSL targets run through wsl.exe and use the distribution default user's $HOME. Check names with PowerShell: wsl.exe -l -q.",
+    "wslLabelPlaceholder": "Ubuntu workbench",
+    "wslAliasLabel": "WSL alias",
+    "wslDistributionLabel": "WSL distribution",
+    "wslDistributionPlaceholder": "Ubuntu",
+    "wslDistributionSelectPlaceholder": "Select a WSL distribution",
+    "wslDistributionValue": "Distro {{distribution}}",
+    "wslListRefresh": "Refresh WSL list",
+    "wslListLoading": "Loading WSL distributions...",
+    "wslListEmpty": "No WSL distributions were discovered on this Windows machine.",
+    "wslAlreadyAdded": "Already added",
+    "wslDefaultDistribution": "Default",
+    "wslState": "State",
+    "wslVersion": "Version",
     "symlinkDisabled": "This remote target does not support symlink install.",
     "projectModeUnsupported": "Project-scoped install is not available for remote targets in this version.",
     "centralUpdatesUnsupported": "Remote Central update checks are not available in this version.",
@@ -260,7 +286,8 @@
     },
     "targets": {
       "local": "Local",
-      "ssh": "SSH"
+      "ssh": "SSH",
+      "wsl": "WSL"
     },
     "status": {
       "succeeded": "Succeeded",
@@ -319,7 +346,8 @@
       "last7days": "Last 7 days",
       "failed": "Failed only",
       "local": "Local",
-      "ssh": "SSH"
+      "ssh": "SSH",
+      "wsl": "WSL"
     },
     "advancedFilters": {
       "show": "Advanced filters",

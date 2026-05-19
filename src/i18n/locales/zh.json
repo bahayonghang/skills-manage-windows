@@ -34,7 +34,8 @@
     "skillCardLinkedSummary": "已链接 {{count}}",
     "skillCardLinkedSummaryNone": "未安装",
     "skillCardMoreActions": "更多操作",
-    "aiSummaryLabel": "AI 摘要"
+    "aiSummaryLabel": "AI 摘要",
+    "unknown": "未知"
   },
   "backendErrors": {
     "ai": {
@@ -56,13 +57,24 @@
     }
   },
   "targets": {
-    "title": "远程目标",
-    "description": "在本机技能和 SSH 远程用户目录之间切换。",
+    "title": "目标管理",
+    "description": "在本机技能、SSH 远程用户目录和 WSL 发行版之间切换。",
     "local": "本机",
     "localDescription": "管理当前电脑上的 skills。",
+    "kind": {
+      "ssh": "SSH",
+      "wsl": "WSL"
+    },
     "active": "当前",
     "activate": "切换",
     "add": "新增目标",
+    "addDescription": "SSH 用于远程机器；WSL 用于本机 Linux 发行版，不需要启用 SSH。",
+    "addSshTitle": "新增 SSH 目标",
+    "addSshDescription": "通过 SSH 主机、用户、端口和密钥或密码连接远程机器。",
+    "addWslTitle": "新增 WSL 发行版",
+    "addWslDescription": "从 Windows 本机 wsl.exe 发现的发行版中选择，不需要 SSH 主机或凭据。",
+    "addSsh": "新增 SSH",
+    "addWsl": "新增 WSL",
     "test": "测试",
     "created": "已创建目标 {{label}}",
     "updated": "已更新目标 {{label}}",
@@ -97,6 +109,20 @@
     "passwordRepairHint": "密码登录目标如果重装系统凭据、迁移应用或凭据丢失，需要在这里重新保存密码。",
     "sshHint": "SkillPort 支持 SSH key 和账号密码两种登录。Key 模式只保存本机密钥路径。密码模式把密码存入系统凭据库，不写入 SQLite 配置。",
     "sshKeyPathHelp": "SSH key path 在 Windows 上通常是 C:\\Users\\你的用户名\\.ssh\\id_ed25519 或 id_rsa。PowerShell 可用 Get-ChildItem ~/.ssh 查看。Host 填服务器 IP 或域名，通常在云服务器控制台、路由器 DHCP 列表，或远程机器 hostname -I 中查看。",
+    "wslHint": "WSL 目标通过 wsl.exe 执行，使用发行版默认用户的 $HOME。可在 PowerShell 运行 wsl.exe -l -q 查看发行版名称。",
+    "wslLabelPlaceholder": "Ubuntu 工作台",
+    "wslAliasLabel": "WSL 别名",
+    "wslDistributionLabel": "WSL 发行版",
+    "wslDistributionPlaceholder": "Ubuntu",
+    "wslDistributionSelectPlaceholder": "选择 WSL 发行版",
+    "wslDistributionValue": "发行版 {{distribution}}",
+    "wslListRefresh": "刷新 WSL 列表",
+    "wslListLoading": "正在加载 WSL 发行版...",
+    "wslListEmpty": "没有发现此 Windows 本机上的 WSL 发行版。",
+    "wslAlreadyAdded": "已添加",
+    "wslDefaultDistribution": "默认",
+    "wslState": "状态",
+    "wslVersion": "版本",
     "symlinkDisabled": "远程目标默认使用 copy 安装。",
     "projectModeUnsupported": "首版远程目标不支持项目级安装。",
     "centralUpdatesUnsupported": "首版远程目标不支持中央库更新检查。",
@@ -260,7 +286,8 @@
     },
     "targets": {
       "local": "本机",
-      "ssh": "SSH"
+      "ssh": "SSH",
+      "wsl": "WSL"
     },
     "status": {
       "succeeded": "成功",
@@ -319,7 +346,8 @@
       "last7days": "最近 7 天",
       "failed": "仅失败",
       "local": "本机",
-      "ssh": "SSH"
+      "ssh": "SSH",
+      "wsl": "WSL"
     },
     "advancedFilters": {
       "show": "高级筛选",

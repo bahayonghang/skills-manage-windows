@@ -19,6 +19,7 @@ import type { InstallMethod } from "@/components/central/InstallDialog";
 import { ProjectPathPicker } from "@/components/central/ProjectPathPicker";
 import { AgentWithStatus, CentralBatchInstallResult } from "@/types";
 import { useTargetStore } from "@/stores/targetStore";
+import { isRemoteLikeTarget } from "@/lib/targetKind";
 import {
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberNames,
@@ -51,7 +52,7 @@ export function BatchInstallCentralSkillsDialog({
 }: BatchInstallCentralSkillsDialogProps) {
   const { t } = useTranslation();
   const activeTarget = useTargetStore((s) => s.activeTarget);
-  const isRemoteTarget = activeTarget.kind === "ssh";
+  const isRemoteTarget = isRemoteLikeTarget(activeTarget);
   const canUseSymlink = !isRemoteTarget || activeTarget.symlinkEnabled === true;
   const targetAgents = useMemo(
     () => agents.filter((agent) => agent.id !== "central"),

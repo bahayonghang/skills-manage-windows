@@ -10,6 +10,7 @@ import {
 } from "@/lib/platformVisibility";
 import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 import { formatPathForDisplay } from "@/lib/path";
+import { isRemoteLikeTarget } from "@/lib/targetKind";
 import {
   BROWSER_PLATFORM_PATHS,
   getPlatformSkillDir,
@@ -186,7 +187,7 @@ export function useCentralSkillsStoreBindings(t: TFunction) {
     updateJob,
     portabilityJob,
     activeTarget,
-    isRemoteTarget: activeTarget.kind === "ssh",
+    isRemoteTarget: isRemoteLikeTarget(activeTarget),
     aiTaggingAvailable: rawAiTaggingAvailable ?? false,
     centralSkillsDir: formatPathForDisplay(
       agents.find((agent) => agent.id === "central")?.global_skills_dir ?? t("central.path")

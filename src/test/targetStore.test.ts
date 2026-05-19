@@ -29,12 +29,26 @@ const sshTarget: TargetSummary = {
   isActive: false,
 };
 
+const wslTarget: TargetSummary = {
+  id: "wsl-ubuntu",
+  kind: "wsl",
+  label: "Ubuntu",
+  distribution: "Ubuntu-24.04",
+  remoteHome: "/home/alice",
+  remoteOs: "Linux",
+  cacheDbPath: "targets/wsl-ubuntu/db.sqlite",
+  symlinkEnabled: true,
+  isActive: false,
+};
+
 describe("targetStore", () => {
   beforeEach(() => {
     useTargetStore.setState({
       targets: [localTarget],
       activeTarget: localTarget,
+      wslDistributions: [],
       isLoading: false,
+      isLoadingWslDistributions: false,
       isCreating: false,
       updatingTargetId: null,
       testingTargetId: null,
@@ -42,6 +56,7 @@ describe("targetStore", () => {
       switchingTargetId: null,
       deletingTargetId: null,
       error: null,
+      wslDistributionError: null,
     });
     vi.clearAllMocks();
   });
@@ -148,6 +163,109 @@ describe("targetStore", () => {
       },
     });
     expect(invoke).toHaveBeenCalledWith("list_targets");
+  });
+
+  it("loads WSL distributions through the backend command", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce([
+      {
+        name: "Ubuntu-24.04",
+        isDefault: true,
+        state: "Stopped",
+        version: "2",
+      },
+    ]);
+
+    await useTargetStore.getState().loadWslDistributions();
+
+    expect(invoke).toHaveBeenCalledWith("list_wsl_distributions");
+    expect(useTargetStore.getState().wslDistributions).toEqual([
+      {
+        name: "Ubuntu-24.04",
+        isDefault: true,
+        state: "Stopped",
+        version: "2",
+      },
+    ]);
+    expect(useTargetStore.getState().wslDistributionError).toBeNull();
+  });
+
+  it("stores WSL distribution discovery errors", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce("wsl.exe not found");
+
+    await expect(useTargetStore.getState().loadWslDistributions()).rejects.toBe(
+      "wsl.exe not found"
+    );
+
+    expect(useTargetStore.getState().wslDistributions).toEqual([]);
+    expect(useTargetStore.getState().isLoadingWslDistributions).toBe(false);
+    expect(useTargetStore.getState().wslDistributionError).toBe("wsl.exe not found");
+  });
+
+  it("creates a wsl target through the backend command", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(wslTarget)
+      .mockResolvedValueOnce([localTarget, wslTarget]);
+
+    const result = await useTargetStore.getState().createWslTarget({
+      label: "Ubuntu",
+      distribution: "Ubuntu-24.04",
+    });
+
+    expect(result).toEqual(wslTarget);
+    expect(invoke).toHaveBeenCalledWith("create_wsl_target", {
+      request: {
+        label: "Ubuntu",
+        distribution: "Ubuntu-24.04",
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("list_targets");
+  });
+
+  it("updates a wsl target through the backend command", async () => {
+    const updatedTarget = {
+      ...wslTarget,
+      label: "Work WSL",
+      distribution: "Ubuntu",
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(updatedTarget)
+      .mockResolvedValueOnce([localTarget, updatedTarget]);
+
+    const result = await useTargetStore.getState().updateWslTarget({
+      id: "wsl-ubuntu",
+      label: "Work WSL",
+      distribution: "Ubuntu",
+    });
+
+    expect(result).toEqual(updatedTarget);
+    expect(invoke).toHaveBeenCalledWith("update_wsl_target", {
+      request: {
+        id: "wsl-ubuntu",
+        label: "Work WSL",
+        distribution: "Ubuntu",
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("list_targets");
+  });
+
+  it("tests a wsl target through the backend command", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      ok: true,
+      remoteHome: "/home/alice",
+      remoteOs: "Linux",
+      message: "ok",
+    });
+
+    const result = await useTargetStore.getState().testWslTarget({
+      distribution: "Ubuntu",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("test_wsl_target", {
+      request: {
+        distribution: "Ubuntu",
+      },
+    });
   });
 
   it("switches active target and updates local state", async () => {

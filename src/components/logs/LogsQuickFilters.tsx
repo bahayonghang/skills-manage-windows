@@ -55,6 +55,7 @@ export function LogsQuickFilters({ filter, onApply }: LogsQuickFiltersProps) {
   const isFailed = filter.status === "failed";
   const isLocal = filter.targetKind === "local";
   const isSsh = filter.targetKind === "ssh";
+  const isWsl = filter.targetKind === "wsl";
 
   return (
     <div
@@ -124,6 +125,14 @@ export function LogsQuickFilters({ filter, onApply }: LogsQuickFiltersProps) {
           onApply({ targetKind: isSsh ? undefined : "ssh" })
         }
         label={t("logs.quickFilters.ssh")}
+      />
+      <QuickChip
+        testId="logs-chip-wsl"
+        active={isWsl}
+        onClick={() =>
+          onApply({ targetKind: isWsl ? undefined : "wsl" })
+        }
+        label={t("logs.quickFilters.wsl")}
       />
     </div>
   );
