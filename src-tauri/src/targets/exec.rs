@@ -44,12 +44,33 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#,
     Ok(probe)
 }
 
+pub(super) async fn probe_wsl_target(target: &WslTargetConfig) -> Result<SshProbe, String> {
+    let connection = connect_wsl_target(target).await?;
+    let output = connection
+        .run_script(
+            r#"printf 'HOME\t%s\n' "$HOME"
+printf 'OS\t%s\n' "$(uname -s 2>/dev/null || printf '%s' unknown)"
+mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#,
+            &[],
+        )
+        .await?;
+    parse_ssh_probe_output(&output)
+}
+
 pub(super) fn is_supported_remote_os(remote_os: &str) -> bool {
     matches!(remote_os, "Linux" | "Darwin")
 }
 
 pub fn remote_symlink_allowed(target: &RemoteTargetConfig) -> bool {
-    target.symlink_enabled || is_supported_remote_os(&target.remote_os)
+    remote_target_symlink_allowed(&target.remote_os, target.symlink_enabled)
+}
+
+pub fn wsl_symlink_allowed(target: &WslTargetConfig) -> bool {
+    remote_target_symlink_allowed(&target.remote_os, target.symlink_enabled)
+}
+
+pub fn remote_target_symlink_allowed(remote_os: &str, symlink_enabled: bool) -> bool {
+    symlink_enabled || is_supported_remote_os(remote_os)
 }
 
 #[derive(Debug, Clone)]
@@ -79,6 +100,43 @@ pub(super) fn ssh_program() -> std::ffi::OsString {
         }
     }
     "ssh".into()
+}
+
+pub(super) fn wsl_program() -> std::ffi::OsString {
+    #[cfg(windows)]
+    {
+        if let Ok(windir) = env::var("WINDIR") {
+            let candidate = PathBuf::from(windir).join("System32").join("wsl.exe");
+            if candidate.is_file() {
+                return candidate.into_os_string();
+            }
+        }
+    }
+    "wsl".into()
+}
+
+#[derive(Debug, Clone)]
+pub struct ConnectedWslTarget {
+    pub(super) target: WslTargetConfig,
+}
+
+pub async fn connect_wsl_target(target: &WslTargetConfig) -> Result<ConnectedWslTarget, String> {
+    #[cfg(not(windows))]
+    {
+        let _ = target;
+        return Err("WSL targets are only supported on Windows.".to_string());
+    }
+
+    #[cfg(windows)]
+    {
+        let connection = ConnectedWslTarget {
+            target: target.clone(),
+        };
+        connection
+            .run_command("printf '%s' connected >/dev/null")
+            .await?;
+        Ok(connection)
+    }
 }
 
 impl ConnectedSshTarget {
@@ -338,6 +396,249 @@ impl ConnectedSshTarget {
         }
         let command = format!("cat > {}", shell_quote(path));
         self.run_command_with_stdin(&command, bytes).map(|_| ())
+    }
+
+    pub async fn read_file(&self, path: &str) -> Result<Vec<u8>, String> {
+        self.run_command_bytes(&format!("cat {}", shell_quote(path)))
+    }
+
+    pub async fn copy_dir(&self, source: &str, target: &str) -> Result<(), String> {
+        let command = format!(
+            "mkdir -p {target} && cp -R {source}/. {target}/",
+            source = shell_quote(source),
+            target = shell_quote(target)
+        );
+        self.run_command(&command).await.map(|_| ())
+    }
+
+    pub async fn remove_tree(&self, path: &str) -> Result<(), String> {
+        self.run_command(&format!("rm -rf -- {}", shell_quote(path)))
+            .await
+            .map(|_| ())
+    }
+
+    pub async fn remove_file(&self, path: &str) -> Result<(), String> {
+        self.run_command(&format!("rm -f -- {}", shell_quote(path)))
+            .await
+            .map(|_| ())
+    }
+
+    pub async fn list_dir(&self, path: &str) -> Result<Vec<RemoteDirEntry>, String> {
+        let command = format!(
+            r#"d={dir}; for p in "$d"/* "$d"/.[!.]* "$d"/..?*; do [ -e "$p" ] || continue; name=${{p##*/}}; link=""; if [ -L "$p" ]; then kind="symlink"; link=$(readlink "$p" || true); elif [ -d "$p" ]; then kind="dir"; elif [ -f "$p" ]; then kind="file"; else kind="other"; fi; printf '%s\t%s\t%s\n' "$name" "$kind" "$link"; done"#,
+            dir = shell_quote(path)
+        );
+        let output = self.run_command(&command).await?;
+        Ok(output
+            .lines()
+            .filter_map(|line| {
+                let mut parts = line.splitn(3, '\t');
+                let name = parts.next()?.to_string();
+                let file_type = parts.next().unwrap_or("other").to_string();
+                let symlink_target = parts
+                    .next()
+                    .map(str::to_string)
+                    .filter(|value| !value.is_empty());
+                Some(RemoteDirEntry {
+                    name,
+                    file_type,
+                    symlink_target,
+                })
+            })
+            .collect())
+    }
+}
+
+impl ConnectedWslTarget {
+    pub(super) fn base_command(&self) -> Command {
+        let mut command = Command::new(wsl_program());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+        command.arg("-d").arg(&self.target.distribution).arg("--");
+        command
+    }
+
+    fn remote_command_error(&self, status: ExitStatus, stderr: &[u8]) -> String {
+        format!(
+            "WSL command failed with status {}: {}",
+            status,
+            self.wsl_failure_detail(stderr)
+        )
+    }
+
+    pub(super) fn wsl_failure_detail(&self, stderr: &[u8]) -> String {
+        let detail = String::from_utf8_lossy(stderr);
+        let detail = detail.trim();
+        if detail.is_empty() {
+            format!(
+                "wsl.exe exited without stderr for distro '{}'. Verify the distro exists with `wsl.exe -l -q` and that it can run `sh`.",
+                self.target.distribution
+            )
+        } else {
+            detail.to_string()
+        }
+    }
+
+    pub async fn run_script(&self, script: &str, args: &[&str]) -> Result<String, String> {
+        let mut command = self.base_command();
+        command.arg("sh").arg("-s").arg("--");
+        for arg in args {
+            command.arg(arg);
+        }
+        let output = self.run_command_process_with_stdin(command, script.as_bytes())?;
+        String::from_utf8(output).map_err(|e| format!("WSL stdout is not valid UTF-8: {}", e))
+    }
+
+    pub fn run_command_with_stdin_bytes(
+        &self,
+        command: &str,
+        stdin: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        let mut process = self.base_command();
+        process.arg("sh").arg("-lc").arg(command);
+        self.run_command_process_with_stdin(process, stdin)
+    }
+
+    pub async fn run_command(&self, command: &str) -> Result<String, String> {
+        let output = self
+            .base_command()
+            .arg("sh")
+            .arg("-lc")
+            .arg(command)
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("Failed to start wsl.exe: {}", e))?;
+        if output.status.success() {
+            String::from_utf8(output.stdout).map_err(|e| format!("WSL stdout is not valid UTF-8: {}", e))
+        } else {
+            Err(self.remote_command_error(output.status, &output.stderr))
+        }
+    }
+
+    fn run_command_process_with_stdin(
+        &self,
+        mut command: Command,
+        stdin: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        let mut child = command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to start wsl.exe: {}", e))?;
+
+        if let Some(mut child_stdin) = child.stdin.take() {
+            child_stdin
+                .write_all(stdin)
+                .map_err(|e| format!("Failed to write wsl.exe stdin: {}", e))?;
+        }
+
+        let output = child
+            .wait_with_output()
+            .map_err(|e| format!("Failed to wait for wsl.exe: {}", e))?;
+        if output.status.success() {
+            Ok(output.stdout)
+        } else {
+            Err(self.remote_command_error(output.status, &output.stderr))
+        }
+    }
+
+    fn run_command_bytes(&self, command: &str) -> Result<Vec<u8>, String> {
+        let output = self
+            .base_command()
+            .arg("sh")
+            .arg("-lc")
+            .arg(command)
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("Failed to start wsl.exe: {}", e))?;
+        if output.status.success() {
+            Ok(output.stdout)
+        } else {
+            Err(self.remote_command_error(output.status, &output.stderr))
+        }
+    }
+
+    pub async fn ensure_dir(&self, path: &str) -> Result<(), String> {
+        if self.exists(path).await? {
+            return Ok(());
+        }
+        Err(format!("WSL path '{}' does not exist.", path))
+    }
+
+    pub async fn exists(&self, path: &str) -> Result<bool, String> {
+        let command = format!("test -e {}", shell_quote(path));
+        let output = self
+            .base_command()
+            .arg("sh")
+            .arg("-lc")
+            .arg(command)
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("Failed to start wsl.exe: {}", e))?;
+        match output.status.code() {
+            Some(0) => Ok(true),
+            Some(1) => Ok(false),
+            _ => Err(format!(
+                "Failed to inspect WSL path '{}': {}",
+                path,
+                self.wsl_failure_detail(&output.stderr)
+            )),
+        }
+    }
+
+    pub async fn inspect_path(&self, path: &str) -> Result<Option<RemotePathInfo>, String> {
+        let command = format!(
+            r#"p={path}; if [ -L "$p" ]; then printf 'symlink\t%s\n' "$(readlink "$p" || true)"; elif [ -d "$p" ]; then printf 'dir\t\n'; elif [ -f "$p" ]; then printf 'file\t\n'; elif [ -e "$p" ]; then printf 'other\t\n'; else exit 1; fi"#,
+            path = shell_quote(path)
+        );
+        let output = self
+            .base_command()
+            .arg("sh")
+            .arg("-lc")
+            .arg(command)
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("Failed to start wsl.exe: {}", e))?;
+        match output.status.code() {
+            Some(0) => {
+                let stdout = String::from_utf8(output.stdout)
+                    .map_err(|e| format!("WSL stdout is not valid UTF-8: {}", e))?;
+                let mut parts = stdout.trim_end().splitn(2, '\t');
+                let file_type = parts.next().unwrap_or("other").to_string();
+                let symlink_target = parts
+                    .next()
+                    .map(str::to_string)
+                    .filter(|value| !value.is_empty());
+                Ok(Some(RemotePathInfo {
+                    file_type,
+                    symlink_target,
+                }))
+            }
+            Some(1) => Ok(None),
+            _ => Err(format!(
+                "Failed to inspect WSL path '{}': {}",
+                path,
+                self.wsl_failure_detail(&output.stderr)
+            )),
+        }
+    }
+
+    pub async fn mkdir_p(&self, path: &str) -> Result<(), String> {
+        self.run_command(&format!("mkdir -p {}", shell_quote(path)))
+            .await
+            .map(|_| ())
+    }
+
+    pub async fn write_file(&self, path: &str, bytes: &[u8]) -> Result<(), String> {
+        if let Some(parent) = remote_parent(path) {
+            self.mkdir_p(&parent).await?;
+        }
+        let command = format!("cat > {}", shell_quote(path));
+        self.run_command_with_stdin_bytes(&command, bytes).map(|_| ())
     }
 
     pub async fn read_file(&self, path: &str) -> Result<Vec<u8>, String> {

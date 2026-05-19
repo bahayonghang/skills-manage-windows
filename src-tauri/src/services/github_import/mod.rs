@@ -19,7 +19,9 @@ use uuid::Uuid;
 
 use crate::{
     db::{self, DbPool, Skill},
-    targets::{connect_ssh_target, remote_join, ActiveTarget, RemoteTargetConfig},
+    targets::{
+        connect_remote_target, remote_join, ActiveTarget, ConnectedRemoteTarget,
+    },
     AppState,
 };
 
@@ -61,10 +63,10 @@ pub(crate) use pat::{
 #[cfg(test)]
 use pat::{GITHUB_PAT_MIGRATION_SETTING_KEY, LEGACY_GITHUB_PAT_SETTING_KEY};
 pub(crate) use preview::{
-    preview_github_repo_import_ssh_with_auth, preview_github_repo_import_with_auth,
+    preview_github_repo_import_remote_with_auth, preview_github_repo_import_with_auth,
 };
 pub(crate) use raw_http::fetch_raw_text;
-pub(crate) use remote::import_github_repo_skills_ssh_with_auth;
+pub(crate) use remote::import_github_repo_skills_remote_with_auth;
 pub(crate) use remote::{
     discard_preview_workspace_for_active_target, fetch_github_skill_markdown_from_remote_workspace,
 };

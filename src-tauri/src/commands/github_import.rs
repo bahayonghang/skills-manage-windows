@@ -13,7 +13,7 @@ use crate::AppState;
 pub(crate) use crate::services::github_import::{
     build_preview_skills, build_repo_skill_candidates_from_snapshot_at_path,
     download_repo_snapshot, github_client, github_direct_auth_from_secret_store,
-    import_github_repo_skills_ssh_with_auth, import_github_repo_skills_with_auth,
+    import_github_repo_skills_remote_with_auth, import_github_repo_skills_with_auth,
     inspect_repo_skill_candidates_from_snapshot_at_path, resolve_repo_source, GitHubRepoSnapshot,
     RemoteSkillCandidate,
 };
@@ -34,15 +34,15 @@ pub async fn preview_github_repo_import(
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
             .await?;
-    match active_target {
+    match &active_target {
         ActiveTarget::Local => {
             github_import::preview_github_repo_import_with_auth(&pool, &repo_url, auth.as_deref())
                 .await
         }
-        ActiveTarget::Ssh(target) => {
-            github_import::preview_github_repo_import_ssh_with_auth(
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            github_import::preview_github_repo_import_remote_with_auth(
                 &pool,
-                &target,
+                &active_target,
                 &repo_url,
                 auth.as_deref(),
             )
@@ -64,7 +64,7 @@ pub async fn import_github_repo_skills(
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
             .await?;
-    match active_target {
+    match &active_target {
         ActiveTarget::Local => {
             github_import::import_github_repo_skills_with_auth(
                 &pool,
@@ -75,10 +75,10 @@ pub async fn import_github_repo_skills(
             )
             .await
         }
-        ActiveTarget::Ssh(target) => {
-            github_import::import_github_repo_skills_ssh_with_auth(
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            github_import::import_github_repo_skills_remote_with_auth(
                 &pool,
-                &target,
+                &active_target,
                 &repo_url,
                 selections,
                 preview_workspace_id.as_deref(),

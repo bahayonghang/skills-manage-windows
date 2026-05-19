@@ -237,7 +237,7 @@ pub async fn install_from_skills_sh_impl(
         renamed_skill_id: None,
     };
 
-    match active_target {
+    match &active_target {
         ActiveTarget::Local => {
             let inspected = github_import::InspectedGitHubRepoSkills {
                 repo: resolved.repo.clone(),
@@ -263,11 +263,11 @@ pub async fn install_from_skills_sh_impl(
                 .ok_or_else(|| format!("Skill '{}' was not imported.", skill_id))?;
             Ok(imported.imported_skill_id.clone())
         }
-        ActiveTarget::Ssh(target) => {
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let repo_url = source_to_github_url(&source)?;
-            let result = github_import::import_github_repo_skills_ssh_with_auth(
+            let result = github_import::import_github_repo_skills_remote_with_auth(
                 pool,
-                &target,
+                &active_target,
                 &repo_url,
                 vec![selection],
                 None,

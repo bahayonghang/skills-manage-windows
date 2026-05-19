@@ -34,17 +34,17 @@ pub(crate) async fn preview_github_repo_import_with_auth(
     })
 }
 
-pub(crate) async fn preview_github_repo_import_ssh_with_auth(
+pub(crate) async fn preview_github_repo_import_remote_with_auth(
     pool: &DbPool,
-    target: &RemoteTargetConfig,
+    active_target: &ActiveTarget,
     repo_url: &str,
     auth: Option<&str>,
 ) -> Result<GitHubRepoPreview, String> {
     let resolved = resolve_repo_source(repo_url, auth).await?;
-    let connection = connect_ssh_target(target).await?;
-    cleanup_expired_preview_workspaces_for_connection(&connection, target).await;
+    let connection = connect_remote_target(active_target).await?;
+    cleanup_expired_preview_workspaces_for_connection(&connection).await;
 
-    let workspace = create_remote_preview_workspace(&connection, target, &resolved, auth).await?;
+    let workspace = create_remote_preview_workspace(&connection, &resolved, auth).await?;
     let preview_result = async {
         let candidates = build_remote_repo_skill_candidates_from_workspace(
             &connection,

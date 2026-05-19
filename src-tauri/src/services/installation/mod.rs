@@ -32,7 +32,10 @@ pub use native::{
     uninstall_skill_from_agent_with_row_impl,
 };
 pub(crate) use remote::install_skill_to_agent_ssh_with_connection;
-pub use remote::{install_skill_to_agent_ssh_impl, uninstall_skill_from_agent_ssh_impl};
+pub use remote::{
+    install_skill_to_agent_remote_impl, install_skill_to_agent_ssh_impl,
+    uninstall_skill_from_agent_remote_impl, uninstall_skill_from_agent_ssh_impl,
+};
 pub(crate) use types::InstallOutcome;
 pub use types::{
     BatchInstallResult, CentralBatchInstallFailure, CentralBatchInstallResult,

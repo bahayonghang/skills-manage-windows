@@ -90,6 +90,17 @@ pub(super) mod tests {
         }
     }
 
+    fn wsl_target() -> WslTargetConfig {
+        WslTargetConfig {
+            id: "wsl-ubuntu".to_string(),
+            label: "Ubuntu".to_string(),
+            distribution: "Ubuntu-24.04".to_string(),
+            remote_home: "/home/alice".to_string(),
+            remote_os: "Linux".to_string(),
+            symlink_enabled: true,
+        }
+    }
+
     fn command_arg_strings(command: Command) -> Vec<String> {
         command
             .get_args()
@@ -128,6 +139,104 @@ pub(super) mod tests {
     fn remote_cache_path_is_scoped_by_target_id() {
         let path = remote_cache_db_path("ssh-demo_1").unwrap();
         assert!(path.ends_with(Path::new("targets").join("ssh-demo_1").join("db.sqlite")));
+    }
+
+    #[test]
+    fn wsl_request_to_config_trims_required_fields() {
+        let config = request_to_wsl_config(
+            CreateWslTargetRequest {
+                label: "  Ubuntu  ".to_string(),
+                distribution: "  Ubuntu-24.04  ".to_string(),
+            },
+            "wsl-demo".to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(config.id, "wsl-demo");
+        assert_eq!(config.label, "Ubuntu");
+        assert_eq!(config.distribution, "Ubuntu-24.04");
+        assert!(config.remote_home.is_empty());
+        assert!(config.remote_os.is_empty());
+    }
+
+    #[test]
+    fn update_wsl_request_preserves_probe_state() {
+        let existing = wsl_target();
+        let config = update_wsl_request_to_config(
+            UpdateWslTargetRequest {
+                id: existing.id.clone(),
+                label: "  Work WSL  ".to_string(),
+                distribution: "  Ubuntu  ".to_string(),
+            },
+            &existing,
+        )
+        .unwrap();
+
+        assert_eq!(config.label, "Work WSL");
+        assert_eq!(config.distribution, "Ubuntu");
+        assert_eq!(config.remote_home, "/home/alice");
+        assert_eq!(config.remote_os, "Linux");
+        assert!(config.symlink_enabled);
+    }
+
+    #[test]
+    fn wsl_base_command_passes_distribution_before_shell() {
+        let connection = ConnectedWslTarget {
+            target: wsl_target(),
+        };
+        let args = command_arg_strings(connection.base_command());
+
+        assert_eq!(args, vec!["-d", "Ubuntu-24.04", "--"]);
+    }
+
+    #[test]
+    fn parse_wsl_distribution_list_reads_default_state_and_version() {
+        let distributions = parse_wsl_distribution_list(
+            "  NAME            STATE           VERSION\n* Ubuntu-24.04    Stopped         2\n  Debian          Running         2\n",
+        );
+
+        assert_eq!(
+            distributions,
+            vec![
+                WslDistributionSummary {
+                    name: "Ubuntu-24.04".to_string(),
+                    is_default: true,
+                    state: Some("Stopped".to_string()),
+                    version: Some("2".to_string()),
+                },
+                WslDistributionSummary {
+                    name: "Debian".to_string(),
+                    is_default: false,
+                    state: Some("Running".to_string()),
+                    version: Some("2".to_string()),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn normalize_wsl_distribution_list_decodes_utf16le_output() {
+        let raw = "  NAME      STATE    VERSION\r\n* Ubuntu    Stopped  2\r\n"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
+
+        let distributions = parse_wsl_distribution_list(&normalize_wsl_list_output(&raw));
+
+        assert_eq!(distributions.len(), 1);
+        assert_eq!(distributions[0].name, "Ubuntu");
+        assert!(distributions[0].is_default);
+        assert_eq!(distributions[0].state.as_deref(), Some("Stopped"));
+        assert_eq!(distributions[0].version.as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn normalize_wsl_distribution_list_strips_nul_bytes_from_utf8ish_output() {
+        let mut raw = b"Ubuntu-24.04\r\n".to_vec();
+        raw.insert(1, 0);
+        let normalized = normalize_wsl_list_output(&raw);
+
+        assert!(normalized.contains("Ubuntu-24.04"));
     }
 
     #[test]
@@ -637,6 +746,7 @@ pub(super) mod tests {
                 assert_eq!(target.password.as_deref(), Some("secret"));
             }
             ActiveTarget::Local => panic!("expected ssh target"),
+            ActiveTarget::Wsl(_) => panic!("expected ssh target"),
         }
     }
 

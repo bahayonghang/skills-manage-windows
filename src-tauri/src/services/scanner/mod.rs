@@ -13,7 +13,7 @@ use tokio::sync::Semaphore;
 
 use crate::db::{self, AgentSkillObservation, DbPool, Skill, SkillInstallation};
 use crate::skill_time::filesystem_timestamps_from_metadata;
-use crate::targets::{connect_ssh_target, RemoteTargetConfig};
+use crate::targets::{connect_remote_target, ActiveTarget};
 
 mod claude_plugin;
 mod persistence;
@@ -507,13 +507,13 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
     })
 }
 
-pub async fn scan_ssh_skills_impl(
+pub async fn scan_remote_skills_impl(
     pool: &DbPool,
-    target: &RemoteTargetConfig,
+    active_target: &ActiveTarget,
 ) -> Result<ScanResult, String> {
     let agents = db::get_all_agents(pool).await?;
     let scan_started_at = Utc::now().to_rfc3339();
-    let connection = connect_ssh_target(target).await?;
+    let connection = connect_remote_target(active_target).await?;
     let central_root = agents
         .iter()
         .find(|agent| agent.id == "central")

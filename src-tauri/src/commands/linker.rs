@@ -23,7 +23,7 @@ use crate::operation_log::{
     record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
 };
 use crate::services::installation;
-use crate::targets::{connect_ssh_target, ActiveTarget};
+use crate::targets::{connect_remote_target, ActiveTarget};
 use crate::AppState;
 
 // Re-export the public surface so existing call-sites under `super::linker::*`
@@ -32,11 +32,13 @@ use crate::AppState;
 pub use crate::services::installation::{
     batch_install_central_skills_impl, copy_dir_all, create_symlink,
     install_skill_to_agent_auto_impl, install_skill_to_agent_copy_impl,
-    install_skill_to_agent_impl, install_skill_to_agent_ssh_impl, make_relative_path,
-    symlink_target_path, uninstall_skill_from_agent_impl, uninstall_skill_from_agent_ssh_impl,
-    uninstall_skill_from_agent_with_row_impl, BatchInstallResult, CentralBatchInstallFailure,
-    CentralBatchInstallResult, CentralBatchInstallSkipped, CentralBatchInstallSuccess,
-    FailedInstall, InstallResult, SkippedInstall,
+    install_skill_to_agent_impl, install_skill_to_agent_remote_impl,
+    install_skill_to_agent_ssh_impl, make_relative_path, symlink_target_path,
+    uninstall_skill_from_agent_impl, uninstall_skill_from_agent_remote_impl,
+    uninstall_skill_from_agent_ssh_impl, uninstall_skill_from_agent_with_row_impl,
+    BatchInstallResult, CentralBatchInstallFailure, CentralBatchInstallResult,
+    CentralBatchInstallSkipped, CentralBatchInstallSuccess, FailedInstall, InstallResult,
+    SkippedInstall,
 };
 
 /// Tauri command: install a skill to a single agent via relative symlink.
@@ -52,7 +54,7 @@ pub async fn install_skill_to_agent(
     let pool = state.active_db().await?;
     let method = method.as_deref().unwrap_or("auto");
     let started_at = Instant::now();
-    let result = match active_target {
+    let result = match &active_target {
         ActiveTarget::Local => match method {
             "copy" => {
                 installation::install_skill_to_agent_copy_impl(&pool, &skill_id, &agent_id).await
@@ -62,15 +64,15 @@ pub async fn install_skill_to_agent(
             }
             _ => installation::install_skill_to_agent_auto_impl(&pool, &skill_id, &agent_id).await,
         },
-        ActiveTarget::Ssh(target) => {
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let remote_method = if method == "symlink" {
                 "symlink"
             } else {
                 "copy"
             };
-            installation::install_skill_to_agent_ssh_impl(
+            installation::install_skill_to_agent_remote_impl(
                 &pool,
-                &target,
+                &active_target,
                 &skill_id,
                 &agent_id,
                 remote_method,
@@ -120,7 +122,7 @@ pub async fn uninstall_skill_from_agent(
     let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
     let started_at = Instant::now();
-    let result = match active_target {
+    let result = match &active_target {
         ActiveTarget::Local => {
             installation::uninstall_skill_from_agent_with_row_impl(
                 &pool,
@@ -130,9 +132,14 @@ pub async fn uninstall_skill_from_agent(
             )
             .await
         }
-        ActiveTarget::Ssh(target) => {
-            installation::uninstall_skill_from_agent_ssh_impl(&pool, &target, &skill_id, &agent_id)
-                .await
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            installation::uninstall_skill_from_agent_remote_impl(
+                &pool,
+                &active_target,
+                &skill_id,
+                &agent_id,
+            )
+            .await
         }
     };
     let status = if result.is_ok() {
@@ -213,8 +220,8 @@ pub async fn batch_install_to_agents(
             failed,
         });
     }
-    let ssh_connection = match &active_target {
-        ActiveTarget::Ssh(target) => match connect_ssh_target(target).await {
+    let remote_connection = match &active_target {
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => match connect_remote_target(&active_target).await {
             Ok(connection) => Some(connection),
             Err(error) => {
                 failed.extend(agent_ids.iter().map(|agent_id| FailedInstall {
@@ -271,19 +278,18 @@ pub async fn batch_install_to_agents(
                     }),
                 }
             }
-            ActiveTarget::Ssh(target) => {
+            ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
                 let remote_method = if method == "symlink" {
                     "symlink"
                 } else {
                     "copy"
                 };
-                let connection = ssh_connection
+                let connection = remote_connection
                     .as_ref()
-                    .ok_or_else(|| "SSH connection was not initialized".to_string())?;
+                    .ok_or_else(|| "Remote connection was not initialized".to_string())?;
                 match installation::install_skill_to_agent_ssh_with_connection(
                     &pool,
                     connection,
-                    target,
                     &skill_id,
                     agent_id,
                     remote_method,
@@ -348,7 +354,7 @@ pub async fn batch_install_central_skills(
     let active_target = state.active_target().await?;
     let target_context = target_context_from_active_target(&active_target);
     let started_at = Instant::now();
-    if matches!(&active_target, ActiveTarget::Ssh(_)) && project_path.is_some() {
+    if active_target.is_remote_like() && project_path.is_some() {
         let error = "Remote project install is not supported in this version.".to_string();
         record_operation_log_best_effort(
             &state.db,
@@ -373,7 +379,7 @@ pub async fn batch_install_central_skills(
         return Err(error);
     }
     let pool = state.active_db().await?;
-    if let ActiveTarget::Ssh(target) = active_target {
+    if active_target.is_remote_like() {
         let remote_method = if method == "symlink" {
             "symlink"
         } else {
@@ -412,7 +418,7 @@ pub async fn batch_install_central_skills(
                 failed,
             });
         }
-        let connection = match connect_ssh_target(&target).await {
+        let connection = match connect_remote_target(&active_target).await {
             Ok(connection) => connection,
             Err(error) => {
                 for skill_id in &skill_ids {
@@ -458,7 +464,6 @@ pub async fn batch_install_central_skills(
                 match installation::install_skill_to_agent_ssh_with_connection(
                     &pool,
                     &connection,
-                    &target,
                     &skill_id,
                     agent_id,
                     remote_method,

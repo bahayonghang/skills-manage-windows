@@ -248,10 +248,10 @@ pub async fn apply_central_repository_sync(
                 central_skills::delete_central_skills_impl(&pool, &decisions.delete_requests)
                     .await?
             }
-            ActiveTarget::Ssh(target) => {
-                central_skills::delete_central_skills_ssh_impl(
+            ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+                central_skills::delete_central_skills_remote_impl(
                     &pool,
-                    target,
+                    &active_target,
                     &decisions.delete_requests,
                 )
                 .await?
@@ -298,10 +298,10 @@ pub async fn apply_central_repository_sync(
                 )
                 .await
             }
-            ActiveTarget::Ssh(target) => {
-                github_import::import_github_repo_skills_ssh_with_auth(
+            ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+                github_import::import_github_repo_skills_remote_with_auth(
                     &pool,
-                    target,
+                    &active_target,
                     &repo_url,
                     addition.selections,
                     addition.preview_workspace_id.as_deref(),

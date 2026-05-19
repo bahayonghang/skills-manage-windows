@@ -2,7 +2,9 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool};
-use crate::targets::{connect_ssh_target, remote_file_type_is_dir, ActiveTarget};
+use crate::targets::{
+    connect_remote_target, remote_file_type_is_dir, ActiveTarget, ConnectedRemoteTarget,
+};
 
 use super::types::DirectoryTreeEntry;
 
@@ -17,8 +19,8 @@ pub async fn read_skill_content_for_target_impl(
 
     match active_target {
         ActiveTarget::Local => read_skill_file_content(&skill.file_path),
-        ActiveTarget::Ssh(target) => {
-            let connection = connect_ssh_target(&target).await?;
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            let connection = connect_remote_target(&active_target).await?;
             let bytes = connection.read_file(&skill.file_path).await?;
             String::from_utf8(bytes).map_err(|e| {
                 format!(
@@ -40,8 +42,8 @@ pub async fn read_file_by_path_for_target_impl(
 ) -> Result<String, String> {
     match active_target {
         ActiveTarget::Local => read_file_by_path_impl(path),
-        ActiveTarget::Ssh(target) => {
-            let connection = connect_ssh_target(&target).await?;
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            let connection = connect_remote_target(&active_target).await?;
             let bytes = connection.read_file(path).await?;
             String::from_utf8(bytes)
                 .map_err(|e| format!("Remote file '{}' is not valid UTF-8: {}", path, e))
@@ -59,8 +61,8 @@ pub async fn list_directory_tree_for_target_impl(
 ) -> Result<Vec<DirectoryTreeEntry>, String> {
     match active_target {
         ActiveTarget::Local => list_directory_tree_impl(path),
-        ActiveTarget::Ssh(target) => {
-            let connection = connect_ssh_target(&target).await?;
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            let connection = connect_remote_target(&active_target).await?;
             list_remote_directory_tree_impl(&connection, path).await
         }
     }
@@ -118,7 +120,7 @@ pub(super) fn list_directory_tree_impl(path: &str) -> Result<Vec<DirectoryTreeEn
 }
 
 async fn list_remote_directory_tree_impl(
-    connection: &crate::targets::ConnectedSshTarget,
+    connection: &ConnectedRemoteTarget,
     path: &str,
 ) -> Result<Vec<DirectoryTreeEntry>, String> {
     if !connection.exists(path).await? {
@@ -144,7 +146,7 @@ async fn list_remote_directory_tree_impl(
 }
 
 async fn fetch_remote_directory_entries(
-    connection: &crate::targets::ConnectedSshTarget,
+    connection: &ConnectedRemoteTarget,
     path: &str,
 ) -> Result<Vec<DirectoryTreeEntry>, String> {
     let entries = connection.list_dir(path).await?;
@@ -195,7 +197,7 @@ pub fn open_in_file_manager_for_target_impl(
     active_target: ActiveTarget,
     path: &str,
 ) -> Result<(), String> {
-    if matches!(active_target, ActiveTarget::Ssh(_)) {
+    if active_target.is_remote_like() {
         return Err("Remote paths cannot be opened in the local file manager. Copy the remote path instead.".to_string());
     }
     open_in_file_manager_checked_impl(path)

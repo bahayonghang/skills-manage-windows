@@ -1,5 +1,6 @@
 use super::*;
 pub(super) const TARGETS_SETTING_KEY: &str = "ssh_targets_v1";
+pub(super) const WSL_TARGETS_SETTING_KEY: &str = "wsl_targets_v1";
 pub(super) const ACTIVE_TARGET_SETTING_KEY: &str = "active_target_id_v1";
 pub(super) const SSH_PASSWORD_SERVICE: &str = "SkillPort SSH Targets";
 pub(super) const SSH_ASKPASS_HELPER_ENV: &str = "SKILLPORT_SSH_ASKPASS_HELPER";
@@ -13,6 +14,7 @@ pub(super) const CREATE_NO_WINDOW: u32 = 0x08000000;
 pub enum TargetKind {
     Local,
     Ssh,
+    Wsl,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -66,6 +68,17 @@ pub struct RemoteTargetConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WslTargetConfig {
+    pub id: String,
+    pub label: String,
+    pub distribution: String,
+    pub remote_home: String,
+    pub remote_os: String,
+    pub symlink_enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateSshTargetRequest {
     pub label: String,
     pub host: String,
@@ -107,6 +120,29 @@ pub struct TestSshTargetRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateWslTargetRequest {
+    pub label: String,
+    pub distribution: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateWslTargetRequest {
+    pub id: String,
+    pub label: String,
+    pub distribution: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestWslTargetRequest {
+    pub id: Option<String>,
+    pub label: Option<String>,
+    pub distribution: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TargetSummary {
     pub id: String,
     pub kind: TargetKind,
@@ -114,6 +150,7 @@ pub struct TargetSummary {
     pub host: Option<String>,
     pub username: Option<String>,
     pub port: Option<u16>,
+    pub distribution: Option<String>,
     pub auth_method: Option<SshAuthMethod>,
     pub key_path: Option<String>,
     pub remote_home: Option<String>,
@@ -137,8 +174,65 @@ pub struct SshTargetTestResult {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WslTargetTestResult {
+    pub ok: bool,
+    pub remote_home: Option<String>,
+    pub remote_os: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WslDistributionSummary {
+    pub name: String,
+    pub is_default: bool,
+    pub state: Option<String>,
+    pub version: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub enum ActiveTarget {
     Local,
     Ssh(Box<RemoteTargetConfig>),
+    Wsl(Box<WslTargetConfig>),
+}
+
+impl ActiveTarget {
+    pub fn is_remote_like(&self) -> bool {
+        !matches!(self, ActiveTarget::Local)
+    }
+
+    pub fn remote_home(&self) -> Option<&str> {
+        match self {
+            ActiveTarget::Local => None,
+            ActiveTarget::Ssh(target) => Some(target.remote_home.as_str()),
+            ActiveTarget::Wsl(target) => Some(target.remote_home.as_str()),
+        }
+    }
+
+    pub fn id(&self) -> &str {
+        match self {
+            ActiveTarget::Local => LOCAL_TARGET_ID,
+            ActiveTarget::Ssh(target) => target.id.as_str(),
+            ActiveTarget::Wsl(target) => target.id.as_str(),
+        }
+    }
+
+    pub fn label(&self) -> &str {
+        match self {
+            ActiveTarget::Local => "Local",
+            ActiveTarget::Ssh(target) => target.label.as_str(),
+            ActiveTarget::Wsl(target) => target.label.as_str(),
+        }
+    }
+
+    pub fn kind(&self) -> TargetKind {
+        match self {
+            ActiveTarget::Local => TargetKind::Local,
+            ActiveTarget::Ssh(_) => TargetKind::Ssh,
+            ActiveTarget::Wsl(_) => TargetKind::Wsl,
+        }
+    }
 }

@@ -14,8 +14,10 @@ mod types;
 mod tests;
 
 pub use delete::{
-    delete_central_skill_impl, delete_central_skill_ssh_impl, delete_central_skills_impl,
-    delete_central_skills_ssh_impl, delete_skill_repository_impl, delete_skill_repository_ssh_impl,
+    delete_central_skill_impl, delete_central_skill_remote_impl, delete_central_skill_ssh_impl,
+    delete_central_skills_impl, delete_central_skills_remote_impl,
+    delete_central_skills_ssh_impl, delete_skill_repository_impl,
+    delete_skill_repository_remote_impl, delete_skill_repository_ssh_impl,
     preview_delete_central_skills_impl, preview_delete_central_skills_ssh_impl,
     preview_delete_skill_repository_impl, preview_delete_skill_repository_ssh_impl,
 };

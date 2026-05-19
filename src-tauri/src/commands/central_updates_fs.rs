@@ -12,7 +12,7 @@ use std::path::{Component, Path, PathBuf};
 use uuid::Uuid;
 
 use crate::targets::{
-    connect_ssh_target, remote_parent, shell_quote, ActiveTarget, ConnectedSshTarget,
+    connect_remote_target, remote_parent, shell_quote, ActiveTarget, ConnectedRemoteTarget,
 };
 
 use super::github_import::GitHubRepoSnapshot;
@@ -40,15 +40,15 @@ pub(super) struct RemoteSkillFile {
 /// [`super::central_updates`] never branches on target type.
 pub(super) enum CentralFs {
     Local,
-    Remote(Box<ConnectedSshTarget>),
+    Remote(Box<ConnectedRemoteTarget>),
 }
 
 impl CentralFs {
     pub(super) async fn from_active_target(target: ActiveTarget) -> Result<Self, String> {
         match target {
             ActiveTarget::Local => Ok(Self::Local),
-            ActiveTarget::Ssh(remote) => {
-                let conn = connect_ssh_target(&remote).await?;
+            ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+                let conn = connect_remote_target(&target).await?;
                 Ok(Self::Remote(Box::new(conn)))
             }
         }
@@ -279,7 +279,7 @@ fn write_skill_dir_atomic_local(
 }
 
 async fn write_skill_dir_atomic_remote(
-    conn: &ConnectedSshTarget,
+    conn: &ConnectedRemoteTarget,
     skill_id: &str,
     target_dir: &str,
     files: &[RemoteSkillFile],
@@ -345,7 +345,7 @@ fn refresh_copy_install_local(
 }
 
 async fn refresh_copy_install_remote(
-    conn: &ConnectedSshTarget,
+    conn: &ConnectedRemoteTarget,
     skill_id: &str,
     source_dir: &str,
     target: &str,
@@ -436,7 +436,7 @@ fn hash_local_directory(root: &Path) -> Result<String, String> {
 /// BFS-walk a remote directory and return a digest comparable to
 /// [`hash_local_directory`]. Symlinks and special entries are skipped, only
 /// regular files contribute to the hash.
-async fn hash_remote_directory(conn: &ConnectedSshTarget, root: &str) -> Result<String, String> {
+async fn hash_remote_directory(conn: &ConnectedRemoteTarget, root: &str) -> Result<String, String> {
     if !conn.exists(root).await? {
         // Treat a missing canonical directory as an empty hash so the upper
         // layer can still mark this skill as `update_available`.
@@ -478,7 +478,7 @@ async fn hash_remote_directory(conn: &ConnectedSshTarget, root: &str) -> Result<
 }
 
 async fn hash_remote_directories(
-    conn: &ConnectedSshTarget,
+    conn: &ConnectedRemoteTarget,
     roots: &[PathBuf],
 ) -> Result<HashMap<PathBuf, String>, String> {
     let mut hashes = HashMap::with_capacity(roots.len());

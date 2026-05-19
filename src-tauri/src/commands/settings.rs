@@ -10,7 +10,6 @@ use crate::operation_log::{
 };
 use crate::paths::{expand_home_path, expand_remote_home_path, path_to_string};
 use crate::secrets::{AI_API_KEY_SECRET_KEY, GITHUB_PAT_SECRET_KEY};
-use crate::targets::ActiveTarget;
 use crate::AppState;
 
 // ─── Core Implementations (testable without Tauri State) ──────────────────────
@@ -150,10 +149,7 @@ pub async fn add_scan_directory(
     let active_target = state.active_target().await?;
     let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    let remote_home = match &active_target {
-        ActiveTarget::Ssh(target) => Some(target.remote_home.as_str()),
-        ActiveTarget::Local => None,
-    };
+    let remote_home = active_target.remote_home();
     let started_at = Instant::now();
     let result =
         add_scan_directory_impl_for_home(&pool, &path, label.as_deref(), remote_home).await;

@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool, SkillRepository, SkillRepositoryWithStats};
-use crate::targets::{connect_ssh_target, ConnectedSshTarget, RemoteTargetConfig};
+use crate::targets::{
+    connect_remote_target, ActiveTarget, ConnectedRemoteTarget, RemoteTargetConfig,
+};
 
 use super::common::{installation_details, shared_root_agent_ids, unique_agent_ids};
 use super::types::{
@@ -315,7 +317,7 @@ pub async fn preview_delete_central_skills_ssh_impl(
 }
 
 async fn remove_remote_installation_path(
-    connection: &ConnectedSshTarget,
+    connection: &ConnectedRemoteTarget,
     installation: &db::SkillInstallation,
     agents_by_id: &HashMap<String, db::Agent>,
 ) -> Result<(), String> {
@@ -330,9 +332,9 @@ async fn remove_remote_installation_path(
     connection.remove_tree(&path).await
 }
 
-pub async fn delete_central_skill_ssh_impl(
+pub async fn delete_central_skill_remote_impl(
     pool: &DbPool,
-    target: &RemoteTargetConfig,
+    active_target: &ActiveTarget,
     skill_id: &str,
     remove_agent_ids: &[String],
 ) -> Result<DeleteCentralSkillResult, String> {
@@ -370,7 +372,7 @@ pub async fn delete_central_skill_ssh_impl(
         .into_iter()
         .map(|agent| (agent.id.clone(), agent))
         .collect();
-    let connection = connect_ssh_target(target).await?;
+    let connection = connect_remote_target(active_target).await?;
 
     let mut removed_agent_ids = Vec::new();
     let mut retained_agent_ids = Vec::new();
@@ -404,9 +406,19 @@ pub async fn delete_central_skill_ssh_impl(
     })
 }
 
-pub async fn delete_central_skills_ssh_impl(
+pub async fn delete_central_skill_ssh_impl(
     pool: &DbPool,
     target: &RemoteTargetConfig,
+    skill_id: &str,
+    remove_agent_ids: &[String],
+) -> Result<DeleteCentralSkillResult, String> {
+    let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
+    delete_central_skill_remote_impl(pool, &active_target, skill_id, remove_agent_ids).await
+}
+
+pub async fn delete_central_skills_remote_impl(
+    pool: &DbPool,
+    active_target: &ActiveTarget,
     requests: &[BatchDeleteCentralSkillRequest],
 ) -> Result<BatchDeleteCentralSkillResult, String> {
     let mut ordered_requests: Vec<BatchDeleteCentralSkillRequest> = Vec::new();
@@ -431,9 +443,9 @@ pub async fn delete_central_skills_ssh_impl(
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
     for request in ordered_requests {
-        match delete_central_skill_ssh_impl(
+        match delete_central_skill_remote_impl(
             pool,
-            target,
+            active_target,
             &request.skill_id,
             &request.remove_agent_ids,
         )
@@ -453,6 +465,15 @@ pub async fn delete_central_skills_ssh_impl(
     }
 
     Ok(BatchDeleteCentralSkillResult { succeeded, failed })
+}
+
+pub async fn delete_central_skills_ssh_impl(
+    pool: &DbPool,
+    target: &RemoteTargetConfig,
+    requests: &[BatchDeleteCentralSkillRequest],
+) -> Result<BatchDeleteCentralSkillResult, String> {
+    let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
+    delete_central_skills_remote_impl(pool, &active_target, requests).await
 }
 
 pub async fn preview_delete_central_skill_impl(
@@ -692,16 +713,16 @@ pub async fn delete_skill_repository_impl(
     })
 }
 
-pub async fn delete_skill_repository_ssh_impl(
+pub async fn delete_skill_repository_remote_impl(
     pool: &DbPool,
-    target: &RemoteTargetConfig,
+    active_target: &ActiveTarget,
     repository_id: &str,
     requests: &[BatchDeleteCentralSkillRequest],
 ) -> Result<DeleteSkillRepositoryResult, String> {
     let (repository, skill_ids) =
         get_deletable_repository_with_skill_ids(pool, repository_id).await?;
     let delete_requests = build_repository_delete_requests(&repository.id, &skill_ids, requests)?;
-    let delete_result = delete_central_skills_ssh_impl(pool, target, &delete_requests).await?;
+    let delete_result = delete_central_skills_remote_impl(pool, active_target, &delete_requests).await?;
     let deleted_repository = if delete_result.failed.is_empty() {
         if skill_ids.is_empty() {
             db::delete_empty_skill_repository(pool, &repository.id).await?
@@ -720,4 +741,14 @@ pub async fn delete_skill_repository_ssh_impl(
         deleted_repository,
         delete_result,
     })
+}
+
+pub async fn delete_skill_repository_ssh_impl(
+    pool: &DbPool,
+    target: &RemoteTargetConfig,
+    repository_id: &str,
+    requests: &[BatchDeleteCentralSkillRequest],
+) -> Result<DeleteSkillRepositoryResult, String> {
+    let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
+    delete_skill_repository_remote_impl(pool, &active_target, repository_id, requests).await
 }
