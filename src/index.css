@@ -1025,7 +1025,7 @@
    - html[data-display-font='...']：按 key 切换字体族；自定义走内联 style 注入
    - .surface-glass / .surface-glass-strong：dashboard 卡片背景层
    - .bg-orbit：Dashboard <main> 装饰径向背景
-   - .ring-readiness：score ring，通过 style 内 `--score: 86%` 驱动
+   - .readiness-card / .readiness-score-plaque：Dashboard 质量控制面板
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -1109,34 +1109,77 @@ html[data-body-font='system'] {
         linear-gradient(145deg, color-mix(in oklch, var(--background) 96%, black 4%), var(--background));
 }
 
-/* ── Score ring (conic gradient driven by inline `--score: 86%`) ───────────── */
+/* ── Dashboard readiness control panel ───────────────────────────────────── */
 
-.ring-readiness {
+.readiness-card {
     position: relative;
-    display: grid;
-    place-items: center;
-    aspect-ratio: 1;
-    border-radius: 50%;
-    background: conic-gradient(
-        from 215deg,
-        var(--chart-1) 0 var(--score, 0%),
-        color-mix(in oklch, var(--muted) 80%, transparent) var(--score, 0%) 100%
-    );
-    box-shadow:
-        inset 0 0 0 1px color-mix(in oklch, var(--border) 88%, transparent),
-        0 28px 70px color-mix(in oklch, var(--background) 78%, transparent);
+    min-height: 100%;
+    overflow: hidden;
 }
 
-.ring-readiness::before {
+.readiness-card::before {
     content: '';
     position: absolute;
-    inset: clamp(0.8rem, 6%, 1.2rem);
-    border-radius: 50%;
-    background: color-mix(in oklch, var(--card) 96%, black 4%);
-    border: 1px solid color-mix(in oklch, var(--border) 90%, transparent);
+    inset: -38% -22% auto auto;
+    width: 17rem;
+    aspect-ratio: 1;
+    border-radius: 999px;
+    background:
+        radial-gradient(circle, color-mix(in oklch, var(--primary) 30%, transparent), transparent 68%),
+        conic-gradient(from 140deg, color-mix(in oklch, var(--chart-1) 45%, transparent), transparent 46%);
+    filter: blur(4px);
+    opacity: 0.72;
 }
 
-.ring-readiness > * {
+.readiness-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(90deg, color-mix(in oklch, var(--border) 22%, transparent) 1px, transparent 1px),
+        linear-gradient(0deg, color-mix(in oklch, var(--border) 18%, transparent) 1px, transparent 1px);
+    background-size: 2.35rem 2.35rem;
+    mask-image: linear-gradient(145deg, transparent 0%, black 34%, transparent 78%);
+    opacity: 0.18;
+}
+
+.readiness-score-plaque {
     position: relative;
-    text-align: center;
+    overflow: hidden;
+    background:
+        linear-gradient(145deg, color-mix(in oklch, var(--card) 94%, white 5%), color-mix(in oklch, var(--card) 82%, transparent)),
+        conic-gradient(from 215deg, color-mix(in oklch, var(--primary) 28%, transparent) 0 var(--score-angle, 0deg), transparent var(--score-angle, 0deg) 360deg);
+    border: 1px solid color-mix(in oklch, var(--border) 86%, transparent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--foreground) 8%, transparent),
+        0 18px 48px color-mix(in oklch, var(--background) 78%, transparent);
+}
+
+.readiness-score-plaque::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(110deg, transparent, color-mix(in oklch, var(--foreground) 7%, transparent), transparent);
+    transform: translateX(-52%);
+}
+
+.readiness-rail {
+    position: relative;
+    overflow: hidden;
+}
+
+.readiness-rail::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(120deg, transparent, color-mix(in oklch, var(--foreground) 5%, transparent), transparent);
+    opacity: 0.48;
+}
+
+.readiness-rail > * {
+    position: relative;
 }

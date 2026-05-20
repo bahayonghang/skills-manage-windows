@@ -22,9 +22,12 @@ export function DashboardShell({
   const { t } = useTranslation();
 
   return (
-    <div className="bg-orbit min-h-full">
-      <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-y-auto overflow-x-hidden">
-        <div className="min-h-0 min-w-0 flex-1 space-y-5 p-3 sm:p-5">
+    <div className="bg-orbit h-full min-h-0 overflow-hidden">
+      <div
+        data-testid="dashboard-scroll-region"
+        className="scrollbar-subtle flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-y-auto overflow-x-hidden overscroll-contain"
+      >
+        <div className="min-h-0 min-w-0 flex-1 space-y-5 p-3 pb-6 sm:p-5 sm:pb-8">
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.85fr)]">
             <HeroSection
               onNavigate={onNavigate}

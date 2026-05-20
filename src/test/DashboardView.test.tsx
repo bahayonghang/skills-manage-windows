@@ -375,6 +375,13 @@ describe("DashboardView", () => {
         aiReviewCount: 1,
         uncategorizedCount: 2,
         unassignedSourceCount: 1,
+        readiness: {
+          score: 65,
+          categorizedRatio: 0.34,
+          describedRatio: 0.82,
+          sourcedRatio: 0.67,
+          installHealthRatio: 0.5,
+        },
         sourceRepositories: repositories,
       },
       categoryVisibility: {
@@ -403,6 +410,13 @@ describe("DashboardView", () => {
     expect(screen.getByTestId("dashboard-metric-uncategorized")).toHaveTextContent("2");
     expect(screen.getByTestId("dashboard-metric-unassigned")).toHaveTextContent("1");
     expect(screen.getByTestId("dashboard-metric-targets")).toHaveTextContent("2");
+    expect(screen.getByTestId("dashboard-scroll-region")).toHaveClass(
+      "overflow-y-auto",
+      "scrollbar-subtle"
+    );
+    expect(screen.getByLabelText(/Readiness factors|就绪度组成项/)).toBeInTheDocument();
+    expect(screen.getByText(/Review gate|复核关口/)).toBeInTheDocument();
+    expect(screen.getByText(/Categorized|分类完成/)).toBeInTheDocument();
     expect(screen.getByText(/Enabled platforms|启用平台/)).toBeInTheDocument();
     expect(screen.getByText("Scanned 3 skills")).toBeInTheDocument();
   });

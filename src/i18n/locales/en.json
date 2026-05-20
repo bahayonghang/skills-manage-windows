@@ -178,6 +178,20 @@
     "readiness": {
       "label": "Readiness",
       "ariaLabel": "Library readiness score {{score}} of 100",
+      "description": "Quality factors behind the score: taxonomy, descriptions, source mapping, and install health.",
+      "scoreUnit": "/100",
+      "status": {
+        "ready": "Ready",
+        "review": "Review gate",
+        "triage": "Needs triage"
+      },
+      "factors": {
+        "ariaLabel": "Readiness factors",
+        "categorized": "Categorized",
+        "described": "Descriptions",
+        "sourced": "Source mapped",
+        "installHealth": "Install health"
+      },
       "miniCentral": "Central",
       "miniSources": "Sources",
       "miniAgents": "Agents"

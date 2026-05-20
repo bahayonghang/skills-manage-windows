@@ -178,6 +178,20 @@
     "readiness": {
       "label": "就绪度",
       "ariaLabel": "技能库就绪度 {{score}} 分（满分 100）",
+      "description": "分数由分类、描述、来源映射和安装健康度组成，优先暴露真正阻塞下一步的质量问题。",
+      "scoreUnit": "/100",
+      "status": {
+        "ready": "已就绪",
+        "review": "复核关口",
+        "triage": "需要整理"
+      },
+      "factors": {
+        "ariaLabel": "就绪度组成项",
+        "categorized": "分类完成",
+        "described": "描述完整",
+        "sourced": "来源映射",
+        "installHealth": "安装健康"
+      },
       "miniCentral": "中央",
       "miniSources": "来源",
       "miniAgents": "Agents"
