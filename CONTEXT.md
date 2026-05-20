@@ -36,11 +36,11 @@ Central Skills 不等同于 Universal Agents。只有显式安装到目标平台
 ~/.agents/skills/
 ```
 
-Codex CLI、Cursor、Gemini CLI、OpenCode、Amp、Copilot 等读取这个位置。
+Codex CLI、Cursor、OpenCode、Amp、Copilot 以及 legacy Gemini CLI 等读取这个全局位置。Antigravity 是 Google 当前推荐平台，但其全局目录是 `~/.gemini/antigravity/skills/`；项目级技能仍共享 `.agents/skills/`。
 
 ### Platform
 
-SkillPort 支持的目标工具或平台，例如 Claude Code、Codex CLI、Cursor、Gemini CLI、OpenCode、OpenClaw。Platform 有自己的 skills 目录，也可能共享 Universal Agents 目录。
+SkillPort 支持的目标工具或平台，例如 Claude Code、Codex CLI、Cursor、Antigravity、Gemini CLI (legacy)、OpenCode、OpenClaw。Platform 有自己的 skills 目录，也可能共享 Universal Agents 目录。
 
 ### Platform install
 

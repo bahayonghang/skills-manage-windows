@@ -17,7 +17,7 @@ Projects 提供「按项目逐个管理」的视图，覆盖那些活在代码�
 每个项目根下，SkillPort 只走**已启用 agent** 各自的项目级 skill 目录：
 
 - Claude Code：`.claude/skills/`
-- 其他平台：`.kiro/skills/`、`.codex/skills/`、`.gemini/skills/`、`.opencode/skills/`，加共享回落路径 `.agents/skills/`。
+- 其他平台：`.kiro/skills/`、`.codex/skills/`、`.opencode/skills/`，以及 Antigravity 等 Universal-compatible agent 使用的共享 workspace 路径 `.agents/skills/`。Legacy Gemini CLI 行继续兼容；Antigravity 项目 skills 通过 `.agents/skills/` 表示。
 
 未启用的 agent 跳过；`central` agent 永远跳过（项目本身不是中央库）。
 
@@ -35,7 +35,7 @@ Projects 提供「按项目逐个管理」的视图，覆盖那些活在代码�
 右面板的 **从中央库安装** 按钮打开一个对话框：
 
 1. 列出可搜索的中央 skill。
-2. 列出有项目级目录的启用 agent。
+2. 列出有项目级目录的启用 agent。Universal workspace 目标会折叠成一组；选择 Universal 会通过代表成员安装到 `.agents/skills/`。
 3. 给出 symlink（默认）和 copy 两个安装方式 radio。
 
 确认后调 `install_skill_to_project`，在项目对应的 agent 目录下落 SKILL.md 文件夹，同时写一行 psi。

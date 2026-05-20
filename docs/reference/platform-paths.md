@@ -9,7 +9,8 @@ The full list of platforms SkillPort manages and where each one stores its skill
 | Claude Code | `~/.claude/skills/` |
 | Codex CLI | `~/.agents/skills/` |
 | Cursor | `~/.agents/skills/` |
-| Gemini CLI | `~/.agents/skills/` |
+| Antigravity | `~/.gemini/antigravity/skills/` |
+| Gemini CLI (legacy) | `~/.agents/skills/` |
 | Trae | `~/.trae/skills/` |
 | Factory Droid | `~/.factory/skills/` |
 | Junie | `~/.junie/skills/` |
@@ -46,15 +47,15 @@ The full list of platforms SkillPort manages and where each one stores its skill
 | `~/.skillsmanage/skills/` | Canonical Central library (legacy directory name kept for compatibility) |
 | `~/.skillsmanage/db.sqlite` | SQLite database (WAL mode) |
 | `~/.skillsmanage/targets/<id>/db.sqlite` | Per-target SQLite cache for SSH targets |
-| `~/.agents/skills/` | Universal Agents target shared by Codex CLI / Cursor / Gemini CLI etc. |
+| `~/.agents/skills/` | Universal Agents global target shared by Codex CLI / Cursor / OpenCode / Amp / Copilot / legacy Gemini CLI etc. |
 
 ## Shared Roots
 
-Multiple agents resolve to `~/.agents/skills/`. Discover collapses these into a single scan root via `services::discovery::roots.rs` so the same project skill is not surfaced N times.
+Multiple global agents resolve to `~/.agents/skills/`. Antigravity is deliberately separate globally (`~/.gemini/antigravity/skills/`) but shares `.agents/skills/` at project/workspace scope. Project scanning collapses those workspace-compatible members so the same project skill is not surfaced N times.
 
 ## Read-only Sources
 
-Claude Code surfaces marketplace plugin directories under `~/.claude/plugins/marketplaces/*` as read-only rows. They are display-only.
+Claude Code surfaces marketplace plugin directories under `~/.claude/plugins/marketplaces/*` as read-only rows. They are display-only. Antigravity plugin bundles are a separate CLI plugin mechanism and are not imported/exported by SkillPort.
 
 ## Custom Platforms
 

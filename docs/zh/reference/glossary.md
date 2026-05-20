@@ -9,7 +9,7 @@ UI、源码、文档中使用的术语。
 | 平台 | Platform | 从已知目录读取技能的 agent（Claude Code、Cursor…） |
 | Agent | Agent | 源码中等价于"平台"（`agent_id`、`agents` 表） |
 | 龙虾 | Lobster | UI 分组：中文厂商系编码 agent（OpenClaw、QClaw…） |
-| 通用平台 | Universal Agents | 共享 `~/.agents/skills/`，被 Codex CLI / Cursor / Gemini CLI 等读取 |
+| 通用平台 | Universal Agents | 全局共享 `~/.agents/skills/`，被 Codex CLI / Cursor / OpenCode / Amp / Copilot / legacy Gemini CLI 等读取；项目范围内 Antigravity 也共享 `.agents/skills/` |
 | 安装 | Install | 把 Central 技能落到平台技能目录 |
 | 符号链接 | Symlink | Linux / macOS 与 Windows 开发者模式下的默认安装方式 |
 | 拷贝 | Copy | 复制目录的安装方式；Windows fallback 默认 |

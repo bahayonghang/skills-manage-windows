@@ -17,7 +17,7 @@ The same path is idempotent — clicking **Add project** on a folder you already
 For each project root, SkillPort walks the per-platform skill directories of **enabled agents only**:
 
 - `.claude/skills/` for Claude Code
-- `.kiro/skills/`, `.codex/skills/`, `.gemini/skills/`, `.opencode/skills/`, and the shared `.agents/skills/` fallback.
+- `.kiro/skills/`, `.codex/skills/`, `.opencode/skills/`, and the shared `.agents/skills/` workspace path used by Universal-compatible agents including Antigravity. Legacy Gemini CLI rows remain compatible, but Antigravity project skills are represented through `.agents/skills/`.
 
 Disabled agents are skipped, and the `central` agent is always skipped (a project is never a global library by itself).
 
@@ -35,7 +35,7 @@ The page is split:
 The right panel's **Install from Central** button opens a dialog that:
 
 1. Lists central skills with search.
-2. Lists enabled agents that declare a project-skill directory.
+2. Lists enabled agents that declare a project-skill directory. Universal workspace targets are grouped together; selecting Universal installs through a representative member into `.agents/skills/`.
 3. Offers symlink (default) or copy.
 
 Confirming the dialog runs `install_skill_to_project`, materialises the SKILL.md folder under the project's per-agent path, and writes the psi row.

@@ -10,7 +10,7 @@
 
 ## Overview
 
-`SkillPort` follows the [Agent Skills](https://github.com/anthropics/agent-skills) open pattern, but keeps its private Central library in `~/.skillsmanage/skills/`. The shared Universal Agents target remains `~/.agents/skills/`, so only skills explicitly installed there are exposed to Codex CLI, Cursor, Gemini CLI, and other tools that read that location.
+`SkillPort` follows the [Agent Skills](https://github.com/anthropics/agent-skills) open pattern, but keeps its private Central library in `~/.skillsmanage/skills/`. The shared Universal Agents target remains `~/.agents/skills/`, so only skills explicitly installed there are exposed to Codex CLI, Cursor, OpenCode, Amp, Copilot, and other tools that read that location. Google's current recommended platform is Antigravity: SkillPort installs its global skills to `~/.gemini/antigravity/skills/`, while Antigravity project skills use `.agents/skills/`. Gemini CLI remains available as a legacy / enterprise compatibility target.
 
 ## Relationship to upstream
 
@@ -99,7 +99,8 @@ Then launch the app again from Finder. If your app is stored somewhere else, rep
 | Coding | Claude Code | `~/.claude/skills/` |
 | Coding | Codex CLI | `~/.agents/skills/` |
 | Coding | Cursor | `~/.agents/skills/` |
-| Coding | Gemini CLI | `~/.agents/skills/` |
+| Coding | Antigravity | `~/.gemini/antigravity/skills/` |
+| Coding | Gemini CLI (legacy) | `~/.agents/skills/` |
 | Coding | Trae | `~/.trae/skills/` |
 | Coding | Factory Droid | `~/.factory/skills/` |
 | Coding | Junie | `~/.junie/skills/` |
@@ -125,7 +126,7 @@ Then launch the app again from Finder. If your app is stored somewhere else, rep
 | Lobster | WorkBuddy (打工搭子) | `~/.workbuddy/skills-marketplace/skills/` |
 | Central | Central Skills | `~/.skillsmanage/skills/` |
 
-> Note: Claude Code also surfaces marketplace plugin directories under `~/.claude/plugins/marketplaces/*` as read-only rows in the Claude view. Those entries are display-only and are not managed like native skills in `~/.claude/skills/`.
+> Note: Claude Code also surfaces marketplace plugin directories under `~/.claude/plugins/marketplaces/*` as read-only rows in the Claude view. Those entries are display-only and are not managed like native skills in `~/.claude/skills/`. Antigravity plugin bundles are a separate CLI plugin mechanism; SkillPort currently manages Antigravity SkillPort-style `SKILL.md` skill folders only, not plugin bundle import/export.
 
 Custom platforms can be added through Settings.
 

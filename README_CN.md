@@ -10,7 +10,7 @@
 
 ## 项目简介
 
-`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库使用私有目录 `~/.skillsmanage/skills/`。共享的 Universal Agents 目标仍是 `~/.agents/skills/`，只有显式安装到这里的技能才会暴露给 Codex CLI、Cursor、Gemini CLI 等读取该目录的工具。
+`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库使用私有目录 `~/.skillsmanage/skills/`。共享的 Universal Agents 目标仍是 `~/.agents/skills/`，只有显式安装到这里的技能才会暴露给 Codex CLI、Cursor、OpenCode、Amp、Copilot 等读取该目录的工具。Google 当前推荐平台是 Antigravity：SkillPort 会把它的全局技能安装到 `~/.gemini/antigravity/skills/`，项目级技能使用 `.agents/skills/`。Gemini CLI 仍保留为 legacy / enterprise 兼容目标。
 
 ## 与上游关系
 
@@ -98,7 +98,8 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 | Coding | Claude Code | `~/.claude/skills/` |
 | Coding | Codex CLI | `~/.agents/skills/` |
 | Coding | Cursor | `~/.agents/skills/` |
-| Coding | Gemini CLI | `~/.agents/skills/` |
+| Coding | Antigravity | `~/.gemini/antigravity/skills/` |
+| Coding | Gemini CLI（legacy） | `~/.agents/skills/` |
 | Coding | Trae | `~/.trae/skills/` |
 | Coding | Factory Droid | `~/.factory/skills/` |
 | Coding | Junie | `~/.junie/skills/` |
@@ -124,7 +125,7 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 | Lobster | WorkBuddy（打工搭子） | `~/.workbuddy/skills-marketplace/skills/` |
 | Central | 中央技能库 | `~/.skillsmanage/skills/` |
 
-> 说明：Claude Code 还会把 `~/.claude/plugins/marketplaces/*` 下的 marketplace plugin 目录显示成只读行。这些条目只做展示，不按 `~/.claude/skills/` 里的原生技能那套方式管理。
+> 说明：Claude Code 还会把 `~/.claude/plugins/marketplaces/*` 下的 marketplace plugin 目录显示成只读行。这些条目只做展示，不按 `~/.claude/skills/` 里的原生技能那套方式管理。Antigravity plugin bundle 属于独立 CLI 插件机制；SkillPort 当前只管理 Antigravity 的 `SKILL.md` 技能目录，不导入或导出 plugin bundle。
 
 也可以在 Settings 中添加自定义平台。
 

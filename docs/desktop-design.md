@@ -2,6 +2,8 @@
 
 > 版本：v0.1 | 日期：2026-04-09
 
+> Historical design note: this April 2026 draft predates the current Central library and Google-platform semantics. Runtime code and README now treat Central as `~/.skillsmanage/skills/`, Universal Agents global as `~/.agents/skills/`, Antigravity global as `~/.gemini/antigravity/skills/`, and Gemini CLI as a legacy / enterprise compatibility target. Antigravity plugin bundles are outside SkillPort's current skill-folder workflow.
+
 ---
 
 ## 一、产品定位
@@ -9,7 +11,7 @@
 **skills-manage** 是一个跨平台 AI Agent Skills 管理工具，以桌面应用为核心形态。
 
 **核心价值**：
-- 一个界面管理所有 AI 工具（Claude Code、Codex、Cursor、Gemini CLI、Trae、Factory Droid、OpenClaw、QClaw 等）的 skills
+- 一个界面管理所有 AI 工具（Claude Code、Codex、Cursor、Antigravity、Gemini CLI (legacy)、Trae、Factory Droid、OpenClaw、QClaw 等）的 skills
 - 启动即全盘扫描，自动分类整理
 - `~/.agents/skills/` 作为 Central Skills（中央技能库）真实源，其他平台通过 **skill 级软链** 引用
 - 自定义 Collection 支持批量安装 + 导入/导出
@@ -52,7 +54,7 @@ graph TB
         CC["~/.claude/skills/"]
         CX["~/.codex/skills/"]
         CU["~/.cursor/skills/"]
-        GE["~/.gemini/skills/"]
+        GE["~/.gemini/antigravity/skills/"]
         TR["~/.trae/skills/"]
         DR["~/.factory/skills/"]
         OC["~/.openclaw/skills/"]
@@ -74,7 +76,7 @@ graph TB
 ```
 
 <!-- 图例：Canon = ~/.agents/skills/, CC = Claude Code, CX = Codex, CU = Cursor -->
-<!-- GE = Gemini CLI, TR = Trae, DR = Factory Droid, OC = OpenClaw, LB = Lobster Platforms -->
+<!-- GE = Antigravity, TR = Trae, DR = Factory Droid, OC = OpenClaw, LB = Lobster Platforms -->
 
 ### 启动扫描流程
 
@@ -288,7 +290,7 @@ skills-manage/
 │ ☑ Claude Code                 │
 │ ☑ Cursor                      │
 │ ☐ Codex CLI                   │
-│ ☐ Gemini CLI                  │
+│ ☐ Antigravity                 │
 │ ☐ Trae                        │
 │ ☐ Factory Droid               │
 │ ☐ OpenClaw                    │
@@ -322,7 +324,7 @@ skills-manage/
 │ ✅ Claude Code  → ~/.claude/skills/...     │
 │ ✅ Cursor       → ~/.cursor/skills/...     │
 │ ❌ Codex CLI    [安装]                      │
-│ ❌ Gemini CLI   [安装]                      │
+│ ❌ Antigravity  [安装]                      │
 │ ❌ Trae         [安装]                      │
 │                                             │
 │ ── Collections ───────────────────────────  │
@@ -536,7 +538,8 @@ CREATE TABLE settings (
 | claude-code | Claude Code | coding | `~/.claude/skills/` |
 | codex | Codex CLI | coding | `~/.agents/skills/` |
 | cursor | Cursor | coding | `~/.cursor/skills/` |
-| gemini-cli | Gemini CLI | coding | `~/.gemini/skills/` |
+| antigravity | Antigravity | coding | `~/.gemini/antigravity/skills/` |
+| gemini-cli | Gemini CLI (legacy) | coding | `~/.gemini/skills/` |
 | trae | Trae | coding | `~/.trae/skills/` |
 | factory-droid | Factory Droid | coding | `~/.factory/skills/` |
 | openclaw | OpenClaw | lobster | `~/.openclaw/skills/` |

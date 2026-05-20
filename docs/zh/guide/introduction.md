@@ -4,7 +4,7 @@
 
 ## 项目定位
 
-`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库使用私有目录 `~/.skillsmanage/skills/`。共享的 Universal Agents 目标仍然是 `~/.agents/skills/`，只有显式安装到这里的 skills 才会被 Codex CLI、Cursor、Gemini CLI 等读取该目录的工具看到。
+`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库使用私有目录 `~/.skillsmanage/skills/`。共享的 Universal Agents 目标仍然是 `~/.agents/skills/`，只有显式安装到这里的 skills 才会被 Codex CLI、Cursor、OpenCode、Amp、Copilot 等读取该目录的工具看到。Google 当前推荐平台是 Antigravity：SkillPort 会把它的全局 skills 安装到 `~/.gemini/antigravity/skills/`，项目级 skills 使用 `.agents/skills/`。Gemini CLI 仍保留为 legacy / enterprise 兼容目标。
 
 应用在一个窗口里同时承担四个角色：
 
