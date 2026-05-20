@@ -1099,6 +1099,54 @@ async fn test_project_install_uses_agents_dir_for_universal_representative() {
 }
 
 #[tokio::test]
+async fn test_project_install_uses_agents_dir_for_antigravity() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let codex_agent_dir = crate::paths::resolve_home_dir()
+        .join(".agents")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let pool = setup_db_with_codex(&central_dir, &claude_agent_dir, &codex_agent_dir).await;
+    create_central_skill(&central_dir, "antigravity-project-skill");
+
+    let result = install_central_skill_to_project_outcome_impl(
+        &pool,
+        "antigravity-project-skill",
+        "antigravity",
+        &project_dir,
+        "copy",
+    )
+    .await
+    .unwrap();
+    let result = match result {
+        InstallOutcome::Installed(result) => result,
+        InstallOutcome::Skipped(skipped) => panic!("expected install, got skip: {:?}", skipped),
+    };
+    let target = project_dir
+        .join(".agents")
+        .join("skills")
+        .join("antigravity-project-skill");
+
+    assert_eq!(PathBuf::from(result.symlink_path), target);
+    assert!(target.join("SKILL.md").exists());
+    assert!(
+        !project_dir
+            .join(".gemini")
+            .join("antigravity")
+            .join("skills")
+            .join("antigravity-project-skill")
+            .exists(),
+        "Antigravity project installs must use the shared .agents/skills directory"
+    );
+}
+
+#[tokio::test]
 async fn test_project_install_refuses_existing_real_dir() {
     let tmp = TempDir::new().unwrap();
     let central_dir = tmp.path().join("central");

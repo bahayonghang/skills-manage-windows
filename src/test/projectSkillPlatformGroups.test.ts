@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { groupProjectSkillsByPlatform } from "../lib/projectSkillPlatformGroups";
-import { getPlatformTargetGroups } from "../lib/platformTargetGroups";
+import { getProjectPlatformTargetGroups } from "../lib/platformTargetGroups";
 import type { AgentWithStatus, ProjectSkill } from "../types";
 
 const baseAgent = {
@@ -42,7 +42,7 @@ function projectSkill(
 
 describe("groupProjectSkillsByPlatform", () => {
   it("groups project skills by Sidebar platform targets and order", () => {
-    const targets = getPlatformTargetGroups(
+    const targets = getProjectPlatformTargetGroups(
       [
         agent("codex", "Codex CLI"),
         agent("claude-code", "Claude Code"),
@@ -73,9 +73,10 @@ describe("groupProjectSkillsByPlatform", () => {
   });
 
   it("folds every Universal member skill into one Universal group", () => {
-    const targets = getPlatformTargetGroups(
+    const targets = getProjectPlatformTargetGroups(
       [
         agent("codex", "Codex CLI"),
+        agent("antigravity", "Antigravity"),
         agent("cursor", "Cursor"),
         agent("opencode", "OpenCode"),
       ],
@@ -85,6 +86,7 @@ describe("groupProjectSkillsByPlatform", () => {
     const groups = groupProjectSkillsByPlatform(
       [
         projectSkill("codex-skill", "codex", "Codex CLI"),
+        projectSkill("antigravity-skill", "antigravity", "Antigravity"),
         projectSkill("cursor-skill", "cursor", "Cursor"),
         projectSkill("opencode-skill", "opencode", "OpenCode"),
       ],
@@ -93,11 +95,16 @@ describe("groupProjectSkillsByPlatform", () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0].id).toBe("universal-agents");
-    expect(groups[0].rawAgentIds).toEqual(["codex", "cursor", "opencode"]);
+    expect(groups[0].rawAgentIds).toEqual([
+      "codex",
+      "antigravity",
+      "cursor",
+      "opencode",
+    ]);
   });
 
   it("folds the Universal representative and legacy raw member ids into Universal", () => {
-    const targets = getPlatformTargetGroups(
+    const targets = getProjectPlatformTargetGroups(
       [
         agent("codex", "Codex CLI"),
         agent("opencode", "OpenCode"),
@@ -124,7 +131,7 @@ describe("groupProjectSkillsByPlatform", () => {
   });
 
   it("keeps hidden or unknown platform skills visible in a fallback group", () => {
-    const targets = getPlatformTargetGroups(
+    const targets = getProjectPlatformTargetGroups(
       [agent("claude-code", "Claude Code")],
       { coding: true, lobster: true }
     );

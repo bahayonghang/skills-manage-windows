@@ -48,7 +48,7 @@ fn select_universal_representative(agents: &[db::Agent]) -> Option<db::Agent> {
 
     agents
         .iter()
-        .find(|agent| db::is_universal_agent(&agent.id))
+        .find(|agent| db::is_universal_project_agent(&agent.id))
         .cloned()
 }
 
@@ -62,7 +62,7 @@ fn build_project_scan_targets(enabled_agents: &[db::Agent]) -> Vec<ProjectScanTa
             continue;
         }
 
-        if db::is_universal_agent(&agent.id) {
+        if db::is_universal_project_agent(&agent.id) {
             continue;
         }
 

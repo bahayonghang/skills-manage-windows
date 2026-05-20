@@ -17,7 +17,7 @@ pub(crate) fn project_relative_skills_dir(agent: &db::Agent) -> Result<PathBuf, 
         return Err("Cannot install a project skill to the central agent itself".to_string());
     }
 
-    if db::is_universal_agent(&agent.id) {
+    if db::is_universal_project_agent(&agent.id) {
         return Ok(PathBuf::from(db::UNIVERSAL_PROJECT_SKILLS_DIR));
     }
 

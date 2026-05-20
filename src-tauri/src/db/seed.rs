@@ -14,7 +14,7 @@ use std::path::Path;
 use super::types::*;
 
 const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 5] =
-    ["claude-code", "codex", "gemini-cli", "opencode", "kiro"];
+    ["claude-code", "codex", "antigravity", "opencode", "kiro"];
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
@@ -98,8 +98,9 @@ async fn seed_builtin_agents(pool: &DbPool, agents: &[Agent]) -> Result<(), Stri
 /// Seed `scan_directories` with one row per unique `global_skills_dir` path
 /// across all built-in agents. Rows are marked `is_builtin = 1` and cannot
 /// be removed by the user. `INSERT OR IGNORE` keeps the operation idempotent:
-/// Universal agents share `~/.agents/skills`, while Central uses the private
-/// `~/.skillsmanage/skills` store.
+/// global Universal agents share `~/.agents/skills`, Antigravity uses its
+/// official `~/.gemini/antigravity/skills` global directory, and Central uses
+/// the private `~/.skillsmanage/skills` store.
 async fn seed_builtin_scan_directories(pool: &DbPool, agents: &[Agent]) -> Result<(), String> {
     let now = Utc::now().to_rfc3339();
     for agent in agents {
@@ -370,6 +371,10 @@ pub fn is_universal_agent(agent_id: &str) -> bool {
     UNIVERSAL_AGENT_IDS.contains(&agent_id)
 }
 
+pub fn is_universal_project_agent(agent_id: &str) -> bool {
+    UNIVERSAL_PROJECT_AGENT_IDS.contains(&agent_id)
+}
+
 fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
     let central_skills_dir = crate::paths::central_skills_dir_from_home(home)
         .to_string_lossy()
@@ -431,7 +436,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
         },
         Agent {
             id: "gemini-cli".to_string(),
-            display_name: "Gemini CLI".to_string(),
+            display_name: "Gemini CLI (legacy)".to_string(),
             category: "coding".to_string(),
             global_skills_dir: agent_skill_dir("gemini-cli", &[".gemini", "skills"]),
             project_skills_dir: Some(UNIVERSAL_PROJECT_SKILLS_DIR.to_string()),
@@ -620,8 +625,8 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             id: "antigravity".to_string(),
             display_name: "Antigravity".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: agent_skill_dir("antigravity", &[".antigravity", "skills"]),
-            project_skills_dir: None,
+            global_skills_dir: skill_dir(&[".gemini", "antigravity", "skills"]),
+            project_skills_dir: Some(UNIVERSAL_PROJECT_SKILLS_DIR.to_string()),
             icon_name: Some("antigravity".to_string()),
             is_detected: false,
             is_builtin: true,

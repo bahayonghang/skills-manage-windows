@@ -33,13 +33,23 @@ const mockAgents: AgentWithStatus[] = [
     is_enabled: true,
   },
   {
+    id: "antigravity",
+    display_name: "Antigravity",
+    category: "coding",
+    global_skills_dir: "~/.gemini/antigravity/skills/",
+    project_skills_dir: ".agents/skills",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
     id: "gemini-cli",
-    display_name: "Gemini CLI",
+    display_name: "Gemini CLI (legacy)",
     category: "coding",
     global_skills_dir: "~/.agents/skills/",
     is_detected: false,
     is_builtin: true,
-    is_enabled: true,
+    is_enabled: false,
   },
   {
     id: "kiro",
@@ -85,7 +95,7 @@ const mockSkill: SkillWithLinks = {
 const mockOnInstall = vi.fn();
 const mockOnOpenChange = vi.fn();
 const successInstallResult = {
-  succeeded: ["claude-code", "codex", "kiro"],
+  succeeded: ["claude-code", "codex", "antigravity", "kiro"],
   skipped: [],
   failed: [],
 };
@@ -152,9 +162,10 @@ describe("InstallDialog", () => {
     renderDialog();
     expect(screen.getByLabelText("Claude Code")).toBeInTheDocument();
     expect(screen.getByLabelText("Universal (.agents/skills)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Antigravity")).toBeInTheDocument();
     expect(screen.getByLabelText("Kiro")).toBeInTheDocument();
     expect(screen.queryByLabelText("Cursor")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Gemini CLI")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Gemini CLI (legacy)")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Codex")).not.toBeInTheDocument();
   });
 
@@ -217,7 +228,7 @@ describe("InstallDialog", () => {
     renderDialog();
     // By default, all enabled and visible targets are pre-selected.
     expect(
-      screen.getByRole("button", { name: /安装到 3 个平台/i })
+      screen.getByRole("button", { name: /安装到 4 个平台/i })
     ).toBeInTheDocument();
   });
 
@@ -253,7 +264,12 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalled();
     });
     const [, agentIds, method] = mockOnInstall.mock.calls[0];
-    expect([...agentIds].sort()).toEqual(["claude-code", "codex", "kiro"]);
+    expect([...agentIds].sort()).toEqual([
+      "antigravity",
+      "claude-code",
+      "codex",
+      "kiro",
+    ]);
     expect(method).toBe("symlink");
   });
 
@@ -267,7 +283,7 @@ describe("InstallDialog", () => {
       },
     });
     const confirmBtn = screen.getByRole("button", {
-      name: /安装到 2 个平台/i,
+      name: /安装到 3 个平台/i,
     });
     fireEvent.click(confirmBtn);
 
@@ -275,7 +291,11 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalled();
     });
     const [, agentIds] = mockOnInstall.mock.calls[0];
-    expect([...agentIds].sort()).toEqual(["claude-code", "kiro"]);
+    expect([...agentIds].sort()).toEqual([
+      "antigravity",
+      "claude-code",
+      "kiro",
+    ]);
   });
 
   it("passes 'symlink' method to onInstall by default", async () => {
@@ -558,9 +578,9 @@ describe("InstallDialog", () => {
   it("updates confirm button count when checkbox toggled", async () => {
     renderDialog();
 
-    // Initially 3 selected: Claude Code, Kiro, and Universal via Codex.
+    // Initially 4 selected: Claude Code, Antigravity, Kiro, and Universal via Codex.
     expect(
-      screen.getByRole("button", { name: /安装到 3 个平台/i })
+      screen.getByRole("button", { name: /安装到 4 个平台/i })
     ).toBeInTheDocument();
 
     // Uncheck Kiro.
@@ -569,7 +589,7 @@ describe("InstallDialog", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /安装到 2 个平台/i })
+        screen.getByRole("button", { name: /安装到 3 个平台/i })
       ).toBeInTheDocument();
     });
   });
@@ -596,6 +616,7 @@ describe("InstallDialog", () => {
 
     fireEvent.click(screen.getByLabelText("Universal (.agents/skills)"));
     fireEvent.click(screen.getByLabelText("Claude Code"));
+    fireEvent.click(screen.getByLabelText("Antigravity"));
     fireEvent.click(screen.getByLabelText("Kiro"));
 
     const confirmBtn = screen.getByRole("button", {

@@ -21,6 +21,7 @@ import hermesIcon from "@/assets/hermes.png";
 import ClaudeCodeIcon from "@lobehub/icons/es/ClaudeCode/components/Mono";
 import GithubCopilotIcon from "@lobehub/icons/es/GithubCopilot/components/Mono";
 import GeminiCliIcon from "@lobehub/icons/es/GeminiCLI/components/Mono";
+import AntigravityIcon from "@lobehub/icons/es/Antigravity/components/Mono";
 import JunieIcon from "@lobehub/icons/es/Junie/components/Mono";
 import QwenIcon from "@lobehub/icons/es/Qwen/components/Mono";
 import OpenCodeIcon from "@lobehub/icons/es/OpenCode/components/Mono";
@@ -56,6 +57,7 @@ type LobeIconProps = React.SVGProps<SVGSVGElement> & {
 
 const LOBEHUB_ICONS: Record<string, React.ComponentType<LobeIconProps>> = {
   "claude-code": ClaudeCodeIcon,
+  "antigravity": AntigravityIcon,
   "copilot": GithubCopilotIcon,
   "gemini-cli": GeminiCliIcon,
   "junie": JunieIcon,

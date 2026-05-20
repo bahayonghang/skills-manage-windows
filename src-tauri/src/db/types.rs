@@ -13,10 +13,12 @@ use sqlx::{FromRow, SqlitePool};
 /// Connection pool alias —— 整个 crate 内统一以 `DbPool` 引用 SQLite 池。
 pub type DbPool = SqlitePool;
 
-/// 通用平台清单：cross-agent 扫描 / 默认安装目标对照表。
-pub const UNIVERSAL_AGENT_IDS: [&str; 12] = [
+/// Global Universal Agents targets share the user-level `~/.agents/skills` directory.
+///
+/// Antigravity is intentionally not part of this global set: its official global
+/// SkillPort-compatible skills directory is `~/.gemini/antigravity/skills`.
+pub const UNIVERSAL_AGENT_IDS: [&str; 11] = [
     "amp",
-    "antigravity",
     "cline",
     "codex",
     "cursor",
@@ -32,10 +34,26 @@ pub const UNIVERSAL_AGENT_IDS: [&str; 12] = [
 /// Universal agents share one project-level skills directory.
 pub const UNIVERSAL_PROJECT_SKILLS_DIR: &str = ".agents/skills";
 
+/// Workspace-level Universal Agents targets share `<workspace>/.agents/skills`.
+pub const UNIVERSAL_PROJECT_AGENT_IDS: [&str; 12] = [
+    "amp",
+    "antigravity",
+    "cline",
+    "codex",
+    "cursor",
+    "deep-agents",
+    "firebender",
+    "gemini-cli",
+    "copilot",
+    "kimi-code-cli",
+    "opencode",
+    "warp",
+];
+
 /// Preferred raw agent id used when a project-level Universal directory is
 /// stored in `project_skill_installations`.
-pub const UNIVERSAL_PROJECT_REPRESENTATIVE_AGENT_IDS: [&str; 5] =
-    ["codex", "opencode", "gemini-cli", "cursor", "amp"];
+pub const UNIVERSAL_PROJECT_REPRESENTATIVE_AGENT_IDS: [&str; 6] =
+    ["codex", "opencode", "antigravity", "gemini-cli", "cursor", "amp"];
 
 /// 占位仓库 ID：`local-unknown` 表示来源未知的本地技能。
 pub const LOCAL_UNKNOWN_REPOSITORY_ID: &str = "local-unknown";

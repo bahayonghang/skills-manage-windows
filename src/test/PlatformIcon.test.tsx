@@ -8,6 +8,7 @@ const ORIGINAL_PLATFORM_IDS = [
   "claude-code",
   "codex",
   "cursor",
+  "antigravity",
   "gemini-cli",
   "trae",
   "factory-droid",
@@ -58,6 +59,11 @@ describe("PlatformIcon", () => {
   it("renders an img element for cursor", () => {
     const { container } = render(<PlatformIcon agentId="cursor" />);
     expect(container.querySelector("img")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for antigravity", () => {
+    const { container } = render(<PlatformIcon agentId="antigravity" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
   });
 
   it("renders an SVG element for gemini-cli", () => {

@@ -433,6 +433,33 @@ async fn test_universal_agents_share_universal_skills_dir() {
             "{agent_id} should use the Universal Agents skills directory"
         );
     }
+
+    let antigravity = agents
+        .iter()
+        .find(|agent| agent.id == "antigravity")
+        .expect("antigravity agent should exist");
+    assert_eq!(antigravity.display_name, "Antigravity");
+    assert!(
+        !crate::paths::paths_equivalent(Path::new(&antigravity.global_skills_dir), &universal_dir),
+        "antigravity global skills should stay separate from ~/.agents/skills"
+    );
+    assert!(
+        antigravity
+            .global_skills_dir
+            .replace('\\', "/")
+            .ends_with(".gemini/antigravity/skills"),
+        "antigravity should use ~/.gemini/antigravity/skills"
+    );
+    assert_eq!(
+        antigravity.project_skills_dir.as_deref(),
+        Some(UNIVERSAL_PROJECT_SKILLS_DIR)
+    );
+
+    let gemini_cli = agents
+        .iter()
+        .find(|agent| agent.id == "gemini-cli")
+        .expect("gemini-cli agent should exist");
+    assert_eq!(gemini_cli.display_name, "Gemini CLI (legacy)");
 }
 
 #[tokio::test]
@@ -449,7 +476,7 @@ async fn test_builtin_agents_seed_default_enabled_subset() {
     let expected_enabled_ids = std::collections::HashSet::from([
         "claude-code",
         "codex",
-        "gemini-cli",
+        "antigravity",
         "opencode",
         "kiro",
         "central",
@@ -1419,7 +1446,8 @@ async fn test_replace_skill_ai_tags_does_not_remove_manual_tags() {
 
 /// Returns the number of *unique* global_skills_dir paths across all
 /// built-in agents. This is the number of rows that seed_builtin_scan_directories
-/// inserts, with Universal agents sharing ~/.agents/skills and Central using
+/// inserts, with global Universal agents sharing ~/.agents/skills,
+/// Antigravity using ~/.gemini/antigravity/skills, and Central using
 /// ~/.skillsmanage/skills.
 fn expected_builtin_scan_dir_count() -> usize {
     let mut paths = std::collections::HashSet::new();
