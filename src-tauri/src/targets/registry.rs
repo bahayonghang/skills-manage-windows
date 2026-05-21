@@ -355,14 +355,34 @@ impl TargetRegistry {
 
     pub async fn active_target(&self, local_db: &DbPool) -> Result<ActiveTarget, String> {
         let active_id = active_target_id(local_db).await?;
-        if active_id == LOCAL_TARGET_ID {
+        self.target_by_id(local_db, &active_id)
+            .await
+            .map_err(|error| {
+                if active_id == LOCAL_TARGET_ID {
+                    error
+                } else {
+                    format!(
+                        "Active target '{}' no longer exists. Switch back to Local.",
+                        active_id
+                    )
+                }
+            })
+    }
+
+    pub async fn target_by_id(
+        &self,
+        local_db: &DbPool,
+        target_id: &str,
+    ) -> Result<ActiveTarget, String> {
+        let target_id = target_id.trim();
+        if target_id == LOCAL_TARGET_ID {
             return Ok(ActiveTarget::Local);
         }
 
         let mut target = load_remote_targets(local_db)
             .await?
             .into_iter()
-            .find(|target| target.id == active_id)
+            .find(|target| target.id == target_id)
             .map(|target| ActiveTarget::Ssh(Box::new(target)));
         if let Some(ActiveTarget::Ssh(target)) = target.as_mut() {
             self.attach_available_password(target);
@@ -374,15 +394,12 @@ impl TargetRegistry {
         if let Some(target) = load_wsl_targets(local_db)
             .await?
             .into_iter()
-            .find(|target| target.id == active_id)
+            .find(|target| target.id == target_id)
         {
             return Ok(ActiveTarget::Wsl(Box::new(target)));
         }
 
-        Err(format!(
-            "Active target '{}' no longer exists. Switch back to Local.",
-            active_id
-        ))
+        Err(format!("Target '{}' not found", target_id))
     }
 
     pub async fn active_db(&self, local_db: &DbPool) -> Result<DbPool, String> {
@@ -397,7 +414,11 @@ impl TargetRegistry {
         self.remote_db_for(&target.id, &target.remote_home).await
     }
 
-    pub async fn remote_db_for(&self, target_id: &str, remote_home: &str) -> Result<DbPool, String> {
+    pub async fn remote_db_for(
+        &self,
+        target_id: &str,
+        remote_home: &str,
+    ) -> Result<DbPool, String> {
         match self.pools.lock() {
             Ok(pools) => {
                 if let Some(pool) = pools.get(target_id) {

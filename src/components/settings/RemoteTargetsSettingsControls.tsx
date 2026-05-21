@@ -12,6 +12,7 @@ import type {
   WslDistributionOption,
   WslTargetFormState,
 } from "./remoteTargetsSettingsTypes";
+import { RemoteTargetSyncButton } from "./RemoteTargetSyncButton";
 
 function sshCredentialStatus(target: TargetSummary) {
   if (!requiresSshPasswordRepair(target)) return null;
@@ -79,6 +80,7 @@ interface RemoteTargetRowProps {
   wslTargetEditForm: WslTargetFormState;
   onCancelEditTarget: () => void;
   onDeleteTarget: (targetId: string) => void;
+  onOpenLocalRemoteSync: (targetId: string) => void;
   onStartEditTarget: (target: TargetSummary) => void;
   onSwitchTarget: (targetId: string) => void;
   onTestExistingTarget: (target: TargetSummary) => void;
@@ -111,6 +113,7 @@ export function RemoteTargetRow({
   wslTargetEditForm,
   onCancelEditTarget,
   onDeleteTarget,
+  onOpenLocalRemoteSync,
   onStartEditTarget,
   onSwitchTarget,
   onTestExistingTarget,
@@ -172,6 +175,12 @@ export function RemoteTargetRow({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {!isLocal && (
+            <RemoteTargetSyncButton
+              targetId={target.id}
+              onOpenLocalRemoteSync={onOpenLocalRemoteSync}
+            />
+          )}
           {!isLocal && (
             <Button
               type="button"

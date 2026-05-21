@@ -8,8 +8,8 @@ use crate::targets::{
     list_wsl_distributions_impl, set_active_target_impl, test_ssh_target_impl,
     test_wsl_target_impl, update_ssh_target_impl, update_ssh_target_password_impl,
     update_wsl_target_impl, CreateSshTargetRequest, CreateWslTargetRequest, SshTargetTestResult,
-    TargetKind, TargetSummary, TestSshTargetRequest, TestWslTargetRequest,
-    UpdateSshTargetRequest, UpdateWslTargetRequest, WslDistributionSummary, WslTargetTestResult,
+    TargetKind, TargetSummary, TestSshTargetRequest, TestWslTargetRequest, UpdateSshTargetRequest,
+    UpdateWslTargetRequest, WslDistributionSummary, WslTargetTestResult,
 };
 use crate::AppState;
 

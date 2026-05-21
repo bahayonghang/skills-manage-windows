@@ -512,7 +512,8 @@ impl ConnectedWslTarget {
             .output()
             .map_err(|e| format!("Failed to start wsl.exe: {}", e))?;
         if output.status.success() {
-            String::from_utf8(output.stdout).map_err(|e| format!("WSL stdout is not valid UTF-8: {}", e))
+            String::from_utf8(output.stdout)
+                .map_err(|e| format!("WSL stdout is not valid UTF-8: {}", e))
         } else {
             Err(self.remote_command_error(output.status, &output.stderr))
         }
@@ -638,7 +639,8 @@ impl ConnectedWslTarget {
             self.mkdir_p(&parent).await?;
         }
         let command = format!("cat > {}", shell_quote(path));
-        self.run_command_with_stdin_bytes(&command, bytes).map(|_| ())
+        self.run_command_with_stdin_bytes(&command, bytes)
+            .map(|_| ())
     }
 
     pub async fn read_file(&self, path: &str) -> Result<Vec<u8>, String> {

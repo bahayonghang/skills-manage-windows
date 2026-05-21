@@ -722,7 +722,8 @@ pub async fn delete_skill_repository_remote_impl(
     let (repository, skill_ids) =
         get_deletable_repository_with_skill_ids(pool, repository_id).await?;
     let delete_requests = build_repository_delete_requests(&repository.id, &skill_ids, requests)?;
-    let delete_result = delete_central_skills_remote_impl(pool, active_target, &delete_requests).await?;
+    let delete_result =
+        delete_central_skills_remote_impl(pool, active_target, &delete_requests).await?;
     let deleted_repository = if delete_result.failed.is_empty() {
         if skill_ids.is_empty() {
             db::delete_empty_skill_repository(pool, &repository.id).await?

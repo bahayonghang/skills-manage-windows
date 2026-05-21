@@ -151,8 +151,7 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
 
     let resolved = resolve_repo_source(repo_url, auth).await?;
     let workspace =
-        resolve_remote_import_workspace(&connection, &resolved, preview_workspace_id, auth)
-            .await?;
+        resolve_remote_import_workspace(&connection, &resolved, preview_workspace_id, auth).await?;
     let candidates = build_remote_repo_skill_candidates_from_workspace(
         &connection,
         &resolved.repo,
@@ -429,10 +428,9 @@ pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
         );
     }
     if !active_target.is_remote_like() {
-            return Err(
-                "Remote GitHub preview workspace is only available on its remote target."
-                    .to_string(),
-            );
+        return Err(
+            "Remote GitHub preview workspace is only available on its remote target.".to_string(),
+        );
     }
     let skill_md_path = if source_path == "." {
         "SKILL.md".to_string()

@@ -221,42 +221,44 @@ pub async fn batch_install_to_agents(
         });
     }
     let remote_connection = match &active_target {
-        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => match connect_remote_target(&active_target).await {
-            Ok(connection) => Some(connection),
-            Err(error) => {
-                failed.extend(agent_ids.iter().map(|agent_id| FailedInstall {
-                    agent_id: agent_id.clone(),
-                    error: error.clone(),
-                }));
-                record_operation_log_best_effort(
-                    &state.db,
-                    target_context,
-                    OperationLogEvent::new(
-                        "install",
-                        "skill.batch_install",
-                        "failed",
-                        format!("Failed to install skill {} to selected agents", skill_id),
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            match connect_remote_target(&active_target).await {
+                Ok(connection) => Some(connection),
+                Err(error) => {
+                    failed.extend(agent_ids.iter().map(|agent_id| FailedInstall {
+                        agent_id: agent_id.clone(),
+                        error: error.clone(),
+                    }));
+                    record_operation_log_best_effort(
+                        &state.db,
+                        target_context,
+                        OperationLogEvent::new(
+                            "install",
+                            "skill.batch_install",
+                            "failed",
+                            format!("Failed to install skill {} to selected agents", skill_id),
+                        )
+                        .subject("skill", &skill_id, &skill_id)
+                        .error(&error)
+                        .details(json!({
+                            "skillId": skill_id,
+                            "agentIds": agent_ids,
+                            "method": method,
+                            "succeeded": &succeeded,
+                            "skipped": &skipped,
+                            "failed": &failed,
+                        }))
+                        .duration_ms(started_at.elapsed().as_millis() as i64),
                     )
-                    .subject("skill", &skill_id, &skill_id)
-                    .error(&error)
-                    .details(json!({
-                        "skillId": skill_id,
-                        "agentIds": agent_ids,
-                        "method": method,
-                        "succeeded": &succeeded,
-                        "skipped": &skipped,
-                        "failed": &failed,
-                    }))
-                    .duration_ms(started_at.elapsed().as_millis() as i64),
-                )
-                .await;
-                return Ok(BatchInstallResult {
-                    succeeded,
-                    skipped,
-                    failed,
-                });
+                    .await;
+                    return Ok(BatchInstallResult {
+                        succeeded,
+                        skipped,
+                        failed,
+                    });
+                }
             }
-        },
+        }
         ActiveTarget::Local => None,
     };
 

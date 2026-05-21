@@ -298,6 +298,8 @@ pub fn run() {
             commands::targets::delete_target,
             commands::targets::set_active_target,
             commands::targets::get_active_target,
+            commands::local_remote_sync::preview_local_remote_sync,
+            commands::local_remote_sync::apply_local_remote_sync,
             // Operation logs
             commands::logs::list_operation_logs,
             commands::logs::get_operation_log,

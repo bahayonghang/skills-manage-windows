@@ -266,7 +266,9 @@ pub async fn create_wsl_target_impl(
     let mut targets = load_wsl_targets(local_db).await?;
     targets.push(target.clone());
     save_wsl_targets(local_db, &targets).await?;
-    registry.remote_db_for(&target.id, &target.remote_home).await?;
+    registry
+        .remote_db_for(&target.id, &target.remote_home)
+        .await?;
 
     let active_id = active_target_id(local_db).await?;
     Ok(registry.wsl_target_summary(&target, active_id.as_str()))
@@ -672,7 +674,10 @@ pub(super) fn test_wsl_request_to_config(
     Ok(WslTargetConfig {
         id,
         label: required_field("label", request.label.as_deref().unwrap_or("WSL target"))?,
-        distribution: required_field("distribution", request.distribution.as_deref().unwrap_or(""))?,
+        distribution: required_field(
+            "distribution",
+            request.distribution.as_deref().unwrap_or(""),
+        )?,
         remote_home: String::new(),
         remote_os: String::new(),
         symlink_enabled: false,

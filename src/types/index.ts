@@ -472,6 +472,17 @@ export type {
   WslTargetTestResult,
 } from "./credentials";
 
+export type {
+  LocalRemoteSyncApplyRequest,
+  LocalRemoteSyncApplyResult,
+  LocalRemoteSyncFailure,
+  LocalRemoteSyncItemKind,
+  LocalRemoteSyncItemPreview,
+  LocalRemoteSyncItemStatus,
+  LocalRemoteSyncPreview,
+  LocalRemoteSyncPreviewRequest,
+} from "./localRemoteSync";
+
 // ─── Project-level Skill Management ──────────────────────────────────────────
 
 export interface Project {

@@ -19,9 +19,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{self, DbPool, Skill},
-    targets::{
-        connect_remote_target, remote_join, ActiveTarget, ConnectedRemoteTarget,
-    },
+    targets::{connect_remote_target, remote_join, ActiveTarget, ConnectedRemoteTarget},
     AppState,
 };
 

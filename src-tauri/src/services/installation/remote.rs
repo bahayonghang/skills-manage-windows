@@ -216,14 +216,7 @@ pub async fn install_skill_to_agent_ssh_impl(
     method: &str,
 ) -> Result<InstallResult, String> {
     let connection = ConnectedRemoteTarget::Ssh(connect_ssh_target(target).await?);
-    install_skill_to_agent_ssh_with_connection(
-        pool,
-        &connection,
-        skill_id,
-        agent_id,
-        method,
-    )
-    .await
+    install_skill_to_agent_ssh_with_connection(pool, &connection, skill_id, agent_id, method).await
 }
 
 pub async fn install_skill_to_agent_remote_impl(

@@ -5,11 +5,17 @@ use super::exec::{
 };
 use super::model::ActiveTarget;
 
-pub async fn connect_remote_target(active_target: &ActiveTarget) -> Result<ConnectedRemoteTarget, String> {
+pub async fn connect_remote_target(
+    active_target: &ActiveTarget,
+) -> Result<ConnectedRemoteTarget, String> {
     match active_target {
         ActiveTarget::Local => Err("Local target is not a remote target.".to_string()),
-        ActiveTarget::Ssh(target) => connect_ssh_target(target).await.map(ConnectedRemoteTarget::Ssh),
-        ActiveTarget::Wsl(target) => connect_wsl_target(target).await.map(ConnectedRemoteTarget::Wsl),
+        ActiveTarget::Ssh(target) => connect_ssh_target(target)
+            .await
+            .map(ConnectedRemoteTarget::Ssh),
+        ActiveTarget::Wsl(target) => connect_wsl_target(target)
+            .await
+            .map(ConnectedRemoteTarget::Wsl),
     }
 }
 

@@ -1217,6 +1217,28 @@
     "title": "Settings",
     "expandSection": "Expand {{title}} section",
     "collapseSection": "Collapse {{title}} section",
+    "localRemoteSync": {
+      "open": "Sync to remote",
+      "title": "Sync local repo and skills",
+      "desc": "Preview and apply a local snapshot sync to {{target}}.",
+      "previewEmpty": "Generate a preview before applying. The sync sends this repo snapshot and all local Central skills to the selected SSH/WSL target.",
+      "previewing": "Generating preview...",
+      "preview": "Preview sync",
+      "apply": "Apply sync",
+      "repoTitle": "Repository snapshot",
+      "skillsTitle": "Central skills ({{count}})",
+      "itemSummary": "{{files}} file(s), {{bytes}}, status: {{status}}",
+      "skillsSummary": "{{changed}} changed skill(s) out of {{total}} total.",
+      "noSkills": "No local Central skills were found.",
+      "applySuccess": "Remote sync completed. Synced {{skills}} skill(s).",
+      "applyPartial": "Remote sync completed with {{failed}} failure(s).",
+      "status": {
+        "add": "add",
+        "update": "update",
+        "skip": "skip",
+        "error": "error"
+      }
+    },
     "appearance": {
       "title": "Appearance",
       "description": "Choose the display and body fonts plus size scale used across the app.",

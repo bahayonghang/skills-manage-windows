@@ -174,7 +174,10 @@ async fn rescan_uses_antigravity_as_universal_representative_when_it_is_the_enab
     assert_eq!(skills.len(), 1);
     assert_eq!(skills[0].agent_id, "antigravity");
     assert_eq!(skills[0].agent_display_name, "Antigravity");
-    assert_eq!(skills[0].description.as_deref(), Some("Antigravity Universal skill"));
+    assert_eq!(
+        skills[0].description.as_deref(),
+        Some("Antigravity Universal skill")
+    );
     assert_eq!(
         skills[0].installed_path,
         crate::paths::normalize_stored_path(&universal_skill.to_string_lossy())

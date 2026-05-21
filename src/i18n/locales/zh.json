@@ -1217,6 +1217,28 @@
     "title": "设置",
     "expandSection": "展开 {{title}} 栏目",
     "collapseSection": "折叠 {{title}} 栏目",
+    "localRemoteSync": {
+      "open": "同步到远程",
+      "title": "同步本机 repo 与 skills",
+      "desc": "预览并应用到 {{target}} 的本机快照同步。",
+      "previewEmpty": "应用前先生成预览。本操作会把当前 repo 快照和本机 Central skills 全量发送到选定 SSH/WSL 目标。",
+      "previewing": "正在生成预览...",
+      "preview": "预览同步",
+      "apply": "应用同步",
+      "repoTitle": "仓库快照",
+      "skillsTitle": "Central skills（{{count}}）",
+      "itemSummary": "{{files}} 个文件，{{bytes}}，状态：{{status}}",
+      "skillsSummary": "共 {{total}} 个 skill，其中 {{changed}} 个需要同步。",
+      "noSkills": "未找到本机 Central skills。",
+      "applySuccess": "远程同步完成，已同步 {{skills}} 个 skill。",
+      "applyPartial": "远程同步完成，但有 {{failed}} 个失败。",
+      "status": {
+        "add": "新增",
+        "update": "更新",
+        "skip": "跳过",
+        "error": "错误"
+      }
+    },
     "appearance": {
       "title": "外观",
       "description": "选择应用使用的标题字体、正文字体与字号缩放。",

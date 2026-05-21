@@ -43,6 +43,7 @@ interface RemoteTargetsSettingsSectionProps {
   onCreateSshTarget: () => void;
   onCreateWslTarget: () => void;
   onDeleteTarget: (targetId: string) => void;
+  onOpenLocalRemoteSync: (targetId: string) => void;
   onRefreshWslDistributions: () => void;
   onStartEditTarget: (target: TargetSummary) => void;
   onSwitchTarget: (targetId: string) => void;
@@ -95,6 +96,7 @@ export function RemoteTargetsSettingsSection({
   onCreateSshTarget,
   onCreateWslTarget,
   onDeleteTarget,
+  onOpenLocalRemoteSync,
   onRefreshWslDistributions,
   onStartEditTarget,
   onSwitchTarget,
@@ -152,6 +154,7 @@ export function RemoteTargetsSettingsSection({
               wslTargetEditForm={wslTargetEditForm}
               onCancelEditTarget={onCancelEditTarget}
               onDeleteTarget={onDeleteTarget}
+              onOpenLocalRemoteSync={onOpenLocalRemoteSync}
               onStartEditTarget={onStartEditTarget}
               onSwitchTarget={onSwitchTarget}
               onTestExistingTarget={onTestExistingTarget}

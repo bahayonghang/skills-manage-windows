@@ -9,6 +9,7 @@ pub mod ai_tagging;
 pub mod central_skills;
 pub mod github_import;
 pub mod installation;
+pub mod local_remote_sync;
 pub mod marketplace;
 pub mod obsidian;
 pub mod portable_state;

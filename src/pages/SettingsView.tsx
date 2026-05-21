@@ -9,6 +9,7 @@ import { AiSettingsSection } from "@/components/settings/AiSettingsSection";
 import { AppearanceSettingsSection } from "@/components/settings/AppearanceSettingsSection";
 import { CustomPlatformsSettingsSection } from "@/components/settings/CustomPlatformsSettingsSection";
 import { GitHubPatSettingsSection } from "@/components/settings/GitHubPatSettingsSection";
+import { LocalRemoteSyncDialog } from "@/components/settings/LocalRemoteSyncDialog";
 import { PlatformDialog } from "@/components/settings/PlatformDialog";
 import { PlatformVisibilitySettingsSection } from "@/components/settings/PlatformVisibilitySettingsSection";
 import {
@@ -24,6 +25,7 @@ import {
 import { AI_PROVIDERS } from "@/data/aiProviders";
 import { createSettingsViewActions } from "@/pages/settingsViewActions";
 import { useSettingsViewBindings } from "@/pages/settingsViewBindings";
+import { useLocalRemoteSyncStore } from "@/stores/localRemoteSyncStore";
 import {
   CTP_VAR_MAP,
   EMPTY_SSH_TARGET_FORM,
@@ -163,6 +165,17 @@ export function SettingsView() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [localRemoteSyncTargetId, setLocalRemoteSyncTargetId] = useState<string | null>(null);
+  const localRemoteSyncPreview = useLocalRemoteSyncStore((state) => state.preview);
+  const localRemoteSyncResult = useLocalRemoteSyncStore((state) => state.result);
+  const isLocalRemoteSyncPreviewing = useLocalRemoteSyncStore(
+    (state) => state.isPreviewing
+  );
+  const isLocalRemoteSyncApplying = useLocalRemoteSyncStore((state) => state.isApplying);
+  const localRemoteSyncError = useLocalRemoteSyncStore((state) => state.error);
+  const previewLocalRemoteSync = useLocalRemoteSyncStore((state) => state.previewSync);
+  const applyLocalRemoteSync = useLocalRemoteSyncStore((state) => state.applySync);
+  const resetLocalRemoteSync = useLocalRemoteSyncStore((state) => state.reset);
 
   const { resolvedUrl } = useMemo(
     () => getAiProviderViewModel(aiSettings, AI_PROVIDERS),
@@ -306,6 +319,30 @@ export function SettingsView() {
   });
 
   const resolvedActiveTarget = activeTarget ?? targets[0]!;
+  const localRemoteSyncTarget = targets.find(
+    (target) => target.id === localRemoteSyncTargetId
+  );
+
+  function handleLocalRemoteSyncOpenChange(open: boolean) {
+    if (!open) {
+      setLocalRemoteSyncTargetId(null);
+      resetLocalRemoteSync();
+    }
+  }
+
+  async function handlePreviewLocalRemoteSync() {
+    if (!localRemoteSyncTargetId) return;
+    await previewLocalRemoteSync({ targetId: localRemoteSyncTargetId });
+  }
+
+  async function handleApplyLocalRemoteSync() {
+    if (!localRemoteSyncTargetId) return;
+    await applyLocalRemoteSync({ targetId: localRemoteSyncTargetId });
+    await loadTargets();
+    if (localRemoteSyncTargetId === activeTarget?.id) {
+      await Promise.allSettled([loadCentralSkills(), refreshCounts()]);
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -350,6 +387,10 @@ export function SettingsView() {
             }}
             onDeleteTarget={(targetId) => {
               void handleDeleteTarget(targetId);
+            }}
+            onOpenLocalRemoteSync={(targetId) => {
+              resetLocalRemoteSync();
+              setLocalRemoteSyncTargetId(targetId);
             }}
             onRefreshWslDistributions={() => {
               void loadWslDistributions().catch(() => undefined);
@@ -506,6 +547,23 @@ export function SettingsView() {
         platform={editingPlatform}
         onAdd={handleAddPlatform}
         onEdit={handleEditPlatform}
+      />
+
+      <LocalRemoteSyncDialog
+        open={Boolean(localRemoteSyncTargetId)}
+        targetLabel={localRemoteSyncTarget?.label ?? ""}
+        preview={localRemoteSyncPreview}
+        result={localRemoteSyncResult}
+        isPreviewing={isLocalRemoteSyncPreviewing}
+        isApplying={isLocalRemoteSyncApplying}
+        error={localRemoteSyncError}
+        onOpenChange={handleLocalRemoteSyncOpenChange}
+        onPreview={() => {
+          void handlePreviewLocalRemoteSync();
+        }}
+        onApply={() => {
+          void handleApplyLocalRemoteSync();
+        }}
       />
     </div>
   );

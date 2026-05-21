@@ -6,6 +6,7 @@ pub mod central_updates_fs;
 pub mod collections;
 pub mod github_import;
 pub mod linker;
+pub mod local_remote_sync;
 pub mod logs;
 pub mod marketplace;
 pub mod obsidian;

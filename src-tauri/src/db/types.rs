@@ -52,8 +52,14 @@ pub const UNIVERSAL_PROJECT_AGENT_IDS: [&str; 12] = [
 
 /// Preferred raw agent id used when a project-level Universal directory is
 /// stored in `project_skill_installations`.
-pub const UNIVERSAL_PROJECT_REPRESENTATIVE_AGENT_IDS: [&str; 6] =
-    ["codex", "opencode", "antigravity", "gemini-cli", "cursor", "amp"];
+pub const UNIVERSAL_PROJECT_REPRESENTATIVE_AGENT_IDS: [&str; 6] = [
+    "codex",
+    "opencode",
+    "antigravity",
+    "gemini-cli",
+    "cursor",
+    "amp",
+];
 
 /// 占位仓库 ID：`local-unknown` 表示来源未知的本地技能。
 pub const LOCAL_UNKNOWN_REPOSITORY_ID: &str = "local-unknown";
