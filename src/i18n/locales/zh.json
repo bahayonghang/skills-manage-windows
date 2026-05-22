@@ -173,7 +173,10 @@
       "description": "下一步动作一目了然：Central 已索引、安装目标已就绪，唯一阻塞工作是复核质量，而非后台网络任务。",
       "ctaBrowse": "浏览中央技能",
       "ctaReview": "复核 {{count}} 个未分类",
-      "ctaMarketplace": "打开市场"
+      "ctaMarketplace": "打开市场",
+      "ctaQuickMigrate": "快速迁移",
+      "ctaQuickMigrateRemoteDesc": "打开 {{target}} 的远程同步。",
+      "ctaQuickMigrateSetupDesc": "同步前先添加或选择 SSH/WSL 目标。"
     },
     "readiness": {
       "label": "就绪度",
@@ -1225,6 +1228,16 @@
       "previewing": "正在生成预览...",
       "preview": "预览同步",
       "apply": "应用同步",
+      "noRemoteTarget": "开始远程同步前，请先添加 SSH 或 WSL 目标。",
+      "nothingToSync": "没有需要同步的变化：远程快照已与本机 repo 和 Central skills 一致。",
+      "boundary": "本操作只发送当前 repo 快照和本机 Central skills，不复制数据库、凭据、target cache 数据或平台安装目录。应用前必须先预览。",
+      "previewSummary": "仓库：{{repoStatus}} · Skills：共 {{total}} 个，{{changed}} 个变化（新增 {{add}}、更新 {{update}}、跳过 {{skip}}、错误 {{error}}）· {{files}} 个文件 · {{bytes}}",
+      "errorItemsWarning": "存在错误项，详见下方列表。应用时仍会同步其它可同步变化。",
+      "flow": {
+        "target": "选择目标",
+        "preview": "预览快照",
+        "apply": "应用同步"
+      },
       "repoTitle": "仓库快照",
       "skillsTitle": "Central skills（{{count}}）",
       "itemSummary": "{{files}} 个文件，{{bytes}}，状态：{{status}}",

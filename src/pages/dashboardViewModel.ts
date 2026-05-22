@@ -72,6 +72,8 @@ export interface DashboardViewModel {
   sparkline: { points: number[]; max: number };
   targetDescription: string;
   targetLabel: string;
+  quickMigratePath: string;
+  quickMigrateDescription: string;
   topTags: ReturnType<typeof buildTopTags>;
   uncategorizedCount: number;
   unassignedSourceCount: number;
@@ -121,6 +123,7 @@ export function useDashboardViewModel({
   isLogsLoading,
   logsError,
   activeTarget,
+  targets,
 }: {
   t: TFunction;
   platformAgents: AgentWithStatus[];
@@ -148,6 +151,7 @@ export function useDashboardViewModel({
   isLogsLoading: boolean;
   logsError: string | null | undefined;
   activeTarget: TargetSummary | undefined;
+  targets: TargetSummary[];
 }) {
   const resolvedSummary = dashboardCentralSummary ?? EMPTY_DASHBOARD_CENTRAL_SUMMARY;
   const resolvedCategoryVisibility =
@@ -208,6 +212,19 @@ export function useDashboardViewModel({
   const targetLabel = isRemoteLikeTarget(resolvedTarget)
     ? resolvedTarget.label
     : t("targets.local");
+  const quickMigrateTarget = isRemoteLikeTarget(resolvedTarget)
+    ? resolvedTarget
+    : targets.find(isRemoteLikeTarget);
+  const hasRemoteSyncTarget =
+    Boolean(quickMigrateTarget);
+  const quickMigratePath = hasRemoteSyncTarget
+    ? "/settings?section=remote-targets&action=local-remote-sync"
+    : "/settings?section=remote-targets";
+  const quickMigrateDescription = hasRemoteSyncTarget
+    ? t("dashboard.hero.ctaQuickMigrateRemoteDesc", {
+        target: quickMigrateTarget?.label ?? targetLabel,
+      })
+    : t("dashboard.hero.ctaQuickMigrateSetupDesc");
   const scanStateLabel =
     isPlatformLoading || isPlatformRefreshing
       ? t("dashboard.scanState.loading")
@@ -308,6 +325,8 @@ export function useDashboardViewModel({
     sparkline,
     targetDescription,
     targetLabel,
+    quickMigratePath,
+    quickMigrateDescription,
     topTags,
     uncategorizedCount,
     unassignedSourceCount,

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ArrowUpRight, ChevronRight, Store } from "lucide-react";
+import { ArrowUpRight, ChevronRight, Store, UploadCloud } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,8 @@ interface HeroSectionProps {
   uncategorizedCount: number;
   scanStateLabel: string;
   scanState: string;
+  quickMigratePath: string;
+  quickMigrateDescription: string;
 }
 
 export function HeroSection({
@@ -16,6 +18,8 @@ export function HeroSection({
   uncategorizedCount,
   scanStateLabel,
   scanState,
+  quickMigratePath,
+  quickMigrateDescription,
 }: HeroSectionProps) {
   const { t } = useTranslation();
   const showReviewCta = uncategorizedCount > 0;
@@ -76,6 +80,15 @@ export function HeroSection({
           >
             <Store className="size-4" />
             {t("dashboard.hero.ctaMarketplace")}
+          </Button>
+          <Button
+            variant="outline"
+            title={quickMigrateDescription}
+            data-testid="dashboard-action-quick-migrate"
+            onClick={() => onNavigate(quickMigratePath)}
+          >
+            <UploadCloud className="size-4" />
+            {t("dashboard.hero.ctaQuickMigrate")}
           </Button>
         </div>
       </div>

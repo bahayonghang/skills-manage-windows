@@ -44,6 +44,85 @@ function changedSkillCount(preview: LocalRemoteSyncPreview | null) {
   );
 }
 
+function countByStatus(preview: LocalRemoteSyncPreview | null) {
+  const counts = { add: 0, update: 0, skip: 0, error: 0 };
+  for (const item of preview?.skills ?? []) {
+    counts[item.status] += 1;
+  }
+  return counts;
+}
+
+function hasSyncableChanges(preview: LocalRemoteSyncPreview | null) {
+  if (!preview) return false;
+  if (preview.repo.status === "add" || preview.repo.status === "update") return true;
+  return preview.skills.some((item) => item.status === "add" || item.status === "update");
+}
+
+function hasItemErrors(preview: LocalRemoteSyncPreview | null) {
+  if (!preview) return false;
+  return preview.repo.status === "error" || preview.skills.some((item) => item.status === "error");
+}
+
+function SyncFlowSteps() {
+  const { t } = useTranslation();
+  const steps = [
+    t("settings.localRemoteSync.flow.target"),
+    t("settings.localRemoteSync.flow.preview"),
+    t("settings.localRemoteSync.flow.apply"),
+  ];
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      {steps.map((step, index) => (
+        <div
+          key={step}
+          className="rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+        >
+          <span className="mr-2 inline-grid size-5 place-items-center rounded-full border border-primary/30 bg-primary/10 text-[0.68rem] font-semibold text-primary">
+            {index + 1}
+          </span>
+          {step}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SyncPreviewSummary({ preview }: { preview: LocalRemoteSyncPreview }) {
+  const { t } = useTranslation();
+  const counts = countByStatus(preview);
+  const changed = changedSkillCount(preview);
+  const errors = hasItemErrors(preview);
+
+  return (
+    <div
+      className={`rounded-xl border p-3 text-sm ${
+        errors
+          ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          : "border-primary/25 bg-primary/10 text-primary"
+      }`}
+      role="status"
+    >
+      {t("settings.localRemoteSync.previewSummary", {
+        repoStatus: t(`settings.localRemoteSync.status.${preview.repo.status}`),
+        total: preview.skills.length,
+        changed,
+        add: counts.add,
+        update: counts.update,
+        skip: counts.skip,
+        error: counts.error,
+        files: preview.totalFileCount,
+        bytes: formatBytes(preview.totalByteCount),
+      })}
+      {errors ? (
+        <p className="mt-1 text-xs">
+          {t("settings.localRemoteSync.errorItemsWarning")}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function SyncItemCard({ item }: { item: LocalRemoteSyncItemPreview }) {
   const { t } = useTranslation();
   return (
@@ -88,7 +167,8 @@ export function LocalRemoteSyncDialog({
   onApply,
 }: LocalRemoteSyncDialogProps) {
   const { t } = useTranslation();
-  const canApply = Boolean(preview) && !isPreviewing && !isApplying;
+  const canApply =
+    Boolean(preview) && hasSyncableChanges(preview) && !isPreviewing && !isApplying;
   const changed = changedSkillCount(preview);
 
   return (
@@ -102,6 +182,10 @@ export function LocalRemoteSyncDialog({
           <DialogDescription>
             {t("settings.localRemoteSync.desc", { target: targetLabel })}
           </DialogDescription>
+          <SyncFlowSteps />
+          <p className="rounded-xl border border-border bg-muted/20 p-3 text-xs leading-5 text-muted-foreground">
+            {t("settings.localRemoteSync.boundary")}
+          </p>
 
           {!preview ? (
             <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
@@ -116,6 +200,7 @@ export function LocalRemoteSyncDialog({
             </div>
           ) : (
             <div className="space-y-4">
+              <SyncPreviewSummary preview={preview} />
               <section className="space-y-2">
                 <h3 className="text-sm font-semibold text-foreground">
                   {t("settings.localRemoteSync.repoTitle")}
@@ -184,6 +269,11 @@ export function LocalRemoteSyncDialog({
           {error ? (
             <p className="text-xs text-destructive" role="alert">
               {error}
+            </p>
+          ) : null}
+          {preview && !hasSyncableChanges(preview) ? (
+            <p className="text-xs text-muted-foreground" role="status">
+              {t("settings.localRemoteSync.nothingToSync")}
             </p>
           ) : null}
         </DialogBody>

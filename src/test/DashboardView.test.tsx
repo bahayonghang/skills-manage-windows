@@ -232,6 +232,15 @@ const localTarget: TargetSummary = {
   isActive: true,
 };
 
+const wslTarget: TargetSummary = {
+  id: "wsl-demo",
+  kind: "wsl",
+  label: "Ubuntu",
+  distribution: "Ubuntu-24.04",
+  remoteHome: "/home/alice",
+  isActive: false,
+};
+
 let centralState: Record<string, unknown>;
 let collectionState: Record<string, unknown>;
 let marketplaceState: Record<string, unknown>;
@@ -241,7 +250,12 @@ let targetState: Record<string, unknown>;
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location">{location.pathname}</div>;
+  return (
+    <div data-testid="location">
+      {location.pathname}
+      {location.search}
+    </div>
+  );
 }
 
 function renderDashboard() {
@@ -395,6 +409,7 @@ describe("DashboardView", () => {
     };
     targetState = {
       activeTarget: localTarget,
+      targets: [localTarget, wslTarget],
     };
     installStoreMocks();
   });
@@ -453,6 +468,24 @@ describe("DashboardView", () => {
     fireEvent.click(screen.getByTestId("dashboard-action-marketplace"));
 
     expect(screen.getByTestId("location")).toHaveTextContent("/marketplace");
+    expect(mockSyncRegistry).not.toHaveBeenCalled();
+  });
+
+  it("navigates to the quick migrate settings action without syncing", () => {
+    renderDashboard();
+
+    const quickMigrate = screen.getByTestId("dashboard-action-quick-migrate");
+    expect(quickMigrate).toHaveTextContent(/Quick migrate|快速迁移/);
+    expect(quickMigrate).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Open remote sync for Ubuntu\.|打开 Ubuntu 的远程同步。/)
+    );
+
+    fireEvent.click(quickMigrate);
+
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/settings?section=remote-targets&action=local-remote-sync"
+    );
     expect(mockSyncRegistry).not.toHaveBeenCalled();
   });
 

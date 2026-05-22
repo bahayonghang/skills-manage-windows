@@ -34,6 +34,8 @@ export function DashboardShell({
               uncategorizedCount={viewModel.uncategorizedCount}
               scanStateLabel={viewModel.scanStateLabel}
               scanState={viewModel.scanState}
+              quickMigratePath={viewModel.quickMigratePath}
+              quickMigrateDescription={viewModel.quickMigrateDescription}
             />
             <HealthOrbit
               readiness={viewModel.readiness}

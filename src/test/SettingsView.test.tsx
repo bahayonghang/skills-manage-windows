@@ -339,9 +339,9 @@ function setupMocks({
   );
 }
 
-function renderSettingsView() {
+function renderSettingsView(initialEntry = "/settings") {
   return render(
-    <MemoryRouter initialEntries={["/settings"]}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/settings" element={<SettingsView />} />
       </Routes>
@@ -409,6 +409,46 @@ describe("SettingsView", () => {
     expect(screen.getByLabelText("WSL 别名")).toBeTruthy();
     expect(screen.getByLabelText("WSL 发行版")).toBeTruthy();
     expect(screen.getByText(/不需要 SSH 主机或凭据/)).toBeTruthy();
+  });
+
+  it("opens the local remote sync dialog from the settings URL action", async () => {
+    setupMocks({
+      targets: [
+        { id: "local", kind: "local" as const, label: "Local", isActive: false },
+        {
+          id: "wsl-ubuntu",
+          kind: "wsl" as const,
+          label: "Ubuntu",
+          distribution: "Ubuntu-24.04",
+          remoteHome: "/home/lyh",
+          isActive: true,
+        },
+      ],
+      activeTarget: {
+        id: "wsl-ubuntu",
+        kind: "wsl" as const,
+        label: "Ubuntu",
+        distribution: "Ubuntu-24.04",
+        isActive: true,
+      },
+    });
+
+    renderSettingsView("/settings?section=remote-targets&action=local-remote-sync");
+
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "同步本机 repo 与 skills"
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent("Ubuntu");
+  });
+
+  it("keeps the remote target section visible when URL action has no remote target", async () => {
+    setupMocks();
+
+    renderSettingsView("/settings?section=remote-targets&action=local-remote-sync");
+
+    expect(await screen.findByText("开始远程同步前，请先添加 SSH 或 WSL 目标。")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("新增 SSH 目标")).toBeTruthy();
   });
 
   it("marks the selected SSH auth method", () => {

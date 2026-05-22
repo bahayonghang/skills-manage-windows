@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router-dom";
 import i18n from "@/i18n";
 
 import { ACCENT_NAMES } from "@/stores/themeStore";
@@ -26,6 +27,7 @@ import { AI_PROVIDERS } from "@/data/aiProviders";
 import { createSettingsViewActions } from "@/pages/settingsViewActions";
 import { useSettingsViewBindings } from "@/pages/settingsViewBindings";
 import { useLocalRemoteSyncStore } from "@/stores/localRemoteSyncStore";
+import { isRemoteLikeTarget } from "@/lib/targetKind";
 import {
   CTP_VAR_MAP,
   EMPTY_SSH_TARGET_FORM,
@@ -57,6 +59,7 @@ const SETTINGS_TOC_ENTRIES: readonly TocEntry[] = [
 
 export function SettingsView() {
   const { t } = useTranslation();
+  const location = useLocation();
   const {
     scanDirectories,
     isLoadingScanDirs,
@@ -166,6 +169,7 @@ export function SettingsView() {
     text: string;
   } | null>(null);
   const [localRemoteSyncTargetId, setLocalRemoteSyncTargetId] = useState<string | null>(null);
+  const consumedSettingsActionRef = useRef<string | null>(null);
   const localRemoteSyncPreview = useLocalRemoteSyncStore((state) => state.preview);
   const localRemoteSyncResult = useLocalRemoteSyncStore((state) => state.result);
   const isLocalRemoteSyncPreviewing = useLocalRemoteSyncStore(
@@ -319,9 +323,61 @@ export function SettingsView() {
   });
 
   const resolvedActiveTarget = activeTarget ?? targets[0]!;
+  const firstRemoteTarget = targets.find(isRemoteLikeTarget);
   const localRemoteSyncTarget = targets.find(
     (target) => target.id === localRemoteSyncTargetId
   );
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const section = params.get("section");
+    const shouldFocusRemoteTargets =
+      section === "remote-targets" || location.hash === "#remote-targets-section";
+
+    if (!shouldFocusRemoteTargets) return;
+
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById("remote-targets-section")
+        ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  }, [location.hash, location.search]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (
+      params.get("section") !== "remote-targets" ||
+      params.get("action") !== "local-remote-sync"
+    ) {
+      return;
+    }
+
+    const actionKey = `${location.pathname}${location.search}`;
+    if (consumedSettingsActionRef.current === actionKey) return;
+    consumedSettingsActionRef.current = actionKey;
+
+    const selectedTarget = isRemoteLikeTarget(resolvedActiveTarget)
+      ? resolvedActiveTarget
+      : firstRemoteTarget;
+
+    if (!selectedTarget) {
+      setTargetMessage({
+        type: "error",
+        text: t("settings.localRemoteSync.noRemoteTarget"),
+      });
+      return;
+    }
+
+    resetLocalRemoteSync();
+    setLocalRemoteSyncTargetId(selectedTarget.id);
+  }, [
+    firstRemoteTarget,
+    location.pathname,
+    location.search,
+    resetLocalRemoteSync,
+    resolvedActiveTarget,
+    t,
+  ]);
 
   function handleLocalRemoteSyncOpenChange(open: boolean) {
     if (!open) {

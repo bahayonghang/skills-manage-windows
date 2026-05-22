@@ -173,7 +173,10 @@
       "description": "Make the next action obvious: Central is indexed, install targets are ready, and the only blocking work is review quality rather than background network operations.",
       "ctaBrowse": "Browse Central Skills",
       "ctaReview": "Review {{count}} uncategorized",
-      "ctaMarketplace": "Open Marketplace"
+      "ctaMarketplace": "Open Marketplace",
+      "ctaQuickMigrate": "Quick migrate",
+      "ctaQuickMigrateRemoteDesc": "Open remote sync for {{target}}.",
+      "ctaQuickMigrateSetupDesc": "Add or choose an SSH/WSL target before syncing."
     },
     "readiness": {
       "label": "Readiness",
@@ -1225,6 +1228,16 @@
       "previewing": "Generating preview...",
       "preview": "Preview sync",
       "apply": "Apply sync",
+      "noRemoteTarget": "Add an SSH or WSL target before starting remote sync.",
+      "nothingToSync": "Nothing to sync. The remote snapshot already matches the local repo and Central skills.",
+      "boundary": "This sends the current repo snapshot and local Central skills only. It does not copy databases, credentials, target cache data, or platform install folders. Preview is required before apply.",
+      "previewSummary": "Repo: {{repoStatus}} · Skills: {{changed}} changed of {{total}} total ({{add}} add, {{update}} update, {{skip}} skip, {{error}} error) · {{files}} files · {{bytes}}",
+      "errorItemsWarning": "Items with errors are listed below. Apply will still sync the remaining eligible changes.",
+      "flow": {
+        "target": "Select target",
+        "preview": "Preview snapshot",
+        "apply": "Apply sync"
+      },
       "repoTitle": "Repository snapshot",
       "skillsTitle": "Central skills ({{count}})",
       "itemSummary": "{{files}} file(s), {{bytes}}, status: {{status}}",
