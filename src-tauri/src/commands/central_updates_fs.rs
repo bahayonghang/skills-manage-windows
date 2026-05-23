@@ -38,13 +38,13 @@ pub(super) struct RemoteSkillFile {
 /// remote and runs equivalent shell-side primitives. Both modes intentionally
 /// expose the same operations so the orchestration code in
 /// [`super::central_updates`] never branches on target type.
-pub(super) enum CentralFs {
+pub(crate) enum CentralFs {
     Local,
     Remote(Box<ConnectedRemoteTarget>),
 }
 
 impl CentralFs {
-    pub(super) async fn from_active_target(target: ActiveTarget) -> Result<Self, String> {
+    pub(crate) async fn from_active_target(target: ActiveTarget) -> Result<Self, String> {
         match target {
             ActiveTarget::Local => Ok(Self::Local),
             ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {

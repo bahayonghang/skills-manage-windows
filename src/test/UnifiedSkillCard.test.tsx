@@ -1,9 +1,27 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
+import { useUpdateCenterStore } from "@/stores/updateCenterStore";
+
+function resetUpdateCenterStore() {
+  useUpdateCenterStore.setState({
+    inventory: null,
+    isRefreshing: false,
+    isApplying: false,
+    lastRefreshedAt: null,
+    isDialogOpen: false,
+    activeTab: "updatable",
+    refreshContext: { repositoryIds: [], skillIds: [] },
+    error: null,
+  });
+}
 
 describe("UnifiedSkillCard", () => {
+  beforeEach(() => {
+    resetUpdateCenterStore();
+  });
+
   it("shows a cached AI summary before the original description", () => {
     render(
       <UnifiedSkillCard
@@ -41,5 +59,59 @@ describe("UnifiedSkillCard", () => {
 
     expect(screen.queryByText("AI 摘要")).not.toBeInTheDocument();
     expect(screen.getByText("Original English description")).toBeInTheDocument();
+  });
+
+  it("does not enable card update action from inventory hasUpdate alone", () => {
+    useUpdateCenterStore.setState({
+      inventory: {
+        updatable: [
+          {
+            repositoryId: "github:owner-repo-main",
+            state: {
+              skill_id: "planner",
+              source_type: "github",
+              status: "update_available",
+            },
+          },
+        ],
+        remoteAdded: [],
+        remoteMissing: [],
+        platformDuplicates: [],
+        orphans: [],
+        failedRepositories: [],
+        generatedAt: "2026-05-23T00:00:00.000Z",
+      },
+    });
+
+    render(
+      <UnifiedSkillCard
+        name="planner"
+        skillId="planner"
+        onUpdateCentral={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", { name: "从来源更新 planner" }),
+    ).toBeDisabled();
+  });
+
+  it("enables card update action only for explicit update_available status", () => {
+    render(
+      <UnifiedSkillCard
+        name="planner"
+        skillId="planner"
+        onUpdateCentral={vi.fn()}
+        updateStatus={{
+          skill_id: "planner",
+          source_type: "github",
+          status: "update_available",
+        }}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", { name: "从来源更新 planner" }),
+    ).toBeEnabled();
   });
 });

@@ -102,7 +102,8 @@ pub async fn get_central_repository_members_by_repositories(
             r.pinned AS repository_pinned,
             r.is_unknown AS repository_is_unknown,
             r.created_at AS repository_created_at,
-            r.updated_at AS repository_updated_at
+            r.updated_at AS repository_updated_at,
+            r.last_synced_at AS repository_last_synced_at
          FROM skill_repository_members m
          JOIN skill_repositories r ON r.id = m.repository_id
          JOIN skills s ON s.id = m.skill_id
@@ -145,6 +146,9 @@ pub async fn get_central_repository_members_by_repositories(
                 .map_err(|e| e.to_string())?,
             updated_at: row
                 .try_get("repository_updated_at")
+                .map_err(|e| e.to_string())?,
+            last_synced_at: row
+                .try_get("repository_last_synced_at")
                 .map_err(|e| e.to_string())?,
         };
         members.push(SkillRepositoryMember {
@@ -520,7 +524,8 @@ pub async fn get_skill_repository_assignments_for_skills(
             r.pinned AS repository_pinned,
             r.is_unknown AS repository_is_unknown,
             r.created_at AS repository_created_at,
-            r.updated_at AS repository_updated_at
+            r.updated_at AS repository_updated_at,
+            r.last_synced_at AS repository_last_synced_at
          FROM skill_repository_members m
          JOIN skill_repositories r ON r.id = m.repository_id
          WHERE m.skill_id IN ({})",
@@ -559,6 +564,9 @@ pub async fn get_skill_repository_assignments_for_skills(
             updated_at: row
                 .try_get("repository_updated_at")
                 .map_err(|e| e.to_string())?,
+            last_synced_at: row
+                .try_get("repository_last_synced_at")
+                .map_err(|e| e.to_string())?,
         };
         assignments.insert(
             skill_id,
@@ -579,7 +587,7 @@ pub async fn get_skill_repositories_with_stats(
     let rows = sqlx::query(
         "SELECT
             r.id, r.name, r.source_type, r.owner, r.repo, r.branch, r.url,
-            r.pinned, r.is_unknown, r.created_at, r.updated_at,
+            r.pinned, r.is_unknown, r.created_at, r.updated_at, r.last_synced_at,
             CASE
               WHEN r.id = ? THEN (
                 SELECT COUNT(*)
@@ -626,6 +634,7 @@ pub async fn get_skill_repositories_with_stats(
             is_unknown: row.try_get("is_unknown").map_err(|e| e.to_string())?,
             created_at: row.try_get("created_at").map_err(|e| e.to_string())?,
             updated_at: row.try_get("updated_at").map_err(|e| e.to_string())?,
+            last_synced_at: row.try_get("last_synced_at").map_err(|e| e.to_string())?,
         };
         result.push(SkillRepositoryWithStats {
             unknown_skill_count: row
@@ -637,4 +646,22 @@ pub async fn get_skill_repositories_with_stats(
     }
 
     Ok(result)
+}
+
+/// 写 `skill_repositories.last_synced_at` —— Phase P2 引入。
+///
+/// 仅由 inventory refresh 流程调用，所以无需走 upsert / unknown 守卫，直接 UPDATE。
+/// 未命中（repo 已被删除）静默忽略。
+pub async fn set_repository_last_synced_at(
+    pool: &DbPool,
+    repository_id: &str,
+    timestamp: &str,
+) -> Result<(), String> {
+    sqlx::query("UPDATE skill_repositories SET last_synced_at = ? WHERE id = ?")
+        .bind(timestamp)
+        .bind(repository_id)
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }

@@ -332,6 +332,8 @@ fn repository_from_installed_row(
             .repository_updated_at
             .clone()
             .ok_or_else(|| "Repository row missing updated_at".to_string())?,
+        // 这条派生路径不需要 last_synced_at（仅在 update inventory 展示用），置 None。
+        last_synced_at: None,
     }))
 }
 

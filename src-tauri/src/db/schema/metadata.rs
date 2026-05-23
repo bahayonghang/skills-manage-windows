@@ -233,5 +233,44 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    /*
+     * ========================================================================
+     * 步骤 N（Update Mechanism Overhaul P2）：新数据模型
+     * ========================================================================
+     * 目标：
+     * 1) `skill_repositories.last_synced_at`：repo 级 sync 时间戳，refresh 写入
+     * 2) `skill_repository_pending_additions`：refresh 发现的远端新增 skill 候选
+     */
+    ensure_column(
+        pool,
+        "skill_repositories",
+        "last_synced_at",
+        "ALTER TABLE skill_repositories ADD COLUMN last_synced_at TEXT",
+    )
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_repository_pending_additions (
+            repository_id              TEXT NOT NULL,
+            source_path                TEXT NOT NULL,
+            skill_id                   TEXT NOT NULL,
+            skill_name                 TEXT NOT NULL,
+            conflict_existing_skill_id TEXT,
+            discovered_at              TEXT NOT NULL,
+            PRIMARY KEY (repository_id, source_path)
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_repository_pending_additions_repo
+         ON skill_repository_pending_additions(repository_id, discovered_at DESC)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     Ok(())
 }

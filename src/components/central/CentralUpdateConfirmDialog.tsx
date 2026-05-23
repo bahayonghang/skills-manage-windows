@@ -44,6 +44,11 @@ function formatDate(value?: string | null): string | null {
   return new Date(timestamp).toLocaleString();
 }
 
+/**
+ * @deprecated 使用 `UpdateCenterDialog` 代替（plans/update-mechanism-overhaul-plan.md P5/P6）。
+ * 本组件保留以兼容旧 workflow（单条更新入口、SkillDetailView 内的更新按钮），
+ * 将在下个 minor release 删除。
+ */
 export function CentralUpdateConfirmDialog({
   open,
   onOpenChange,

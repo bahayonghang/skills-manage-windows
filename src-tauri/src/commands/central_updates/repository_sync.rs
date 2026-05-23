@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, State};
-
 use crate::{
     db::{self, DbPool, SkillRepository, SkillUpdateState},
     services::central_skills::{
@@ -11,22 +10,18 @@ use crate::{
     targets::ActiveTarget,
     AppState,
 };
-
 use crate::commands::central_updates_fs::{normalize_repo_path, CentralFs};
 use crate::commands::github_import::{
     self, GitHubRepoImportResult, GitHubRepoRef, GitHubRepoSnapshot, GitHubSkillImportSelection,
     GitHubSkillPreview,
 };
-
 use super::{
     emit_update_progress, error_state_from_assignment, keep_remote_missing_central_skills_impl,
     load_remote_skill_content, load_selected_central_skills, prepare_skill_updates,
     prepare_snapshots_for_repo_refs, remote_missing_state_from_assignment, repo_cache_key,
     state_from_remote, unsupported_state_from_assignment, update_counters_for_state,
-    RemoteSkillLoadError, UpdateCounters, STATUS_CANCELLED, STATUS_ERROR, STATUS_REMOTE_MISSING,
-    STATUS_UNSUPPORTED, STATUS_UPDATE_AVAILABLE,
+    RemoteSkillLoadError, SkillUpdateStatus, UpdateCounters,
 };
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRemoteAddedSkill {
@@ -132,6 +127,9 @@ pub struct CentralRepositorySyncApplyResult {
 }
 
 #[tauri::command]
+#[deprecated(
+    note = "Use refresh_skill_update_inventory with scope=Repositories instead. See plans/update-mechanism-overhaul-plan.md."
+)]
 pub async fn check_central_repository_sync(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -190,7 +188,7 @@ pub async fn check_central_repository_sync(
             emit_update_progress(
                 &app,
                 "checking",
-                STATUS_CANCELLED,
+                SkillUpdateStatus::Cancelled.as_str(),
                 total,
                 &counters,
                 None,
@@ -246,7 +244,7 @@ pub async fn check_central_repository_sync(
     .await?;
     let remote_missing_states = states
         .iter()
-        .filter(|state| state.status == STATUS_REMOTE_MISSING)
+        .filter(|state| state.status == SkillUpdateStatus::RemoteMissing.as_str())
         .cloned()
         .collect::<Vec<_>>();
     let remote_missing = build_remote_missing_skills(&repo_by_id, remote_missing_states);
@@ -269,6 +267,9 @@ pub async fn check_central_repository_sync(
 }
 
 #[tauri::command]
+#[deprecated(
+    note = "Use apply_skill_update_decisions instead. See plans/update-mechanism-overhaul-plan.md."
+)]
 pub async fn apply_central_repository_sync(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -666,14 +667,14 @@ fn build_repository_sync_summaries(
             continue;
         };
         *checked_by_repo.entry(repo_id.clone()).or_default() += 1;
-        match state.status.as_str() {
-            STATUS_UPDATE_AVAILABLE => {
+        match state.status.parse::<SkillUpdateStatus>().ok() {
+            Some(SkillUpdateStatus::UpdateAvailable) => {
                 *update_available_by_repo.entry(repo_id).or_default() += 1;
             }
-            STATUS_UNSUPPORTED => {
+            Some(SkillUpdateStatus::Unsupported) => {
                 *unsupported_by_repo.entry(repo_id).or_default() += 1;
             }
-            STATUS_ERROR => {
+            Some(SkillUpdateStatus::Error) => {
                 *failed_by_repo.entry(repo_id).or_default() += 1;
             }
             _ => {}

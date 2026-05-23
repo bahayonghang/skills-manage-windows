@@ -27,6 +27,10 @@ vi.mock("../stores/skillDetailStore", () => ({
   useSkillDetailStore: vi.fn(),
 }));
 
+vi.mock("../stores/updateCenterStore", () => ({
+  useUpdateCenterStore: vi.fn(),
+}));
+
 vi.mock("sonner", () => ({
   toast: {
     success: vi.fn(),
@@ -79,6 +83,7 @@ import { usePlatformStore } from "../stores/platformStore";
 import { useSkillStore } from "../stores/skillStore";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
 import { useSkillDetailStore } from "../stores/skillDetailStore";
+import { useUpdateCenterStore } from "../stores/updateCenterStore";
 import * as tauriBridge from "@/lib/tauri";
 
 const userSourceText = /用户来源|User source/i;
@@ -375,12 +380,19 @@ const mockUninstallSkillFromAgent = vi.fn();
 const mockRefreshCounts = vi.fn();
 const mockRefreshInstallations = vi.fn();
 const mockRescan = vi.fn();
+const mockScanDuplicates = vi.fn();
+const mockOpenUpdateCenter = vi.fn();
 const mockUsePlatformStore = vi.mocked(usePlatformStore);
 const mockUseSkillStore = vi.mocked(useSkillStore);
 const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
 const mockUseSkillDetailStore = vi.mocked(useSkillDetailStore);
+const mockUseUpdateCenterStore = vi.mocked(useUpdateCenterStore);
 const centralStoreHarness = mockUseCentralSkillsStore as typeof mockUseCentralSkillsStore & {
   setState: (nextState: Record<string, unknown>) => void;
+};
+const updateCenterHarness = mockUseUpdateCenterStore as typeof mockUseUpdateCenterStore & {
+  setState: (nextState: Record<string, unknown>) => void;
+  getState: () => ReturnType<typeof buildUpdateCenterStoreState>;
 };
 
 function buildPlatformStoreState(overrides = {}) {
@@ -439,8 +451,30 @@ function buildSkillDetailStoreState(overrides = {}) {
   };
 }
 
+function buildUpdateCenterStoreState(overrides: Record<string, unknown> = {}) {
+  return {
+    inventory: {
+      updatable: [],
+      remoteAdded: [],
+      remoteMissing: [],
+      platformDuplicates: [],
+      orphans: [],
+      failedRepositories: [],
+      generatedAt: "2026-05-22T00:00:00Z",
+    },
+    isDialogOpen: false,
+    activeTab: "updatable",
+    scanDuplicates: mockScanDuplicates,
+    openDialog: mockOpenUpdateCenter,
+    closeDialog: vi.fn(),
+    setActiveTab: vi.fn(),
+    ...overrides,
+  };
+}
+
 function installDefaultStoreMocks() {
   let currentCentralState = buildCentralSkillsStoreState();
+  let currentUpdateCenterState = buildUpdateCenterStoreState();
 
   mockUsePlatformStore.mockImplementation((selector?: unknown) => {
     const state = buildPlatformStoreState();
@@ -461,11 +495,21 @@ function installDefaultStoreMocks() {
     if (typeof selector === "function") return selector(state);
     return state;
   });
+  mockUseUpdateCenterStore.mockImplementation((selector?: unknown) => {
+    if (typeof selector === "function") return selector(currentUpdateCenterState);
+    return currentUpdateCenterState;
+  });
 
   Object.assign(mockUseCentralSkillsStore, {
     getState: () => currentCentralState,
     setState: (nextState: Record<string, unknown>) => {
       currentCentralState = { ...currentCentralState, ...nextState };
+    },
+  });
+  Object.assign(mockUseUpdateCenterStore, {
+    getState: () => currentUpdateCenterState,
+    setState: (nextState: Record<string, unknown>) => {
+      currentUpdateCenterState = { ...currentUpdateCenterState, ...nextState };
     },
   });
 }
@@ -503,6 +547,8 @@ describe("PlatformView", () => {
     mockRefreshInstallations.mockReset();
     mockUninstallSkillFromAgent.mockReset();
     mockRescan.mockReset();
+    mockScanDuplicates.mockReset();
+    mockOpenUpdateCenter.mockReset();
     vi.mocked(toast.success).mockReset();
     vi.mocked(toast.error).mockReset();
     vi.mocked(toast.info).mockReset();
@@ -1115,13 +1161,32 @@ describe("PlatformView", () => {
     });
   });
 
-  it("scans for duplicates by rescanning and reloading the current platform list", async () => {
+  it("routes duplicate scans through the UpdateCenter store and opens the duplicates tab", async () => {
     mockUseSkillStore.mockImplementation((selector?: unknown) => {
       const state = buildSkillStoreState({
         skillsByAgent: { "claude-code": mockDuplicateClaudeSkills },
       });
       if (typeof selector === "function") return selector(state);
       return state;
+    });
+    mockScanDuplicates.mockImplementation(async () => {
+      const current = updateCenterHarness.getState();
+      updateCenterHarness.setState({
+        inventory: {
+          ...current.inventory,
+          platformDuplicates: [
+            {
+              agentId: "claude-code",
+              skillId: "shared-skill",
+              skillName: "shared-skill",
+              writablePaths: ["~/.claude/skills/shared-skill"],
+              pluginPaths: [
+                "~/.claude/plugins/cache/publisher/plugin-a/1.0.0/skills/shared-skill",
+              ],
+            },
+          ],
+        },
+      });
     });
 
     renderPlatformView();
@@ -1132,40 +1197,13 @@ describe("PlatformView", () => {
     await waitFor(() => {
       expect(mockRescan).toHaveBeenCalledTimes(1);
       expect(mockGetSkillsByAgent).toHaveBeenCalledWith("claude-code");
+      expect(mockScanDuplicates).toHaveBeenCalledWith(["claude-code"]);
+      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("duplicates");
     });
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText(/清理重复技能/)).toBeInTheDocument();
+    expect(toast.success).toHaveBeenCalled();
   });
 
-  it("duplicate cleanup for Claude deletes only the writable user row", async () => {
-    mockUseSkillStore.mockImplementation((selector?: unknown) => {
-      const state = buildSkillStoreState({
-        skillsByAgent: { "claude-code": mockDuplicateClaudeSkills },
-      });
-      if (typeof selector === "function") return selector(state);
-      return state;
-    });
-
-    renderPlatformView();
-
-    fireEvent.click(screen.getByRole("button", { name: /扫描 Claude Code 的重复技能/ }));
-    const dialog = await screen.findByRole("dialog");
-
-    expect(within(dialog).getByText("插件只读副本（不会删除）")).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: /删除 1 个平台副本/ }));
-
-    await waitFor(() => {
-      expect(mockUninstallSkillFromAgent).toHaveBeenCalledTimes(1);
-    });
-    expect(mockUninstallSkillFromAgent).toHaveBeenCalledWith(
-      "shared-skill",
-      "claude-code",
-      "claude-code::user::shared-skill"
-    );
-    expect(mockRefreshCounts).toHaveBeenCalled();
-  });
-
-  it("duplicate cleanup for Universal uses the Codex representative without row id", async () => {
+  it("routes Universal duplicate scans through the Codex representative agent id", async () => {
     mockUsePlatformStore.mockImplementation((selector?: unknown) => {
       const state = buildPlatformStoreState({
         agents: [mockAgent, mockCodexAgent, mockCursorAgent],
@@ -1186,20 +1224,37 @@ describe("PlatformView", () => {
       if (typeof selector === "function") return selector(state);
       return state;
     });
+    mockScanDuplicates.mockImplementation(async () => {
+      const current = updateCenterHarness.getState();
+      updateCenterHarness.setState({
+        inventory: {
+          ...current.inventory,
+          platformDuplicates: [
+            {
+              agentId: "codex",
+              skillId: "shared-skill",
+              skillName: "shared-skill",
+              writablePaths: ["~/.agents/skills/shared-skill"],
+              pluginPaths: [
+                "~/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill",
+              ],
+            },
+          ],
+        },
+      });
+    });
 
     renderPlatformView("universal-agents");
 
     fireEvent.click(screen.getByRole("button", { name: /扫描 Universal 的重复技能/ }));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /删除 1 个平台副本/ }));
 
     await waitFor(() => {
-      expect(mockUninstallSkillFromAgent).toHaveBeenCalledTimes(1);
+      expect(mockScanDuplicates).toHaveBeenCalledWith(["codex"]);
+      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("duplicates");
     });
-    expect(mockUninstallSkillFromAgent.mock.calls[0]).toEqual(["shared-skill", "codex"]);
   });
 
-  it("shows a toast and does not open the dialog when no cleanable duplicates exist", async () => {
+  it("shows a toast and does not open the UpdateCenter when no duplicates are found", async () => {
     renderPlatformView();
 
     fireEvent.click(screen.getByRole("button", { name: /扫描 Claude Code 的重复技能/ }));
@@ -1207,7 +1262,7 @@ describe("PlatformView", () => {
     await waitFor(() => {
       expect(toast.info).toHaveBeenCalledWith("未发现可清理的重复技能");
     });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockOpenUpdateCenter).not.toHaveBeenCalled();
   });
 
   it("does not pass ordinary row ids when uninstalling non-Claude platform skills", async () => {

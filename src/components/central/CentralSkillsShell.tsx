@@ -3,6 +3,7 @@ import {
   ActivityIcon,
   Download,
   GitBranch,
+  ListChecks,
   RefreshCw,
 } from "lucide-react";
 import type { TFunction } from "i18next";
@@ -28,6 +29,7 @@ import { CentralSkillDialogs } from "@/components/central/CentralSkillDialogs";
 import { CentralSkillListContent } from "@/components/central/CentralSkillListContent";
 import { CentralSearchBar } from "@/components/central/CentralSearchBar";
 import { CentralSidebar } from "@/components/central/CentralSidebar";
+import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";
 import { groupSkillsByMode } from "@/lib/centralGrouping";
@@ -187,6 +189,22 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
     savedViewsSlot,
   } = props;
 
+  const openUpdateCenter = useUpdateCenterStore((s) => s.openDialog);
+  const updateCenterRefreshContext = useMemo(() => {
+    const selectedRepoId = viewState.repos.length === 1 ? viewState.repos[0] : null;
+    const selectedRepo = selectedRepoId
+      ? repositories.find((repo) => repo.id === selectedRepoId)
+      : null;
+    const repositoryIds =
+      selectedRepo?.source_type === "github" && !selectedRepo.is_unknown
+        ? [selectedRepo.id]
+        : [];
+    return {
+      repositoryIds,
+      skillIds: listContent.sortedSkills.map((skill) => skill.id),
+    };
+  }, [listContent.sortedSkills, repositories, viewState.repos]);
+
   const handleToggleRepo = (repoId: string) => {
     const next = viewState.repos[0] === repoId ? [] : [repoId];
     setViewState({ ...viewState, repos: next });
@@ -262,6 +280,16 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           >
             <GitBranch className="size-3.5" />
             {t("marketplace.githubImportSecondaryCta")}
+          </Button>
+
+          {/* 入口：更新中心（聚合可更新 / 新增 / 已删除 / 平台冗余）─── */}
+          <Button
+            variant="outline"
+            onClick={() => openUpdateCenter(undefined, updateCenterRefreshContext)}
+            data-testid="central-open-update-center"
+          >
+            <ListChecks className="size-3.5" />
+            {t("central.updateCenter.openButton")}
           </Button>
 
           {/* 主 CTA：检查更新 ────────────────────────────────────── */}

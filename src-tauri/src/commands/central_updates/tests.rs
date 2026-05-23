@@ -121,7 +121,7 @@ fn update_counters_count_remote_missing_as_skipped() {
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: STATUS_REMOTE_MISSING.to_string(),
+        status: SkillUpdateStatus::RemoteMissing.to_string(),
         error: Some("removed remotely".to_string()),
     };
 
@@ -271,6 +271,7 @@ fn remote_missing_skills_include_repository_display_metadata() {
         is_unknown: false,
         created_at: Utc::now().to_rfc3339(),
         updated_at: Utc::now().to_rfc3339(),
+        last_synced_at: None,
     };
     let state = SkillUpdateState {
         skill_id: "missing".to_string(),
@@ -282,7 +283,7 @@ fn remote_missing_skills_include_repository_display_metadata() {
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: STATUS_REMOTE_MISSING.to_string(),
+        status: SkillUpdateStatus::RemoteMissing.to_string(),
         error: Some("removed remotely".to_string()),
     };
     let repo_by_id = HashMap::from([(repository.id.clone(), repository)]);
@@ -314,7 +315,7 @@ fn remote_missing_skills_allow_unmapped_repository_source() {
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: STATUS_REMOTE_MISSING.to_string(),
+        status: SkillUpdateStatus::RemoteMissing.to_string(),
         error: Some("removed remotely".to_string()),
     };
 
@@ -359,7 +360,7 @@ async fn keep_remote_missing_detaches_source_without_deleting_skill() {
             latest_remote_hash: None,
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: STATUS_REMOTE_MISSING.to_string(),
+            status: SkillUpdateStatus::RemoteMissing.to_string(),
             error: Some("removed remotely".to_string()),
         },
     )
@@ -420,7 +421,7 @@ async fn keep_remote_missing_rejects_non_remote_missing_state() {
             latest_remote_hash: Some("fnv1a64:new".to_string()),
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: STATUS_UPDATE_AVAILABLE.to_string(),
+            status: SkillUpdateStatus::UpdateAvailable.to_string(),
             error: None,
         },
     )
@@ -533,7 +534,7 @@ async fn prepare_skill_updates_reuses_fresh_update_available_local_hash() {
             latest_remote_hash: Some("sha256-manifest:remote".to_string()),
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: STATUS_UPDATE_AVAILABLE.to_string(),
+            status: SkillUpdateStatus::UpdateAvailable.to_string(),
             error: None,
         },
     )
@@ -563,7 +564,7 @@ fn stale_update_available_state_does_not_reuse_local_hash() {
         latest_remote_hash: Some("sha256-manifest:new".to_string()),
         last_checked_at: Some((Utc::now() - ChronoDuration::minutes(11)).to_rfc3339()),
         last_updated_at: None,
-        status: STATUS_UPDATE_AVAILABLE.to_string(),
+        status: SkillUpdateStatus::UpdateAvailable.to_string(),
         error: None,
     };
 

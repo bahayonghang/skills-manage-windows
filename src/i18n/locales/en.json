@@ -1036,6 +1036,58 @@
       "paletteActionSaveCurrentView": "Save current view…",
       "paletteActionCreateTagGroup": "Create tag group…",
       "paletteActionGroupBy": "Group by: {{label}}"
+    },
+    "updateCenter": {
+      "title": "Update Center",
+      "openButton": "Update Center",
+      "refreshButton": "Refresh",
+      "refreshing": "Refreshing…",
+      "scopeLabel": "Scope",
+      "scopeAll": "All",
+      "scopeRepository": "Current repository",
+      "scopeCurrent": "Current results",
+      "tabs": {
+        "updatable": "Updatable ({{count}})",
+        "added": "Added ({{count}})",
+        "missing": "Removed ({{count}})",
+        "duplicates": "Platform duplicates ({{count}})",
+        "orphans": "Orphans ({{count}})"
+      },
+      "applyAll": "Apply all ({{count}})",
+      "clearInventory": "Clear inventory",
+      "emptyAllClean": "Everything is up to date",
+      "tabEmpty": "No entries in this category",
+      "lastRefreshedAt": "Last refreshed: {{time}}",
+      "actions": {
+        "apply": "Apply",
+        "keep": "Keep",
+        "skip": "Skip",
+        "delete": "Delete",
+        "overwrite": "Overwrite",
+        "rename": "Rename"
+      },
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all",
+      "selected": "{{count}} selected",
+      "renameLabel": "New skill id",
+      "duplicateGroup": "{{skill}} on {{agent}}",
+      "pluginCopiesReadOnly": "Plugin copies (read-only): {{paths}}",
+      "orphansComingSoon": "Orphan detection not yet implemented",
+      "applyingChanges": "Applying…",
+      "applySuccess": "Applied {{count}} changes",
+      "applyPartialFailure": "Applied {{succeeded}}, failed {{failed}}",
+      "applyError": "Apply failed: {{error}}",
+      "deleteOptionUnavailable": "No deletable copy info",
+      "repositorySource": "Repository: {{repository}}",
+      "repositorySourceUnknown": "Repository: unknown",
+      "sourcePath": "Source path: {{path}}",
+      "duplicateAgentSkill": "{{skill}}",
+      "badges": {
+        "duplicate": "Duplicate",
+        "orphan": "Orphan"
+      },
+      "singleUpdateSuccess": "Updated \"{{skill}}\" to the latest version",
+      "singleUpdateFailed": "Failed to update \"{{skill}}\": {{error}}"
     }
   },
   "installDialog": {

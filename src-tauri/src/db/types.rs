@@ -155,6 +155,10 @@ pub struct SkillRepository {
     pub is_unknown: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// repo 级最后一次 inventory refresh 的时间戳（ISO-8601）。Phase P2 引入。
+    /// 旧 DB 升级时通过 ensure_column 安全加列，默认为 NULL。
+    #[serde(default)]
+    pub last_synced_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,6 +192,20 @@ pub struct SkillRepositorySyncSkip {
     pub created_at: String,
     pub updated_at: String,
     pub last_seen_at: String,
+}
+
+/// Pending remote addition discovered during inventory refresh — Phase P2.
+///
+/// 由 `refresh_skill_update_inventory` 写入，关闭"更新中心"也不丢；apply 阶段
+/// 走 import / skip / unskip 任意分支后由对应分支删掉对应行。
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SkillRepositoryPendingAddition {
+    pub repository_id: String,
+    pub source_path: String,
+    pub skill_id: String,
+    pub skill_name: String,
+    pub conflict_existing_skill_id: Option<String>,
+    pub discovered_at: String,
 }
 
 // ─── Update State ────────────────────────────────────────────────────────────

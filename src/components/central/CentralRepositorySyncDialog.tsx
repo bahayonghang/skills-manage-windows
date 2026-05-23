@@ -74,6 +74,11 @@ function missingSkillId(item: CentralRemoteMissingSkill): string {
   return item.state.skill_id;
 }
 
+/**
+ * @deprecated 使用 `UpdateCenterDialog` 代替（plans/update-mechanism-overhaul-plan.md P5/P6）。
+ * 本组件保留以兼容旧 workflow（仓库同步预览/新增技能导入流程），
+ * 将在下个 minor release 删除。
+ */
 export function CentralRepositorySyncDialog({
   open,
   onOpenChange,

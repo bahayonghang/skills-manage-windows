@@ -29,6 +29,10 @@ import {
   getPlatformTargetMemberNames,
   isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
+import {
+  selectSkillInventoryFlagsFromInventory,
+  useUpdateCenterStore,
+} from "@/stores/updateCenterStore";
 
 // ─── Platform Toggle Icon (internal) ──────────────────────────────────────────
 
@@ -92,6 +96,12 @@ export interface UnifiedSkillCardProps {
   aiSummary?: string | null;
   summaryLabel?: string;
   className?: string;
+
+  /**
+   * 当前 skill 在中央库中的 id。设置后会从 `useUpdateCenterStore` 查询 inventory
+   * 派生 badge（platform duplicate / orphan）。central / project 卡片应传入。
+   */
+  skillId?: string;
 
   /** Click the card itself (platform variant navigates to detail). */
   onClick?: () => void;
@@ -157,6 +167,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     aiSummary,
     summaryLabel,
     className,
+    skillId,
     onClick,
     checkbox,
     isCentral,
@@ -187,6 +198,20 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     density = "default",
   } = props;
 
+  // 优先用显式传入的 skillId，没传时回退到 platformIcons.skillId（central 卡片）。
+  const inventorySkillId = skillId ?? platformIcons?.skillId ?? null;
+  const updateCenterInventory = useUpdateCenterStore((state) => state.inventory);
+  const inventoryFlags = useMemo(
+    () =>
+      inventorySkillId
+        ? selectSkillInventoryFlagsFromInventory(
+            updateCenterInventory,
+            inventorySkillId,
+          )
+        : null,
+    [inventorySkillId, updateCenterInventory],
+  );
+
   // Determine variant features
   const hasCheckbox = !!checkbox;
   const hasPlatformIcons = !!platformIcons;
@@ -205,6 +230,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   const hasAiSummary = trimmedAiSummary.length > 0;
   const summaryText = hasAiSummary ? trimmedAiSummary : description;
   const resolvedSummaryLabel = summaryLabel ?? t("common.aiSummaryLabel");
+  const canUpdateCentral = updateStatus?.status === "update_available";
 
   const targetAgents = useMemo(
     () => platformIcons?.agents.filter((a) => a.id !== "central") ?? [],
@@ -327,9 +353,13 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                 {onUpdateCentral && (
                   <button
                     onClick={onUpdateCentral}
-                    disabled={isLoading || updateStatus?.status !== "update_available" || updateStatus?.isUpdating}
+                    disabled={
+                      isLoading ||
+                      updateStatus?.isUpdating ||
+                      !canUpdateCentral
+                    }
                     title={
-                      updateStatus?.status === "update_available"
+                      canUpdateCentral
                         ? t("central.updateSkill")
                         : updateStatus?.error ?? t("central.checkUpdatesFirst")
                     }
@@ -488,7 +518,6 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
               </span>
             )}
 
-            {/* Publisher (marketplace recommended) */}
             {publisher && (
               <span className="text-[10px] text-muted-foreground truncate">{publisher}</span>
             )}
@@ -510,8 +539,32 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                 {t(`central.updateStatus.${updateStatus.status}`)}
               </span>
             )}
+            {/* Inventory 分类徽章：update / missing 由 updateStatus chip 覆盖。 */}
+            {inventoryFlags?.hasDuplicate && (
+              <span
+                data-testid={
+                  inventorySkillId
+                    ? `skill-card-duplicate-badge-${inventorySkillId}`
+                    : undefined
+                }
+                className="inline-flex items-center rounded-full bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 ring-1 ring-orange-500/30 dark:text-orange-300"
+              >
+                {t("central.updateCenter.badges.duplicate")}
+              </span>
+            )}
+            {inventoryFlags?.isOrphan && (
+              <span
+                data-testid={
+                  inventorySkillId
+                    ? `skill-card-orphan-badge-${inventorySkillId}`
+                    : undefined
+                }
+                className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border"
+              >
+                {t("central.updateCenter.badges.orphan")}
+              </span>
+            )}
 
-            {/* Tags (marketplace recommended) */}
             {tags && tags.length > 0 && (
               <div className="flex items-center gap-1">
                 {tags.slice(0, 2).map((tag) => (

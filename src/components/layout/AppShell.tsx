@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { GlobalSearchDialog } from "./GlobalSearchDialog";
+import { UpdateCenterDialog } from "@/components/central/UpdateCenterDialog";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useTargetStore } from "@/stores/targetStore";
@@ -170,6 +171,7 @@ export function AppShell() {
         onOpenChange={setIsSearchOpen}
         onAction={handleAction}
       />
+      <UpdateCenterDialog />
     </div>
   );
 }

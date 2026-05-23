@@ -180,6 +180,7 @@ impl AiTagJobRegistry {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[allow(deprecated)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_sql::Builder::new().build())
@@ -356,6 +357,12 @@ pub fn run() {
             commands::central_updates::update_central_skills,
             commands::central_updates::cancel_central_skill_updates,
             commands::central_updates::keep_remote_missing_central_skills,
+            // Skill update inventory (Phase P2 of Update Mechanism Overhaul)
+            commands::skill_update_inventory::refresh_skill_update_inventory,
+            commands::skill_update_inventory::get_skill_update_inventory,
+            commands::skill_update_inventory::clear_skill_update_inventory,
+            commands::skill_update_inventory::apply_skill_update_decisions,
+            commands::skill_update_inventory::scan_platform_duplicate_skills,
             // Collections
             commands::collections::create_collection,
             commands::collections::get_collections,

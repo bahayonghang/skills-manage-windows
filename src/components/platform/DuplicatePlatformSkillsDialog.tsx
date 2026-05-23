@@ -32,6 +32,11 @@ function sourcePath(skill: ScannedSkill): string {
   return skill.source_root || skill.dir_path;
 }
 
+/**
+ * @deprecated 使用 `UpdateCenterDialog` 的"平台冗余" Tab 代替
+ * （plans/update-mechanism-overhaul-plan.md P7）。本组件保留以兼容历史调用方，
+ * 将在下一个 minor release 删除。
+ */
 export function DuplicatePlatformSkillsDialog({
   open,
   onOpenChange,

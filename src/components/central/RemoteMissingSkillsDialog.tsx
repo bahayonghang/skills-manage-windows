@@ -46,6 +46,11 @@ function copyKey(skillId: string, agentId: string): string {
   return `${skillId}\0${agentId}`;
 }
 
+/**
+ * @deprecated 使用 `UpdateCenterDialog` 代替（plans/update-mechanism-overhaul-plan.md P5/P6）。
+ * 本组件保留以兼容旧 workflow（更新检查后弹出的远端缺失处理流程），
+ * 将在下个 minor release 删除。
+ */
 export function RemoteMissingSkillsDialog({
   open,
   onOpenChange,

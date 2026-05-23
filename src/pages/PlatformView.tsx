@@ -7,12 +7,12 @@ import { usePlatformStore } from "@/stores/platformStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
+import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
-import { DuplicatePlatformSkillsDialog } from "@/components/platform/DuplicatePlatformSkillsDialog";
 import {
   PlatformSkillSortMenu,
   PlatformSkillViewMenu,
@@ -31,10 +31,6 @@ import {
   getPlatformTargetGroups,
   isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
-import {
-  findDuplicatePlatformSkillGroups,
-} from "@/lib/platformDuplicateSkills";
-import type { DuplicatePlatformSkillGroup } from "@/lib/platformDuplicateSkills";
 import {
   derivePlatformSkillRows,
   type PlatformGroupBy,
@@ -126,6 +122,8 @@ export function PlatformView() {
   const currentDetail = useSkillDetailStore((state) => state.detail);
   const refreshDetailInstallations = useSkillDetailStore((state) => state.refreshInstallations);
   const refreshCounts = usePlatformStore((state) => state.refreshCounts);
+  const scanDuplicates = useUpdateCenterStore((state) => state.scanDuplicates);
+  const openUpdateCenter = useUpdateCenterStore((state) => state.openDialog);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<ClaudeSourceFilter>("all");
@@ -136,10 +134,7 @@ export function PlatformView() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [drawerSkill, setDrawerSkill] = useState<ScannedSkill | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [duplicateGroups, setDuplicateGroups] = useState<DuplicatePlatformSkillGroup[]>([]);
-  const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false);
   const [isDuplicateScanning, setIsDuplicateScanning] = useState(false);
-  const [isDuplicateCleaning, setIsDuplicateCleaning] = useState(false);
   const [returnFocusRowKey, setReturnFocusRowKey] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -263,36 +258,29 @@ export function PlatformView() {
     }
   }
 
-  function getLatestSkillsForAgent(agentId: string) {
-    const getState = (
-      useSkillStore as typeof useSkillStore & {
-        getState?: () => { skillsByAgent: Record<string, ScannedSkill[]> };
-      }
-    ).getState;
-    return getState?.().skillsByAgent[agentId] ?? skills;
-  }
-
   async function handleScanDuplicates() {
     if (!resolvedAgentId) return;
     setIsDuplicateScanning(true);
     try {
       await rescan();
       await getSkillsByAgent(resolvedAgentId);
-      const latestSkills = getLatestSkillsForAgent(resolvedAgentId);
-      const groups = findDuplicatePlatformSkillGroups(latestSkills);
+      await scanDuplicates([resolvedAgentId]);
+      const inventory = useUpdateCenterStore.getState().inventory;
+      const groups = inventory?.platformDuplicates ?? [];
       if (groups.length === 0) {
-        setDuplicateGroups([]);
-        setIsDuplicateDialogOpen(false);
         toast.info(t("platform.duplicatesNone"));
         return;
       }
 
-      setDuplicateGroups(groups);
-      setIsDuplicateDialogOpen(true);
+      const rowCount = groups.reduce(
+        (sum, group) => sum + group.writablePaths.length,
+        0
+      );
+      openUpdateCenter("duplicates");
       toast.success(
         t("platform.duplicatesFound", {
           skillCount: groups.length,
-          rowCount: groups.reduce((sum, group) => sum + group.writableRows.length, 0),
+          rowCount,
         })
       );
     } catch (err) {
@@ -302,49 +290,6 @@ export function PlatformView() {
     }
   }
 
-  async function handleCleanDuplicates(rows: ScannedSkill[]) {
-    if (!resolvedAgentId || rows.length === 0) return;
-    setIsDuplicateCleaning(true);
-    const failures: string[] = [];
-
-    for (const row of rows) {
-      const rowId = getClaudeUserRowId(row);
-      try {
-        if (rowId) {
-          await uninstallSkillFromAgent(row.id, resolvedAgentId, rowId);
-        } else {
-          await uninstallSkillFromAgent(row.id, resolvedAgentId);
-        }
-      } catch (err) {
-        failures.push(`${row.name}: ${String(err)}`);
-      }
-    }
-
-    try {
-      await refreshCounts();
-      await getSkillsByAgent(resolvedAgentId);
-      if (currentDetail && rows.some((row) => row.id === currentDetail.id)) {
-        await refreshDetailInstallations(currentDetail.id);
-      }
-    } finally {
-      setIsDuplicateCleaning(false);
-    }
-
-    const succeeded = rows.length - failures.length;
-    if (failures.length === 0) {
-      toast.success(t("platform.duplicatesCleanSuccess", { count: succeeded }));
-      setIsDuplicateDialogOpen(false);
-      setDuplicateGroups([]);
-    } else {
-      toast.error(
-        t("platform.duplicatesCleanPartial", {
-          succeeded,
-          failed: failures.length,
-          errors: failures.join("; "),
-        })
-      );
-    }
-  }
   const isLoading = resolvedAgentId ? (loadingByAgent[resolvedAgentId] ?? false) : false;
 
   // Memoize skills to avoid changing dependency reference on every render
@@ -671,15 +616,6 @@ export function PlatformView() {
         skill={installTargetSkill}
         agents={installTargetAgents}
         onInstall={handleInstall}
-      />
-
-      <DuplicatePlatformSkillsDialog
-        open={isDuplicateDialogOpen}
-        onOpenChange={setIsDuplicateDialogOpen}
-        groups={duplicateGroups}
-        platformName={platformDisplayName}
-        isSubmitting={isDuplicateCleaning}
-        onConfirm={handleCleanDuplicates}
       />
 
       <SkillDetailDrawer
