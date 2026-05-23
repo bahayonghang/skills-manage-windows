@@ -7,6 +7,7 @@ import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type { SkillGroup } from "@/lib/centralGrouping";
+import { cn } from "@/lib/utils";
 import type { CentralSkillUpdateState, SkillWithLinks } from "@/types";
 
 /**
@@ -23,6 +24,7 @@ export interface CentralGroupedSkillListProps {
   contentRef: RefObject<HTMLDivElement | null>;
   groups: SkillGroup[];
   availableInstallAgents: PlatformTarget[];
+  selectedCount: number;
   selectedSkillIdSet: Set<string>;
   updateStatuses: Record<string, CentralSkillUpdateState>;
   updatingSkillIds: string[];
@@ -41,6 +43,7 @@ export function CentralGroupedSkillList({
   contentRef,
   groups,
   availableInstallAgents,
+  selectedCount,
   selectedSkillIdSet,
   updateStatuses,
   updatingSkillIds,
@@ -65,7 +68,14 @@ export function CentralGroupedSkillList({
   const aiSummaries = useSkillExplanationSummaries(visibleSkillIds, "zh");
 
   return (
-    <div ref={contentRef} className="scrollbar-subtle flex-1 overflow-auto p-6">
+    <div
+      ref={contentRef}
+      data-testid="central-skill-list-scroll"
+      className={cn(
+        "scrollbar-subtle flex-1 overflow-auto p-6",
+        selectedCount > 0 && "pb-28"
+      )}
+    >
       <div className="space-y-6">
         {groups.map((group) => {
           const isCollapsed = collapsed[group.key] ?? false;

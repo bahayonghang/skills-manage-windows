@@ -426,6 +426,24 @@ export function CentralSkillsView() {
     },
   });
 
+  const handleToggleSelectionPreservingScroll = useCallback(
+    (skillId: string) => {
+      const scrollContainer = contentRef.current;
+      const scrollTop = scrollContainer?.scrollTop;
+
+      handleToggleSelection(skillId);
+
+      if (scrollTop === undefined) return;
+
+      window.requestAnimationFrame(() => {
+        if (contentRef.current) {
+          contentRef.current.scrollTop = scrollTop;
+        }
+      });
+    },
+    [handleToggleSelection]
+  );
+
   // ─── 共享 props ────────────────────────────────────────────────
   const dialogsProps = {
         agents,
@@ -537,7 +555,7 @@ export function CentralSkillsView() {
         onDetail: handleOpenDrawer,
         onInstallTo: handleInstallClick,
         onTogglePlatform: handleTogglePlatform,
-        onToggleSelection: handleToggleSelection,
+        onToggleSelection: handleToggleSelectionPreservingScroll,
         onUpdateCentral: (skillIds: string[]) => {
           void handleUpdateSkills(skillIds);
         },

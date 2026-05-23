@@ -59,7 +59,7 @@ import type {
  * - 通过 viewState / setViewState 驱动新视图状态（repo 单选、tag 多选 + URL state 同步）
  */
 
-type ListContentProps = Omit<ComponentProps<typeof CentralSkillListContent>, "t">;
+type ListContentProps = Omit<ComponentProps<typeof CentralSkillListContent>, "t" | "selectedCount">;
 type CategorizePanelProps = Omit<CentralSkillCategorizePanelProps, "t">;
 type DialogProps = Omit<ComponentProps<typeof CentralSkillDialogs>, "t">;
 type InstalledSkillsFilterProps = Omit<CentralInstalledSkillsQuickFilterProps, "t">;
@@ -423,9 +423,18 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           savedViewsSlot={savedViewsSlot}
         />
         {viewState.group === "none" ? (
-          <CentralSkillListContent {...listContent} t={t} />
+          <CentralSkillListContent
+            {...listContent}
+            selectedCount={bulkBar.selectedCount}
+            t={t}
+          />
         ) : (
-          <GroupedListView listContent={listContent} group={viewState.group} t={t} />
+          <GroupedListView
+            listContent={listContent}
+            selectedCount={bulkBar.selectedCount}
+            group={viewState.group}
+            t={t}
+          />
         )}
       </div>
 
@@ -468,11 +477,12 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
 
 interface GroupedListViewProps {
   listContent: ListContentProps;
+  selectedCount: number;
   group: GroupByMode;
   t: TFunction;
 }
 
-function GroupedListView({ listContent, group, t }: GroupedListViewProps) {
+function GroupedListView({ listContent, selectedCount, group, t }: GroupedListViewProps) {
   const groups = useMemo(
     () =>
       groupSkillsByMode(listContent.sortedSkills, group, {
@@ -495,6 +505,7 @@ function GroupedListView({ listContent, group, t }: GroupedListViewProps) {
       contentRef={listContent.contentRef}
       groups={groups}
       availableInstallAgents={listContent.availableInstallAgents}
+      selectedCount={selectedCount}
       selectedSkillIdSet={listContent.selectedSkillIdSet}
       updateStatuses={listContent.updateStatuses}
       updatingSkillIds={listContent.updatingSkillIds}

@@ -210,6 +210,32 @@ describe("CentralSkillsView shell（V2 markup）", () => {
     expect(screen.getByTestId("bulk-bar-clear-selection")).toBeInTheDocument();
   });
 
+  it("首次选中后保留列表滚动位置并为底部批量条预留安全区", async () => {
+    renderCentralSkillsView();
+    const scrollContainer = screen.getByTestId("central-skill-list-scroll");
+    const [firstCheckbox] = screen.getAllByLabelText("选择技能");
+    scrollContainer.scrollTop = 240;
+
+    fireEvent.click(firstCheckbox);
+
+    expect(await screen.findByTestId("central-bulk-action-bar")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(scrollContainer.scrollTop).toBe(240);
+    });
+    expect(scrollContainer).toHaveClass("pb-28");
+
+    scrollContainer.scrollTop = 360;
+    fireEvent.click(firstCheckbox);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("central-bulk-action-bar")).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(scrollContainer.scrollTop).toBe(360);
+    });
+    expect(scrollContainer).not.toHaveClass("pb-28");
+  });
+
   it("批量条「打标签」按钮触发 Categorize 抽屉", async () => {
     renderCentralSkillsView();
     fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
@@ -221,10 +247,14 @@ describe("CentralSkillsView shell（V2 markup）", () => {
 
   it("批量条「取消选择」清空选中并关闭批量条", async () => {
     renderCentralSkillsView();
+    const scrollContainer = screen.getByTestId("central-skill-list-scroll");
     fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    expect(await screen.findByTestId("central-bulk-action-bar")).toBeInTheDocument();
+    expect(scrollContainer).toHaveClass("pb-28");
     fireEvent.click(await screen.findByTestId("bulk-bar-clear-selection"));
     await waitFor(() => {
       expect(screen.queryByTestId("central-bulk-action-bar")).not.toBeInTheDocument();
     });
+    expect(scrollContainer).not.toHaveClass("pb-28");
   });
 });

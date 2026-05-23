@@ -7,6 +7,7 @@ import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
+import { cn } from "@/lib/utils";
 import type {
   CentralSkillUpdateState,
   SkillWithLinks,
@@ -25,6 +26,7 @@ export function CentralSkillListContent({
   onToggleSelection,
   onUpdateCentral,
   searchQuery,
+  selectedCount,
   selectedSkillIdSet,
   setDetailButtonRef,
   skillsCount,
@@ -46,6 +48,7 @@ export function CentralSkillListContent({
   onToggleSelection: (skillId: string) => void;
   onUpdateCentral: (skillIds: string[]) => void;
   searchQuery: string;
+  selectedCount: number;
   selectedSkillIdSet: Set<string>;
   setDetailButtonRef: (skillId: string, node: HTMLButtonElement | null) => void;
   skillsCount: number;
@@ -134,7 +137,14 @@ export function CentralSkillListContent({
   }
 
   return (
-    <div ref={contentRef} className="scrollbar-subtle flex-1 overflow-auto p-6">
+    <div
+      ref={contentRef}
+      data-testid="central-skill-list-scroll"
+      className={cn(
+        "scrollbar-subtle flex-1 overflow-auto p-6",
+        selectedCount > 0 && "pb-28"
+      )}
+    >
       {isLoading ? (
         <CentralSkillEmptyState message={t("central.loading")} />
       ) : skillsCount === 0 ? (
