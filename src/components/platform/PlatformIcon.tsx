@@ -136,6 +136,15 @@ function PlatformIconComponent({ agentId, className, size = 16 }: PlatformIconPr
         </svg>
       );
 
+    case "zed":
+      // Zed — stylized Z mark, kept local to avoid adding another icon asset.
+      return (
+        <svg {...svgProps}>
+          <path d="M3 2.5h10v2H6.8l6.2 7V13.5H3v-2h6.2L3 4.5z" />
+          <path d="M5.8 6.1h4.4L8 8.6z" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+
     case "central":
       // Central Skills — 3-D cube / package
       return (

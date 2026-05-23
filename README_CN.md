@@ -99,6 +99,7 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 | Coding | Codex CLI | `~/.agents/skills/` |
 | Coding | Cursor | `~/.agents/skills/` |
 | Coding | Antigravity | `~/.gemini/antigravity/skills/` |
+| Coding | Zed（社区兼容） | `~/.config/zed/skills/` |
 | Coding | Gemini CLI（legacy） | `~/.agents/skills/` |
 | Coding | Trae | `~/.trae/skills/` |
 | Coding | Factory Droid | `~/.factory/skills/` |
@@ -125,7 +126,7 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 | Lobster | WorkBuddy（打工搭子） | `~/.workbuddy/skills-marketplace/skills/` |
 | Central | 中央技能库 | `~/.skillsmanage/skills/` |
 
-> 说明：Claude Code 还会把 `~/.claude/plugins/marketplaces/*` 下的 marketplace plugin 目录显示成只读行。这些条目只做展示，不按 `~/.claude/skills/` 里的原生技能那套方式管理。Antigravity plugin bundle 属于独立 CLI 插件机制；SkillPort 当前只管理 Antigravity 的 `SKILL.md` 技能目录，不导入或导出 plugin bundle。
+> 说明：Claude Code 还会把 `~/.claude/plugins/marketplaces/*` 下的 marketplace plugin 目录显示成只读行。这些条目只做展示，不按 `~/.claude/skills/` 里的原生技能那套方式管理。Antigravity plugin bundle 属于独立 CLI 插件机制；SkillPort 当前只管理 Antigravity 的 `SKILL.md` 技能目录，不导入或导出 plugin bundle。 Zed 以社区兼容 skills 路径列出；SkillPort 不宣称该目录是 Zed 官方原生 skills 规范。
 
 也可以在 Settings 中添加自定义平台。
 

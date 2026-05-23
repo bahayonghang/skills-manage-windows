@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 use std::fs;
 use tempfile::TempDir;
 
-const BUILTIN_AGENT_COUNT: usize = 33;
+const BUILTIN_AGENT_COUNT: usize = 34;
 
 async fn setup_test_db() -> DbPool {
     let pool = SqlitePool::connect(":memory:").await.unwrap();

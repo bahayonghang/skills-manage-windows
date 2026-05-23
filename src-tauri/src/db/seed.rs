@@ -633,6 +633,17 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             is_enabled: is_builtin_agent_enabled_by_default("antigravity", "coding"),
         },
         Agent {
+            id: "zed".to_string(),
+            display_name: "Zed".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: skill_dir(&[".config", "zed", "skills"]),
+            project_skills_dir: None,
+            icon_name: Some("zed".to_string()),
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: is_builtin_agent_enabled_by_default("zed", "coding"),
+        },
+        Agent {
             id: "cline".to_string(),
             display_name: "Cline".to_string(),
             category: "coding".to_string(),

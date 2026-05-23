@@ -9,4 +9,4 @@
 - [x] 添加wsl支持，不需要使用ssh连接wsl，支持在设置中手动添加和右上角切换
 - [x] 解决当repo中添加或者删除skills带来的检查更新问题
 - [x] 优化更新机制
-- [ ] 为zed添加skills路径: ~/.config/zed/skills/
+- [x] 为zed添加skills路径: ~/.config/zed/skills/（社区兼容路径）

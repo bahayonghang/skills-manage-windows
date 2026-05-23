@@ -351,7 +351,7 @@ async fn operation_log_export_contains_metadata_and_entries() {
 async fn test_builtin_agents_seeded() {
     let pool = setup_test_db().await;
     let agents = get_all_agents(&pool).await.unwrap();
-    assert_eq!(agents.len(), 33, "Should have exactly 33 built-in agents");
+    assert_eq!(agents.len(), 34, "Should have exactly 34 built-in agents");
 
     let ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
     // Coding platforms
@@ -372,6 +372,7 @@ async fn test_builtin_agents_seeded() {
     assert!(ids.contains(&"ob1"));
     assert!(ids.contains(&"amp"));
     assert!(ids.contains(&"antigravity"));
+    assert!(ids.contains(&"zed"));
     assert!(ids.contains(&"cline"));
     assert!(ids.contains(&"deep-agents"));
     assert!(ids.contains(&"firebender"));
@@ -455,6 +456,23 @@ async fn test_universal_agents_share_universal_skills_dir() {
         Some(UNIVERSAL_PROJECT_SKILLS_DIR)
     );
 
+    let zed = agents
+        .iter()
+        .find(|agent| agent.id == "zed")
+        .expect("zed agent should exist");
+    assert_eq!(zed.display_name, "Zed");
+    assert!(
+        !crate::paths::paths_equivalent(Path::new(&zed.global_skills_dir), &universal_dir),
+        "zed should use its community-compatible skills directory, not ~/.agents/skills"
+    );
+    assert!(
+        zed.global_skills_dir
+            .replace('\\', "/")
+            .ends_with(".config/zed/skills"),
+        "zed should use ~/.config/zed/skills"
+    );
+    assert_eq!(zed.project_skills_dir.as_deref(), None);
+
     let gemini_cli = agents
         .iter()
         .find(|agent| agent.id == "gemini-cli")
@@ -490,7 +508,7 @@ async fn test_init_does_not_duplicate_agents_on_reinit() {
     let pool = setup_test_db().await;
     init_database(&pool).await.unwrap(); // Call a second time
     let agents = get_all_agents(&pool).await.unwrap();
-    assert_eq!(agents.len(), 33, "Reinit must not duplicate agents");
+    assert_eq!(agents.len(), 34, "Reinit must not duplicate agents");
 }
 
 // ── Skills ────────────────────────────────────────────────────────────────
@@ -885,7 +903,7 @@ async fn test_insert_custom_agent() {
     insert_custom_agent(&pool, &custom).await.unwrap();
 
     let all = get_all_agents(&pool).await.unwrap();
-    assert_eq!(all.len(), 34, "Should have 33 builtins + 1 custom");
+    assert_eq!(all.len(), 35, "Should have 34 builtins + 1 custom");
 
     let retrieved = get_agent_by_id(&pool, "my-custom-agent")
         .await
