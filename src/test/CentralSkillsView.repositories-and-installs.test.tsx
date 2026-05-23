@@ -150,6 +150,32 @@ describe("CentralSkillsView repositories + installs（V2 markup）", () => {
   });
 
 
+  it("sorts by installed platform count", async () => {
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByTestId("central-toolbar-sort"));
+    fireEvent.click(await screen.findByTestId("central-toolbar-sort-installedPlatformCount-desc"));
+
+    await waitFor(() => {
+      const detailButtons = screen.getAllByRole("button", {
+        name: /查看 .* 的详情/i,
+      });
+      expect(detailButtons[0]).toHaveTextContent("frontend-design");
+      expect(detailButtons[1]).toHaveTextContent("code-reviewer");
+    });
+
+    fireEvent.click(screen.getByTestId("central-toolbar-sort"));
+    fireEvent.click(await screen.findByTestId("central-toolbar-sort-installedPlatformCount-asc"));
+
+    await waitFor(() => {
+      const detailButtons = screen.getAllByRole("button", {
+        name: /查看 .* 的详情/i,
+      });
+      expect(detailButtons[0]).toHaveTextContent("code-reviewer");
+      expect(detailButtons[1]).toHaveTextContent("frontend-design");
+    });
+  });
+
   it("sorts by modified time and reverses direction explicitly", async () => {
     renderCentralSkillsView();
 

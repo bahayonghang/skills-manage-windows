@@ -40,6 +40,12 @@ describe("centralViewState", () => {
     expect(s.sortDir).toBe("desc");
   });
 
+  it("parses installed platform count sort", () => {
+    const s = parseCentralViewState(new URLSearchParams("sort=installedPlatformCount:desc"));
+    expect(s.sortField).toBe("installedPlatformCount");
+    expect(s.sortDir).toBe("desc");
+  });
+
   it("falls back when sort is malformed", () => {
     const s = parseCentralViewState(new URLSearchParams("sort=bogus:asc"));
     expect(s.sortField).toBe("name"); // default

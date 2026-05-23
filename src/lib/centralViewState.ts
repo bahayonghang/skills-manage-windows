@@ -57,6 +57,7 @@ const SORT_FIELDS: ReadonlySet<CentralSortField> = new Set([
   "name",
   "createdAt",
   "updatedAt",
+  "installedPlatformCount",
 ]);
 const SORT_DIRECTIONS: ReadonlySet<CentralSortDirection> = new Set(["asc", "desc"]);
 

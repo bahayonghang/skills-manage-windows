@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { BatchDeleteCentralSkillPreviewResult, CentralSkillUpdateState, DeleteSkillRepositoryPreview, SkillDetail, SkillRepositoryWithStats, SkillWithLinks } from "@/types";
 import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
+import { selectMostUniversalSkills } from "@/lib/centralInstalledFilters";
 import { markAppPerformance } from "@/lib/performance";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { CentralSidebarHeader } from "@/components/central/CentralSidebarHeader";
@@ -148,7 +149,6 @@ export function CentralSkillsView() {
     canCreateManualTag,
     filteredManualTags,
     selectedSkillIdSet,
-    skillIdsKey,
     updateAvailableSkillIds,
     updateTargetSkillIds,
   } = useCentralSkillsDerivedData({
@@ -179,6 +179,7 @@ export function CentralSkillsView() {
       { value: "name", label: t("central.sortByName") },
       { value: "createdAt", label: t("central.sortByCreatedAt") },
       { value: "updatedAt", label: t("central.sortByUpdatedAt") },
+      { value: "installedPlatformCount", label: t("central.sortByInstalledPlatformCount") },
     ],
     [t]
   );
@@ -204,6 +205,19 @@ export function CentralSkillsView() {
     setIsBatchInstallDialogOpen,
     setSelectedSkillIds,
   });
+
+  const mostUniversalCurrentSkills = useMemo(
+    () => selectMostUniversalSkills(visibleCurrentViewSkills),
+    [visibleCurrentViewSkills]
+  );
+
+  useEffect(() => {
+    const visibleIds = new Set(visibleCurrentViewSkills.map((skill) => skill.id));
+    setSelectedSkillIds((current) => {
+      const next = current.filter((skillId) => visibleIds.has(skillId));
+      return next.length === current.length ? current : next;
+    });
+  }, [visibleCurrentViewSkills]);
 
   // ─── Saved Views ────────────────────────────────────────────
   const savedViewsBridge = useCentralSavedViewsBridge({
@@ -297,14 +311,6 @@ export function CentralSkillsView() {
     if (!v2.isSearchActive || !contentRef.current) return;
     contentRef.current.scrollTop = 0;
   }, [v2.isSearchActive, viewState.q]);
-
-  useEffect(() => {
-    const visibleIds = new Set(skillIdsKey ? skillIdsKey.split("\0") : []);
-    setSelectedSkillIds((current) => {
-      const next = current.filter((skillId) => visibleIds.has(skillId));
-      return next.length === current.length ? current : next;
-    });
-  }, [skillIdsKey]);
 
   useEffect(() => {
     if (!isLoading && skills.length > 0 && !hasMarkedCentralListReady.current) {
@@ -612,6 +618,14 @@ export function CentralSkillsView() {
 
   const handleClearSelection = useCallback(() => setSelectedSkillIds([]), []);
 
+  const handleSelectCurrentResults = useCallback(() => {
+    setSelectedSkillIds(visibleCurrentViewSkills.map((skill) => skill.id));
+  }, [visibleCurrentViewSkills]);
+
+  const handleSelectMostUniversal = useCallback(() => {
+    setSelectedSkillIds(mostUniversalCurrentSkills.map((skill) => skill.id));
+  }, [mostUniversalCurrentSkills]);
+
   const categorizePanelProps = {
     aiTagJob,
     aiTagReviews,
@@ -658,6 +672,15 @@ export function CentralSkillsView() {
     onBatchDelete: () => {
       void handleBatchDeleteClick();
     },
+    onClearSelection: handleClearSelection,
+  };
+
+  const selectionControlsProps = {
+    selectedCount: selectedSkillIds.length,
+    currentResultCount: visibleCurrentViewSkills.length,
+    universalSelectionCount: mostUniversalCurrentSkills.length,
+    onSelectCurrentResults: handleSelectCurrentResults,
+    onSelectMostUniversal: handleSelectMostUniversal,
     onClearSelection: handleClearSelection,
   };
 
@@ -716,6 +739,7 @@ export function CentralSkillsView() {
         listContent={listContentProps}
         categorizePanel={categorizePanelProps}
         bulkBar={bulkBarProps}
+        selectionControls={selectionControlsProps}
         categorizeDrawer={categorizeDrawerProps}
         taskCenter={taskCenterProps}
         dialogs={dialogsProps}
@@ -753,3 +777,4 @@ export function CentralSkillsView() {
     </>
   );
 }
+

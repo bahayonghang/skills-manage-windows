@@ -33,7 +33,7 @@ import type {
   SkillportStateImportResult,
 } from "@/types";
 
-export type CentralSortField = "name" | "createdAt" | "updatedAt";
+export type CentralSortField = "name" | "createdAt" | "updatedAt" | "installedPlatformCount";
 export type CentralSortDirection = "asc" | "desc";
 export type CentralCategorizeTab = "manual" | "ai" | "review";
 

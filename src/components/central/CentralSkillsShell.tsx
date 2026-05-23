@@ -5,6 +5,7 @@ import {
   GitBranch,
   ListChecks,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import type { TFunction } from "i18next";
 
@@ -111,6 +112,14 @@ export interface CentralSkillsShellProps {
     onBatchDelete: () => void;
     onClearSelection: () => void;
   };
+  selectionControls: {
+    selectedCount: number;
+    currentResultCount: number;
+    universalSelectionCount: number;
+    onSelectCurrentResults: () => void;
+    onSelectMostUniversal: () => void;
+    onClearSelection: () => void;
+  };
   categorizeDrawer: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -174,6 +183,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
     categorizePanel,
     dialogs,
     bulkBar,
+    selectionControls,
     categorizeDrawer,
     taskCenter,
     setIsGitHubImportOpen,
@@ -398,6 +408,16 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
         </div>
       </div>
 
+      <CentralSelectionControls
+        t={t}
+        selectedCount={selectionControls.selectedCount}
+        currentResultCount={selectionControls.currentResultCount}
+        universalSelectionCount={selectionControls.universalSelectionCount}
+        onSelectCurrentResults={selectionControls.onSelectCurrentResults}
+        onSelectMostUniversal={selectionControls.onSelectMostUniversal}
+        onClearSelection={selectionControls.onClearSelection}
+      />
+
       {/* Body: sidebar + list + categorize ───────────────────────────── */}
       <div className="flex min-h-0 flex-1">
         <CentralSidebar
@@ -471,6 +491,83 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
         onCancelPortability={taskCenter.onCancelPortability}
         onViewAiReviews={taskCenter.onViewAiReviews}
       />
+    </div>
+  );
+}
+
+
+interface CentralSelectionControlsProps {
+  t: TFunction;
+  selectedCount: number;
+  currentResultCount: number;
+  universalSelectionCount: number;
+  onSelectCurrentResults: () => void;
+  onSelectMostUniversal: () => void;
+  onClearSelection: () => void;
+}
+
+function CentralSelectionControls({
+  t,
+  selectedCount,
+  currentResultCount,
+  universalSelectionCount,
+  onSelectCurrentResults,
+  onSelectMostUniversal,
+  onClearSelection,
+}: CentralSelectionControlsProps) {
+  const hasCurrentResults = currentResultCount > 0;
+  const canSelectUniversal = universalSelectionCount > 0;
+
+  return (
+    <div className="border-b border-border/70 px-6 py-2">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span data-testid="central-selection-summary" className="font-medium text-foreground">
+          {t("central.selectionSummary", {
+            selectedCount,
+            currentCount: currentResultCount,
+          })}
+        </span>
+        <span className="hidden h-4 w-px bg-border sm:block" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          disabled={!hasCurrentResults}
+          onClick={onSelectCurrentResults}
+          data-testid="central-select-current-results"
+        >
+          {t("central.selectCurrentResults")}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          disabled={selectedCount === 0}
+          onClick={onClearSelection}
+          data-testid="central-clear-selection"
+        >
+          {t("central.clearSelection")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          disabled={!canSelectUniversal}
+          onClick={onSelectMostUniversal}
+          title={
+            canSelectUniversal
+              ? t("central.selectMostUniversalTitle", { count: universalSelectionCount })
+              : t("central.selectMostUniversalDisabled")
+          }
+          data-testid="central-select-most-universal"
+        >
+          <Sparkles className="size-3.5" />
+          {t("central.selectMostUniversal")}
+        </Button>
+      </div>
     </div>
   );
 }

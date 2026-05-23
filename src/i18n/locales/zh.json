@@ -1089,6 +1089,21 @@
       },
       "singleUpdateSuccess": "「{{skill}}」已更新到最新版本",
       "singleUpdateFailed": "「{{skill}}」更新失败：{{error}}"
+    },
+    "sortByInstalledPlatformCount": "安装平台数",
+    "selectionSummary": "已选 {{selectedCount}} / 当前结果 {{currentCount}}",
+    "selectCurrentResults": "全选当前结果",
+    "selectMostUniversal": "通用性优先",
+    "selectMostUniversalTitle": "选择当前结果中覆盖平台最多的 {{count}} 个技能",
+    "selectMostUniversalDisabled": "当前结果没有已安装覆盖，无法按通用性选择。",
+    "batchInstallPlatformsLabel": "目标平台",
+    "batchInstallManagePlatforms": "管理平台 / 添加平台",
+    "batchInstallSkippedDetails": "跳过明细",
+    "batchInstallSkipReasons": {
+      "already_installed": "已安装",
+      "shared_target_record": "共享目录",
+      "central_symlink": "中央库链接",
+      "matching_copy": "匹配副本"
     }
   },
   "installDialog": {

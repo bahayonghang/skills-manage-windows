@@ -25,6 +25,7 @@ import {
   type CentralQueryAst,
   type CentralQueryContext,
 } from "@/lib/centralSearchQuery";
+import { getSkillInstalledPlatformCount } from "@/lib/centralInstalledFilters";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 import type { CentralViewState } from "@/lib/centralViewState";
 import type {
@@ -94,6 +95,11 @@ function compareSkillsForSort(
     sensitivity: "base",
   });
   if (field === "name") return nameComparison * dir;
+  if (field === "installedPlatformCount") {
+    const countComparison =
+      getSkillInstalledPlatformCount(a) - getSkillInstalledPlatformCount(b);
+    return countComparison === 0 ? nameComparison : countComparison * dir;
+  }
   const timeComparison =
     getSkillSortTimestamp(a, field) - getSkillSortTimestamp(b, field);
   return timeComparison === 0 ? nameComparison : timeComparison * dir;

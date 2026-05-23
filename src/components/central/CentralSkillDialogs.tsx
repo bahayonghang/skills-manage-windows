@@ -282,6 +282,7 @@ export function CentralSkillDialogs({
         skillCount={selectedSkillIds.length}
         agents={availableInstallAgents}
         isInstalling={isInstalling}
+        onManagePlatforms={() => setIsPlatformManageOpen(true)}
         onInstall={onBatchInstallCentralSkills}
       />
 

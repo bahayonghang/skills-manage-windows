@@ -1089,6 +1089,21 @@
       },
       "singleUpdateSuccess": "Updated \"{{skill}}\" to the latest version",
       "singleUpdateFailed": "Failed to update \"{{skill}}\": {{error}}"
+    },
+    "sortByInstalledPlatformCount": "Installed platform count",
+    "selectionSummary": "{{selectedCount}} selected / {{currentCount}} current result(s)",
+    "selectCurrentResults": "Select current results",
+    "selectMostUniversal": "Most universal",
+    "selectMostUniversalTitle": "Select {{count}} skill(s) with the broadest platform coverage in current results",
+    "selectMostUniversalDisabled": "No current result has installed platform coverage.",
+    "batchInstallPlatformsLabel": "Target platforms",
+    "batchInstallManagePlatforms": "Manage / add platforms",
+    "batchInstallSkippedDetails": "Skipped details",
+    "batchInstallSkipReasons": {
+      "already_installed": "Already installed",
+      "shared_target_record": "Shared directory",
+      "central_symlink": "Central symlink",
+      "matching_copy": "Matching copy"
     }
   },
   "installDialog": {

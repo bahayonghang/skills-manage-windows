@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import {
   cleanupCentralSkillsViewTestState,
+  mockSkills,
   renderCentralSkillsView,
   resetCentralSkillsViewTestState,
 } from "./centralSkillsViewTestSupport";
@@ -66,7 +67,7 @@ describe("CentralSkillsView shell（V2 markup）", () => {
     expect(search).toBeInTheDocument();
   });
 
-  it("排序 menu 展开后含 6 个 (field × dir) 选项", async () => {
+  it("排序 menu 展开后含 8 个 (field × dir) 选项", async () => {
     renderCentralSkillsView();
     fireEvent.click(screen.getByTestId("central-toolbar-sort"));
     expect(
@@ -77,6 +78,63 @@ describe("CentralSkillsView shell（V2 markup）", () => {
     expect(screen.getByTestId("central-toolbar-sort-createdAt-desc")).toBeInTheDocument();
     expect(screen.getByTestId("central-toolbar-sort-updatedAt-asc")).toBeInTheDocument();
     expect(screen.getByTestId("central-toolbar-sort-updatedAt-desc")).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-sort-installedPlatformCount-asc")).toBeInTheDocument();
+    expect(screen.getByTestId("central-toolbar-sort-installedPlatformCount-desc")).toBeInTheDocument();
+  });
+
+  it("选择控制条支持全选当前结果和清空选择", async () => {
+    renderCentralSkillsView();
+
+    expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 0 / 当前结果 2");
+    fireEvent.click(screen.getByTestId("central-select-current-results"));
+
+    expect(await screen.findByTestId("central-bulk-action-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 2 / 当前结果 2");
+
+    fireEvent.click(screen.getByTestId("central-clear-selection"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("central-bulk-action-bar")).not.toBeInTheDocument();
+    });
+  });
+
+  it("筛选变化后移除不可见的已选技能", async () => {
+    window.localStorage.setItem("central.sidebarPinned", "true");
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByTestId("central-select-current-results"));
+    expect(await screen.findByTestId("central-selection-summary")).toHaveTextContent("已选 2 / 当前结果 2");
+
+    const sidebar = screen.getByTestId("central-sidebar-v2");
+    fireEvent.click(within(sidebar).getByTestId("repo-github-openai-skills-main"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 1 / 当前结果 1");
+    });
+  });
+
+  it("通用性优先选择当前结果中安装平台数最高的技能", async () => {
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByTestId("central-select-most-universal"));
+
+    expect(await screen.findByTestId("central-bulk-action-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 1 / 当前结果 2");
+    const checkboxes = screen.getAllByLabelText("选择技能") as HTMLInputElement[];
+    expect(checkboxes[0]).not.toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+  });
+
+  it("通用性优先在当前结果没有安装覆盖时禁用", () => {
+    renderCentralSkillsView({
+      centralOverrides: {
+        skills: [
+          { ...mockSkills[0], linked_agents: [], shared_root_agents: [] },
+          { ...mockSkills[1], linked_agents: [], shared_root_agents: [] },
+        ],
+      },
+    });
+
+    expect(screen.getByTestId("central-select-most-universal")).toBeDisabled();
   });
 
   it("视图 menu 展开后含 group / installed / quick filters 段", async () => {
@@ -258,3 +316,4 @@ describe("CentralSkillsView shell（V2 markup）", () => {
     expect(scrollContainer).not.toHaveClass("pb-28");
   });
 });
+

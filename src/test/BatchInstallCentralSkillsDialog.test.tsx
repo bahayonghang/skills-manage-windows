@@ -73,8 +73,9 @@ const successInstallResult: CentralBatchInstallResult = {
 
 const mockOnInstall = vi.fn();
 const mockOnOpenChange = vi.fn();
+const mockOnManagePlatforms = vi.fn();
 
-function renderDialog(props: { agents?: AgentWithStatus[] } = {}) {
+function renderDialog(props: { agents?: AgentWithStatus[]; onManagePlatforms?: () => void } = {}) {
   return render(
     <BatchInstallCentralSkillsDialog
       open
@@ -85,6 +86,7 @@ function renderDialog(props: { agents?: AgentWithStatus[] } = {}) {
         lobster: true,
       })}
       isInstalling={false}
+      onManagePlatforms={props.onManagePlatforms}
       onInstall={mockOnInstall}
     />
   );
@@ -105,6 +107,14 @@ describe("BatchInstallCentralSkillsDialog", () => {
     const capability = defaultCapability as { permissions: string[] };
 
     expect(capability.permissions).toContain("dialog:default");
+  });
+
+  it("opens platform management from the target area", () => {
+    renderDialog({ onManagePlatforms: mockOnManagePlatforms });
+
+    fireEvent.click(screen.getByTestId("batch-install-manage-platforms"));
+
+    expect(mockOnManagePlatforms).toHaveBeenCalledTimes(1);
   });
 
   it("fills project path from the folder picker and submits it", async () => {
@@ -221,6 +231,7 @@ describe("BatchInstallCentralSkillsDialog", () => {
     }));
 
     expect(await screen.findByText(/成功 1，跳过 1，失败 1/)).toBeInTheDocument();
+    expect(screen.getByTestId("batch-install-skipped-summary")).toHaveTextContent("已安装: 1");
     expect(screen.getByText(/frontend-design \/ kiro/)).toBeInTheDocument();
     expect(mockOnOpenChange).not.toHaveBeenCalledWith(false);
   });
