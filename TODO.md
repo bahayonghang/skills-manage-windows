@@ -8,4 +8,5 @@
 - [x] 修改repo查看模式，不是批量选中，而是单独选中某个repo，只查看这个repo中的skills
 - [x] 添加wsl支持，不需要使用ssh连接wsl，支持在设置中手动添加和右上角切换
 - [x] 解决当repo中添加或者删除skills带来的检查更新问题
-- [ ] 优化更新机制
+- [x] 优化更新机制
+- [ ] 为zed添加skills路径: ~/.config/zed/skills/

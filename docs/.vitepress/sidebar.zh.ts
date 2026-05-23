@@ -14,6 +14,7 @@ export const sidebarZh: DefaultTheme.SidebarMulti = {
       text: '核心工作流',
       items: [
         { text: '中央技能库', link: '/zh/guide/central-skills' },
+        { text: '更新中心', link: '/zh/guide/update-center' },
         { text: '平台', link: '/zh/guide/platforms' },
         { text: '集合', link: '/zh/guide/collections' },
         { text: '项目', link: '/zh/guide/projects' },

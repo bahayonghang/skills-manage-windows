@@ -2,6 +2,21 @@
 
 本文件记录该项目的重要变更。
 
+## [Unreleased]
+
+### 新功能
+
+- **更新中心**：统一 dialog，把可更新 skills、远端新增、远端删除、平台冗余合到一个屏幕，每条都支持逐项决策。取代原本独立的 **检查更新**、**远端缺失**、**仓库同步** 三个 dialog。文档见 `docs/zh/guide/update-center.md`。
+- 新增 Tauri 命令 `refresh_skill_update_inventory`、`apply_skill_update_decisions`、`clear_skill_update_inventory`、`get_skill_update_inventory`、`scan_platform_duplicate_skills`。
+- 新增 DB 表 `skill_repository_pending_additions`，新增字段 `skill_repositories.last_synced_at`，用于跨 session 持久化刷新结果。
+- 后端 `SkillUpdateStatus` enum 取代原来的字符串常量。
+
+### 调整
+
+- PlatformView 的 **扫描重复** 按钮现在跳转到更新中心的 **平台冗余** Tab，不再打开独立 dialog。
+- `UnifiedSkillCard` 新增 inventory-only 的 badge 展示（平台冗余、失链孤儿）。
+- `DuplicatePlatformSkillsDialog`、`CentralUpdateConfirmDialog`、`RemoteMissingSkillsDialog`、`CentralRepositorySyncDialog` 已标记 `@deprecated`，下一个 minor release 之后移除。
+
 ## 0.11.0 - 2026-05-11
 
 这是 `0.10.x → 0.11.0` 版本线的安全与中央技能库 V2 收口版本。本版本继续保持 Windows-first 打包契约不变，同时让 Central Skills 成为默认的高信息密度工作区。

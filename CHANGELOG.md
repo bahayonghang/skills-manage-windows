@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Update Center**: a unified dialog that aggregates updatable skills, remote additions, remote deletions, and platform duplicates into one screen with per-item decisions. Replaces the standalone *Check for updates*, *Remote missing*, and *Repository sync* dialogs. See `docs/guide/update-center.md`.
+- New Tauri commands `refresh_skill_update_inventory`, `apply_skill_update_decisions`, `clear_skill_update_inventory`, `get_skill_update_inventory`, `scan_platform_duplicate_skills`.
+- New DB table `skill_repository_pending_additions` and column `skill_repositories.last_synced_at` to persist refresh results across sessions.
+- Backend `SkillUpdateStatus` enum replaces the previous string constants.
+
+### Changed
+
+- PlatformView's *Scan duplicates* button now opens the Update Center on the *Platform duplicates* tab instead of a standalone dialog.
+- `UnifiedSkillCard` shows additional badges for inventory-only signals (platform duplicate, orphan).
+- `DuplicatePlatformSkillsDialog`, `CentralUpdateConfirmDialog`, `RemoteMissingSkillsDialog`, `CentralRepositorySyncDialog` are marked `@deprecated` and will be removed after one minor release.
+
 ## 0.11.0 - 2026-05-11
 
 Security and Central Library V2 release for the 0.10.x → 0.11.0 line. This release keeps the Windows-first packaging contract unchanged while making Central Skills the default high-density workspace.
