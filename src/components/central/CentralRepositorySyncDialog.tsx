@@ -14,11 +14,17 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  buildSkillConflictSourceMap,
+  formatConflictSourceLabel,
+  repositoryDisplayName,
+} from "@/lib/centralConflictSource";
 import type {
   AgentWithStatus,
   BatchDeleteCentralSkillPreviewResult,
   BatchDeleteCentralSkillRequest,
   DuplicateResolution,
+  SkillWithLinks,
 } from "@/types";
 import type {
   CentralRepositoryAdditionSkipRequest,
@@ -46,6 +52,7 @@ interface CentralRepositorySyncDialogProps {
   preview: CentralRepositorySyncPreview | null;
   deletePreview: BatchDeleteCentralSkillPreviewResult | null;
   agents: AgentWithStatus[];
+  skills: SkillWithLinks[];
   isPreviewLoading: boolean;
   isApplying: boolean;
   error: string | null;
@@ -85,6 +92,7 @@ export function CentralRepositorySyncDialog({
   preview,
   deletePreview,
   agents,
+  skills,
   isPreviewLoading,
   isApplying,
   error,
@@ -148,10 +156,12 @@ export function CentralRepositorySyncDialog({
     () => new Map((deletePreview?.failed ?? []).map((item) => [item.skill_id, item.error])),
     [deletePreview]
   );
+  const skillSourceById = useMemo(() => buildSkillConflictSourceMap(skills), [skills]);
   const agentNameById = useMemo(
     () => new Map(agents.map((agent) => [agent.id, agent.display_name])),
     [agents]
   );
+  const unassignedSourceLabel = t("central.unassignedSource");
 
   function updateAddedDecision(key: string, patch: Partial<AddedDecision>) {
     setAddedDecisions((current) => ({
@@ -363,6 +373,19 @@ export function CentralRepositorySyncDialog({
                     resolution: item.preview.conflict ? "skip" : "overwrite",
                     renamedSkillId: item.preview.skillId,
                   };
+                  const existingConflict = item.preview.conflict
+                    ? skillSourceById.get(item.preview.conflict.existingSkillId)
+                    : null;
+                  const remoteSource = formatConflictSourceLabel(
+                    repositoryDisplayName(item.repo),
+                    item.preview.sourcePath,
+                    unassignedSourceLabel
+                  );
+                  const existingSource = formatConflictSourceLabel(
+                    existingConflict?.repositoryLabel,
+                    existingConflict?.sourcePath,
+                    unassignedSourceLabel
+                  );
                   return (
                     <article key={key} className="rounded-xl border border-border p-3">
                       <div className="flex items-start gap-3">
@@ -385,7 +408,10 @@ export function CentralRepositorySyncDialog({
                           {item.preview.conflict && (
                             <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
                               {t("central.repositorySyncConflict", {
-                                skill: item.preview.conflict.existingName,
+                                remoteSource,
+                                skill:
+                                  existingConflict?.skillName ?? item.preview.conflict.existingName,
+                                existingSource,
                               })}
                             </div>
                           )}
@@ -447,6 +473,19 @@ export function CentralRepositorySyncDialog({
                     action: "keep",
                     renamedSkillId: item.preview.skillId,
                   };
+                  const existingConflict = item.preview.conflict
+                    ? skillSourceById.get(item.preview.conflict.existingSkillId)
+                    : null;
+                  const remoteSource = formatConflictSourceLabel(
+                    repositoryDisplayName(item.repo),
+                    item.preview.sourcePath,
+                    unassignedSourceLabel
+                  );
+                  const existingSource = formatConflictSourceLabel(
+                    existingConflict?.repositoryLabel,
+                    existingConflict?.sourcePath,
+                    unassignedSourceLabel
+                  );
                   return (
                     <article key={key} className="rounded-xl border border-border bg-background p-3">
                       <div className="flex flex-wrap items-start gap-3">
@@ -460,7 +499,10 @@ export function CentralRepositorySyncDialog({
                           {item.preview.conflict && (
                             <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
                               {t("central.repositorySyncConflict", {
-                                skill: item.preview.conflict.existingName,
+                                remoteSource,
+                                skill:
+                                  existingConflict?.skillName ?? item.preview.conflict.existingName,
+                                existingSource,
                               })}
                             </div>
                           )}

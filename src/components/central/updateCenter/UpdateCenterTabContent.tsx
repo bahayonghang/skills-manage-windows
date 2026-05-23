@@ -24,6 +24,7 @@ import {
 
 import type { UpdateCenterTab } from "@/stores/updateCenterStore";
 import type { SkillUpdateInventory } from "@/types/skillUpdateInventory";
+import type { SkillConflictSourceInfo } from "@/lib/centralConflictSource";
 
 export interface UpdateCenterTabHandlers {
   updateUpdatable: (skillId: string, patch: Partial<UpdatableRowState>) => void;
@@ -41,6 +42,8 @@ interface UpdateCenterTabContentProps {
   inventory: SkillUpdateInventory | null;
   decisions: DecisionState;
   handlers: UpdateCenterTabHandlers;
+  existingSkillSources: ReadonlyMap<string, SkillConflictSourceInfo>;
+  repositoryLabels: ReadonlyMap<string, string>;
 }
 
 export function UpdateCenterTabContent({
@@ -48,6 +51,8 @@ export function UpdateCenterTabContent({
   inventory,
   decisions,
   handlers,
+  existingSkillSources,
+  repositoryLabels,
 }: UpdateCenterTabContentProps) {
   const { t } = useTranslation();
 
@@ -87,6 +92,8 @@ export function UpdateCenterTabContent({
         <RemoteAddedTabPanel
           items={inventory.remoteAdded}
           state={decisions.added}
+          existingSkillSources={existingSkillSources}
+          repositoryLabels={repositoryLabels}
           onChange={handlers.updateAdded}
         />
       );

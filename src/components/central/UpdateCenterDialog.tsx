@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import {
   useUpdateCenterStore,
   type UpdateCenterTab,
@@ -40,6 +41,10 @@ import {
   coerceRefreshScopeKind,
   isRefreshScopeEnabled,
 } from "@/lib/updateCenterRefreshScope";
+import {
+  buildRepositoryDisplayNameMap,
+  buildSkillConflictSourceMap,
+} from "@/lib/centralConflictSource";
 
 const TAB_ORDER: readonly UpdateCenterTab[] = [
   "updatable",
@@ -64,9 +69,19 @@ export function UpdateCenterDialog() {
   const apply = useUpdateCenterStore((state) => state.apply);
   const clear = useUpdateCenterStore((state) => state.clear);
   const setActiveTab = useUpdateCenterStore((state) => state.setActiveTab);
+  const skills = useCentralSkillsStore((state) => state.skills ?? []);
+  const repositories = useCentralSkillsStore((state) => state.repositories ?? []);
 
   const [scopeKind, setScopeKind] = useState<SkillRefreshScopeKind>("all");
   const [decisions, setDecisions] = useState<DecisionState>(emptyDecisionState);
+  const existingSkillSources = useMemo(
+    () => buildSkillConflictSourceMap(skills),
+    [skills],
+  );
+  const repositoryLabels = useMemo(
+    () => buildRepositoryDisplayNameMap(repositories),
+    [repositories],
+  );
 
   const inventoryKey = useMemo(
     () => inventorySignature(inventory),
@@ -255,6 +270,8 @@ export function UpdateCenterDialog() {
               inventory={inventory}
               decisions={decisions}
               handlers={handlers}
+              existingSkillSources={existingSkillSources}
+              repositoryLabels={repositoryLabels}
             />
           </div>
         </DialogBody>

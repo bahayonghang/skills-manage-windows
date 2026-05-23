@@ -327,6 +327,7 @@ export function CentralSkillDialogs({
         preview={repositorySyncPreview}
         deletePreview={repositorySyncDeletePreview}
         agents={agents}
+        skills={skills}
         isPreviewLoading={isRepositorySyncPreviewLoading}
         isApplying={isApplyingRepositorySync || isDeleting}
         error={repositorySyncError}

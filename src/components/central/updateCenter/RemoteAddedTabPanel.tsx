@@ -4,6 +4,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { DuplicateResolution } from "@/types";
 import type { RemoteAddedSkill } from "@/types/skillUpdateInventory";
 import { remoteAddedKey } from "@/components/central/updateCenter/keys";
+import {
+  formatConflictSourceLabel,
+  type SkillConflictSourceInfo,
+} from "@/lib/centralConflictSource";
 
 export interface RemoteAddedRowState {
   selected: boolean;
@@ -14,6 +18,8 @@ export interface RemoteAddedRowState {
 interface RemoteAddedTabPanelProps {
   items: RemoteAddedSkill[];
   state: Record<string, RemoteAddedRowState>;
+  existingSkillSources: ReadonlyMap<string, SkillConflictSourceInfo>;
+  repositoryLabels: ReadonlyMap<string, string>;
   onChange: (key: string, patch: Partial<RemoteAddedRowState>) => void;
 }
 
@@ -26,15 +32,31 @@ const RESOLUTIONS: readonly DuplicateResolution[] = [
 export function RemoteAddedTabPanel({
   items,
   state,
+  existingSkillSources,
+  repositoryLabels,
   onChange,
 }: RemoteAddedTabPanelProps) {
   const { t } = useTranslation();
+  const unassignedSourceLabel = t("central.unassignedSource");
 
   return (
     <div className="max-h-[28rem] space-y-2 overflow-auto pr-1">
       {items.map((item) => {
         const key = remoteAddedKey(item.repositoryId, item.sourcePath);
         const hasConflict = Boolean(item.conflictExistingSkillId);
+        const existingConflict = item.conflictExistingSkillId
+          ? existingSkillSources.get(item.conflictExistingSkillId)
+          : null;
+        const remoteSource = formatConflictSourceLabel(
+          repositoryLabels.get(item.repositoryId) ?? item.repositoryId,
+          item.sourcePath,
+          unassignedSourceLabel,
+        );
+        const existingSource = formatConflictSourceLabel(
+          existingConflict?.repositoryLabel,
+          existingConflict?.sourcePath,
+          unassignedSourceLabel,
+        );
         const decision: RemoteAddedRowState = state[key] ?? {
           selected: true,
           resolution: hasConflict ? "skip" : "overwrite",
@@ -57,7 +79,11 @@ export function RemoteAddedTabPanel({
                 </div>
                 {hasConflict && (
                   <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                    ↔ {item.conflictExistingSkillId}
+                    {t("central.repositorySyncConflict", {
+                      remoteSource,
+                      skill: existingConflict?.skillName ?? item.conflictExistingSkillId,
+                      existingSource,
+                    })}
                   </div>
                 )}
               </div>
