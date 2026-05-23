@@ -1746,6 +1746,7 @@
     "githubImportStatusChangeToOverwrite": "Overwrite",
     "githubImportStatusChangeToRename": "Rename",
     "githubImportStatusResetDefault": "Reset",
+    "githubImportInlineResolutionLabel": "Conflict resolution for {{name}}",
     "githubImportTabBadgeUnresolved": "This skill has an unresolved conflict",
     "githubImportNoConflictTitle": "No conflict handling needed",
     "githubImportNoConflictBody": "This skill can be imported directly with its current id unless you deselect it from the import.",

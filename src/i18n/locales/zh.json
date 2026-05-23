@@ -1746,6 +1746,7 @@
     "githubImportStatusChangeToOverwrite": "改为覆盖",
     "githubImportStatusChangeToRename": "重命名",
     "githubImportStatusResetDefault": "还原默认",
+    "githubImportInlineResolutionLabel": "{{name}} 的冲突处理方式",
     "githubImportTabBadgeUnresolved": "该技能有未处理的冲突",
     "githubImportNoConflictTitle": "当前无需处理冲突",
     "githubImportNoConflictBody": "这个技能可以沿用当前 id 直接导入；如果不想导入，也可以在这里取消选择。",
