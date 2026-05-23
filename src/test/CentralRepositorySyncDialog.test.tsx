@@ -2,8 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { describe, expect, it, vi } from "vitest";
 
 import { CentralRepositorySyncDialog } from "@/components/central/CentralRepositorySyncDialog";
-import type { AgentWithStatus, BatchDeleteCentralSkillPreviewResult } from "@/types";
-import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
+import type { AgentWithStatus, BatchDeleteCentralSkillPreviewResult, SkillWithLinks } from "@/types";
+import type { CentralRemoteAddedSkill, CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
 
 const agents: AgentWithStatus[] = [
   {
@@ -33,7 +33,15 @@ function remoteMissingState(skillId: string, sourcePath: string, url = "https://
   };
 }
 
-function remoteAddedSkill(sourcePath: string, skillId: string, skillName: string) {
+function remoteAddedSkill(
+  sourcePath: string,
+  skillId: string,
+  skillName: string,
+  conflict?: {
+    existingSkillId: string;
+    existingName: string;
+  }
+): CentralRemoteAddedSkill {
   return {
     repositoryId: "github-openai-skills-main",
     repo: {
@@ -50,10 +58,54 @@ function remoteAddedSkill(sourcePath: string, skillId: string, skillName: string
       rootDirectory: "skills",
       skillDirectoryName: skillId,
       downloadUrl: `https://raw.githubusercontent.com/openai/skills/main/${sourcePath}/SKILL.md`,
-      conflict: null,
+      conflict: conflict
+        ? {
+            ...conflict,
+            existingCanonicalPath: "~/.skillsmanage/skills/conflicting-skill",
+            proposedSkillId: skillId,
+            proposedName: skillName,
+          }
+        : null,
     },
   };
 }
+
+const existingSkills: SkillWithLinks[] = [
+  {
+    id: "conflicting-skill",
+    name: "Local Conflicting Skill",
+    file_path: "~/.skillsmanage/skills/conflicting-skill/SKILL.md",
+    canonical_path: "~/.skillsmanage/skills/conflicting-skill",
+    is_central: true,
+    scanned_at: "2026-05-19T00:00:00Z",
+    linked_agents: [],
+    shared_root_agents: [],
+    repository: {
+      id: "github-anthropic-skills-main",
+      name: "anthropic/skills",
+      source_type: "github",
+      owner: "anthropic",
+      repo: "skills",
+      branch: "main",
+      url: "https://github.com/anthropic/skills",
+      pinned: false,
+      is_unknown: false,
+      created_at: "2026-05-19T00:00:00Z",
+      updated_at: "2026-05-19T00:00:00Z",
+    },
+    source_path: "skills/conflicting",
+  },
+  {
+    id: "unsourced-skill",
+    name: "Unsourced Skill",
+    file_path: "~/.skillsmanage/skills/unsourced-skill/SKILL.md",
+    canonical_path: "~/.skillsmanage/skills/unsourced-skill",
+    is_central: true,
+    scanned_at: "2026-05-19T00:00:00Z",
+    linked_agents: [],
+    shared_root_agents: [],
+  },
+];
 
 const preview: CentralRepositorySyncPreview = {
   states: [],
@@ -130,6 +182,7 @@ function renderDialog(onConfirm = vi.fn()) {
       preview={preview}
       deletePreview={deletePreview}
       agents={agents}
+      skills={existingSkills}
       isPreviewLoading={false}
       isApplying={false}
       error={null}
@@ -225,6 +278,7 @@ describe("CentralRepositorySyncDialog", () => {
         }}
         deletePreview={{ previews: [], failed: [] }}
         agents={agents}
+        skills={existingSkills}
         isPreviewLoading={false}
         isApplying={false}
         error={null}
@@ -254,6 +308,48 @@ describe("CentralRepositorySyncDialog", () => {
     });
   });
 
+  it("shows remote and existing source details for conflicting remote additions", () => {
+    render(
+      <CentralRepositorySyncDialog
+        open
+        onOpenChange={vi.fn()}
+        preview={{
+          ...preview,
+          remoteAdded: [
+            remoteAddedSkill("skills/conflicting", "conflicting-skill", "Conflicting Remote", {
+              existingSkillId: "conflicting-skill",
+              existingName: "Legacy Conflict Name",
+            }),
+            remoteAddedSkill("skills/unsourced", "unsourced-skill", "Unsourced Remote", {
+              existingSkillId: "unsourced-skill",
+              existingName: "Unsourced Skill",
+            }),
+          ],
+          remoteMissing: [],
+        }}
+        deletePreview={{ previews: [], failed: [] }}
+        agents={agents}
+        skills={existingSkills}
+        isPreviewLoading={false}
+        isApplying={false}
+        error={null}
+        onConfirm={vi.fn()}
+      />
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText(
+        "冲突：远端 openai/skills/skills/conflicting ↔ 已有 Local Conflicting Skill（anthropic/skills/skills/conflicting）"
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "冲突：远端 openai/skills/skills/unsourced ↔ 已有 Unsourced Skill（未分配来源）"
+      )
+    ).toBeInTheDocument();
+  });
+
   it("shows skipped remote additions separately and can import, rename, or re-show them", async () => {
     const onConfirm = vi.fn();
     render(
@@ -272,6 +368,7 @@ describe("CentralRepositorySyncDialog", () => {
         }}
         deletePreview={{ previews: [], failed: [] }}
         agents={agents}
+        skills={existingSkills}
         isPreviewLoading={false}
         isApplying={false}
         error={null}
