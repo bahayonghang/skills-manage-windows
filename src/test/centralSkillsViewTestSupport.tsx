@@ -409,6 +409,8 @@ export const mockCheckRepositorySync = vi.fn();
 export const mockApplyRepositorySync = vi.fn();
 export const mockUpdateSkills = vi.fn();
 export const mockKeepRemoteMissingSkills = vi.fn();
+export const mockPreviewCentralStoreLocationChange = vi.fn();
+export const mockApplyCentralStoreLocationChange = vi.fn();
 export const mockCancelAiTagJob = vi.fn();
 export const mockAcceptAiTagReview = vi.fn();
 export const mockSkipAiTagReview = vi.fn();
@@ -493,6 +495,8 @@ export function buildCentralStoreState(overrides = {}) {
     applyRepositorySync: mockApplyRepositorySync,
     updateSkills: mockUpdateSkills,
     keepRemoteMissingSkills: mockKeepRemoteMissingSkills,
+    previewCentralStoreLocationChange: mockPreviewCentralStoreLocationChange,
+    applyCentralStoreLocationChange: mockApplyCentralStoreLocationChange,
     cancelAiTagJob: mockCancelAiTagJob,
     acceptAiTagReview: mockAcceptAiTagReview,
     skipAiTagReview: mockSkipAiTagReview,
@@ -647,6 +651,23 @@ export function resetCentralSkillsViewTestState() {
   });
   mockUpdateSkills.mockResolvedValue({ succeeded: [], failed: [], skipped: [], states: [] });
   mockKeepRemoteMissingSkills.mockResolvedValue([]);
+  mockPreviewCentralStoreLocationChange.mockResolvedValue({
+    sourcePath: "/Users/test/.skillsmanage/skills",
+    targetPath: "/Users/test/SkillPort/skills",
+    skillsToCopy: 1,
+    skillsToOverwrite: 1,
+    targetOnlySkills: 1,
+  });
+  mockApplyCentralStoreLocationChange.mockResolvedValue({
+    sourcePath: "/Users/test/.skillsmanage/skills",
+    targetPath: "/Users/test/SkillPort/skills",
+    copied: 1,
+    overwritten: 1,
+    targetOnlyImported: 1,
+    symlinkRebuildFailed: 0,
+    symlinkFailures: [],
+    completedAt: "2026-05-24T00:00:00Z",
+  });
   mockExportSkillportState.mockResolvedValue(
     JSON.stringify({
       kind: "skillport/state-export",

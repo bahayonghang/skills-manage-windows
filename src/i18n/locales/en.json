@@ -1104,6 +1104,33 @@
       "shared_target_record": "Shared directory",
       "central_symlink": "Central symlink",
       "matching_copy": "Matching copy"
+    },
+    "storeLocation": {
+      "changeButton": "Change location",
+      "title": "Change Central store location",
+      "description": "Preview the move before switching. Current Central skills overwrite same-name skills in the target; target-only skills are kept and scanned after migration.",
+      "currentPath": "Current location",
+      "newPath": "New location",
+      "newPathPlaceholder": "D:\\SkillPort\\central-skills",
+      "browse": "Browse...",
+      "browseAria": "Choose new Central store folder",
+      "pickError": "Could not choose a folder: {{error}}",
+      "preview": "Preview",
+      "previewing": "Previewing...",
+      "previewTitle": "Migration preview",
+      "skillsToCopy": "New copies",
+      "skillsToOverwrite": "Same-name overwritten",
+      "targetOnlySkills": "Target-only kept",
+      "overwriteWarning": "Same-name target skills will be replaced by the current Central store. The old Central directory will not be deleted.",
+      "apply": "Migrate and switch",
+      "applying": "Migrating...",
+      "success": "Central store moved: {{copied}} copied, {{overwritten}} overwritten, {{imported}} target-only imported, {{failed}} symlink rebuild failures.",
+      "error": "Central store location change failed: {{error}}",
+      "unsupportedTarget": "Changing the Central store location is only supported for the Local target in this version.",
+      "emptyPath": "Enter a target folder path.",
+      "samePath": "Choose a different folder from the current Central store.",
+      "nestedPath": "The old and new Central store folders cannot be nested inside each other.",
+      "requiresOverwrite": "This migration requires overwrite confirmation."
     }
   },
   "installDialog": {

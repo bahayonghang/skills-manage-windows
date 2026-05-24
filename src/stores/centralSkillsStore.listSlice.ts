@@ -1,6 +1,8 @@
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import {
   AgentWithStatus,
+  CentralStoreLocationChangeResult,
+  CentralStoreLocationPreview,
   CentralSkillUpdateState,
   SkillAiTagReview,
   SkillRepositoryWithStats,
@@ -23,7 +25,10 @@ async function loadAiApiKeyState(): Promise<AiApiKeyState | null> {
   }
 }
 
-export function createCentralListSlice({ set, getGeneration }: CentralStoreContext): Pick<CentralSkillsState, "loadCentralSkills"> {
+export function createCentralListSlice({ set, getGeneration }: CentralStoreContext): Pick<
+  CentralSkillsState,
+  "loadCentralSkills" | "previewCentralStoreLocationChange" | "applyCentralStoreLocationChange"
+> {
   return {
   /**
    * Load all Central Skills with per-platform link status, along with the
@@ -63,6 +68,16 @@ export function createCentralListSlice({ set, getGeneration }: CentralStoreConte
         set({ error: String(err), isLoading: false });
       }
     }
+  },
+  previewCentralStoreLocationChange: async (targetPath: string) => {
+    return invoke<CentralStoreLocationPreview>("preview_central_store_location_change", {
+      request: { targetPath },
+    });
+  },
+  applyCentralStoreLocationChange: async (targetPath: string) => {
+    return invoke<CentralStoreLocationChangeResult>("apply_central_store_location_change", {
+      request: { targetPath, overwriteExisting: true },
+    });
   },
   };
 }

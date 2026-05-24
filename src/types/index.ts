@@ -199,6 +199,13 @@ export interface CentralBatchInstallResult {
   failed: CentralBatchInstallFailure[];
 }
 
+
+export type {
+  CentralStoreLocationChangeResult,
+  CentralStoreLocationPreview,
+  CentralStoreLocationSymlinkFailure,
+} from "./centralStoreLocation";
+
 export interface DeleteCentralSkillPreview {
   skill_id: string;
   skill_name: string;

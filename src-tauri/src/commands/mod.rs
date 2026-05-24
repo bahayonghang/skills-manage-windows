@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod bootstrap;
 pub mod central_metadata;
+pub mod central_store_location;
 pub mod central_updates;
 pub mod central_updates_fs;
 pub mod collections;

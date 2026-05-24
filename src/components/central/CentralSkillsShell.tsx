@@ -4,6 +4,7 @@ import {
   Download,
   GitBranch,
   ListChecks,
+  MapPin,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
@@ -141,6 +142,11 @@ export interface CentralSkillsShellProps {
   };
 
   // Header 操作
+  centralStoreLocation: {
+    disabled: boolean;
+    onOpen: () => void;
+    disabledReason?: string;
+  };
   setIsGitHubImportOpen: (open: boolean) => void;
   setIsPlatformManageOpen: (open: boolean) => void;
   setIsPortabilityOpen: (open: boolean) => void;
@@ -186,6 +192,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
     selectionControls,
     categorizeDrawer,
     taskCenter,
+    centralStoreLocation,
     setIsGitHubImportOpen,
     setIsPlatformManageOpen,
     setIsPortabilityOpen,
@@ -277,9 +284,24 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       <div className="border-b border-border px-6 py-3 flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold leading-tight">{t("central.title")}</h1>
-          <p className="text-[11px] text-muted-foreground/70 mt-0.5 truncate" title={centralSkillsDir}>
-            {centralSkillsDir}
-          </p>
+          <div className="mt-0.5 flex min-w-0 items-center gap-2">
+            <p className="truncate text-[11px] text-muted-foreground/70" title={centralSkillsDir}>
+              {centralSkillsDir}
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 shrink-0 gap-1 px-2 text-[11px]"
+              disabled={centralStoreLocation.disabled}
+              onClick={centralStoreLocation.onOpen}
+              title={centralStoreLocation.disabledReason}
+              data-testid="central-store-location-open"
+            >
+              <MapPin className="size-3" aria-hidden="true" />
+              {t("central.storeLocation.changeButton")}
+            </Button>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {/* 核心入口：GitHub 导入 ─────────────────────────────────── */}

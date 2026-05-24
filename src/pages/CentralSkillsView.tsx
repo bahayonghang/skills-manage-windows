@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
-
 import { BatchDeleteCentralSkillPreviewResult, CentralSkillUpdateState, DeleteSkillRepositoryPreview, SkillDetail, SkillRepositoryWithStats, SkillWithLinks } from "@/types";
 import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
 import { selectMostUniversalSkills } from "@/lib/centralInstalledFilters";
@@ -9,6 +8,7 @@ import { markAppPerformance } from "@/lib/performance";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { CentralSidebarHeader } from "@/components/central/CentralSidebarHeader";
 import { CentralSkillsShell } from "@/components/central/CentralSkillsShell";
+import { CentralStoreLocationDialog } from "@/components/central/CentralStoreLocationDialog";
 import { CommandPalette } from "@/components/central/CommandPalette";
 import { useCentralViewStateUrl } from "@/hooks/useCentralViewStateUrl";
 import { useCentralSkillsActions } from "@/pages/centralSkillsActions";
@@ -27,6 +27,7 @@ import {
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralInstalledSkillsFilterBridge } from "@/pages/centralInstalledSkillsFilterBridge";
 import { useCentralSkillsLayoutSizing } from "@/pages/centralSkillsLayoutSizing";
+import { createCentralStoreLocationControls, useCentralStoreLocationApplied } from "@/pages/centralStoreLocationView";
 
 export function CentralSkillsView() {
   const { t } = useTranslation();
@@ -41,6 +42,7 @@ export function CentralSkillsView() {
     updateJob,
     portabilityJob,
     aiTaggingAvailable,
+    isRemoteTarget,
     centralSkillsDir,
     isLoading,
     loadCentralSkills,
@@ -63,6 +65,8 @@ export function CentralSkillsView() {
     previewSkillportStateImport,
     importSkillportState,
     setRepositoryPinned,
+    previewCentralStoreLocationChange,
+    applyCentralStoreLocationChange,
   } = useCentralSkillsStoreBindings(t);
 
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
@@ -117,6 +121,7 @@ export function CentralSkillsView() {
   const [isRemoteMissingDialogOpen, setIsRemoteMissingDialogOpen] = useState(false);
   const [isRepositorySyncDialogOpen, setIsRepositorySyncDialogOpen] = useState(false);
   const [isRepositoryDeleteDialogOpen, setIsRepositoryDeleteDialogOpen] = useState(false);
+  const [isStoreLocationDialogOpen, setIsStoreLocationDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isGitHubImportOpen, setIsGitHubImportOpen] = useState(false);
@@ -717,6 +722,12 @@ export function CentralSkillsView() {
     />
   );
 
+  const handleCentralStoreLocationApplied = useCentralStoreLocationApplied({
+    loadCentralSkills,
+    refreshCounts,
+    t,
+  });
+
   return (
     <>
       <CentralSkillsShell
@@ -743,6 +754,11 @@ export function CentralSkillsView() {
         categorizeDrawer={categorizeDrawerProps}
         taskCenter={taskCenterProps}
         dialogs={dialogsProps}
+        centralStoreLocation={createCentralStoreLocationControls({
+          isRemoteTarget,
+          setIsStoreLocationDialogOpen,
+          t,
+        })}
         setIsGitHubImportOpen={setIsGitHubImportOpen}
         setIsPlatformManageOpen={setIsPlatformManageOpen}
         setIsPortabilityOpen={setIsPortabilityOpen}
@@ -774,6 +790,7 @@ export function CentralSkillsView() {
         onSelectTag={(tag) => addUniqueToCentralViewState(viewState, setViewState, "tags", tag.id)}
         onSelectRepository={(repo) => addUniqueToCentralViewState(viewState, setViewState, "repos", repo.id)}
       />
+      <CentralStoreLocationDialog open={isStoreLocationDialogOpen} onOpenChange={setIsStoreLocationDialogOpen} t={t} currentPath={centralSkillsDir} preview={previewCentralStoreLocationChange} apply={applyCentralStoreLocationChange} onApplied={handleCentralStoreLocationApplied} />
     </>
   );
 }

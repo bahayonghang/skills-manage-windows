@@ -6,6 +6,8 @@ import {
   BatchDeleteCentralSkillResult,
   BatchInstallResult,
   CentralBatchInstallResult,
+  CentralStoreLocationChangeResult,
+  CentralStoreLocationPreview,
   CentralSkillUpdateJob,
   CentralSkillUpdateResult,
   CentralSkillUpdateState,
@@ -53,6 +55,10 @@ export interface CentralSkillsState {
 
   // Actions
   loadCentralSkills: () => Promise<void>;
+  previewCentralStoreLocationChange: (targetPath: string) => Promise<CentralStoreLocationPreview>;
+  applyCentralStoreLocationChange: (
+    targetPath: string
+  ) => Promise<CentralStoreLocationChangeResult>;
   installSkill: (
     skillId: string,
     agentIds: string[],

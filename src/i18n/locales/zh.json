@@ -1104,6 +1104,33 @@
       "shared_target_record": "共享目录",
       "central_symlink": "中央库链接",
       "matching_copy": "匹配副本"
+    },
+    "storeLocation": {
+      "changeButton": "修改位置",
+      "title": "修改中央技能库位置",
+      "description": "切换前先预览迁移结果。当前中央库会覆盖目标目录中的同名技能；目标目录独有技能会保留，并在迁移后扫描导入。",
+      "currentPath": "当前位置",
+      "newPath": "新位置",
+      "newPathPlaceholder": "D:\\SkillPort\\central-skills",
+      "browse": "浏览...",
+      "browseAria": "选择新的中央技能库文件夹",
+      "pickError": "选择文件夹失败：{{error}}",
+      "preview": "预览",
+      "previewing": "预览中...",
+      "previewTitle": "迁移预览",
+      "skillsToCopy": "新增复制",
+      "skillsToOverwrite": "同名覆盖",
+      "targetOnlySkills": "目标独有保留",
+      "overwriteWarning": "目标目录中的同名技能会被当前中央库替换。旧中央库目录不会删除。",
+      "apply": "迁移并切换",
+      "applying": "迁移中...",
+      "success": "中央技能库已切换：复制 {{copied}} 个，覆盖 {{overwritten}} 个，导入目标独有 {{imported}} 个，symlink 重建失败 {{failed}} 个。",
+      "error": "修改中央技能库位置失败：{{error}}",
+      "unsupportedTarget": "当前版本仅支持在本机 Local 目标修改中央技能库位置。",
+      "emptyPath": "请输入目标文件夹路径。",
+      "samePath": "请选择不同于当前中央库的位置。",
+      "nestedPath": "新旧中央库目录不能互相嵌套。",
+      "requiresOverwrite": "本次迁移需要确认覆盖策略。"
     }
   },
   "installDialog": {

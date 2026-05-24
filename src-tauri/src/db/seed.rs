@@ -36,8 +36,10 @@ async fn init_database_with_agents(
     // Seed built-in agents (INSERT OR IGNORE so repeated init is safe)
     seed_builtin_agents(pool, &builtin_agents).await?;
 
-    // Seed built-in scan directories from the built-in agent registry.
-    seed_builtin_scan_directories(pool, &builtin_agents).await?;
+    // Seed built-in scan directories from the DB rows after upsert so user
+    // customizations that are intentionally preserved (Central store path)
+    // remain the source of truth on the next startup.
+    seed_builtin_scan_directories(pool).await?;
 
     // Seed built-in skill registries (marketplace sources)
     seed_builtin_registries(pool).await?;
@@ -59,7 +61,10 @@ async fn seed_builtin_agents(pool: &DbPool, agents: &[Agent]) -> Result<(), Stri
              ON CONFLICT(id) DO UPDATE SET
               display_name = excluded.display_name,
               category = excluded.category,
-              global_skills_dir = excluded.global_skills_dir,
+              global_skills_dir = CASE
+                WHEN agents.id = 'central' THEN agents.global_skills_dir
+                ELSE excluded.global_skills_dir
+              END,
               project_skills_dir = excluded.project_skills_dir,
               icon_name = excluded.icon_name",
         )
@@ -95,15 +100,17 @@ async fn seed_builtin_agents(pool: &DbPool, agents: &[Agent]) -> Result<(), Stri
     Ok(())
 }
 
-/// Seed `scan_directories` with one row per unique `global_skills_dir` path
-/// across all built-in agents. Rows are marked `is_builtin = 1` and cannot
-/// be removed by the user. `INSERT OR IGNORE` keeps the operation idempotent:
-/// global Universal agents share `~/.agents/skills`, Antigravity uses its
-/// official `~/.gemini/antigravity/skills` global directory, and Central uses
-/// the private `~/.skillsmanage/skills` store.
-async fn seed_builtin_scan_directories(pool: &DbPool, agents: &[Agent]) -> Result<(), String> {
+/// Seed `scan_directories` with one row per unique DB built-in
+/// `global_skills_dir` path. Rows are marked `is_builtin = 1` and cannot be
+/// removed by the user. Reading from DB rather than the static registry keeps a
+/// user-selected Central store path from being reset by startup seeding.
+async fn seed_builtin_scan_directories(pool: &DbPool) -> Result<(), String> {
+    let agents: Vec<Agent> = sqlx::query_as("SELECT * FROM agents WHERE is_builtin = 1")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let now = Utc::now().to_rfc3339();
-    for agent in agents {
+    for agent in &agents {
         sqlx::query(
             "INSERT OR IGNORE INTO scan_directories
              (path, label, is_active, is_builtin, added_at)

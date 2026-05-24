@@ -1532,12 +1532,14 @@ async fn test_builtin_scan_dirs_seeded_is_idempotent() {
 }
 
 #[tokio::test]
-async fn test_reinit_updates_stale_builtin_agent_paths() {
+async fn central_store_location_reinit_preserves_custom_central_agent_path() {
     let pool = setup_test_db().await;
-    sqlx::query("UPDATE agents SET global_skills_dir = '/tmp/.agents/skills' WHERE id = 'central'")
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE agents SET global_skills_dir = '/tmp/custom-central-skills' WHERE id = 'central'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
 
     init_database(&pool).await.unwrap();
 
@@ -1545,10 +1547,7 @@ async fn test_reinit_updates_stale_builtin_agent_paths() {
         .await
         .unwrap()
         .expect("central agent should exist");
-    assert_eq!(
-        central.global_skills_dir,
-        crate::paths::central_skills_dir().to_string_lossy()
-    );
+    assert_eq!(central.global_skills_dir, "/tmp/custom-central-skills");
 }
 
 #[tokio::test]
@@ -1583,8 +1582,14 @@ async fn test_reinit_preserves_existing_builtin_agent_enabled_flags() {
 }
 
 #[tokio::test]
-async fn test_reinit_replaces_stale_builtin_scan_directory_paths() {
+async fn central_store_location_reinit_seeds_scan_dirs_from_custom_central_agent_path() {
     let pool = setup_test_db().await;
+    sqlx::query(
+        "UPDATE agents SET global_skills_dir = '/tmp/custom-central-skills' WHERE id = 'central'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     sqlx::query("DELETE FROM scan_directories WHERE is_builtin = 1")
         .execute(&pool)
         .await
@@ -1601,12 +1606,10 @@ async fn test_reinit_replaces_stale_builtin_scan_directory_paths() {
     init_database(&pool).await.unwrap();
 
     let dirs = get_scan_directories(&pool).await.unwrap();
-    let central_path = crate::paths::central_skills_dir()
-        .to_string_lossy()
-        .into_owned();
     assert!(
-        dirs.iter().any(|dir| dir.path == central_path),
-        "reinit should seed the resolved central skills path"
+        dirs.iter()
+            .any(|dir| dir.path == "/tmp/custom-central-skills"),
+        "reinit should seed the DB central skills path"
     );
     assert!(
         !dirs.iter().any(|dir| dir.path == "/tmp/.agents/skills"),

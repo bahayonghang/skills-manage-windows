@@ -15,6 +15,9 @@ const {
   mockDeleteCentralSkill,
   mockDeleteSkillRepository,
   mockRescan,
+  mockLoadCentralSkills,
+  mockPreviewCentralStoreLocationChange,
+  mockApplyCentralStoreLocationChange,
   mockRefreshInstallations,
   renderCentralSkillsView,
 } = S;
@@ -23,6 +26,70 @@ describe("CentralSkillsView repositories + installs（V2 markup）", () => {
   beforeEach(() => {
     S.resetCentralSkillsViewTestState();
     window.localStorage.clear();
+  });
+
+  it("previews and applies a Local Central store location change", async () => {
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByTestId("central-store-location-open"));
+    expect(await screen.findByText("修改中央技能库位置")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("新位置"), {
+      target: { value: "D:\\SkillPort\\central-skills" },
+    });
+    fireEvent.click(screen.getByText("预览"));
+
+    await waitFor(() => {
+      expect(mockPreviewCentralStoreLocationChange).toHaveBeenCalledWith(
+        "D:\\SkillPort\\central-skills"
+      );
+    });
+    expect(await screen.findByText("迁移预览")).toBeInTheDocument();
+    expect(screen.getByText("同名覆盖")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("迁移并切换"));
+
+    await waitFor(() => {
+      expect(mockApplyCentralStoreLocationChange).toHaveBeenCalledWith(
+        "D:\\SkillPort\\central-skills"
+      );
+      expect(mockLoadCentralSkills).toHaveBeenCalled();
+      expect(mockRescan).toHaveBeenCalled();
+      expect(toast.success).toHaveBeenCalledWith(
+        expect.stringContaining("中央技能库已切换")
+      );
+    });
+  });
+
+  it("disables Central store location changes for remote targets", () => {
+    S.useTargetStore.setState({
+      targets: [
+        {
+          id: "ssh-1",
+          kind: "ssh",
+          label: "Remote",
+          host: "example.com",
+          username: "alice",
+          remoteHome: "/home/alice",
+          remoteOs: "linux",
+          isActive: true,
+        },
+      ],
+      activeTarget: {
+        id: "ssh-1",
+        kind: "ssh",
+        label: "Remote",
+        host: "example.com",
+        username: "alice",
+        remoteHome: "/home/alice",
+        remoteOs: "linux",
+        isActive: true,
+      },
+    });
+
+    renderCentralSkillsView();
+
+    expect(screen.getByTestId("central-store-location-open")).toBeDisabled();
   });
   afterEach(S.cleanupCentralSkillsViewTestState);
 

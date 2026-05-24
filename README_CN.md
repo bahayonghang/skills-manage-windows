@@ -10,7 +10,7 @@
 
 ## 项目简介
 
-`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库使用私有目录 `~/.skillsmanage/skills/`。共享的 Universal Agents 目标仍是 `~/.agents/skills/`，只有显式安装到这里的技能才会暴露给 Codex CLI、Cursor、OpenCode、Amp、Copilot 等读取该目录的工具。Google 当前推荐平台是 Antigravity：SkillPort 会把它的全局技能安装到 `~/.gemini/antigravity/skills/`，项目级技能使用 `.agents/skills/`。Gemini CLI 仍保留为 legacy / enterprise 兼容目标。
+`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库默认使用私有目录 `~/.skillsmanage/skills/`。在本机 Local 目标下，可以在中央技能库页面修改这个位置：切换前会先预览，迁移时当前中央库覆盖目标目录同名技能，目标目录独有技能会保留并扫描导入，旧目录不会删除。共享的 Universal Agents 目标仍是 `~/.agents/skills/`，只有显式安装到这里的技能才会暴露给 Codex CLI、Cursor、OpenCode、Amp、Copilot 等读取该目录的工具。Google 当前推荐平台是 Antigravity：SkillPort 会把它的全局技能安装到 `~/.gemini/antigravity/skills/`，项目级技能使用 `.agents/skills/`。Gemini CLI 仍保留为 legacy / enterprise 兼容目标。
 
 ## 与上游关系
 
