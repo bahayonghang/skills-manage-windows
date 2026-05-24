@@ -6,7 +6,6 @@ import {
   ListChecks,
   MapPin,
   RefreshCw,
-  Sparkles,
 } from "lucide-react";
 import type { TFunction } from "i18next";
 
@@ -116,9 +115,7 @@ export interface CentralSkillsShellProps {
   selectionControls: {
     selectedCount: number;
     currentResultCount: number;
-    universalSelectionCount: number;
     onSelectCurrentResults: () => void;
-    onSelectMostUniversal: () => void;
     onClearSelection: () => void;
   };
   categorizeDrawer: {
@@ -434,9 +431,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
         t={t}
         selectedCount={selectionControls.selectedCount}
         currentResultCount={selectionControls.currentResultCount}
-        universalSelectionCount={selectionControls.universalSelectionCount}
         onSelectCurrentResults={selectionControls.onSelectCurrentResults}
-        onSelectMostUniversal={selectionControls.onSelectMostUniversal}
         onClearSelection={selectionControls.onClearSelection}
       />
 
@@ -522,9 +517,7 @@ interface CentralSelectionControlsProps {
   t: TFunction;
   selectedCount: number;
   currentResultCount: number;
-  universalSelectionCount: number;
   onSelectCurrentResults: () => void;
-  onSelectMostUniversal: () => void;
   onClearSelection: () => void;
 }
 
@@ -532,13 +525,10 @@ function CentralSelectionControls({
   t,
   selectedCount,
   currentResultCount,
-  universalSelectionCount,
   onSelectCurrentResults,
-  onSelectMostUniversal,
   onClearSelection,
 }: CentralSelectionControlsProps) {
   const hasCurrentResults = currentResultCount > 0;
-  const canSelectUniversal = universalSelectionCount > 0;
 
   return (
     <div className="border-b border-border/70 px-6 py-2">
@@ -571,23 +561,6 @@ function CentralSelectionControls({
           data-testid="central-clear-selection"
         >
           {t("central.clearSelection")}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          disabled={!canSelectUniversal}
-          onClick={onSelectMostUniversal}
-          title={
-            canSelectUniversal
-              ? t("central.selectMostUniversalTitle", { count: universalSelectionCount })
-              : t("central.selectMostUniversalDisabled")
-          }
-          data-testid="central-select-most-universal"
-        >
-          <Sparkles className="size-3.5" />
-          {t("central.selectMostUniversal")}
         </Button>
       </div>
     </div>

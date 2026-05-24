@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import {
   cleanupCentralSkillsViewTestState,
-  mockSkills,
   renderCentralSkillsView,
   resetCentralSkillsViewTestState,
 } from "./centralSkillsViewTestSupport";
@@ -86,6 +85,7 @@ describe("CentralSkillsView shell（V2 markup）", () => {
     renderCentralSkillsView();
 
     expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 0 / 当前结果 2");
+    expect(screen.queryByTestId("central-select-most-universal")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("central-select-current-results"));
 
     expect(await screen.findByTestId("central-bulk-action-bar")).toBeInTheDocument();
@@ -110,31 +110,6 @@ describe("CentralSkillsView shell（V2 markup）", () => {
     await waitFor(() => {
       expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 1 / 当前结果 1");
     });
-  });
-
-  it("通用性优先选择当前结果中安装平台数最高的技能", async () => {
-    renderCentralSkillsView();
-
-    fireEvent.click(screen.getByTestId("central-select-most-universal"));
-
-    expect(await screen.findByTestId("central-bulk-action-bar")).toBeInTheDocument();
-    expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 1 / 当前结果 2");
-    const checkboxes = screen.getAllByLabelText("选择技能") as HTMLInputElement[];
-    expect(checkboxes[0]).not.toBeChecked();
-    expect(checkboxes[1]).toBeChecked();
-  });
-
-  it("通用性优先在当前结果没有安装覆盖时禁用", () => {
-    renderCentralSkillsView({
-      centralOverrides: {
-        skills: [
-          { ...mockSkills[0], linked_agents: [], shared_root_agents: [] },
-          { ...mockSkills[1], linked_agents: [], shared_root_agents: [] },
-        ],
-      },
-    });
-
-    expect(screen.getByTestId("central-select-most-universal")).toBeDisabled();
   });
 
   it("视图 menu 展开后含 group / installed / quick filters 段", async () => {

@@ -3,7 +3,6 @@ import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import { BatchDeleteCentralSkillPreviewResult, CentralSkillUpdateState, DeleteSkillRepositoryPreview, SkillDetail, SkillRepositoryWithStats, SkillWithLinks } from "@/types";
 import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
-import { selectMostUniversalSkills } from "@/lib/centralInstalledFilters";
 import { markAppPerformance } from "@/lib/performance";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { CentralSidebarHeader } from "@/components/central/CentralSidebarHeader";
@@ -210,11 +209,6 @@ export function CentralSkillsView() {
     setIsBatchInstallDialogOpen,
     setSelectedSkillIds,
   });
-
-  const mostUniversalCurrentSkills = useMemo(
-    () => selectMostUniversalSkills(visibleCurrentViewSkills),
-    [visibleCurrentViewSkills]
-  );
 
   useEffect(() => {
     const visibleIds = new Set(visibleCurrentViewSkills.map((skill) => skill.id));
@@ -627,10 +621,6 @@ export function CentralSkillsView() {
     setSelectedSkillIds(visibleCurrentViewSkills.map((skill) => skill.id));
   }, [visibleCurrentViewSkills]);
 
-  const handleSelectMostUniversal = useCallback(() => {
-    setSelectedSkillIds(mostUniversalCurrentSkills.map((skill) => skill.id));
-  }, [mostUniversalCurrentSkills]);
-
   const categorizePanelProps = {
     aiTagJob,
     aiTagReviews,
@@ -683,9 +673,7 @@ export function CentralSkillsView() {
   const selectionControlsProps = {
     selectedCount: selectedSkillIds.length,
     currentResultCount: visibleCurrentViewSkills.length,
-    universalSelectionCount: mostUniversalCurrentSkills.length,
     onSelectCurrentResults: handleSelectCurrentResults,
-    onSelectMostUniversal: handleSelectMostUniversal,
     onClearSelection: handleClearSelection,
   };
 
