@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 
-use crate::commands::central_updates::{
-    self, keep_remote_missing_central_skills_impl,
-};
+use crate::commands::central_updates::{self, keep_remote_missing_central_skills_impl};
 use crate::commands::central_updates_fs::normalize_repo_path;
 use crate::db::{self, DbPool};
 use crate::services::central_skills::{
@@ -11,9 +9,7 @@ use crate::services::central_skills::{
 use crate::services::installation::uninstall_skill_from_agent_with_row_impl;
 use crate::targets::ActiveTarget;
 
-use super::{
-    PlatformDuplicateRemoval, SkillUpdateApplyFailure, SkillUpdateApplyResult,
-};
+use super::{PlatformDuplicateRemoval, SkillUpdateApplyFailure, SkillUpdateApplyResult};
 
 /// 步骤1：keep_missing 解耦版。复用 `keep_remote_missing_central_skills_impl`，
 /// 单元测试用空 app/state 也能跑通。

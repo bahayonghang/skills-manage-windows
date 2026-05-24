@@ -22,9 +22,8 @@ use tauri::{AppHandle, State};
 
 use crate::commands::central_updates::{
     self, error_state_from_assignment, load_remote_skill_content, prepare_skill_updates,
-    prepare_snapshots_for_repo_refs,
-    remote_missing_state_from_assignment, state_from_remote, unsupported_state_from_assignment,
-    RemoteSkillLoadError, SkillUpdateStatus,
+    prepare_snapshots_for_repo_refs, remote_missing_state_from_assignment, state_from_remote,
+    unsupported_state_from_assignment, RemoteSkillLoadError, SkillUpdateStatus,
 };
 use crate::commands::central_updates_fs::{normalize_repo_path, CentralFs};
 use crate::commands::github_import::{self, GitHubRepoRef};
@@ -36,9 +35,9 @@ mod apply_steps;
 mod scan;
 mod types;
 
-pub use types::*;
 pub(crate) use apply_steps::*;
 pub(crate) use scan::*;
+pub use types::*;
 
 /*
  * ========================================================================
@@ -587,7 +586,6 @@ pub async fn apply_skill_update_decisions(
     Ok(result)
 }
 
-
 #[tauri::command]
 pub async fn scan_platform_duplicate_skills(
     state: State<'_, AppState>,
@@ -602,7 +600,6 @@ pub async fn scan_platform_duplicate_skills(
  * 内部 helpers
  * ========================================================================
  */
-
 
 fn prepared_repo_ref(prepared: &central_updates::PreparedSkillUpdate) -> Option<GitHubRepoRef> {
     repo_ref_for_repository(&prepared.assignment.repository)
