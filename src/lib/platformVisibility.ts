@@ -13,6 +13,7 @@ export const DEFAULT_ENABLED_PLATFORM_IDS = [
   "claude-code",
   "codex",
   "antigravity",
+  "antigravity-cli",
   "opencode",
   "kiro",
 ] as const;

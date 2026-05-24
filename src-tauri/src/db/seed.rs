@@ -1,20 +1,18 @@
-//! Built-in seed data and init dispatch — Phase 2d.
-//!
-//! Owns:
-//! - `init_database` / `init_database_for_remote_home` / `init_database_with_agents`
-//!   that schedule schema creation (in `super::schema::init`) followed by seeding.
-//! - `seed_builtin_*` (agents / scan_directories / registries / skill_metadata).
-//! - `builtin_*` data (agents per host home, builtin skill tags).
-//!
-//! Runtime CRUD lives under `super::repos::*` and is bridged at `db/mod.rs`.
+//! Built-in seed data and init dispatch; runtime CRUD lives under `super::repos::*`.
 
 use chrono::Utc;
 use std::path::Path;
 
 use super::types::*;
 
-const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 5] =
-    ["claude-code", "codex", "antigravity", "opencode", "kiro"];
+const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 6] = [
+    "claude-code",
+    "codex",
+    "antigravity",
+    "antigravity-cli",
+    "opencode",
+    "kiro",
+];
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
@@ -445,7 +443,7 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             id: "gemini-cli".to_string(),
             display_name: "Gemini CLI (legacy)".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: agent_skill_dir("gemini-cli", &[".gemini", "skills"]),
+            global_skills_dir: skill_dir(&[".gemini", "skills"]),
             project_skills_dir: Some(UNIVERSAL_PROJECT_SKILLS_DIR.to_string()),
             icon_name: Some("gemini".to_string()),
             is_detected: false,
@@ -638,6 +636,17 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             is_detected: false,
             is_builtin: true,
             is_enabled: is_builtin_agent_enabled_by_default("antigravity", "coding"),
+        },
+        Agent {
+            id: "antigravity-cli".to_string(),
+            display_name: "Antigravity CLI".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: skill_dir(&[".gemini", "antigravity-cli", "skills"]),
+            project_skills_dir: Some(UNIVERSAL_PROJECT_SKILLS_DIR.to_string()),
+            icon_name: Some("antigravity".to_string()),
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: is_builtin_agent_enabled_by_default("antigravity-cli", "coding"),
         },
         Agent {
             id: "zed".to_string(),

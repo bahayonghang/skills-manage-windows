@@ -58,6 +58,7 @@ type LobeIconProps = React.SVGProps<SVGSVGElement> & {
 const LOBEHUB_ICONS: Record<string, React.ComponentType<LobeIconProps>> = {
   "claude-code": ClaudeCodeIcon,
   "antigravity": AntigravityIcon,
+  "antigravity-cli": AntigravityIcon,
   "copilot": GithubCopilotIcon,
   "gemini-cli": GeminiCliIcon,
   "junie": JunieIcon,

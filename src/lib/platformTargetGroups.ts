@@ -14,7 +14,6 @@ const UNIVERSAL_AGENT_ID_ORDER = [
   "cursor",
   "deep-agents",
   "firebender",
-  "gemini-cli",
   "copilot",
   "kimi-code-cli",
   "opencode",
@@ -24,6 +23,7 @@ const UNIVERSAL_AGENT_ID_ORDER = [
 const UNIVERSAL_PROJECT_AGENT_ID_ORDER = [
   "amp",
   "antigravity",
+  "antigravity-cli",
   "cline",
   "codex",
   "cursor",
@@ -39,6 +39,8 @@ const UNIVERSAL_PROJECT_AGENT_ID_ORDER = [
 const UNIVERSAL_INSTALL_AGENT_ORDER = [
   "codex",
   "opencode",
+  "antigravity-cli",
+  "antigravity",
   "gemini-cli",
   "cursor",
   "amp",

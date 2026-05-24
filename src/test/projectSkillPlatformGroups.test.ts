@@ -77,6 +77,7 @@ describe("groupProjectSkillsByPlatform", () => {
       [
         agent("codex", "Codex CLI"),
         agent("antigravity", "Antigravity"),
+        agent("antigravity-cli", "Antigravity CLI"),
         agent("cursor", "Cursor"),
         agent("opencode", "OpenCode"),
       ],
@@ -87,6 +88,7 @@ describe("groupProjectSkillsByPlatform", () => {
       [
         projectSkill("codex-skill", "codex", "Codex CLI"),
         projectSkill("antigravity-skill", "antigravity", "Antigravity"),
+        projectSkill("antigravity-cli-skill", "antigravity-cli", "Antigravity CLI"),
         projectSkill("cursor-skill", "cursor", "Cursor"),
         projectSkill("opencode-skill", "opencode", "OpenCode"),
       ],
@@ -98,6 +100,7 @@ describe("groupProjectSkillsByPlatform", () => {
     expect(groups[0].rawAgentIds).toEqual([
       "codex",
       "antigravity",
+      "antigravity-cli",
       "cursor",
       "opencode",
     ]);

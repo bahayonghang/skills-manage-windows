@@ -15,16 +15,17 @@ pub type DbPool = SqlitePool;
 
 /// Global Universal Agents targets share the user-level `~/.agents/skills` directory.
 ///
-/// Antigravity is intentionally not part of this global set: its official global
-/// SkillPort-compatible skills directory is `~/.gemini/antigravity/skills`.
-pub const UNIVERSAL_AGENT_IDS: [&str; 11] = [
+/// Google-branded global targets are intentionally not part of this set:
+/// Antigravity uses `~/.gemini/antigravity/skills`, Antigravity CLI uses
+/// `~/.gemini/antigravity-cli/skills`, and legacy Gemini CLI carries the
+/// shared Google `~/.gemini/skills` target.
+pub const UNIVERSAL_AGENT_IDS: [&str; 10] = [
     "amp",
     "cline",
     "codex",
     "cursor",
     "deep-agents",
     "firebender",
-    "gemini-cli",
     "copilot",
     "kimi-code-cli",
     "opencode",
@@ -35,9 +36,10 @@ pub const UNIVERSAL_AGENT_IDS: [&str; 11] = [
 pub const UNIVERSAL_PROJECT_SKILLS_DIR: &str = ".agents/skills";
 
 /// Workspace-level Universal Agents targets share `<workspace>/.agents/skills`.
-pub const UNIVERSAL_PROJECT_AGENT_IDS: [&str; 12] = [
+pub const UNIVERSAL_PROJECT_AGENT_IDS: [&str; 13] = [
     "amp",
     "antigravity",
+    "antigravity-cli",
     "cline",
     "codex",
     "cursor",
@@ -52,9 +54,10 @@ pub const UNIVERSAL_PROJECT_AGENT_IDS: [&str; 12] = [
 
 /// Preferred raw agent id used when a project-level Universal directory is
 /// stored in `project_skill_installations`.
-pub const UNIVERSAL_PROJECT_REPRESENTATIVE_AGENT_IDS: [&str; 6] = [
+pub const UNIVERSAL_PROJECT_REPRESENTATIVE_AGENT_IDS: [&str; 7] = [
     "codex",
     "opencode",
+    "antigravity-cli",
     "antigravity",
     "gemini-cli",
     "cursor",

@@ -63,6 +63,16 @@ const mockAgents: AgentWithStatus[] = [
     is_enabled: true,
   },
   {
+    id: "antigravity-cli",
+    display_name: "Antigravity CLI",
+    category: "coding",
+    global_skills_dir: "~/.gemini/antigravity-cli/skills/",
+    project_skills_dir: ".agents/skills",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
     id: "central",
     display_name: "Central",
     category: "central",
@@ -109,6 +119,7 @@ describe("ProjectInstallDialog", () => {
     expect(screen.getByText("Universal")).toBeInTheDocument();
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /Antigravity/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Antigravity CLI/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Codex")).not.toBeInTheDocument();
     // central agent should be filtered out
     expect(screen.queryByText("Central")).not.toBeInTheDocument();
@@ -139,6 +150,7 @@ describe("ProjectInstallDialog", () => {
     });
     const [, agentIds] = mockOnConfirm.mock.calls[0];
     expect(agentIds).not.toContain("antigravity");
+    expect(agentIds).not.toContain("antigravity-cli");
   });
 
   it("passes the Universal representative agent when only Universal is selected", async () => {
