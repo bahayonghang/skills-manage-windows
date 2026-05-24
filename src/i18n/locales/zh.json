@@ -503,7 +503,18 @@
       "localSource": "本地/用户来源",
       "pluginSource": "插件来源",
       "unknownSource": "未知来源"
-    }
+    },
+    "transferRailKicker": "技能转运工具带",
+    "transferSelectionSummary": "已选 {{selectedCount}} / 可转运 {{selectableCount}}",
+    "transferSelectCurrent": "选择当前结果",
+    "transferSelectMostUniversal": "最通用",
+    "transferClear": "清空",
+    "transferActionSummary": "已暂存 {{count}} 个待转运技能",
+    "transferInstall": "安装到其他平台…",
+    "transferDialogTitle": "安装已选平台技能",
+    "transferDialogDesc": "将 {{platform}} 中已选的 {{count}} 个技能转运到其他平台。当前平台默认不勾选，可手动重新选择。",
+    "transferNoUniversalCoverage": "当前结果没有可用于通用性选择的中央库覆盖数据。",
+    "transferInstallError": "批量安装平台技能失败：{{error}}"
   },
   "central": {
     "title": "中央技能库",

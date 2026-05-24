@@ -8,7 +8,7 @@ import {
 } from "react-router-dom";
 import { toast } from "sonner";
 import { PlatformView } from "../pages/PlatformView";
-import { AgentWithStatus, ScannedSkill } from "../types";
+import { AgentWithStatus, ScannedSkill, SkillWithLinks } from "../types";
 
 // Mock stores
 vi.mock("../stores/platformStore", () => ({
@@ -131,6 +131,16 @@ const mockCodexAgent: AgentWithStatus = {
   is_enabled: true,
 };
 
+const mockLobsterAgent: AgentWithStatus = {
+  id: "lobster-desktop",
+  display_name: "Lobster Desktop",
+  category: "lobster",
+  global_skills_dir: "/Users/test/.lobster/skills/",
+  is_detected: true,
+  is_builtin: true,
+  is_enabled: true,
+};
+
 const mockSkills: ScannedSkill[] = [
   {
     id: "frontend-design",
@@ -151,6 +161,42 @@ const mockSkills: ScannedSkill[] = [
     link_type: "copy",
     is_central: false,
   },
+];
+
+function centralSkill(
+  id: string,
+  overrides: Partial<SkillWithLinks> = {}
+): SkillWithLinks {
+  return {
+    id,
+    name: id,
+    description: `${id} central record`,
+    file_path: `~/.skillsmanage/skills/${id}/SKILL.md`,
+    is_central: true,
+    scanned_at: "2026-04-09T00:00:00Z",
+    linked_agents: [],
+    shared_root_agents: [],
+    ...overrides,
+  };
+}
+
+const mockCentralSkillRecords: SkillWithLinks[] = [
+  centralSkill("frontend-design", {
+    linked_agents: ["claude-code"],
+    shared_root_agents: ["codex", "cursor"],
+  }),
+  centralSkill("code-reviewer", {
+    linked_agents: ["claude-code"],
+  }),
+  centralSkill("shared-skill", {
+    linked_agents: ["claude-code", "cursor"],
+  }),
+  centralSkill("cursor-helper", {
+    linked_agents: ["cursor"],
+  }),
+  centralSkill("universal-helper", {
+    linked_agents: ["codex", "cursor"],
+  }),
 ];
 
 const mockCursorSkills: ScannedSkill[] = [
@@ -176,6 +222,48 @@ const mockUniversalSkills: ScannedSkill[] = [
     dir_path: "~/.agents/skills/universal-helper",
     link_type: "native",
     is_central: false,
+  },
+];
+
+const mockLobsterSkills: ScannedSkill[] = [
+  {
+    id: "lobster-helper",
+    row_id: "lobster-helper",
+    name: "lobster-helper",
+    description: "Non-coding platform helper",
+    file_path: "~/.lobster/skills/lobster-helper/SKILL.md",
+    dir_path: "~/.lobster/skills/lobster-helper",
+    link_type: "copy",
+    is_central: false,
+  },
+];
+
+const mockDuplicateWritableSkills: ScannedSkill[] = [
+  {
+    id: "shared-skill",
+    row_id: "claude-code::user::shared-skill-a",
+    name: "shared-skill",
+    description: "Writable user copy A",
+    file_path: "~/.claude/skills/shared-skill-a/SKILL.md",
+    dir_path: "~/.claude/skills/shared-skill-a",
+    link_type: "copy",
+    is_central: false,
+    source_kind: "user",
+    source_root: "~/.claude/skills",
+    is_read_only: false,
+  },
+  {
+    id: "shared-skill",
+    row_id: "claude-code::user::shared-skill-b",
+    name: "shared-skill",
+    description: "Writable user copy B",
+    file_path: "~/.claude/skills/shared-skill-b/SKILL.md",
+    dir_path: "~/.claude/skills/shared-skill-b",
+    link_type: "copy",
+    is_central: false,
+    source_kind: "user",
+    source_root: "~/.claude/skills",
+    is_read_only: false,
   },
 ];
 
@@ -376,6 +464,7 @@ const mockSortablePlatformSkills: ScannedSkill[] = [
 const mockGetSkillsByAgent = vi.fn();
 const mockLoadCentralSkills = vi.fn();
 const mockInstallSkill = vi.fn();
+const mockBatchInstallSkills = vi.fn();
 const mockUninstallSkillFromAgent = vi.fn();
 const mockRefreshCounts = vi.fn();
 const mockRefreshInstallations = vi.fn();
@@ -439,6 +528,7 @@ function buildCentralSkillsStoreState(overrides = {}) {
     agents: [mockAgent],
     loadCentralSkills: mockLoadCentralSkills,
     installSkill: mockInstallSkill,
+    batchInstallSkills: mockBatchInstallSkills,
     ...overrides,
   };
 }
@@ -546,6 +636,8 @@ describe("PlatformView", () => {
     mockRefreshCounts.mockReset();
     mockRefreshInstallations.mockReset();
     mockUninstallSkillFromAgent.mockReset();
+    mockBatchInstallSkills.mockReset();
+    mockBatchInstallSkills.mockResolvedValue({ succeeded: [], skipped: [], failed: [] });
     mockRescan.mockReset();
     mockScanDuplicates.mockReset();
     mockOpenUpdateCenter.mockReset();
@@ -825,6 +917,153 @@ describe("PlatformView", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/没有匹配的技能/)).toBeInTheDocument();
+    });
+  });
+
+  it("shows the transfer rail only on Coding platform pages", () => {
+    const codingView = renderPlatformView();
+    expect(screen.getByTestId("platform-transfer-rail")).toBeInTheDocument();
+    codingView.unmount();
+
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockLobsterAgent],
+        skillsByAgent: {
+          "claude-code": mockSkills.length,
+          "lobster-desktop": mockLobsterSkills.length,
+        },
+        categoryVisibility: { coding: true, lobster: true },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: {
+          "claude-code": mockSkills,
+          "lobster-desktop": mockLobsterSkills,
+        },
+        loadingByAgent: {
+          "claude-code": false,
+          "lobster-desktop": false,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView("lobster-desktop");
+    expect(screen.queryByTestId("platform-transfer-rail")).not.toBeInTheDocument();
+  });
+
+  it("selects only visible writable platform rows from the transfer rail", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockDuplicateClaudeSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+    expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可转运 1");
+
+    fireEvent.click(screen.getByTestId("platform-select-current-results"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 1 / 可转运 1");
+    });
+    expect(screen.getByTestId("platform-batch-action-bar")).toBeInTheDocument();
+    const checkboxes = screen.getAllByLabelText("选择技能");
+    expect(checkboxes).toHaveLength(1);
+    expect(checkboxes[0]).toBeChecked();
+  });
+
+  it("selects the most universal visible platform rows from Central coverage records", async () => {
+    centralStoreHarness.setState({ skills: mockCentralSkillRecords });
+    renderPlatformView();
+
+    fireEvent.click(screen.getByTestId("platform-select-most-universal"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 1 / 可转运 2");
+    });
+    const checkedCards = screen
+      .getAllByLabelText("选择技能")
+      .filter((checkbox) => checkbox.getAttribute("aria-checked") === "true")
+      .map((checkbox) => checkbox.closest(".rounded-xl"));
+    expect(checkedCards).toHaveLength(1);
+    expect(checkedCards[0]).toHaveTextContent("frontend-design");
+  });
+
+  it("dedupes selected skill ids for platform batch install and excludes the current platform by default", async () => {
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockCodexAgent, mockCursorAgent],
+        skillsByAgent: {
+          "claude-code": mockDuplicateWritableSkills.length,
+          codex: 0,
+          cursor: 0,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockDuplicateWritableSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+    fireEvent.click(screen.getByTestId("platform-select-current-results"));
+    fireEvent.click(await screen.findByTestId("platform-batch-install"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("checkbox", { name: "Claude Code" })).not.toBeChecked();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /将 1 个技能安装到 1 个平台/i }));
+
+    await waitFor(() => {
+      expect(mockBatchInstallSkills).toHaveBeenCalledTimes(1);
+    });
+    const [skillIds, agentIds, method, projectPath] = mockBatchInstallSkills.mock.calls[0];
+    expect(skillIds).toEqual(["shared-skill"]);
+    expect(agentIds).not.toContain("claude-code");
+    expect(method).toBe("symlink");
+    expect(projectPath).toBeNull();
+  });
+
+  it("prunes transfer selection when search or source filters hide selected rows", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockClaudePluginSliceDuplicates },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+    fireEvent.click(screen.getByTestId("platform-select-current-results"));
+    expect(await screen.findByTestId("platform-batch-action-bar")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: claudeTabName("插件来源", 2) }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可转运 0");
+    });
+    expect(screen.queryByTestId("platform-batch-action-bar")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: claudeTabName("全部", 3) }));
+    fireEvent.click(screen.getByTestId("platform-select-current-results"));
+    fireEvent.change(screen.getByPlaceholderText(/搜索技能/), {
+      target: { value: "missing-skill" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可转运 0");
     });
   });
 
@@ -1660,6 +1899,8 @@ describe("PlatformView", () => {
     );
 
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("platform-select-current-results"));
+    expect(await screen.findByTestId("platform-batch-action-bar")).toBeInTheDocument();
 
     const searchInput = screen.getByPlaceholderText(/搜索技能/);
     const scroller = searchInput
@@ -1677,6 +1918,7 @@ describe("PlatformView", () => {
     await waitFor(() => {
       expect(screen.getByText("Cursor")).toBeInTheDocument();
     });
+    expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可转运 1");
 
     await waitFor(() => {
       expect((scroller as HTMLDivElement).scrollTop).toBe(0);

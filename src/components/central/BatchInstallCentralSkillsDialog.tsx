@@ -35,6 +35,9 @@ interface BatchInstallCentralSkillsDialogProps {
   skillCount: number;
   agents: AgentWithStatus[];
   isInstalling: boolean;
+  title?: string;
+  description?: string;
+  defaultExcludedAgentIds?: string[];
   onInstall: (
     agentIds: string[],
     method: InstallMethod,
@@ -49,6 +52,9 @@ export function BatchInstallCentralSkillsDialog({
   skillCount,
   agents,
   isInstalling,
+  title,
+  description,
+  defaultExcludedAgentIds = [],
   onInstall,
   onManagePlatforms,
 }: BatchInstallCentralSkillsDialogProps) {
@@ -66,6 +72,11 @@ export function BatchInstallCentralSkillsDialog({
   const [projectPath, setProjectPath] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CentralBatchInstallResult | null>(null);
+  const defaultExcludedKey = defaultExcludedAgentIds.join("\0");
+  const defaultExcludedSet = useMemo(
+    () => new Set(defaultExcludedKey ? defaultExcludedKey.split("\0") : []),
+    [defaultExcludedKey]
+  );
   const skipped = useMemo(() => result?.skipped ?? [], [result]);
   const skippedSummary = useMemo(() => summarizeSkippedReasons(skipped), [skipped]);
 
@@ -92,6 +103,7 @@ export function BatchInstallCentralSkillsDialog({
     const initialSelection = new Set(
       targetAgents
         .filter((agent) => targetMode === "platform" || hasProjectSkillPattern(agent))
+        .filter((agent) => !defaultExcludedSet.has(agent.id))
         .map((agent) => agent.id)
     );
     setSelectedAgentIds(initialSelection);
@@ -107,7 +119,7 @@ export function BatchInstallCentralSkillsDialog({
     } else {
       setInstallMethod("copy");
     }
-  }, [open, targetAgents, targetMode, isRemoteTarget, canUseSymlink]);
+  }, [open, targetAgents, targetMode, isRemoteTarget, canUseSymlink, defaultExcludedSet]);
 
   function handleModeChange(mode: TargetMode) {
     if (isRemoteTarget && mode === "project") {
@@ -167,13 +179,13 @@ export function BatchInstallCentralSkillsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{t("central.batchInstallTitle")}</DialogTitle>
+          <DialogTitle>{title ?? t("central.batchInstallTitle")}</DialogTitle>
           <DialogClose />
         </DialogHeader>
 
         <DialogBody className="space-y-5">
           <DialogDescription>
-            {t("central.batchInstallDesc", { count: skillCount })}
+            {description ?? t("central.batchInstallDesc", { count: skillCount })}
           </DialogDescription>
 
           <div className="space-y-2">

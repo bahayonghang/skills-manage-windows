@@ -503,7 +503,18 @@
       "localSource": "Local / user source",
       "pluginSource": "Plugin source",
       "unknownSource": "Unknown source"
-    }
+    },
+    "transferRailKicker": "Transfer rail",
+    "transferSelectionSummary": "{{selectedCount}} selected / {{selectableCount}} transferable",
+    "transferSelectCurrent": "Select current results",
+    "transferSelectMostUniversal": "Most universal",
+    "transferClear": "Clear",
+    "transferActionSummary": "{{count}} skill(s) staged for transfer",
+    "transferInstall": "Install to other platforms…",
+    "transferDialogTitle": "Install selected platform skills",
+    "transferDialogDesc": "Transfer {{count}} selected skill(s) from {{platform}} to other platforms. The current platform is unchecked by default.",
+    "transferNoUniversalCoverage": "No selected result has Central platform coverage metadata.",
+    "transferInstallError": "Failed to install selected platform skills: {{error}}"
   },
   "central": {
     "title": "Central Skills",
