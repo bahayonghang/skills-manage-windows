@@ -31,6 +31,7 @@ export function CustomPlatformsSettingsSection({
       sectionId="custom-platforms"
       title={t("settings.customPlatforms")}
       description={t("settings.customPlatformsDesc")}
+      icon={<Cpu className="size-5 shrink-0 text-muted-foreground" />}
       action={
         <Button
           variant="outline"

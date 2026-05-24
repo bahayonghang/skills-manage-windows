@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import {
+  getSettingsSectionTheme,
+  getSettingsSectionThemeStyle,
+} from "@/components/settings/settingsSectionTheme";
 import { cn } from "@/lib/utils";
 
 export interface TocEntry {
@@ -78,17 +82,21 @@ export function SettingsTableOfContents({ entries }: SettingsTableOfContentsProp
       <ul className="flex flex-wrap gap-1">
         {entries.map((entry) => {
           const active = activeId === entry.id;
+          const theme = getSettingsSectionTheme(entry.id);
           return (
             <li key={entry.id}>
               <button
                 type="button"
                 onClick={() => handleClick(entry.id)}
                 aria-current={active ? "true" : undefined}
+                data-settings-section-anchor={entry.id}
+                data-settings-section-tone={theme.tone}
+                style={getSettingsSectionThemeStyle(entry.id)}
                 className={cn(
                   "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
                   active
-                    ? "border-primary/40 bg-primary/15 text-primary"
-                    : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50",
+                    ? "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-[color:var(--settings-section-accent)] shadow-[0_0_0_1px_var(--settings-section-accent-faint)]"
+                    : "border-transparent text-muted-foreground hover:border-[color:var(--settings-section-accent-border)] hover:bg-[color:var(--settings-section-accent-faint)] hover:text-foreground",
                 )}
               >
                 {t(`settings.toc.entries.${entry.labelKey}`)}

@@ -600,10 +600,67 @@ describe("SettingsView", () => {
   it("renders the existing settings sections", () => {
     setupMocks();
     renderSettingsView();
+    expect(screen.getAllByText("外观").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("远程目标").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("GitHub 导入访问令牌").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("AI 提供商").length).toBeGreaterThan(0);
     expect(screen.getAllByText("扫描目录").length).toBeGreaterThan(0);
     expect(screen.getAllByText("自定义平台").length).toBeGreaterThan(0);
     expect(screen.getAllByText("平台可见性").length).toBeGreaterThan(0);
     expect(screen.getAllByText("关于").length).toBeGreaterThan(0);
+  });
+
+  it("applies stable section tones to settings cards and the table of contents", () => {
+    setupMocks();
+    const { container } = renderSettingsView();
+
+    expect(
+      container.querySelector(
+        '[data-settings-section="appearance"][data-settings-section-tone="appearance"]'
+      )
+    ).toBeTruthy();
+    expect(
+      container.querySelector(
+        '[data-settings-section="remote-targets"][data-settings-section-tone="remote-targets"]'
+      )
+    ).toBeTruthy();
+    expect(
+      container.querySelector(
+        '[data-settings-section="ai-provider"][data-settings-section-tone="ai-provider"]'
+      )
+    ).toBeTruthy();
+    expect(
+      container.querySelector(
+        '[data-settings-section="scan-directories"][data-settings-section-tone="scan-directories"]'
+      )
+    ).toBeTruthy();
+
+    expect(
+      container.querySelector(
+        '[data-settings-section-anchor="appearance-section"][data-settings-section-tone="appearance"]'
+      )
+    ).toBeTruthy();
+    expect(
+      container.querySelector(
+        '[data-settings-section-anchor="ai-section"][data-settings-section-tone="ai-provider"]'
+      )
+    ).toBeTruthy();
+  });
+
+  it("keeps the table of contents aria-current state when navigating sections", () => {
+    setupMocks();
+    renderSettingsView();
+
+    const appearanceToc = screen.getByRole("button", { name: "外观" });
+    const scanDirsToc = screen.getByRole("button", { name: "扫描目录" });
+
+    expect(appearanceToc).toHaveAttribute("aria-current", "true");
+    expect(scanDirsToc).not.toHaveAttribute("aria-current");
+
+    fireEvent.click(scanDirsToc);
+
+    expect(scanDirsToc).toHaveAttribute("aria-current", "true");
+    expect(appearanceToc).not.toHaveAttribute("aria-current");
   });
 
   it("persists collapsed settings sections in localStorage", () => {

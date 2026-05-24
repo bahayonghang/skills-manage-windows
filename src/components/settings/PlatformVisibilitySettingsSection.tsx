@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Input } from "@/components/ui/input";
@@ -51,6 +51,7 @@ export function PlatformVisibilitySettingsSection({
       sectionId="platform-visibility"
       title={t("settings.platformVisibility")}
       description={t("settings.platformVisibilityDesc")}
+      icon={<Eye className="size-5 shrink-0 text-muted-foreground" />}
     >
         <div className="space-y-4">
           <div className="relative">

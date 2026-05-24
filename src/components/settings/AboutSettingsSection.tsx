@@ -36,7 +36,11 @@ export function AboutSettingsSection({
   const { t } = useTranslation();
 
   return (
-    <SettingsCollapsibleCard sectionId="about" title={t("settings.about")}>
+    <SettingsCollapsibleCard
+      sectionId="about"
+      title={t("settings.about")}
+      icon={<Info className="size-5 shrink-0 text-muted-foreground" />}
+    >
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <Info className="size-4 text-muted-foreground shrink-0" />

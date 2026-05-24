@@ -84,15 +84,19 @@ export function AppearanceSettingsSection() {
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("settings.appearance.displayFont")}
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="mt-2 grid max-w-2xl grid-cols-2 gap-2 sm:grid-cols-3 xl:max-w-xl">
             {DISPLAY_FONT_OPTIONS.map((option) => {
               const active = prefs.display === option.key;
               return (
                 <Button
                   key={option.key}
-                  variant={active ? "default" : "outline"}
+                  variant="outline"
                   size="sm"
-                  className="justify-start"
+                  className={cn(
+                    "max-w-44 justify-start",
+                    active &&
+                      "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]"
+                  )}
                   onClick={() => void handleDisplayKey(option.key)}
                   aria-pressed={active}
                 >
@@ -130,15 +134,19 @@ export function AppearanceSettingsSection() {
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("settings.appearance.bodyFont")}
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="mt-2 grid max-w-2xl grid-cols-2 gap-2 sm:grid-cols-3 xl:max-w-xl">
             {BODY_FONT_OPTIONS.map((option) => {
               const active = prefs.body === option.key;
               return (
                 <Button
                   key={option.key}
-                  variant={active ? "default" : "outline"}
+                  variant="outline"
                   size="sm"
-                  className="justify-start"
+                  className={cn(
+                    "max-w-44 justify-start",
+                    active &&
+                      "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]"
+                  )}
                   onClick={() => void handleBodyKey(option.key)}
                   aria-pressed={active}
                 >
@@ -167,14 +175,18 @@ export function AppearanceSettingsSection() {
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("settings.appearance.scale")}
           </div>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex max-w-xl flex-wrap gap-2">
             {FONT_SCALE_OPTIONS.map((option) => {
               const active = Math.abs(prefs.scale - option.value) < 1e-3;
               return (
                 <Button
                   key={option.value}
-                  variant={active ? "default" : "outline"}
+                  variant="outline"
                   size="sm"
+                  className={cn(
+                    active &&
+                      "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]"
+                  )}
                   onClick={() => void handleScale(option.value)}
                   aria-pressed={active}
                 >
@@ -186,8 +198,8 @@ export function AppearanceSettingsSection() {
         </div>
 
         {/* Live preview */}
-        <div className="rounded-lg border border-border bg-muted/30 px-4 py-4">
-          <div className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        <div className="rounded-xl border border-[color:var(--settings-section-accent-border)] bg-[linear-gradient(135deg,var(--settings-section-accent-soft),var(--settings-section-accent-faint))] px-4 py-4 shadow-inner">
+          <div className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-[color:var(--settings-section-accent)]">
             {t("settings.appearance.preview")}
           </div>
           <div className="mt-2 font-display text-3xl font-semibold tracking-tight">

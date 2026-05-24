@@ -40,6 +40,7 @@ export function ScanDirectoriesSettingsSection({
       sectionId="scan-directories"
       title={t("settings.scanDirs")}
       description={t("settings.scanDirsDesc")}
+      icon={<FolderOpen className="size-5 shrink-0 text-muted-foreground" />}
       action={
         <Button
           variant="outline"
