@@ -10,7 +10,7 @@
 
 ## Overview
 
-`SkillPort` follows the [Agent Skills](https://github.com/anthropics/agent-skills) open pattern, but keeps its private Central library in `~/.skillsmanage/skills/` by default. On the Local target, the Central page can change this location with a previewed migrate-and-switch flow: current Central skills overwrite same-name target skills, target-only skills are kept and scanned in, and the old directory is not deleted. The shared Universal Agents target remains `~/.agents/skills/`, so only skills explicitly installed there are exposed to Codex CLI, Cursor, OpenCode, Amp, Copilot, and other tools that read that location. Google's current recommended platform is Antigravity: SkillPort installs its global skills to `~/.gemini/antigravity/skills/`, while Antigravity project skills use `.agents/skills/`. Gemini CLI remains available as a legacy / enterprise compatibility target.
+`SkillPort` follows the [Agent Skills](https://github.com/anthropics/agent-skills) open pattern, but keeps its private Central library in `~/.skillsmanage/skills/` by default. On the Local target, the Central page can change this location with a previewed migrate-and-switch flow: current Central skills overwrite same-name target skills, target-only skills are kept and scanned in, and the old directory is not deleted. The shared Universal Agents target remains `~/.agents/skills/`, so only skills explicitly installed there are exposed to Codex CLI, Cursor, OpenCode, Amp, Copilot, and other tools that read that location. SkillPort distinguishes Google's Antigravity app target from Antigravity CLI: Antigravity global skills stay in `~/.gemini/antigravity/skills/`, Antigravity CLI global skills use `~/.gemini/antigravity-cli/skills/`, and both use `.agents/skills/` for workspace/project installs. Gemini CLI remains available as a legacy/shared Google target at `~/.gemini/skills/`.
 
 ## Relationship to upstream
 
@@ -100,8 +100,9 @@ Then launch the app again from Finder. If your app is stored somewhere else, rep
 | Coding | Codex CLI | `~/.agents/skills/` |
 | Coding | Cursor | `~/.agents/skills/` |
 | Coding | Antigravity | `~/.gemini/antigravity/skills/` |
+| Coding | Antigravity CLI | `~/.gemini/antigravity-cli/skills/` |
 | Coding | Zed (community-compatible) | `~/.config/zed/skills/` |
-| Coding | Gemini CLI (legacy) | `~/.agents/skills/` |
+| Coding | Gemini CLI (legacy) | `~/.gemini/skills/` |
 | Coding | Trae | `~/.trae/skills/` |
 | Coding | Factory Droid | `~/.factory/skills/` |
 | Coding | Junie | `~/.junie/skills/` |
@@ -127,7 +128,7 @@ Then launch the app again from Finder. If your app is stored somewhere else, rep
 | Lobster | WorkBuddy (打工搭子) | `~/.workbuddy/skills-marketplace/skills/` |
 | Central | Central Skills | `~/.skillsmanage/skills/` |
 
-> Note: Claude Code also surfaces marketplace plugin directories under `~/.claude/plugins/marketplaces/*` as read-only rows in the Claude view. Those entries are display-only and are not managed like native skills in `~/.claude/skills/`. Antigravity plugin bundles are a separate CLI plugin mechanism; SkillPort currently manages Antigravity SkillPort-style `SKILL.md` skill folders only, not plugin bundle import/export. Zed is listed with a community-compatible skills path; SkillPort does not claim this is an official Zed-native skills specification.
+> Note: Claude Code also surfaces marketplace plugin directories under `~/.claude/plugins/marketplaces/*` as read-only rows in the Claude view. Those entries are display-only and are not managed like native skills in `~/.claude/skills/`. Antigravity plugin bundles are a separate CLI plugin mechanism; SkillPort currently manages Google `SKILL.md` skill folders only, not plugin bundle import/export. Zed is listed with a community-compatible skills path; SkillPort does not claim this is an official Zed-native skills specification.
 
 Custom platforms can be added through Settings.
 

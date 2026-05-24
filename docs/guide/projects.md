@@ -17,7 +17,7 @@ The same path is idempotent — clicking **Add project** on a folder you already
 For each project root, SkillPort walks the per-platform skill directories of **enabled agents only**:
 
 - `.claude/skills/` for Claude Code
-- `.kiro/skills/`, `.codex/skills/`, `.opencode/skills/`, and the shared `.agents/skills/` workspace path used by Universal-compatible agents including Antigravity. Legacy Gemini CLI rows remain compatible, but Antigravity project skills are represented through `.agents/skills/`.
+- `.kiro/skills/`, `.codex/skills/`, `.opencode/skills/`, and the shared `.agents/skills/` workspace path used by Universal-compatible agents including Antigravity and Antigravity CLI. Legacy Gemini CLI rows remain compatible, and Google project/workspace skills are represented through `.agents/skills/`.
 
 Disabled agents are skipped, and the `central` agent is always skipped (a project is never a global library by itself).
 
@@ -71,4 +71,4 @@ Visiting `/discover` now redirects to `/projects` and shows a one-time banner. O
 
 ---
 
-Last reviewed: 2026-05-14
+Last reviewed: 2026-05-25

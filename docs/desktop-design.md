@@ -2,7 +2,7 @@
 
 > 版本：v0.1 | 日期：2026-04-09
 
-> Historical design note: this April 2026 draft predates the current Central library and Google-platform semantics. Runtime code and README now treat Central as `~/.skillsmanage/skills/`, Universal Agents global as `~/.agents/skills/`, Antigravity global as `~/.gemini/antigravity/skills/`, and Gemini CLI as a legacy / enterprise compatibility target. Antigravity plugin bundles are outside SkillPort's current skill-folder workflow.
+> Historical design note: this April 2026 draft predates the current Central library and Google-platform semantics. Runtime code and README now treat Central as `~/.skillsmanage/skills/`, Universal Agents global as `~/.agents/skills/`, Antigravity global as `~/.gemini/antigravity/skills/`, Antigravity CLI global as `~/.gemini/antigravity-cli/skills/`, and Gemini CLI as the legacy/shared `~/.gemini/skills/` target. Antigravity plugin bundles are outside SkillPort's current skill-folder workflow.
 
 ---
 
@@ -11,7 +11,7 @@
 **skills-manage** 是一个跨平台 AI Agent Skills 管理工具，以桌面应用为核心形态。
 
 **核心价值**：
-- 一个界面管理所有 AI 工具（Claude Code、Codex、Cursor、Antigravity、Gemini CLI (legacy)、Trae、Factory Droid、OpenClaw、QClaw 等）的 skills
+- 一个界面管理所有 AI 工具（Claude Code、Codex、Cursor、Antigravity、Antigravity CLI、Gemini CLI (legacy)、Trae、Factory Droid、OpenClaw、QClaw 等）的 skills
 - 启动即全盘扫描，自动分类整理
 - `~/.agents/skills/` 作为 Central Skills（中央技能库）真实源，其他平台通过 **skill 级软链** 引用
 - 自定义 Collection 支持批量安装 + 导入/导出
@@ -539,6 +539,7 @@ CREATE TABLE settings (
 | codex | Codex CLI | coding | `~/.agents/skills/` |
 | cursor | Cursor | coding | `~/.cursor/skills/` |
 | antigravity | Antigravity | coding | `~/.gemini/antigravity/skills/` |
+| antigravity-cli | Antigravity CLI | coding | `~/.gemini/antigravity-cli/skills/` |
 | gemini-cli | Gemini CLI (legacy) | coding | `~/.gemini/skills/` |
 | trae | Trae | coding | `~/.trae/skills/` |
 | factory-droid | Factory Droid | coding | `~/.factory/skills/` |

@@ -17,7 +17,7 @@ Projects 提供「按项目逐个管理」的视图，覆盖那些活在代码�
 每个项目根下，SkillPort 只走**已启用 agent** 各自的项目级 skill 目录：
 
 - Claude Code：`.claude/skills/`
-- 其他平台：`.kiro/skills/`、`.codex/skills/`、`.opencode/skills/`，以及 Antigravity 等 Universal-compatible agent 使用的共享 workspace 路径 `.agents/skills/`。Legacy Gemini CLI 行继续兼容；Antigravity 项目 skills 通过 `.agents/skills/` 表示。
+- 其他平台：`.kiro/skills/`、`.codex/skills/`、`.opencode/skills/`，以及 Antigravity、Antigravity CLI 等 Universal-compatible agent 使用的共享 workspace 路径 `.agents/skills/`。Legacy Gemini CLI 行继续兼容；Google project / workspace skills 通过 `.agents/skills/` 表示。
 
 未启用的 agent 跳过；`central` agent 永远跳过（项目本身不是中央库）。
 
@@ -73,4 +73,4 @@ Projects 提供「按项目逐个管理」的视图，覆盖那些活在代码�
 
 ---
 
-Last reviewed: 2026-05-14
+Last reviewed: 2026-05-25

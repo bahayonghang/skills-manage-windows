@@ -9,7 +9,7 @@ Vocabulary that appears across the UI, source code, and docs.
 | Platform | 平台 | An agent that reads skills from a known directory (Claude Code, Cursor, …) |
 | Agent | Agent | Synonym for Platform in source code (`agent_id`, `agents` table) |
 | Lobster | 龙虾 | UI grouping for vendor-specific Chinese coding agents (OpenClaw, QClaw, …) |
-| Universal Agents | 通用平台 | Shared global `~/.agents/skills/` target read by Codex CLI / Cursor / OpenCode / Amp / Copilot / legacy Gemini CLI etc.; at project scope Antigravity also shares `.agents/skills/` |
+| Universal Agents | 通用平台 | Shared global `~/.agents/skills/` target read by Codex CLI / Cursor / OpenCode / Amp / Copilot and other universal agents; at project scope Antigravity and Antigravity CLI also share `.agents/skills/` |
 | Install | 安装 | Materialize a Central skill into a platform's skills directory |
 | Symlink | 符号链接 | Default install method on Linux / macOS and Windows with Developer Mode |
 | Copy | 拷贝 | Install method that duplicates the directory; default for Windows fallbacks |
@@ -44,4 +44,4 @@ Vocabulary that appears across the UI, source code, and docs.
 - Platform → directory: see [Platform Paths](./platform-paths.md)
 - Install method semantics: see [Architecture → Installation Engine](../architecture/installation-engine.md)
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-05-25

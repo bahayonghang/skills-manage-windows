@@ -10,7 +10,8 @@ The full list of platforms SkillPort manages and where each one stores its skill
 | Codex CLI | `~/.agents/skills/` |
 | Cursor | `~/.agents/skills/` |
 | Antigravity | `~/.gemini/antigravity/skills/` |
-| Gemini CLI (legacy) | `~/.agents/skills/` |
+| Antigravity CLI | `~/.gemini/antigravity-cli/skills/` |
+| Gemini CLI (legacy) | `~/.gemini/skills/` |
 | Trae | `~/.trae/skills/` |
 | Factory Droid | `~/.factory/skills/` |
 | Junie | `~/.junie/skills/` |
@@ -47,11 +48,12 @@ The full list of platforms SkillPort manages and where each one stores its skill
 | `~/.skillsmanage/skills/` | Canonical Central library (legacy directory name kept for compatibility) |
 | `~/.skillsmanage/db.sqlite` | SQLite database (WAL mode) |
 | `~/.skillsmanage/targets/<id>/db.sqlite` | Per-target SQLite cache for SSH targets |
-| `~/.agents/skills/` | Universal Agents global target shared by Codex CLI / Cursor / OpenCode / Amp / Copilot / legacy Gemini CLI etc. |
+| `~/.agents/skills/` | Universal Agents global target shared by Codex CLI / Cursor / OpenCode / Amp / Copilot and other universal agents. |
+| `~/.gemini/skills/` | Legacy/shared Google target carried by Gemini CLI. |
 
 ## Shared Roots
 
-Multiple global agents resolve to `~/.agents/skills/`. Antigravity is deliberately separate globally (`~/.gemini/antigravity/skills/`) but shares `.agents/skills/` at project/workspace scope. Project scanning collapses those workspace-compatible members so the same project skill is not surfaced N times.
+Multiple global agents resolve to `~/.agents/skills/`. Antigravity and Antigravity CLI are deliberately separate globally (`~/.gemini/antigravity/skills/` and `~/.gemini/antigravity-cli/skills/`) but both share `.agents/skills/` at project/workspace scope. The legacy/shared Google path is represented by Gemini CLI at `~/.gemini/skills/`. Project scanning collapses workspace-compatible members so the same project skill is not surfaced N times.
 
 ## Read-only Sources
 
@@ -66,4 +68,4 @@ Settings → Platforms allows adding custom platforms. SkillPort auto-generates 
 
 The directory is created lazily on first install.
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-05-25

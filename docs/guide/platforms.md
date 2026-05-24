@@ -1,6 +1,6 @@
 # Platforms
 
-A platform is any AI coding agent or runtime that reads a `skills/` directory. SkillPort ships with 33 built-in platform definitions and lets you add custom ones from Settings.
+A platform is any AI coding agent or runtime that reads a `skills/` directory. SkillPort ships with 34 built-in platform definitions and lets you add custom ones from Settings.
 
 ## Categories
 
@@ -18,7 +18,8 @@ A platform is any AI coding agent or runtime that reads a `skills/` directory. S
 | Coding | Codex CLI | `~/.agents/skills/` |
 | Coding | Cursor | `~/.agents/skills/` |
 | Coding | Antigravity | `~/.gemini/antigravity/skills/` |
-| Coding | Gemini CLI (legacy) | `~/.agents/skills/` |
+| Coding | Antigravity CLI | `~/.gemini/antigravity-cli/skills/` |
+| Coding | Gemini CLI (legacy) | `~/.gemini/skills/` |
 | Coding | Trae | `~/.trae/skills/` |
 | Coding | Factory Droid | `~/.factory/skills/` |
 | Coding | Junie | `~/.junie/skills/` |
@@ -44,7 +45,7 @@ A platform is any AI coding agent or runtime that reads a `skills/` directory. S
 | Lobster | WorkBuddy | `~/.workbuddy/skills-marketplace/skills/` |
 | Central | Central Skills | `~/.skillsmanage/skills/` |
 
-Several coding platforms (Codex, Cursor, OpenCode, Amp, Copilot, plus legacy Gemini CLI) read from the shared Universal Agents global path. Antigravity is Google's current recommended platform, but its global skills live at `~/.gemini/antigravity/skills/`; project/workspace skills still use the shared `.agents/skills/` directory. SkillPort does not manage Antigravity plugin bundles in this workflow.
+Several coding platforms (Codex, Cursor, OpenCode, Amp, Copilot, and other universal agents) read from the shared Universal Agents global path. SkillPort keeps Google's Antigravity app and Antigravity CLI as distinct global targets: `~/.gemini/antigravity/skills/` and `~/.gemini/antigravity-cli/skills/`. Both use the shared `.agents/skills/` directory for project/workspace installs, while Gemini CLI remains a legacy/shared Google target at `~/.gemini/skills/`. SkillPort does not manage Antigravity plugin bundles in this workflow.
 
 ## Platform view
 
@@ -77,4 +78,4 @@ You can hide platforms you do not use from Settings → Platform Visibility. Hid
 
 ---
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-05-25

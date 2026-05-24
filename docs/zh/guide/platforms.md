@@ -1,6 +1,6 @@
 # 平台
 
-平台是指任何会读取 `skills/` 目录的 AI 编码 agent 或运行时。SkillPort 预置 33 个平台定义，并允许在设置中添加自定义平台。
+平台是指任何会读取 `skills/` 目录的 AI 编码 agent 或运行时。SkillPort 预置 34 个平台定义，并允许在设置中添加自定义平台。
 
 ## 分类
 
@@ -18,7 +18,8 @@
 | Coding | Codex CLI | `~/.agents/skills/` |
 | Coding | Cursor | `~/.agents/skills/` |
 | Coding | Antigravity | `~/.gemini/antigravity/skills/` |
-| Coding | Gemini CLI（legacy） | `~/.agents/skills/` |
+| Coding | Antigravity CLI | `~/.gemini/antigravity-cli/skills/` |
+| Coding | Gemini CLI（legacy） | `~/.gemini/skills/` |
 | Coding | Trae | `~/.trae/skills/` |
 | Coding | Factory Droid | `~/.factory/skills/` |
 | Coding | Junie | `~/.junie/skills/` |
@@ -44,7 +45,7 @@
 | Lobster | WorkBuddy（打工搭子） | `~/.workbuddy/skills-marketplace/skills/` |
 | Central | 中央技能库 | `~/.skillsmanage/skills/` |
 
-Codex、Cursor、OpenCode、Amp、Copilot 以及 legacy Gemini CLI 读取共享的 Universal Agents 全局路径。Antigravity 是 Google 当前推荐平台，但它的全局 skills 位于 `~/.gemini/antigravity/skills/`；项目 / workspace skills 仍使用共享 `.agents/skills/` 目录。SkillPort 本轮不管理 Antigravity plugin bundle。
+Codex、Cursor、OpenCode、Amp、Copilot 等 universal agents 读取共享的 Universal Agents 全局路径。SkillPort 将 Google 的 Antigravity 应用和 Antigravity CLI 保持为独立全局目标：`~/.gemini/antigravity/skills/` 与 `~/.gemini/antigravity-cli/skills/`。两者的项目 / workspace 安装都使用共享 `.agents/skills/` 目录；Gemini CLI 仍作为 legacy/shared Google 目标使用 `~/.gemini/skills/`。SkillPort 本轮不管理 Antigravity plugin bundle。
 
 ## 平台视图
 
@@ -77,4 +78,4 @@ Codex、Cursor、OpenCode、Amp、Copilot 以及 legacy Gemini CLI 读取共享�
 
 ---
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-05-25
