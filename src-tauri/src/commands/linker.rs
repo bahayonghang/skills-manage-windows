@@ -30,15 +30,16 @@ use crate::AppState;
 // or `crate::commands::linker::*` (collections / discover / central_migration
 // / central_updates) keep compiling without changes.
 pub use crate::services::installation::{
-    batch_install_central_skills_impl, copy_dir_all, create_symlink,
-    install_skill_to_agent_auto_impl, install_skill_to_agent_copy_impl,
+    batch_install_central_skills_impl, batch_uninstall_skills_from_agent_impl, copy_dir_all,
+    create_symlink, install_skill_to_agent_auto_impl, install_skill_to_agent_copy_impl,
     install_skill_to_agent_impl, install_skill_to_agent_remote_impl,
     install_skill_to_agent_ssh_impl, make_relative_path, symlink_target_path,
     uninstall_skill_from_agent_impl, uninstall_skill_from_agent_remote_impl,
     uninstall_skill_from_agent_ssh_impl, uninstall_skill_from_agent_with_row_impl,
-    BatchInstallResult, CentralBatchInstallFailure, CentralBatchInstallResult,
-    CentralBatchInstallSkipped, CentralBatchInstallSuccess, FailedInstall, InstallResult,
-    SkippedInstall,
+    BatchInstallResult, BatchUninstallSkillFailure, BatchUninstallSkillRequest,
+    BatchUninstallSkillResult, BatchUninstallSkillSuccess, CentralBatchInstallFailure,
+    CentralBatchInstallResult, CentralBatchInstallSkipped, CentralBatchInstallSuccess,
+    FailedInstall, InstallResult, SkippedInstall,
 };
 
 /// Tauri command: install a skill to a single agent via relative symlink.
@@ -169,6 +170,75 @@ pub async fn uninstall_skill_from_agent(
     }
     record_operation_log_best_effort(&state.db, target_context, event).await;
     result
+}
+
+/// Tauri command: remove multiple skills from one agent.
+#[tauri::command]
+pub async fn batch_uninstall_skills_from_agent(
+    state: State<'_, AppState>,
+    agent_id: String,
+    requests: Vec<BatchUninstallSkillRequest>,
+) -> Result<BatchUninstallSkillResult, String> {
+    let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
+    let pool = state.active_db().await?;
+    let started_at = Instant::now();
+    let result = match &active_target {
+        ActiveTarget::Local => {
+            installation::batch_uninstall_skills_from_agent_impl(&pool, &agent_id, requests).await
+        }
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            let mut succeeded = Vec::new();
+            let mut failed = Vec::new();
+            for request in requests {
+                match installation::uninstall_skill_from_agent_remote_impl(
+                    &pool,
+                    &active_target,
+                    &request.skill_id,
+                    &agent_id,
+                )
+                .await
+                {
+                    Ok(()) => succeeded.push(BatchUninstallSkillSuccess {
+                        skill_id: request.skill_id,
+                        row_id: request.row_id,
+                    }),
+                    Err(error) => failed.push(BatchUninstallSkillFailure {
+                        skill_id: request.skill_id,
+                        row_id: request.row_id,
+                        error,
+                    }),
+                }
+            }
+            BatchUninstallSkillResult { succeeded, failed }
+        }
+    };
+    let status =
+        installation::batch_operation_status(result.succeeded.len(), 0, result.failed.len());
+    record_operation_log_best_effort(
+        &state.db,
+        target_context,
+        OperationLogEvent::new(
+            "install",
+            "skill.batch_uninstall",
+            status,
+            format!(
+                "Uninstalled {} skill(s) from {}, {} failed",
+                result.succeeded.len(),
+                agent_id,
+                result.failed.len()
+            ),
+        )
+        .subject("agent", &agent_id, &agent_id)
+        .details(json!({
+            "agentId": agent_id,
+            "succeeded": &result.succeeded,
+            "failed": &result.failed,
+        }))
+        .duration_ms(started_at.elapsed().as_millis() as i64),
+    )
+    .await;
+    Ok(result)
 }
 
 /// Tauri command: install a skill to multiple agents in one call.

@@ -10,8 +10,9 @@ use crate::db::DbPool;
 use super::native::install_central_skill_to_agent_outcome_by_method;
 use super::project::install_central_skill_to_project_outcome_impl;
 use super::types::{
-    CentralBatchInstallFailure, CentralBatchInstallResult, CentralBatchInstallSkipped,
-    CentralBatchInstallSuccess, InstallOutcome,
+    BatchUninstallSkillFailure, BatchUninstallSkillRequest, BatchUninstallSkillResult,
+    BatchUninstallSkillSuccess, CentralBatchInstallFailure, CentralBatchInstallResult,
+    CentralBatchInstallSkipped, CentralBatchInstallSuccess, InstallOutcome,
 };
 
 /// Drop empty strings and collapse duplicates while preserving first-occurrence
@@ -101,4 +102,45 @@ pub async fn batch_install_central_skills_impl(
         skipped,
         failed,
     }
+}
+
+pub async fn batch_uninstall_skills_from_agent_impl(
+    pool: &DbPool,
+    agent_id: &str,
+    requests: Vec<BatchUninstallSkillRequest>,
+) -> BatchUninstallSkillResult {
+    let mut succeeded = Vec::new();
+    let mut failed = Vec::new();
+
+    for request in requests {
+        if request.skill_id.is_empty() {
+            failed.push(BatchUninstallSkillFailure {
+                skill_id: request.skill_id,
+                row_id: request.row_id,
+                error: "skill_id is required".to_string(),
+            });
+            continue;
+        }
+
+        match super::native::uninstall_skill_from_agent_with_row_impl(
+            pool,
+            &request.skill_id,
+            agent_id,
+            request.row_id.as_deref(),
+        )
+        .await
+        {
+            Ok(()) => succeeded.push(BatchUninstallSkillSuccess {
+                skill_id: request.skill_id,
+                row_id: request.row_id,
+            }),
+            Err(error) => failed.push(BatchUninstallSkillFailure {
+                skill_id: request.skill_id,
+                row_id: request.row_id,
+                error,
+            }),
+        }
+    }
+
+    BatchUninstallSkillResult { succeeded, failed }
 }

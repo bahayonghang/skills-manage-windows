@@ -319,6 +319,7 @@ pub fn run() {
             // Linker
             commands::linker::install_skill_to_agent,
             commands::linker::uninstall_skill_from_agent,
+            commands::linker::batch_uninstall_skills_from_agent,
             commands::linker::batch_install_to_agents,
             commands::linker::batch_install_central_skills,
             // Skills

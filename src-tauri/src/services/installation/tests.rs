@@ -26,6 +26,7 @@ use super::native::{
 };
 use super::project::install_central_skill_to_project_outcome_impl;
 use super::remote::{classify_remote_existing_install_target, RemoteExistingInstallAction};
+use super::types::BatchUninstallSkillRequest;
 use super::types::{BatchInstallResult, FailedInstall, InstallOutcome};
 
 // ── Test helpers ──────────────────────────────────────────────────────────
@@ -751,6 +752,166 @@ async fn test_uninstall_claude_row_rejects_skill_id_mismatch() {
         skill_dir.join("SKILL.md").exists(),
         "mismatched row should not delete the observed path"
     );
+}
+
+#[tokio::test]
+async fn test_batch_uninstall_skills_from_agent_reports_partial_failure() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "batch-remove-ok");
+    install_skill_to_agent_impl(&pool, "batch-remove-ok", "claude-code")
+        .await
+        .unwrap();
+    fs::create_dir_all(agent_dir.join("protected-batch-dir")).unwrap();
+
+    let result = super::batch::batch_uninstall_skills_from_agent_impl(
+        &pool,
+        "claude-code",
+        vec![
+            BatchUninstallSkillRequest {
+                skill_id: "batch-remove-ok".to_string(),
+                row_id: None,
+            },
+            BatchUninstallSkillRequest {
+                skill_id: "protected-batch-dir".to_string(),
+                row_id: None,
+            },
+        ],
+    )
+    .await;
+
+    assert_eq!(result.succeeded.len(), 1);
+    assert_eq!(result.succeeded[0].skill_id, "batch-remove-ok");
+    assert_eq!(result.failed.len(), 1);
+    assert_eq!(result.failed[0].skill_id, "protected-batch-dir");
+    assert!(
+        fs::symlink_metadata(agent_dir.join("batch-remove-ok")).is_err(),
+        "successful batch item should remove the platform install"
+    );
+}
+
+#[tokio::test]
+async fn test_batch_uninstall_claude_user_rows_keep_row_identity() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&agent_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    let first_dir = create_user_skill(&agent_dir, "same-name-a");
+    let second_dir = create_user_skill(&agent_dir, "same-name-b");
+    let first_observation = claude_observation(&agent_dir, "same-skill", &first_dir, "user", false);
+    let second_observation =
+        claude_observation(&agent_dir, "same-skill", &second_dir, "user", false);
+    let first_row_id = first_observation.row_id.clone();
+    let second_row_id = second_observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &first_observation)
+        .await
+        .unwrap();
+    db::upsert_agent_skill_observation(&pool, &second_observation)
+        .await
+        .unwrap();
+
+    let result = super::batch::batch_uninstall_skills_from_agent_impl(
+        &pool,
+        "claude-code",
+        vec![BatchUninstallSkillRequest {
+            skill_id: "same-skill".to_string(),
+            row_id: Some(first_row_id.clone()),
+        }],
+    )
+    .await;
+
+    assert_eq!(result.succeeded.len(), 1);
+    assert!(result.failed.is_empty());
+    assert!(fs::symlink_metadata(&first_dir).is_err());
+    assert!(second_dir.join("SKILL.md").exists());
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &first_row_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &second_row_id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn test_batch_uninstall_rejects_read_only_and_shared_root_rows() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    let plugin_dir = tmp
+        .path()
+        .join("plugin")
+        .join("skills")
+        .join("plugin-batch-skill");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&claude_dir).unwrap();
+    fs::create_dir_all(&plugin_dir).unwrap();
+    fs::write(
+        plugin_dir.join("SKILL.md"),
+        "---\nname: plugin-batch-skill\n---\n\n# plugin\n",
+    )
+    .unwrap();
+
+    let pool = setup_db(&central_dir, &claude_dir).await;
+    let observation = claude_observation(
+        &claude_dir,
+        "plugin-batch-skill",
+        &plugin_dir,
+        "plugin",
+        true,
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+    point_codex_to_dir(&pool, &central_dir).await;
+    create_central_skill(&central_dir, "shared-root-batch-skill");
+    install_skill_to_agent_impl(&pool, "shared-root-batch-skill", "codex")
+        .await
+        .unwrap();
+
+    let plugin_result = super::batch::batch_uninstall_skills_from_agent_impl(
+        &pool,
+        "claude-code",
+        vec![BatchUninstallSkillRequest {
+            skill_id: "plugin-batch-skill".to_string(),
+            row_id: Some(row_id),
+        }],
+    )
+    .await;
+    let shared_result = super::batch::batch_uninstall_skills_from_agent_impl(
+        &pool,
+        "codex",
+        vec![BatchUninstallSkillRequest {
+            skill_id: "shared-root-batch-skill".to_string(),
+            row_id: None,
+        }],
+    )
+    .await;
+
+    assert!(plugin_result.succeeded.is_empty());
+    assert!(plugin_result.failed[0].error.contains("read-only"));
+    assert!(plugin_dir.join("SKILL.md").exists());
+    assert!(shared_result.succeeded.is_empty());
+    assert!(shared_result.failed[0]
+        .error
+        .contains("cannot be uninstalled independently"));
+    assert!(central_dir
+        .join("shared-root-batch-skill")
+        .join("SKILL.md")
+        .exists());
 }
 
 // ── batch install ─────────────────────────────────────────────────────────
