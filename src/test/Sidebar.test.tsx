@@ -181,9 +181,21 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("button", { name: /Claude Code/ })).not.toBeInTheDocument();
   });
 
-  it("does not render Settings in the sidebar", () => {
-    renderSidebar();
-    expect(screen.queryByRole("button", { name: /设置/ })).not.toBeInTheDocument();
+  it("renders Settings as a fixed sidebar destination", () => {
+    const { container } = renderSidebar();
+    const settingsButton = screen.getByRole("button", { name: /设置/ });
+
+    expect(settingsButton).toBeInTheDocument();
+    expect(settingsButton.closest("nav")).toBe(container.querySelector("nav"));
+  });
+
+  it("highlights Settings when on settings subpages", () => {
+    renderSidebar("/settings/connections");
+    const settingsButton = screen.getByRole("button", { name: /设置/ });
+    const centralButton = screen.getByRole("button", { name: /中央技能库/ });
+
+    expect(settingsButton.className).toContain("bg-sidebar-primary");
+    expect(centralButton.className).not.toContain("bg-sidebar-primary");
   });
 
   it("keeps platform entries visible during background refresh", () => {

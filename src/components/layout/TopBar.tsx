@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Blocks, Moon, Plus, Search, Settings, Sun } from "lucide-react";
+import { Blocks, Moon, Plus, Search, Sun } from "lucide-react";
 
 import { usePlatformStore } from "@/stores/platformStore";
 import { useThemeStore, type ThemeFlavor } from "@/stores/themeStore";
@@ -77,7 +77,7 @@ export function TopBar({ onSearchClick }: TopBarProps) {
     if (pathname === "/logs") {
       return { label: t("logs.title"), count: undefined };
     }
-    if (pathname === "/settings") {
+    if (pathname.startsWith("/settings")) {
       return { label: t("sidebar.settings"), count: undefined };
     }
     if (pathname.startsWith("/skill/")) {
@@ -180,20 +180,6 @@ export function TopBar({ onSearchClick }: TopBarProps) {
         ) : (
           <Sun className="size-4" />
         )}
-      </button>
-
-      {/* Settings */}
-      <button
-        onClick={() => navigate("/settings")}
-        className={cn(
-          "z-10 p-1.5 rounded-md transition-colors cursor-pointer shrink-0",
-          "text-muted-foreground hover:text-foreground hover:bg-muted/60",
-          pathname === "/settings" && "bg-muted/60 text-foreground",
-        )}
-        aria-label={t("sidebar.settings")}
-        title={t("sidebar.settings")}
-      >
-        <Settings className="size-4" />
       </button>
     </header>
   );

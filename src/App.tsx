@@ -145,7 +145,7 @@ function App() {
         />
         {/* Settings */}
         <Route
-          path="settings"
+          path="settings/*"
           element={lazyPage(<SettingsView />)}
         />
       </Route>

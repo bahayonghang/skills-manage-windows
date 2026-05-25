@@ -173,6 +173,20 @@ describe("App", () => {
     expect(screen.queryByText("按工具")).not.toBeInTheDocument();
   });
 
+  it("keeps settings as a single sidebar entry instead of a top bar button", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/central"]}>
+          <App />
+        </MemoryRouter>
+      );
+    });
+
+    const settingsButtons = screen.getAllByRole("button", { name: "设置" });
+    expect(settingsButtons).toHaveLength(1);
+    expect(settingsButtons[0].closest("nav")).toHaveAttribute("aria-label", "主导航");
+  });
+
   it("redirects / to the Dashboard route", async () => {
     await act(async () => {
       render(

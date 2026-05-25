@@ -218,8 +218,8 @@ export function useDashboardViewModel({
   const hasRemoteSyncTarget =
     Boolean(quickMigrateTarget);
   const quickMigratePath = hasRemoteSyncTarget
-    ? "/settings?section=remote-targets&action=local-remote-sync"
-    : "/settings?section=remote-targets";
+    ? "/settings/connections?action=local-remote-sync&section=remote-targets"
+    : "/settings/connections";
   const quickMigrateDescription = hasRemoteSyncTarget
     ? t("dashboard.hero.ctaQuickMigrateRemoteDesc", {
         target: quickMigrateTarget?.label ?? targetLabel,

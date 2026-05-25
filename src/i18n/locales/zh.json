@@ -1561,7 +1561,36 @@
     "english": "English",
     "aiSaveSaving": "AI 设置保存中...",
     "aiSaveSaved": "AI 设置已保存",
-    "aiSaveError": "AI 设置保存失败：{{error}}"
+    "aiSaveError": "AI 设置保存失败：{{error}}",
+    "pages": {
+      "eyebrow": "设置中心",
+      "navAriaLabel": "设置页面导航",
+      "legacyFallback": "已从旧设置链接跳转到默认页面。",
+      "appearance": {
+        "title": "外观",
+        "description": "调整主题、语言、强调色、字体和显示密度。"
+      },
+      "connections": {
+        "title": "连接与同步",
+        "description": "管理本机、SSH 与 WSL 目标，并启动本机到远程同步。"
+      },
+      "platforms": {
+        "title": "平台管理",
+        "description": "注册自定义平台，控制工具分组和平台在应用中的显示。"
+      },
+      "integrations": {
+        "title": "集成与密钥",
+        "description": "配置 GitHub 访问令牌、AI 提供商、API Key 和 AI 标注限流。"
+      },
+      "skillSources": {
+        "title": "技能来源",
+        "description": "管理用于扫描技能的内置目录和项目目录。"
+      },
+      "about": {
+        "title": "帮助与关于",
+        "description": "查看应用版本、数据库位置和项目仓库信息。"
+      }
+    }
   },
   "addDir": {
     "title": "添加项目目录",

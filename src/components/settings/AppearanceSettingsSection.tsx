@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Type } from "lucide-react";
+import { Droplets, Globe, Palette, Type } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
+import i18n from "@/i18n";
+import type { CatppuccinAccent, ThemeFlavor } from "@/stores/themeStore";
 import {
   BODY_FONT_OPTIONS,
   DEFAULT_FONT_PREFERENCES,
@@ -21,7 +23,27 @@ import {
 } from "@/lib/displayFont";
 import { cn } from "@/lib/utils";
 
-export function AppearanceSettingsSection() {
+interface AppearanceSettingsSectionProps {
+  accent: CatppuccinAccent;
+  accentNames: CatppuccinAccent[];
+  ctpVarMap: Record<CatppuccinAccent, string>;
+  flavor: ThemeFlavor;
+  flavorColors: Record<ThemeFlavor, string>;
+  flavorOrder: ThemeFlavor[];
+  onSetAccent: (accent: CatppuccinAccent) => void;
+  onSetFlavor: (flavor: ThemeFlavor) => void;
+}
+
+export function AppearanceSettingsSection({
+  accent,
+  accentNames,
+  ctpVarMap,
+  flavor,
+  flavorColors,
+  flavorOrder,
+  onSetAccent,
+  onSetFlavor,
+}: AppearanceSettingsSectionProps) {
   const { t } = useTranslation();
   const [prefs, setPrefs] = useState<FontPreferences>(DEFAULT_FONT_PREFERENCES);
 
@@ -79,6 +101,92 @@ export function AppearanceSettingsSection() {
       icon={<Type className="size-4 text-muted-foreground shrink-0" />}
     >
       <div className="space-y-5">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-border/80 bg-background/70 p-4">
+            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <Palette className="size-3.5" />
+              {t("settings.flavor")}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {flavorOrder.map((item) => (
+                <Button
+                  key={item}
+                  variant={flavor === item ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => onSetFlavor(item)}
+                  aria-pressed={flavor === item}
+                >
+                  <span
+                    className="mr-1.5 inline-block size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: flavorColors[item] }}
+                  />
+                  {t(`settings.${item}`)}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/80 bg-background/70 p-4">
+            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <Globe className="size-3.5" />
+              {t("settings.language")}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button
+                variant={i18n.language === "zh" ? "default" : "outline"}
+                size="sm"
+                onClick={() => i18n.changeLanguage("zh")}
+                aria-pressed={i18n.language === "zh"}
+              >
+                {t("settings.chinese")}
+              </Button>
+              <Button
+                variant={i18n.language === "en" ? "default" : "outline"}
+                size="sm"
+                onClick={() => i18n.changeLanguage("en")}
+                aria-pressed={i18n.language === "en"}
+              >
+                {t("settings.english")}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border/80 bg-background/70 p-4">
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <Droplets className="size-3.5" />
+            {t("settings.accentColor")}
+          </div>
+          <div
+            className="mt-3 flex flex-wrap gap-1.5"
+            role="radiogroup"
+            aria-label={t("settings.accentColor")}
+          >
+            {accentNames.map((name) => {
+              const ctpVar = ctpVarMap[name];
+              const isActive = accent === name;
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  aria-label={t(`settings.accent.${name}`)}
+                  title={t(`settings.accent.${name}`)}
+                  onClick={() => onSetAccent(name)}
+                  className={cn(
+                    "relative size-8 rounded-full transition-colors active:scale-95 cursor-pointer md:size-6",
+                    isActive
+                      ? "ring-2 ring-ring ring-offset-2 ring-offset-background scale-110"
+                      : "ring-1 ring-border hover:scale-105 hover:ring-2 hover:ring-ring/50"
+                  )}
+                  style={{ backgroundColor: `var(${ctpVar})` }}
+                />
+              );
+            })}
+          </div>
+        </div>
+
         {/* Display font */}
         <div>
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

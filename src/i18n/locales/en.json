@@ -1561,7 +1561,36 @@
     "english": "English",
     "aiSaveSaving": "Saving AI settings...",
     "aiSaveSaved": "AI settings saved",
-    "aiSaveError": "AI settings failed to save: {{error}}"
+    "aiSaveError": "AI settings failed to save: {{error}}",
+    "pages": {
+      "eyebrow": "Settings Center",
+      "navAriaLabel": "Settings page navigation",
+      "legacyFallback": "This old settings link was redirected to the default page.",
+      "appearance": {
+        "title": "Appearance",
+        "description": "Adjust theme, language, accent color, fonts, and display density."
+      },
+      "connections": {
+        "title": "Connections & Sync",
+        "description": "Manage local, SSH, and WSL targets, then start local-to-remote sync."
+      },
+      "platforms": {
+        "title": "Platform Management",
+        "description": "Register custom platforms and control tool group or platform visibility."
+      },
+      "integrations": {
+        "title": "Integrations & Keys",
+        "description": "Configure GitHub tokens, AI providers, API keys, and AI tagging limits."
+      },
+      "skillSources": {
+        "title": "Skill Sources",
+        "description": "Manage built-in and project directories scanned for skills."
+      },
+      "about": {
+        "title": "Help & About",
+        "description": "View the app version, database location, and project repository."
+      }
+    }
   },
   "addDir": {
     "title": "Add Project Directory",

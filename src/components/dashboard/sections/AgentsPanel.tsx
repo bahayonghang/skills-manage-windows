@@ -38,7 +38,7 @@ export function AgentsPanel({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onNavigate("/settings#platforms")}
+            onClick={() => onNavigate("/settings/platforms")}
           >
             {t("dashboard.agents.manage")}
             <ChevronRight className="size-3.5" />

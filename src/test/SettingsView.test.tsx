@@ -343,7 +343,7 @@ function renderSettingsView(initialEntry = "/settings") {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
-        <Route path="/settings" element={<SettingsView />} />
+        <Route path="/settings/*" element={<SettingsView />} />
       </Routes>
     </MemoryRouter>
   );
@@ -368,20 +368,20 @@ describe("SettingsView", () => {
 
   it("renders the github token section", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
     expect(screen.getByText("GitHub 导入访问令牌")).toBeTruthy();
   });
 
   it("renders AI tag rate controls", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
     expect(screen.getByText(/AI Tag (速率限制|rate limit)/)).toBeTruthy();
     expect(screen.getByLabelText(/AI Tag .*429/)).toBeTruthy();
   });
 
   it("links SSH target form labels to inputs", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/connections");
     expect(screen.getByLabelText("别名")).toBeTruthy();
     expect(screen.getByLabelText("主机")).toBeTruthy();
     expect(screen.getByLabelText("用户")).toBeTruthy();
@@ -400,7 +400,7 @@ describe("SettingsView", () => {
         },
       ],
     });
-    renderSettingsView();
+    renderSettingsView("/settings/connections");
 
     expect(screen.getByText("新增 SSH 目标")).toBeTruthy();
     expect(screen.getByText("新增 WSL 发行版")).toBeTruthy();
@@ -453,14 +453,14 @@ describe("SettingsView", () => {
 
   it("marks the selected SSH auth method", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/connections");
     expect(screen.getByRole("button", { name: "SSH key" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "账号密码" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("links AI settings labels to inputs", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
     expect(screen.getByLabelText("API Key")).toBeTruthy();
     expect(screen.getByLabelText("模型")).toBeTruthy();
     expect(screen.getByLabelText("并发数")).toBeTruthy();
@@ -482,7 +482,7 @@ describe("SettingsView", () => {
         model: "openrouter/auto",
       },
     });
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
     expect(screen.getByText("当前 OpenRouter Key：已配置")).toBeTruthy();
     expect(screen.getByText("此 Key 将用于技能解释和 AI 标注复核。")).toBeTruthy();
     expect(screen.getByText("Key 指纹：sha256:abcd1234")).toBeTruthy();
@@ -515,7 +515,7 @@ describe("SettingsView", () => {
       },
       updateAiSettings,
     });
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
 
     expect(screen.getByText("保存后将替换当前 OpenRouter Key。")).toBeTruthy();
     const input = screen.getByLabelText("API Key");
@@ -532,7 +532,7 @@ describe("SettingsView", () => {
   it("switches AI provider through the provider-scoped store action", async () => {
     const switchAiProvider = vi.fn().mockResolvedValue(undefined);
     setupMocks({ switchAiProvider });
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
 
     fireEvent.click(screen.getByRole("button", { name: "DeepSeek" }));
 
@@ -555,7 +555,7 @@ describe("SettingsView", () => {
         tagStopOnRateLimit: true,
       },
     });
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
 
     expect(screen.getByText("自定义协议")).toBeTruthy();
     expect(screen.getByRole("radio", { name: /OpenAI/ })).toHaveAttribute("aria-checked", "true");
@@ -571,7 +571,7 @@ describe("SettingsView", () => {
         protocol: "openai",
       },
     });
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
 
     expect(screen.getByText("https://openrouter.ai/api/v1/chat/completions")).toBeTruthy();
     expect(screen.queryByText("https://openrouter.ai/api/v1/messages")).toBeNull();
@@ -588,7 +588,7 @@ describe("SettingsView", () => {
         error: null,
       },
     });
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
 
     fireEvent.click(screen.getByRole("button", { name: "清除 Key" }));
 
@@ -597,31 +597,59 @@ describe("SettingsView", () => {
     });
   });
 
-  it("renders the existing settings sections", () => {
+  it("renders only the default appearance page content on /settings", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings");
+
     expect(screen.getAllByText("外观").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("远程目标").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("GitHub 导入访问令牌").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("AI 提供商").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("扫描目录").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("自定义平台").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("平台可见性").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("关于").length).toBeGreaterThan(0);
+    expect(screen.getByText("主题风格")).toBeTruthy();
+    expect(screen.queryByText("新增 SSH 目标")).toBeNull();
+    expect(screen.queryByText("GitHub 导入访问令牌")).toBeNull();
+    expect(screen.queryByText("扫描目录")).toBeNull();
+    expect(screen.queryByText("自定义平台")).toBeNull();
+    expect(screen.queryByText("应用版本")).toBeNull();
   });
 
-  it("applies stable section tones to settings cards and the table of contents", () => {
+  it("routes each settings page to its own content", () => {
+    setupMocks({ agents: [mockBuiltinAgent], scanDirs: [mockBuiltinDir] });
+    const { unmount } = renderSettingsView("/settings/connections");
+    expect(screen.getByRole("heading", { name: "连接与同步" })).toBeTruthy();
+    expect(screen.getByText("新增 SSH 目标")).toBeTruthy();
+    unmount();
+
+    setupMocks({ agents: [mockBuiltinAgent], scanDirs: [mockBuiltinDir] });
+    const platforms = renderSettingsView("/settings/platforms");
+    expect(screen.getByRole("heading", { name: "平台管理" })).toBeTruthy();
+    expect(screen.getByText("自定义平台")).toBeTruthy();
+    expect(screen.getByText("平台可见性")).toBeTruthy();
+    platforms.unmount();
+
+    setupMocks({ agents: [mockBuiltinAgent], scanDirs: [mockBuiltinDir] });
+    const integrations = renderSettingsView("/settings/integrations");
+    expect(screen.getByRole("heading", { name: "集成与密钥" })).toBeTruthy();
+    expect(screen.getByText("GitHub 导入访问令牌")).toBeTruthy();
+    expect(screen.getByText("AI 提供商")).toBeTruthy();
+    integrations.unmount();
+
+    setupMocks({ agents: [mockBuiltinAgent], scanDirs: [mockBuiltinDir] });
+    const sources = renderSettingsView("/settings/skill-sources");
+    expect(screen.getByRole("heading", { name: "技能来源" })).toBeTruthy();
+    expect(screen.getByText("扫描目录")).toBeTruthy();
+    sources.unmount();
+
+    setupMocks({ agents: [mockBuiltinAgent], scanDirs: [mockBuiltinDir] });
+    renderSettingsView("/settings/about");
+    expect(screen.getByRole("heading", { name: "帮助与关于" })).toBeTruthy();
+    expect(screen.getByText("应用版本")).toBeTruthy();
+  });
+
+  it("applies stable section tones to settings cards and page navigation", () => {
     setupMocks();
-    const { container } = renderSettingsView();
+    const { container } = renderSettingsView("/settings/integrations");
 
     expect(
       container.querySelector(
-        '[data-settings-section="appearance"][data-settings-section-tone="appearance"]'
-      )
-    ).toBeTruthy();
-    expect(
-      container.querySelector(
-        '[data-settings-section="remote-targets"][data-settings-section-tone="remote-targets"]'
+        '[data-settings-section="github-pat"][data-settings-section-tone="github-pat"]'
       )
     ).toBeTruthy();
     expect(
@@ -629,43 +657,45 @@ describe("SettingsView", () => {
         '[data-settings-section="ai-provider"][data-settings-section-tone="ai-provider"]'
       )
     ).toBeTruthy();
-    expect(
-      container.querySelector(
-        '[data-settings-section="scan-directories"][data-settings-section-tone="scan-directories"]'
-      )
-    ).toBeTruthy();
 
     expect(
       container.querySelector(
-        '[data-settings-section-anchor="appearance-section"][data-settings-section-tone="appearance"]'
+        '[data-settings-page-nav="integrations"][aria-current="page"]'
       )
     ).toBeTruthy();
     expect(
-      container.querySelector(
-        '[data-settings-section-anchor="ai-section"][data-settings-section-tone="ai-provider"]'
-      )
+      container.querySelector('[data-settings-page-nav="appearance"]')
     ).toBeTruthy();
   });
 
-  it("keeps the table of contents aria-current state when navigating sections", () => {
+  it("keeps the settings side navigation aria-current state when navigating pages", async () => {
     setupMocks();
-    renderSettingsView();
+    const { container } = renderSettingsView();
 
-    const appearanceToc = screen.getByRole("button", { name: "外观" });
-    const scanDirsToc = screen.getByRole("button", { name: "扫描目录" });
+    const appearanceNav = container.querySelector('[data-settings-page-nav="appearance"]');
+    const sourcesNav = container.querySelector('[data-settings-page-nav="skill-sources"]');
 
-    expect(appearanceToc).toHaveAttribute("aria-current", "true");
-    expect(scanDirsToc).not.toHaveAttribute("aria-current");
+    expect(appearanceNav).toHaveAttribute("aria-current", "page");
+    expect(sourcesNav).not.toHaveAttribute("aria-current");
 
-    fireEvent.click(scanDirsToc);
+    fireEvent.click(sourcesNav as HTMLElement);
 
-    expect(scanDirsToc).toHaveAttribute("aria-current", "true");
-    expect(appearanceToc).not.toHaveAttribute("aria-current");
+    expect(await screen.findByRole("heading", { name: "技能来源" })).toBeTruthy();
+    expect(sourcesNav).toHaveAttribute("aria-current", "page");
+    expect(appearanceNav).not.toHaveAttribute("aria-current");
+  });
+
+  it("maps legacy settings links to the matching settings page", async () => {
+    setupMocks();
+    renderSettingsView("/settings#remote-targets-section");
+
+    expect(await screen.findByRole("heading", { name: "连接与同步" })).toBeTruthy();
+    expect(screen.getByText("新增 SSH 目标")).toBeTruthy();
   });
 
   it("persists collapsed settings sections in localStorage", () => {
     setupMocks();
-    const { unmount } = renderSettingsView();
+    const { unmount } = renderSettingsView("/settings/skill-sources");
     const scanToggle = screen.getByRole("button", { name: "折叠 扫描目录 栏目" });
 
     expect(scanToggle).toHaveAttribute("aria-expanded", "true");
@@ -680,7 +710,7 @@ describe("SettingsView", () => {
 
     unmount();
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
 
     const restoredToggle = screen.getByRole("button", { name: "展开 扫描目录 栏目" });
     expect(restoredToggle).toHaveAttribute("aria-expanded", "false");
@@ -696,7 +726,7 @@ describe("SettingsView", () => {
 
   it("renders the repository url in about", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/about");
     expect(screen.getByText("仓库地址")).toBeTruthy();
     expect(screen.getByRole("link", { name: "https://github.com/bahayonghang/skills-manage-windows" })).toHaveAttribute(
       "href",
@@ -714,14 +744,14 @@ describe("SettingsView", () => {
   it("calls loadGitHubPat on mount", () => {
     const loadGitHubPat = vi.fn();
     setupMocks({ loadGitHubPat });
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
     expect(loadGitHubPat).toHaveBeenCalled();
   });
 
   it("loads WSL distributions on mount", () => {
     const loadWslDistributions = vi.fn().mockResolvedValue(undefined);
     setupMocks({ loadWslDistributions });
-    renderSettingsView();
+    renderSettingsView("/settings/connections");
     expect(loadWslDistributions).toHaveBeenCalled();
   });
 
@@ -729,7 +759,7 @@ describe("SettingsView", () => {
     setupMocks({
       githubPatState: { configured: true, storageState: "stored", error: null },
     });
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
 
     expect(screen.getByLabelText("GitHub Personal Access Token")).toHaveValue("");
     expect(screen.getByText("已保存到安全存储")).toBeTruthy();
@@ -741,7 +771,7 @@ describe("SettingsView", () => {
   it("saves the github pat from settings", async () => {
     const saveGitHubPat = vi.fn().mockResolvedValue(undefined);
     setupMocks({ saveGitHubPat });
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
 
     fireEvent.change(screen.getByLabelText("GitHub Personal Access Token"), {
       target: { value: "  github_pat_new  " },
@@ -760,7 +790,7 @@ describe("SettingsView", () => {
       githubPatState: { configured: true, storageState: "stored", error: null },
       clearGitHubPat,
     });
-    renderSettingsView();
+    renderSettingsView("/settings/integrations");
 
     fireEvent.click(screen.getByRole("button", { name: "清除令牌" }));
 
@@ -800,7 +830,7 @@ describe("SettingsView", () => {
       ],
       updateSshTargetPassword,
     });
-    renderSettingsView();
+    renderSettingsView("/settings/connections");
 
     expect(screen.getByText(/需要密码|Password needed/i)).toBeTruthy();
     const passwordInput = screen.getByLabelText("Lab 的 SSH 密码");
@@ -858,7 +888,7 @@ describe("SettingsView", () => {
       loadCentralSkills: vi.fn().mockResolvedValue(undefined),
       loadMarketplaceRegistries: vi.fn().mockResolvedValue(undefined),
     });
-    renderSettingsView();
+    renderSettingsView("/settings/connections");
 
     fireEvent.click(screen.getByLabelText("编辑目标 Lab"));
     fireEvent.change(screen.getByDisplayValue("lab.local"), {
@@ -912,7 +942,7 @@ describe("SettingsView", () => {
         },
       ],
     });
-    renderSettingsView();
+    renderSettingsView("/settings/connections");
 
     fireEvent.change(screen.getByLabelText("WSL 别名"), {
       target: { value: "Ubuntu" },
@@ -964,7 +994,7 @@ describe("SettingsView", () => {
         },
       ],
     });
-    renderSettingsView();
+    renderSettingsView("/settings/connections");
 
     const option = screen.getByRole("option", {
       name: /Ubuntu-24\.04.*已添加/,
@@ -1009,7 +1039,7 @@ describe("SettingsView", () => {
       loadCentralSkills: vi.fn().mockResolvedValue(undefined),
       loadMarketplaceRegistries: vi.fn().mockResolvedValue(undefined),
     });
-    renderSettingsView();
+    renderSettingsView("/settings/connections");
 
     expect(screen.queryByText(/需要密码|Password needed/i)).toBeNull();
     fireEvent.click(screen.getByLabelText("编辑目标 Ubuntu"));
@@ -1033,25 +1063,25 @@ describe("SettingsView", () => {
 
   it("shows loading state for scan directories", () => {
     setupMocks({ isLoadingScanDirs: true });
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
     expect(screen.getByText("加载中...")).toBeTruthy();
   });
 
   it("shows empty state when no scan directories", () => {
     setupMocks({ scanDirs: [] });
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
     expect(screen.getByText("暂无扫描目录")).toBeTruthy();
   });
 
   it("renders builtin scan directory with 内置目录 label", () => {
     setupMocks({ scanDirs: [mockBuiltinDir] });
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
     expect(screen.getAllByText(/内置目录/).length).toBeGreaterThan(0);
   });
 
   it("does not show remove button for builtin directories", () => {
     setupMocks({ scanDirs: [mockBuiltinDir] });
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
     // No delete button should be present for builtin dir
     expect(
       screen.queryByRole("button", { name: /删除目录 ~\/.agents\/skills\// })
@@ -1060,7 +1090,7 @@ describe("SettingsView", () => {
 
   it("shows remove button for custom directories", () => {
     setupMocks({ scanDirs: [mockCustomDir] });
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
     expect(
       screen.getByRole("button", { name: `删除目录 ${mockCustomDir.path}` })
     ).toBeTruthy();
@@ -1068,7 +1098,7 @@ describe("SettingsView", () => {
 
   it("shows toggle for custom directories", () => {
     setupMocks({ scanDirs: [mockCustomDir] });
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
     expect(
       screen.getByLabelText(`启用 ${mockCustomDir.path}`)
     ).toBeTruthy();
@@ -1076,7 +1106,7 @@ describe("SettingsView", () => {
 
   it("does not show toggle for builtin directories", () => {
     setupMocks({ scanDirs: [mockBuiltinDir] });
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
     expect(
       screen.queryByLabelText(`启用 ${mockBuiltinDir.path}`)
     ).toBeNull();
@@ -1084,25 +1114,25 @@ describe("SettingsView", () => {
 
   it("shows 启用 label when directory is active", () => {
     setupMocks({ scanDirs: [{ ...mockCustomDir, is_active: true }] });
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
     expect(screen.getByText("启用")).toBeTruthy();
   });
 
   it("shows 禁用 label when directory is inactive", () => {
     setupMocks({ scanDirs: [{ ...mockCustomDir, is_active: false }] });
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
     expect(screen.getByText("禁用")).toBeTruthy();
   });
 
   it("shows add directory button", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
     expect(screen.getByRole("button", { name: "添加项目目录" })).toBeTruthy();
   });
 
   it("opens add directory dialog when button is clicked", async () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
     fireEvent.click(screen.getByRole("button", { name: "添加项目目录" }));
     await waitFor(() => {
       expect(screen.getByText("添加项目目录")).toBeTruthy();
@@ -1117,7 +1147,7 @@ describe("SettingsView", () => {
       removeScanDirectory,
       rescan,
     });
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
 
     fireEvent.click(
       screen.getByRole("button", { name: `删除目录 ${mockCustomDir.path}` })
@@ -1135,7 +1165,7 @@ describe("SettingsView", () => {
     const removeScanDirectory = vi.fn().mockResolvedValue(undefined);
     const refreshCounts = vi.fn().mockResolvedValue(undefined);
     setupMocks({ scanDirs: [mockCustomDir], removeScanDirectory, refreshCounts });
-    renderSettingsView();
+    renderSettingsView("/settings/skill-sources");
 
     fireEvent.click(
       screen.getByRole("button", { name: `删除目录 ${mockCustomDir.path}` })
@@ -1151,20 +1181,20 @@ describe("SettingsView", () => {
 
   it("shows empty state when no custom platforms", () => {
     setupMocks({ agents: [mockBuiltinAgent] }); // only builtin agents
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
     expect(screen.getByText("暂无自定义平台。点击「添加平台」注册新平台。")).toBeTruthy();
   });
 
   it("renders custom platform with name and path", () => {
     setupMocks({ agents: [mockBuiltinAgent, mockCustomAgent] });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
     expect(screen.getAllByText("QClaw").length).toBeGreaterThan(0);
     expect(screen.getByText("/Users/test/.qclaw/skills/")).toBeTruthy();
   });
 
   it("shows edit button for custom platforms", () => {
     setupMocks({ agents: [mockBuiltinAgent, mockCustomAgent] });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
     expect(
       screen.getByRole("button", { name: `编辑平台 ${mockCustomAgent.display_name}` })
     ).toBeTruthy();
@@ -1172,7 +1202,7 @@ describe("SettingsView", () => {
 
   it("shows remove button for custom platforms", () => {
     setupMocks({ agents: [mockBuiltinAgent, mockCustomAgent] });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
     expect(
       screen.getByRole("button", { name: `删除平台 ${mockCustomAgent.display_name}` })
     ).toBeTruthy();
@@ -1180,7 +1210,7 @@ describe("SettingsView", () => {
 
   it("does not show builtin agents in custom platforms list", () => {
     setupMocks({ agents: [mockBuiltinAgent] });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
     // builtin agent should not appear in custom platforms section
     expect(
       screen.queryByRole("button", { name: `编辑平台 ${mockBuiltinAgent.display_name}` })
@@ -1189,13 +1219,13 @@ describe("SettingsView", () => {
 
   it("shows add platform button", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
     expect(screen.getByRole("button", { name: "添加自定义平台" })).toBeTruthy();
   });
 
   it("opens add platform dialog when button is clicked", async () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
     fireEvent.click(screen.getByRole("button", { name: "添加自定义平台" }));
     await waitFor(() => {
       expect(screen.getByText("添加自定义平台")).toBeTruthy();
@@ -1204,7 +1234,7 @@ describe("SettingsView", () => {
 
   it("opens edit platform dialog when edit button is clicked", async () => {
     setupMocks({ agents: [mockBuiltinAgent, mockCustomAgent] });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
     fireEvent.click(
       screen.getByRole("button", { name: `编辑平台 ${mockCustomAgent.display_name}` })
     );
@@ -1221,7 +1251,7 @@ describe("SettingsView", () => {
       removeCustomAgent,
       rescan,
     });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
 
     fireEvent.click(
       screen.getByRole("button", { name: `删除平台 ${mockCustomAgent.display_name}` })
@@ -1243,7 +1273,7 @@ describe("SettingsView", () => {
       removeCustomAgent,
       rescan,
     });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
 
     fireEvent.click(
       screen.getByRole("button", { name: `删除平台 ${mockCustomAgent.display_name}` })
@@ -1259,25 +1289,25 @@ describe("SettingsView", () => {
 
   it("shows the app version in the about section", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/about");
     expect(screen.getByText(/SkillPort v\d+\.\d+\.\d+/)).toBeTruthy();
   });
 
   it("shows the database path in the about section", () => {
     setupMocks({ scanDirs: [mockBuiltinDir], agents: [mockBuiltinAgent] });
-    renderSettingsView();
+    renderSettingsView("/settings/about");
     expect(screen.getByText("/Users/test/.skillsmanage/db.sqlite")).toBeTruthy();
   });
 
   it("shows version label", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/about");
     expect(screen.getByText("应用版本")).toBeTruthy();
   });
 
   it("shows database path label", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings/about");
     expect(screen.getByText("数据库路径")).toBeTruthy();
   });
 
@@ -1285,13 +1315,13 @@ describe("SettingsView", () => {
 
   it("shows flavor label in about section", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings");
     expect(screen.getByText("主题风格")).toBeTruthy();
   });
 
   it("renders all flavor buttons", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings");
     expect(screen.getByRole("button", { name: /Mocha/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Macchiato/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Frappé/ })).toBeTruthy();
@@ -1302,14 +1332,14 @@ describe("SettingsView", () => {
 
   it("active flavor button has aria-pressed=true", () => {
     setupMocks({ flavor: "mocha" });
-    renderSettingsView();
+    renderSettingsView("/settings");
     const mochaBtn = screen.getByRole("button", { name: /Mocha/ });
     expect(mochaBtn).toHaveAttribute("aria-pressed", "true");
   });
 
   it("inactive flavor button has aria-pressed=false", () => {
     setupMocks({ flavor: "mocha" });
-    renderSettingsView();
+    renderSettingsView("/settings");
     const latteBtn = screen.getByRole("button", { name: /Latte/ });
     expect(latteBtn).toHaveAttribute("aria-pressed", "false");
   });
@@ -1317,14 +1347,14 @@ describe("SettingsView", () => {
   it("clicking a flavor button calls setFlavor", () => {
     const setFlavor = vi.fn();
     setupMocks({ flavor: "mocha", setFlavor });
-    renderSettingsView();
+    renderSettingsView("/settings");
     fireEvent.click(screen.getByRole("button", { name: /Latte/ }));
     expect(setFlavor).toHaveBeenCalledWith("latte");
   });
 
   it("each flavor button shows a color dot", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings");
     // Each flavor button should have a colored dot (inline span with rounded-full)
     const buttons = [
       screen.getByRole("button", { name: /Mocha/ }),
@@ -1344,27 +1374,27 @@ describe("SettingsView", () => {
 
   it("shows accent color label in about section", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings");
     expect(screen.getByText("强调色")).toBeTruthy();
   });
 
   it("renders 14 accent color swatches", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings");
     const swatches = screen.getAllByRole("radio");
     expect(swatches).toHaveLength(14);
   });
 
   it("active accent swatch has aria-checked=true", () => {
     setupMocks({ accent: "lavender" });
-    renderSettingsView();
+    renderSettingsView("/settings");
     const lavenderSwatch = screen.getByRole("radio", { name: "薰衣草" });
     expect(lavenderSwatch).toHaveAttribute("aria-checked", "true");
   });
 
   it("inactive accent swatch has aria-checked=false", () => {
     setupMocks({ accent: "lavender" });
-    renderSettingsView();
+    renderSettingsView("/settings");
     const greenSwatch = screen.getByRole("radio", { name: "绿色" });
     expect(greenSwatch).toHaveAttribute("aria-checked", "false");
   });
@@ -1372,14 +1402,14 @@ describe("SettingsView", () => {
   it("clicking an accent swatch calls setAccent", () => {
     const setAccent = vi.fn();
     setupMocks({ accent: "lavender", setAccent });
-    renderSettingsView();
+    renderSettingsView("/settings");
     fireEvent.click(screen.getByRole("radio", { name: "绿色" }));
     expect(setAccent).toHaveBeenCalledWith("green");
   });
 
   it("accent swatches use CSS custom properties for background color", () => {
     setupMocks();
-    renderSettingsView();
+    renderSettingsView("/settings");
     const rosewaterSwatch = screen.getByRole("radio", { name: "玫瑰水" });
     expect(rosewaterSwatch.style.backgroundColor).toBe("var(--ctp-rosewater)");
   });
@@ -1387,7 +1417,7 @@ describe("SettingsView", () => {
   it("toggles coding group visibility from settings", async () => {
     const setCategoryVisibility = vi.fn().mockResolvedValue(undefined);
     setupMocks({ setCategoryVisibility });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
 
     fireEvent.click(screen.getByLabelText("切换 编程类 分组显示"));
 
@@ -1399,7 +1429,7 @@ describe("SettingsView", () => {
   it("toggles an individual platform visibility from settings", async () => {
     const setAgentEnabled = vi.fn().mockResolvedValue(undefined);
     setupMocks({ agents: [mockBuiltinAgent, mockCustomAgent], setAgentEnabled });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
 
     fireEvent.click(screen.getByLabelText("切换平台 Claude Code 的显示"));
 
@@ -1413,7 +1443,7 @@ describe("SettingsView", () => {
       agents: [mockBuiltinAgent, mockLobsterAgent],
       categoryVisibility: { coding: true, lobster: false },
     });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
 
     expect(screen.getByText("已隐藏 · 0 / 1 已启用")).toBeTruthy();
     expect(screen.queryByText("OpenClaw")).toBeNull();
@@ -1424,7 +1454,7 @@ describe("SettingsView", () => {
       agents: [mockBuiltinAgent, mockOpenCodeAgent, mockCursorAgent],
       categoryVisibility: { coding: true, lobster: false },
     });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
 
     fireEvent.click(screen.getByRole("button", { name: "收起 编程类 分组的平台详情" }));
 
@@ -1441,7 +1471,7 @@ describe("SettingsView", () => {
       agents: [mockBuiltinAgent, mockOpenCodeAgent, mockCursorAgent],
       categoryVisibility: { coding: true, lobster: false },
     });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
 
     fireEvent.click(screen.getByRole("button", { name: "收起 编程类 分组的平台详情" }));
     fireEvent.change(screen.getByLabelText("搜索平台"), {
@@ -1456,7 +1486,7 @@ describe("SettingsView", () => {
     setupMocks({
       agents: [mockBuiltinAgent, mockOpenCodeAgent, mockCursorAgent, mockLobsterAgent],
     });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
 
     fireEvent.change(screen.getByLabelText("搜索平台"), {
       target: { value: "open" },
@@ -1472,7 +1502,7 @@ describe("SettingsView", () => {
     setupMocks({
       agents: [mockBuiltinAgent, mockOpenCodeAgent, mockLobsterAgent],
     });
-    renderSettingsView();
+    renderSettingsView("/settings/platforms");
 
     expect(screen.queryByText("显示工具")).toBeNull();
   });

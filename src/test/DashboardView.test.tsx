@@ -484,7 +484,7 @@ describe("DashboardView", () => {
     fireEvent.click(quickMigrate);
 
     expect(screen.getByTestId("location")).toHaveTextContent(
-      "/settings?section=remote-targets&action=local-remote-sync"
+      "/settings/connections?action=local-remote-sync&section=remote-targets"
     );
     expect(mockSyncRegistry).not.toHaveBeenCalled();
   });
