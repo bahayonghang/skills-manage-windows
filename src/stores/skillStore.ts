@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
-import { ScannedSkill, SkillWithLinks } from "@/types";
+import {
+  BatchUninstallSkillRequest,
+  BatchUninstallSkillResult,
+  ScannedSkill,
+  SkillWithLinks,
+} from "@/types";
+import { getBatchUninstallRequestActionKey } from "@/lib/platformBatchActions";
 import {
   BROWSER_PLATFORM_PATHS,
   getPlatformSkillDir,
@@ -88,6 +94,10 @@ interface SkillState {
   // Actions
   getSkillsByAgent: (agentId: string) => Promise<void>;
   uninstallSkillFromAgent: (skillId: string, agentId: string, rowId?: string | null) => Promise<void>;
+  batchUninstallSkillsFromAgent: (
+    agentId: string,
+    requests: BatchUninstallSkillRequest[]
+  ) => Promise<BatchUninstallSkillResult>;
   /** Fetch central skills as a one-shot read (no internal caching). */
   fetchCentralSkillsList: () => Promise<SkillWithLinks[]>;
   resetForTargetChange: () => void;
@@ -194,6 +204,75 @@ export const useSkillStore = create<SkillState>((set) => ({
       set((state) => {
         const next = { ...state.pendingSkillActionKeys };
         delete next[actionKey];
+        return {
+          error: String(err),
+          pendingSkillActionKeys: next,
+        };
+      });
+      throw err;
+    }
+  },
+
+  batchUninstallSkillsFromAgent: async (
+    agentId: string,
+    requests: BatchUninstallSkillRequest[]
+  ) => {
+    if (requests.length === 0) {
+      return { succeeded: [], failed: [] };
+    }
+
+    const generation = skillStoreGeneration;
+    const actionKeys = requests.map((request) =>
+      getBatchUninstallRequestActionKey(agentId, request)
+    );
+    set((state) => ({
+      pendingSkillActionKeys: {
+        ...state.pendingSkillActionKeys,
+        ...Object.fromEntries(actionKeys.map((key) => [key, true])),
+      },
+      error: null,
+    }));
+
+    if (!isTauriRuntime()) {
+      set((state) => {
+        const next = { ...state.pendingSkillActionKeys };
+        actionKeys.forEach((key) => delete next[key]);
+        return {
+          pendingSkillActionKeys: next,
+          error: "Uninstalling skills requires the Tauri desktop runtime.",
+        };
+      });
+      throw new Error("Uninstalling skills requires the Tauri desktop runtime.");
+    }
+
+    try {
+      const result = await invoke<BatchUninstallSkillResult>(
+        "batch_uninstall_skills_from_agent",
+        {
+          agentId,
+          requests,
+        }
+      );
+      const skills = await invoke<ScannedSkill[]>("get_skills_by_agent", {
+        agentId,
+      });
+
+      set((state) => {
+        const next = { ...state.pendingSkillActionKeys };
+        actionKeys.forEach((key) => delete next[key]);
+        return {
+          skillsByAgent:
+            generation === skillStoreGeneration
+              ? { ...state.skillsByAgent, [agentId]: skills }
+              : state.skillsByAgent,
+          pendingSkillActionKeys: next,
+        };
+      });
+      return result;
+    } catch (err) {
+      set((state) => {
+        const next = { ...state.pendingSkillActionKeys };
+        actionKeys.forEach((key) => delete next[key]);
         return {
           error: String(err),
           pendingSkillActionKeys: next,

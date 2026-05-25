@@ -465,6 +465,7 @@ const mockGetSkillsByAgent = vi.fn();
 const mockLoadCentralSkills = vi.fn();
 const mockInstallSkill = vi.fn();
 const mockBatchInstallSkills = vi.fn();
+const mockBatchUninstallSkillsFromAgent = vi.fn();
 const mockUninstallSkillFromAgent = vi.fn();
 const mockRefreshCounts = vi.fn();
 const mockRefreshInstallations = vi.fn();
@@ -518,6 +519,7 @@ function buildSkillStoreState(overrides = {}) {
     error: null,
     getSkillsByAgent: mockGetSkillsByAgent,
     uninstallSkillFromAgent: mockUninstallSkillFromAgent,
+    batchUninstallSkillsFromAgent: mockBatchUninstallSkillsFromAgent,
     ...overrides,
   };
 }
@@ -636,6 +638,8 @@ describe("PlatformView", () => {
     mockRefreshCounts.mockReset();
     mockRefreshInstallations.mockReset();
     mockUninstallSkillFromAgent.mockReset();
+    mockBatchUninstallSkillsFromAgent.mockReset();
+    mockBatchUninstallSkillsFromAgent.mockResolvedValue({ succeeded: [], failed: [] });
     mockBatchInstallSkills.mockReset();
     mockBatchInstallSkills.mockResolvedValue({ succeeded: [], skipped: [], failed: [] });
     mockRescan.mockReset();
@@ -920,9 +924,10 @@ describe("PlatformView", () => {
     });
   });
 
-  it("shows the transfer rail only on Coding platform pages", () => {
+  it("shows batch selection on non-Coding pages but keeps transfer-only controls on Coding pages", () => {
     const codingView = renderPlatformView();
     expect(screen.getByTestId("platform-transfer-rail")).toBeInTheDocument();
+    expect(screen.getByTestId("platform-select-most-universal")).toBeInTheDocument();
     codingView.unmount();
 
     mockUsePlatformStore.mockImplementation((selector?: unknown) => {
@@ -953,7 +958,12 @@ describe("PlatformView", () => {
     });
 
     renderPlatformView("lobster-desktop");
-    expect(screen.queryByTestId("platform-transfer-rail")).not.toBeInTheDocument();
+    expect(screen.getByTestId("platform-transfer-rail")).toBeInTheDocument();
+    expect(screen.queryByTestId("platform-select-most-universal")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("platform-select-current-results"));
+    expect(screen.getByTestId("platform-batch-action-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("platform-batch-delete")).toBeInTheDocument();
+    expect(screen.queryByTestId("platform-batch-install")).not.toBeInTheDocument();
   });
 
   it("selects only visible writable platform rows from the transfer rail", async () => {
@@ -966,12 +976,12 @@ describe("PlatformView", () => {
     });
 
     renderPlatformView();
-    expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可转运 1");
+    expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可操作 1");
 
     fireEvent.click(screen.getByTestId("platform-select-current-results"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 1 / 可转运 1");
+      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 1 / 可操作 1");
     });
     expect(screen.getByTestId("platform-batch-action-bar")).toBeInTheDocument();
     const checkboxes = screen.getAllByLabelText("选择技能");
@@ -986,7 +996,7 @@ describe("PlatformView", () => {
     fireEvent.click(screen.getByTestId("platform-select-most-universal"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 1 / 可转运 2");
+      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 1 / 可操作 2");
     });
     const checkedCards = screen
       .getAllByLabelText("选择技能")
@@ -1036,6 +1046,158 @@ describe("PlatformView", () => {
     expect(projectPath).toBeNull();
   });
 
+  it("batch deletes Claude user rows with row identity and excludes read-only plugin rows", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockDuplicateClaudeSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockBatchUninstallSkillsFromAgent.mockResolvedValueOnce({
+      succeeded: [{ skill_id: "shared-skill", row_id: "claude-code::user::shared-skill" }],
+      failed: [],
+    });
+
+    renderPlatformView();
+    fireEvent.click(screen.getByTestId("platform-select-current-results"));
+
+    await waitFor(() => {
+      expect(screen.getAllByLabelText("选择技能")).toHaveLength(1);
+    });
+    fireEvent.click(screen.getByTestId("platform-batch-delete"));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/插件缓存/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByTestId("platform-batch-delete-confirm"));
+
+    await waitFor(() => {
+      expect(mockBatchUninstallSkillsFromAgent).toHaveBeenCalledWith("claude-code", [
+        { skill_id: "shared-skill", row_id: "claude-code::user::shared-skill" },
+      ]);
+    });
+  });
+
+  it("batch deletes ordinary Cursor rows without passing ordinary row_id values", async () => {
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockCursorAgent],
+        skillsByAgent: {
+          "claude-code": mockSkills.length,
+          cursor: mockCursorSkills.length,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: {
+          "claude-code": mockSkills,
+          cursor: mockCursorSkills,
+        },
+        loadingByAgent: {
+          "claude-code": false,
+          cursor: false,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockBatchUninstallSkillsFromAgent.mockResolvedValueOnce({
+      succeeded: [{ skill_id: "cursor-helper" }],
+      failed: [],
+    });
+
+    renderPlatformView("cursor");
+    fireEvent.click(screen.getByTestId("platform-select-current-results"));
+    fireEvent.click(await screen.findByTestId("platform-batch-delete"));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByTestId("platform-batch-delete-confirm"));
+
+    await waitFor(() => {
+      expect(mockBatchUninstallSkillsFromAgent).toHaveBeenCalledWith("cursor", [
+        { skill_id: "cursor-helper" },
+      ]);
+    });
+  });
+
+  it("batch deletes Universal page skills through the representative install agent", async () => {
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockCodexAgent, mockCursorAgent],
+        skillsByAgent: {
+          "claude-code": mockSkills.length,
+          codex: mockUniversalSkills.length,
+          cursor: mockCursorSkills.length,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { codex: mockUniversalSkills },
+        loadingByAgent: { codex: false },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockBatchUninstallSkillsFromAgent.mockResolvedValueOnce({
+      succeeded: [{ skill_id: "universal-helper" }],
+      failed: [],
+    });
+
+    renderPlatformView("universal-agents");
+    fireEvent.click(screen.getByTestId("platform-select-current-results"));
+    fireEvent.click(await screen.findByTestId("platform-batch-delete"));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByTestId("platform-batch-delete-confirm"));
+
+    await waitFor(() => {
+      expect(mockBatchUninstallSkillsFromAgent).toHaveBeenCalledWith("codex", [
+        { skill_id: "universal-helper" },
+      ]);
+    });
+  });
+
+  it("keeps only failed batch delete rows selected after partial failure", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockDuplicateWritableSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockBatchUninstallSkillsFromAgent.mockResolvedValueOnce({
+      succeeded: [
+        { skill_id: "shared-skill", row_id: "claude-code::user::shared-skill-a" },
+      ],
+      failed: [
+        {
+          skill_id: "shared-skill",
+          row_id: "claude-code::user::shared-skill-b",
+          error: "locked",
+        },
+      ],
+    });
+
+    renderPlatformView();
+    fireEvent.click(screen.getByTestId("platform-select-current-results"));
+    fireEvent.click(await screen.findByTestId("platform-batch-delete"));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByTestId("platform-batch-delete-confirm"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 1 / 可操作 2");
+    });
+    const checkedCards = screen
+      .getAllByLabelText("选择技能")
+      .filter((checkbox) => checkbox.getAttribute("aria-checked") === "true")
+      .map((checkbox) => checkbox.closest(".rounded-xl"));
+    expect(checkedCards).toHaveLength(1);
+    expect(checkedCards[0]).toHaveTextContent("Writable user copy B");
+    expect(toast.error).toHaveBeenCalledWith(
+      "已卸载 1 个，1 个失败；失败项已保留选中，可重试。"
+    );
+  });
+
   it("prunes transfer selection when search or source filters hide selected rows", async () => {
     mockUseSkillStore.mockImplementation((selector?: unknown) => {
       const state = buildSkillStoreState({
@@ -1052,7 +1214,7 @@ describe("PlatformView", () => {
     fireEvent.click(screen.getByRole("tab", { name: claudeTabName("插件来源", 2) }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可转运 0");
+      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可操作 0");
     });
     expect(screen.queryByTestId("platform-batch-action-bar")).not.toBeInTheDocument();
 
@@ -1063,7 +1225,7 @@ describe("PlatformView", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可转运 0");
+      expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可操作 0");
     });
   });
 
@@ -1918,7 +2080,7 @@ describe("PlatformView", () => {
     await waitFor(() => {
       expect(screen.getByText("Cursor")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可转运 1");
+    expect(screen.getByTestId("platform-transfer-summary")).toHaveTextContent("已选 0 / 可操作 1");
 
     await waitFor(() => {
       expect((scroller as HTMLDivElement).scrollTop).toBe(0);

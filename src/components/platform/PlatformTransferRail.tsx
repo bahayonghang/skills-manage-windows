@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ArrowRightLeft, Eraser, PackagePlus, Sparkles } from "lucide-react";
+import { ArrowRightLeft, Eraser, PackagePlus, Sparkles, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -7,17 +7,18 @@ export function PlatformTransferRail({
   selectedCount,
   selectableCount,
   onSelectCurrentResults,
-  onSelectMostUniversal,
   onClearSelection,
+  onSelectMostUniversal,
 }: {
   selectedCount: number;
   selectableCount: number;
   onSelectCurrentResults: () => void;
-  onSelectMostUniversal: () => void;
   onClearSelection: () => void;
+  onSelectMostUniversal?: () => void;
 }) {
   const { t } = useTranslation();
   const hasSelectableSkills = selectableCount > 0;
+  const canSelectMostUniversal = typeof onSelectMostUniversal === "function";
 
   return (
     <div
@@ -31,13 +32,13 @@ export function PlatformTransferRail({
           </div>
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-200/80">
-              {t("platform.transferRailKicker")}
+              {t("platform.batchRailKicker")}
             </p>
             <p
               data-testid="platform-transfer-summary"
               className="text-sm font-semibold text-slate-50"
             >
-              {t("platform.transferSelectionSummary", {
+              {t("platform.batchSelectionSummary", {
                 selectedCount,
                 selectableCount,
               })}
@@ -57,18 +58,20 @@ export function PlatformTransferRail({
           >
             {t("platform.transferSelectCurrent")}
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 border border-cyan-400/35 bg-cyan-400/10 px-2.5 text-xs text-cyan-100 hover:bg-cyan-400/20 hover:text-white"
-            disabled={!hasSelectableSkills}
-            onClick={onSelectMostUniversal}
-            data-testid="platform-select-most-universal"
-          >
-            <Sparkles className="size-3.5" aria-hidden />
-            {t("platform.transferSelectMostUniversal")}
-          </Button>
+          {canSelectMostUniversal && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 border border-cyan-400/35 bg-cyan-400/10 px-2.5 text-xs text-cyan-100 hover:bg-cyan-400/20 hover:text-white"
+              disabled={!hasSelectableSkills}
+              onClick={onSelectMostUniversal}
+              data-testid="platform-select-most-universal"
+            >
+              <Sparkles className="size-3.5" aria-hidden />
+              {t("platform.transferSelectMostUniversal")}
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
@@ -90,15 +93,20 @@ export function PlatformTransferRail({
 export function PlatformTransferActionBar({
   selectedCount,
   isInstalling,
-  onInstall,
+  isDeleting,
   onClearSelection,
+  onDelete,
+  onInstall,
 }: {
   selectedCount: number;
   isInstalling: boolean;
-  onInstall: () => void;
+  isDeleting: boolean;
   onClearSelection: () => void;
+  onDelete: () => void;
+  onInstall?: () => void;
 }) {
   const { t } = useTranslation();
+  const showInstall = typeof onInstall === "function";
 
   if (selectedCount === 0) return null;
 
@@ -111,7 +119,7 @@ export function PlatformTransferActionBar({
         <div className="flex items-center gap-2">
           <span className="inline-flex size-2 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(103,232,249,0.85)]" />
           <span className="text-sm font-semibold">
-            {t("platform.transferActionSummary", { count: selectedCount })}
+            {t("platform.batchActionSummary", { count: selectedCount })}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -123,15 +131,28 @@ export function PlatformTransferActionBar({
           >
             {t("platform.transferClear")}
           </Button>
+          {showInstall && (
+            <Button
+              type="button"
+              className="h-9 bg-cyan-300 px-3 text-xs font-semibold text-slate-950 hover:bg-cyan-200"
+              disabled={isInstalling || isDeleting}
+              onClick={onInstall}
+              data-testid="platform-batch-install"
+            >
+              <PackagePlus className="size-3.5" aria-hidden />
+              {t("platform.transferInstall")}
+            </Button>
+          )}
           <Button
             type="button"
-            className="h-9 bg-cyan-300 px-3 text-xs font-semibold text-slate-950 hover:bg-cyan-200"
-            disabled={isInstalling}
-            onClick={onInstall}
-            data-testid="platform-batch-install"
+            variant="destructive"
+            className="h-9 px-3 text-xs font-semibold"
+            disabled={isDeleting || isInstalling}
+            onClick={onDelete}
+            data-testid="platform-batch-delete"
           >
-            <PackagePlus className="size-3.5" aria-hidden />
-            {t("platform.transferInstall")}
+            <Trash2 className="size-3.5" aria-hidden />
+            {t("platform.batchDelete")}
           </Button>
         </div>
       </div>

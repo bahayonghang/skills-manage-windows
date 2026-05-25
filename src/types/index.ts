@@ -176,6 +176,7 @@ export interface BatchInstallResult {
   skipped?: Array<{ agent_id: string; target_path: string; reason: string }>;
   failed: Array<{ agent_id: string; error: string }>;
 }
+
 export interface CentralBatchInstallSuccess {
   skill_id: string;
   agent_id: string;
@@ -199,6 +200,8 @@ export interface CentralBatchInstallResult {
   failed: CentralBatchInstallFailure[];
 }
 
+
+export type { BatchUninstallSkillRequest, BatchUninstallSkillResult } from "./platformBatch";
 
 export type {
   CentralStoreLocationChangeResult,

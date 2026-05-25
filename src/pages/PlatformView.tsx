@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
+import { BatchDeletePlatformSkillsDialog } from "@/components/platform/BatchDeletePlatformSkillsDialog";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { PlatformGroupedSkillList } from "@/components/platform/PlatformGroupedSkillList";
 import {
@@ -25,7 +26,15 @@ import {
 import { InstallDialog, type InstallMethod } from "@/components/central/InstallDialog";
 import { BatchInstallCentralSkillsDialog } from "@/components/central/BatchInstallCentralSkillsDialog";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
+import { usePlatformSkillSelection } from "@/hooks/usePlatformSkillSelection";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
+import {
+  createPlatformBatchUninstallRequest,
+  getFailedBatchUninstallActionKeys,
+  getPlatformSkillActionKey,
+  getPlatformSkillRowKey,
+  getPlatformSkillSummaryKeys,
+} from "@/lib/platformBatchActions";
 import { formatPathForDisplay } from "@/lib/path";
 import { cn } from "@/lib/utils";
 import { ScannedSkill, SkillWithLinks } from "@/types";
@@ -76,6 +85,9 @@ export function PlatformView() {
   const pendingSkillActionKeys = useSkillStore((state) => state.pendingSkillActionKeys);
   const getSkillsByAgent = useSkillStore((state) => state.getSkillsByAgent);
   const uninstallSkillFromAgent = useSkillStore((state) => state.uninstallSkillFromAgent);
+  const batchUninstallSkillsFromAgent = useSkillStore(
+    (state) => state.batchUninstallSkillsFromAgent
+  );
 
   const centralSkills = useCentralSkillsStore((state) => state.skills);
   const loadCentralSkills = useCentralSkillsStore((state) => state.loadCentralSkills);
@@ -96,21 +108,14 @@ export function PlatformView() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isBatchInstallDialogOpen, setIsBatchInstallDialogOpen] = useState(false);
   const [isBatchInstalling, setIsBatchInstalling] = useState(false);
-  const [selectedSkillKeys, setSelectedSkillKeys] = useState<Set<string>>(new Set());
+  const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [drawerSkill, setDrawerSkill] = useState<ScannedSkill | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isDuplicateScanning, setIsDuplicateScanning] = useState(false);
   const [returnFocusRowKey, setReturnFocusRowKey] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-
-  function getSkillRowKey(skill: ScannedSkill) {
-    return skill.row_id ?? skill.id;
-  }
-
-  function getSkillSummaryKeys(skill: ScannedSkill) {
-    return skill.row_id ? [skill.row_id, skill.id] : [skill.id];
-  }
 
   const platformTargets = useMemo(
     () => getPlatformTargetGroups(agents, categoryVisibility),
@@ -212,22 +217,12 @@ export function PlatformView() {
     }
   }
 
-  function getPendingSkillActionKey(skill: ScannedSkill) {
-    return getClaudeUserRowId(skill) ?? (resolvedAgentId ? `${resolvedAgentId}::${skill.id}` : skill.id);
-  }
-
-  function getClaudeUserRowId(skill: ScannedSkill) {
-    return resolvedAgentId === "claude-code" && skill.source_kind === "user" && !skill.is_read_only
-      ? skill.row_id
-      : undefined;
-  }
-
   async function handleUninstall(skill: ScannedSkill) {
     if (!resolvedAgentId) return;
-    const rowId = getClaudeUserRowId(skill);
+    const request = createPlatformBatchUninstallRequest(skill, resolvedAgentId);
     try {
-      if (rowId) {
-        await uninstallSkillFromAgent(skill.id, resolvedAgentId, rowId);
+      if (request.row_id) {
+        await uninstallSkillFromAgent(skill.id, resolvedAgentId, request.row_id);
       } else {
         await uninstallSkillFromAgent(skill.id, resolvedAgentId);
       }
@@ -329,7 +324,7 @@ export function PlatformView() {
   const sourceFilteredSkills = platformRows.sourceFilteredSkills;
   const filteredSkills = platformRows.sortedSkills;
   const summarySkillIds = useMemo(
-    () => filteredSkills.flatMap((skill) => getSkillSummaryKeys(skill)),
+    () => filteredSkills.flatMap((skill) => getPlatformSkillSummaryKeys(skill)),
     [filteredSkills]
   );
   const aiSummaries = useSkillExplanationSummaries(summarySkillIds, "zh");
@@ -337,65 +332,22 @@ export function PlatformView() {
   function getAiSummary(skill: ScannedSkill) {
     return (skill.row_id ? aiSummaries[skill.row_id] : undefined) ?? aiSummaries[skill.id];
   }
-
-  const selectableFilteredSkills = useMemo(
-    () =>
-      isCodingPlatformPage
-        ? filteredSkills.filter((skill) => !skill.is_read_only)
-        : [],
-    [filteredSkills, isCodingPlatformPage]
-  );
-  const selectableRowKeys = useMemo(
-    () => new Set(selectableFilteredSkills.map((skill) => getSkillRowKey(skill))),
-    [selectableFilteredSkills]
-  );
-  const selectedPlatformSkills = useMemo(
-    () =>
-      selectableFilteredSkills.filter((skill) =>
-        selectedSkillKeys.has(getSkillRowKey(skill))
-      ),
-    [selectableFilteredSkills, selectedSkillKeys]
-  );
+  const {
+    selectedSkillKeys,
+    setSelectedSkillKeys,
+    selectableFilteredSkills,
+    selectedPlatformSkills,
+    toggleSelectedSkill,
+    selectCurrentResults,
+    clearSelectedSkills,
+  } = usePlatformSkillSelection({
+    agentId,
+    filteredSkills,
+  });
   const selectedBatchSkillIds = useMemo(
     () => Array.from(new Set(selectedPlatformSkills.map((skill) => skill.id))),
     [selectedPlatformSkills]
   );
-
-  useEffect(() => {
-    setSelectedSkillKeys(new Set());
-  }, [agentId]);
-
-  useEffect(() => {
-    setSelectedSkillKeys((current) => {
-      if (!isCodingPlatformPage || current.size === 0) {
-        return current.size === 0 ? current : new Set();
-      }
-
-      const next = new Set(
-        Array.from(current).filter((skillKey) => selectableRowKeys.has(skillKey))
-      );
-      return next.size === current.size ? current : next;
-    });
-  }, [isCodingPlatformPage, selectableRowKeys]);
-
-  function toggleSelectedSkill(skill: ScannedSkill) {
-    if (!isCodingPlatformPage || skill.is_read_only) return;
-
-    const rowKey = getSkillRowKey(skill);
-    setSelectedSkillKeys((current) => {
-      const next = new Set(current);
-      if (next.has(rowKey)) {
-        next.delete(rowKey);
-      } else {
-        next.add(rowKey);
-      }
-      return next;
-    });
-  }
-
-  function handleSelectCurrentResults() {
-    setSelectedSkillKeys(new Set(selectableFilteredSkills.map((skill) => getSkillRowKey(skill))));
-  }
 
   async function handleSelectMostUniversal() {
     if (selectableFilteredSkills.length === 0) return;
@@ -424,13 +376,13 @@ export function PlatformView() {
       new Set(
         selectableFilteredSkills
           .filter((skill) => selectedCentralSkillIds.has(skill.id))
-          .map((skill) => getSkillRowKey(skill))
+          .map((skill) => getPlatformSkillRowKey(skill))
       )
     );
   }
 
   function handleClearTransferSelection() {
-    setSelectedSkillKeys(new Set());
+    clearSelectedSkills();
   }
 
   async function handleBatchInstall(
@@ -466,11 +418,46 @@ export function PlatformView() {
     }
   }
 
+  async function handleBatchDelete() {
+    if (!resolvedAgentId || selectedPlatformSkills.length === 0) return;
+
+    const requests = selectedPlatformSkills.map((skill) =>
+      createPlatformBatchUninstallRequest(skill, resolvedAgentId)
+    );
+    setIsBatchDeleting(true);
+    try {
+      const result = await batchUninstallSkillsFromAgent(resolvedAgentId, requests);
+      await refreshCounts();
+      await getSkillsByAgent(resolvedAgentId);
+      await loadCentralSkills();
+
+      const failedKeys = getFailedBatchUninstallActionKeys(resolvedAgentId, result);
+      if (result.failed.length === 0) {
+        clearSelectedSkills();
+        setIsBatchDeleteDialogOpen(false);
+        toast.success(t("platform.batchDeleteSuccess", { count: result.succeeded.length }));
+      } else {
+        setSelectedSkillKeys(failedKeys);
+        toast.error(
+          t("platform.batchDeletePartial", {
+            succeeded: result.succeeded.length,
+            failed: result.failed.length,
+          })
+        );
+      }
+    } catch (err) {
+      toast.error(t("platform.batchDeleteError", { error: String(err) }));
+      throw err;
+    } finally {
+      setIsBatchDeleting(false);
+    }
+  }
+
   useEffect(() => {
     if (!drawerSkill) return;
 
-    const rowKey = getSkillRowKey(drawerSkill);
-    const refreshedSkill = skills.find((skill) => getSkillRowKey(skill) === rowKey);
+    const rowKey = getPlatformSkillRowKey(drawerSkill);
+    const refreshedSkill = skills.find((skill) => getPlatformSkillRowKey(skill) === rowKey);
 
     if (!refreshedSkill) {
       setIsDrawerOpen(false);
@@ -492,7 +479,7 @@ export function PlatformView() {
   }
 
   function handleOpenDrawer(skill: ScannedSkill) {
-    setReturnFocusRowKey(getSkillRowKey(skill));
+    setReturnFocusRowKey(getPlatformSkillRowKey(skill));
     setDrawerSkill(skill);
     setIsDrawerOpen(true);
   }
@@ -543,10 +530,11 @@ export function PlatformView() {
     { value: "none", label: t("platform.groupBy.none") },
     { value: "repository", label: t("platform.groupBy.repository") },
   ];
+  const showTransferActions = isCodingPlatformPage;
 
   const renderSkillCard = (skill: ScannedSkill, className?: string) => (
     <UnifiedSkillCard
-      key={getSkillRowKey(skill)}
+      key={getPlatformSkillRowKey(skill)}
       name={skill.name}
       description={skill.description}
       aiSummary={getAiSummary(skill)}
@@ -555,16 +543,16 @@ export function PlatformView() {
       isReadOnly={skill.is_read_only ?? false}
       publisher={skill.repository?.name}
       checkbox={
-        isCodingPlatformPage && !skill.is_read_only
+        !skill.is_read_only
           ? {
-              checked: selectedSkillKeys.has(getSkillRowKey(skill)),
+              checked: selectedSkillKeys.has(getPlatformSkillRowKey(skill)),
               onChange: () => toggleSelectedSkill(skill),
             }
           : undefined
       }
       isLoading={
         resolvedAgentId
-          ? (pendingSkillActionKeys[getPendingSkillActionKey(skill)] ?? false)
+          ? (pendingSkillActionKeys[getPlatformSkillActionKey(skill, resolvedAgentId)] ?? false)
           : false
       }
       onDetail={() => handleOpenDrawer(skill)}
@@ -585,7 +573,7 @@ export function PlatformView() {
           ? `从 ${platformDisplayName} 卸载 ${skill.name}`
           : `Uninstall ${skill.name} from ${platformDisplayName}`,
       })}
-      detailButtonRef={(node) => setDetailButtonRef(getSkillRowKey(skill), node)}
+      detailButtonRef={(node) => setDetailButtonRef(getPlatformSkillRowKey(skill), node)}
       className={className}
     />
   );
@@ -678,17 +666,19 @@ export function PlatformView() {
         </div>
       </div>
 
-      {isCodingPlatformPage && (
-        <PlatformTransferRail
-          selectedCount={selectedSkillKeys.size}
-          selectableCount={selectableFilteredSkills.length}
-          onSelectCurrentResults={handleSelectCurrentResults}
-          onSelectMostUniversal={() => {
-            void handleSelectMostUniversal();
-          }}
-          onClearSelection={handleClearTransferSelection}
-        />
-      )}
+      <PlatformTransferRail
+        selectedCount={selectedSkillKeys.size}
+        selectableCount={selectableFilteredSkills.length}
+        onSelectCurrentResults={selectCurrentResults}
+        onSelectMostUniversal={
+          showTransferActions
+            ? () => {
+                void handleSelectMostUniversal();
+              }
+            : undefined
+        }
+        onClearSelection={handleClearTransferSelection}
+      />
 
       {/* Content */}
       <div ref={contentRef} className="flex-1 overflow-auto p-6">
@@ -727,7 +717,7 @@ export function PlatformView() {
             minColumnWidth={420}
             maxColumns={2}
             scrollContainerRef={contentRef}
-            itemKey={(skill) => getSkillRowKey(skill)}
+            itemKey={(skill) => getPlatformSkillRowKey(skill)}
             renderItem={(skill) => renderSkillCard(skill, "h-[132px]")}
           />
         ) : (
@@ -737,14 +727,16 @@ export function PlatformView() {
         )}
       </div>
 
-      {isCodingPlatformPage && (
-        <PlatformTransferActionBar
-          selectedCount={selectedSkillKeys.size}
-          isInstalling={isBatchInstalling}
-          onInstall={() => setIsBatchInstallDialogOpen(true)}
-          onClearSelection={handleClearTransferSelection}
-        />
-      )}
+      <PlatformTransferActionBar
+        selectedCount={selectedSkillKeys.size}
+        isInstalling={isBatchInstalling}
+        isDeleting={isBatchDeleting}
+        onInstall={
+          showTransferActions ? () => setIsBatchInstallDialogOpen(true) : undefined
+        }
+        onDelete={() => setIsBatchDeleteDialogOpen(true)}
+        onClearSelection={handleClearTransferSelection}
+      />
 
       {/* Install Dialog */}
       <InstallDialog
@@ -768,6 +760,15 @@ export function PlatformView() {
         })}
         defaultExcludedAgentIds={defaultBatchExcludedAgentIds}
         onInstall={handleBatchInstall}
+      />
+
+      <BatchDeletePlatformSkillsDialog
+        open={isBatchDeleteDialogOpen}
+        onOpenChange={setIsBatchDeleteDialogOpen}
+        platformName={platformDisplayName}
+        skills={selectedPlatformSkills}
+        isDeleting={isBatchDeleting}
+        onConfirm={handleBatchDelete}
       />
 
       <SkillDetailDrawer
