@@ -289,6 +289,20 @@ describe("settingsStore", () => {
     expect(useSettingsStore.getState().isLoadingGitHubPat).toBe(false);
   });
 
+  it("revealGitHubPat invokes the reveal command without mutating token state", async () => {
+    useSettingsStore.setState({
+      githubPatState: { configured: true, storageState: "stored", error: null },
+    });
+    vi.mocked(invoke).mockResolvedValueOnce("github_pat_secret");
+
+    const before = useSettingsStore.getState().githubPatState;
+    const result = await useSettingsStore.getState().revealGitHubPat();
+
+    expect(result).toBe("github_pat_secret");
+    expect(invoke).toHaveBeenCalledWith("reveal_github_pat");
+    expect(useSettingsStore.getState().githubPatState).toBe(before);
+  });
+
   it("saveGitHubPat persists a token through secure storage", async () => {
     vi.mocked(invoke).mockResolvedValueOnce({
       configured: true,
@@ -392,6 +406,39 @@ describe("settingsStore", () => {
       fingerprint: "sha256:1234abcd",
     });
     expect(invoke).toHaveBeenCalledWith("get_ai_api_key_state", { provider: "glm" });
+  });
+
+  it("revealAiApiKey invokes the provider-scoped reveal command without mutating ai state", async () => {
+    useSettingsStore.setState({
+      aiSettings: {
+        provider: "deepseek",
+        region: "intl",
+        apiKey: "",
+        model: "",
+        customUrl: "",
+        protocol: "",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+      aiApiKeyState: {
+        provider: "deepseek",
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:deepabcd",
+        error: null,
+      },
+    });
+    vi.mocked(invoke).mockResolvedValueOnce("sk-deepseek-secret");
+
+    const beforeSettings = useSettingsStore.getState().aiSettings;
+    const beforeKeyState = useSettingsStore.getState().aiApiKeyState;
+    const result = await useSettingsStore.getState().revealAiApiKey("deepseek");
+
+    expect(result).toBe("sk-deepseek-secret");
+    expect(invoke).toHaveBeenCalledWith("reveal_ai_api_key", { provider: "deepseek" });
+    expect(useSettingsStore.getState().aiSettings).toBe(beforeSettings);
+    expect(useSettingsStore.getState().aiApiKeyState).toBe(beforeKeyState);
   });
 
   it("debounces rapid AI setting edits into one batch save", async () => {

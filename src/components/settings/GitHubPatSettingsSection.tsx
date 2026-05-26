@@ -1,9 +1,10 @@
-import { KeyRound, Loader2 } from "lucide-react";
+import { KeyRound, Loader2, ShieldCheck, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { GitHubPatState, SecretStorageState } from "@/types";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SecretValueInput } from "@/components/settings/SecretValueInput";
 import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
 
 type GitHubPatMessage = {
@@ -21,6 +22,7 @@ interface GitHubPatSettingsSectionProps {
   isTestingGitHubPat: boolean;
   onClear: () => void;
   onInputChange: (value: string) => void;
+  onReveal: () => Promise<string | null>;
   onSave: () => void;
   onTest: () => void;
 }
@@ -34,15 +36,30 @@ export function GitHubPatSettingsSection({
   isTestingGitHubPat,
   onClear,
   onInputChange,
+  onReveal,
   onSave,
   onTest,
 }: GitHubPatSettingsSectionProps) {
   const { t } = useTranslation();
+  const [revealError, setRevealError] = useState<string | null>(null);
   const storageLabel =
     githubPatState.configured || githubPatState.storageState === "unreadable"
       ? t(`settings.githubPatStorageState.${githubPatState.storageState}`)
       : t("settings.githubPatNotConfigured");
   const storageTone = githubPatStorageTone(githubPatState.storageState);
+  const effectiveMessage =
+    githubPatMessage ??
+    (revealError
+      ? {
+          type: "error" as const,
+          text: t("settings.githubPatRevealFailed"),
+          detail: revealError,
+        }
+      : null);
+
+  useEffect(() => {
+    setRevealError(null);
+  }, [githubPatState.configured, githubPatInput]);
 
   return (
     <SettingsCollapsibleCard
@@ -52,56 +69,66 @@ export function GitHubPatSettingsSection({
       icon={<KeyRound className="size-5 shrink-0 text-muted-foreground" />}
     >
         <div className="space-y-4">
-          <div>
-            <label htmlFor="github-pat" className="mb-1 block text-xs text-muted-foreground">
-              {t("settings.githubPatLabel")}
-            </label>
-            <Input
+          <div className="rounded-xl border border-border/70 bg-background/70 p-3 shadow-sm">
+            <SecretValueInput
               id="github-pat"
-              type="password"
-              placeholder="github_pat_..."
+              label={t("settings.githubPatLabel")}
               value={githubPatInput}
-              onChange={(event) => onInputChange(event.target.value)}
+              configured={githubPatState.configured}
               disabled={isLoadingGitHubPat || isSavingGitHubPat}
+              placeholder={t("settings.githubPatPlaceholder")}
+              revealScopeKey="github-pat"
+              inputShowLabel={t("settings.githubPatShowInput")}
+              inputHideLabel={t("settings.githubPatHideInput")}
+              savedRevealLabel={t("settings.githubPatRevealSaved")}
+              savedHideLabel={t("settings.githubPatHideSaved")}
+              savedHiddenHint={t("settings.githubPatSavedHiddenHint")}
+              savedRevealedHint={t("settings.githubPatSavedRevealedHint")}
+              inputReplacementHint={t("settings.githubPatWillReplace")}
+              onChange={onInputChange}
+              onRevealSaved={onReveal}
+              onRevealError={setRevealError}
             />
-            {githubPatState.configured && !githubPatInput ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("settings.githubPatConfiguredNoReveal")}
-              </p>
+          </div>
+
+          <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${storageTone}`}>
+              <ShieldCheck className="size-3.5" />
+              {storageLabel}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/20 px-2.5 py-1">
+              <Zap className="size-3.5 text-primary" />
+              {t("settings.githubPatRateLimitChip")}
+            </span>
+            <span className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 sm:col-span-2">
+              {t("settings.githubPatDirectOnly")}
+            </span>
+            <span className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+              {t("settings.githubPatRateLimitHint")}
+            </span>
+            <span className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+              {t("settings.githubPatAppWideHint")}
+            </span>
+            {githubPatState.error ? (
+              <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-300 sm:col-span-2">
+                {t("settings.githubPatMigrationWarning")}
+              </span>
             ) : null}
           </div>
 
-          <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-sm text-muted-foreground">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span
-                className={`rounded-full border px-2 py-0.5 text-[11px] ${storageTone}`}
-              >
-                {storageLabel}
-              </span>
-              {githubPatState.error ? (
-                <span className="text-xs text-amber-600 dark:text-amber-300">
-                  {t("settings.githubPatMigrationWarning")}
-                </span>
-              ) : null}
-            </div>
-            <p>{t("settings.githubPatDirectOnly")}</p>
-            <p className="mt-2">{t("settings.githubPatRateLimitHint")}</p>
-            <p className="mt-2">{t("settings.githubPatAppWideHint")}</p>
-          </div>
-
-          {githubPatMessage ? (
+          {effectiveMessage ? (
             <p
               className={
-                githubPatMessage.type === "error"
+                effectiveMessage.type === "error"
                   ? "text-sm text-destructive"
                   : "text-sm text-emerald-600 dark:text-emerald-400"
               }
               role="status"
             >
-              {githubPatMessage.text}
-              {githubPatMessage.detail ? (
+              {effectiveMessage.text}
+              {effectiveMessage.detail ? (
                 <span className="mt-1 block text-xs opacity-80">
-                  {githubPatMessage.detail}
+                  {effectiveMessage.detail}
                 </span>
               ) : null}
             </p>

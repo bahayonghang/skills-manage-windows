@@ -32,6 +32,7 @@ interface SettingsState extends AiSettingsSlice {
   toggleScanDirectory: (path: string, active: boolean) => Promise<void>;
 
   loadGitHubPat: () => Promise<void>;
+  revealGitHubPat: () => Promise<string | null>;
   saveGitHubPat: (value: string) => Promise<void>;
   clearGitHubPat: () => Promise<void>;
   testGitHubPat: () => Promise<GitHubPatTestResult>;
@@ -191,6 +192,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         isLoadingGitHubPat: false,
       });
     }
+  },
+
+  revealGitHubPat: async () => {
+    if (!isTauriRuntime()) {
+      return null;
+    }
+    return invoke<string | null>("reveal_github_pat");
   },
 
   saveGitHubPat: async (value: string) => {

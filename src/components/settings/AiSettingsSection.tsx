@@ -1,8 +1,9 @@
-import { Bot, ChevronDown, ChevronRight, Eye, EyeOff, Loader2, LockKeyhole } from "lucide-react";
-import { useState } from "react";
+import { Bot, ChevronDown, ChevronRight, KeyRound, Loader2, ServerCog, SlidersHorizontal } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { SecretValueInput } from "@/components/settings/SecretValueInput";
 import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -36,6 +37,7 @@ interface AiSettingsSectionProps {
   showAiTestDetails: boolean;
   onProviderChange: (id: string) => void;
   onClearApiKey: () => void;
+  onRevealApiKey: (providerId: string) => Promise<string | null>;
   onSetShowAiTestDetails: (value: boolean | ((current: boolean) => boolean)) => void;
   onTestConnection: () => void;
   onUpdateAiSettings: (patch: Partial<AiSettings>) => void;
@@ -54,17 +56,20 @@ export function AiSettingsSection({
   showAiTestDetails,
   onProviderChange,
   onClearApiKey,
+  onRevealApiKey,
   onSetShowAiTestDetails,
   onTestConnection,
   onUpdateAiSettings,
 }: AiSettingsSectionProps) {
   const { t } = useTranslation();
-  const [showApiKey, setShowApiKey] = useState(false);
+  const [revealError, setRevealError] = useState<string | null>(null);
   const currentProvider = AI_PROVIDERS.find((provider) => provider.id === aiSettings.provider);
   const currentProviderLabel = currentProvider ? t(currentProvider.labelKey) : aiSettings.provider;
   const aiControlsDisabled = isLoadingAiSettings || aiSaveStatus === "saving";
-  const hasNewApiKeyInput = aiSettings.apiKey.trim().length > 0;
-  const canRevealNewApiKeyInput = !aiControlsDisabled && hasNewApiKeyInput;
+
+  useEffect(() => {
+    setRevealError(null);
+  }, [aiSettings.provider, aiSettings.apiKey, aiApiKeyState.configured]);
 
   return (
     <SettingsCollapsibleCard
@@ -74,9 +79,23 @@ export function AiSettingsSection({
       icon={<Bot className="size-5 shrink-0 text-muted-foreground" />}
     >
         <div className="space-y-4">
-          <div>
-            <div id="settings-ai-provider-label" className="text-xs text-muted-foreground mb-2">
-              {t("settings.aiProviderLabel")}
+          <div className="rounded-xl border border-border/70 bg-background/70 p-3 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div id="settings-ai-provider-label" className="text-xs font-medium text-foreground">
+                  {t("settings.aiProviderLabel")}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("settings.aiProviderConsoleHint")}
+                </p>
+              </div>
+              <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${secretStorageTone(aiApiKeyState.storageState)}`}
+              >
+                {aiApiKeyState.configured || aiApiKeyState.storageState === "unreadable"
+                  ? t(`settings.aiApiKeyStorageState.${aiApiKeyState.storageState}`)
+                  : t("settings.aiApiKeyNotConfigured")}
+              </span>
             </div>
             <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby="settings-ai-provider-label">
               {AI_PROVIDERS.map((provider) => (
@@ -93,148 +112,141 @@ export function AiSettingsSection({
               ))}
             </div>
           </div>
-          {currentProvider && currentProvider.regions.length > 1 && (
-            <AiRegionPicker
-              lang={lang}
-              region={aiSettings.region}
-              regions={currentProvider.regions}
-              disabled={aiControlsDisabled}
-              onChange={(region) => onUpdateAiSettings({ region })}
-            />
-          )}
-          <div>
-            <label htmlFor="settings-ai-api-key" className="text-xs text-muted-foreground mb-1 block">
-              {t("settings.aiApiKeyLabel")}
-            </label>
-            <div className="mb-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
-              <div className="text-xs font-medium text-foreground">
-                {t("settings.aiApiKeyActiveState", {
-                  provider: currentProviderLabel,
-                  state: getAiApiKeyActiveStateLabel(t, aiApiKeyState),
-                })}
+
+          <div className="grid gap-3 xl:grid-cols-2">
+            <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
+              <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <KeyRound className="size-3.5" />
+                {t("settings.aiSecretConsoleTitle")}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("settings.aiApiKeyUsageHint")}
-              </p>
-              {aiApiKeyState.configured && aiApiKeyState.fingerprint ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("settings.aiApiKeyFingerprint", {
-                    fingerprint: aiApiKeyState.fingerprint,
+              <SecretValueInput
+                id="settings-ai-api-key"
+                label={t("settings.aiApiKeyLabel")}
+                value={aiSettings.apiKey}
+                configured={aiApiKeyState.configured}
+                disabled={aiControlsDisabled}
+                placeholder={t("settings.aiApiKeyPlaceholder")}
+                revealScopeKey={aiSettings.provider}
+                inputShowLabel={t("settings.aiApiKeyShow")}
+                inputHideLabel={t("settings.aiApiKeyHide")}
+                savedRevealLabel={t("settings.aiApiKeyRevealSaved")}
+                savedHideLabel={t("settings.aiApiKeyHideSaved")}
+                savedHiddenHint={t("settings.aiApiKeySavedHiddenHint", {
+                  provider: currentProviderLabel,
+                })}
+                savedRevealedHint={t("settings.aiApiKeySavedRevealedHint", {
+                  provider: currentProviderLabel,
+                })}
+                inputReplacementHint={t("settings.aiApiKeyWillReplace", {
+                  provider: currentProviderLabel,
+                })}
+                onChange={(nextValue) => onUpdateAiSettings({ apiKey: nextValue })}
+                onRevealSaved={() => onRevealApiKey(aiSettings.provider)}
+                onRevealError={setRevealError}
+              />
+              <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                <p>
+                  {t("settings.aiApiKeyActiveState", {
+                    provider: currentProviderLabel,
+                    state: getAiApiKeyActiveStateLabel(t, aiApiKeyState),
                   })}
                 </p>
-              ) : null}
-            </div>
-            <div className="relative">
-              <Input
-                id="settings-ai-api-key"
-                type={showApiKey ? "text" : "password"}
-                placeholder={
-                  aiApiKeyState.configured
-                    ? t("settings.aiApiKeyReplacePlaceholder")
-                    : t("settings.aiApiKeyPlaceholder")
-                }
-                value={aiSettings.apiKey}
-                className="pr-10"
-                disabled={aiControlsDisabled}
-                onChange={(event) => onUpdateAiSettings({ apiKey: event.target.value })}
-              />
-              <button
-                type="button"
-                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-50"
-                disabled={!canRevealNewApiKeyInput}
-                aria-label={
-                  hasNewApiKeyInput
-                    ? showApiKey
-                      ? t("settings.aiApiKeyHide")
-                      : t("settings.aiApiKeyShow")
-                    : t("settings.aiApiKeySavedHidden")
-                }
-                onClick={() => setShowApiKey((value) => !value)}
-              >
-                {!hasNewApiKeyInput && aiApiKeyState.configured ? (
-                  <LockKeyhole className="size-4" />
-                ) : showApiKey ? (
-                  <EyeOff className="size-4" />
-                ) : (
-                  <Eye className="size-4" />
-                )}
-              </button>
-            </div>
-            {hasNewApiKeyInput ? (
-              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                {t("settings.aiApiKeyWillReplace", { provider: currentProviderLabel })}
-              </p>
-            ) : null}
-            {aiApiKeyState.configured && !aiSettings.apiKey ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("settings.aiApiKeyConfiguredNoReveal")}
-              </p>
-            ) : null}
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span
-                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${secretStorageTone(aiApiKeyState.storageState)}`}
-              >
-                {aiApiKeyState.configured || aiApiKeyState.storageState === "unreadable"
-                  ? t(`settings.aiApiKeyStorageState.${aiApiKeyState.storageState}`)
-                  : t("settings.aiApiKeyNotConfigured")}
-              </span>
+                {aiApiKeyState.configured && aiApiKeyState.fingerprint ? (
+                  <p>
+                    {t("settings.aiApiKeyFingerprint", {
+                      fingerprint: aiApiKeyState.fingerprint,
+                    })}
+                  </p>
+                ) : null}
+                {revealError ? (
+                  <p className="text-destructive">
+                    {t("settings.aiApiKeyRevealFailed", { error: revealError })}
+                  </p>
+                ) : null}
+                {aiApiKeyState.error ? (
+                  <p className="text-amber-600 dark:text-amber-400">
+                    {t("settings.aiApiKeyMigrationWarning")}
+                  </p>
+                ) : null}
+              </div>
               <Button
                 variant="outline"
                 size="sm"
+                className="mt-3"
                 disabled={aiControlsDisabled || !aiApiKeyState.configured}
                 onClick={onClearApiKey}
               >
                 {t("settings.aiApiKeyClear")}
               </Button>
             </div>
-            {aiApiKeyState.error ? (
-              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                {t("settings.aiApiKeyMigrationWarning")}
-              </p>
-            ) : null}
+
+            <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
+              <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <ServerCog className="size-3.5" />
+                {t("settings.aiRuntimeConsoleTitle")}
+              </div>
+              <div className="space-y-3">
+                {currentProvider && currentProvider.regions.length > 1 ? (
+                  <AiRegionPicker
+                    lang={lang}
+                    region={aiSettings.region}
+                    regions={currentProvider.regions}
+                    disabled={aiControlsDisabled}
+                    onChange={(region) => onUpdateAiSettings({ region })}
+                  />
+                ) : null}
+                <div>
+                  <label htmlFor="settings-ai-model" className="text-xs text-muted-foreground mb-1 block">
+                    {t("settings.aiModelLabel")}
+                  </label>
+                  <Input
+                    id="settings-ai-model"
+                    placeholder={t("settings.aiModelPlaceholder")}
+                    value={aiSettings.model}
+                    disabled={aiControlsDisabled}
+                    onChange={(event) => onUpdateAiSettings({ model: event.target.value })}
+                  />
+                </div>
+                {aiSettings.provider === "custom" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label htmlFor="settings-ai-api-url" className="text-xs text-muted-foreground mb-1 block">
+                        {t("settings.aiApiUrlLabel")}
+                      </label>
+                      <Input
+                        id="settings-ai-api-url"
+                        placeholder={t("settings.aiApiUrlPlaceholder")}
+                        value={aiSettings.customUrl}
+                        disabled={aiControlsDisabled}
+                        onChange={(event) => onUpdateAiSettings({ customUrl: event.target.value })}
+                      />
+                    </div>
+                    <AiProtocolPicker
+                      protocol={aiSettings.protocol}
+                      disabled={aiControlsDisabled}
+                      onChange={(protocol) => onUpdateAiSettings({ protocol })}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
           <AiSaveStatusRow
             aiSaveError={aiSaveError}
             aiSaveStatus={aiSaveStatus}
             isLoadingAiSettings={isLoadingAiSettings}
           />
-          <div>
-            <label htmlFor="settings-ai-model" className="text-xs text-muted-foreground mb-1 block">
-              {t("settings.aiModelLabel")}
-            </label>
-            <Input
-              id="settings-ai-model"
-              placeholder={t("settings.aiModelPlaceholder")}
-              value={aiSettings.model}
-              disabled={aiControlsDisabled}
-              onChange={(event) => onUpdateAiSettings({ model: event.target.value })}
+
+          <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
+            <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <SlidersHorizontal className="size-3.5" />
+              {t("settings.aiControlsConsoleTitle")}
+            </div>
+            <AiTagRateSettings
+              aiSettings={aiSettings}
+              onUpdateAiSettings={onUpdateAiSettings}
             />
           </div>
-          {aiSettings.provider === "custom" && (
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="settings-ai-api-url" className="text-xs text-muted-foreground mb-1 block">
-                  {t("settings.aiApiUrlLabel")}
-                </label>
-                <Input
-                  id="settings-ai-api-url"
-                  placeholder={t("settings.aiApiUrlPlaceholder")}
-                  value={aiSettings.customUrl}
-                  disabled={aiControlsDisabled}
-                  onChange={(event) => onUpdateAiSettings({ customUrl: event.target.value })}
-                />
-              </div>
-              <AiProtocolPicker
-                protocol={aiSettings.protocol}
-                disabled={aiControlsDisabled}
-                onChange={(protocol) => onUpdateAiSettings({ protocol })}
-              />
-            </div>
-          )}
-          <AiTagRateSettings
-            aiSettings={aiSettings}
-            onUpdateAiSettings={onUpdateAiSettings}
-          />
           <div className="flex items-center gap-3">
             {resolvedUrl && (
               <div className="text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2 font-mono truncate flex-1 min-w-0">

@@ -134,6 +134,8 @@ export interface SettingsPageSectionsProps {
   onPreviewLocalRemoteSync: () => void;
   onProviderChange: (id: string) => void;
   onRefreshWslDistributions: () => void;
+  onRevealAiApiKey: (providerId: string) => Promise<string | null>;
+  onRevealGitHubPat: () => Promise<string | null>;
   onRemoveDirectory: (path: string) => void;
   onRemovePlatform: (agentId: string) => void;
   onSaveGitHubPat: () => void;
@@ -307,7 +309,7 @@ function SettingsPlatformsPage(props: SettingsPageSectionsProps) {
 
 function SettingsIntegrationsPage(props: SettingsPageSectionsProps) {
   return (
-    <>
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
       <section id="github-pat-section" className="scroll-mt-24">
         <GitHubPatSettingsSection
           githubPatState={props.githubPatState}
@@ -318,6 +320,7 @@ function SettingsIntegrationsPage(props: SettingsPageSectionsProps) {
           isTestingGitHubPat={props.isTestingGitHubPat}
           onClear={props.onClearGitHubPat}
           onInputChange={props.onGitHubPatInputChange}
+          onReveal={props.onRevealGitHubPat}
           onSave={props.onSaveGitHubPat}
           onTest={props.onTestGitHubPat}
         />
@@ -336,12 +339,13 @@ function SettingsIntegrationsPage(props: SettingsPageSectionsProps) {
           showAiTestDetails={props.showAiTestDetails}
           onClearApiKey={props.onClearAiApiKey}
           onProviderChange={props.onProviderChange}
+          onRevealApiKey={props.onRevealAiApiKey}
           onSetShowAiTestDetails={props.onSetShowAiTestDetails}
           onTestConnection={props.onTestAiConnection}
           onUpdateAiSettings={props.onUpdateAiSettings}
         />
       </section>
-    </>
+    </div>
   );
 }
 
