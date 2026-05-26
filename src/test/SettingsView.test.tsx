@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { SettingsView } from "../pages/SettingsView";
 import type { AiSettings } from "../stores/settingsStore";
@@ -607,7 +607,7 @@ describe("SettingsView", () => {
     renderSettingsView("/settings");
 
     expect(screen.getAllByText("外观").length).toBeGreaterThan(0);
-    expect(screen.getByText("主题风格")).toBeTruthy();
+    expect(screen.getAllByText("主题风格").length).toBeGreaterThan(0);
     expect(screen.queryByText("新增 SSH 目标")).toBeNull();
     expect(screen.queryByText("GitHub 导入访问令牌")).toBeNull();
     expect(screen.queryByText("扫描目录")).toBeNull();
@@ -1321,7 +1321,7 @@ describe("SettingsView", () => {
   it("shows flavor label in about section", () => {
     setupMocks();
     renderSettingsView("/settings");
-    expect(screen.getByText("主题风格")).toBeTruthy();
+    expect(screen.getAllByText("主题风格").length).toBeGreaterThan(0);
   });
 
   it("renders all flavor buttons", () => {
@@ -1380,7 +1380,7 @@ describe("SettingsView", () => {
   it("shows accent color label in about section", () => {
     setupMocks();
     renderSettingsView("/settings");
-    expect(screen.getByText("强调色")).toBeTruthy();
+    expect(screen.getAllByText("强调色").length).toBeGreaterThan(0);
   });
 
   it("renders 14 accent color swatches", () => {
@@ -1417,6 +1417,76 @@ describe("SettingsView", () => {
     renderSettingsView("/settings");
     const rosewaterSwatch = screen.getByRole("radio", { name: "玫瑰水" });
     expect(rosewaterSwatch.style.backgroundColor).toBe("var(--ctp-rosewater)");
+  });
+
+  it("keeps language and font scale controls operable with aria-pressed", () => {
+    setupMocks();
+    renderSettingsView("/settings");
+
+    expect(screen.getByRole("button", { name: /中文/ })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: /English/ })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+
+    expect(screen.getByRole("button", { name: /English/ })).toBeEnabled();
+
+    const defaultScale = screen.getByRole("button", { name: /Default|默认/ });
+    const spaciousScale = screen.getByRole("button", { name: /Spacious|宽松/ });
+
+    expect(defaultScale).toHaveAttribute("aria-pressed", "true");
+    expect(spaciousScale).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(spaciousScale);
+
+    expect(spaciousScale).toHaveAttribute("aria-pressed", "true");
+    expect(defaultScale).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("shows custom font inputs only inside the selected font group", () => {
+    setupMocks();
+    renderSettingsView("/settings");
+
+    expect(screen.queryByLabelText("自定义标题字体族")).toBeNull();
+    expect(screen.queryByLabelText("自定义正文字体族")).toBeNull();
+
+    const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
+    fireEvent.click(within(displayGroup).getByRole("button", { name: /自定义/ }));
+
+    expect(within(displayGroup).getByLabelText("自定义标题字体族")).toBeTruthy();
+    expect(screen.queryByLabelText("自定义正文字体族")).toBeNull();
+
+    const bodyGroup = screen.getByRole("group", { name: "正文字体选项" });
+    fireEvent.click(within(bodyGroup).getByRole("button", { name: /自定义/ }));
+
+    expect(within(displayGroup).getByLabelText("自定义标题字体族")).toBeTruthy();
+    expect(within(bodyGroup).getByLabelText("自定义正文字体族")).toBeTruthy();
+  });
+
+  it("updates the preview specimen chips from selected font and scale state", () => {
+    setupMocks();
+    renderSettingsView("/settings");
+
+    expect(screen.getByText("Midnight Type Lab")).toBeTruthy();
+    expect(screen.getByLabelText("标题字体 Geist Sans")).toBeTruthy();
+    expect(screen.getByLabelText("正文字体 JetBrains Mono")).toBeTruthy();
+    expect(screen.getByLabelText("字号缩放 默认")).toBeTruthy();
+
+    const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
+    const bodyGroup = screen.getByRole("group", { name: "正文字体选项" });
+
+    fireEvent.click(
+      within(displayGroup).getByRole("button", { name: /Instrument Serif/ })
+    );
+    fireEvent.click(within(bodyGroup).getByRole("button", { name: /Inter/ }));
+    fireEvent.click(screen.getByRole("button", { name: /宽松/ }));
+
+    expect(screen.getByLabelText("标题字体 Instrument Serif")).toBeTruthy();
+    expect(screen.getByLabelText("正文字体 Inter")).toBeTruthy();
+    expect(screen.getByLabelText("字号缩放 宽松")).toBeTruthy();
   });
 
   it("toggles coding group visibility from settings", async () => {
