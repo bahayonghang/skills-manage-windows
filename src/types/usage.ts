@@ -51,6 +51,16 @@ export interface RefreshSummary {
   scannedAtMs: number;
 }
 
+export interface UsageRefreshResult {
+  summary: RefreshSummary;
+  overview: UsageOverview;
+  recent: SkillCall[];
+  providers: ProviderHealth[];
+  scope: UsageScopeInfo;
+  usedCachedData: boolean;
+  refreshError: string | null;
+}
+
 export interface SkillUsageDetail {
   skill: string;
   count: number;
@@ -66,6 +76,9 @@ export interface UsageScopeInfo {
   targetId: string;
   label: string;
   isRemote: boolean;
-  /** 远程 target 是否能成功连接；Local 时永远为 false */
+  /**
+   * 远程 target 是否可达；显式 refresh 返回权威值。
+   * 普通只读 getter 为避免额外 SSH/WSL 建连，可能对远程乐观返回 true。
+   */
   remoteReachable: boolean;
 }

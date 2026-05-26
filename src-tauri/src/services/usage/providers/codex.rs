@@ -17,7 +17,6 @@ use async_trait::async_trait;
 use regex::Regex;
 use serde_json::Value;
 
-use crate::services::usage::fs_backend::FsBackend;
 use crate::services::usage::providers::claude_code; // 复用 parse_timestamp 同形态
 use crate::services::usage::{Scope, SkillCall, UsageProvider};
 
@@ -86,26 +85,20 @@ impl UsageProvider for CodexProvider {
 
         let builtins: HashSet<&str> = BUILTINS.iter().copied().collect();
         let mut calls: Vec<SkillCall> = Vec::new();
+        let paths = backend.walk_jsonl(&sessions_dir).await?;
+        let content_by_path = backend.read_many_to_strings(&paths).await?;
 
-        for path in backend.walk_jsonl(&sessions_dir).await? {
-            parse_session(backend.as_ref(), &path, &builtins, &mut calls).await;
+        for path in paths {
+            if let Some(content) = content_by_path.get(&path) {
+                parse_session_content(content, &builtins, &mut calls);
+            }
         }
 
         Ok(calls)
     }
 }
 
-async fn parse_session(
-    backend: &dyn FsBackend,
-    path: &str,
-    builtins: &HashSet<&str>,
-    calls: &mut Vec<SkillCall>,
-) {
-    let content = match backend.read_to_string(path).await {
-        Ok(c) => c,
-        Err(_) => return,
-    };
-
+fn parse_session_content(content: &str, builtins: &HashSet<&str>, calls: &mut Vec<SkillCall>) {
     let mut project = String::new();
     let mut session_id = String::new();
     let re = name_re();

@@ -25,11 +25,21 @@ export function useUsageBootstrap() {
       void refresh(false);
     }
     // 订阅 active target 切换事件——切换后 store 自动 evict + reload
+    let disposed = false;
     let unlistenFn: (() => void) | null = null;
     void subscribeTargetChanged().then((u) => {
+      if (disposed) {
+        try {
+          u();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
       unlistenFn = u;
     });
     return () => {
+      disposed = true;
       if (unlistenFn) {
         try {
           unlistenFn();

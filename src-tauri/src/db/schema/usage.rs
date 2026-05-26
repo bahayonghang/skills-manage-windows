@@ -65,6 +65,22 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_calls_target_ts
+         ON skill_calls(target_id, timestamp_ms)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_calls_target_skill_ts
+         ON skill_calls(target_id, skill, timestamp_ms)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     // skill_call_providers：每个 (target, provider) 的最近健康状态。
     // call_count 冗余存以避免「打开 Skill Usage 页时再 COUNT」抖动。
     sqlx::query(

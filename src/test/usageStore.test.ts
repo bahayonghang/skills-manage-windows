@@ -5,6 +5,14 @@ import { useUsageStore } from "../stores/usageStore";
 import { useTargetStore } from "../stores/targetStore";
 import { useUsageBootstrap } from "../pages/skillUsageBindings";
 
+vi.mock("sonner", () => ({
+  toast: {
+    info: vi.fn(),
+    error: vi.fn(),
+    success: vi.fn(),
+  },
+}));
+
 vi.mock("@/lib/tauri", () => ({
   invoke: vi.fn(),
   listen: vi.fn(),
@@ -12,9 +20,11 @@ vi.mock("@/lib/tauri", () => ({
 }));
 
 import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { toast } from "sonner";
 
 const invokeMock = vi.mocked(invoke);
 const runtimeMock = vi.mocked(isTauriRuntime);
+const toastInfoMock = vi.mocked(toast.info);
 const initialActions = {
   refresh: useUsageStore.getState().refresh,
   subscribeTargetChanged: useUsageStore.getState().subscribeTargetChanged,
@@ -38,6 +48,7 @@ beforeEach(() => {
   invokeMock.mockReset();
   runtimeMock.mockReset();
   runtimeMock.mockReturnValue(true);
+  toastInfoMock.mockReset();
   useUsageStore.setState({
     overview: null,
     recent: [],
@@ -57,47 +68,133 @@ beforeEach(() => {
 });
 
 describe("usageStore", () => {
-  it("refresh dispatches usage_refresh + 4 follow-up loads", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "usage_refresh") {
-        return {
-          cached: false,
-          callsWritten: 4,
-          providersAvailable: 1,
-          scannedAtMs: 1700000000000,
-        };
-      }
-      if (cmd === "usage_get_overview") {
-        return overviewFixture();
-      }
-      if (cmd === "usage_get_recent") return [];
-      if (cmd === "usage_get_providers") return [];
-      if (cmd === "usage_get_scope_info") {
-        return {
-          targetId: "local",
-          label: "Local",
-          isRemote: false,
-          remoteReachable: false,
-        };
-      }
-      throw new Error(`unexpected command: ${cmd}`);
+  it("refresh uses the single usage_refresh payload and stores all returned panels", async () => {
+    invokeMock.mockResolvedValue({
+      summary: {
+        cached: false,
+        callsWritten: 4,
+        providersAvailable: 1,
+        scannedAtMs: 1700000000000,
+      },
+      overview: overviewFixture(),
+      recent: [],
+      providers: [],
+      scope: {
+        targetId: "local",
+        label: "Local",
+        isRemote: false,
+        remoteReachable: false,
+      },
+      usedCachedData: false,
+      refreshError: null,
     });
 
-    const summary = await useUsageStore.getState().refresh(true);
+    const result = await useUsageStore.getState().refresh(true);
 
-    expect(summary?.callsWritten).toBe(4);
+    expect(result?.summary.callsWritten).toBe(4);
     expect(invokeMock).toHaveBeenCalledWith("usage_refresh", { force: true });
-    expect(invokeMock).toHaveBeenCalledWith("usage_get_overview", {
-      topSkillsLimit: 50,
-    });
-    expect(invokeMock).toHaveBeenCalledWith("usage_get_recent", { limit: 20 });
-    expect(invokeMock).toHaveBeenCalledWith("usage_get_providers");
-    expect(invokeMock).toHaveBeenCalledWith("usage_get_scope_info");
+    expect(invokeMock).toHaveBeenCalledTimes(1);
 
     const state = useUsageStore.getState();
     expect(state.overview?.kpis.totalCalls).toBe(4);
     expect(state.refreshing).toBe(false);
-    expect(state.lastRefreshMs).not.toBeNull();
+    expect(state.lastRefreshMs).toBe(1700000000000);
+  });
+
+  it("deduplicates concurrent refresh calls for the same active target", async () => {
+    type RefreshPayload = {
+      summary: {
+        cached: boolean;
+        callsWritten: number;
+        providersAvailable: number;
+        scannedAtMs: number;
+      };
+      overview: ReturnType<typeof overviewFixture>;
+      recent: [];
+      providers: [];
+      scope: {
+        targetId: string;
+        label: string;
+        isRemote: boolean;
+        remoteReachable: boolean;
+      };
+      usedCachedData: boolean;
+      refreshError: null;
+    };
+    let resolveRefresh: (value: RefreshPayload) => void = () => {
+      throw new Error("refresh resolver missing");
+    };
+    invokeMock.mockImplementation(
+      () =>
+        new Promise<RefreshPayload>((resolve) => {
+          resolveRefresh = resolve;
+        })
+    );
+
+    const first = useUsageStore.getState().refresh(false);
+    const second = useUsageStore.getState().refresh(true);
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(second).not.toBeNull();
+
+    resolveRefresh({
+      summary: {
+        cached: false,
+        callsWritten: 4,
+        providersAvailable: 1,
+        scannedAtMs: 1700000000000,
+      },
+      overview: overviewFixture(),
+      recent: [],
+      providers: [],
+      scope: {
+        targetId: "local",
+        label: "Local",
+        isRemote: false,
+        remoteReachable: false,
+      },
+      usedCachedData: false,
+      refreshError: null,
+    });
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(firstResult?.summary.callsWritten).toBe(4);
+    expect(secondResult?.summary.callsWritten).toBe(4);
+  });
+
+  it("keeps cached payload on remote refresh failure and shows cached-data toast", async () => {
+    invokeMock.mockResolvedValue({
+      summary: {
+        cached: true,
+        callsWritten: 0,
+        providersAvailable: 0,
+        scannedAtMs: 1700000000000,
+      },
+      overview: overviewFixture(),
+      recent: [],
+      providers: [],
+      scope: {
+        targetId: "ssh-prod",
+        label: "alice@prod",
+        isRemote: true,
+        remoteReachable: false,
+      },
+      usedCachedData: true,
+      refreshError: "ssh timeout",
+    });
+    useTargetStore.setState({
+      targets: [{ id: "ssh-prod", kind: "ssh", label: "alice@prod", isActive: true }],
+      activeTarget: { id: "ssh-prod", kind: "ssh", label: "alice@prod", isActive: true },
+    });
+
+    const result = await useUsageStore.getState().refresh(true);
+
+    expect(result?.usedCachedData).toBe(true);
+    expect(result?.refreshError).toContain("ssh timeout");
+    expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(4);
+    expect(useUsageStore.getState().scope?.remoteReachable).toBe(false);
+    expect(useUsageStore.getState().error).toBeNull();
+    expect(toastInfoMock).toHaveBeenCalledTimes(1);
   });
 
   it("refresh writes error on backend failure and stops refreshing", async () => {
@@ -146,6 +243,39 @@ describe("usageStore", () => {
 
     await waitFor(() => expect(refresh).toHaveBeenCalledWith(false));
     expect(subscribeTargetChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("bootstrap cleans up late listener registration after unmount", async () => {
+    let resolveUnlisten: (value: () => void) => void = () => {
+      throw new Error("listener resolver missing");
+    };
+    const unlisten = vi.fn();
+    const subscribeTargetChanged = vi.fn(
+      () =>
+        new Promise<() => void>((resolve) => {
+          resolveUnlisten = resolve;
+        })
+    );
+    useUsageStore.setState({
+      overview: overviewFixture(),
+      recent: [],
+      providers: [],
+      scope: {
+        targetId: "local",
+        label: "Local",
+        isRemote: false,
+        remoteReachable: false,
+      },
+      lastRefreshMs: Date.now(),
+      refresh: vi.fn(async () => null),
+      subscribeTargetChanged,
+    });
+
+    const { unmount } = renderHook(() => useUsageBootstrap());
+    unmount();
+    resolveUnlisten(unlisten);
+
+    await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1));
   });
 
   it("resolveSkillId returns null on backend failure", async () => {

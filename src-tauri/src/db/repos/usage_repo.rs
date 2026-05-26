@@ -7,7 +7,7 @@
 //! 复用主库不能整库替换，所以用事务。
 
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, QueryBuilder, Sqlite};
 
 use crate::db::types::DbPool;
 
@@ -57,6 +57,41 @@ pub struct ProviderScanOutcome {
     pub display_name: String,
     pub available: bool,
     pub call_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageKpisRow {
+    pub total_calls: i64,
+    pub unique_skills: i64,
+    pub unique_projects: i64,
+    pub unique_sources: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DayCountRow {
+    pub date: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillDetailSummaryRow {
+    pub count: i64,
+    pub sessions: i64,
+    pub first_used_ms: i64,
+    pub last_used_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillCountRow {
+    pub skill: String,
+    pub count: i64,
+    pub projects: i64,
+    pub sessions: i64,
+    pub last_used_ms: i64,
 }
 
 /// 原子替换指定 target 的 skill_calls：事务内先 DELETE WHERE target_id=?，
@@ -192,4 +227,181 @@ pub async fn list_recent_calls(
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())
+}
+
+pub async fn get_usage_kpis(pool: &DbPool, target_id: &str) -> Result<UsageKpisRow, String> {
+    sqlx::query_as::<_, UsageKpisRow>(
+        "SELECT
+            COUNT(*) AS total_calls,
+            COUNT(DISTINCT skill) AS unique_skills,
+            COUNT(DISTINCT project) AS unique_projects,
+            COUNT(DISTINCT source) AS unique_sources
+         FROM skill_calls
+         WHERE target_id = ?",
+    )
+    .bind(target_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+pub async fn list_top_skills(
+    pool: &DbPool,
+    target_id: &str,
+    limit: usize,
+) -> Result<Vec<SkillCountRow>, String> {
+    let limit = if limit == 0 { i64::MAX } else { limit as i64 };
+    sqlx::query_as::<_, SkillCountRow>(
+        "SELECT
+            skill,
+            COUNT(*) AS count,
+            COUNT(DISTINCT project) AS projects,
+            COUNT(DISTINCT session_id) AS sessions,
+            MAX(timestamp_ms) AS last_used_ms
+         FROM skill_calls
+         WHERE target_id = ?
+         GROUP BY skill
+         ORDER BY count DESC, last_used_ms DESC, skill ASC
+         LIMIT ?",
+    )
+    .bind(target_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+pub async fn list_daily_counts_since(
+    pool: &DbPool,
+    target_id: &str,
+    cutoff_ms: i64,
+) -> Result<Vec<DayCountRow>, String> {
+    sqlx::query_as::<_, DayCountRow>(
+        "SELECT
+            strftime('%Y-%m-%d', timestamp_ms / 1000, 'unixepoch') AS date,
+            COUNT(*) AS count
+         FROM skill_calls
+         WHERE target_id = ?
+           AND timestamp_ms >= ?
+         GROUP BY date
+         ORDER BY date ASC",
+    )
+    .bind(target_id)
+    .bind(cutoff_ms)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+pub async fn get_skill_detail_summary(
+    pool: &DbPool,
+    target_id: &str,
+    skill: &str,
+) -> Result<Option<SkillDetailSummaryRow>, String> {
+    sqlx::query_as::<_, SkillDetailSummaryRow>(
+        "SELECT
+            COUNT(*) AS count,
+            COUNT(DISTINCT session_id) AS sessions,
+            COALESCE(MIN(timestamp_ms), 0) AS first_used_ms,
+            COALESCE(MAX(timestamp_ms), 0) AS last_used_ms
+         FROM skill_calls
+         WHERE target_id = ?
+           AND skill = ?",
+    )
+    .bind(target_id)
+    .bind(skill)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+pub async fn list_skill_project_counts(
+    pool: &DbPool,
+    target_id: &str,
+    skill: &str,
+) -> Result<Vec<SkillCountRow>, String> {
+    sqlx::query_as::<_, SkillCountRow>(
+        "SELECT
+            project AS skill,
+            COUNT(*) AS count,
+            1 AS projects,
+            0 AS sessions,
+            MAX(timestamp_ms) AS last_used_ms
+         FROM skill_calls
+         WHERE target_id = ?
+           AND skill = ?
+         GROUP BY project
+         ORDER BY count DESC, last_used_ms DESC, skill ASC",
+    )
+    .bind(target_id)
+    .bind(skill)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+pub async fn list_skill_daily_counts_since(
+    pool: &DbPool,
+    target_id: &str,
+    skill: &str,
+    cutoff_ms: i64,
+) -> Result<Vec<DayCountRow>, String> {
+    sqlx::query_as::<_, DayCountRow>(
+        "SELECT
+            strftime('%Y-%m-%d', timestamp_ms / 1000, 'unixepoch') AS date,
+            COUNT(*) AS count
+         FROM skill_calls
+         WHERE target_id = ?
+           AND skill = ?
+           AND timestamp_ms >= ?
+         GROUP BY date
+         ORDER BY date ASC",
+    )
+    .bind(target_id)
+    .bind(skill)
+    .bind(cutoff_ms)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
+pub async fn list_skill_counts_since(
+    pool: &DbPool,
+    target_id: &str,
+    skills: &[String],
+    cutoff_ms: i64,
+) -> Result<Vec<(String, i64)>, String> {
+    if skills.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let mut builder = QueryBuilder::<Sqlite>::new(
+        "SELECT skill, COUNT(*) AS count
+         FROM skill_calls
+         WHERE target_id = ",
+    );
+    builder
+        .push_bind(target_id)
+        .push(" AND timestamp_ms >= ")
+        .push_bind(cutoff_ms)
+        .push(" AND skill IN (");
+
+    {
+        let mut separated = builder.separated(", ");
+        for skill in skills {
+            separated.push_bind(skill);
+        }
+    }
+
+    builder.push(
+        ")
+         GROUP BY skill",
+    );
+
+    let rows = builder
+        .build_query_as::<(String, i64)>()
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
 }

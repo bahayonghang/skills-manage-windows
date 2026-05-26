@@ -52,6 +52,13 @@ fn uuidv7_to_ms(uuid: &str) -> i64 {
 
 pub struct GrokProvider;
 
+struct SessionReadRequest {
+    project: String,
+    session_dir_name: String,
+    updates_path: String,
+    chat_path: String,
+}
+
 impl GrokProvider {
     fn sessions_dir(scope: &Scope) -> String {
         scope.join_home(&[".grok", "sessions"])
@@ -82,6 +89,7 @@ impl UsageProvider for GrokProvider {
         let builtins: HashSet<&str> = BUILTINS.iter().copied().collect();
         let re = cmd_re();
         let mut calls = Vec::new();
+        let mut session_requests = Vec::new();
 
         for proj in backend.list_entries(&sessions_dir).await? {
             if !proj.is_dir {
@@ -107,115 +115,162 @@ impl UsageProvider for GrokProvider {
                 }
                 let session_dir_name = sess.name;
                 let sess_path = scope.join_path(&proj_path, &[&session_dir_name]);
-                let mut seen: HashSet<String> = HashSet::new();
-
-                // Source 1: updates.jsonl
                 let updates = scope.join_path(&sess_path, &["updates.jsonl"]);
-                if backend.exists(&updates).await {
-                    if let Ok(content) = backend.read_to_string(&updates).await {
-                        for line in content.lines() {
-                            if line.trim().is_empty() {
-                                continue;
-                            }
-                            let record: Value = match serde_json::from_str(line) {
-                                Ok(v) => v,
-                                Err(_) => continue,
-                            };
-
-                            let update = &record["params"]["update"];
-                            if update["sessionUpdate"].as_str() != Some("user_message_chunk") {
-                                continue;
-                            }
-                            let mc = &update["content"];
-                            if mc["type"].as_str() != Some("text") {
-                                continue;
-                            }
-                            let text = mc["text"].as_str().unwrap_or("");
-
-                            for caps in re.captures_iter(text) {
-                                let skill = &caps[1];
-                                if builtins.contains(skill) {
-                                    continue;
-                                }
-                                seen.insert(skill.to_string());
-
-                                // Grok timestamp 是秒（小数），换算到毫秒
-                                let ts = record["timestamp"]
-                                    .as_f64()
-                                    .map(|f| (f * 1000.0) as i64)
-                                    .or_else(|| record["timestamp"].as_i64().map(|n| n * 1000))
-                                    .unwrap_or(0);
-
-                                calls.push(SkillCall {
-                                    skill: skill.to_string(),
-                                    timestamp_ms: ts,
-                                    project: project.clone(),
-                                    session_id: record["params"]["sessionId"]
-                                        .as_str()
-                                        .unwrap_or(&session_dir_name)
-                                        .to_string(),
-                                    source: SOURCE.into(),
-                                });
-                            }
-                        }
-                    }
-                }
-
-                // Source 2: chat_history.jsonl
                 let chat = scope.join_path(&sess_path, &["chat_history.jsonl"]);
-                if backend.exists(&chat).await {
-                    if let Ok(content) = backend.read_to_string(&chat).await {
-                        let session_ts = uuidv7_to_ms(&session_dir_name);
+                session_requests.push(SessionReadRequest {
+                    project: project.clone(),
+                    session_dir_name,
+                    updates_path: updates,
+                    chat_path: chat,
+                });
+            }
+        }
 
-                        for line in content.lines() {
-                            if line.trim().is_empty() || !line.contains("command-name") {
-                                continue;
-                            }
-                            let record: Value = match serde_json::from_str(line) {
-                                Ok(v) => v,
-                                Err(_) => continue,
-                            };
-                            if record["type"].as_str() != Some("user") {
-                                continue;
-                            }
+        let mut file_paths = Vec::with_capacity(session_requests.len() * 2);
+        for request in &session_requests {
+            file_paths.push(request.updates_path.clone());
+            file_paths.push(request.chat_path.clone());
+        }
+        let content_by_path = backend.read_many_to_strings(&file_paths).await?;
 
-                            let text = match &record["content"] {
-                                Value::String(s) => s.clone(),
-                                Value::Array(arr) => arr
-                                    .iter()
-                                    .filter_map(|p| p["text"].as_str())
-                                    .collect::<Vec<_>>()
-                                    .join(""),
-                                _ => continue,
-                            };
-
-                            // Subagent replay 跳过
-                            if text.contains("<background_context>") {
-                                continue;
-                            }
-
-                            for caps in re.captures_iter(&text) {
-                                let skill = caps[1].to_string();
-                                if builtins.contains(skill.as_str()) || seen.contains(&skill) {
-                                    continue;
-                                }
-                                seen.insert(skill.clone());
-
-                                calls.push(SkillCall {
-                                    skill,
-                                    timestamp_ms: session_ts,
-                                    project: project.clone(),
-                                    session_id: session_dir_name.clone(),
-                                    source: SOURCE.into(),
-                                });
-                            }
-                        }
-                    }
-                }
+        for request in session_requests {
+            let mut seen: HashSet<String> = HashSet::new();
+            if let Some(content) = content_by_path.get(&request.updates_path) {
+                collect_from_updates_content(
+                    content,
+                    &request.project,
+                    &request.session_dir_name,
+                    &builtins,
+                    re,
+                    &mut seen,
+                    &mut calls,
+                );
+            }
+            if let Some(content) = content_by_path.get(&request.chat_path) {
+                collect_from_chat_content(
+                    content,
+                    &request.project,
+                    &request.session_dir_name,
+                    &builtins,
+                    re,
+                    &mut seen,
+                    &mut calls,
+                );
             }
         }
 
         Ok(calls)
+    }
+}
+
+fn collect_from_updates_content(
+    content: &str,
+    project: &str,
+    session_dir_name: &str,
+    builtins: &HashSet<&str>,
+    re: &Regex,
+    seen: &mut HashSet<String>,
+    calls: &mut Vec<SkillCall>,
+) {
+    for line in content.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let record: Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let update = &record["params"]["update"];
+        if update["sessionUpdate"].as_str() != Some("user_message_chunk") {
+            continue;
+        }
+        let mc = &update["content"];
+        if mc["type"].as_str() != Some("text") {
+            continue;
+        }
+        let text = mc["text"].as_str().unwrap_or("");
+
+        for caps in re.captures_iter(text) {
+            let skill = caps[1].to_string();
+            if builtins.contains(skill.as_str()) || !seen.insert(skill.clone()) {
+                continue;
+            }
+
+            // Grok timestamp 是秒（小数），换算到毫秒
+            let ts = record["timestamp"]
+                .as_f64()
+                .map(|f| (f * 1000.0) as i64)
+                .or_else(|| record["timestamp"].as_i64().map(|n| n * 1000))
+                .unwrap_or(0);
+
+            calls.push(SkillCall {
+                skill,
+                timestamp_ms: ts,
+                project: project.to_string(),
+                session_id: record["params"]["sessionId"]
+                    .as_str()
+                    .unwrap_or(session_dir_name)
+                    .to_string(),
+                source: SOURCE.into(),
+            });
+        }
+    }
+}
+
+fn collect_from_chat_content(
+    content: &str,
+    project: &str,
+    session_dir_name: &str,
+    builtins: &HashSet<&str>,
+    re: &Regex,
+    seen: &mut HashSet<String>,
+    calls: &mut Vec<SkillCall>,
+) {
+    let session_ts = uuidv7_to_ms(session_dir_name);
+
+    for line in content.lines() {
+        if line.trim().is_empty() || !line.contains("command-name") {
+            continue;
+        }
+        let record: Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if record["type"].as_str() != Some("user") {
+            continue;
+        }
+
+        let text = match &record["content"] {
+            Value::String(s) => s.clone(),
+            Value::Array(arr) => arr
+                .iter()
+                .filter_map(|p| p["text"].as_str())
+                .collect::<Vec<_>>()
+                .join(""),
+            _ => continue,
+        };
+
+        // Subagent replay 跳过
+        if text.contains("<background_context>") {
+            continue;
+        }
+
+        for caps in re.captures_iter(&text) {
+            let skill = caps[1].to_string();
+            if builtins.contains(skill.as_str()) || seen.contains(&skill) {
+                continue;
+            }
+            seen.insert(skill.clone());
+
+            calls.push(SkillCall {
+                skill,
+                timestamp_ms: session_ts,
+                project: project.to_string(),
+                session_id: session_dir_name.to_string(),
+                source: SOURCE.into(),
+            });
+        }
     }
 }
 

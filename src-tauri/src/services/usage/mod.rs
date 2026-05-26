@@ -321,16 +321,39 @@ pub async fn build_overview(
     target_id: &str,
     top_skills_limit: usize,
 ) -> Result<aggregate::UsageOverview, String> {
-    let rows = db::list_calls_for_target(pool, target_id).await?;
-    let kpis = aggregate::kpis_from_rows(&rows);
-    let top_skills = aggregate::top_skills_from_rows(&rows, top_skills_limit);
-    let heatmap = aggregate::heatmap_grid_16w(&rows, Utc::now().timestamp_millis());
+    let kpis_row = db::get_usage_kpis(pool, target_id).await?;
+    let top_skill_rows = db::list_top_skills(pool, target_id, top_skills_limit).await?;
+    let cutoff_ms = Utc::now().timestamp_millis() - (16 * 7 * 86_400_000);
+    let day_rows = db::list_daily_counts_since(pool, target_id, cutoff_ms).await?;
     let last_scan_ms = db::get_last_scan_ms(pool, target_id).await?;
 
     Ok(aggregate::UsageOverview {
-        kpis,
-        top_skills,
-        heatmap,
+        kpis: aggregate::UsageKpis {
+            total_calls: kpis_row.total_calls,
+            unique_skills: kpis_row.unique_skills,
+            unique_projects: kpis_row.unique_projects,
+            unique_sources: kpis_row.unique_sources,
+        },
+        top_skills: top_skill_rows
+            .into_iter()
+            .map(|row| aggregate::SkillCount {
+                skill: row.skill,
+                count: row.count,
+                projects: row.projects,
+                sessions: row.sessions,
+                last_used_ms: row.last_used_ms,
+            })
+            .collect(),
+        heatmap: aggregate::heatmap_grid_16w_from_daily_counts(
+            &day_rows
+                .into_iter()
+                .map(|row| aggregate::DayCount {
+                    date: row.date,
+                    count: row.count,
+                })
+                .collect::<Vec<_>>(),
+            Utc::now().timestamp_millis(),
+        ),
         last_scan_ms,
     })
 }

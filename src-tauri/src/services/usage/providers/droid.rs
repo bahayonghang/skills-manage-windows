@@ -50,71 +50,74 @@ impl UsageProvider for DroidProvider {
 
         let mut calls = Vec::new();
         let re = active_re();
+        let paths = backend.walk_jsonl(&sessions_dir).await?;
+        let content_by_path = backend.read_many_to_strings(&paths).await?;
 
-        for path in backend.walk_jsonl(&sessions_dir).await? {
-            let content = match backend.read_to_string(&path).await {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-
-            let mut session_id = String::new();
-            let mut project = String::new();
-
-            for line in content.lines() {
-                if line.trim().is_empty() {
-                    continue;
-                }
-                let entry: Value = match serde_json::from_str(line) {
-                    Ok(v) => v,
-                    Err(_) => continue,
-                };
-
-                if entry["type"].as_str() == Some("session_start") {
-                    session_id = entry["id"].as_str().unwrap_or("").to_string();
-                    if let Some(cwd) = entry["cwd"].as_str() {
-                        project = cwd.to_string();
-                    }
-                    continue;
-                }
-                if entry["type"].as_str() != Some("message") {
-                    continue;
-                }
-
-                let parts = match entry["message"]["content"].as_array() {
-                    Some(a) => a,
-                    None => continue,
-                };
-
-                for part in parts {
-                    if part["type"].as_str() != Some("tool_result") {
-                        continue;
-                    }
-                    let text = part["content"].as_str().unwrap_or("");
-                    // 一次 tool_result 可能激活多个 skill，必须 captures_iter 取完
-                    for caps in re.captures_iter(text) {
-                        let skill = caps[1].to_string();
-
-                        let ts = match &entry["timestamp"] {
-                            Value::String(s) => chrono::DateTime::parse_from_rfc3339(s)
-                                .map(|d| d.timestamp_millis())
-                                .unwrap_or(0),
-                            Value::Number(n) => n.as_i64().unwrap_or(0),
-                            _ => 0,
-                        };
-
-                        calls.push(SkillCall {
-                            skill,
-                            timestamp_ms: ts,
-                            project: project.clone(),
-                            session_id: session_id.clone(),
-                            source: SOURCE.into(),
-                        });
-                    }
-                }
+        for path in paths {
+            if let Some(content) = content_by_path.get(&path) {
+                collect_from_session_content(content, re, &mut calls);
             }
         }
 
         Ok(calls)
+    }
+}
+
+fn collect_from_session_content(content: &str, re: &Regex, calls: &mut Vec<SkillCall>) {
+    let mut session_id = String::new();
+    let mut project = String::new();
+
+    for line in content.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let entry: Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        if entry["type"].as_str() == Some("session_start") {
+            session_id = entry["id"].as_str().unwrap_or("").to_string();
+            if let Some(cwd) = entry["cwd"].as_str() {
+                project = cwd.to_string();
+            }
+            continue;
+        }
+        if entry["type"].as_str() != Some("message") {
+            continue;
+        }
+
+        let parts = match entry["message"]["content"].as_array() {
+            Some(a) => a,
+            None => continue,
+        };
+
+        for part in parts {
+            if part["type"].as_str() != Some("tool_result") {
+                continue;
+            }
+            let text = part["content"].as_str().unwrap_or("");
+            // 一次 tool_result 可能激活多个 skill，必须 captures_iter 取完
+            for caps in re.captures_iter(text) {
+                let skill = caps[1].to_string();
+
+                let ts = match &entry["timestamp"] {
+                    Value::String(s) => chrono::DateTime::parse_from_rfc3339(s)
+                        .map(|d| d.timestamp_millis())
+                        .unwrap_or(0),
+                    Value::Number(n) => n.as_i64().unwrap_or(0),
+                    _ => 0,
+                };
+
+                calls.push(SkillCall {
+                    skill,
+                    timestamp_ms: ts,
+                    project: project.clone(),
+                    session_id: session_id.clone(),
+                    source: SOURCE.into(),
+                });
+            }
+        }
     }
 }
 

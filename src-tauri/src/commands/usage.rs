@@ -29,59 +29,43 @@ use crate::services::usage::{
 use crate::targets::{connect_remote_target, ActiveTarget};
 use crate::AppState;
 
-/// 当前 Usage 作用域。远程连接失败时保留 active target id，不回退到 Local，
-/// 让读命令返回空的远程形状并由 UI 显示 unreachable banner。
-#[derive(Debug)]
-enum CurrentUsageScope {
-    Reachable(Scope),
-    RemoteUnavailable { target_id: String },
+#[derive(Debug, Clone)]
+struct ActiveUsageTarget {
+    active: ActiveTarget,
+    target_id: String,
+    label: String,
+    is_remote: bool,
 }
 
-impl CurrentUsageScope {
-    fn target_id(&self) -> String {
-        match self {
-            CurrentUsageScope::Reachable(scope) => scope.target_id(),
-            CurrentUsageScope::RemoteUnavailable { target_id } => target_id.clone(),
-        }
-    }
-
-    fn remote_unavailable(&self) -> bool {
-        matches!(self, CurrentUsageScope::RemoteUnavailable { .. })
-    }
-}
-
-async fn current_scope(state: &State<'_, AppState>) -> Result<CurrentUsageScope, String> {
+async fn active_usage_target(state: &State<'_, AppState>) -> Result<ActiveUsageTarget, String> {
     let active = state.targets.active_target(&state.db).await?;
-    match active {
-        ActiveTarget::Local => Ok(CurrentUsageScope::Reachable(Scope::Local)),
-        remote @ (ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_)) => {
-            let target_id = remote.id().to_string();
-            let remote_home = remote.remote_home().unwrap_or("/").to_string();
-            match connect_remote_target(&remote).await {
-                Ok(connection) => Ok(CurrentUsageScope::Reachable(Scope::Remote {
-                    target_id,
-                    remote_home,
-                    connection: Arc::new(connection),
-                })),
-                Err(error) => {
-                    tracing::warn!(
-                        target_id = %target_id,
-                        error = %error,
-                        "Skill Usage: failed to connect remote target; returning empty remote usage scope"
-                    );
-                    Ok(CurrentUsageScope::RemoteUnavailable { target_id })
-                }
-            }
-        }
+    Ok(ActiveUsageTarget {
+        target_id: active.id().to_string(),
+        label: active.label().to_string(),
+        is_remote: active.is_remote_like(),
+        active,
+    })
+}
+
+fn scope_info_for_target(target: &ActiveUsageTarget, remote_reachable: Option<bool>) -> UsageScopeInfo {
+    UsageScopeInfo {
+        target_id: target.target_id.clone(),
+        label: target.label.clone(),
+        is_remote: target.is_remote,
+        remote_reachable: if target.is_remote {
+            remote_reachable.unwrap_or(true)
+        } else {
+            false
+        },
     }
 }
 
-fn empty_overview() -> UsageOverview {
-    UsageOverview {
-        kpis: usage::aggregate::UsageKpis::default(),
-        top_skills: vec![],
-        heatmap: usage::aggregate::heatmap_grid_16w(&[], Utc::now().timestamp_millis()),
-        last_scan_ms: None,
+fn cached_fallback_summary(last_scan_ms: Option<i64>) -> RefreshSummary {
+    RefreshSummary {
+        cached: last_scan_ms.is_some(),
+        calls_written: 0,
+        providers_available: 0,
+        scanned_at_ms: last_scan_ms.unwrap_or(0),
     }
 }
 
@@ -97,20 +81,126 @@ fn empty_skill_detail(skill: String) -> SkillUsageDetail {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageRefreshResult {
+    pub summary: RefreshSummary,
+    pub overview: UsageOverview,
+    pub recent: Vec<SkillCall>,
+    pub providers: Vec<ProviderHealth>,
+    pub scope: UsageScopeInfo,
+    pub used_cached_data: bool,
+    pub refresh_error: Option<String>,
+}
+
+async fn build_refresh_page(
+    state: &State<'_, AppState>,
+    target_id: &str,
+    summary: RefreshSummary,
+    scope: UsageScopeInfo,
+    used_cached_data: bool,
+    refresh_error: Option<String>,
+) -> Result<UsageRefreshResult, String> {
+    let overview = usage::build_overview(&state.db, target_id, 50).await?;
+    let recent = usage::rows_to_skill_calls(
+        crate::db::list_recent_calls(&state.db, target_id, 20).await?,
+    );
+    let providers = usage::list_provider_health(&state.db, target_id).await?;
+
+    Ok(UsageRefreshResult {
+        summary,
+        overview,
+        recent,
+        providers,
+        scope,
+        used_cached_data,
+        refresh_error,
+    })
+}
+
 #[tauri::command]
 pub async fn usage_refresh(
     state: State<'_, AppState>,
     force: bool,
-) -> Result<RefreshSummary, String> {
-    let scope = current_scope(&state).await?;
-    match scope {
-        CurrentUsageScope::Reachable(scope) => usage::refresh(&state.db, &scope, force).await,
-        CurrentUsageScope::RemoteUnavailable { .. } => Ok(RefreshSummary {
-            cached: false,
-            calls_written: 0,
-            providers_available: 0,
-            scanned_at_ms: Utc::now().timestamp_millis(),
-        }),
+) -> Result<UsageRefreshResult, String> {
+    let target = active_usage_target(&state).await?;
+
+    if target.is_remote && !force {
+        if let Some(last_scan_ms) = crate::db::get_last_scan_ms(&state.db, &target.target_id).await?
+        {
+            let now_ms = Utc::now().timestamp_millis();
+            if now_ms - last_scan_ms < usage::CACHE_TTL_MS {
+                return build_refresh_page(
+                    &state,
+                    &target.target_id,
+                    RefreshSummary {
+                        cached: true,
+                        calls_written: 0,
+                        providers_available: 0,
+                        scanned_at_ms: last_scan_ms,
+                    },
+                    scope_info_for_target(&target, None),
+                    true,
+                    None,
+                )
+                .await;
+            }
+        }
+    }
+
+    match &target.active {
+        ActiveTarget::Local => {
+            let summary = usage::refresh(&state.db, &Scope::Local, force).await?;
+            build_refresh_page(
+                &state,
+                &target.target_id,
+                summary.clone(),
+                scope_info_for_target(&target, Some(false)),
+                summary.cached,
+                None,
+            )
+            .await
+        }
+        remote @ (ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_)) => {
+            let remote_home = remote.remote_home().unwrap_or("/").to_string();
+            match connect_remote_target(remote).await {
+                Ok(connection) => {
+                    let scope = Scope::Remote {
+                        target_id: target.target_id.clone(),
+                        remote_home,
+                        connection: Arc::new(connection),
+                    };
+                    let summary = usage::refresh(&state.db, &scope, force).await?;
+                    build_refresh_page(
+                        &state,
+                        &target.target_id,
+                        summary.clone(),
+                        scope_info_for_target(&target, Some(true)),
+                        summary.cached,
+                        None,
+                    )
+                    .await
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        target_id = %target.target_id,
+                        error = %error,
+                        "Skill Usage: remote refresh failed; returning cached local usage data"
+                    );
+                    let last_scan_ms =
+                        crate::db::get_last_scan_ms(&state.db, &target.target_id).await?;
+                    build_refresh_page(
+                        &state,
+                        &target.target_id,
+                        cached_fallback_summary(last_scan_ms),
+                        scope_info_for_target(&target, Some(false)),
+                        last_scan_ms.is_some(),
+                        Some(error.to_string()),
+                    )
+                    .await
+                }
+            }
+        }
     }
 }
 
@@ -119,13 +209,9 @@ pub async fn usage_get_overview(
     state: State<'_, AppState>,
     top_skills_limit: Option<usize>,
 ) -> Result<UsageOverview, String> {
-    let scope = current_scope(&state).await?;
-    if scope.remote_unavailable() {
-        return Ok(empty_overview());
-    }
-    let target_id = scope.target_id();
+    let target = active_usage_target(&state).await?;
     let limit = top_skills_limit.unwrap_or(50);
-    usage::build_overview(&state.db, &target_id, limit).await
+    usage::build_overview(&state.db, &target.target_id, limit).await
 }
 
 #[tauri::command]
@@ -133,13 +219,9 @@ pub async fn usage_get_recent(
     state: State<'_, AppState>,
     limit: Option<i64>,
 ) -> Result<Vec<SkillCall>, String> {
-    let scope = current_scope(&state).await?;
-    if scope.remote_unavailable() {
-        return Ok(vec![]);
-    }
-    let target_id = scope.target_id();
     let n = limit.unwrap_or(20).max(1);
-    let rows = crate::db::list_recent_calls(&state.db, &target_id, n).await?;
+    let target = active_usage_target(&state).await?;
+    let rows = crate::db::list_recent_calls(&state.db, &target.target_id, n).await?;
     Ok(usage::rows_to_skill_calls(rows))
 }
 
@@ -147,12 +229,8 @@ pub async fn usage_get_recent(
 pub async fn usage_get_providers(
     state: State<'_, AppState>,
 ) -> Result<Vec<ProviderHealth>, String> {
-    let scope = current_scope(&state).await?;
-    if scope.remote_unavailable() {
-        return Ok(vec![]);
-    }
-    let target_id = scope.target_id();
-    usage::list_provider_health(&state.db, &target_id).await
+    let target = active_usage_target(&state).await?;
+    usage::list_provider_health(&state.db, &target.target_id).await
 }
 
 /// 单 skill 详情 —— 当 SkillBarChart 没有匹配到中央库 skill_id 时的内嵌备选视图。
@@ -173,73 +251,45 @@ pub async fn usage_get_skill_detail(
     state: State<'_, AppState>,
     skill: String,
 ) -> Result<SkillUsageDetail, String> {
-    let scope = current_scope(&state).await?;
-    if scope.remote_unavailable() {
+    let target = active_usage_target(&state).await?;
+    let summary = crate::db::get_skill_detail_summary(&state.db, &target.target_id, &skill)
+        .await?
+        .unwrap_or_default();
+
+    if summary.count == 0 {
         return Ok(empty_skill_detail(skill));
     }
-    let target_id = scope.target_id();
-    let rows = crate::db::list_calls_for_target(&state.db, &target_id).await?;
-    let filtered: Vec<_> = rows.into_iter().filter(|r| r.skill == skill).collect();
 
-    if filtered.is_empty() {
-        return Ok(SkillUsageDetail {
-            skill,
-            count: 0,
-            sessions: 0,
-            first_used_ms: 0,
-            last_used_ms: 0,
-            by_project: vec![],
-            weekly: vec![],
-        });
-    }
-
-    let count = filtered.len() as i64;
-    let mut sessions = std::collections::HashSet::new();
-    let mut first_used = i64::MAX;
-    let mut last_used = 0i64;
-    for r in &filtered {
-        sessions.insert(r.session_id.clone());
-        first_used = first_used.min(r.timestamp_ms);
-        last_used = last_used.max(r.timestamp_ms);
-    }
-
-    // 按项目计数（复用 top_skills_from_rows 的 bucket 形态：把 project 当 skill 算）
-    let by_project = {
-        let mut m: HashMap<String, (i64, i64)> = HashMap::new();
-        for r in &filtered {
-            let e = m.entry(r.project.clone()).or_insert((0, 0));
-            e.0 += 1;
-            if r.timestamp_ms > e.1 {
-                e.1 = r.timestamp_ms;
-            }
-        }
-        let mut v: Vec<_> = m
+    let by_project = crate::db::list_skill_project_counts(&state.db, &target.target_id, &skill)
+        .await?
+        .into_iter()
+        .map(|row| SkillCount {
+            skill: row.skill,
+            count: row.count,
+            projects: row.projects,
+            sessions: row.sessions,
+            last_used_ms: row.last_used_ms,
+        })
+        .collect();
+    let cutoff_ms = Utc::now().timestamp_millis() - (16 * 7 * 86_400_000);
+    let weekly = usage::aggregate::heatmap_grid_16w_from_daily_counts(
+        &crate::db::list_skill_daily_counts_since(&state.db, &target.target_id, &skill, cutoff_ms)
+            .await?
             .into_iter()
-            .map(|(name, (c, last))| SkillCount {
-                skill: name,
-                count: c,
-                projects: 1,
-                sessions: 0,
-                last_used_ms: last,
+            .map(|row| DayCount {
+                date: row.date,
+                count: row.count,
             })
-            .collect();
-        v.sort_by(|a, b| {
-            b.count
-                .cmp(&a.count)
-                .then(b.last_used_ms.cmp(&a.last_used_ms))
-        });
-        v
-    };
-
-    // 16 周稀疏图：每周一格 count 总和
-    let weekly = usage::aggregate::heatmap_grid_16w(&filtered, Utc::now().timestamp_millis());
+            .collect::<Vec<_>>(),
+        Utc::now().timestamp_millis(),
+    );
 
     Ok(SkillUsageDetail {
         skill,
-        count,
-        sessions: sessions.len() as i64,
-        first_used_ms: first_used,
-        last_used_ms: last_used,
+        count: summary.count,
+        sessions: summary.sessions,
+        first_used_ms: summary.first_used_ms,
+        last_used_ms: summary.last_used_ms,
         by_project,
         weekly,
     })
@@ -256,28 +306,17 @@ pub async fn usage_get_skill_counts(
     if skills.is_empty() {
         return Ok(HashMap::new());
     }
-    let scope = current_scope(&state).await?;
-    if scope.remote_unavailable() {
-        return Ok(skills.into_iter().map(|skill| (skill, 0)).collect());
-    }
-    let target_id = scope.target_id();
-    let rows = crate::db::list_calls_for_target(&state.db, &target_id).await?;
-
+    let target = active_usage_target(&state).await?;
     let cutoff = (Utc::now() - chrono::Duration::days(days as i64)).timestamp_millis();
-    let want: std::collections::HashSet<&str> = skills.iter().map(|s| s.as_str()).collect();
-
     let mut out: HashMap<String, i64> = HashMap::new();
     // 提前用 0 占位，让前端拿到完整 keyset 不用做 fallback
     for s in &skills {
         out.insert(s.clone(), 0);
     }
-    for r in &rows {
-        if r.timestamp_ms < cutoff {
-            continue;
-        }
-        if want.contains(r.skill.as_str()) {
-            *out.entry(r.skill.clone()).or_insert(0) += 1;
-        }
+    for (skill, count) in
+        crate::db::list_skill_counts_since(&state.db, &target.target_id, &skills, cutoff).await?
+    {
+        out.insert(skill, count);
     }
     Ok(out)
 }
@@ -326,28 +365,16 @@ pub struct UsageScopeInfo {
     pub target_id: String,
     pub label: String,
     pub is_remote: bool,
-    /// 远程时是否能成功连接。connect_remote_target 失败时为 false 且
-    /// is_remote=true，让前端区分「连接失败 fallback Local」和「真正在 Local」。
+    /// 远程 reachability。显式 refresh 会返回权威值；只读 getter 为避免额外
+    /// SSH/WSL 建连，会对远程 target 乐观返回 true。
     pub remote_reachable: bool,
 }
 
 #[tauri::command]
 pub async fn usage_get_scope_info(state: State<'_, AppState>) -> Result<UsageScopeInfo, String> {
-    let active = state.targets.active_target(&state.db).await?;
-    let target_id = active.id().to_string();
-    let label = active.label().to_string();
-    let is_remote = active.is_remote_like();
-    let remote_reachable = if is_remote {
-        connect_remote_target(&active).await.is_ok()
-    } else {
-        false
-    };
-    Ok(UsageScopeInfo {
-        target_id,
-        label,
-        is_remote,
-        remote_reachable,
-    })
+    let target = active_usage_target(&state).await?;
+    // 只读 getter 不做 SSH/WSL 建连；显式 refresh 返回权威 reachability。
+    Ok(scope_info_for_target(&target, None))
 }
 
 #[cfg(test)]
@@ -355,23 +382,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn remote_unavailable_scope_keeps_remote_target_id() {
-        let scope = CurrentUsageScope::RemoteUnavailable {
+    fn scope_info_for_remote_read_paths_is_optimistic() {
+        let target = ActiveUsageTarget {
+            active: ActiveTarget::Local,
             target_id: "ssh-prod".to_string(),
+            label: "alice@prod".to_string(),
+            is_remote: true,
         };
 
-        assert_eq!(scope.target_id(), "ssh-prod");
-        assert!(scope.remote_unavailable());
+        let optimistic = scope_info_for_target(&target, None);
+        assert!(optimistic.remote_reachable);
+
+        let unreachable = scope_info_for_target(&target, Some(false));
+        assert!(!unreachable.remote_reachable);
     }
 
     #[test]
-    fn empty_remote_shapes_do_not_include_stale_calls() {
-        let overview = empty_overview();
-        assert_eq!(overview.kpis.total_calls, 0);
-        assert!(overview.top_skills.is_empty());
-        assert_eq!(overview.heatmap.len(), 16 * 7);
-        assert!(overview.last_scan_ms.is_none());
+    fn cached_fallback_summary_preserves_last_successful_scan_time() {
+        let summary = cached_fallback_summary(Some(1_700_000_000_000));
+        assert!(summary.cached);
+        assert_eq!(summary.scanned_at_ms, 1_700_000_000_000);
 
+        let empty_summary = cached_fallback_summary(None);
+        assert!(!empty_summary.cached);
+        assert_eq!(empty_summary.scanned_at_ms, 0);
+    }
+
+    #[test]
+    fn empty_skill_detail_returns_zero_shape() {
         let detail = empty_skill_detail("review".to_string());
         assert_eq!(detail.skill, "review");
         assert_eq!(detail.count, 0);

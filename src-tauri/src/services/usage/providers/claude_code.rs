@@ -182,24 +182,23 @@ async fn collect_from_projects(
 ) -> Result<(), String> {
     // 顶层是按 cwd 编码的目录，一次扫一层进各项目，但内部 jsonl 可能嵌
     // 在 subagents/ 子目录里——所以通过 FsBackend 递归列出 jsonl。
-    for path in backend.walk_jsonl(projects_dir).await? {
-        parse_session_file(backend, &path, builtins, seen, calls).await;
+    let paths = backend.walk_jsonl(projects_dir).await?;
+    let content_by_path = backend.read_many_to_strings(&paths).await?;
+    for path in paths {
+        if let Some(content) = content_by_path.get(&path) {
+            parse_session_file_content(content, &path, builtins, seen, calls);
+        }
     }
     Ok(())
 }
 
-async fn parse_session_file(
-    backend: &dyn FsBackend,
+fn parse_session_file_content(
+    content: &str,
     path: &str,
     builtins: &HashSet<&str>,
     seen: &mut HashSet<String>,
     calls: &mut Vec<SkillCall>,
 ) {
-    let content = match backend.read_to_string(path).await {
-        Ok(c) => c,
-        Err(_) => return,
-    };
-
     let session_id = file_stem_from_path(path);
 
     // project (cwd) 从首个有 cwd 的行抽出来——比解码目录名靠谱。

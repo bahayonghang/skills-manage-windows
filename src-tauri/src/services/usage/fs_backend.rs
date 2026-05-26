@@ -14,12 +14,17 @@
 //! - `walk_jsonl` 走 `find <root> -name '*.jsonl' -type f`，
 //!   一次 SSH round trip 拿全列表，避免每个目录单独 list。
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::targets::ConnectedRemoteTarget;
+use crate::targets::{shell_quote, ConnectedRemoteTarget};
+
+const PATH_MARKER: &str = "\u{001e}PATH\t";
+const EOF_MARKER: &str = "\u{001f}EOF";
+const REMOTE_READ_CHUNK_SIZE: usize = 64;
 
 /// 简化目录条目：调用方仅关心是否目录与名称。
 #[derive(Debug, Clone)]
@@ -36,6 +41,18 @@ pub trait FsBackend: Send + Sync {
 
     /// 整个文件读成 UTF-8 字符串。读取失败或编码错误返回 Err。
     async fn read_to_string(&self, path: &str) -> Result<String, String>;
+
+    /// 批量读多个 UTF-8 文本文件。默认逐文件读取；Remote backend 会覆盖成
+    /// 单次/分批 SSH 脚本，减少 round trips。
+    async fn read_many_to_strings(&self, paths: &[String]) -> Result<HashMap<String, String>, String> {
+        let mut content_by_path = HashMap::new();
+        for path in paths {
+            if let Ok(content) = self.read_to_string(path).await {
+                content_by_path.insert(path.clone(), content);
+            }
+        }
+        Ok(content_by_path)
+    }
 
     /// 递归列出 root 目录下所有 .jsonl 文件的绝对路径。Local 用 walkdir，
     /// Remote 用 `find -name '*.jsonl' -type f`。
@@ -75,6 +92,16 @@ impl FsBackend for LocalFsBackend {
 
     async fn read_to_string(&self, path: &str) -> Result<String, String> {
         std::fs::read_to_string(path).map_err(|e| format!("local read {}: {}", path, e))
+    }
+
+    async fn read_many_to_strings(&self, paths: &[String]) -> Result<HashMap<String, String>, String> {
+        let mut content_by_path = HashMap::new();
+        for path in paths {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                content_by_path.insert(path.clone(), content);
+            }
+        }
+        Ok(content_by_path)
     }
 
     async fn walk_jsonl(&self, root: &str) -> Result<Vec<String>, String> {
@@ -144,11 +171,25 @@ impl FsBackend for RemoteFsBackend {
         String::from_utf8(bytes).map_err(|e| format!("remote utf8 {}: {}", path, e))
     }
 
+    async fn read_many_to_strings(&self, paths: &[String]) -> Result<HashMap<String, String>, String> {
+        if paths.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut content_by_path = HashMap::new();
+        for chunk in paths.chunks(REMOTE_READ_CHUNK_SIZE) {
+            let script = build_batch_read_script(chunk);
+            let stdout = self.target.run_command(&script).await?;
+            content_by_path.extend(parse_batch_read_output(&stdout));
+        }
+        Ok(content_by_path)
+    }
+
     async fn walk_jsonl(&self, root: &str) -> Result<Vec<String>, String> {
         // `find` 在大多数 *nix 都有；返回每行一个绝对路径
         let cmd = format!(
             "find {} -type f -name '*.jsonl' 2>/dev/null",
-            shell_escape(root)
+            shell_quote(root)
         );
         let stdout = self.target.run_command(&cmd).await.unwrap_or_default();
         Ok(stdout
@@ -185,23 +226,49 @@ impl FsBackend for RemoteFsBackend {
     }
 }
 
-/// 简单 shell 转义：用单引号包裹并将内部单引号 ' → '\'' 转义。
-/// 与 targets/exec.rs 的 shell_quote 等价但避免跨模块依赖私有项。
-fn shell_escape(s: &str) -> String {
-    if s.is_empty() {
-        return "''".to_string();
+fn build_batch_read_script(paths: &[String]) -> String {
+    let mut script = String::from("set -eu\n");
+    script.push_str("for path in");
+    for path in paths {
+        script.push(' ');
+        script.push_str(&shell_quote(path));
     }
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('\'');
-    for ch in s.chars() {
-        if ch == '\'' {
-            out.push_str("'\\''");
-        } else {
-            out.push(ch);
-        }
+    script.push_str("; do\n");
+    script.push_str(&format!("  printf '{}%s\\n' \"$path\"\n", PATH_MARKER));
+    script.push_str("  if [ -r \"$path\" ]; then\n");
+    script.push_str("    cat -- \"$path\"\n");
+    script.push_str("  fi\n");
+    script.push_str(&format!("  printf '{}\\n'\n", EOF_MARKER));
+    script.push_str("done\n");
+    script
+}
+
+fn parse_batch_read_output(output: &str) -> HashMap<String, String> {
+    let mut content_by_path = HashMap::new();
+    let mut remaining = output;
+    while let Some(start) = remaining.find(PATH_MARKER) {
+        let after_marker = &remaining[start + PATH_MARKER.len()..];
+        let Some((path, after_path)) = after_marker.split_once('\n') else {
+            break;
+        };
+        let Some(end) = after_path.find(EOF_MARKER) else {
+            break;
+        };
+        let body = &after_path[..end];
+        content_by_path.insert(path.to_string(), body.to_string());
+        remaining = &after_path[end + EOF_MARKER.len()..];
     }
-    out.push('\'');
-    out
+
+    content_by_path
+}
+
+#[cfg(test)]
+fn encode_batch_read_output(entries: &[(String, String)]) -> String {
+    entries
+        .iter()
+        .map(|(path, content)| format!("{PATH_MARKER}{path}\n{content}{EOF_MARKER}\n"))
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 #[cfg(test)]
@@ -244,9 +311,34 @@ mod tests {
     }
 
     #[test]
-    fn shell_escape_handles_quotes_and_empty() {
-        assert_eq!(shell_escape(""), "''");
-        assert_eq!(shell_escape("plain"), "'plain'");
-        assert_eq!(shell_escape("can't"), "'can'\\''t'");
+    fn build_batch_read_script_quotes_paths() {
+        let script = build_batch_read_script(&["/tmp/demo path.txt".to_string()]);
+        assert!(script.contains("'/tmp/demo path.txt'"));
+        assert!(script.contains(PATH_MARKER));
+        assert!(script.contains(EOF_MARKER));
+    }
+
+    #[test]
+    fn parse_batch_read_output_preserves_special_characters_and_boundaries() {
+        let encoded = encode_batch_read_output(&[
+            (
+                "/tmp/alpha.jsonl".to_string(),
+                "{\"text\":\"line\\twith tab\"}\nsecond line\n".to_string(),
+            ),
+            (
+                "/tmp/beta.jsonl".to_string(),
+                "<skill><name>review</name></skill>\n".to_string(),
+            ),
+        ]);
+        let parsed = parse_batch_read_output(&encoded);
+
+        assert_eq!(
+            parsed.get("/tmp/alpha.jsonl"),
+            Some(&"{\"text\":\"line\\twith tab\"}\nsecond line\n".to_string())
+        );
+        assert_eq!(
+            parsed.get("/tmp/beta.jsonl"),
+            Some(&"<skill><name>review</name></skill>\n".to_string())
+        );
     }
 }

@@ -297,8 +297,16 @@ describe("SkillUsageView ScopeBadge", () => {
       providers: [],
       recent: [],
       overview: {
-        kpis: { totalCalls: 0, uniqueSkills: 0, uniqueProjects: 0, uniqueSources: 0 },
-        topSkills: [],
+        kpis: { totalCalls: 9, uniqueSkills: 2, uniqueProjects: 1, uniqueSources: 1 },
+        topSkills: [
+          {
+            skill: "review",
+            count: 9,
+            projects: 1,
+            sessions: 2,
+            lastUsedMs: Date.now(),
+          },
+        ],
         heatmap: [],
         lastScanMs: null,
       },
@@ -309,5 +317,7 @@ describe("SkillUsageView ScopeBadge", () => {
     expect(badge).toHaveAttribute("data-scope-kind", "remote");
     expect(badge.textContent).toMatch(/alice@prod/);
     expect(screen.getByTestId("remote-unreachable-banner")).toBeInTheDocument();
+    expect(screen.getByText("review")).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/9/);
   });
 });

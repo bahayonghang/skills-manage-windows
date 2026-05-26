@@ -133,21 +133,12 @@ pub fn daily_counts(rows: &[SkillCallRow]) -> Vec<DayCount> {
         .collect()
 }
 
-/// 16 周 × 7 天的热力图密集矩阵：返回 112 个 DayCount，按日期升序。
-/// 没有调用的日期 count=0；保证前端永远拿到完整 16w*7d 网格不用补 0。
-///
-/// 起点：以 `now_ms` 当日所在周的周一为基准，往前推 (16-1)=15 周得到首日。
-/// 这与 skilled `buildHeatmapGrid` 完全一致。
-pub fn heatmap_grid_16w(rows: &[SkillCallRow], now_ms: i64) -> Vec<DayCount> {
+/// 基于已聚合好的每日计数补齐 16 周热力图网格。
+pub fn heatmap_grid_16w_from_daily_counts(days: &[DayCount], now_ms: i64) -> Vec<DayCount> {
     use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
     use std::collections::HashMap;
 
-    let mut day_count: HashMap<String, i64> = HashMap::new();
-    for r in rows {
-        let dt = DateTime::<Utc>::from_timestamp_millis(r.timestamp_ms).unwrap_or_default();
-        let key = dt.format("%Y-%m-%d").to_string();
-        *day_count.entry(key).or_insert(0) += 1;
-    }
+    let day_count: HashMap<&str, i64> = days.iter().map(|d| (d.date.as_str(), d.count)).collect();
 
     let now = DateTime::<Utc>::from_timestamp_millis(now_ms).unwrap_or_default();
     // weekday: Monday=0..Sunday=6（与 skilled 的 `(getUTCDay()+6)%7` 一致）
@@ -159,11 +150,21 @@ pub fn heatmap_grid_16w(rows: &[SkillCallRow], now_ms: i64) -> Vec<DayCount> {
     for i in 0..(16 * 7) {
         let d = start_date + Duration::days(i as i64);
         let key = d.format("%Y-%m-%d").to_string();
-        let count = day_count.get(&key).copied().unwrap_or(0);
+        let count = day_count.get(key.as_str()).copied().unwrap_or(0);
         grid.push(DayCount { date: key, count });
     }
 
     grid
+}
+
+/// 16 周 × 7 天的热力图密集矩阵：返回 112 个 DayCount，按日期升序。
+/// 没有调用的日期 count=0；保证前端永远拿到完整 16w*7d 网格不用补 0。
+///
+/// 起点：以 `now_ms` 当日所在周的周一为基准，往前推 (16-1)=15 周得到首日。
+/// 这与 skilled `buildHeatmapGrid` 完全一致。
+pub fn heatmap_grid_16w(rows: &[SkillCallRow], now_ms: i64) -> Vec<DayCount> {
+    let days = daily_counts(rows);
+    heatmap_grid_16w_from_daily_counts(&days, now_ms)
 }
 
 #[cfg(test)]
