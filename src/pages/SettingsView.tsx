@@ -411,8 +411,8 @@ export function SettingsView() {
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <SettingsSideNav activePageId={activePageId} />
-        <main className="min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6 lg:px-10">
-          <div className="mx-auto max-w-4xl space-y-6">
+        <main className="min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
+          <div className="mx-auto w-full max-w-7xl space-y-6">
             <header className="border-b border-border/80 pb-5">
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-2xl border border-border bg-card text-primary shadow-sm">
@@ -422,7 +422,7 @@ export function SettingsView() {
                   <h2 className="text-2xl font-semibold tracking-tight">
                     {t(activePage.titleKey)}
                   </h2>
-                  <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
                     {t(activePage.descriptionKey)}
                   </p>
                   {!isKnownSettingsSubpath ? (

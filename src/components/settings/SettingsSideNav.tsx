@@ -21,7 +21,7 @@ export function SettingsSideNav({ activePageId }: SettingsSideNavProps) {
       aria-label={t("settings.pages.navAriaLabel")}
       className={cn(
         "shrink-0 border-border/70 bg-card/40",
-        "lg:w-64 lg:border-r lg:bg-transparent",
+        "lg:w-56 lg:border-r lg:bg-transparent xl:w-60 2xl:w-64",
       )}
     >
       <div className="sticky top-0 space-y-1 p-2 lg:top-4 lg:p-4">
@@ -58,7 +58,7 @@ export function SettingsSideNav({ activePageId }: SettingsSideNavProps) {
                 <span className="block truncate font-medium">
                   {t(page.titleKey)}
                 </span>
-                <span className="block truncate text-xs text-muted-foreground">
+                <span className="hidden truncate text-xs text-muted-foreground 2xl:block">
                   {t(page.descriptionKey)}
                 </span>
               </span>

@@ -136,7 +136,7 @@ export function RemoteTargetsSettingsSection({
           </p>
         )}
 
-        <div className="rounded-lg border border-border overflow-hidden">
+        <div className="overflow-hidden rounded-xl border border-border bg-card/35">
           {targets.map((target) => (
             <RemoteTargetRow
               key={target.id}
@@ -168,8 +168,8 @@ export function RemoteTargetsSettingsSection({
           ))}
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-2">
-          <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-4">
+        <div className="grid gap-4 2xl:grid-cols-2">
+          <div className="space-y-4 rounded-xl border border-border/70 bg-muted/20 p-4 xl:p-5">
             <div>
               <div className="text-sm font-medium">{t("targets.addSshTitle")}</div>
               <div className="text-xs text-muted-foreground">
@@ -186,7 +186,7 @@ export function RemoteTargetsSettingsSection({
             />
           </div>
 
-          <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-4">
+          <div className="space-y-4 rounded-xl border border-border/70 bg-muted/20 p-4 xl:p-5">
             <div>
               <div className="text-sm font-medium">{t("targets.addWslTitle")}</div>
               <div className="text-xs text-muted-foreground">
