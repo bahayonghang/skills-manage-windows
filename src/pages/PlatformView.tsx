@@ -15,26 +15,15 @@ import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { BatchDeletePlatformSkillsDialog } from "@/components/platform/BatchDeletePlatformSkillsDialog";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { PlatformGroupedSkillList } from "@/components/platform/PlatformGroupedSkillList";
-import {
-  PlatformTransferActionBar,
-  PlatformTransferRail,
-} from "@/components/platform/PlatformTransferRail";
-import {
-  PlatformSkillSortMenu,
-  PlatformSkillViewMenu,
-} from "@/components/platform/PlatformSkillToolbarMenus";
+import { PlatformTransferActionBar, PlatformTransferRail } from "@/components/platform/PlatformTransferRail";
+import { PlatformSkillSortMenu, PlatformSkillViewMenu } from "@/components/platform/PlatformSkillToolbarMenus";
 import { InstallDialog, type InstallMethod } from "@/components/central/InstallDialog";
 import { BatchInstallCentralSkillsDialog } from "@/components/central/BatchInstallCentralSkillsDialog";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { usePlatformSkillSelection } from "@/hooks/usePlatformSkillSelection";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
-import {
-  createPlatformBatchUninstallRequest,
-  getFailedBatchUninstallActionKeys,
-  getPlatformSkillActionKey,
-  getPlatformSkillRowKey,
-  getPlatformSkillSummaryKeys,
-} from "@/lib/platformBatchActions";
+import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
+import { createPlatformBatchUninstallRequest, getFailedBatchUninstallActionKeys, getPlatformSkillActionKey, getPlatformSkillRowKey, getPlatformSkillSummaryKeys } from "@/lib/platformBatchActions";
 import { formatPathForDisplay } from "@/lib/path";
 import { cn } from "@/lib/utils";
 import { ScannedSkill, SkillWithLinks } from "@/types";
@@ -328,6 +317,11 @@ export function PlatformView() {
     [filteredSkills]
   );
   const aiSummaries = useSkillExplanationSummaries(summarySkillIds, "zh");
+  const skillNamesForUsage = useMemo(
+    () => Array.from(new Set(filteredSkills.map((s) => s.name))),
+    [filteredSkills]
+  );
+  const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
 
   function getAiSummary(skill: ScannedSkill) {
     return (skill.row_id ? aiSummaries[skill.row_id] : undefined) ?? aiSummaries[skill.id];
@@ -542,6 +536,7 @@ export function PlatformView() {
       originKind={skill.source_kind ?? null}
       isReadOnly={skill.is_read_only ?? false}
       publisher={skill.repository?.name}
+      usageBadge={usageCounts?.[skill.name]}
       checkbox={
         !skill.is_read_only
           ? {

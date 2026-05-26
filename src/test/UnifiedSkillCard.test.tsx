@@ -114,4 +114,18 @@ describe("UnifiedSkillCard", () => {
       screen.getByRole("button", { name: "从来源更新 planner" }),
     ).toBeEnabled();
   });
+
+  it("renders usageBadge when count > 0", () => {
+    render(<UnifiedSkillCard name="review" usageBadge={12} />);
+    expect(screen.getByTestId("usage-badge")).toBeInTheDocument();
+    expect(screen.getByText("12×")).toBeInTheDocument();
+  });
+
+  it("hides usageBadge when count is 0 or undefined", () => {
+    const { rerender } = render(<UnifiedSkillCard name="x" usageBadge={0} />);
+    expect(screen.queryByTestId("usage-badge")).not.toBeInTheDocument();
+
+    rerender(<UnifiedSkillCard name="x" />);
+    expect(screen.queryByTestId("usage-badge")).not.toBeInTheDocument();
+  });
 });

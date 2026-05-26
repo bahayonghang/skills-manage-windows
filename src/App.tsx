@@ -54,6 +54,11 @@ const DashboardView = lazy(() =>
     default: DashboardView,
   }))
 );
+const SkillUsageView = lazy(() =>
+  import("@/pages/SkillUsageView").then(({ SkillUsageView }) => ({
+    default: SkillUsageView,
+  }))
+);
 
 function RouteLoadingFallback() {
   const { t } = useTranslation();
@@ -142,6 +147,11 @@ function App() {
         <Route
           path="logs"
           element={lazyPage(<OperationLogsView />)}
+        />
+        {/* Skill Usage — aggregated calls across AI coding tools (skilled-style) */}
+        <Route
+          path="usage"
+          element={lazyPage(<SkillUsageView />)}
         />
         {/* Settings */}
         <Route

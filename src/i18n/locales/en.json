@@ -160,7 +160,38 @@
     "categoryLobster": "Lobster",
     "categoryCoding": "Coding",
     "resizeSidebar": "Resize sidebar",
-    "obsidian": "Obsidian Vaults"
+    "obsidian": "Obsidian Vaults",
+    "skillUsage": "Skill Usage"
+  },
+  "skillUsage": {
+    "title": "Skill Usage",
+    "subtitle": "Aggregated skill calls across local AI coding tool session logs",
+    "refresh": "Refresh",
+    "lastRefreshed": "Refreshed {{time}} ago",
+    "neverRefreshed": "Not scanned yet",
+    "notDetected": "not detected",
+    "kpi": {
+      "calls": "Calls",
+      "skills": "Skills",
+      "projects": "Projects",
+      "sources": "Sources"
+    },
+    "panels": {
+      "topSkills": "Top skills",
+      "heatmap": "16-week activity",
+      "recent": "Recent calls",
+      "providers": "Provider health"
+    },
+    "empty": {
+      "placeholder": "No data yet. Refresh to populate this panel.",
+      "noData": "No skill invocations detected. Make sure ~/.claude / ~/.codex etc. contain session logs."
+    },
+    "sort": {
+      "count": "by count",
+      "alpha": "a–z",
+      "recent": "recent"
+    },
+    "remoteUnreachable": "Cannot reach remote host {{host}}; showing empty data temporarily. Check SSH status then refresh."
   },
   "dashboard": {
     "eyebrow": "Local operations console",

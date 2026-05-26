@@ -164,6 +164,20 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: /OpenClaw/ })).toBeInTheDocument();
   });
 
+  it("renders Skill Usage entry below Operation Logs and routes to /usage", () => {
+    renderSidebar();
+    const usageButton = screen.getByRole("button", { name: /技能使用/ });
+    expect(usageButton).toBeInTheDocument();
+    fireEvent.click(usageButton);
+    expect(screen.getByTestId("location")).toHaveTextContent("/usage");
+  });
+
+  it("highlights Skill Usage when on /usage", () => {
+    renderSidebar("/usage");
+    const usageButton = screen.getByRole("button", { name: /技能使用/ });
+    expect(usageButton.className).toContain("bg-sidebar-primary");
+  });
+
   it("shows a blocking loading row only during shell hydration", () => {
     vi.mocked(usePlatformStore).mockImplementation((selector?: unknown) => {
       const state = buildPlatformStoreState({ isLoading: true });

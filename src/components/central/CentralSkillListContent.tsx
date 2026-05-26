@@ -6,6 +6,7 @@ import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
+import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import { cn } from "@/lib/utils";
 import type {
@@ -63,6 +64,11 @@ export function CentralSkillListContent({
     [sortedSkills]
   );
   const aiSummaries = useSkillExplanationSummaries(summarySkillIds, "zh");
+  const skillNamesForUsage = useMemo(
+    () => Array.from(new Set(sortedSkills.map((s) => s.name))),
+    [sortedSkills]
+  );
+  const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
 
   function renderSearchResult(skill: SkillWithLinks) {
     return (
@@ -71,6 +77,7 @@ export function CentralSkillListContent({
         name={skill.name}
         description={skill.description}
         aiSummary={aiSummaries[skill.id]}
+        usageBadge={usageCounts?.[skill.name]}
         checkbox={{
           checked: selectedSkillIdSet.has(skill.id),
           onChange: () => onToggleSelection(skill.id),
@@ -103,6 +110,7 @@ export function CentralSkillListContent({
         name={skill.name}
         description={skill.description}
         aiSummary={aiSummaries[skill.id]}
+        usageBadge={usageCounts?.[skill.name]}
         checkbox={{
           checked: selectedSkillIdSet.has(skill.id),
           onChange: () => onToggleSelection(skill.id),

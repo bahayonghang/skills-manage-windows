@@ -11,6 +11,7 @@ import {
   Store,
   ChevronLeft,
   ChevronRight,
+  BarChart3,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
@@ -259,6 +260,15 @@ export function Sidebar() {
           isActive={isLogsActive}
           onClick={() => navigate("/logs")}
           icon={<ScrollText className="size-4" />}
+          expanded={expanded}
+        />
+
+        {/* Skill Usage — skilled-style aggregated call stats across AI tools */}
+        <NavItem
+          label={t("sidebar.skillUsage")}
+          isActive={pathname === "/usage"}
+          onClick={() => navigate("/usage")}
+          icon={<BarChart3 className="size-4" />}
           expanded={expanded}
         />
 
