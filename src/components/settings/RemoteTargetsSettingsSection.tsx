@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -18,6 +19,28 @@ export type {
   WslDistributionOption,
   WslTargetFormState,
 } from "./remoteTargetsSettingsTypes";
+
+interface RemoteTargetCreateCardProps {
+  title: string;
+  description: string;
+  children: ReactNode;
+}
+
+function RemoteTargetCreateCard({
+  title,
+  description,
+  children,
+}: RemoteTargetCreateCardProps) {
+  return (
+    <div className="space-y-4 rounded-xl border border-border/70 bg-muted/20 p-4 xl:p-5">
+      <div>
+        <div className="text-sm font-medium">{title}</div>
+        <div className="text-xs text-muted-foreground">{description}</div>
+      </div>
+      {children}
+    </div>
+  );
+}
 
 interface RemoteTargetsSettingsSectionProps {
   activeTarget: TargetSummary;
@@ -168,14 +191,11 @@ export function RemoteTargetsSettingsSection({
           ))}
         </div>
 
-        <div className="grid gap-4 2xl:grid-cols-2">
-          <div className="space-y-4 rounded-xl border border-border/70 bg-muted/20 p-4 xl:p-5">
-            <div>
-              <div className="text-sm font-medium">{t("targets.addSshTitle")}</div>
-              <div className="text-xs text-muted-foreground">
-                {t("targets.addSshDescription")}
-              </div>
-            </div>
+        <div className="space-y-4">
+          <RemoteTargetCreateCard
+            title={t("targets.addSshTitle")}
+            description={t("targets.addSshDescription")}
+          >
             <SshTargetForm
               form={sshTargetForm}
               isCreatingTarget={isCreatingTarget}
@@ -184,15 +204,12 @@ export function RemoteTargetsSettingsSection({
               onTest={onTestNewSshTarget}
               onUpdate={onUpdateSshTargetForm}
             />
-          </div>
+          </RemoteTargetCreateCard>
 
-          <div className="space-y-4 rounded-xl border border-border/70 bg-muted/20 p-4 xl:p-5">
-            <div>
-              <div className="text-sm font-medium">{t("targets.addWslTitle")}</div>
-              <div className="text-xs text-muted-foreground">
-                {t("targets.addWslDescription")}
-              </div>
-            </div>
+          <RemoteTargetCreateCard
+            title={t("targets.addWslTitle")}
+            description={t("targets.addWslDescription")}
+          >
             <WslTargetForm
               form={wslTargetForm}
               isCreatingTarget={isCreatingTarget}
@@ -206,7 +223,7 @@ export function RemoteTargetsSettingsSection({
               onTest={onTestNewWslTarget}
               onUpdate={onUpdateWslTargetForm}
             />
-          </div>
+          </RemoteTargetCreateCard>
         </div>
 
         <div className="space-y-1 text-xs text-muted-foreground">

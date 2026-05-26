@@ -404,6 +404,11 @@ describe("SettingsView", () => {
 
     expect(screen.getByText("新增 SSH 目标")).toBeTruthy();
     expect(screen.getByText("新增 WSL 发行版")).toBeTruthy();
+    expect(
+      screen
+        .getAllByText(/新增 (SSH 目标|WSL 发行版)/)
+        .map((node) => node.textContent)
+    ).toEqual(["新增 SSH 目标", "新增 WSL 发行版"]);
     expect(screen.queryByRole("button", { name: "WSL" })).toBeNull();
     expect(screen.getByLabelText("主机")).toBeTruthy();
     expect(screen.getByLabelText("WSL 别名")).toBeTruthy();
