@@ -185,10 +185,11 @@ describe("ActivityHeatmap", () => {
   it("renders 112 cells for a full 16w x 7d window", () => {
     const days = buildDays(new Array(16 * 7).fill(0));
     render(<ActivityHeatmap days={days} />);
-    const cells = screen
-      .getByTestId("heatmap-grid")
-      .querySelectorAll("[data-testid^='heatmap-cell-']");
+    const grid = screen.getByTestId("heatmap-grid");
+    const cells = grid.querySelectorAll("[data-testid^='heatmap-cell-']");
+    expect(grid).toHaveClass("auto-cols-fr");
     expect(cells.length).toBe(112);
+    expect(cells[0]).toHaveClass("aspect-square");
   });
 
   it("assigns level 0 to zero-count days and level 4 to max-count days", () => {

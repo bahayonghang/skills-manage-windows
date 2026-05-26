@@ -93,7 +93,9 @@ export function SkillUsageView() {
             </div>
           </Panel>
           <Panel title={t("skillUsage.panels.heatmap")}>
-            <ActivityHeatmap days={overview?.heatmap ?? []} />
+            <div className="h-[28rem]">
+              <ActivityHeatmap days={overview?.heatmap ?? []} className="h-full" />
+            </div>
           </Panel>
           <Panel title={t("skillUsage.panels.recent")}>
             <RecentCallsFeed calls={recent} />

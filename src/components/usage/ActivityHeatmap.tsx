@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { DayCount } from "@/types/usage";
 import { cn } from "@/lib/utils";
@@ -9,7 +10,7 @@ interface ActivityHeatmapProps {
   className?: string;
 }
 
-const WEEKDAY_LABELS = ["Mon", "Wed", "Fri"]; // sparse labels
+const LABELED_WEEKDAY_ROWS = new Set([0, 2, 4]); // Mon / Wed / Fri
 
 /**
  * GitHub 风格 16 周活动热力图。
@@ -24,10 +25,24 @@ const WEEKDAY_LABELS = ["Mon", "Wed", "Fri"]; // sparse labels
  * 5 级配色：lvl 0=空（border 灰），1..4 emerald 渐深。
  */
 export function ActivityHeatmap({ days, className }: ActivityHeatmapProps) {
+  const { i18n } = useTranslation();
   const max = useMemo(
     () => Math.max(1, ...days.map((d) => d.count)),
     [days]
   );
+  const weekdayLabels = useMemo(() => {
+    const mondayUtc = Date.UTC(2024, 0, 1); // 2024-01-01 is a Monday.
+    const formatter = new Intl.DateTimeFormat(i18n.language || undefined, {
+      weekday: "short",
+      timeZone: "UTC",
+    });
+
+    return Array.from({ length: 7 }, (_, index) =>
+      LABELED_WEEKDAY_ROWS.has(index)
+        ? formatter.format(new Date(mondayUtc + index * 86_400_000))
+        : ""
+    );
+  }, [i18n.language]);
 
   if (days.length === 0) {
     return (
@@ -43,18 +58,24 @@ export function ActivityHeatmap({ days, className }: ActivityHeatmapProps) {
   }
 
   return (
-    <div className={cn("flex gap-2", className)}>
+    <div
+      data-testid="heatmap-shell"
+      className={cn(
+        "flex h-full min-h-[16rem] items-center justify-center gap-3 overflow-hidden",
+        className
+      )}
+    >
       {/* Weekday labels (sparse) */}
-      <div className="flex flex-col justify-between py-0.5 text-[10px] text-muted-foreground">
-        {WEEKDAY_LABELS.map((d) => (
-          <span key={d}>{d}</span>
+      <div className="grid h-full min-h-[12rem] grid-rows-7 items-center py-1 text-[10px] text-muted-foreground">
+        {weekdayLabels.map((d, index) => (
+          <span key={`${d}-${index}`}>{d}</span>
         ))}
       </div>
 
       {/* Heatmap grid */}
       <div
         data-testid="heatmap-grid"
-        className="grid auto-cols-min grid-flow-col grid-rows-7 gap-[2px]"
+        className="grid w-full max-w-[40rem] auto-cols-fr grid-flow-col grid-rows-7 gap-1"
       >
         {days.map((d) => {
           const lvl = levelFor(d.count, max);
@@ -65,7 +86,7 @@ export function ActivityHeatmap({ days, className }: ActivityHeatmapProps) {
               data-level={lvl}
               title={`${d.date} • ${d.count}`}
               className={cn(
-                "block size-3 rounded-[2px]",
+                "block aspect-square w-full rounded-[4px]",
                 CELL_LEVEL_CLASS[lvl]
               )}
             />
