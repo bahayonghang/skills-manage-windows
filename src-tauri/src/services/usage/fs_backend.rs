@@ -44,7 +44,10 @@ pub trait FsBackend: Send + Sync {
 
     /// 批量读多个 UTF-8 文本文件。默认逐文件读取；Remote backend 会覆盖成
     /// 单次/分批 SSH 脚本，减少 round trips。
-    async fn read_many_to_strings(&self, paths: &[String]) -> Result<HashMap<String, String>, String> {
+    async fn read_many_to_strings(
+        &self,
+        paths: &[String],
+    ) -> Result<HashMap<String, String>, String> {
         let mut content_by_path = HashMap::new();
         for path in paths {
             if let Ok(content) = self.read_to_string(path).await {
@@ -94,7 +97,10 @@ impl FsBackend for LocalFsBackend {
         std::fs::read_to_string(path).map_err(|e| format!("local read {}: {}", path, e))
     }
 
-    async fn read_many_to_strings(&self, paths: &[String]) -> Result<HashMap<String, String>, String> {
+    async fn read_many_to_strings(
+        &self,
+        paths: &[String],
+    ) -> Result<HashMap<String, String>, String> {
         let mut content_by_path = HashMap::new();
         for path in paths {
             if let Ok(content) = std::fs::read_to_string(path) {
@@ -171,7 +177,10 @@ impl FsBackend for RemoteFsBackend {
         String::from_utf8(bytes).map_err(|e| format!("remote utf8 {}: {}", path, e))
     }
 
-    async fn read_many_to_strings(&self, paths: &[String]) -> Result<HashMap<String, String>, String> {
+    async fn read_many_to_strings(
+        &self,
+        paths: &[String],
+    ) -> Result<HashMap<String, String>, String> {
         if paths.is_empty() {
             return Ok(HashMap::new());
         }

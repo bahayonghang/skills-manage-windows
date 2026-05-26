@@ -47,7 +47,10 @@ async fn active_usage_target(state: &State<'_, AppState>) -> Result<ActiveUsageT
     })
 }
 
-fn scope_info_for_target(target: &ActiveUsageTarget, remote_reachable: Option<bool>) -> UsageScopeInfo {
+fn scope_info_for_target(
+    target: &ActiveUsageTarget,
+    remote_reachable: Option<bool>,
+) -> UsageScopeInfo {
     UsageScopeInfo {
         target_id: target.target_id.clone(),
         label: target.label.clone(),
@@ -102,9 +105,8 @@ async fn build_refresh_page(
     refresh_error: Option<String>,
 ) -> Result<UsageRefreshResult, String> {
     let overview = usage::build_overview(&state.db, target_id, 50).await?;
-    let recent = usage::rows_to_skill_calls(
-        crate::db::list_recent_calls(&state.db, target_id, 20).await?,
-    );
+    let recent =
+        usage::rows_to_skill_calls(crate::db::list_recent_calls(&state.db, target_id, 20).await?);
     let providers = usage::list_provider_health(&state.db, target_id).await?;
 
     Ok(UsageRefreshResult {
@@ -126,7 +128,8 @@ pub async fn usage_refresh(
     let target = active_usage_target(&state).await?;
 
     if target.is_remote && !force {
-        if let Some(last_scan_ms) = crate::db::get_last_scan_ms(&state.db, &target.target_id).await?
+        if let Some(last_scan_ms) =
+            crate::db::get_last_scan_ms(&state.db, &target.target_id).await?
         {
             let now_ms = Utc::now().timestamp_millis();
             if now_ms - last_scan_ms < usage::CACHE_TTL_MS {
