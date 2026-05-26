@@ -55,8 +55,8 @@ pub(crate) use import::{
 };
 pub(crate) use pat::{
     clear_github_pat_impl, get_github_pat_state_impl, github_client,
-    github_direct_auth_from_secret_store, migrate_github_pat_on_startup, set_github_pat_impl,
-    test_github_pat_impl,
+    github_direct_auth_from_secret_store, migrate_github_pat_on_startup, reveal_github_pat_impl,
+    set_github_pat_impl, test_github_pat_impl,
 };
 #[cfg(test)]
 use pat::{GITHUB_PAT_MIGRATION_SETTING_KEY, LEGACY_GITHUB_PAT_SETTING_KEY};
