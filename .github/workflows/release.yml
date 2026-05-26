@@ -110,9 +110,25 @@ jobs:
         shell: pwsh
         run: node scripts/sync-version.mjs
 
+      - name: Validate updater signing secrets
+        shell: pwsh
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_UPDATER_PUBLIC_KEY)) {
+            throw "Missing TAURI_UPDATER_PUBLIC_KEY secret for Windows updater builds."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw "Missing TAURI_SIGNING_PRIVATE_KEY secret for Windows updater builds."
+          }
+
       - name: Build Windows bundles
         shell: pwsh
-        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi --no-sign --ci
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi --config '{"bundle":{"createUpdaterArtifacts":true},"plugins":{"updater":{"pubkey":"${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}"}}}' --ci
 
       - name: Prepare Windows assets
         shell: pwsh
@@ -141,9 +157,20 @@ jobs:
             throw "Windows executable not found at $exePath."
           }
 
-          Copy-Item -LiteralPath $nsis.FullName -Destination (Join-Path $assetDir ("skillport_" + $version + "_windows_x64_nsis.exe")) -Force
+          $nsisAsset = Join-Path $assetDir ("skillport_" + $version + "_windows_x64_nsis.exe")
+          Copy-Item -LiteralPath $nsis.FullName -Destination $nsisAsset -Force
+          if (-not (Test-Path "$($nsis.FullName).sig")) {
+            throw "Windows NSIS updater signature not found at $($nsis.FullName).sig."
+          }
+          Copy-Item -LiteralPath "$($nsis.FullName).sig" -Destination "$nsisAsset.sig" -Force
           Copy-Item -LiteralPath $msi.FullName -Destination (Join-Path $assetDir ("skillport_" + $version + "_windows_x64.msi")) -Force
           Compress-Archive -Path $exePath -DestinationPath (Join-Path $assetDir ("skillport_" + $version + "_windows_x64.zip")) -Force
+
+      - name: Generate updater metadata
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_TAG -replace '^v', ''
+          node scripts/generate-latest-json.mjs --version $version --tag $env:RELEASE_TAG --asset-dir release-assets
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4

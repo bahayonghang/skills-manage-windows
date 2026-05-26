@@ -44,6 +44,16 @@ vi.mock("../stores/marketplaceStore", () => ({
   useMarketplaceStore: vi.fn(),
 }));
 
+vi.mock("../stores/appUpdateStore", async () => {
+  const actual = await vi.importActual<typeof import("../stores/appUpdateStore")>(
+    "../stores/appUpdateStore"
+  );
+  return {
+    ...actual,
+    useAppUpdateStore: vi.fn(),
+  };
+});
+
 vi.mock("@/lib/tauri", () => ({
   invoke: vi.fn(),
   isTauriRuntime: vi.fn(() => true),
@@ -55,6 +65,7 @@ import { useThemeStore } from "../stores/themeStore";
 import { useTargetStore } from "../stores/targetStore";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
 import { useMarketplaceStore } from "../stores/marketplaceStore";
+import { useAppUpdateStore } from "../stores/appUpdateStore";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -204,6 +215,7 @@ function setupMocks({
   setFlavor = vi.fn(),
   accent = "lavender" as const,
   setAccent = vi.fn(),
+  appUpdateState = {} as Partial<ReturnType<typeof useAppUpdateStore.getState>>,
 } = {}) {
   const githubPatState =
     providedGitHubPatState ??
@@ -340,6 +352,24 @@ function setupMocks({
       setAccent,
       init: vi.fn(),
     })
+  );
+
+  const appUpdateDefaults = {
+    status: "idle" as const,
+    currentVersion: "0.10.7",
+    latestVersion: null,
+    releaseNotes: null,
+    progress: { downloaded: 0, total: null },
+    error: null,
+    hasChecked: false,
+    checkForUpdate: vi.fn(),
+    installUpdate: vi.fn(),
+    reset: vi.fn(),
+    ...appUpdateState,
+  };
+
+  vi.mocked(useAppUpdateStore).mockImplementation((selector) =>
+    selector(appUpdateDefaults)
   );
 }
 
@@ -797,14 +827,23 @@ describe("SettingsView", () => {
     );
   });
 
-  it("renders the repository url in about", () => {
+  it("renders the release cockpit resources and repository url in about", () => {
     setupMocks();
     renderSettingsView("/settings/about");
+
+    expect(screen.getByText("Release Cockpit")).toBeTruthy();
     expect(screen.getByText("仓库地址")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "https://github.com/bahayonghang/skills-manage-windows" })).toHaveAttribute(
+    expect(screen.getAllByRole("link", { name: "https://github.com/bahayonghang/skills-manage-windows" })[0]).toHaveAttribute(
       "href",
       "https://github.com/bahayonghang/skills-manage-windows"
     );
+    expect(screen.getByRole("link", { name: /^README/ })).toHaveAttribute(
+      "href",
+      "https://github.com/bahayonghang/skills-manage-windows#readme"
+    );
+    expect(screen.getByRole("link", { name: /中文 README/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Releases/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Issues/ })).toBeTruthy();
   });
 
   it("calls loadScanDirectories on mount", () => {
@@ -1377,7 +1416,8 @@ describe("SettingsView", () => {
   it("shows the app version in the about section", () => {
     setupMocks();
     renderSettingsView("/settings/about");
-    expect(screen.getByText(/SkillPort v\d+\.\d+\.\d+/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "SkillPort" })).toBeTruthy();
+    expect(screen.getAllByText(/v\d+\.\d+\.\d+/).length).toBeGreaterThan(0);
   });
 
   it("shows the database path in the about section", () => {
@@ -1386,16 +1426,80 @@ describe("SettingsView", () => {
     expect(screen.getByText("/Users/test/.skillsmanage/db.sqlite")).toBeTruthy();
   });
 
-  it("shows version label", () => {
+  it("shows version label, update controls, diagnostics, and stack chips", () => {
     setupMocks();
     renderSettingsView("/settings/about");
+
     expect(screen.getByText("应用版本")).toBeTruthy();
+    expect(screen.getByText("数据库路径")).toBeTruthy();
+    expect(screen.getByText("应用更新")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /检查更新/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /下载并安装/ })).toBeDisabled();
+    expect(screen.getByText("Windows x64 NSIS")).toBeTruthy();
+    expect(screen.getByText(/自动更新需要发布流水线注入 Tauri updater 公钥/)).toBeTruthy();
+    expect(screen.getByText("Rust")).toBeTruthy();
+    expect(screen.getByText("Tauri 2")).toBeTruthy();
+    expect(screen.getByText("React 19")).toBeTruthy();
+    expect(screen.getByText("TypeScript 6")).toBeTruthy();
+    expect(screen.getByText("Tailwind CSS 4")).toBeTruthy();
+    expect(screen.getByText("SQLite/sqlx")).toBeTruthy();
+    expect(screen.getByText("Zustand")).toBeTruthy();
+    expect(screen.getByText("i18next")).toBeTruthy();
   });
 
-  it("shows database path label", () => {
-    setupMocks();
+  it("calls the update store when checking and installing updates", () => {
+    const checkForUpdate = vi.fn();
+    const installUpdate = vi.fn();
+    setupMocks({
+      appUpdateState: {
+        status: "available",
+        latestVersion: "0.10.8",
+        releaseNotes: "Bug fixes",
+        checkForUpdate,
+        installUpdate,
+      },
+    });
     renderSettingsView("/settings/about");
-    expect(screen.getByText("数据库路径")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /检查更新/ }));
+    fireEvent.click(screen.getByRole("button", { name: /下载并安装/ }));
+
+    expect(checkForUpdate).toHaveBeenCalledOnce();
+    expect(installUpdate).toHaveBeenCalledOnce();
+    expect(screen.getByText("v0.10.8 可用")).toBeTruthy();
+    expect(screen.getByText("Bug fixes")).toBeTruthy();
+  });
+
+  it.each([
+    ["upToDate", "已是最新版本。"],
+    ["unsupported", "当前不是 Tauri 桌面运行环境，无法执行内置更新。"],
+    ["error", "metadata missing"],
+  ] as const)("renders update state %s", (status, message) => {
+    setupMocks({
+      appUpdateState: {
+        status,
+        error: status === "error" ? "metadata missing" : null,
+      },
+    });
+    renderSettingsView("/settings/about");
+
+    expect(screen.getByText(message)).toBeTruthy();
+  });
+
+  it("renders downloading progress", () => {
+    setupMocks({
+      appUpdateState: {
+        status: "downloading",
+        progress: { downloaded: 50, total: 100 },
+      },
+    });
+    renderSettingsView("/settings/about");
+
+    expect(screen.getByRole("progressbar", { name: "应用更新下载进度" })).toHaveAttribute(
+      "aria-valuenow",
+      "50"
+    );
+    expect(screen.getByText("50 B / 100 B · 50%")).toBeTruthy();
   });
 
   // ── Flavor Switcher ──────────────────────────────────────────────────────

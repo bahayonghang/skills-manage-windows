@@ -1,6 +1,6 @@
 [package]
 name = "skillport"
-version = "0.10.7"
+version = "0.10.8"
 description = "AI Agent Skills Manager"
 authors = ["iamzhihuix"]
 license = "Apache-2.0"
@@ -19,6 +19,8 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
+tauri-plugin-updater = "2.10.1"
+tauri-plugin-process = "2.3.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_norway = "0.9.42"

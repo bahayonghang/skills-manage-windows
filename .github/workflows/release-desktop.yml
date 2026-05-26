@@ -54,8 +54,24 @@ jobs:
         shell: pwsh
         run: node scripts/sync-version.mjs
 
+      - name: Validate updater signing secrets
+        shell: pwsh
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_UPDATER_PUBLIC_KEY)) {
+            throw "Missing TAURI_UPDATER_PUBLIC_KEY secret for Windows updater builds."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw "Missing TAURI_SIGNING_PRIVATE_KEY secret for Windows updater builds."
+          }
+
       - name: Build Windows bundles
-        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi --no-sign --ci
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi --config '{"bundle":{"createUpdaterArtifacts":true},"plugins":{"updater":{"pubkey":"${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}"}}}' --ci
 
       - name: Prepare Windows assets
         shell: pwsh
@@ -68,7 +84,12 @@ jobs:
           if ($null -eq $nsis) {
             throw "Windows NSIS bundle not found."
           }
-          Copy-Item $nsis.FullName "release-assets/skillport_${version}_windows_x64_nsis.exe"
+          $nsisAsset = "release-assets/skillport_${version}_windows_x64_nsis.exe"
+          Copy-Item $nsis.FullName $nsisAsset
+          if (-not (Test-Path "$($nsis.FullName).sig")) {
+            throw "Windows NSIS updater signature not found at $($nsis.FullName).sig."
+          }
+          Copy-Item "$($nsis.FullName).sig" "$nsisAsset.sig"
 
           $msi = Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi" -Recurse -Filter *.msi | Select-Object -First 1
           if ($null -eq $msi) {
@@ -81,6 +102,12 @@ jobs:
             throw "Windows executable not found at $exePath."
           }
           Compress-Archive -Path $exePath -DestinationPath "release-assets/skillport_${version}_windows_x64.zip" -Force
+
+      - name: Generate updater metadata
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          node scripts/generate-latest-json.mjs --version $version --tag $env:GITHUB_REF_NAME --asset-dir release-assets
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4

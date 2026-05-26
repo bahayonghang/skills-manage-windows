@@ -1695,8 +1695,70 @@
       },
       "about": {
         "title": "Help & About",
-        "description": "View the app version, database location, and project repository."
+        "description": "Release cockpit for app updates, Windows diagnostics, help links, and project metadata."
       }
+    },
+    "aboutCockpit": {
+      "eyebrow": "Release Cockpit",
+      "heroDesc": "Version, updates, diagnostics, and help links in one dark release console.",
+      "channel": "Update channel",
+      "stable": "Stable",
+      "platform": "Platform",
+      "windowsX64": "Windows x64 NSIS",
+      "currentVersion": "Current version",
+      "latestVersion": "Latest version",
+      "pendingCheck": "Pending check",
+      "updateTitle": "App update",
+      "updateDesc": "Use Tauri updater to check, download, and install signed Windows release packages.",
+      "updateState": "Update state",
+      "checkUpdate": "Check update",
+      "checking": "Checking…",
+      "downloadInstall": "Download & install",
+      "installing": "Installing…",
+      "artifact": "Updater artifact",
+      "downloadProgress": "{{downloaded}} / {{total}} · {{percent}}%",
+      "progressAria": "App update download progress",
+      "newVersion": "v{{version}} available",
+      "releaseNotes": "Release notes",
+      "upToDateMessage": "You are already on the latest version.",
+      "unsupportedMessage": "Built-in updates can only run inside the Tauri desktop app.",
+      "diagnosticsTitle": "Diagnostics",
+      "diagnosticsDesc": "Quick checks for the Windows build chain and local data location.",
+      "buildTarget": "Build target",
+      "windowsSupport": "Initial support: Windows x64 NSIS auto-update",
+      "stackTitle": "Technology stack",
+      "stackDesc": "Key runtimes and UI foundations used by this desktop client.",
+      "resourcesTitle": "Help resources",
+      "resourcesDesc": "Open docs, release history, or issue trackers.",
+      "updateStatus": {
+        "idle": "Not checked",
+        "checking": "Checking",
+        "available": "Update available",
+        "downloading": "Downloading",
+        "installing": "Installing",
+        "upToDate": "Up to date",
+        "unsupported": "Unsupported",
+        "error": "Update failed"
+      },
+      "resources": {
+        "readme": {
+          "title": "README",
+          "desc": "Read the English project overview and local run guide."
+        },
+        "readmeZh": {
+          "title": "Chinese README",
+          "desc": "Read Chinese usage notes, platform goals, and conventions."
+        },
+        "releases": {
+          "title": "Releases",
+          "desc": "Review historical versions, installers, and updater metadata."
+        },
+        "issues": {
+          "title": "Issues",
+          "desc": "Report bugs, track defects, or propose improvements."
+        }
+      },
+      "signingNote": "Auto updates require the release workflow to inject the Tauri updater public key and sign the NSIS artifact with the private key."
     }
   },
   "addDir": {
