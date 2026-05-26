@@ -20,3 +20,4 @@ pub(crate) mod skills_repo;
 pub(crate) mod tag_groups_repo;
 pub(crate) mod tags_repo;
 pub(crate) mod update_states_repo;
+pub(crate) mod usage_repo;

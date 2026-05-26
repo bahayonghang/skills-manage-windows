@@ -50,6 +50,9 @@ async fn test_init_creates_all_tables() {
         "scan_directories",
         "settings",
         "operation_logs",
+        "skill_calls",
+        "skill_call_providers",
+        "skill_call_scan_state",
     ];
     for table in &tables {
         let result = sqlx::query(&format!("SELECT COUNT(*) as cnt FROM {}", table))

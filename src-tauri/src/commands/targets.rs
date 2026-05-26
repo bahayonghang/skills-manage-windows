@@ -386,8 +386,11 @@ pub async fn delete_target(state: State<'_, AppState>, target_id: String) -> Res
 #[tauri::command]
 pub async fn set_active_target(
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
     target_id: String,
 ) -> Result<TargetSummary, String> {
+    use tauri::Emitter;
+
     let result = set_active_target_impl(&state.targets, &state.db, &target_id).await;
     match &result {
         Ok(target) => {
@@ -407,6 +410,9 @@ pub async fn set_active_target(
                 .subject("target", &target.id, &target.label),
             )
             .await;
+            // Skill Usage 子系统订阅这个事件做 evict + reload；其他子系统
+            // 也可以监听同一个事件刷新各自的目标维度数据。
+            let _ = app.emit("usage://target-changed", &target.id);
         }
         Err(error) => {
             record_operation_log_best_effort(

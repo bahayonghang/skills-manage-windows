@@ -25,6 +25,7 @@ pub(super) mod metadata;
 pub(super) mod projects;
 pub(super) mod saved_views;
 pub(super) mod settings;
+pub(super) mod usage;
 
 use super::types::DbPool;
 
@@ -48,6 +49,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     marketplace::init(pool).await?;
     saved_views::init(pool).await?;
     projects::init(pool).await?;
+    usage::init(pool).await?;
 
     Ok(())
 }

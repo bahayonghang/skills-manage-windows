@@ -15,3 +15,4 @@ pub mod obsidian;
 pub mod portable_state;
 pub mod projects;
 pub mod scanner;
+pub mod usage;

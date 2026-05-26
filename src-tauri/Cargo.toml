@@ -35,7 +35,11 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 sha2 = "0.10"
+async-trait = "0.1"
+walkdir = "2"
+regex = "1"
+urlencoding = "2"
+tempfile = "3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
-tempfile = "3"

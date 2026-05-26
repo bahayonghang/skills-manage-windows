@@ -452,6 +452,15 @@ pub fn run() {
             commands::tag_groups::delete_tag_group,
             commands::tag_groups::reorder_tag_groups,
             commands::tag_groups::set_tag_group,
+            // Skill Usage (Skilled-style aggregation across AI coding tools)
+            commands::usage::usage_refresh,
+            commands::usage::usage_get_overview,
+            commands::usage::usage_get_recent,
+            commands::usage::usage_get_providers,
+            commands::usage::usage_get_skill_detail,
+            commands::usage::usage_get_skill_counts,
+            commands::usage::usage_resolve_skill_id,
+            commands::usage::usage_get_scope_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
