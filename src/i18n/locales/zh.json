@@ -1187,7 +1187,28 @@
       "samePath": "请选择不同于当前中央库的位置。",
       "nestedPath": "新旧中央库目录不能互相嵌套。",
       "requiresOverwrite": "本次迁移需要确认覆盖策略。"
-    }
+    },
+    "repositorySyncLargeDialogDesc": "检查仓库新增、已跳过新增、远端删除和失败仓库；删除旧 skill 是独立破坏性动作，不会自动导入远端 skill。",
+    "repositorySyncSummaryActions": "本次将应用 {{total}} 项决策，其中 {{deleting}} 项为删除。",
+    "repositorySyncTabs": {
+      "pending": "待处理新增 {{count}}",
+      "skipped": "已跳过新增 {{count}}",
+      "missing": "远端删除 {{count}}",
+      "failed": "失败仓库 {{count}}"
+    },
+    "repositorySyncDeletePreviewUnavailable": "删除预览不可用，暂不能删除这个旧 skill。",
+    "repositorySyncDeletePreviewTitle": "将删除的旧 Central skill",
+    "repositorySyncCentralPath": "中央路径：{{path}}",
+    "repositorySyncAutoRemovedLinks": "将自动移除平台链接：{{platforms}}",
+    "repositorySyncAutoRemovedLinksEmpty": "没有需要自动移除的平台链接。",
+    "repositorySyncDeleteUnavailable": "无法定位可删除的旧 Central skill。",
+    "repositorySyncDeleteOldSkill": "删除旧 skill",
+    "repositorySyncDeleteOldSkillDesc": "仅删除已有的本地 Central skill；不会导入这个远端 skill。",
+    "repositorySyncFailedTitle": "失败仓库（{{count}}）",
+    "repositorySyncTabEmpty": "此分类没有需要处理的项目。",
+    "repositorySyncRenameRequired": "请输入新的技能 ID。",
+    "repositorySyncRenameInvalid": "技能 ID 只能使用小写字母、数字和单个短横线。",
+    "repositorySyncApplyWithCount": "应用同步（{{count}} 项）"
   },
   "installDialog": {
     "title": "安装 {{name}}",

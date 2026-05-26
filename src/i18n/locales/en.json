@@ -1187,7 +1187,28 @@
       "samePath": "Choose a different folder from the current Central store.",
       "nestedPath": "The old and new Central store folders cannot be nested inside each other.",
       "requiresOverwrite": "This migration requires overwrite confirmation."
-    }
+    },
+    "repositorySyncLargeDialogDesc": "Review repository additions, remembered skips, remote removals, and failed repositories. Deleting an old skill is a separate destructive action and never imports the remote skill automatically.",
+    "repositorySyncSummaryActions": "{{total}} decision(s) will be applied; {{deleting}} of them delete local skills.",
+    "repositorySyncTabs": {
+      "pending": "Pending additions {{count}}",
+      "skipped": "Skipped additions {{count}}",
+      "missing": "Remote removals {{count}}",
+      "failed": "Failed repositories {{count}}"
+    },
+    "repositorySyncDeletePreviewUnavailable": "Delete preview is unavailable, so this old skill cannot be deleted yet.",
+    "repositorySyncDeletePreviewTitle": "Old Central skill to delete",
+    "repositorySyncCentralPath": "Central path: {{path}}",
+    "repositorySyncAutoRemovedLinks": "Platform links removed automatically: {{platforms}}",
+    "repositorySyncAutoRemovedLinksEmpty": "No platform links need automatic removal.",
+    "repositorySyncDeleteUnavailable": "No removable old Central skill could be located.",
+    "repositorySyncDeleteOldSkill": "Delete old skill",
+    "repositorySyncDeleteOldSkillDesc": "Deletes only the existing local Central skill; this remote skill will not be imported.",
+    "repositorySyncFailedTitle": "Failed repositories ({{count}})",
+    "repositorySyncTabEmpty": "Nothing to handle in this category.",
+    "repositorySyncRenameRequired": "Enter a new skill ID.",
+    "repositorySyncRenameInvalid": "Skill IDs can only use lower-case letters, numbers, and single dashes.",
+    "repositorySyncApplyWithCount": "Apply sync ({{count}})"
   },
   "installDialog": {
     "title": "Install {{name}}",

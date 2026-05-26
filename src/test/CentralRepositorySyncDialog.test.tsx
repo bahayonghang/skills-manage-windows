@@ -265,6 +265,259 @@ describe("CentralRepositorySyncDialog", () => {
     });
   });
 
+
+
+  it("renders four tabs and defaults to pending additions before skipped, missing, and failures", () => {
+    render(
+      <CentralRepositorySyncDialog
+        open
+        onOpenChange={vi.fn()}
+        preview={{
+          ...preview,
+          remoteAdded: [remoteAddedSkill("skills/new-skill", "new-skill", "New Skill")],
+          skippedRemoteAdded: [remoteAddedSkill("skills/skipped-skill", "skipped-skill", "Skipped Skill")],
+          failedRepositories: [
+            { repositoryId: "repo-failed", name: "Broken Repo", error: "network failed" },
+          ],
+        }}
+        deletePreview={deletePreview}
+        agents={agents}
+        skills={existingSkills}
+        isPreviewLoading={false}
+        isApplying={false}
+        error={null}
+        onConfirm={vi.fn()}
+      />
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("tab", { name: "待处理新增 1" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(within(dialog).getByRole("tab", { name: "已跳过新增 1" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("tab", { name: "远端删除 3" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("tab", { name: "失败仓库 1" })).toBeInTheDocument();
+    expect(within(dialog).getByText("New Skill")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Skipped Skill")).not.toBeInTheDocument();
+  });
+
+  it("shows delete-old-skill only for conflict rows with a removable Central skill", () => {
+    render(
+      <CentralRepositorySyncDialog
+        open
+        onOpenChange={vi.fn()}
+        preview={{
+          ...preview,
+          remoteAdded: [
+            remoteAddedSkill("skills/conflicting", "conflicting-skill", "Conflicting Remote", {
+              existingSkillId: "conflicting-skill",
+              existingName: "Local Conflicting Skill",
+            }),
+            remoteAddedSkill("skills/fresh", "fresh-skill", "Fresh Remote"),
+          ],
+          remoteMissing: [],
+        }}
+        deletePreview={{
+          previews: [
+            {
+              skill_id: "conflicting-skill",
+              skill_name: "Local Conflicting Skill",
+              central_path: "~/.skillsmanage/skills/conflicting-skill",
+              copy_installations: [],
+              auto_removed_agent_ids: ["cursor"],
+            },
+          ],
+          failed: [],
+        }}
+        agents={agents}
+        skills={existingSkills}
+        isPreviewLoading={false}
+        isApplying={false}
+        error={null}
+        onConfirm={vi.fn()}
+      />
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const conflictRow = within(dialog).getByText("Conflicting Remote").closest("article")!;
+    const freshRow = within(dialog).getByText("Fresh Remote").closest("article")!;
+    expect(within(conflictRow).getByRole("button", { name: "删除旧 skill" })).toBeInTheDocument();
+    expect(within(freshRow).queryByRole("button", { name: "删除旧 skill" })).not.toBeInTheDocument();
+  });
+
+  it("pending delete-old-skill submits only deleteRequests and leaves the remote addition pending", async () => {
+    const onConfirm = vi.fn();
+    render(
+      <CentralRepositorySyncDialog
+        open
+        onOpenChange={vi.fn()}
+        preview={{
+          ...preview,
+          remoteAdded: [
+            remoteAddedSkill("skills/conflicting", "conflicting-skill", "Conflicting Remote", {
+              existingSkillId: "conflicting-skill",
+              existingName: "Local Conflicting Skill",
+            }),
+          ],
+          remoteMissing: [],
+        }}
+        deletePreview={{
+          previews: [
+            {
+              skill_id: "conflicting-skill",
+              skill_name: "Local Conflicting Skill",
+              central_path: "~/.skillsmanage/skills/conflicting-skill",
+              copy_installations: [],
+              auto_removed_agent_ids: ["cursor"],
+            },
+          ],
+          failed: [],
+        }}
+        agents={agents}
+        skills={existingSkills}
+        isPreviewLoading={false}
+        isApplying={false}
+        error={null}
+        onConfirm={onConfirm}
+      />
+    );
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除旧 skill" }));
+    expect(within(dialog).getByText("中央路径：~/.skillsmanage/skills/conflicting-skill")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByTestId("confirm-repo-sync"));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledWith(
+        [],
+        [{ skill_id: "conflicting-skill", remove_agent_ids: [] }],
+        [],
+        [],
+        []
+      );
+    });
+  });
+
+  it("skipped delete-old-skill submits only deleteRequests and keeps the remembered skip state", async () => {
+    const onConfirm = vi.fn();
+    render(
+      <CentralRepositorySyncDialog
+        open
+        onOpenChange={vi.fn()}
+        preview={{
+          ...preview,
+          remoteAdded: [],
+          skippedRemoteAdded: [
+            remoteAddedSkill("skills/conflicting", "conflicting-skill", "Conflicting Remote", {
+              existingSkillId: "conflicting-skill",
+              existingName: "Local Conflicting Skill",
+            }),
+          ],
+          remoteMissing: [],
+        }}
+        deletePreview={{
+          previews: [
+            {
+              skill_id: "conflicting-skill",
+              skill_name: "Local Conflicting Skill",
+              central_path: "~/.skillsmanage/skills/conflicting-skill",
+              copy_installations: [],
+              auto_removed_agent_ids: [],
+            },
+          ],
+          failed: [],
+        }}
+        agents={agents}
+        skills={existingSkills}
+        isPreviewLoading={false}
+        isApplying={false}
+        error={null}
+        onConfirm={onConfirm}
+      />
+    );
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除旧 skill" }));
+    fireEvent.click(within(dialog).getByTestId("confirm-repo-sync"));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledWith(
+        [],
+        [{ skill_id: "conflicting-skill", remove_agent_ids: [] }],
+        [],
+        [],
+        []
+      );
+    });
+  });
+
+  it("disables Apply and shows an inline error for invalid rename ids", () => {
+    render(
+      <CentralRepositorySyncDialog
+        open
+        onOpenChange={vi.fn()}
+        preview={{
+          ...preview,
+          remoteAdded: [remoteAddedSkill("skills/new-skill", "new-skill", "New Skill")],
+          remoteMissing: [],
+        }}
+        deletePreview={{ previews: [], failed: [] }}
+        agents={agents}
+        skills={existingSkills}
+        isPreviewLoading={false}
+        isApplying={false}
+        error={null}
+        onConfirm={vi.fn()}
+      />
+    );
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "重命名" }));
+    fireEvent.change(within(dialog).getByLabelText("重命名后的技能 ID"), {
+      target: { value: "Bad Skill!" },
+    });
+
+    expect(within(dialog).getByText("技能 ID 只能使用小写字母、数字和单个短横线。")).toBeInTheDocument();
+    expect(within(dialog).getByTestId("confirm-repo-sync")).toBeDisabled();
+  });
+
+  it("shows failed repositories as cards instead of a semicolon-joined warning line", () => {
+    render(
+      <CentralRepositorySyncDialog
+        open
+        onOpenChange={vi.fn()}
+        preview={{
+          ...preview,
+          remoteAdded: [],
+          remoteMissing: [],
+          failedRepositories: [
+            { repositoryId: "repo-one", name: "Repo One", error: "first failure" },
+            { repositoryId: "repo-two", name: "Repo Two", error: "second failure" },
+          ],
+        }}
+        deletePreview={{ previews: [], failed: [] }}
+        agents={agents}
+        skills={existingSkills}
+        isPreviewLoading={false}
+        isApplying={false}
+        error={null}
+        onConfirm={vi.fn()}
+      />
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("tab", { name: "失败仓库 2" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(within(dialog).getByText("Repo One")).toBeInTheDocument();
+    expect(within(dialog).getByText("Repo Two")).toBeInTheDocument();
+    expect(within(dialog).getByText("first failure")).toBeInTheDocument();
+    expect(within(dialog).getByText("second failure")).toBeInTheDocument();
+    expect(within(dialog).queryByText("first failure; second failure")).not.toBeInTheDocument();
+  });
+
   it("submits active remote additions selected as Skip through skipAdditions", async () => {
     const onConfirm = vi.fn();
     render(

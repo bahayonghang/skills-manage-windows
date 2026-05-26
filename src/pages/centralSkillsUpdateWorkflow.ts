@@ -15,6 +15,7 @@ import type {
   CentralRepositoryAddedSkillSelection,
   CentralRepositorySyncPreview,
 } from "@/types/centralRepositorySync";
+import { collectRepositorySyncDeletePreviewSkillIds } from "@/components/central/repositorySyncUtils";
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
@@ -109,7 +110,8 @@ export function useCentralSkillsUpdateWorkflow({
     if (
       preview.remoteAdded.length === 0 &&
       preview.skippedRemoteAdded.length === 0 &&
-      preview.remoteMissing.length === 0
+      preview.remoteMissing.length === 0 &&
+      preview.failedRepositories.length === 0
     ) {
       return;
     }
@@ -117,15 +119,14 @@ export function useCentralSkillsUpdateWorkflow({
     setRepositorySyncDeletePreview(null);
     setRepositorySyncError(null);
     setIsRepositorySyncDialogOpen(true);
-    if (preview.remoteMissing.length === 0) {
+    const previewSkillIds = collectRepositorySyncDeletePreviewSkillIds(preview);
+    if (previewSkillIds.length === 0) {
       setIsRepositorySyncPreviewLoading(false);
       return;
     }
     setIsRepositorySyncPreviewLoading(true);
     try {
-      const deletePreview = await loadBatchDeletePreview(
-        preview.remoteMissing.map((item) => item.state.skill_id)
-      );
+      const deletePreview = await loadBatchDeletePreview(previewSkillIds);
       setRepositorySyncDeletePreview(deletePreview);
     } catch (err) {
       const message = String(err);
@@ -252,7 +253,8 @@ export function useCentralSkillsUpdateWorkflow({
       if (
         preview.remoteAdded.length > 0 ||
         preview.skippedRemoteAdded.length > 0 ||
-        preview.remoteMissing.length > 0
+        preview.remoteMissing.length > 0 ||
+        preview.failedRepositories.length > 0
       ) {
         if (availableStates.length > 0) {
           setQueuedRepositorySyncPreview(preview);

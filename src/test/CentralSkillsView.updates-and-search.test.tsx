@@ -782,6 +782,132 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     });
   });
 
+
+
+  it("loads repository sync delete preview from remote-missing and conflict existing skills as a deduped union", async () => {
+    window.history.replaceState(null, "", "/");
+    window.localStorage.setItem("central.sidebarPinned", "true");
+    const githubRepo = mockRepositories[1]!;
+    const remoteMissingState: CentralSkillUpdateState = {
+      skill_id: "code-reviewer",
+      source_type: "github",
+      source_url: "https://github.com/openai/skills",
+      ref: "main",
+      source_path: "skills/code-reviewer",
+      last_remote_hash: null,
+      latest_remote_hash: null,
+      last_checked_at: "2026-04-29T01:23:45Z",
+      last_updated_at: null,
+      status: "remote_missing",
+      error: "removed remotely",
+    };
+    const skills: SkillWithLinks[] = [
+      { ...mockSkills[0]!, id: "github-one", name: "github-one", repository: githubRepo },
+    ];
+    mockCheckRepositorySync.mockResolvedValueOnce({
+      states: [remoteMissingState],
+      remoteAdded: [
+        {
+          repositoryId: githubRepo.id,
+          repo: {
+            owner: "openai",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/openai/skills",
+          },
+          preview: {
+            sourcePath: "skills/github-one",
+            skillId: "github-one",
+            skillName: "GitHub One Remote",
+            description: null,
+            rootDirectory: "skills",
+            skillDirectoryName: "github-one",
+            downloadUrl: "https://raw.githubusercontent.com/openai/skills/main/skills/github-one/SKILL.md",
+            conflict: {
+              existingSkillId: "github-one",
+              existingName: "github-one",
+              existingCanonicalPath: "~/.skillsmanage/skills/github-one",
+              proposedSkillId: "github-one",
+              proposedName: "GitHub One Remote",
+            },
+          },
+        },
+      ],
+      skippedRemoteAdded: [
+        {
+          repositoryId: githubRepo.id,
+          repo: {
+            owner: "openai",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/openai/skills",
+          },
+          preview: {
+            sourcePath: "skills/github-one-skipped",
+            skillId: "github-one-skipped",
+            skillName: "GitHub One Skipped",
+            description: null,
+            rootDirectory: "skills",
+            skillDirectoryName: "github-one-skipped",
+            downloadUrl: "https://raw.githubusercontent.com/openai/skills/main/skills/github-one-skipped/SKILL.md",
+            conflict: {
+              existingSkillId: "github-one",
+              existingName: "github-one",
+              existingCanonicalPath: "~/.skillsmanage/skills/github-one",
+              proposedSkillId: "github-one-skipped",
+              proposedName: "GitHub One Skipped",
+            },
+          },
+        },
+      ],
+      remoteMissing: [
+        {
+          state: remoteMissingState,
+          repositoryId: githubRepo.id,
+          repositoryName: "openai/skills",
+          repo: {
+            owner: "openai",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/openai/skills",
+          },
+        },
+      ],
+      repositories: [],
+      failedRepositories: [],
+    });
+    mockLoadBatchDeletePreview.mockResolvedValueOnce({
+      previews: [
+        {
+          skill_id: "code-reviewer",
+          skill_name: "code-reviewer",
+          central_path: "~/.skillsmanage/skills/code-reviewer",
+          copy_installations: [],
+          auto_removed_agent_ids: [],
+        },
+        {
+          skill_id: "github-one",
+          skill_name: "github-one",
+          central_path: "~/.skillsmanage/skills/github-one",
+          copy_installations: [],
+          auto_removed_agent_ids: [],
+        },
+      ],
+      failed: [],
+    });
+
+    renderCentralSkillsView({ centralOverrides: { skills } });
+
+    fireEvent.click(screen.getByTestId(`repo-${githubRepo.id}`));
+    fireEvent.click(await screen.findByRole("button", { name: "检查 openai/skills（1）" }));
+
+    await waitFor(() => {
+      expect(mockLoadBatchDeletePreview).toHaveBeenCalledWith(["code-reviewer", "github-one"]);
+    });
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("GitHub One Remote")).toBeInTheDocument();
+  });
+
   it("opens repository sync dialog for remote-added skills", async () => {
     window.history.replaceState(null, "", "/");
     window.localStorage.setItem("central.sidebarPinned", "true");
