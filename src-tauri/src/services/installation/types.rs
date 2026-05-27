@@ -35,6 +35,31 @@ pub struct FailedInstall {
     pub error: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BatchUninstallSkillRequest {
+    pub skill_id: String,
+    pub row_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BatchUninstallSkillSuccess {
+    pub skill_id: String,
+    pub row_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BatchUninstallSkillFailure {
+    pub skill_id: String,
+    pub row_id: Option<String>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BatchUninstallSkillResult {
+    pub succeeded: Vec<BatchUninstallSkillSuccess>,
+    pub failed: Vec<BatchUninstallSkillFailure>,
+}
+
 /// Successful item from a Central batch install request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CentralBatchInstallSuccess {

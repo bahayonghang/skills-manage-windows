@@ -41,6 +41,7 @@ async fn test_init_creates_all_tables() {
         "collection_skills",
         "skill_repositories",
         "skill_repository_members",
+        "skill_repository_sync_skips",
         "skill_update_states",
         "skill_tags",
         "skill_tag_links",
@@ -49,6 +50,9 @@ async fn test_init_creates_all_tables() {
         "scan_directories",
         "settings",
         "operation_logs",
+        "skill_calls",
+        "skill_call_providers",
+        "skill_call_scan_state",
     ];
     for table in &tables {
         let result = sqlx::query(&format!("SELECT COUNT(*) as cnt FROM {}", table))
@@ -64,6 +68,47 @@ async fn test_init_is_idempotent() {
     // Calling init_database again should not fail
     let result = init_database(&pool).await;
     assert!(result.is_ok(), "Second init should be idempotent");
+}
+
+#[tokio::test]
+async fn test_init_adds_performance_timestamp_columns_and_indexes() {
+    let pool = setup_test_db().await;
+
+    let skill_columns = table_columns(&pool, "skills").await;
+    assert!(skill_columns.contains(&"fs_created_at".to_string()));
+    assert!(skill_columns.contains(&"fs_updated_at".to_string()));
+
+    let observation_columns = table_columns(&pool, "agent_skill_observations").await;
+    assert!(observation_columns.contains(&"fs_created_at".to_string()));
+    assert!(observation_columns.contains(&"fs_updated_at".to_string()));
+
+    let observation_indexes = table_indexes(&pool, "agent_skill_observations").await;
+    assert!(
+        observation_indexes.contains(&"idx_agent_skill_observations_agent_name_dir".to_string())
+    );
+
+    let update_state_indexes = table_indexes(&pool, "skill_update_states").await;
+    assert!(update_state_indexes.contains(&"idx_skill_update_states_status_skill".to_string()));
+}
+
+async fn table_columns(pool: &DbPool, table: &str) -> Vec<String> {
+    sqlx::query(&format!("PRAGMA table_info({table})"))
+        .fetch_all(pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.try_get::<String, _>("name").unwrap())
+        .collect()
+}
+
+async fn table_indexes(pool: &DbPool, table: &str) -> Vec<String> {
+    sqlx::query(&format!("PRAGMA index_list({table})"))
+        .fetch_all(pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.try_get::<String, _>("name").unwrap())
+        .collect()
 }
 
 fn test_operation_log_entry(
@@ -309,7 +354,7 @@ async fn operation_log_export_contains_metadata_and_entries() {
 async fn test_builtin_agents_seeded() {
     let pool = setup_test_db().await;
     let agents = get_all_agents(&pool).await.unwrap();
-    assert_eq!(agents.len(), 33, "Should have exactly 33 built-in agents");
+    assert_eq!(agents.len(), 35, "Should have exactly 35 built-in agents");
 
     let ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
     // Coding platforms
@@ -330,6 +375,8 @@ async fn test_builtin_agents_seeded() {
     assert!(ids.contains(&"ob1"));
     assert!(ids.contains(&"amp"));
     assert!(ids.contains(&"antigravity"));
+    assert!(ids.contains(&"antigravity-cli"));
+    assert!(ids.contains(&"zed"));
     assert!(ids.contains(&"cline"));
     assert!(ids.contains(&"deep-agents"));
     assert!(ids.contains(&"firebender"));
@@ -391,6 +438,122 @@ async fn test_universal_agents_share_universal_skills_dir() {
             "{agent_id} should use the Universal Agents skills directory"
         );
     }
+
+    let antigravity = agents
+        .iter()
+        .find(|agent| agent.id == "antigravity")
+        .expect("antigravity agent should exist");
+    assert_eq!(antigravity.display_name, "Antigravity");
+    assert!(
+        !crate::paths::paths_equivalent(Path::new(&antigravity.global_skills_dir), &universal_dir),
+        "antigravity global skills should stay separate from ~/.agents/skills"
+    );
+    assert!(
+        antigravity
+            .global_skills_dir
+            .replace('\\', "/")
+            .ends_with(".gemini/antigravity/skills"),
+        "antigravity should use ~/.gemini/antigravity/skills"
+    );
+    assert_eq!(
+        antigravity.project_skills_dir.as_deref(),
+        Some(UNIVERSAL_PROJECT_SKILLS_DIR)
+    );
+
+    let antigravity_cli = agents
+        .iter()
+        .find(|agent| agent.id == "antigravity-cli")
+        .expect("antigravity-cli agent should exist");
+    assert_eq!(antigravity_cli.display_name, "Antigravity CLI");
+    assert_ne!(antigravity_cli.id, antigravity.id);
+    assert_ne!(
+        antigravity_cli.global_skills_dir,
+        antigravity.global_skills_dir
+    );
+    assert!(
+        !crate::paths::paths_equivalent(
+            Path::new(&antigravity_cli.global_skills_dir),
+            &universal_dir
+        ),
+        "antigravity-cli global skills should stay separate from ~/.agents/skills"
+    );
+    assert!(
+        antigravity_cli
+            .global_skills_dir
+            .replace('\\', "/")
+            .ends_with(".gemini/antigravity-cli/skills"),
+        "antigravity-cli should use ~/.gemini/antigravity-cli/skills"
+    );
+    assert_eq!(
+        antigravity_cli.project_skills_dir.as_deref(),
+        Some(UNIVERSAL_PROJECT_SKILLS_DIR)
+    );
+
+    let zed = agents
+        .iter()
+        .find(|agent| agent.id == "zed")
+        .expect("zed agent should exist");
+    assert_eq!(zed.display_name, "Zed");
+    assert!(
+        !crate::paths::paths_equivalent(Path::new(&zed.global_skills_dir), &universal_dir),
+        "zed should use its community-compatible skills directory, not ~/.agents/skills"
+    );
+    assert!(
+        zed.global_skills_dir
+            .replace('\\', "/")
+            .ends_with(".config/zed/skills"),
+        "zed should use ~/.config/zed/skills"
+    );
+    assert_eq!(zed.project_skills_dir.as_deref(), None);
+
+    let gemini_cli = agents
+        .iter()
+        .find(|agent| agent.id == "gemini-cli")
+        .expect("gemini-cli agent should exist");
+    assert_eq!(gemini_cli.display_name, "Gemini CLI (legacy)");
+    assert!(
+        !crate::paths::paths_equivalent(Path::new(&gemini_cli.global_skills_dir), &universal_dir),
+        "gemini-cli should carry the legacy/shared Google target, not ~/.agents/skills"
+    );
+    assert!(
+        gemini_cli
+            .global_skills_dir
+            .replace('\\', "/")
+            .ends_with(".gemini/skills"),
+        "gemini-cli should use ~/.gemini/skills"
+    );
+}
+
+#[test]
+fn test_remote_builtin_agents_rewrite_google_platform_paths() {
+    let agents = builtin_agents_for_posix_home("/home/alice");
+
+    let antigravity = agents
+        .iter()
+        .find(|agent| agent.id == "antigravity")
+        .expect("antigravity agent should exist");
+    let antigravity_cli = agents
+        .iter()
+        .find(|agent| agent.id == "antigravity-cli")
+        .expect("antigravity-cli agent should exist");
+    let gemini_cli = agents
+        .iter()
+        .find(|agent| agent.id == "gemini-cli")
+        .expect("gemini-cli agent should exist");
+
+    assert_eq!(
+        antigravity.global_skills_dir,
+        "/home/alice/.gemini/antigravity/skills"
+    );
+    assert_eq!(
+        antigravity_cli.global_skills_dir,
+        "/home/alice/.gemini/antigravity-cli/skills"
+    );
+    assert_eq!(gemini_cli.global_skills_dir, "/home/alice/.gemini/skills");
+    assert_eq!(
+        antigravity_cli.project_skills_dir.as_deref(),
+        Some(UNIVERSAL_PROJECT_SKILLS_DIR)
+    );
 }
 
 #[tokio::test]
@@ -407,7 +570,8 @@ async fn test_builtin_agents_seed_default_enabled_subset() {
     let expected_enabled_ids = std::collections::HashSet::from([
         "claude-code",
         "codex",
-        "gemini-cli",
+        "antigravity",
+        "antigravity-cli",
         "opencode",
         "kiro",
         "central",
@@ -421,7 +585,7 @@ async fn test_init_does_not_duplicate_agents_on_reinit() {
     let pool = setup_test_db().await;
     init_database(&pool).await.unwrap(); // Call a second time
     let agents = get_all_agents(&pool).await.unwrap();
-    assert_eq!(agents.len(), 33, "Reinit must not duplicate agents");
+    assert_eq!(agents.len(), 35, "Reinit must not duplicate agents");
 }
 
 // ── Skills ────────────────────────────────────────────────────────────────
@@ -441,6 +605,8 @@ fn make_skill(id: &str, name: &str, is_central: bool) -> Skill {
         source: None,
         content: Some("# Test Skill\n\nContent here.".to_string()),
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 
@@ -814,7 +980,7 @@ async fn test_insert_custom_agent() {
     insert_custom_agent(&pool, &custom).await.unwrap();
 
     let all = get_all_agents(&pool).await.unwrap();
-    assert_eq!(all.len(), 34, "Should have 33 builtins + 1 custom");
+    assert_eq!(all.len(), 36, "Should have 35 builtins + 1 custom");
 
     let retrieved = get_agent_by_id(&pool, "my-custom-agent")
         .await
@@ -1066,6 +1232,150 @@ async fn test_assign_github_repository_to_skill_records_source_path() {
 }
 
 #[tokio::test]
+async fn test_skill_repository_sync_skip_upsert_list_and_delete() {
+    let pool = setup_test_db().await;
+    let repository = create_or_update_skill_repository(
+        &pool,
+        Some("github-openai-skills-main"),
+        "openai/skills",
+        "github",
+        Some("openai"),
+        Some("skills"),
+        Some("main"),
+        Some("https://github.com/openai/skills"),
+        false,
+    )
+    .await
+    .unwrap();
+
+    let created = upsert_skill_repository_sync_skip(
+        &pool,
+        &repository.id,
+        "skills/planning-with-files-ar",
+        "planning-with-files-ar",
+        "Planning with Files AR",
+    )
+    .await
+    .unwrap();
+    assert_eq!(created.repository_id, repository.id);
+    assert_eq!(created.source_path, "skills/planning-with-files-ar");
+
+    let updated = upsert_skill_repository_sync_skip(
+        &pool,
+        &repository.id,
+        "skills/planning-with-files-ar",
+        "planning-files-ar",
+        "Planning Files Arabic",
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated.created_at, created.created_at);
+    assert_eq!(updated.skill_id, "planning-files-ar");
+    assert_eq!(updated.skill_name, "Planning Files Arabic");
+
+    let skips = get_skill_repository_sync_skips(&pool, std::slice::from_ref(&repository.id))
+        .await
+        .unwrap();
+    assert_eq!(skips.len(), 1);
+    assert_eq!(skips[0].source_path, "skills/planning-with-files-ar");
+
+    assert!(delete_skill_repository_sync_skip(
+        &pool,
+        &repository.id,
+        "skills/planning-with-files-ar"
+    )
+    .await
+    .unwrap());
+    assert!(
+        get_skill_repository_sync_skips(&pool, std::slice::from_ref(&repository.id))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn test_skill_repository_pinned_defaults_false_and_can_be_updated() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("github-pin-skill", "GitHub Pin Skill", true);
+    upsert_skill(&pool, &skill).await.unwrap();
+
+    let repository = assign_github_repository_to_skill(
+        &pool,
+        "openai",
+        "skills",
+        "main",
+        "https://github.com/openai/skills",
+        "github-pin-skill",
+        "skills/github-pin-skill",
+    )
+    .await
+    .unwrap();
+    assert!(!repository.pinned);
+
+    let updated = set_skill_repository_pinned(&pool, &repository.id, true)
+        .await
+        .unwrap();
+    assert!(updated.pinned);
+
+    let repositories = get_skill_repositories_with_stats(&pool).await.unwrap();
+    let listed = repositories
+        .iter()
+        .find(|entry| entry.repository.id == repository.id)
+        .unwrap();
+    assert!(listed.repository.pinned);
+}
+
+#[tokio::test]
+async fn test_create_or_update_skill_repository_preserves_pinned_state() {
+    let pool = setup_test_db().await;
+    let repository = create_or_update_skill_repository(
+        &pool,
+        Some("github-openai-skills-main"),
+        "openai/skills",
+        "github",
+        Some("openai"),
+        Some("skills"),
+        Some("main"),
+        Some("https://github.com/openai/skills"),
+        false,
+    )
+    .await
+    .unwrap();
+
+    set_skill_repository_pinned(&pool, &repository.id, true)
+        .await
+        .unwrap();
+    let refreshed = create_or_update_skill_repository(
+        &pool,
+        Some("github-openai-skills-main"),
+        "openai/skills-renamed",
+        "github",
+        Some("openai"),
+        Some("skills"),
+        Some("main"),
+        Some("https://github.com/openai/skills"),
+        false,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(refreshed.name, "openai/skills-renamed");
+    assert!(refreshed.pinned);
+}
+
+#[tokio::test]
+async fn test_set_skill_repository_pinned_rejects_unknown_repository() {
+    let pool = setup_test_db().await;
+
+    let error = set_skill_repository_pinned(&pool, LOCAL_UNKNOWN_REPOSITORY_ID, true)
+        .await
+        .unwrap_err();
+
+    assert!(error.contains("cannot be pinned"));
+}
+
+#[tokio::test]
 async fn test_delete_last_repository_skill_prunes_repository() {
     let pool = setup_test_db().await;
     let skill = make_skill("github-prune-skill", "GitHub Prune Skill", true);
@@ -1231,7 +1541,8 @@ async fn test_replace_skill_ai_tags_does_not_remove_manual_tags() {
 
 /// Returns the number of *unique* global_skills_dir paths across all
 /// built-in agents. This is the number of rows that seed_builtin_scan_directories
-/// inserts, with Universal agents sharing ~/.agents/skills and Central using
+/// inserts, with global Universal agents sharing ~/.agents/skills,
+/// Antigravity using ~/.gemini/antigravity/skills, and Central using
 /// ~/.skillsmanage/skills.
 fn expected_builtin_scan_dir_count() -> usize {
     let mut paths = std::collections::HashSet::new();
@@ -1298,12 +1609,14 @@ async fn test_builtin_scan_dirs_seeded_is_idempotent() {
 }
 
 #[tokio::test]
-async fn test_reinit_updates_stale_builtin_agent_paths() {
+async fn central_store_location_reinit_preserves_custom_central_agent_path() {
     let pool = setup_test_db().await;
-    sqlx::query("UPDATE agents SET global_skills_dir = '/tmp/.agents/skills' WHERE id = 'central'")
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE agents SET global_skills_dir = '/tmp/custom-central-skills' WHERE id = 'central'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
 
     init_database(&pool).await.unwrap();
 
@@ -1311,10 +1624,7 @@ async fn test_reinit_updates_stale_builtin_agent_paths() {
         .await
         .unwrap()
         .expect("central agent should exist");
-    assert_eq!(
-        central.global_skills_dir,
-        crate::paths::central_skills_dir().to_string_lossy()
-    );
+    assert_eq!(central.global_skills_dir, "/tmp/custom-central-skills");
 }
 
 #[tokio::test]
@@ -1349,8 +1659,14 @@ async fn test_reinit_preserves_existing_builtin_agent_enabled_flags() {
 }
 
 #[tokio::test]
-async fn test_reinit_replaces_stale_builtin_scan_directory_paths() {
+async fn central_store_location_reinit_seeds_scan_dirs_from_custom_central_agent_path() {
     let pool = setup_test_db().await;
+    sqlx::query(
+        "UPDATE agents SET global_skills_dir = '/tmp/custom-central-skills' WHERE id = 'central'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     sqlx::query("DELETE FROM scan_directories WHERE is_builtin = 1")
         .execute(&pool)
         .await
@@ -1367,12 +1683,10 @@ async fn test_reinit_replaces_stale_builtin_scan_directory_paths() {
     init_database(&pool).await.unwrap();
 
     let dirs = get_scan_directories(&pool).await.unwrap();
-    let central_path = crate::paths::central_skills_dir()
-        .to_string_lossy()
-        .into_owned();
     assert!(
-        dirs.iter().any(|dir| dir.path == central_path),
-        "reinit should seed the resolved central skills path"
+        dirs.iter()
+            .any(|dir| dir.path == "/tmp/custom-central-skills"),
+        "reinit should seed the DB central skills path"
     );
     assert!(
         !dirs.iter().any(|dir| dir.path == "/tmp/.agents/skills"),

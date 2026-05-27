@@ -979,6 +979,84 @@ async fn test_scan_all_skills_impl_non_claude_agents_ignore_claude_plugins() {
 }
 
 #[tokio::test]
+async fn test_scan_all_skills_impl_codex_scans_local_plugin_cache_as_read_only_observation() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    sqlx::query("DELETE FROM agents WHERE id != 'codex'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM scan_directories")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let user_root = tmp.path().join(".agents").join("skills");
+    let plugin_root = tmp
+        .path()
+        .join(".codex/plugins/cache/openai/example-plugin/1.0.0");
+    let plugin_skill_root = plugin_root.join("skills");
+
+    fs::create_dir_all(&user_root).unwrap();
+    fs::create_dir_all(&plugin_skill_root).unwrap();
+
+    create_skill_dir(
+        &user_root,
+        "shared-skill",
+        &valid_skill_md("Shared Skill", "User copy"),
+    );
+    create_skill_dir(
+        &plugin_skill_root,
+        "shared-skill",
+        &valid_skill_md("Shared Skill", "Plugin copy"),
+    );
+
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'codex'")
+        .bind(user_root.to_string_lossy().to_string())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let result = scan_all_skills_impl(&pool).await.unwrap();
+    assert_eq!(result.agents_scanned, 1);
+    assert_eq!(result.skills_by_agent.get("codex").copied(), Some(2));
+
+    let observations = db::get_agent_skill_observations(&pool, "codex")
+        .await
+        .unwrap();
+    assert_eq!(observations.len(), 1);
+    assert_eq!(observations[0].skill_id, "shared-skill");
+    assert_eq!(observations[0].source_kind, "plugin");
+    assert!(observations[0].is_read_only);
+    assert!(crate::paths::paths_equivalent(
+        Path::new(&observations[0].dir_path),
+        &plugin_skill_root.join("shared-skill")
+    ));
+    assert!(crate::paths::paths_equivalent(
+        Path::new(&observations[0].source_root),
+        &plugin_root
+    ));
+
+    let installs = db::get_skill_installations(&pool, "shared-skill")
+        .await
+        .unwrap();
+    assert_eq!(
+        installs.len(),
+        1,
+        "Codex plugin observations must not create install-state records"
+    );
+    assert_eq!(installs[0].agent_id, "codex");
+
+    let rows = db::get_skills_for_agent(&pool, "codex").await.unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().any(|row| row.source_kind.is_none()));
+    assert!(rows
+        .iter()
+        .any(|row| row.source_kind.as_deref() == Some("plugin") && row.is_read_only));
+}
+
+#[tokio::test]
 #[ignore = "manual isolated-home sanity check"]
 async fn test_scan_all_skills_impl_claude_fixture_home_sanity() {
     let fixture_home = Path::new("/tmp/skillport-test-fixtures/claude-multi-source");

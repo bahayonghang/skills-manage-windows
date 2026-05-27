@@ -55,6 +55,7 @@ describe("matchesRepositoryFilter", () => {
       source_type: "github",
       owner: "anthropics",
       repo: "skills",
+      pinned: false,
       is_unknown: false,
       created_at: "",
       updated_at: "",

@@ -574,6 +574,7 @@ export function MarketplaceShell({
                       }
                       onInstall={() => void onInstallSkillsSh(skill.source, skill.skill_id)}
                       isLoading={installingIds.has(installKey)}
+                      installLabel={t("marketplace.skillsShAddToCentral")}
                     />
                   );
                 })}

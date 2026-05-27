@@ -20,6 +20,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
             repo        TEXT,
             branch      TEXT,
             url         TEXT,
+            pinned      BOOLEAN NOT NULL DEFAULT 0,
             is_unknown  BOOLEAN NOT NULL DEFAULT 0,
             created_at  TEXT NOT NULL,
             updated_at  TEXT NOT NULL
@@ -28,6 +29,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    ensure_column(
+        pool,
+        "skill_repositories",
+        "pinned",
+        "ALTER TABLE skill_repositories ADD COLUMN pinned BOOLEAN NOT NULL DEFAULT 0",
+    )
+    .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_repository_members (
@@ -52,6 +61,30 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_repository_members_repository_skill_id
          ON skill_repository_members(repository_id, skill_id)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_repository_sync_skips (
+            repository_id TEXT NOT NULL,
+            source_path   TEXT NOT NULL,
+            skill_id      TEXT NOT NULL,
+            skill_name    TEXT NOT NULL,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL,
+            last_seen_at  TEXT NOT NULL,
+            PRIMARY KEY (repository_id, source_path)
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_repository_sync_skips_repository_seen
+         ON skill_repository_sync_skips(repository_id, last_seen_at DESC)",
     )
     .execute(pool)
     .await
@@ -84,6 +117,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_update_states_checked_skill
          ON skill_update_states(last_checked_at DESC, skill_id)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_update_states_status_skill
+         ON skill_update_states(status, skill_id)",
     )
     .execute(pool)
     .await
@@ -187,6 +228,45 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_ai_tag_reviews_status_updated_skill_tag
          ON skill_ai_tag_reviews(status, updated_at DESC, skill_id, tag_id)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    /*
+     * ========================================================================
+     * 步骤 N（Update Mechanism Overhaul P2）：新数据模型
+     * ========================================================================
+     * 目标：
+     * 1) `skill_repositories.last_synced_at`：repo 级 sync 时间戳，refresh 写入
+     * 2) `skill_repository_pending_additions`：refresh 发现的远端新增 skill 候选
+     */
+    ensure_column(
+        pool,
+        "skill_repositories",
+        "last_synced_at",
+        "ALTER TABLE skill_repositories ADD COLUMN last_synced_at TEXT",
+    )
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_repository_pending_additions (
+            repository_id              TEXT NOT NULL,
+            source_path                TEXT NOT NULL,
+            skill_id                   TEXT NOT NULL,
+            skill_name                 TEXT NOT NULL,
+            conflict_existing_skill_id TEXT,
+            discovered_at              TEXT NOT NULL,
+            PRIMARY KEY (repository_id, source_path)
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_repository_pending_additions_repo
+         ON skill_repository_pending_additions(repository_id, discovered_at DESC)",
     )
     .execute(pool)
     .await

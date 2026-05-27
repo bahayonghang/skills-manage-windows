@@ -9,8 +9,9 @@ pub async fn upsert_agent_skill_observation(
     sqlx::query(
         "INSERT INTO agent_skill_observations
          (row_id, agent_id, skill_id, name, description, file_path, dir_path,
-          source_kind, source_root, link_type, symlink_target, is_read_only, scanned_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          source_kind, source_root, link_type, symlink_target, is_read_only, scanned_at,
+          fs_created_at, fs_updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(row_id) DO UPDATE SET
            agent_id       = excluded.agent_id,
            skill_id       = excluded.skill_id,
@@ -23,7 +24,9 @@ pub async fn upsert_agent_skill_observation(
            link_type      = excluded.link_type,
            symlink_target = excluded.symlink_target,
            is_read_only   = excluded.is_read_only,
-           scanned_at     = excluded.scanned_at",
+           scanned_at     = excluded.scanned_at,
+           fs_created_at  = COALESCE(excluded.fs_created_at, agent_skill_observations.fs_created_at),
+           fs_updated_at  = COALESCE(excluded.fs_updated_at, agent_skill_observations.fs_updated_at)",
     )
     .bind(&observation.row_id)
     .bind(&observation.agent_id)
@@ -38,6 +41,8 @@ pub async fn upsert_agent_skill_observation(
     .bind(&observation.symlink_target)
     .bind(observation.is_read_only)
     .bind(&observation.scanned_at)
+    .bind(&observation.fs_created_at)
+    .bind(&observation.fs_updated_at)
     .execute(pool)
     .await
     .map(|_| ())

@@ -61,7 +61,9 @@ description: Review code changes and identify bugs. Use when the user asks for c
 | **Claude Code** | `.claude/skills/` | `~/.claude/skills/` |
 | **Cursor** | `.agents/skills/` | `~/.cursor/skills/` |
 | **Codex (OpenAI)** | `.agents/skills/` | `~/.agents/skills/` (+ `/etc/codex/skills/` admin) |
-| **Gemini CLI** | `.agents/skills/` | `~/.gemini/skills/` |
+| **Antigravity (Google app)** | `.agents/skills/` | `~/.gemini/antigravity/skills/` |
+| **Antigravity CLI** | `.agents/skills/` | `~/.gemini/antigravity-cli/skills/` |
+| **Gemini CLI (legacy / enterprise)** | `.agents/skills/` | `~/.gemini/skills/` |
 | **Trae** | `.trae/skills/` | `~/.trae/skills/` |
 | **Trae CN** | `.trae/skills/` | `~/.trae-cn/skills/` |
 | **Factory Droid** | `.factory/skills/` | `~/.factory/skills/` |
@@ -82,7 +84,9 @@ description: Review code changes and identify bugs. Use when the user asks for c
 | **Amp** | `.agents/skills/` | `~/.config/agents/skills/` |
 | **Qwen Code** | `.qwen/skills/` | `~/.qwen/skills/` |
 
-**关键发现**：Codex、Cursor、Gemini CLI、Cline、Copilot 等多个平台都兼容 `.agents/skills/` 作为通用路径，这使得 `~/.agents/skills/` 成为天然的 canonical 真实源目录。
+**2026-05-25 更新**：SkillPort 明确区分 Google 的 Antigravity 应用目标与 Antigravity CLI。Antigravity 全局技能目录仍是 `~/.gemini/antigravity/skills/`；Antigravity CLI 全局技能目录是 `~/.gemini/antigravity-cli/skills/`；两者的项目 / workspace 技能目录都是 `.agents/skills/`。Gemini CLI 保留为 legacy/shared Google 兼容平台，承载 `~/.gemini/skills/`。
+
+**关键发现**：Codex、Cursor、Cline、Copilot、OpenCode、Amp、Antigravity、Antigravity CLI 等多个平台都兼容 `.agents/skills/` 作为项目或通用路径，这使得 `~/.agents/skills/` 仍是重要的 Universal Agents 目标。Gemini CLI 的全局 shared / legacy 目标则由 `~/.gemini/skills/` 承载。
 
 ---
 
@@ -119,11 +123,13 @@ description: Review code changes and identify bugs. Use when the user asks for c
 - **Plugin 机制**：可将 skills 打包为 plugin 分发
 - **禁用配置**：`~/.codex/config.toml` 中通过 `[[skills.config]]` 条目禁用
 
-### Gemini CLI (Google)
+### Antigravity / Antigravity CLI / Gemini CLI (Google)
 
-- **路径别名**：`.agents/skills/` 是 `.gemini/skills/` 的别名（PR #18151）
-- **内置创建器**：`skill-creator` 内置 skill 可通过对话创建新 skill
-- **配置文件**：`settings.json` + `GEMINI.md` 控制行为
+- **Antigravity（应用目标）**：全局 skills 使用 `~/.gemini/antigravity/skills/`，项目 / workspace skills 使用 `.agents/skills/`。
+- **Antigravity CLI**：全局 skills 使用 `~/.gemini/antigravity-cli/skills/`，项目 / workspace skills 使用 `.agents/skills/`。
+- **Gemini CLI（legacy / enterprise）**：保留 `~/.gemini/skills/` / `.agents/skills/` 兼容语义，避免破坏既有本地目录和数据库行。
+- **插件边界**：Antigravity plugin bundle 属于 CLI 插件机制，不等同于 SkillPort 当前管理的 `SKILL.md` 技能目录；本轮不实现 plugin import/export。
+- **配置文件**：Google 平台仍可能通过 settings / 项目说明文件控制行为，SkillPort 只管理 skill 文件夹落点。
 
 ### Factory Droid
 
@@ -151,7 +157,7 @@ description: Review code changes and identify bugs. Use when the user asks for c
 - **安装源**：GitHub shorthand / 完整 URL / GitLab / git URL / 本地路径
 - **核心命令**：`add`, `remove`, `list`, `find`, `check`, `update`, `init`
 - **安装方法**：Symlink（推荐）/ Copy
-- **Global 路径**：`~/.agents/skills/` 作为 canonical 源
+- **Global 路径**：`~/.agents/skills/` 作为 Universal Agents canonical 源；Antigravity 与 Antigravity CLI 全局技能分别例外使用 `~/.gemini/antigravity/skills/`、`~/.gemini/antigravity-cli/skills/`；Gemini CLI legacy/shared 目标使用 `~/.gemini/skills/`
 - **Lock 文件**：`~/.agents/.skill-lock.json`
 
 **已知问题（来自 GitHub Issues）**：

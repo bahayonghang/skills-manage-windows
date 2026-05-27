@@ -39,6 +39,7 @@ interface SkillDetailSidebarProps {
   detail: SkillDetail | null;
   isRemoteTarget: boolean;
   onOpenSourcePath: () => void;
+  onOpenDetailDirectory: () => void;
   directoryTree: DirectoryTreeEntry[];
   isDirectoryLoading: boolean;
   onOpenFileTreePath: (path: string) => void;
@@ -196,6 +197,7 @@ export function SkillDetailSidebar({
   detail,
   isRemoteTarget,
   onOpenSourcePath,
+  onOpenDetailDirectory,
   directoryTree,
   isDirectoryLoading,
   onOpenFileTreePath,
@@ -283,12 +285,30 @@ export function SkillDetailSidebar({
             <div className="space-y-2.5">
               <MetadataRow label={t("detail.filePath")} value={detail.file_path} />
               {detail.dir_path && (
-                <MetadataRow
-                  label={t("detail.directoryPath", {
-                    defaultValue: i18n.language.startsWith("zh") ? "目录路径" : "Directory path",
-                  })}
-                  value={detail.dir_path}
-                />
+                <div className="space-y-1.5">
+                  <MetadataRow
+                    label={t("detail.directoryPath", {
+                      defaultValue: i18n.language.startsWith("zh") ? "目录路径" : "Directory path",
+                    })}
+                    value={detail.dir_path}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={onOpenDetailDirectory}
+                    className="h-7 gap-1.5 px-2 text-xs"
+                  >
+                    {isRemoteTarget ? (
+                      <Copy className="size-3.5" />
+                    ) : (
+                      <FolderOpen className="size-3.5" />
+                    )}
+                    {isRemoteTarget
+                      ? t("detail.copyRemoteFolderPath")
+                      : t("detail.openFolder")}
+                  </Button>
+                </div>
               )}
               {detail.canonical_path && (
                 <MetadataRow label={t("detail.canonical")} value={detail.canonical_path} />

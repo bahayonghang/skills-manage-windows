@@ -93,6 +93,8 @@ pub async fn import_obsidian_skill_to_central_impl(
             source: Some("copy".to_string()),
             content: None,
             scanned_at: now,
+            fs_created_at: None,
+            fs_updated_at: None,
         };
         db::upsert_skill(pool, &db_skill).await?;
     }
@@ -171,6 +173,8 @@ pub async fn import_obsidian_skill_to_platform_impl(
             source: Some(install_method.as_str().to_string()),
             content: None,
             scanned_at: now.clone(),
+            fs_created_at: None,
+            fs_updated_at: None,
         };
         db::upsert_skill(pool, &db_skill).await?;
     }

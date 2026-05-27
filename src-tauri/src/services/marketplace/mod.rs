@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use crate::paths;
 use crate::secrets::SecretStore;
 use crate::services::github_import;
-use crate::targets::{connect_ssh_target, remote_join, ActiveTarget};
+use crate::targets::{connect_remote_target, remote_join, ActiveTarget};
 
 mod skills_sh;
 
@@ -522,7 +522,7 @@ pub async fn install_marketplace_skill_impl(
         .await
         .map_err(|e| format!("Failed to read response: {}", e))?;
 
-    match active_target {
+    match &active_target {
         ActiveTarget::Local => {
             let skill_dir = central_skill_dir_for_name(&paths::central_skills_dir(), &skill.name);
             std::fs::create_dir_all(&skill_dir)
@@ -532,13 +532,13 @@ pub async fn install_marketplace_skill_impl(
             std::fs::write(&skill_md_path, &content)
                 .map_err(|e| format!("Failed to write SKILL.md: {}", e))?;
         }
-        ActiveTarget::Ssh(target) => {
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let central = crate::db::get_agent_by_id(pool, "central")
                 .await?
                 .ok_or_else(|| "Central agent not found in database".to_string())?;
             let skill_dir = remote_join(&central.global_skills_dir, &skill.name);
             let skill_md_path = remote_join(&skill_dir, "SKILL.md");
-            let connection = connect_ssh_target(&target).await?;
+            let connection = connect_remote_target(&active_target).await?;
             connection.mkdir_p(&skill_dir).await?;
             connection
                 .write_file(&skill_md_path, content.as_bytes())

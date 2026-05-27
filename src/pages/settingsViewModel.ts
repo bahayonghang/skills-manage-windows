@@ -17,7 +17,10 @@ import { matchesPlatformVisibilityQuery } from "@/components/settings/platformVi
 import type { AiProvider } from "@/data/aiProviders";
 import { resolveProviderApiUrl } from "@/lib/aiProviderConfig";
 import type { AgentWithStatus, TargetSummary } from "@/types";
-import type { SshTargetFormState } from "@/components/settings/RemoteTargetsSettingsSection";
+import type {
+  SshTargetFormState,
+  WslTargetFormState,
+} from "@/components/settings/RemoteTargetsSettingsSection";
 
 const DB_PATH_FALLBACK = "~/.skillsmanage/db.sqlite";
 
@@ -31,6 +34,11 @@ export const EMPTY_SSH_TARGET_FORM: SshTargetFormState = {
   authMethod: "key",
   keyPath: "",
   password: "",
+};
+
+export const EMPTY_WSL_TARGET_FORM: WslTargetFormState = {
+  label: "",
+  distribution: "",
 };
 
 export const FLAVOR_COLORS: Record<ThemeFlavor, string> = {
@@ -192,7 +200,7 @@ export function getNextAiProviderPatch(
         ? provider.regions[0]
         : aiSettings.region,
     customUrl: id === "custom" ? aiSettings.customUrl : "",
-    protocol: id === "custom" ? aiSettings.protocol : "",
+    protocol: id === "custom" ? aiSettings.protocol : provider?.defaultProtocol ?? "",
   };
 }
 
@@ -205,6 +213,13 @@ export function targetToSshTargetForm(target: TargetSummary): SshTargetFormState
     authMethod: target.authMethod ?? "key",
     keyPath: target.keyPath ?? "",
     password: "",
+  };
+}
+
+export function targetToWslTargetForm(target: TargetSummary): WslTargetFormState {
+  return {
+    label: target.label,
+    distribution: target.distribution ?? "",
   };
 }
 
@@ -227,5 +242,12 @@ export function sshTargetPayload(
       authMethod === "password" && (includeEmptyPassword || password)
         ? form.password
         : null,
+  };
+}
+
+export function wslTargetPayload(form: WslTargetFormState) {
+  return {
+    label: form.label.trim(),
+    distribution: form.distribution.trim(),
   };
 }

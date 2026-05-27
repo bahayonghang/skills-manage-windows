@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { ProjectInstallDialog } from "../components/projects/ProjectInstallDialog";
-import { getPlatformTargetGroups } from "../lib/platformTargetGroups";
+import { getProjectPlatformTargetGroups } from "../lib/platformTargetGroups";
 import type {
   AgentWithStatus,
   Project,
@@ -53,6 +53,26 @@ const mockAgents: AgentWithStatus[] = [
     is_enabled: true,
   },
   {
+    id: "antigravity",
+    display_name: "Antigravity",
+    category: "coding",
+    global_skills_dir: "~/.gemini/antigravity/skills/",
+    project_skills_dir: ".agents/skills",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
+    id: "antigravity-cli",
+    display_name: "Antigravity CLI",
+    category: "coding",
+    global_skills_dir: "~/.gemini/antigravity-cli/skills/",
+    project_skills_dir: ".agents/skills",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
     id: "central",
     display_name: "Central",
     category: "central",
@@ -67,7 +87,7 @@ const mockOnConfirm = vi.fn();
 const mockOnOpenChange = vi.fn();
 
 function renderDialog(overrides: { existingSkills?: ProjectSkill[] } = {}) {
-  const platformTargets = getPlatformTargetGroups(mockAgents, {
+  const platformTargets = getProjectPlatformTargetGroups(mockAgents, {
     coding: true,
     lobster: true,
   });
@@ -98,6 +118,8 @@ describe("ProjectInstallDialog", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Universal")).toBeInTheDocument();
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Antigravity/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Antigravity CLI/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Codex")).not.toBeInTheDocument();
     // central agent should be filtered out
     expect(screen.queryByText("Central")).not.toBeInTheDocument();
@@ -126,6 +148,9 @@ describe("ProjectInstallDialog", () => {
         "symlink"
       );
     });
+    const [, agentIds] = mockOnConfirm.mock.calls[0];
+    expect(agentIds).not.toContain("antigravity");
+    expect(agentIds).not.toContain("antigravity-cli");
   });
 
   it("passes the Universal representative agent when only Universal is selected", async () => {

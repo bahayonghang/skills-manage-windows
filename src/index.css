@@ -3,6 +3,8 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/inter";
+@import "@fontsource/instrument-serif";
 
 @custom-variant dark (&:is([data-theme='mocha'] *, [data-theme='macchiato'] *, [data-theme='frappe'] *, [data-theme='claude-dark'] *));
 
@@ -13,6 +15,110 @@
     --scrollbar-thumb-hover: color-mix(in srgb, var(--muted-foreground) 58%, transparent);
     --scrollbar-thumb-active: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
     --scrollbar-track: color-mix(in srgb, var(--muted) 22%, transparent);
+}
+
+/* Static boot surface rendered from index.html before React chunks load. */
+.startup-shell {
+    display: flex;
+    min-height: 100%;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 50% 35%, rgba(180, 190, 254, 0.16), transparent 34rem),
+        linear-gradient(135deg, #1e1e2e 0%, #181825 58%, #11111b 100%);
+    color: #cdd6f4;
+    font-family: 'JetBrains Mono Variable', 'Geist Variable', ui-monospace, monospace;
+}
+
+.startup-card {
+    display: grid;
+    width: min(22rem, calc(100vw - 3rem));
+    gap: 1.25rem;
+    justify-items: center;
+    border: 1px solid rgba(180, 190, 254, 0.18);
+    border-radius: 1.5rem;
+    background: rgba(24, 24, 37, 0.76);
+    padding: 2rem;
+    box-shadow:
+        inset 0 1px 0 rgba(205, 214, 244, 0.08),
+        0 24px 80px rgba(17, 17, 27, 0.5);
+    backdrop-filter: blur(18px);
+}
+
+.startup-mark {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.startup-mark span {
+    display: block;
+    width: 0.7rem;
+    height: 2.25rem;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #b4befe 0%, #89b4fa 100%);
+    animation: startup-pulse 900ms ease-in-out infinite;
+}
+
+.startup-mark span:nth-child(2) {
+    height: 3rem;
+    animation-delay: 120ms;
+}
+
+.startup-mark span:nth-child(3) {
+    animation-delay: 240ms;
+}
+
+.startup-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+}
+
+.startup-progress {
+    position: relative;
+    height: 0.2rem;
+    width: 12rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(69, 71, 90, 0.8);
+}
+
+.startup-progress span {
+    position: absolute;
+    inset-block: 0;
+    width: 38%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, transparent, #b4befe, transparent);
+    animation: startup-progress 1.2s ease-in-out infinite;
+}
+
+@keyframes startup-pulse {
+    0%, 100% {
+        transform: scaleY(0.72);
+        opacity: 0.62;
+    }
+    50% {
+        transform: scaleY(1);
+        opacity: 1;
+    }
+}
+
+@keyframes startup-progress {
+    0% {
+        left: -38%;
+    }
+    100% {
+        left: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .startup-mark span,
+    .startup-progress span {
+        animation: none;
+    }
 }
 
 @theme inline {
@@ -909,4 +1015,171 @@
 
 .scrollbar-subtle::-webkit-scrollbar-thumb:active {
   background-color: var(--scrollbar-thumb-active);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dashboard 玻璃态层 — PR2 设计系统增量
+   ═══════════════════════════════════════════════════════════════════════════
+   - --font-display / --font-body：用户可在 Settings 切换的字体（默认 Geist / JBM）
+   - --font-scale：基础字号缩放（0.875 / 1 / 1.125）
+   - html[data-display-font='...']：按 key 切换字体族；自定义走内联 style 注入
+   - .surface-glass / .surface-glass-strong：dashboard 卡片背景层
+   - .bg-orbit：Dashboard <main> 装饰径向背景
+   - .readiness-card / .readiness-score-plaque：Dashboard 质量控制面板
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+    --font-display: 'Geist Variable', 'JetBrains Mono Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-body: 'JetBrains Mono Variable', 'Geist Variable', ui-monospace, monospace;
+    --font-scale: 1;
+    --shadow-orbit: 0 24px 70px color-mix(in oklch, var(--background) 86%, transparent);
+}
+
+html[data-display-font='geist'] {
+    --font-display: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+}
+html[data-display-font='jetbrains'] {
+    --font-display: 'JetBrains Mono Variable', ui-monospace, monospace;
+}
+html[data-display-font='inter'] {
+    --font-display: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+}
+html[data-display-font='serif'] {
+    --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+}
+html[data-display-font='system'] {
+    --font-display: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+html[data-body-font='jetbrains'] {
+    --font-body: 'JetBrains Mono Variable', ui-monospace, monospace;
+}
+html[data-body-font='geist'] {
+    --font-body: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+}
+html[data-body-font='inter'] {
+    --font-body: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+}
+html[data-body-font='system'] {
+    --font-body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.font-display {
+    font-family: var(--font-display);
+}
+
+.font-body {
+    font-family: var(--font-body);
+}
+
+/* ── 玻璃态卡片层（基于现有 --card token，不引入 OKLCH 字面值） ─────────── */
+
+.surface-glass {
+    background: linear-gradient(
+        145deg,
+        color-mix(in oklch, var(--card) 92%, white 4%),
+        color-mix(in oklch, var(--card) 84%, transparent 12%)
+    );
+    border: 1px solid color-mix(in oklch, var(--border) 88%, transparent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--foreground) 6%, transparent),
+        var(--shadow-orbit);
+    backdrop-filter: blur(26px) saturate(155%);
+    -webkit-backdrop-filter: blur(26px) saturate(155%);
+}
+
+.surface-glass-strong {
+    background: linear-gradient(
+        145deg,
+        color-mix(in oklch, var(--card) 96%, white 6%),
+        color-mix(in oklch, var(--card) 88%, transparent 8%)
+    );
+    border: 1px solid color-mix(in oklch, var(--border) 96%, transparent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--foreground) 8%, transparent),
+        0 28px 90px color-mix(in oklch, var(--background) 80%, transparent);
+    backdrop-filter: blur(30px) saturate(160%);
+    -webkit-backdrop-filter: blur(30px) saturate(160%);
+}
+
+.bg-orbit {
+    background:
+        radial-gradient(circle at 16% 4%, color-mix(in oklch, var(--primary) 28%, transparent), transparent 34rem),
+        radial-gradient(circle at 80% 2%, color-mix(in oklch, var(--ring) 20%, transparent), transparent 30rem),
+        linear-gradient(145deg, color-mix(in oklch, var(--background) 96%, black 4%), var(--background));
+}
+
+/* ── Dashboard readiness control panel ───────────────────────────────────── */
+
+.readiness-card {
+    position: relative;
+    min-height: 100%;
+    overflow: hidden;
+}
+
+.readiness-card::before {
+    content: '';
+    position: absolute;
+    inset: -38% -22% auto auto;
+    width: 17rem;
+    aspect-ratio: 1;
+    border-radius: 999px;
+    background:
+        radial-gradient(circle, color-mix(in oklch, var(--primary) 30%, transparent), transparent 68%),
+        conic-gradient(from 140deg, color-mix(in oklch, var(--chart-1) 45%, transparent), transparent 46%);
+    filter: blur(4px);
+    opacity: 0.72;
+}
+
+.readiness-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(90deg, color-mix(in oklch, var(--border) 22%, transparent) 1px, transparent 1px),
+        linear-gradient(0deg, color-mix(in oklch, var(--border) 18%, transparent) 1px, transparent 1px);
+    background-size: 2.35rem 2.35rem;
+    mask-image: linear-gradient(145deg, transparent 0%, black 34%, transparent 78%);
+    opacity: 0.18;
+}
+
+.readiness-score-plaque {
+    position: relative;
+    overflow: hidden;
+    background:
+        linear-gradient(145deg, color-mix(in oklch, var(--card) 94%, white 5%), color-mix(in oklch, var(--card) 82%, transparent)),
+        conic-gradient(from 215deg, color-mix(in oklch, var(--primary) 28%, transparent) 0 var(--score-angle, 0deg), transparent var(--score-angle, 0deg) 360deg);
+    border: 1px solid color-mix(in oklch, var(--border) 86%, transparent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--foreground) 8%, transparent),
+        0 18px 48px color-mix(in oklch, var(--background) 78%, transparent);
+}
+
+.readiness-score-plaque::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(110deg, transparent, color-mix(in oklch, var(--foreground) 7%, transparent), transparent);
+    transform: translateX(-52%);
+}
+
+.readiness-rail {
+    position: relative;
+    overflow: hidden;
+}
+
+.readiness-rail::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(120deg, transparent, color-mix(in oklch, var(--foreground) 5%, transparent), transparent);
+    opacity: 0.48;
+}
+
+.readiness-rail > * {
+    position: relative;
 }

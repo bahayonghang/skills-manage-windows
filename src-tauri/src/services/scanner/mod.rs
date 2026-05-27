@@ -12,14 +12,17 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
 use crate::db::{self, AgentSkillObservation, DbPool, Skill, SkillInstallation};
-use crate::targets::{connect_ssh_target, RemoteTargetConfig};
+use crate::skill_time::filesystem_timestamps_from_metadata;
+use crate::targets::{connect_remote_target, ActiveTarget};
 
 mod claude_plugin;
+mod persistence;
 mod ssh_batch;
 
 use claude_plugin::{
-    claude_observation_row_id, scan_roots_for_agent, AgentScanRoot, ClaudeSourceKind,
+    agent_tracks_observations, observation_row_id, scan_roots_for_agent, AgentScanRoot, SourceKind,
 };
+use persistence::{persist_scan_batch, ScanPersistenceBatch};
 use ssh_batch::{
     build_batch_read_script, build_probe_script, build_scanned_skills_from_contents,
     parse_batch_read_output, parse_probe_output, unique_skill_paths, RemoteScanItem,
@@ -50,6 +53,8 @@ pub struct ScannedSkill {
     /// Symlink target path, if link_type is "symlink".
     pub symlink_target: Option<String>,
     pub is_central: bool,
+    pub fs_created_at: Option<String>,
+    pub fs_updated_at: Option<String>,
 }
 
 /// Summary returned by `scan_all_skills`.
@@ -69,6 +74,8 @@ struct DirectorySkillEntry {
     pub dir_path: String,
     pub is_symlink: bool,
     pub symlink_target: Option<String>,
+    pub fs_created_at: Option<String>,
+    pub fs_updated_at: Option<String>,
 }
 
 // ─── Core Functions ───────────────────────────────────────────────────────────
@@ -161,6 +168,8 @@ fn build_scanned_skill(entry: &DirectorySkillEntry, is_central: bool) -> Scanned
         link_type,
         symlink_target: entry.symlink_target.clone(),
         is_central,
+        fs_created_at: entry.fs_created_at.clone(),
+        fs_updated_at: entry.fs_updated_at.clone(),
     }
 }
 
@@ -187,6 +196,7 @@ fn scan_directory_entries(dir: &Path) -> Vec<DirectorySkillEntry> {
         if !skill_md_path.exists() {
             continue;
         }
+        let file_meta = std::fs::metadata(&skill_md_path).ok();
 
         let info = match parse_skill_md(&skill_md_path) {
             Some(info) => info,
@@ -194,6 +204,8 @@ fn scan_directory_entries(dir: &Path) -> Vec<DirectorySkillEntry> {
         };
 
         let (is_symlink, symlink_target) = inspect_directory_entry(&entry_path);
+        let (fs_created_at, fs_updated_at) =
+            filesystem_timestamps_from_metadata(Some(&meta), file_meta.as_ref());
         let id = entry_path
             .file_name()
             .and_then(|name| name.to_str())
@@ -208,6 +220,8 @@ fn scan_directory_entries(dir: &Path) -> Vec<DirectorySkillEntry> {
             dir_path: entry_path.to_string_lossy().into_owned(),
             is_symlink,
             symlink_target,
+            fs_created_at,
+            fs_updated_at,
         });
     }
 
@@ -236,53 +250,6 @@ fn scan_parallelism_limit() -> usize {
     std::thread::available_parallelism()
         .map(|parallelism| parallelism.get().clamp(1, 8))
         .unwrap_or(4)
-}
-
-async fn delete_skills_not_in_scope(
-    pool: &DbPool,
-    found_skill_ids: &[String],
-) -> Result<(), String> {
-    if found_skill_ids.is_empty() {
-        sqlx::query("DELETE FROM skill_installations")
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        return sqlx::query("DELETE FROM skills")
-            .execute(pool)
-            .await
-            .map(|_| ())
-            .map_err(|e| e.to_string());
-    }
-
-    let placeholders = found_skill_ids
-        .iter()
-        .map(|_| "?")
-        .collect::<Vec<_>>()
-        .join(",");
-    let installation_sql = format!(
-        "DELETE FROM skill_installations WHERE skill_id NOT IN ({})",
-        placeholders
-    );
-    let mut installation_query = sqlx::query(&installation_sql);
-    for skill_id in found_skill_ids {
-        installation_query = installation_query.bind(skill_id.as_str());
-    }
-    installation_query
-        .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let skill_sql = format!("DELETE FROM skills WHERE id NOT IN ({})", placeholders);
-    let mut skill_query = sqlx::query(&skill_sql);
-    for skill_id in found_skill_ids {
-        skill_query = skill_query.bind(skill_id.as_str());
-    }
-    skill_query
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 /// Walk `dir` one level deep, looking for immediate subdirectories that contain
@@ -335,10 +302,10 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
 
     let mut total_skills: usize = 0;
     let mut skills_by_agent: HashMap<String, usize> = HashMap::new();
-    let mut all_found_skill_ids: HashSet<String> = HashSet::new();
     let mut scanned_root_cache: HashMap<String, Vec<ScannedSkill>> = HashMap::new();
     let mut counted_scan_roots: HashSet<String> = HashSet::new();
     let scan_semaphore = Arc::new(Semaphore::new(scan_parallelism_limit()));
+    let mut persistence = ScanPersistenceBatch::default();
 
     for agent in &agents {
         let is_central = agent.category == "central";
@@ -349,20 +316,22 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
             .collect();
 
         if existing_roots.is_empty() {
-            db::update_agent_detected(pool, &agent.id, false).await?;
-            skills_by_agent.insert(agent.id.clone(), 0);
-            db::delete_stale_skill_installations(pool, &agent.id, &[]).await?;
-            if agent.id == "claude-code" {
-                db::delete_stale_agent_skill_observations(pool, &agent.id, &[]).await?;
+            persistence.set_agent_detected(&agent.id, false);
+            persistence.touch_install_agent(&agent.id);
+            if agent_tracks_observations(&agent.id) {
+                persistence.touch_observation_agent(&agent.id);
             }
+            skills_by_agent.insert(agent.id.clone(), 0);
             continue;
         }
 
-        db::update_agent_detected(pool, &agent.id, true).await?;
+        persistence.set_agent_detected(&agent.id, true);
+        persistence.touch_install_agent(&agent.id);
+        if agent_tracks_observations(&agent.id) {
+            persistence.touch_observation_agent(&agent.id);
+        }
 
         let mut scanned = Vec::new();
-        let mut found_install_ids = Vec::new();
-        let mut found_observation_row_ids = Vec::new();
         let mut root_results: Vec<Option<Vec<ScannedSkill>>> = vec![None; existing_roots.len()];
         let mut pending_root_scans = Vec::new();
 
@@ -420,9 +389,9 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
             }
 
             for skill in &root_scanned {
-                if let Some(source_kind) = root.claude_source {
+                if let Some(source_kind) = root.source_kind {
                     let observation = AgentSkillObservation {
-                        row_id: claude_observation_row_id(&agent.id, &skill.dir_path),
+                        row_id: observation_row_id(&agent.id, &skill.dir_path),
                         agent_id: agent.id.clone(),
                         skill_id: skill.id.clone(),
                         name: skill.name.clone(),
@@ -435,16 +404,17 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                         symlink_target: skill.symlink_target.clone(),
                         is_read_only: source_kind.is_read_only(),
                         scanned_at: scan_started_at.clone(),
+                        fs_created_at: skill.fs_created_at.clone(),
+                        fs_updated_at: skill.fs_updated_at.clone(),
                     };
-                    db::upsert_agent_skill_observation(pool, &observation).await?;
-                    found_observation_row_ids.push(observation.row_id);
+                    persistence.remember_observation(&agent.id, &observation.row_id);
+                    persistence.observations.push(observation);
                 }
 
-                let should_persist_manageable_state =
-                    root.claude_source != Some(ClaudeSourceKind::Plugin);
+                let should_persist_manageable_state = root.source_kind != Some(SourceKind::Plugin);
                 if should_persist_manageable_state {
-                    all_found_skill_ids.insert(skill.id.clone());
-                    found_install_ids.push(skill.id.clone());
+                    persistence.global_found_skill_ids.insert(skill.id.clone());
+                    persistence.remember_installation(&agent.id, &skill.id);
 
                     let db_skill = Skill {
                         id: skill.id.clone(),
@@ -460,8 +430,10 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                         source: Some(skill.link_type.clone()),
                         content: None,
                         scanned_at: scan_started_at.clone(),
+                        fs_created_at: skill.fs_created_at.clone(),
+                        fs_updated_at: skill.fs_updated_at.clone(),
                     };
-                    db::upsert_skill(pool, &db_skill).await?;
+                    persistence.skills.push(db_skill);
 
                     let installation = SkillInstallation {
                         skill_id: skill.id.clone(),
@@ -471,17 +443,11 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                         symlink_target: skill.symlink_target.clone(),
                         created_at: scan_started_at.clone(),
                     };
-                    db::upsert_skill_installation(pool, &installation).await?;
+                    persistence.installations.push(installation);
                 }
             }
 
             scanned.extend(root_scanned);
-        }
-
-        db::delete_stale_skill_installations(pool, &agent.id, &found_install_ids).await?;
-        if agent.id == "claude-code" {
-            db::delete_stale_agent_skill_observations(pool, &agent.id, &found_observation_row_ids)
-                .await?;
         }
 
         let count = scanned.len();
@@ -510,7 +476,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
             scanned
         };
         for skill in &scanned_skills {
-            all_found_skill_ids.insert(skill.id.clone());
+            persistence.global_found_skill_ids.insert(skill.id.clone());
 
             let db_skill = Skill {
                 id: skill.id.clone(),
@@ -522,16 +488,17 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                 source: Some(skill.link_type.clone()),
                 content: None,
                 scanned_at: scan_started_at.clone(),
+                fs_created_at: skill.fs_created_at.clone(),
+                fs_updated_at: skill.fs_updated_at.clone(),
             };
-            db::upsert_skill(pool, &db_skill).await?;
+            persistence.skills.push(db_skill);
         }
         if counted_scan_roots.insert(scan_key) {
             total_skills += scanned_skills.len();
         }
     }
 
-    let found_ids_vec: Vec<String> = all_found_skill_ids.into_iter().collect();
-    delete_skills_not_in_scope(pool, &found_ids_vec).await?;
+    persist_scan_batch(pool, persistence).await?;
 
     Ok(ScanResult {
         total_skills,
@@ -540,13 +507,13 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
     })
 }
 
-pub async fn scan_ssh_skills_impl(
+pub async fn scan_remote_skills_impl(
     pool: &DbPool,
-    target: &RemoteTargetConfig,
+    active_target: &ActiveTarget,
 ) -> Result<ScanResult, String> {
     let agents = db::get_all_agents(pool).await?;
     let scan_started_at = Utc::now().to_rfc3339();
-    let connection = connect_ssh_target(target).await?;
+    let connection = connect_remote_target(active_target).await?;
     let central_root = agents
         .iter()
         .find(|agent| agent.id == "central")
@@ -561,7 +528,7 @@ pub async fn scan_ssh_skills_impl(
                 vec![AgentScanRoot {
                     path: PathBuf::from(&agent.global_skills_dir),
                     source_root: None,
-                    claude_source: None,
+                    source_kind: None,
                 }]
             };
             (agent, scan_roots)
@@ -616,9 +583,9 @@ pub async fn scan_ssh_skills_impl(
 
     let mut total_skills: usize = 0;
     let mut skills_by_agent: HashMap<String, usize> = HashMap::new();
-    let mut all_found_skill_ids: HashSet<String> = HashSet::new();
     let mut scanned_root_cache: HashMap<String, Vec<ScannedSkill>> = HashMap::new();
     let mut counted_scan_roots: HashSet<String> = HashSet::new();
+    let mut persistence = ScanPersistenceBatch::default();
 
     for (agent, scan_roots) in &scan_roots_by_agent {
         let existing_roots: Vec<AgentScanRoot> = scan_roots
@@ -631,28 +598,26 @@ pub async fn scan_ssh_skills_impl(
             .any(|root| root_parent_exists.contains(&root.path.to_string_lossy().into_owned()));
 
         if existing_roots.is_empty() && !parent_visible {
-            db::update_agent_detected(pool, &agent.id, false).await?;
-            skills_by_agent.insert(agent.id.clone(), 0);
-            db::delete_stale_skill_installations(pool, &agent.id, &[]).await?;
-            if agent.id == "claude-code" {
-                db::delete_stale_agent_skill_observations(pool, &agent.id, &[]).await?;
+            persistence.set_agent_detected(&agent.id, false);
+            persistence.touch_install_agent(&agent.id);
+            if agent_tracks_observations(&agent.id) {
+                persistence.touch_observation_agent(&agent.id);
             }
+            skills_by_agent.insert(agent.id.clone(), 0);
             continue;
         }
 
-        db::update_agent_detected(pool, &agent.id, true).await?;
+        persistence.set_agent_detected(&agent.id, true);
+        persistence.touch_install_agent(&agent.id);
+        if agent_tracks_observations(&agent.id) {
+            persistence.touch_observation_agent(&agent.id);
+        }
         if existing_roots.is_empty() {
             skills_by_agent.insert(agent.id.clone(), 0);
-            db::delete_stale_skill_installations(pool, &agent.id, &[]).await?;
-            if agent.id == "claude-code" {
-                db::delete_stale_agent_skill_observations(pool, &agent.id, &[]).await?;
-            }
             continue;
         }
 
         let mut scanned = Vec::new();
-        let mut found_install_ids = Vec::new();
-        let mut found_observation_row_ids = Vec::new();
 
         for root in &existing_roots {
             let root_str = root.path.to_string_lossy().into_owned();
@@ -686,9 +651,9 @@ pub async fn scan_ssh_skills_impl(
                 .into_owned();
 
             for skill in &root_scanned {
-                if let Some(source_kind) = root.claude_source {
+                if let Some(source_kind) = root.source_kind {
                     let observation = AgentSkillObservation {
-                        row_id: claude_observation_row_id(&agent.id, &skill.dir_path),
+                        row_id: observation_row_id(&agent.id, &skill.dir_path),
                         agent_id: agent.id.clone(),
                         skill_id: skill.id.clone(),
                         name: skill.name.clone(),
@@ -701,16 +666,17 @@ pub async fn scan_ssh_skills_impl(
                         symlink_target: skill.symlink_target.clone(),
                         is_read_only: source_kind.is_read_only(),
                         scanned_at: scan_started_at.clone(),
+                        fs_created_at: skill.fs_created_at.clone(),
+                        fs_updated_at: skill.fs_updated_at.clone(),
                     };
-                    db::upsert_agent_skill_observation(pool, &observation).await?;
-                    found_observation_row_ids.push(observation.row_id);
+                    persistence.remember_observation(&agent.id, &observation.row_id);
+                    persistence.observations.push(observation);
                 }
 
-                let should_persist_manageable_state =
-                    root.claude_source != Some(ClaudeSourceKind::Plugin);
+                let should_persist_manageable_state = root.source_kind != Some(SourceKind::Plugin);
                 if should_persist_manageable_state {
-                    all_found_skill_ids.insert(skill.id.clone());
-                    found_install_ids.push(skill.id.clone());
+                    persistence.global_found_skill_ids.insert(skill.id.clone());
+                    persistence.remember_installation(&agent.id, &skill.id);
 
                     let db_skill = Skill {
                         id: skill.id.clone(),
@@ -726,8 +692,10 @@ pub async fn scan_ssh_skills_impl(
                         source: Some(skill.link_type.clone()),
                         content: None,
                         scanned_at: scan_started_at.clone(),
+                        fs_created_at: skill.fs_created_at.clone(),
+                        fs_updated_at: skill.fs_updated_at.clone(),
                     };
-                    db::upsert_skill(pool, &db_skill).await?;
+                    persistence.skills.push(db_skill);
 
                     let installation = SkillInstallation {
                         skill_id: skill.id.clone(),
@@ -737,24 +705,18 @@ pub async fn scan_ssh_skills_impl(
                         symlink_target: skill.symlink_target.clone(),
                         created_at: scan_started_at.clone(),
                     };
-                    db::upsert_skill_installation(pool, &installation).await?;
+                    persistence.installations.push(installation);
                 }
             }
 
             scanned.extend(root_scanned);
         }
 
-        db::delete_stale_skill_installations(pool, &agent.id, &found_install_ids).await?;
-        if agent.id == "claude-code" {
-            db::delete_stale_agent_skill_observations(pool, &agent.id, &found_observation_row_ids)
-                .await?;
-        }
         let count = scanned.len();
         skills_by_agent.insert(agent.id.clone(), count);
     }
 
-    let found_ids_vec: Vec<String> = all_found_skill_ids.into_iter().collect();
-    delete_skills_not_in_scope(pool, &found_ids_vec).await?;
+    persist_scan_batch(pool, persistence).await?;
 
     Ok(ScanResult {
         total_skills,

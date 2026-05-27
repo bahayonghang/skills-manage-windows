@@ -20,6 +20,7 @@ import type {
   SkillRepositoryWithStats,
   SkillWithLinks,
 } from "@/types";
+import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
@@ -31,6 +32,7 @@ export interface CentralSkillsActionsState {
   repositoryDeleteTarget: SkillRepositoryWithStats | null;
   repositoryFilter: string;
   queuedRemoteMissingStates: CentralSkillUpdateState[];
+  queuedRepositorySyncPreview: CentralRepositorySyncPreview | null;
   selectedSkillIds: string[];
   currentViewSkills: SkillWithLinks[];
 }
@@ -51,6 +53,9 @@ export interface CentralSkillsActionsSetters {
   setIsDrawerOpen: StateSetter<boolean>;
   setIsRemoteMissingDialogOpen: StateSetter<boolean>;
   setIsRemoteMissingPreviewLoading: StateSetter<boolean>;
+  setIsRepositorySyncDialogOpen: StateSetter<boolean>;
+  setIsRepositorySyncPreviewLoading: StateSetter<boolean>;
+  setIsApplyingRepositorySync: StateSetter<boolean>;
   setIsRepositoryDeleteDialogOpen: StateSetter<boolean>;
   setIsRepositoryDeletePreviewLoading: StateSetter<boolean>;
   setIsResolvingRemoteMissing: StateSetter<boolean>;
@@ -59,9 +64,13 @@ export interface CentralSkillsActionsSetters {
   setManualTagQuery: StateSetter<string>;
   setPendingUpdateStates: StateSetter<CentralSkillUpdateState[]>;
   setQueuedRemoteMissingStates: StateSetter<CentralSkillUpdateState[]>;
+  setQueuedRepositorySyncPreview: StateSetter<CentralRepositorySyncPreview | null>;
   setRemoteMissingError: StateSetter<string | null>;
   setRemoteMissingPreview: StateSetter<BatchDeleteCentralSkillPreviewResult | null>;
   setRemoteMissingStates: StateSetter<CentralSkillUpdateState[]>;
+  setRepositorySyncDeletePreview: StateSetter<BatchDeleteCentralSkillPreviewResult | null>;
+  setRepositorySyncError: StateSetter<string | null>;
+  setRepositorySyncPreview: StateSetter<CentralRepositorySyncPreview | null>;
   setRepositoryDeletePreview: StateSetter<DeleteSkillRepositoryPreview | null>;
   setRepositoryDeletePreviewError: StateSetter<string | null>;
   setRepositoryDeleteTarget: StateSetter<SkillRepositoryWithStats | null>;
@@ -108,6 +117,7 @@ export function useCentralSkillsActions({
     repositoryDeleteTarget,
     repositoryFilter,
     queuedRemoteMissingStates,
+    queuedRepositorySyncPreview,
     selectedSkillIds,
     currentViewSkills,
   } = state;
@@ -127,6 +137,9 @@ export function useCentralSkillsActions({
     setIsDrawerOpen,
     setIsRemoteMissingDialogOpen,
     setIsRemoteMissingPreviewLoading,
+    setIsRepositorySyncDialogOpen,
+    setIsRepositorySyncPreviewLoading,
+    setIsApplyingRepositorySync,
     setIsRepositoryDeleteDialogOpen,
     setIsRepositoryDeletePreviewLoading,
     setIsResolvingRemoteMissing,
@@ -135,9 +148,13 @@ export function useCentralSkillsActions({
     setManualTagQuery,
     setPendingUpdateStates,
     setQueuedRemoteMissingStates,
+    setQueuedRepositorySyncPreview,
     setRemoteMissingError,
     setRemoteMissingPreview,
     setRemoteMissingStates,
+    setRepositorySyncDeletePreview,
+    setRepositorySyncError,
+    setRepositorySyncPreview,
     setRepositoryDeletePreview,
     setRepositoryDeletePreviewError,
     setRepositoryDeleteTarget,
@@ -177,17 +194,25 @@ export function useCentralSkillsActions({
     t,
     state: {
       queuedRemoteMissingStates,
+      queuedRepositorySyncPreview,
     },
     setters: {
       setIsUpdateConfirmDialogOpen,
       setIsRemoteMissingDialogOpen,
       setIsRemoteMissingPreviewLoading,
+      setIsRepositorySyncDialogOpen,
+      setIsRepositorySyncPreviewLoading,
+      setIsApplyingRepositorySync,
       setIsResolvingRemoteMissing,
       setPendingUpdateStates,
       setQueuedRemoteMissingStates,
+      setQueuedRepositorySyncPreview,
       setRemoteMissingError,
       setRemoteMissingPreview,
       setRemoteMissingStates,
+      setRepositorySyncDeletePreview,
+      setRepositorySyncError,
+      setRepositorySyncPreview,
       setSelectedSkillIds,
     },
   });

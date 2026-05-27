@@ -205,6 +205,11 @@ pub fn target_context_from_active_target(
             id: target.id.clone(),
             label: Some(target.label.clone()),
         },
+        ActiveTarget::Wsl(target) => OperationLogTargetContext {
+            kind: "wsl".to_string(),
+            id: target.id.clone(),
+            label: Some(target.label.clone()),
+        },
     }
 }
 

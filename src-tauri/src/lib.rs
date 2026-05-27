@@ -6,6 +6,7 @@ pub mod operation_log;
 pub mod paths;
 pub mod secrets;
 pub mod services;
+pub mod skill_time;
 pub mod targets;
 
 use db::DbPool;
@@ -179,12 +180,15 @@ impl AiTagJobRegistry {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[allow(deprecated)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             logging::init_file_logging().map_err(std::io::Error::other)?;
 
@@ -286,13 +290,19 @@ pub fn run() {
             commands::bootstrap::get_skill_counts_summary,
             // Targets
             commands::targets::list_targets,
+            commands::targets::list_wsl_distributions,
             commands::targets::create_ssh_target,
             commands::targets::update_ssh_target,
             commands::targets::test_ssh_target,
             commands::targets::update_ssh_target_password,
+            commands::targets::create_wsl_target,
+            commands::targets::update_wsl_target,
+            commands::targets::test_wsl_target,
             commands::targets::delete_target,
             commands::targets::set_active_target,
             commands::targets::get_active_target,
+            commands::local_remote_sync::preview_local_remote_sync,
+            commands::local_remote_sync::apply_local_remote_sync,
             // Operation logs
             commands::logs::list_operation_logs,
             commands::logs::get_operation_log,
@@ -311,11 +321,13 @@ pub fn run() {
             // Linker
             commands::linker::install_skill_to_agent,
             commands::linker::uninstall_skill_from_agent,
+            commands::linker::batch_uninstall_skills_from_agent,
             commands::linker::batch_install_to_agents,
             commands::linker::batch_install_central_skills,
             // Skills
             commands::skills::get_skills_by_agent,
             commands::skills::get_central_skills,
+            commands::skills::get_central_skills_page,
             commands::skills::preview_delete_central_skills,
             commands::skills::delete_central_skill,
             commands::skills::delete_central_skills,
@@ -330,6 +342,7 @@ pub fn run() {
             commands::central_metadata::get_skill_repositories,
             commands::central_metadata::create_or_update_skill_repository,
             commands::central_metadata::assign_skills_to_repository,
+            commands::central_metadata::set_skill_repository_pinned,
             commands::central_metadata::get_skill_tags,
             commands::central_metadata::create_skill_tag,
             commands::central_metadata::assign_skill_tags,
@@ -340,11 +353,21 @@ pub fn run() {
             commands::central_metadata::accept_ai_tag_review,
             commands::central_metadata::skip_ai_tag_review,
             // Central updates
+            commands::central_store_location::preview_central_store_location_change,
+            commands::central_store_location::apply_central_store_location_change,
             commands::central_updates::get_central_skill_update_states,
             commands::central_updates::check_central_skill_updates,
+            commands::central_updates::repository_sync::check_central_repository_sync,
+            commands::central_updates::repository_sync::apply_central_repository_sync,
             commands::central_updates::update_central_skills,
             commands::central_updates::cancel_central_skill_updates,
             commands::central_updates::keep_remote_missing_central_skills,
+            // Skill update inventory (Phase P2 of Update Mechanism Overhaul)
+            commands::skill_update_inventory::refresh_skill_update_inventory,
+            commands::skill_update_inventory::get_skill_update_inventory,
+            commands::skill_update_inventory::clear_skill_update_inventory,
+            commands::skill_update_inventory::apply_skill_update_decisions,
+            commands::skill_update_inventory::scan_platform_duplicate_skills,
             // Collections
             commands::collections::create_collection,
             commands::collections::get_collections,
@@ -366,9 +389,11 @@ pub fn run() {
             commands::settings::set_setting,
             commands::settings::set_settings,
             commands::settings::get_ai_api_key_state,
+            commands::settings::reveal_ai_api_key,
             commands::settings::set_ai_api_key,
             commands::settings::clear_ai_api_key,
             commands::github_import::get_github_pat,
+            commands::github_import::reveal_github_pat,
             commands::github_import::set_github_pat,
             commands::github_import::clear_github_pat,
             commands::github_import::test_github_pat,
@@ -411,6 +436,7 @@ pub fn run() {
             commands::marketplace::explain_skill,
             commands::marketplace::test_ai_connection,
             commands::marketplace::get_skill_explanation,
+            commands::marketplace::get_skill_explanation_summaries,
             commands::marketplace::explain_skill_stream,
             commands::marketplace::refresh_skill_explanation,
             commands::portable_state::export_skillport_state,
@@ -430,6 +456,15 @@ pub fn run() {
             commands::tag_groups::delete_tag_group,
             commands::tag_groups::reorder_tag_groups,
             commands::tag_groups::set_tag_group,
+            // Skill Usage (Skilled-style aggregation across AI coding tools)
+            commands::usage::usage_refresh,
+            commands::usage::usage_get_overview,
+            commands::usage::usage_get_recent,
+            commands::usage::usage_get_providers,
+            commands::usage::usage_get_skill_detail,
+            commands::usage::usage_get_skill_counts,
+            commands::usage::usage_resolve_skill_id,
+            commands::usage::usage_get_scope_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

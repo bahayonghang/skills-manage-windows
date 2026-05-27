@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AgentWithStatus, CentralSkillUpdateState, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "../types";
+import type {
+  CentralRepositorySyncApplyResult,
+  CentralRepositorySyncPreview,
+} from "@/types/centralRepositorySync";
 import * as tauriBridge from "@/lib/tauri";
 
 // Mock Tauri core before importing the store
@@ -77,6 +81,7 @@ const mockRepositories: SkillRepositoryWithStats[] = [
     id: "local-unknown",
     name: "本地 / 未知来源",
     source_type: "local",
+    pinned: false,
     is_unknown: true,
     created_at: "2026-04-17T00:00:00.000Z",
     updated_at: "2026-04-17T00:00:00.000Z",
@@ -409,6 +414,7 @@ describe("centralSkillsStore", () => {
       repo: "skills",
       branch: "main",
       url: "https://github.com/openai/skills",
+      pinned: false,
       is_unknown: false,
       created_at: "2026-04-17T00:00:00.000Z",
       updated_at: "2026-04-17T00:00:00.000Z",
@@ -452,6 +458,7 @@ describe("centralSkillsStore", () => {
         repo: "skills",
         branch: "main",
         url: "https://github.com/openai/skills",
+        pinned: false,
         is_unknown: false,
         created_at: "2026-04-17T00:00:00.000Z",
         updated_at: "2026-04-17T00:00:00.000Z",
@@ -767,6 +774,40 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().isMetadataUpdating).toBe(false);
   });
 
+  it("sets repository pin state and refreshes repositories", async () => {
+    const pinnedRepository: SkillRepositoryWithStats = {
+      id: "github-openai-skills-main",
+      name: "openai/skills",
+      source_type: "github",
+      owner: "openai",
+      repo: "skills",
+      branch: "main",
+      url: "https://github.com/openai/skills",
+      pinned: true,
+      is_unknown: false,
+      created_at: "2026-04-17T00:00:00.000Z",
+      updated_at: "2026-04-17T00:00:00.000Z",
+      skill_count: 1,
+      unknown_skill_count: 0,
+    };
+    const pinnedRepositories = [mockRepositories[0], pinnedRepository];
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(pinnedRepository)
+      .mockResolvedValueOnce(pinnedRepositories);
+
+    await useCentralSkillsStore
+      .getState()
+      .setRepositoryPinned("github-openai-skills-main", true);
+
+    expect(invoke).toHaveBeenCalledWith("set_skill_repository_pinned", {
+      repositoryId: "github-openai-skills-main",
+      pinned: true,
+    });
+    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+    expect(useCentralSkillsStore.getState().repositories).toEqual(pinnedRepositories);
+    expect(useCentralSkillsStore.getState().isMetadataUpdating).toBe(false);
+  });
+
   it("assigns skill tags and refreshes central skills", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce(undefined)
@@ -849,6 +890,115 @@ describe("centralSkillsStore", () => {
     );
   });
 
+  it("checks repository sync and merges checked states without storing remote additions", async () => {
+    const preview: CentralRepositorySyncPreview = {
+      states: mockUpdateStates,
+      remoteAdded: [
+        {
+          repositoryId: "github-owner-repo-main",
+          repo: {
+            owner: "owner",
+            repo: "repo",
+            branch: "main",
+            normalizedUrl: "https://github.com/owner/repo",
+          },
+          preview: {
+            sourcePath: "skills/new-skill",
+            skillId: "new-skill",
+            skillName: "New Skill",
+            description: null,
+            rootDirectory: "skills",
+            skillDirectoryName: "new-skill",
+            downloadUrl: "https://raw.githubusercontent.com/owner/repo/main/skills/new-skill/SKILL.md",
+            conflict: null,
+          },
+        },
+      ],
+      skippedRemoteAdded: [],
+      remoteMissing: [],
+      repositories: [],
+      failedRepositories: [],
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(preview);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .checkRepositorySync(["github-owner-repo-main"], ["frontend-design"]);
+
+    expect(result).toEqual(preview);
+    expect(invoke).toHaveBeenCalledWith("check_central_repository_sync", {
+      repositoryIds: ["github-owner-repo-main"],
+      skillIds: ["frontend-design"],
+    });
+    expect(useCentralSkillsStore.getState().updateStatuses["frontend-design"]).toEqual(
+      mockUpdateStates[0]
+    );
+    expect(useCentralSkillsStore.getState().updateStatuses["new-skill"]).toBeUndefined();
+  });
+
+  it("checks repository sync with wrapped remote-missing payload and still only indexes checked states", async () => {
+    const remoteMissingState: CentralSkillUpdateState = {
+      ...mockUpdateStates[0],
+      skill_id: "code-reviewer",
+      source_path: "skills/code-reviewer",
+      last_remote_hash: null,
+      latest_remote_hash: null,
+      status: "remote_missing",
+      error: "removed remotely",
+    };
+    const preview: CentralRepositorySyncPreview = {
+      states: [remoteMissingState],
+      remoteAdded: [
+        {
+          repositoryId: "github-owner-repo-main",
+          repo: {
+            owner: "owner",
+            repo: "repo",
+            branch: "main",
+            normalizedUrl: "https://github.com/owner/repo",
+          },
+          preview: {
+            sourcePath: "skills/new-skill",
+            skillId: "new-skill",
+            skillName: "New Skill",
+            description: null,
+            rootDirectory: "skills",
+            skillDirectoryName: "new-skill",
+            downloadUrl: "https://raw.githubusercontent.com/owner/repo/main/skills/new-skill/SKILL.md",
+            conflict: null,
+          },
+        },
+      ],
+      skippedRemoteAdded: [],
+      remoteMissing: [
+        {
+          state: remoteMissingState,
+          repositoryId: "github-owner-repo-main",
+          repositoryName: "owner/repo",
+          repo: {
+            owner: "owner",
+            repo: "repo",
+            branch: "main",
+            normalizedUrl: "https://github.com/owner/repo",
+          },
+        },
+      ],
+      repositories: [],
+      failedRepositories: [],
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(preview);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .checkRepositorySync(["github-owner-repo-main"], ["code-reviewer"]);
+
+    expect(result).toEqual(preview);
+    expect(useCentralSkillsStore.getState().updateStatuses["code-reviewer"]).toEqual(
+      remoteMissingState
+    );
+    expect(useCentralSkillsStore.getState().updateStatuses["new-skill"]).toBeUndefined();
+  });
+
   it("updates central skills and merges returned states without a second state refresh", async () => {
     const updatedState: CentralSkillUpdateState = {
       ...mockUpdateStates[0],
@@ -905,6 +1055,92 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().skills).toEqual(mockSkills);
     expect(useCentralSkillsStore.getState().repositories).toEqual(mockRepositories);
     expect(useCentralSkillsStore.getState().updateStatuses).toEqual({});
+  });
+
+  it("applies repository sync and refreshes skills, repositories, tags, and update states", async () => {
+    const applyResult: CentralRepositorySyncApplyResult = {
+      keptSkillIds: ["code-reviewer"],
+      deleteResult: { succeeded: [], failed: [] },
+      importResults: [
+        {
+          repo: {
+            owner: "owner",
+            repo: "repo",
+            branch: "main",
+            normalizedUrl: "https://github.com/owner/repo",
+          },
+          importedSkills: [
+            {
+              sourcePath: "skills/new-skill",
+              originalSkillId: "new-skill",
+              importedSkillId: "new-skill",
+              skillName: "New Skill",
+              targetDirectory: "~/.skillsmanage/skills/new-skill",
+              resolution: "overwrite",
+            },
+          ],
+          skippedSkills: [],
+        },
+      ],
+      skippedAdditions: [],
+      unskippedAdditions: [],
+      failedRepositories: [],
+      states: mockUpdateStates,
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(applyResult)
+      .mockResolvedValueOnce(mockSkills)
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce(mockUpdateStates);
+
+    const result = await useCentralSkillsStore.getState().applyRepositorySync({
+      keepSkillIds: ["code-reviewer"],
+      deleteRequests: [],
+      additions: [
+        {
+          repositoryId: "github-owner-repo-main",
+          selections: [
+            {
+              sourcePath: "skills/new-skill",
+              resolution: "overwrite",
+              renamedSkillId: null,
+            },
+          ],
+        },
+      ],
+      skipAdditions: [],
+      unskipAdditions: [],
+    });
+
+    expect(result).toEqual(applyResult);
+    expect(invoke).toHaveBeenCalledWith("apply_central_repository_sync", {
+      decisions: {
+        keepSkillIds: ["code-reviewer"],
+        deleteRequests: [],
+        additions: [
+          {
+            repositoryId: "github-owner-repo-main",
+            selections: [
+              {
+                sourcePath: "skills/new-skill",
+                resolution: "overwrite",
+                renamedSkillId: null,
+              },
+            ],
+          },
+        ],
+        skipAdditions: [],
+        unskipAdditions: [],
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
+    expect(invoke).toHaveBeenCalledWith("get_skill_tags");
+    expect(invoke).toHaveBeenCalledWith("get_central_skill_update_states");
+    expect(useCentralSkillsStore.getState().updateStatuses["frontend-design"]).toEqual(
+      mockUpdateStates[0]
+    );
   });
 
   it("updates AI tag job state from progress events", async () => {

@@ -45,6 +45,8 @@ async fn seed_central_skill(pool: &DbPool, canonical_dir: &Path, skill_id: &str)
         source: None,
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(pool, &skill).await.unwrap();
 }

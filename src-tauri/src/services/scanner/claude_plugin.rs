@@ -1,7 +1,6 @@
-//! Claude plugin discovery: parses ~/.claude/settings.json and
-//! ~/.claude/plugins/installed_plugins.json to enumerate enabled-plugin skill
-//! roots, plus a few small helpers (read_json_file, claude_observation_row_id,
-//! scan_roots_for_agent) that are only relevant to Claude-aware scanning.
+//! Agent source-root discovery: user-managed skill roots plus read-only plugin
+//! roots. Claude plugins are discovered from ~/.claude runtime metadata; Codex
+//! plugins are discovered from the local ~/.codex/plugins/cache tree.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -9,12 +8,12 @@ use std::path::{Path, PathBuf};
 use serde::{de::DeserializeOwned, Deserialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ClaudeSourceKind {
+pub(super) enum SourceKind {
     User,
     Plugin,
 }
 
-impl ClaudeSourceKind {
+impl SourceKind {
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::User => "user",
@@ -31,7 +30,7 @@ impl ClaudeSourceKind {
 pub(super) struct AgentScanRoot {
     pub(super) path: PathBuf,
     pub(super) source_root: Option<PathBuf>,
-    pub(super) claude_source: Option<ClaudeSourceKind>,
+    pub(super) source_kind: Option<SourceKind>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -148,7 +147,7 @@ pub(super) fn claude_plugin_roots(global_skills_dir: &Path) -> Vec<AgentScanRoot
                 roots.push(AgentScanRoot {
                     path: scan_path,
                     source_root: Some(install_root.clone()),
-                    claude_source: Some(ClaudeSourceKind::Plugin),
+                    source_kind: Some(SourceKind::Plugin),
                 });
             }
         }
@@ -157,25 +156,125 @@ pub(super) fn claude_plugin_roots(global_skills_dir: &Path) -> Vec<AgentScanRoot
     roots
 }
 
+fn home_from_platform_skills_dir(global_skills_dir: &Path) -> Option<PathBuf> {
+    let parent = global_skills_dir.parent()?;
+    let parent_name = parent.file_name()?.to_string_lossy();
+    if parent_name.eq_ignore_ascii_case(".agents") || parent_name.eq_ignore_ascii_case(".codex") {
+        return parent.parent().map(Path::to_path_buf);
+    }
+
+    None
+}
+
+fn plugin_source_root_for_skills_dir(skills_dir: &Path) -> PathBuf {
+    let Some(parent) = skills_dir.parent() else {
+        return skills_dir.to_path_buf();
+    };
+
+    let parent_name = parent
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_default();
+    if parent_name.eq_ignore_ascii_case(".codex") || parent_name.eq_ignore_ascii_case(".claude") {
+        return parent.parent().unwrap_or(parent).to_path_buf();
+    }
+
+    parent.to_path_buf()
+}
+
+fn collect_codex_skill_roots(dir: &Path, depth: usize, max_depth: usize, roots: &mut Vec<PathBuf>) {
+    if depth > max_depth {
+        return;
+    }
+
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() || file_type.is_symlink() {
+            continue;
+        }
+
+        let path = entry.path();
+        let is_skills_dir = path
+            .file_name()
+            .map(|name| name.to_string_lossy().eq_ignore_ascii_case("skills"))
+            .unwrap_or(false);
+        if is_skills_dir {
+            roots.push(path);
+            continue;
+        }
+
+        collect_codex_skill_roots(&path, depth + 1, max_depth, roots);
+    }
+}
+
+pub(super) fn codex_plugin_roots(global_skills_dir: &Path) -> Vec<AgentScanRoot> {
+    let Some(home) = home_from_platform_skills_dir(global_skills_dir) else {
+        return Vec::new();
+    };
+
+    let cache_root = home.join(".codex").join("plugins").join("cache");
+    if !cache_root.exists() {
+        return Vec::new();
+    }
+
+    let mut scan_paths = Vec::new();
+    collect_codex_skill_roots(&cache_root, 0, 8, &mut scan_paths);
+    scan_paths.sort();
+
+    let mut seen_scan_paths = HashSet::new();
+    scan_paths
+        .into_iter()
+        .filter_map(|scan_path| {
+            let scan_path_key = scan_path.to_string_lossy().into_owned();
+            if !seen_scan_paths.insert(scan_path_key) {
+                return None;
+            }
+
+            Some(AgentScanRoot {
+                source_root: Some(plugin_source_root_for_skills_dir(&scan_path)),
+                path: scan_path,
+                source_kind: Some(SourceKind::Plugin),
+            })
+        })
+        .collect()
+}
+
 pub(super) fn scan_roots_for_agent(agent: &crate::db::Agent) -> Vec<AgentScanRoot> {
     let primary_root = PathBuf::from(&agent.global_skills_dir);
-    if agent.id != "claude-code" {
-        return vec![AgentScanRoot {
-            path: primary_root,
-            source_root: None,
-            claude_source: None,
+    if agent.id == "claude-code" {
+        let mut roots = vec![AgentScanRoot {
+            path: primary_root.clone(),
+            source_root: Some(primary_root.clone()),
+            source_kind: Some(SourceKind::User),
         }];
+        roots.extend(claude_plugin_roots(&primary_root));
+        return roots;
     }
 
     let mut roots = vec![AgentScanRoot {
         path: primary_root.clone(),
-        source_root: Some(primary_root.clone()),
-        claude_source: Some(ClaudeSourceKind::User),
+        source_root: None,
+        source_kind: None,
     }];
-    roots.extend(claude_plugin_roots(&primary_root));
+
+    if agent.id == "codex" {
+        roots.extend(codex_plugin_roots(&primary_root));
+    }
+
     roots
 }
 
-pub(super) fn claude_observation_row_id(agent_id: &str, dir_path: &str) -> String {
+pub(super) fn agent_tracks_observations(agent_id: &str) -> bool {
+    matches!(agent_id, "claude-code" | "codex")
+}
+
+pub(super) fn observation_row_id(agent_id: &str, dir_path: &str) -> String {
     format!("{agent_id}::{dir_path}")
 }

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { lazy, Suspense } from "react";
+import { useTranslation } from "react-i18next";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 
@@ -53,9 +54,31 @@ const DashboardView = lazy(() =>
     default: DashboardView,
   }))
 );
+const SkillUsageView = lazy(() =>
+  import("@/pages/SkillUsageView").then(({ SkillUsageView }) => ({
+    default: SkillUsageView,
+  }))
+);
+
+function RouteLoadingFallback() {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground"
+    >
+      <div className="flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1.5 shadow-sm">
+        <span className="size-2 animate-pulse rounded-full bg-primary" aria-hidden />
+        <span>{t("common.loading")}</span>
+      </div>
+    </div>
+  );
+}
 
 function lazyPage(element: ReactNode) {
-  return <Suspense fallback={null}>{element}</Suspense>;
+  return <Suspense fallback={<RouteLoadingFallback />}>{element}</Suspense>;
 }
 
 function App() {
@@ -125,9 +148,14 @@ function App() {
           path="logs"
           element={lazyPage(<OperationLogsView />)}
         />
+        {/* Skill Usage — aggregated calls across AI coding tools (skilled-style) */}
+        <Route
+          path="usage"
+          element={lazyPage(<SkillUsageView />)}
+        />
         {/* Settings */}
         <Route
-          path="settings"
+          path="settings/*"
           element={lazyPage(<SettingsView />)}
         />
       </Route>

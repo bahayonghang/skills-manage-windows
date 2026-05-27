@@ -21,6 +21,7 @@ import { formatBackendError } from "@/lib/backendError";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { arePathsEquivalent } from "@/lib/path";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
+import { isRemoteLikeTarget } from "@/lib/targetKind";
 import {
   getPlatformTargetGroups,
   getPlatformTargetMemberIds,
@@ -160,7 +161,7 @@ export function SkillDetailView({
   const isLoading = isFileMode ? fileIsLoading : storeIsLoading;
   const explanation = isFileMode ? fileExplanation : storeExplanation;
   const isExplanationLoading = isFileMode ? fileIsExplaining : storeIsExplanationLoading;
-  const isRemoteTarget = activeTarget.kind === "ssh";
+  const isRemoteTarget = isRemoteLikeTarget(activeTarget);
 
   const [activeTab, setActiveTab] = useState<PreviewTab>("markdown");
   const [isCollectionPickerOpen, setIsCollectionPickerOpen] = useState(false);
@@ -431,6 +432,22 @@ export function SkillDetailView({
     }
   }, [sourceMetadata, isRemoteTarget, openInFileManager, t]);
 
+  const handleOpenDetailDirectory = useCallback(async () => {
+    if (!detail?.dir_path) {
+      return;
+    }
+    try {
+      if (isRemoteTarget) {
+        await navigator.clipboard.writeText(detail.dir_path);
+        toast.success(t("targets.pathCopied"));
+        return;
+      }
+      await openInFileManager(detail.dir_path);
+    } catch {
+      // keep opener failures non-blocking; the file tree remains usable
+    }
+  }, [detail?.dir_path, isRemoteTarget, openInFileManager, t]);
+
   const handleOpenFileTreePath = useCallback(async (path: string) => {
     if (!path) {
       return;
@@ -535,6 +552,7 @@ export function SkillDetailView({
               detail={detail}
               isRemoteTarget={isRemoteTarget}
               onOpenSourcePath={handleOpenSourcePath}
+              onOpenDetailDirectory={handleOpenDetailDirectory}
               directoryTree={directoryTree}
               isDirectoryLoading={isDirectoryLoading}
               onOpenFileTreePath={handleOpenFileTreePath}

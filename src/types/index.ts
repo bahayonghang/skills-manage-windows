@@ -62,7 +62,16 @@ export interface DashboardCentralSummary {
   aiReviewCount: number;
   uncategorizedCount: number;
   unassignedSourceCount: number;
+  readiness: DashboardReadiness;
   sourceRepositories: SkillRepositoryWithStats[];
+}
+
+export interface DashboardReadiness {
+  score: number;
+  categorizedRatio: number;
+  describedRatio: number;
+  sourcedRatio: number;
+  installHealthRatio: number;
 }
 export type ClaudeSourceKind = "user" | "plugin";
 
@@ -76,6 +85,13 @@ export interface ScannedSkill {
   link_type: string;
   symlink_target?: string;
   is_central: boolean;
+  scanned_at?: string;
+  installed_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  repository?: SkillRepository | null;
+  source_path?: string | null;
+  is_source_unknown?: boolean;
   source_kind?: ClaudeSourceKind | null;
   source_root?: string | null;
   is_read_only?: boolean;
@@ -123,13 +139,11 @@ export interface SkillDetail extends Omit<Skill, "content"> {
   source_path?: string;
   is_source_unknown?: boolean;
 }
-
 export interface SkillDetailRequest {
   skillId: string;
   agentId?: string;
   rowId?: string;
 }
-
 export interface DirectoryTreeEntry {
   name: string;
   path: string;
@@ -137,7 +151,6 @@ export interface DirectoryTreeEntry {
   symlink_target?: string | null;
   children: DirectoryTreeEntry[];
 }
-
 export interface SkillWithLinks {
   id: string;
   name: string;
@@ -158,7 +171,6 @@ export interface SkillWithLinks {
   source_path?: string;
   is_source_unknown?: boolean;
 }
-
 export interface BatchInstallResult {
   succeeded: string[];
   skipped?: Array<{ agent_id: string; target_path: string; reason: string }>;
@@ -170,13 +182,11 @@ export interface CentralBatchInstallSuccess {
   agent_id: string;
   target_path: string;
 }
-
 export interface CentralBatchInstallFailure {
   skill_id: string;
   agent_id: string;
   error: string;
 }
-
 export interface CentralBatchInstallSkipped {
   skill_id: string;
   agent_id: string;
@@ -189,6 +199,15 @@ export interface CentralBatchInstallResult {
   skipped?: CentralBatchInstallSkipped[];
   failed: CentralBatchInstallFailure[];
 }
+
+
+export type { BatchUninstallSkillRequest, BatchUninstallSkillResult } from "./platformBatch";
+
+export type {
+  CentralStoreLocationChangeResult,
+  CentralStoreLocationPreview,
+  CentralStoreLocationSymlinkFailure,
+} from "./centralStoreLocation";
 
 export interface DeleteCentralSkillPreview {
   skill_id: string;
@@ -270,6 +289,7 @@ export interface SkillRepository {
   repo?: string;
   branch?: string;
   url?: string;
+  pinned: boolean;
   is_unknown: boolean;
   created_at: string;
   updated_at: string;
@@ -288,7 +308,6 @@ export interface SkillTag {
   is_builtin: boolean;
   created_at: string;
   updated_at: string;
-  /** 标签所属分组 id（M3 加入；旧数据为 null）。 */
   group_id?: string | null;
 }
 
@@ -434,56 +453,19 @@ export interface ScanDirectory {
   added_at: string;
 }
 
-// ─── Operation Log Types ─────────────────────────────────────────────────────
-
-export type OperationLogLevel = "info" | "warn" | "error";
-export type OperationLogStatus = "succeeded" | "failed" | "partial" | "cancelled";
-export type OperationLogTargetKind = "local" | "ssh";
-
-export interface OperationLogEntry {
-  id: string;
-  createdAt: string;
-  level: OperationLogLevel | string;
-  targetKind: OperationLogTargetKind | string;
-  targetId: string;
-  targetLabel?: string | null;
-  category: string;
-  action: string;
-  status: OperationLogStatus | string;
-  subjectType?: string | null;
-  subjectId?: string | null;
-  subjectLabel?: string | null;
-  summary: string;
-  errorSummary?: string | null;
-  detailsJson?: string | null;
-  durationMs?: number | null;
-  batchId?: string | null;
-}
-
-export interface OperationLogFilter {
-  query?: string;
-  targetKind?: OperationLogTargetKind | "";
-  targetId?: string;
-  level?: OperationLogLevel | "";
-  status?: OperationLogStatus | "";
-  category?: string;
-  action?: string;
-  createdAfter?: string;
-  createdBefore?: string;
-  limit?: number;
-  offset?: number;
-}
-
-export interface OperationLogPage {
-  entries: OperationLogEntry[];
-  total: number;
-  limit: number;
-  offset: number;
-}
+export type {
+  OperationLogEntry,
+  OperationLogFilter,
+  OperationLogLevel,
+  OperationLogPage,
+  OperationLogStatus,
+  OperationLogTargetKind,
+} from "./operationLogs";
 
 export type {
   AiApiKeyState,
   CreateSshTargetRequest,
+  CreateWslTargetRequest,
   GitHubPatState,
   GitHubPatTestResult,
   SecretStorageState,
@@ -493,8 +475,23 @@ export type {
   TargetKind,
   TargetSummary,
   TestSshTargetRequest,
+  TestWslTargetRequest,
   UpdateSshTargetRequest,
+  UpdateWslTargetRequest,
+  WslDistributionSummary,
+  WslTargetTestResult,
 } from "./credentials";
+
+export type {
+  LocalRemoteSyncApplyRequest,
+  LocalRemoteSyncApplyResult,
+  LocalRemoteSyncFailure,
+  LocalRemoteSyncItemKind,
+  LocalRemoteSyncItemPreview,
+  LocalRemoteSyncItemStatus,
+  LocalRemoteSyncPreview,
+  LocalRemoteSyncPreviewRequest,
+} from "./localRemoteSync";
 
 // ─── Project-level Skill Management ──────────────────────────────────────────
 

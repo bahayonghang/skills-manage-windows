@@ -55,6 +55,8 @@ fn make_central_skill_at(id: &str, name: &str, dir: &Path) -> Skill {
         source: Some("native".to_string()),
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 
@@ -94,6 +96,8 @@ fn make_skill(id: &str, name: &str, is_central: bool) -> Skill {
         },
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 
@@ -108,6 +112,8 @@ fn make_remote_central_skill(id: &str, dir: &str) -> Skill {
         source: Some("native".to_string()),
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 
@@ -135,17 +141,41 @@ fn make_observation(
     source_kind: &str,
     read_only: bool,
 ) -> AgentSkillObservation {
+    make_observation_for_agent(
+        "claude-code",
+        row_id,
+        skill_id,
+        name,
+        dir_path,
+        source_kind,
+        read_only,
+    )
+}
+
+fn make_observation_for_agent(
+    agent_id: &str,
+    row_id: &str,
+    skill_id: &str,
+    name: &str,
+    dir_path: &str,
+    source_kind: &str,
+    read_only: bool,
+) -> AgentSkillObservation {
     AgentSkillObservation {
         row_id: row_id.to_string(),
-        agent_id: "claude-code".to_string(),
+        agent_id: agent_id.to_string(),
         skill_id: skill_id.to_string(),
         name: name.to_string(),
         description: Some(format!("{source_kind} copy")),
         file_path: format!("{dir_path}/SKILL.md"),
         dir_path: dir_path.to_string(),
         source_kind: source_kind.to_string(),
-        source_root: if source_kind == "user" {
+        source_root: if source_kind == "user" && agent_id == "claude-code" {
             "/tmp/.claude/skills".to_string()
+        } else if source_kind == "user" {
+            format!("/tmp/.agents/skills/{agent_id}")
+        } else if agent_id == "codex" {
+            "/tmp/.codex/plugins/cache/openai/example/1.0.0".to_string()
         } else {
             "/tmp/.claude/plugins/cache/publisher/plugin-a/1.0.0".to_string()
         },
@@ -153,6 +183,8 @@ fn make_observation(
         symlink_target: None,
         is_read_only: read_only,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 
@@ -439,6 +471,37 @@ async fn test_get_central_skills_excludes_non_central() {
         "only central skills should be returned"
     );
     assert_eq!(skills_with_links[0].id, "c-skill");
+}
+
+#[tokio::test]
+async fn test_get_central_skills_page_filters_sorts_and_counts_total() {
+    let pool = setup_test_db().await;
+
+    let mut alpha = make_skill("alpha", "Alpha Tool", true);
+    alpha.fs_updated_at = Some("2026-05-17T01:00:00Z".to_string());
+    let mut beta = make_skill("beta", "Beta Tool", true);
+    beta.fs_updated_at = Some("2026-05-18T01:00:00Z".to_string());
+    let ignored = make_skill("gamma", "Gamma Tool", false);
+    db::upsert_skill(&pool, &alpha).await.unwrap();
+    db::upsert_skill(&pool, &beta).await.unwrap();
+    db::upsert_skill(&pool, &ignored).await.unwrap();
+
+    let page = get_central_skills_page_impl(
+        &pool,
+        CentralSkillsPageRequest {
+            query: Some("tool".to_string()),
+            sort: Some("updatedAt:desc".to_string()),
+            limit: Some(1),
+            offset: Some(0),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(page.total, 2);
+    assert_eq!(page.items.len(), 1);
+    assert_eq!(page.items[0].id, "beta");
 }
 
 // ── get_skill_detail ──────────────────────────────────────────────────────
@@ -1009,6 +1072,8 @@ async fn test_read_skill_content_returns_file_content() {
         source: None,
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(&pool, &skill).await.unwrap();
 
@@ -1030,6 +1095,8 @@ async fn test_read_skill_content_file_not_found() {
         source: None,
         content: None,
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(&pool, &skill).await.unwrap();
 
@@ -1067,6 +1134,7 @@ async fn test_get_skills_by_agent_impl_includes_installation_metadata() {
 
     let skill = make_skill("meta-skill", "Meta Skill", false);
     db::upsert_skill(&pool, &skill).await.unwrap();
+    let installed_at = Utc::now().to_rfc3339();
 
     db::upsert_skill_installation(
         &pool,
@@ -1076,7 +1144,7 @@ async fn test_get_skills_by_agent_impl_includes_installation_metadata() {
             installed_path: "/tmp/claude/meta-skill".to_string(),
             link_type: "symlink".to_string(),
             symlink_target: Some("/tmp/central/meta-skill".to_string()),
-            created_at: Utc::now().to_rfc3339(),
+            created_at: installed_at.clone(),
         },
     )
     .await
@@ -1102,6 +1170,73 @@ async fn test_get_skills_by_agent_impl_includes_installation_metadata() {
         Some("/tmp/central/meta-skill"),
         "symlink_target must be forwarded from installation record"
     );
+    assert_eq!(
+        s.installed_at.as_deref(),
+        Some(installed_at.as_str()),
+        "installed_at must expose skill_installations.created_at"
+    );
+    assert_eq!(s.scanned_at, skill.scanned_at);
+    assert_eq!(
+        s.created_at.as_deref(),
+        Some(skill.scanned_at.as_str()),
+        "missing filesystem metadata falls back to scanned_at"
+    );
+    assert_eq!(
+        s.updated_at.as_deref(),
+        Some(skill.scanned_at.as_str()),
+        "missing filesystem metadata falls back to scanned_at"
+    );
+}
+
+#[tokio::test]
+async fn test_get_skills_by_agent_impl_includes_repository_metadata_for_installations() {
+    let pool = setup_test_db().await;
+
+    let skill = make_skill("repo-skill", "Repo Skill", true);
+    db::upsert_skill(&pool, &skill).await.unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "repo-skill".to_string(),
+            agent_id: "cursor".to_string(),
+            installed_path: "/tmp/cursor/repo-skill".to_string(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+    let repository = db::create_or_update_skill_repository(
+        &pool,
+        Some("github-owner-repo-main"),
+        "owner/repo",
+        "github",
+        Some("owner"),
+        Some("repo"),
+        Some("main"),
+        Some("https://github.com/owner/repo"),
+        false,
+    )
+    .await
+    .unwrap();
+    db::assign_skills_to_repository(
+        &pool,
+        &repository.id,
+        &["repo-skill".to_string()],
+        Some("skills/repo-skill"),
+    )
+    .await
+    .unwrap();
+
+    let skills = get_skills_by_agent_impl(&pool, "cursor").await.unwrap();
+    assert_eq!(skills.len(), 1);
+    let row = &skills[0];
+    let repository = row.repository.as_ref().expect("repository metadata");
+    assert_eq!(repository.id, "github-owner-repo-main");
+    assert_eq!(repository.name, "owner/repo");
+    assert_eq!(row.source_path.as_deref(), Some("skills/repo-skill"));
+    assert!(!row.is_source_unknown);
 }
 
 #[tokio::test]
@@ -1227,6 +1362,10 @@ async fn test_get_skills_by_agent_impl_claude_includes_source_identity_and_confl
     );
     assert_eq!(skills[0].conflict_count, 2);
     assert_eq!(skills[1].conflict_count, 2);
+    assert!(skills[0].installed_at.is_none());
+    assert_eq!(skills[0].created_at, Some(skills[0].scanned_at.clone()));
+    assert_eq!(skills[0].updated_at, Some(skills[0].scanned_at.clone()));
+    assert!(skills[0].repository.is_none());
 }
 
 #[tokio::test]
@@ -1394,6 +1533,127 @@ async fn test_get_skill_detail_with_row_impl_claude_user_row_keeps_manageable_st
     assert_eq!(detail.conflict_count, 2);
     assert_eq!(detail.installations.len(), 1);
     assert_eq!(detail.collections.len(), 1);
+}
+
+#[tokio::test]
+async fn test_get_skills_by_agent_impl_codex_merges_platform_and_plugin_rows() {
+    let pool = setup_test_db().await;
+
+    let skill = make_skill("shared-skill", "Shared Skill", false);
+    db::upsert_skill(&pool, &skill).await.unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "shared-skill".to_string(),
+            agent_id: "codex".to_string(),
+            installed_path: "/tmp/.agents/skills/shared-skill".to_string(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+    db::upsert_agent_skill_observation(
+        &pool,
+        &make_observation_for_agent(
+            "codex",
+            "codex::/tmp/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill",
+            "shared-skill",
+            "Shared Skill",
+            "/tmp/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill",
+            "plugin",
+            true,
+        ),
+    )
+    .await
+    .unwrap();
+
+    let skills = get_skills_by_agent_impl(&pool, "codex").await.unwrap();
+    let platform_row = skills
+        .iter()
+        .find(|skill| !skill.is_read_only)
+        .expect("platform row");
+    let plugin_row = skills
+        .iter()
+        .find(|skill| skill.is_read_only)
+        .expect("plugin row");
+
+    assert_eq!(skills.len(), 2);
+    assert_eq!(platform_row.row_id, "shared-skill");
+    assert_eq!(platform_row.source_kind, None);
+    assert!(platform_row.installed_at.is_some());
+    assert_eq!(plugin_row.source_kind.as_deref(), Some("plugin"));
+    assert!(plugin_row.installed_at.is_none());
+    assert_eq!(plugin_row.created_at, Some(plugin_row.scanned_at.clone()));
+    assert_eq!(plugin_row.updated_at, Some(plugin_row.scanned_at.clone()));
+    assert!(plugin_row.repository.is_none());
+    assert_eq!(platform_row.conflict_count, 2);
+    assert_eq!(plugin_row.conflict_count, 2);
+    assert_eq!(
+        platform_row.conflict_group.as_deref(),
+        Some("codex::shared-skill")
+    );
+    assert_eq!(
+        plugin_row.conflict_group.as_deref(),
+        Some("codex::shared-skill")
+    );
+}
+
+#[tokio::test]
+async fn test_get_skill_detail_with_row_impl_codex_plugin_row_uses_selected_observation() {
+    let pool = setup_test_db().await;
+
+    let skill = make_skill("shared-skill", "Shared Skill", false);
+    db::upsert_skill(&pool, &skill).await.unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "shared-skill".to_string(),
+            agent_id: "codex".to_string(),
+            installed_path: "/tmp/.agents/skills/shared-skill".to_string(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let row_id = "codex::/tmp/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill";
+    db::upsert_agent_skill_observation(
+        &pool,
+        &make_observation_for_agent(
+            "codex",
+            row_id,
+            "shared-skill",
+            "Shared Skill",
+            "/tmp/.codex/plugins/cache/openai/example/1.0.0/skills/shared-skill",
+            "plugin",
+            true,
+        ),
+    )
+    .await
+    .unwrap();
+
+    let detail = get_skill_detail_with_row_impl(&pool, "shared-skill", Some("codex"), Some(row_id))
+        .await
+        .unwrap();
+
+    assert_eq!(detail.row_id, row_id);
+    assert_eq!(detail.source_kind.as_deref(), Some("plugin"));
+    assert_eq!(
+        detail.source_root.as_deref(),
+        Some("/tmp/.codex/plugins/cache/openai/example/1.0.0")
+    );
+    assert!(detail.is_read_only);
+    assert_eq!(detail.conflict_count, 2);
+    assert_eq!(
+        detail.conflict_group.as_deref(),
+        Some("codex::shared-skill")
+    );
+    assert!(detail.installations.is_empty());
+    assert!(detail.collections.is_empty());
 }
 
 #[tokio::test]

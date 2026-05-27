@@ -1,11 +1,13 @@
 pub mod agents;
 pub mod bootstrap;
 pub mod central_metadata;
+pub mod central_store_location;
 pub mod central_updates;
 pub mod central_updates_fs;
 pub mod collections;
 pub mod github_import;
 pub mod linker;
+pub mod local_remote_sync;
 pub mod logs;
 pub mod marketplace;
 pub mod obsidian;
@@ -14,8 +16,10 @@ pub mod projects;
 pub mod saved_views;
 pub mod scanner;
 pub mod settings;
+pub mod skill_update_inventory;
 pub mod skills;
 pub mod tag_groups;
 pub mod targets;
+pub mod usage;
 
 pub const APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { TFunction } from "i18next";
 
 import { isTauriRuntime } from "@/lib/tauri";
+import { isRemoteLikeTarget, isWslTarget } from "@/lib/targetKind";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
   type PlatformCategoryVisibility,
@@ -19,6 +20,8 @@ import {
 } from "@/pages/dashboardUtils";
 import type {
   AgentWithStatus,
+  DashboardCentralSummary,
+  DashboardReadiness,
   OperationLogEntry,
   SkillRepositoryWithStats,
   SkillTag,
@@ -26,17 +29,10 @@ import type {
   TargetSummary,
 } from "@/types";
 
-interface DashboardCentralSummary {
-  centralSkillCount: number;
-  updatesAvailable: number;
-  aiReviewCount: number;
-  uncategorizedCount: number;
-  unassignedSourceCount: number;
-  sourceRepositories: SkillRepositoryWithStats[];
-}
-
 export interface DashboardQueueItem {
   key: string;
+  /** 用于 dashboard work queue tab 过滤；mockup 的 All/Review/Metadata 三态。 */
+  kind: "review" | "metadata";
   label: string;
   count: number;
   description: string;
@@ -63,6 +59,8 @@ export interface DashboardViewModel {
   lastScanLabel: string;
   loadError: string | null;
   logTotal: number;
+  queueItems: DashboardQueueItem[];
+  readiness: DashboardReadiness;
   recentLogs: OperationLogEntry[];
   registriesCount: number;
   resolvedCollectionCount: number;
@@ -71,8 +69,11 @@ export interface DashboardViewModel {
   scanStateLabel: string;
   sourceRepositoryCount: number;
   skillsByAgent: Record<string, number>;
+  sparkline: { points: number[]; max: number };
   targetDescription: string;
   targetLabel: string;
+  quickMigratePath: string;
+  quickMigrateDescription: string;
   topTags: ReturnType<typeof buildTopTags>;
   uncategorizedCount: number;
   unassignedSourceCount: number;
@@ -122,6 +123,7 @@ export function useDashboardViewModel({
   isLogsLoading,
   logsError,
   activeTarget,
+  targets,
 }: {
   t: TFunction;
   platformAgents: AgentWithStatus[];
@@ -149,6 +151,7 @@ export function useDashboardViewModel({
   isLogsLoading: boolean;
   logsError: string | null | undefined;
   activeTarget: TargetSummary | undefined;
+  targets: TargetSummary[];
 }) {
   const resolvedSummary = dashboardCentralSummary ?? EMPTY_DASHBOARD_CENTRAL_SUMMARY;
   const resolvedCategoryVisibility =
@@ -194,19 +197,34 @@ export function useDashboardViewModel({
     repositories.length > 0
       ? repositories.length
       : resolvedSummary.sourceRepositories.length;
-  const targetDescription =
-    resolvedTarget.kind === "ssh"
-      ? [
-          resolvedTarget.username && resolvedTarget.host
+  const targetDescription = isRemoteLikeTarget(resolvedTarget)
+    ? [
+        isWslTarget(resolvedTarget)
+          ? resolvedTarget.distribution
+          : resolvedTarget.username && resolvedTarget.host
             ? `${resolvedTarget.username}@${resolvedTarget.host}`
             : resolvedTarget.host,
-          resolvedTarget.remoteHome,
-        ]
-          .filter(Boolean)
-          .join(" / ")
-      : t("targets.localDescription");
-  const targetLabel =
-    resolvedTarget.kind === "ssh" ? resolvedTarget.label : t("targets.local");
+        resolvedTarget.remoteHome,
+      ]
+        .filter(Boolean)
+        .join(" / ")
+    : t("targets.localDescription");
+  const targetLabel = isRemoteLikeTarget(resolvedTarget)
+    ? resolvedTarget.label
+    : t("targets.local");
+  const quickMigrateTarget = isRemoteLikeTarget(resolvedTarget)
+    ? resolvedTarget
+    : targets.find(isRemoteLikeTarget);
+  const hasRemoteSyncTarget =
+    Boolean(quickMigrateTarget);
+  const quickMigratePath = hasRemoteSyncTarget
+    ? "/settings/connections?action=local-remote-sync&section=remote-targets"
+    : "/settings/connections";
+  const quickMigrateDescription = hasRemoteSyncTarget
+    ? t("dashboard.hero.ctaQuickMigrateRemoteDesc", {
+        target: quickMigrateTarget?.label ?? targetLabel,
+      })
+    : t("dashboard.hero.ctaQuickMigrateSetupDesc");
   const scanStateLabel =
     isPlatformLoading || isPlatformRefreshing
       ? t("dashboard.scanState.loading")
@@ -229,30 +247,45 @@ export function useDashboardViewModel({
   const queueItems: DashboardQueueItem[] = [
     {
       key: "updates",
+      kind: "review",
       label: t("dashboard.queue.updates"),
       count: updatesAvailable,
       description: t("dashboard.queue.updatesDesc"),
     },
     {
       key: "ai",
+      kind: "review",
       label: t("dashboard.queue.aiReviews"),
       count: aiReviewCount,
       description: t("dashboard.queue.aiReviewsDesc"),
     },
     {
       key: "uncategorized",
+      kind: "metadata",
       label: t("dashboard.queue.uncategorized"),
       count: uncategorizedCount,
       description: t("dashboard.queue.uncategorizedDesc"),
     },
     {
       key: "unassigned",
+      kind: "metadata",
       label: t("dashboard.queue.unassigned"),
       count: unassignedSourceCount,
       description: t("dashboard.queue.unassignedDesc"),
     },
   ];
   const activeQueueItems = queueItems.filter((item) => item.count > 0);
+  const readiness = resolvedSummary.readiness ?? {
+    score: 0,
+    categorizedRatio: 0,
+    describedRatio: 0,
+    sourcedRatio: 0,
+    installHealthRatio: 0,
+  };
+  const sparkline = {
+    points: activity.buckets.map((bucket) => bucket.count),
+    max: activity.max,
+  };
   const healthSummary =
     centralTotal > 0
       ? t("dashboard.health.summary", {
@@ -279,6 +312,8 @@ export function useDashboardViewModel({
     lastScanLabel,
     loadError,
     logTotal,
+    queueItems,
+    readiness,
     recentLogs,
     registriesCount: registries.length,
     resolvedCollectionCount,
@@ -287,8 +322,11 @@ export function useDashboardViewModel({
     scanStateLabel,
     sourceRepositoryCount,
     skillsByAgent,
+    sparkline,
     targetDescription,
     targetLabel,
+    quickMigratePath,
+    quickMigrateDescription,
     topTags,
     uncategorizedCount,
     unassignedSourceCount,

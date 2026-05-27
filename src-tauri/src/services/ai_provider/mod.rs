@@ -20,6 +20,8 @@ mod stream;
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashMap;
+
 pub use claude::AiConnectionTestResult;
 pub(crate) use config::resolve_ai_provider_config;
 #[cfg(test)]
@@ -33,7 +35,7 @@ pub use error::{ExplanationErrorInfo, ExplanationErrorKind};
 pub use prompt::ExplanationApiProtocol;
 pub use secret::{
     clear_ai_api_key_impl, get_ai_api_key_state_impl, migrate_ai_api_key_on_startup,
-    set_ai_api_key_impl, AiApiKeyState,
+    reveal_ai_api_key_impl, set_ai_api_key_impl, AiApiKeyState,
 };
 pub use stream::{ExplanationChunkPayload, ExplanationCompletePayload};
 
@@ -82,6 +84,15 @@ pub async fn get_skill_explanation_impl(
     lang: String,
 ) -> Result<Option<String>, String> {
     cache::load_cached_skill_explanation(pool, &skill_id, &lang).await
+}
+
+/// Read cached explanations for many skills. Never triggers the AI provider.
+pub async fn get_skill_explanation_summaries_impl(
+    pool: &crate::db::DbPool,
+    skill_ids: Vec<String>,
+    lang: String,
+) -> Result<HashMap<String, String>, String> {
+    cache::load_cached_skill_explanation_summaries(pool, &skill_ids, &lang).await
 }
 
 /// Stream an AI-generated explanation. Cache hits are emitted as a single chunk

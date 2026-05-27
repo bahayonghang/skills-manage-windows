@@ -1,11 +1,14 @@
-import type { RefObject } from "react";
+import { useMemo, type RefObject } from "react";
 import type { TFunction } from "i18next";
 
 import { CentralSkillEmptyState, CentralSkillFirstVisitEmptyState } from "@/components/central/CentralSkillEmptyStates";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
+import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
+import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
+import { cn } from "@/lib/utils";
 import type {
   CentralSkillUpdateState,
   SkillWithLinks,
@@ -24,6 +27,7 @@ export function CentralSkillListContent({
   onToggleSelection,
   onUpdateCentral,
   searchQuery,
+  selectedCount,
   selectedSkillIdSet,
   setDetailButtonRef,
   skillsCount,
@@ -45,6 +49,7 @@ export function CentralSkillListContent({
   onToggleSelection: (skillId: string) => void;
   onUpdateCentral: (skillIds: string[]) => void;
   searchQuery: string;
+  selectedCount: number;
   selectedSkillIdSet: Set<string>;
   setDetailButtonRef: (skillId: string, node: HTMLButtonElement | null) => void;
   skillsCount: number;
@@ -54,12 +59,25 @@ export function CentralSkillListContent({
   updateStatuses: Record<string, CentralSkillUpdateState>;
   updatingSkillIds: string[];
 }) {
+  const summarySkillIds = useMemo(
+    () => sortedSkills.map((skill) => skill.id),
+    [sortedSkills]
+  );
+  const aiSummaries = useSkillExplanationSummaries(summarySkillIds, "zh");
+  const skillNamesForUsage = useMemo(
+    () => Array.from(new Set(sortedSkills.map((s) => s.name))),
+    [sortedSkills]
+  );
+  const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
+
   function renderSearchResult(skill: SkillWithLinks) {
     return (
       <UnifiedSkillCard
         key={skill.id}
         name={skill.name}
         description={skill.description}
+        aiSummary={aiSummaries[skill.id]}
+        usageBadge={usageCounts?.[skill.name]}
         checkbox={{
           checked: selectedSkillIdSet.has(skill.id),
           onChange: () => onToggleSelection(skill.id),
@@ -79,6 +97,7 @@ export function CentralSkillListContent({
         onUpdateCentral={() => onUpdateCentral([skill.id])}
         onDeleteFromCentral={() => onDelete(skill)}
         detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
+        density="compact"
         className="h-[132px]"
       />
     );
@@ -90,6 +109,8 @@ export function CentralSkillListContent({
         key={skill.id}
         name={skill.name}
         description={skill.description}
+        aiSummary={aiSummaries[skill.id]}
+        usageBadge={usageCounts?.[skill.name]}
         checkbox={{
           checked: selectedSkillIdSet.has(skill.id),
           onChange: () => onToggleSelection(skill.id),
@@ -117,13 +138,21 @@ export function CentralSkillListContent({
           onToggle: onTogglePlatform,
           togglingAgentId,
         }}
+        density="compact"
         className="h-[212px]"
       />
     );
   }
 
   return (
-    <div ref={contentRef} className="scrollbar-subtle flex-1 overflow-auto p-6">
+    <div
+      ref={contentRef}
+      data-testid="central-skill-list-scroll"
+      className={cn(
+        "scrollbar-subtle flex-1 overflow-auto p-6",
+        selectedCount > 0 && "pb-28"
+      )}
+    >
       {isLoading ? (
         <CentralSkillEmptyState message={t("central.loading")} />
       ) : skillsCount === 0 ? (

@@ -12,6 +12,7 @@ function repo(
     name: id,
     source_type: "github",
     is_unknown: false,
+    pinned: false,
     skill_count: 0,
     unknown_skill_count: 0,
     created_at: "",
@@ -57,6 +58,23 @@ describe("groupRepositoriesForSidebar", () => {
       "anthropics/tools",
     ]);
     expect(anthropicsGroup.totalSkillCount).toBe(20);
+  });
+
+  it("sorts pinned repositories before unpinned repositories within a group", () => {
+    const repos = [
+      repo("r1", { owner: "openai", repo: "alpha", name: "openai/alpha" }),
+      repo("r2", { owner: "openai", repo: "zeta", name: "openai/zeta", pinned: true }),
+      repo("r3", { owner: "openai", repo: "beta", name: "openai/beta" }),
+    ];
+
+    const sections = groupRepositoriesForSidebar(repos);
+    const group = sections[0].groups[0];
+    if (group.kind !== "owner") throw new Error("expected owner");
+    expect(group.repositories.map((r) => r.name)).toEqual([
+      "openai/zeta",
+      "openai/alpha",
+      "openai/beta",
+    ]);
   });
 
   it("falls back to github-no-owner group when owner is missing", () => {

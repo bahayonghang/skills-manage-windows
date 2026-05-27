@@ -17,6 +17,7 @@ function makeRepo(over: Partial<SkillRepository> & { id: string; name: string })
     repo: over.repo,
     branch: over.branch,
     url: over.url,
+    pinned: over.pinned ?? false,
     is_unknown: over.is_unknown ?? false,
     created_at: over.created_at ?? "2026-01-01T00:00:00Z",
     updated_at: over.updated_at ?? "2026-01-01T00:00:00Z",

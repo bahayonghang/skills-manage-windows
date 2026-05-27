@@ -262,4 +262,99 @@ describe("skillStore", () => {
       useSkillStore.getState().pendingSkillActionKeys["claude-code::frontend-design"]
     ).toBeUndefined();
   });
+
+  it("batch uninstalls skills with row-aware IPC payload and refreshes the agent list", async () => {
+    const remainingSkills = [mockSkills[1]];
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({
+        succeeded: [
+          {
+            skill_id: "frontend-design",
+          },
+          {
+            skill_id: "shared-skill",
+            row_id: "claude-code::user::shared-skill",
+          },
+        ],
+        failed: [],
+      })
+      .mockResolvedValueOnce(remainingSkills);
+
+    const result = await useSkillStore
+      .getState()
+      .batchUninstallSkillsFromAgent("claude-code", [
+        { skill_id: "frontend-design" },
+        { skill_id: "shared-skill", row_id: "claude-code::user::shared-skill" },
+      ]);
+
+    expect(invoke).toHaveBeenNthCalledWith(1, "batch_uninstall_skills_from_agent", {
+      agentId: "claude-code",
+      requests: [
+        { skill_id: "frontend-design" },
+        { skill_id: "shared-skill", row_id: "claude-code::user::shared-skill" },
+      ],
+    });
+    expect(invoke).toHaveBeenNthCalledWith(2, "get_skills_by_agent", {
+      agentId: "claude-code",
+    });
+    expect(result.failed).toEqual([]);
+    expect(useSkillStore.getState().skillsByAgent["claude-code"]).toEqual(remainingSkills);
+  });
+
+  it("tracks batch uninstall pending state by row-level action keys", async () => {
+    let resolveBatch!: (value: {
+      succeeded: Array<{ skill_id: string; row_id?: string }>;
+      failed: never[];
+    }) => void;
+    vi.mocked(invoke)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveBatch = resolve;
+        })
+      )
+      .mockResolvedValueOnce([]);
+
+    const uninstallPromise = useSkillStore
+      .getState()
+      .batchUninstallSkillsFromAgent("claude-code", [
+        { skill_id: "frontend-design" },
+        { skill_id: "shared-skill", row_id: "claude-code::user::shared-skill" },
+      ]);
+
+    expect(
+      useSkillStore.getState().pendingSkillActionKeys["claude-code::frontend-design"]
+    ).toBe(true);
+    expect(
+      useSkillStore.getState().pendingSkillActionKeys["claude-code::user::shared-skill"]
+    ).toBe(true);
+
+    resolveBatch({
+      succeeded: [
+        { skill_id: "frontend-design" },
+        { skill_id: "shared-skill", row_id: "claude-code::user::shared-skill" },
+      ],
+      failed: [],
+    });
+    await uninstallPromise;
+
+    expect(useSkillStore.getState().pendingSkillActionKeys).toEqual({});
+  });
+
+  it("rejects batch uninstall outside the Tauri desktop runtime", async () => {
+    const isTauriSpy = vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(false);
+
+    await expect(
+      useSkillStore
+        .getState()
+        .batchUninstallSkillsFromAgent("claude-code", [{ skill_id: "frontend-design" }])
+    ).rejects.toThrow("Uninstalling skills requires the Tauri desktop runtime.");
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(useSkillStore.getState().error).toBe(
+      "Uninstalling skills requires the Tauri desktop runtime."
+    );
+    expect(useSkillStore.getState().pendingSkillActionKeys).toEqual({});
+
+    isTauriSpy.mockRestore();
+  });
 });

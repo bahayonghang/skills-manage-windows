@@ -176,6 +176,8 @@ pub(super) fn build_scanned_skills_from_contents(
                 link_type,
                 symlink_target: symlink_target.clone(),
                 is_central,
+                fs_created_at: None,
+                fs_updated_at: None,
             })
         })
         .collect()

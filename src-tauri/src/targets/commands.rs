@@ -246,6 +246,105 @@ pub async fn update_ssh_target_password_impl(
     }
 }
 
+pub async fn create_wsl_target_impl(
+    registry: &TargetRegistry,
+    local_db: &DbPool,
+    request: CreateWslTargetRequest,
+) -> Result<TargetSummary, String> {
+    let target_id = format!("wsl-{}", Uuid::new_v4());
+    let mut target = request_to_wsl_config(request, target_id)?;
+    let probe = probe_wsl_target(&target).await?;
+    if !is_supported_remote_os(&probe.remote_os) {
+        return Err(format!(
+            "WSL OS '{}' is not supported in this version. Linux is expected for WSL targets.",
+            probe.remote_os
+        ));
+    }
+
+    target.remote_home = probe.remote_home;
+    target.remote_os = probe.remote_os;
+    let mut targets = load_wsl_targets(local_db).await?;
+    targets.push(target.clone());
+    save_wsl_targets(local_db, &targets).await?;
+    registry
+        .remote_db_for(&target.id, &target.remote_home)
+        .await?;
+
+    let active_id = active_target_id(local_db).await?;
+    Ok(registry.wsl_target_summary(&target, active_id.as_str()))
+}
+
+pub async fn update_wsl_target_impl(
+    registry: &TargetRegistry,
+    local_db: &DbPool,
+    request: UpdateWslTargetRequest,
+) -> Result<TargetSummary, String> {
+    let mut targets = load_wsl_targets(local_db).await?;
+    let index = targets
+        .iter()
+        .position(|target| target.id == request.id)
+        .ok_or_else(|| format!("Target '{}' not found", request.id))?;
+    let mut updated_target = update_wsl_request_to_config(request, &targets[index])?;
+
+    let probe = probe_wsl_target(&updated_target).await?;
+    if !is_supported_remote_os(&probe.remote_os) {
+        return Err(format!(
+            "WSL OS '{}' is not supported in this version. Linux is expected for WSL targets.",
+            probe.remote_os
+        ));
+    }
+    updated_target.remote_home = probe.remote_home;
+    updated_target.remote_os = probe.remote_os;
+
+    targets[index] = updated_target.clone();
+    save_wsl_targets(local_db, &targets).await?;
+    registry.drop_remote_pool(&updated_target.id);
+    registry
+        .remote_db_for(&updated_target.id, &updated_target.remote_home)
+        .await?;
+
+    let active_id = active_target_id(local_db).await?;
+    Ok(registry.wsl_target_summary(&updated_target, active_id.as_str()))
+}
+
+pub async fn test_wsl_target_impl(
+    local_db: &DbPool,
+    request: TestWslTargetRequest,
+) -> Result<WslTargetTestResult, String> {
+    let target = match request.id.as_deref() {
+        Some(id) if !id.trim().is_empty() => load_wsl_targets(local_db)
+            .await?
+            .into_iter()
+            .find(|target| target.id == id)
+            .ok_or_else(|| format!("Target '{}' not found", id))?,
+        _ => test_wsl_request_to_config(request)?,
+    };
+
+    match probe_wsl_target(&target).await {
+        Ok(probe) if is_supported_remote_os(&probe.remote_os) => Ok(WslTargetTestResult {
+            ok: true,
+            remote_home: Some(probe.remote_home),
+            remote_os: Some(probe.remote_os),
+            message: "WSL target is available.".to_string(),
+        }),
+        Ok(probe) => Ok(WslTargetTestResult {
+            ok: false,
+            remote_home: Some(probe.remote_home),
+            remote_os: Some(probe.remote_os.clone()),
+            message: format!(
+                "WSL OS '{}' is not supported in this version. Linux is expected for WSL targets.",
+                probe.remote_os
+            ),
+        }),
+        Err(error) => Ok(WslTargetTestResult {
+            ok: false,
+            remote_home: None,
+            remote_os: None,
+            message: error,
+        }),
+    }
+}
+
 pub async fn delete_target_impl(
     registry: &TargetRegistry,
     local_db: &DbPool,
@@ -255,21 +354,25 @@ pub async fn delete_target_impl(
         return Err("Local target cannot be deleted.".to_string());
     }
 
-    let mut targets = load_remote_targets(local_db).await?;
-    let original_len = targets.len();
-    targets.retain(|target| target.id != target_id);
-    if targets.len() == original_len {
+    let mut ssh_targets = load_remote_targets(local_db).await?;
+    let mut wsl_targets = load_wsl_targets(local_db).await?;
+    let removed_ssh = ssh_targets
+        .iter()
+        .position(|target| target.id == target_id)
+        .map(|index| ssh_targets.remove(index));
+    let removed_wsl = wsl_targets
+        .iter()
+        .position(|target| target.id == target_id)
+        .map(|index| wsl_targets.remove(index));
+    if removed_ssh.is_none() && removed_wsl.is_none() {
         return Err(format!("Target '{}' not found", target_id));
     }
-    if let Some(mut removed) = load_remote_targets(local_db)
-        .await?
-        .into_iter()
-        .find(|target| target.id == target_id)
-    {
+    if let Some(mut removed) = removed_ssh {
         registry.delete_target_password(&mut removed)?;
     }
 
-    save_remote_targets(local_db, &targets).await?;
+    save_remote_targets(local_db, &ssh_targets).await?;
+    save_wsl_targets(local_db, &wsl_targets).await?;
     if active_target_id(local_db).await? == target_id {
         db::set_setting(local_db, ACTIVE_TARGET_SETTING_KEY, LOCAL_TARGET_ID).await?;
     }
@@ -282,13 +385,18 @@ pub async fn set_active_target_impl(
     local_db: &DbPool,
     target_id: &str,
 ) -> Result<TargetSummary, String> {
-    if target_id != LOCAL_TARGET_ID
-        && !load_remote_targets(local_db)
+    if target_id != LOCAL_TARGET_ID {
+        let ssh_exists = load_remote_targets(local_db)
             .await?
             .iter()
-            .any(|target| target.id == target_id)
-    {
-        return Err(format!("Target '{}' not found", target_id));
+            .any(|target| target.id == target_id);
+        let wsl_exists = load_wsl_targets(local_db)
+            .await?
+            .iter()
+            .any(|target| target.id == target_id);
+        if !ssh_exists && !wsl_exists {
+            return Err(format!("Target '{}' not found", target_id));
+        }
     }
 
     db::set_setting(local_db, ACTIVE_TARGET_SETTING_KEY, target_id).await?;
@@ -335,6 +443,24 @@ pub(super) async fn save_remote_targets(
 ) -> Result<(), String> {
     let raw = serde_json::to_string(targets).map_err(|e| e.to_string())?;
     db::set_setting(local_db, TARGETS_SETTING_KEY, &raw).await
+}
+
+pub async fn load_wsl_targets(local_db: &DbPool) -> Result<Vec<WslTargetConfig>, String> {
+    let Some(raw) = db::get_setting(local_db, WSL_TARGETS_SETTING_KEY).await? else {
+        return Ok(Vec::new());
+    };
+    if raw.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_str(&raw).map_err(|e| format!("Failed to parse WSL targets: {}", e))
+}
+
+pub(super) async fn save_wsl_targets(
+    local_db: &DbPool,
+    targets: &[WslTargetConfig],
+) -> Result<(), String> {
+    let raw = serde_json::to_string(targets).map_err(|e| e.to_string())?;
+    db::set_setting(local_db, WSL_TARGETS_SETTING_KEY, &raw).await
 }
 
 pub(super) fn request_to_config(
@@ -502,6 +628,56 @@ pub(super) fn test_request_to_config(
         credential_key,
         protected_password: None,
         password,
+        remote_home: String::new(),
+        remote_os: String::new(),
+        symlink_enabled: false,
+    })
+}
+
+pub(super) fn request_to_wsl_config(
+    request: CreateWslTargetRequest,
+    target_id: String,
+) -> Result<WslTargetConfig, String> {
+    Ok(WslTargetConfig {
+        id: target_id,
+        label: required_field("label", &request.label)?,
+        distribution: required_field("distribution", &request.distribution)?,
+        remote_home: String::new(),
+        remote_os: String::new(),
+        symlink_enabled: false,
+    })
+}
+
+pub(super) fn update_wsl_request_to_config(
+    request: UpdateWslTargetRequest,
+    existing: &WslTargetConfig,
+) -> Result<WslTargetConfig, String> {
+    let requested_id = required_field("id", &request.id)?;
+    if requested_id != existing.id {
+        return Err("Target id cannot be changed.".to_string());
+    }
+
+    Ok(WslTargetConfig {
+        id: existing.id.clone(),
+        label: required_field("label", &request.label)?,
+        distribution: required_field("distribution", &request.distribution)?,
+        remote_home: existing.remote_home.clone(),
+        remote_os: existing.remote_os.clone(),
+        symlink_enabled: existing.symlink_enabled,
+    })
+}
+
+pub(super) fn test_wsl_request_to_config(
+    request: TestWslTargetRequest,
+) -> Result<WslTargetConfig, String> {
+    let id = request.id.unwrap_or_else(|| "wsl-test".to_string());
+    Ok(WslTargetConfig {
+        id,
+        label: required_field("label", request.label.as_deref().unwrap_or("WSL target"))?,
+        distribution: required_field(
+            "distribution",
+            request.distribution.as_deref().unwrap_or(""),
+        )?,
         remote_home: String::new(),
         remote_os: String::new(),
         symlink_enabled: false,

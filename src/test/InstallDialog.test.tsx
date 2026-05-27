@@ -33,13 +33,33 @@ const mockAgents: AgentWithStatus[] = [
     is_enabled: true,
   },
   {
-    id: "gemini-cli",
-    display_name: "Gemini CLI",
+    id: "antigravity",
+    display_name: "Antigravity",
     category: "coding",
-    global_skills_dir: "~/.agents/skills/",
-    is_detected: false,
+    global_skills_dir: "~/.gemini/antigravity/skills/",
+    project_skills_dir: ".agents/skills",
+    is_detected: true,
     is_builtin: true,
     is_enabled: true,
+  },
+  {
+    id: "antigravity-cli",
+    display_name: "Antigravity CLI",
+    category: "coding",
+    global_skills_dir: "~/.gemini/antigravity-cli/skills/",
+    project_skills_dir: ".agents/skills",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
+    id: "gemini-cli",
+    display_name: "Gemini CLI (legacy)",
+    category: "coding",
+    global_skills_dir: "~/.gemini/skills/",
+    is_detected: false,
+    is_builtin: true,
+    is_enabled: false,
   },
   {
     id: "kiro",
@@ -85,7 +105,7 @@ const mockSkill: SkillWithLinks = {
 const mockOnInstall = vi.fn();
 const mockOnOpenChange = vi.fn();
 const successInstallResult = {
-  succeeded: ["claude-code", "codex", "kiro"],
+  succeeded: ["claude-code", "codex", "antigravity", "antigravity-cli", "kiro"],
   skipped: [],
   failed: [],
 };
@@ -152,9 +172,11 @@ describe("InstallDialog", () => {
     renderDialog();
     expect(screen.getByLabelText("Claude Code")).toBeInTheDocument();
     expect(screen.getByLabelText("Universal (.agents/skills)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Antigravity")).toBeInTheDocument();
+    expect(screen.getByLabelText("Antigravity CLI")).toBeInTheDocument();
     expect(screen.getByLabelText("Kiro")).toBeInTheDocument();
     expect(screen.queryByLabelText("Cursor")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Gemini CLI")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Gemini CLI (legacy)")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Codex")).not.toBeInTheDocument();
   });
 
@@ -216,9 +238,7 @@ describe("InstallDialog", () => {
   it("shows confirm button with count of selected platforms", () => {
     renderDialog();
     // By default, all enabled and visible targets are pre-selected.
-    expect(
-      screen.getByRole("button", { name: /安装到 3 个平台/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /安装到 5 个平台/i })).toBeInTheDocument();
   });
 
   it("calls onInstall with selected agent IDs on confirm", async () => {
@@ -253,7 +273,13 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalled();
     });
     const [, agentIds, method] = mockOnInstall.mock.calls[0];
-    expect([...agentIds].sort()).toEqual(["claude-code", "codex", "kiro"]);
+    expect([...agentIds].sort()).toEqual([
+      "antigravity",
+      "antigravity-cli",
+      "claude-code",
+      "codex",
+      "kiro",
+    ]);
     expect(method).toBe("symlink");
   });
 
@@ -267,7 +293,7 @@ describe("InstallDialog", () => {
       },
     });
     const confirmBtn = screen.getByRole("button", {
-      name: /安装到 2 个平台/i,
+      name: /安装到 4 个平台/i,
     });
     fireEvent.click(confirmBtn);
 
@@ -275,7 +301,12 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalled();
     });
     const [, agentIds] = mockOnInstall.mock.calls[0];
-    expect([...agentIds].sort()).toEqual(["claude-code", "kiro"]);
+    expect([...agentIds].sort()).toEqual([
+      "antigravity",
+      "antigravity-cli",
+      "claude-code",
+      "kiro",
+    ]);
   });
 
   it("passes 'symlink' method to onInstall by default", async () => {
@@ -438,6 +469,43 @@ describe("InstallDialog", () => {
     expect(mockOnInstall).not.toHaveBeenCalled();
   });
 
+
+  it("allows remote project installs with manual POSIX path input", async () => {
+    const remoteTarget: TargetSummary = {
+      id: "ssh-demo",
+      kind: "ssh",
+      label: "Demo",
+      remoteOs: "Linux",
+      symlinkEnabled: true,
+      isActive: true,
+    };
+    useTargetStore.setState({
+      targets: [localTarget, remoteTarget],
+      activeTarget: remoteTarget,
+    });
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
+
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+    expect(screen.queryByRole("button", { name: "选择项目文件夹" })).not.toBeInTheDocument();
+    expect(screen.getByText("远程项目路径需要手动输入，并使用 POSIX 格式，例如 /home/me/project。")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("/home/me/project"), {
+      target: { value: "/home/test/project" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /安装到 .* 个平台/i }));
+
+    await waitFor(() => {
+      expect(mockOnInstall).toHaveBeenCalledWith(
+        "frontend-design",
+        expect.any(Array),
+        "copy",
+        "/home/test/project"
+      );
+    });
+    expect(openDialog).not.toHaveBeenCalled();
+  });
+
   it("defaults to symlink for remote targets that support symlinks", async () => {
     mockOnInstall.mockResolvedValueOnce(successInstallResult);
     const remoteTarget: TargetSummary = {
@@ -558,9 +626,9 @@ describe("InstallDialog", () => {
   it("updates confirm button count when checkbox toggled", async () => {
     renderDialog();
 
-    // Initially 3 selected: Claude Code, Kiro, and Universal via Codex.
+    // Initially 5 selected: Claude Code, Antigravity, Antigravity CLI, Kiro, and Universal via Codex.
     expect(
-      screen.getByRole("button", { name: /安装到 3 个平台/i })
+      screen.getByRole("button", { name: /安装到 5 个平台/i })
     ).toBeInTheDocument();
 
     // Uncheck Kiro.
@@ -569,7 +637,7 @@ describe("InstallDialog", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /安装到 2 个平台/i })
+        screen.getByRole("button", { name: /安装到 4 个平台/i })
       ).toBeInTheDocument();
     });
   });
@@ -596,6 +664,8 @@ describe("InstallDialog", () => {
 
     fireEvent.click(screen.getByLabelText("Universal (.agents/skills)"));
     fireEvent.click(screen.getByLabelText("Claude Code"));
+    fireEvent.click(screen.getByLabelText("Antigravity"));
+    fireEvent.click(screen.getByLabelText("Antigravity CLI"));
     fireEvent.click(screen.getByLabelText("Kiro"));
 
     const confirmBtn = screen.getByRole("button", {

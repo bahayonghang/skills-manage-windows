@@ -263,7 +263,7 @@ pub(crate) fn inspect_repo_skill_candidates_from_snapshot_at_path(
 }
 
 pub(super) async fn build_remote_repo_skill_candidates_from_workspace(
-    connection: &crate::targets::ConnectedSshTarget,
+    connection: &ConnectedRemoteTarget,
     repo: &GitHubRepoRef,
     remote_repo_dir: &str,
     source_path: Option<&str>,
@@ -379,7 +379,7 @@ pub(super) fn invalid_frontmatter_message(manifest: &SnapshotSkillManifest) -> S
 }
 
 pub(super) async fn remote_skill_manifest_paths(
-    connection: &crate::targets::ConnectedSshTarget,
+    connection: &ConnectedRemoteTarget,
     remote_repo_dir: &str,
 ) -> Result<Vec<String>, String> {
     let output = connection

@@ -8,6 +8,8 @@ const ORIGINAL_PLATFORM_IDS = [
   "claude-code",
   "codex",
   "cursor",
+  "antigravity",
+  "antigravity-cli",
   "gemini-cli",
   "trae",
   "factory-droid",
@@ -35,6 +37,7 @@ const NEW_PLATFORM_IDS = [
   "autoclaw",
   "copilot",
   "aider",
+  "zed",
   "universal-agents",
 ];
 
@@ -58,6 +61,16 @@ describe("PlatformIcon", () => {
   it("renders an img element for cursor", () => {
     const { container } = render(<PlatformIcon agentId="cursor" />);
     expect(container.querySelector("img")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for antigravity", () => {
+    const { container } = render(<PlatformIcon agentId="antigravity" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for antigravity-cli", () => {
+    const { container } = render(<PlatformIcon agentId="antigravity-cli" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
   });
 
   it("renders an SVG element for gemini-cli", () => {
@@ -182,6 +195,11 @@ describe("PlatformIcon", () => {
     expect(container.querySelector("svg")).toBeInTheDocument();
   });
 
+  it("renders an SVG element for zed", () => {
+    const { container } = render(<PlatformIcon agentId="zed" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
   it("renders an SVG element for universal-agents", () => {
     const { container } = render(<PlatformIcon agentId="universal-agents" />);
     expect(container.querySelector("svg")).toBeInTheDocument();
@@ -200,7 +218,14 @@ describe("PlatformIcon", () => {
       const svg = container.querySelector("svg");
       expect(svg).toBeInTheDocument();
       const inner = svg?.innerHTML ?? "";
-      expect(svgContents.has(inner), `Duplicate SVG for ${id}`).toBe(false);
+      const duplicate = svgContents.get(inner);
+      if (duplicate) {
+        expect(
+          new Set([duplicate, id]),
+          `Duplicate SVG for ${id}`
+        ).toEqual(new Set(["antigravity", "antigravity-cli"]));
+        continue;
+      }
       svgContents.set(inner, id);
     }
   });

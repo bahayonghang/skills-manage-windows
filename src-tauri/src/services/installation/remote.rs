@@ -1,10 +1,11 @@
-//! Remote (SSH) install/uninstall orchestration. Drives the
-//! `REMOTE_CENTRAL_INSTALL_SCRIPT` shell snippet on the remote host through
-//! a `ConnectedSshTarget`.
+//! Remote install/uninstall orchestration. Drives the
+//! `REMOTE_CENTRAL_INSTALL_SCRIPT` shell snippet on a POSIX remote-like target
+//! (SSH or WSL).
 
 use crate::db::{self, DbPool, SkillInstallation};
 use crate::targets::{
-    connect_ssh_target, remote_join, remote_symlink_allowed, ConnectedSshTarget, RemoteTargetConfig,
+    connect_remote_target, connect_ssh_target, remote_join, ActiveTarget, ConnectedRemoteTarget,
+    RemoteTargetConfig,
 };
 
 #[cfg(test)]
@@ -87,8 +88,8 @@ async fn record_remote_installation(
     })
 }
 
-async fn ensure_remote_centralized(
-    connection: &ConnectedSshTarget,
+pub(crate) async fn ensure_remote_centralized(
+    connection: &ConnectedRemoteTarget,
     pool: &DbPool,
     skill_id: &str,
     canonical_dir: &str,
@@ -137,7 +138,7 @@ async fn mark_remote_skill_centralized(
 }
 
 async fn run_remote_central_install_script(
-    connection: &ConnectedSshTarget,
+    connection: &ConnectedRemoteTarget,
     source_dir: &str,
     canonical_dir: &str,
     target_path: &str,
@@ -214,22 +215,24 @@ pub async fn install_skill_to_agent_ssh_impl(
     agent_id: &str,
     method: &str,
 ) -> Result<InstallResult, String> {
-    let connection = connect_ssh_target(target).await?;
-    install_skill_to_agent_ssh_with_connection(
-        pool,
-        &connection,
-        target,
-        skill_id,
-        agent_id,
-        method,
-    )
-    .await
+    let connection = ConnectedRemoteTarget::Ssh(connect_ssh_target(target).await?);
+    install_skill_to_agent_ssh_with_connection(pool, &connection, skill_id, agent_id, method).await
+}
+
+pub async fn install_skill_to_agent_remote_impl(
+    pool: &DbPool,
+    active_target: &ActiveTarget,
+    skill_id: &str,
+    agent_id: &str,
+    method: &str,
+) -> Result<InstallResult, String> {
+    let connection = connect_remote_target(active_target).await?;
+    install_skill_to_agent_ssh_with_connection(pool, &connection, skill_id, agent_id, method).await
 }
 
 pub(crate) async fn install_skill_to_agent_ssh_with_connection(
     pool: &DbPool,
-    connection: &ConnectedSshTarget,
-    target: &RemoteTargetConfig,
+    connection: &ConnectedRemoteTarget,
     skill_id: &str,
     agent_id: &str,
     method: &str,
@@ -271,7 +274,7 @@ pub(crate) async fn install_skill_to_agent_ssh_with_connection(
     } else {
         "copy"
     };
-    if method == "symlink" && !remote_symlink_allowed(target) {
+    if method == "symlink" && !connection.symlink_allowed() {
         return Err("Remote symlink install is disabled for this target.".to_string());
     }
     let installations = db::get_skill_installations(pool, skill_id).await?;
@@ -314,6 +317,16 @@ pub async fn uninstall_skill_from_agent_ssh_impl(
     skill_id: &str,
     agent_id: &str,
 ) -> Result<(), String> {
+    let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
+    uninstall_skill_from_agent_remote_impl(pool, &active_target, skill_id, agent_id).await
+}
+
+pub async fn uninstall_skill_from_agent_remote_impl(
+    pool: &DbPool,
+    active_target: &ActiveTarget,
+    skill_id: &str,
+    agent_id: &str,
+) -> Result<(), String> {
     let agent = db::get_agent_by_id(pool, agent_id)
         .await?
         .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
@@ -329,7 +342,7 @@ pub async fn uninstall_skill_from_agent_ssh_impl(
     }
 
     let install_path = remote_join(&agent.global_skills_dir, skill_id);
-    let connection = connect_ssh_target(target).await?;
+    let connection = connect_remote_target(active_target).await?;
     connection.remove_tree(&install_path).await?;
     db::delete_skill_installation(pool, skill_id, agent_id).await
 }

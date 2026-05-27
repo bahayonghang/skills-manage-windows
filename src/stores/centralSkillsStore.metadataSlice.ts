@@ -16,6 +16,7 @@ import type { CentralSkillsState, CentralStoreContext } from "./centralSkillsSto
 export function createCentralMetadataSlice({ set }: CentralStoreContext): Pick<CentralSkillsState,
   | "createRepository"
   | "assignSkillsToRepository"
+  | "setRepositoryPinned"
   | "createTag"
   | "assignSkillTags"
   | "loadAiTagReviews"
@@ -52,6 +53,18 @@ export function createCentralMetadataSlice({ set }: CentralStoreContext): Pick<C
         invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
       ]);
       set({ skills, repositories, isMetadataUpdating: false });
+    } catch (err) {
+      set({ error: String(err), isMetadataUpdating: false });
+      throw err;
+    }
+  },
+
+  setRepositoryPinned: async (repositoryId, pinned) => {
+    set({ isMetadataUpdating: true, error: null });
+    try {
+      await invoke<SkillRepository>("set_skill_repository_pinned", { repositoryId, pinned });
+      const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
+      set({ repositories, isMetadataUpdating: false });
     } catch (err) {
       set({ error: String(err), isMetadataUpdating: false });
       throw err;

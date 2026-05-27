@@ -26,6 +26,27 @@ pub struct SkillWithLinks {
     pub is_source_unknown: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CentralSkillsPageRequest {
+    pub query: Option<String>,
+    #[serde(default, alias = "sources", alias = "repos")]
+    pub source: Vec<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub install_state: Option<String>,
+    pub sort: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CentralSkillsPage {
+    pub items: Vec<SkillWithLinks>,
+    pub total: usize,
+}
+
 /// An installation record enriched with the `installed_at` timestamp for
 /// the skill detail IPC response. This is the frontend-facing version of
 /// `db::SkillInstallation` — `created_at` from the DB is exposed as

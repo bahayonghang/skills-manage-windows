@@ -46,13 +46,31 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
     is_enabled: true,
   },
   {
-    id: "gemini-cli",
-    display_name: "Gemini CLI",
+    id: "antigravity",
+    display_name: "Antigravity",
     category: "coding",
     global_skills_dir: "",
     is_detected: true,
     is_builtin: true,
     is_enabled: true,
+  },
+  {
+    id: "antigravity-cli",
+    display_name: "Antigravity CLI",
+    category: "coding",
+    global_skills_dir: "",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: true,
+  },
+  {
+    id: "gemini-cli",
+    display_name: "Gemini CLI (legacy)",
+    category: "coding",
+    global_skills_dir: "",
+    is_detected: true,
+    is_builtin: true,
+    is_enabled: false,
   },
   {
     id: "opencode",
@@ -102,12 +120,14 @@ const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
 ];
 
 const BROWSER_FIXTURE_COUNTS: ScanResult = {
-  total_skills: 5,
-  agents_scanned: 7,
+  total_skills: 6,
+  agents_scanned: 10,
   skills_by_agent: {
     "claude-code": 1,
     codex: 1,
-    "gemini-cli": 1,
+    antigravity: 1,
+    "antigravity-cli": 1,
+    "gemini-cli": 0,
     opencode: 1,
     kiro: 1,
     cursor: 0,
@@ -122,6 +142,13 @@ const BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY: DashboardCentralSummary = {
   aiReviewCount: 0,
   uncategorizedCount: 0,
   unassignedSourceCount: 0,
+  readiness: {
+    score: 0,
+    categorizedRatio: 0,
+    describedRatio: 0,
+    sourcedRatio: 0,
+    installHealthRatio: 0,
+  },
   sourceRepositories: [],
 };
 

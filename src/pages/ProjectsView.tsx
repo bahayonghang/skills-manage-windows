@@ -8,7 +8,7 @@ import { ProjectRemoveDialog } from "@/components/projects/ProjectRemoveDialog";
 import { ProjectRenameDialog } from "@/components/projects/ProjectRenameDialog";
 import { ProjectsShell } from "@/components/projects/ProjectsShell";
 import { DiscoverDeprecationBanner } from "@/components/projects/DiscoverDeprecationBanner";
-import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
+import { getProjectPlatformTargetGroups } from "@/lib/platformTargetGroups";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useProjectsStore } from "@/stores/projectsStore";
@@ -86,7 +86,7 @@ export function ProjectsView() {
   );
 
   const projectPlatformTargets = useMemo(
-    () => getPlatformTargetGroups(agents, categoryVisibility),
+    () => getProjectPlatformTargetGroups(agents, categoryVisibility),
     [agents, categoryVisibility]
   );
 

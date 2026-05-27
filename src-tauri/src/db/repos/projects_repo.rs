@@ -1,5 +1,7 @@
 //! `projects` 和 `project_skill_installations` 两张表的 CRUD。
 
+use std::collections::HashSet;
+
 use sqlx::Row;
 
 use crate::db::types::{DbPool, Project, ProjectSkillInstallation};
@@ -165,6 +167,109 @@ pub async fn upsert_project_skill_installation(
     .map_err(|e| e.to_string())
 }
 
+/// Persist a full project scan in one transaction: upsert all observed rows,
+/// delete stale rows for the project, and refresh `last_scanned_at`.
+pub async fn persist_project_skill_scan(
+    pool: &DbPool,
+    project_id: &str,
+    rows: &[ProjectSkillInstallation],
+    last_scanned_at: &str,
+) -> Result<(), String> {
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE TEMP TABLE IF NOT EXISTS project_scan_keep (
+            project_id TEXT NOT NULL,
+            skill_id TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
+            PRIMARY KEY (project_id, skill_id, agent_id)
+         )",
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM project_scan_keep")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    for psi in rows {
+        sqlx::query(
+            "INSERT INTO project_skill_installations
+             (project_id, skill_id, name, description, file_path, source_origin,
+              agent_id, installed_path, link_type, symlink_target, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(project_id, skill_id, agent_id) DO UPDATE SET
+                 installed_path = excluded.installed_path,
+                 name           = excluded.name,
+                 description    = excluded.description,
+                 file_path      = excluded.file_path,
+                 source_origin  = CASE
+                     WHEN project_skill_installations.source_origin = 'central'
+                          AND (
+                              excluded.source_origin = 'central'
+                              OR project_skill_installations.installed_path = excluded.installed_path
+                          )
+                     THEN 'central'
+                     WHEN excluded.source_origin = 'central'
+                     THEN 'central'
+                     ELSE 'project'
+                 END,
+                 link_type      = excluded.link_type,
+                 symlink_target = excluded.symlink_target",
+        )
+        .bind(&psi.project_id)
+        .bind(&psi.skill_id)
+        .bind(&psi.name)
+        .bind(&psi.description)
+        .bind(&psi.file_path)
+        .bind(&psi.source_origin)
+        .bind(&psi.agent_id)
+        .bind(&psi.installed_path)
+        .bind(&psi.link_type)
+        .bind(&psi.symlink_target)
+        .bind(&psi.created_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        sqlx::query(
+            "INSERT OR IGNORE INTO project_scan_keep (project_id, skill_id, agent_id)
+             VALUES (?, ?, ?)",
+        )
+        .bind(&psi.project_id)
+        .bind(&psi.skill_id)
+        .bind(&psi.agent_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    sqlx::query(
+        "DELETE FROM project_skill_installations
+         WHERE project_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM project_scan_keep keep
+             WHERE keep.project_id = project_skill_installations.project_id
+               AND keep.skill_id = project_skill_installations.skill_id
+               AND keep.agent_id = project_skill_installations.agent_id
+           )",
+    )
+    .bind(project_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query("UPDATE projects SET last_scanned_at = ? WHERE id = ?")
+        .bind(last_scanned_at)
+        .bind(project_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    tx.commit().await.map_err(|e| e.to_string())
+}
+
 pub async fn list_project_skill_installations(
     pool: &DbPool,
     project_id: &str,
@@ -241,7 +346,7 @@ pub async fn delete_stale_project_skill_installations(
     .await
     .map_err(|e| e.to_string())?;
 
-    let kept: std::collections::HashSet<(String, String)> = kept_pairs.iter().cloned().collect();
+    let kept: HashSet<(String, String)> = kept_pairs.iter().cloned().collect();
     for row in rows {
         let skill_id: String = row.try_get("skill_id").map_err(|e| e.to_string())?;
         let agent_id: String = row.try_get("agent_id").map_err(|e| e.to_string())?;

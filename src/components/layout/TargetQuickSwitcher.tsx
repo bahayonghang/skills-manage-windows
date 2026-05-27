@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronDown, Loader2, Server, Settings2 } from "lucide-react";
 
 import { useTargetStore } from "@/stores/targetStore";
+import { isRemoteLikeTarget, isWslTarget } from "@/lib/targetKind";
 import { cn } from "@/lib/utils";
 import type { TargetSummary } from "@/types";
 
@@ -47,6 +48,9 @@ export function TargetQuickSwitcher() {
 
   function describeTarget(target: TargetSummary): string {
     if (target.kind === "local") return t("targets.localDescription");
+    if (isWslTarget(target)) {
+      return `${t("targets.kind.wsl")} - ${target.distribution || t("common.unknown")}`;
+    }
     const auth =
       target.authMethod === "password"
         ? t("targets.authPassword")
@@ -56,7 +60,7 @@ export function TargetQuickSwitcher() {
   }
 
   function triggerLabel(): string {
-    if (activeTarget.kind === "ssh") return activeTarget.label;
+    if (isRemoteLikeTarget(activeTarget)) return activeTarget.label;
     return t("targets.local");
   }
 
@@ -80,7 +84,7 @@ export function TargetQuickSwitcher() {
     navigate("/settings");
   }
 
-  const isActiveSsh = activeTarget.kind === "ssh";
+  const isActiveRemote = isRemoteLikeTarget(activeTarget);
 
   return (
     <div ref={containerRef} className="relative">
@@ -91,16 +95,18 @@ export function TargetQuickSwitcher() {
         aria-expanded={open}
         aria-label={t("targets.quickSwitch.trigger")}
         title={
-          isActiveSsh
+          activeTarget.kind === "ssh"
             ? `${activeTarget.username ?? ""}@${activeTarget.host ?? ""}`
-            : t("targets.local")
+            : isWslTarget(activeTarget)
+              ? activeTarget.distribution ?? activeTarget.label
+              : t("targets.local")
         }
         className={cn(
           "z-10 mr-2 hidden max-w-44 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors sm:flex",
-          isActiveSsh
+          isActiveRemote
             ? "bg-primary/10 text-primary hover:bg-primary/15"
             : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-          open && !isActiveSsh && "bg-muted/60 text-foreground",
+          open && !isActiveRemote && "bg-muted/60 text-foreground",
         )}
       >
         <Server className="size-3.5 shrink-0" />

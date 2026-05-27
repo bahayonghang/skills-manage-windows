@@ -15,7 +15,7 @@ use crate::paths::{
     platform_global_skills_dir_for_remote, platform_project_skills_dir,
     platform_project_skills_dir_for_remote, PlatformPathSpec,
 };
-use crate::targets::{connect_ssh_target, remote_parent, ActiveTarget, RemoteTargetConfig};
+use crate::targets::{connect_remote_target, remote_parent, ActiveTarget, ConnectedRemoteTarget};
 use crate::AppState;
 
 /// An agent enriched with a live `is_detected` flag derived from the file
@@ -182,7 +182,7 @@ pub async fn detect_agents_impl(pool: &DbPool) -> Result<Vec<AgentWithStatus>, S
 }
 
 async fn is_remote_agent_detected(
-    connection: &crate::targets::ConnectedSshTarget,
+    connection: &ConnectedRemoteTarget,
     global_skills_dir: &str,
 ) -> Result<bool, String> {
     if connection.exists(global_skills_dir).await? {
@@ -195,12 +195,12 @@ async fn is_remote_agent_detected(
     connection.exists(&parent).await
 }
 
-pub async fn detect_ssh_agents_impl(
+pub async fn detect_remote_agents_impl(
     pool: &DbPool,
-    target: &RemoteTargetConfig,
+    active_target: &ActiveTarget,
 ) -> Result<Vec<AgentWithStatus>, String> {
     let agents = db::get_all_agents(pool).await?;
-    let connection = connect_ssh_target(target).await?;
+    let connection = connect_remote_target(active_target).await?;
     let mut result = Vec::with_capacity(agents.len());
 
     for agent in agents {
@@ -337,7 +337,7 @@ pub async fn get_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatu
     let pool = state.active_db().await?;
     match active_target {
         ActiveTarget::Local => get_agents_impl(&pool).await,
-        ActiveTarget::Ssh(_) => get_agents_cached_impl(&pool).await,
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => get_agents_cached_impl(&pool).await,
     }
 }
 
@@ -347,10 +347,7 @@ pub async fn list_platform_paths(
 ) -> Result<std::collections::HashMap<String, ResolvedPlatformPaths>, String> {
     let active_target = state.active_target().await?;
     let pool = state.active_db().await?;
-    let remote_home = match &active_target {
-        ActiveTarget::Ssh(target) => Some(target.remote_home.as_str()),
-        ActiveTarget::Local => None,
-    };
+    let remote_home = active_target.remote_home();
     list_platform_paths_impl(&pool, remote_home).await
 }
 
@@ -360,7 +357,9 @@ pub async fn detect_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithSt
     let pool = state.active_db().await?;
     match active_target {
         ActiveTarget::Local => detect_agents_impl(&pool).await,
-        ActiveTarget::Ssh(target) => detect_ssh_agents_impl(&pool, &target).await,
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            detect_remote_agents_impl(&pool, &active_target).await
+        }
     }
 }
 
@@ -372,10 +371,7 @@ pub async fn add_custom_agent(
     let active_target = state.active_target().await?;
     let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    let remote_home = match &active_target {
-        ActiveTarget::Ssh(target) => Some(target.remote_home.as_str()),
-        ActiveTarget::Local => None,
-    };
+    let remote_home = active_target.remote_home();
     let display_name = config.display_name.clone();
     let global_skills_dir = config.global_skills_dir.clone();
     let started_at = Instant::now();
@@ -415,10 +411,7 @@ pub async fn update_custom_agent(
     let active_target = state.active_target().await?;
     let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    let remote_home = match &active_target {
-        ActiveTarget::Ssh(target) => Some(target.remote_home.as_str()),
-        ActiveTarget::Local => None,
-    };
+    let remote_home = active_target.remote_home();
     let display_name = config.display_name.clone();
     let global_skills_dir = config.global_skills_dir.clone();
     let started_at = Instant::now();

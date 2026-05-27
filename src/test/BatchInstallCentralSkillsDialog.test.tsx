@@ -73,8 +73,9 @@ const successInstallResult: CentralBatchInstallResult = {
 
 const mockOnInstall = vi.fn();
 const mockOnOpenChange = vi.fn();
+const mockOnManagePlatforms = vi.fn();
 
-function renderDialog(props: { agents?: AgentWithStatus[] } = {}) {
+function renderDialog(props: { agents?: AgentWithStatus[]; onManagePlatforms?: () => void } = {}) {
   return render(
     <BatchInstallCentralSkillsDialog
       open
@@ -85,6 +86,7 @@ function renderDialog(props: { agents?: AgentWithStatus[] } = {}) {
         lobster: true,
       })}
       isInstalling={false}
+      onManagePlatforms={props.onManagePlatforms}
       onInstall={mockOnInstall}
     />
   );
@@ -105,6 +107,14 @@ describe("BatchInstallCentralSkillsDialog", () => {
     const capability = defaultCapability as { permissions: string[] };
 
     expect(capability.permissions).toContain("dialog:default");
+  });
+
+  it("opens platform management from the target area", () => {
+    renderDialog({ onManagePlatforms: mockOnManagePlatforms });
+
+    fireEvent.click(screen.getByTestId("batch-install-manage-platforms"));
+
+    expect(mockOnManagePlatforms).toHaveBeenCalledTimes(1);
   });
 
   it("fills project path from the folder picker and submits it", async () => {
@@ -164,6 +174,42 @@ describe("BatchInstallCentralSkillsDialog", () => {
     expect(mockOnInstall).not.toHaveBeenCalled();
   });
 
+
+  it("allows remote project installs with a manually typed POSIX path", async () => {
+    const remoteTarget: TargetSummary = {
+      id: "ssh-demo",
+      kind: "ssh",
+      label: "Demo",
+      remoteOs: "Linux",
+      symlinkEnabled: true,
+      isActive: true,
+    };
+    useTargetStore.setState({
+      targets: [localTarget, remoteTarget],
+      activeTarget: remoteTarget,
+    });
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+
+    expect(screen.queryByRole("button", { name: "选择项目文件夹" })).not.toBeInTheDocument();
+    expect(screen.getByText("请输入远程项目的绝对路径。")).toBeInTheDocument();
+    const input = screen.getByPlaceholderText("/home/me/project");
+    fireEvent.change(input, { target: { value: "/home/test/project" } });
+    fireEvent.click(screen.getByRole("button", {
+      name: /将 2 个技能安装到 .* 个平台/i,
+    }));
+
+    await waitFor(() =>
+      expect(mockOnInstall).toHaveBeenCalledWith(
+        expect.any(Array),
+        "copy",
+        "/home/test/project"
+      )
+    );
+    expect(openDialog).not.toHaveBeenCalled();
+  });
+
   it("closes without an error when every selected target is skipped", async () => {
     mockOnInstall.mockResolvedValueOnce({
       succeeded: [],
@@ -221,6 +267,7 @@ describe("BatchInstallCentralSkillsDialog", () => {
     }));
 
     expect(await screen.findByText(/成功 1，跳过 1，失败 1/)).toBeInTheDocument();
+    expect(screen.getByTestId("batch-install-skipped-summary")).toHaveTextContent("已安装: 1");
     expect(screen.getByText(/frontend-design \/ kiro/)).toBeInTheDocument();
     expect(mockOnOpenChange).not.toHaveBeenCalledWith(false);
   });

@@ -151,11 +151,21 @@ export function GitHubRepoImportPreviewWorkspace({
               const isActive =
                 selectedPreviewSkill?.sourcePath === skill.sourcePath;
 
+              const resolution =
+                state?.resolution ?? (skill.conflict ? "skip" : "overwrite");
+
               return (
-                <button
+                <div
                   key={skill.sourcePath}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelectSkillPath(skill.sourcePath)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelectSkillPath(skill.sourcePath);
+                    }
+                  }}
                   className={cn(
                     "w-full rounded-xl border p-3 text-left transition-colors",
                     isActive
@@ -185,9 +195,46 @@ export function GitHubRepoImportPreviewWorkspace({
                         {skill.description ||
                           t("marketplace.githubImportNoDescription")}
                       </div>
+                      {skill.conflict ? (
+                        <div
+                          className="mt-3 inline-flex max-w-full items-center gap-1 rounded-lg border border-border/70 bg-muted/25 p-0.5"
+                          role="group"
+                          aria-label={t(
+                            "marketplace.githubImportInlineResolutionLabel",
+                            { name: skill.skillName },
+                          )}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {(["skip", "overwrite"] as const).map((nextResolution) => {
+                            const isCurrent = resolution === nextResolution;
+                            return (
+                              <Button
+                                key={nextResolution}
+                                type="button"
+                                variant={isCurrent ? "default" : "ghost"}
+                                size="sm"
+                                className={cn(
+                                  "h-7 rounded-md px-2.5 text-[11px]",
+                                  isCurrent
+                                    ? "shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground",
+                                )}
+                                aria-pressed={isCurrent}
+                                onClick={() =>
+                                  onUpdateSelection(skill, {
+                                    resolution: nextResolution,
+                                  })
+                                }
+                              >
+                                {t(`marketplace.duplicateResolution.${nextResolution}`)}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

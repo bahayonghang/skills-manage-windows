@@ -23,14 +23,15 @@ use crate::db::SkillForAgent;
 pub use crate::services::central_skills::{
     delete_central_skill_impl, delete_central_skill_ssh_impl, delete_central_skills_impl,
     delete_central_skills_ssh_impl, delete_skill_repository_impl, delete_skill_repository_ssh_impl,
-    get_central_skills_impl, get_skill_detail_with_row_impl, get_skills_by_agent_impl,
-    list_directory_tree_for_target_impl, preview_delete_central_skills_impl,
-    preview_delete_central_skills_ssh_impl, preview_delete_skill_repository_impl,
-    preview_delete_skill_repository_ssh_impl, BatchDeleteCentralSkillPreviewResult,
-    BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess,
-    DeleteCentralSkillPreview, DeleteCentralSkillResult, DeleteSkillRepositoryPreview,
-    DeleteSkillRepositoryResult, DirectoryTreeEntry, FailedCentralSkillDelete, SkillDetail,
-    SkillInstallationDetail, SkillWithLinks,
+    get_central_skills_impl, get_central_skills_page_impl, get_skill_detail_with_row_impl,
+    get_skills_by_agent_impl, list_directory_tree_for_target_impl,
+    preview_delete_central_skills_impl, preview_delete_central_skills_ssh_impl,
+    preview_delete_skill_repository_impl, preview_delete_skill_repository_ssh_impl,
+    BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest,
+    BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, CentralSkillsPage,
+    CentralSkillsPageRequest, DeleteCentralSkillPreview, DeleteCentralSkillResult,
+    DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult, DirectoryTreeEntry,
+    FailedCentralSkillDelete, SkillDetail, SkillInstallationDetail, SkillWithLinks,
 };
 
 /// Tauri command: return all skills installed for a given agent, including
@@ -52,6 +53,15 @@ pub async fn get_central_skills(state: State<'_, AppState>) -> Result<Vec<SkillW
 }
 
 #[tauri::command]
+pub async fn get_central_skills_page(
+    state: State<'_, AppState>,
+    request: CentralSkillsPageRequest,
+) -> Result<CentralSkillsPage, String> {
+    let pool = state.active_db().await?;
+    central_skills::get_central_skills_page_impl(&pool, request).await
+}
+
+#[tauri::command]
 pub async fn preview_delete_central_skills(
     state: State<'_, AppState>,
     skill_ids: Vec<String>,
@@ -61,7 +71,7 @@ pub async fn preview_delete_central_skills(
         ActiveTarget::Local => {
             central_skills::preview_delete_central_skills_impl(&pool, &skill_ids).await
         }
-        ActiveTarget::Ssh(_) => {
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             central_skills::preview_delete_central_skills_ssh_impl(&pool, &skill_ids).await
         }
     }
@@ -77,14 +87,14 @@ pub async fn delete_central_skill(
     let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
     let started_at = Instant::now();
-    let result = match active_target {
+    let result = match &active_target {
         ActiveTarget::Local => {
             central_skills::delete_central_skill_impl(&pool, &skill_id, &remove_agent_ids).await
         }
-        ActiveTarget::Ssh(target) => {
-            central_skills::delete_central_skill_ssh_impl(
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            central_skills::delete_central_skill_remote_impl(
                 &pool,
-                &target,
+                &active_target,
                 &skill_id,
                 &remove_agent_ids,
             )
@@ -130,10 +140,11 @@ pub async fn delete_central_skills(
     let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
     let started_at = Instant::now();
-    let result = match active_target {
+    let result = match &active_target {
         ActiveTarget::Local => central_skills::delete_central_skills_impl(&pool, &requests).await,
-        ActiveTarget::Ssh(target) => {
-            central_skills::delete_central_skills_ssh_impl(&pool, &target, &requests).await
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            central_skills::delete_central_skills_remote_impl(&pool, &active_target, &requests)
+                .await
         }
     };
     match &result {
@@ -199,7 +210,7 @@ pub async fn preview_delete_skill_repository(
         ActiveTarget::Local => {
             central_skills::preview_delete_skill_repository_impl(&pool, &repository_id).await
         }
-        ActiveTarget::Ssh(_) => {
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             central_skills::preview_delete_skill_repository_ssh_impl(&pool, &repository_id).await
         }
     }
@@ -215,14 +226,14 @@ pub async fn delete_skill_repository(
     let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
     let started_at = Instant::now();
-    let result = match active_target {
+    let result = match &active_target {
         ActiveTarget::Local => {
             central_skills::delete_skill_repository_impl(&pool, &repository_id, &requests).await
         }
-        ActiveTarget::Ssh(target) => {
-            central_skills::delete_skill_repository_ssh_impl(
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            central_skills::delete_skill_repository_remote_impl(
                 &pool,
-                &target,
+                &active_target,
                 &repository_id,
                 &requests,
             )

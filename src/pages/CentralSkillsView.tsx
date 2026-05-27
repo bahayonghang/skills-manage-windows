@@ -1,21 +1,21 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
-
 import { BatchDeleteCentralSkillPreviewResult, CentralSkillUpdateState, DeleteSkillRepositoryPreview, SkillDetail, SkillRepositoryWithStats, SkillWithLinks } from "@/types";
+import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
 import { markAppPerformance } from "@/lib/performance";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
+import { CentralSidebarHeader } from "@/components/central/CentralSidebarHeader";
 import { CentralSkillsShell } from "@/components/central/CentralSkillsShell";
-import { CentralSidebarV2Header } from "@/components/central/v2/CentralSidebarV2Header";
-import { CentralSkillsShellV2 } from "@/components/central/v2/CentralSkillsShellV2";
-import { CommandPaletteV2 } from "@/components/central/v2/CommandPaletteV2";
-import { useFeatureFlag } from "@/lib/featureFlags";
+import { CentralStoreLocationDialog } from "@/components/central/CentralStoreLocationDialog";
+import { CommandPalette } from "@/components/central/CommandPalette";
 import { useCentralViewStateUrl } from "@/hooks/useCentralViewStateUrl";
 import { useCentralSkillsActions } from "@/pages/centralSkillsActions";
 import { getCentralSkillsCheckButtonState } from "@/pages/centralSkillsCheckButton";
-import { useCentralSkillsViewModelV2 } from "@/pages/centralSkillsViewModelV2";
-import { addUniqueToCentralViewState, useCentralV2SavedViewsBridge } from "@/pages/centralV2SavedViewsBridge";
-import { useCentralV2TagGroupsBridge } from "@/pages/centralV2TagGroupsBridge";
-import { useCentralV2PaletteActions } from "@/pages/centralV2PaletteActions";
+import { useCentralSkillsFacets } from "@/pages/centralSkillsFacets";
+import { addUniqueToCentralViewState, useCentralSavedViewsBridge } from "@/pages/centralSavedViewsBridge";
+import { useCentralTagGroupsBridge } from "@/pages/centralTagGroupsBridge";
+import { useCentralPaletteActions } from "@/pages/centralPaletteActions";
 import {
   useCentralSkillsDerivedData,
   useCentralSkillsStoreBindings,
@@ -26,6 +26,8 @@ import {
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralInstalledSkillsFilterBridge } from "@/pages/centralInstalledSkillsFilterBridge";
 import { useCentralSkillsLayoutSizing } from "@/pages/centralSkillsLayoutSizing";
+import { createCentralStoreLocationControls, useCentralStoreLocationApplied } from "@/pages/centralStoreLocationView";
+
 export function CentralSkillsView() {
   const { t } = useTranslation();
   const {
@@ -39,6 +41,7 @@ export function CentralSkillsView() {
     updateJob,
     portabilityJob,
     aiTaggingAvailable,
+    isRemoteTarget,
     centralSkillsDir,
     isLoading,
     loadCentralSkills,
@@ -60,13 +63,11 @@ export function CentralSkillsView() {
     exportSkillportState,
     previewSkillportStateImport,
     importSkillportState,
+    setRepositoryPinned,
+    previewCentralStoreLocationChange,
+    applyCentralStoreLocationChange,
   } = useCentralSkillsStoreBindings(t);
 
-  const [sortField, setSortField] = useState<CentralSortField>("name");
-  const [sortDirection, setSortDirection] = useState<CentralSortDirection>("asc");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [repositoryFilter, setRepositoryFilter] = useState("all");
-  const [tagFilter, setTagFilter] = useState("all");
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const [categorizeTab, setCategorizeTab] = useState<CentralCategorizeTab>("manual");
   const [manualTagQuery, setManualTagQuery] = useState("");
@@ -84,26 +85,32 @@ export function CentralSkillsView() {
   const [remoteMissingStates, setRemoteMissingStates] = useState<CentralSkillUpdateState[]>([]);
   const [remoteMissingPreview, setRemoteMissingPreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
+  const [repositorySyncPreview, setRepositorySyncPreview] =
+    useState<CentralRepositorySyncPreview | null>(null);
+  const [queuedRepositorySyncPreview, setQueuedRepositorySyncPreview] =
+    useState<CentralRepositorySyncPreview | null>(null);
+  const [repositorySyncDeletePreview, setRepositorySyncDeletePreview] =
+    useState<BatchDeleteCentralSkillPreviewResult | null>(null);
   const [repositoryDeleteTarget, setRepositoryDeleteTarget] =
     useState<SkillRepositoryWithStats | null>(null);
   const [repositoryDeletePreview, setRepositoryDeletePreview] =
     useState<DeleteSkillRepositoryPreview | null>(null);
   const {
-    categorizeSidebarWidth,
     filterSidebarWidth,
-    handleCategorizeSidebarResizeKeyDown,
     handleFilterSidebarResizeKeyDown,
-    startCategorizeSidebarResize,
     startFilterSidebarResize,
   } = useCentralSkillsLayoutSizing();
   const [isDeletePreviewLoading, setIsDeletePreviewLoading] = useState(false);
   const [isBatchDeletePreviewLoading, setIsBatchDeletePreviewLoading] = useState(false);
   const [isRemoteMissingPreviewLoading, setIsRemoteMissingPreviewLoading] = useState(false);
+  const [isRepositorySyncPreviewLoading, setIsRepositorySyncPreviewLoading] = useState(false);
   const [isResolvingRemoteMissing, setIsResolvingRemoteMissing] = useState(false);
+  const [isApplyingRepositorySync, setIsApplyingRepositorySync] = useState(false);
   const [isRepositoryDeletePreviewLoading, setIsRepositoryDeletePreviewLoading] = useState(false);
   const [deletePreviewError, setDeletePreviewError] = useState<string | null>(null);
   const [batchDeletePreviewError, setBatchDeletePreviewError] = useState<string | null>(null);
   const [remoteMissingError, setRemoteMissingError] = useState<string | null>(null);
+  const [repositorySyncError, setRepositorySyncError] = useState<string | null>(null);
   const [repositoryDeletePreviewError, setRepositoryDeletePreviewError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -111,18 +118,20 @@ export function CentralSkillsView() {
   const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
   const [isUpdateConfirmDialogOpen, setIsUpdateConfirmDialogOpen] = useState(false);
   const [isRemoteMissingDialogOpen, setIsRemoteMissingDialogOpen] = useState(false);
+  const [isRepositorySyncDialogOpen, setIsRepositorySyncDialogOpen] = useState(false);
   const [isRepositoryDeleteDialogOpen, setIsRepositoryDeleteDialogOpen] = useState(false);
+  const [isStoreLocationDialogOpen, setIsStoreLocationDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isGitHubImportOpen, setIsGitHubImportOpen] = useState(false);
   const [isPlatformManageOpen, setIsPlatformManageOpen] = useState(false);
   const [isPortabilityOpen, setIsPortabilityOpen] = useState(false);
-  const [dismissedUpdateProgressKey, setDismissedUpdateProgressKey] = useState<string | null>(null);
+  const [isCategorizeDrawerOpen, setIsCategorizeDrawerOpen] = useState(false);
+  const [isTaskCenterOpen, setIsTaskCenterOpen] = useState(false);
   const [githubRepoUrl, setGitHubRepoUrl] = useState("");
   const contentRef = useRef<HTMLDivElement | null>(null);
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const hasMarkedCentralListReady = useRef(false);
-  const deferredSearchQuery = useDeferredValue(searchQuery);
   const categoryVisibility =
     usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const setCategoryVisibility = usePlatformStore((state) => state.setCategoryVisibility);
@@ -130,126 +139,117 @@ export function CentralSkillsView() {
   const addCustomAgent = usePlatformStore((state) => state.addCustomAgent);
   const updateCustomAgent = usePlatformStore((state) => state.updateCustomAgent);
   const removeCustomAgent = usePlatformStore((state) => state.removeCustomAgent);
-  const effectiveSearchQuery =
-    skills.length > 80 ? deferredSearchQuery : searchQuery;
+
+  const [viewState, setViewState] = useCentralViewStateUrl();
+  const v2 = useCentralSkillsFacets({
+    skills,
+    repositories,
+    tags,
+    aiTagReviews,
+    updateStatuses,
+    state: viewState,
+  });
   const {
     canCreateManualTag,
     filteredManualTags,
-    filteredSkills,
-    isSearchActive,
-    normalizedSearchQuery,
     selectedSkillIdSet,
-    skillIdsKey,
-    sortedSkills,
-    tagCounts,
-    uncategorizedCount,
     updateAvailableSkillIds,
     updateTargetSkillIds,
   } = useCentralSkillsDerivedData({
     skills,
     tags,
-    aiTagReviews,
     updateStatuses,
     selectedSkillIds,
-    searchQuery,
-    effectiveSearchQuery,
     manualTagQuery,
-    repositoryFilter,
-    tagFilter,
-    sortField,
-    sortDirection,
   });
 
-  // ─── Central V2 (M1): 新布局通过 feature flag 切换。V2 view-model 与 V1 并存，state 各自维护，保证 V1 行为完全不受影响。
-  const v2EnabledFromFlag = useFeatureFlag("central.newLayout");
-  const [v2OverrideClassic, setV2OverrideClassic] = useState(false);
-  const v2Enabled = v2EnabledFromFlag && !v2OverrideClassic;
-  const [v2ViewState, setV2ViewState] = useCentralViewStateUrl({ disabled: !v2Enabled });
-  const v2 = useCentralSkillsViewModelV2({
-    skills,
-    repositories,
-    tags,
-    aiTagReviews,
-    updateStatuses,
-    state: v2ViewState,
-  });
-  const currentViewSkills = v2Enabled ? v2.sortedSkills : sortedSkills;
+  // ─── 旧动作模块仍接收 setRepositoryFilter（StateSetter<string>），这里包装成对 viewState.repos 的转换。
+  const setRepositoryFilter = useCallback<Dispatch<SetStateAction<string>>>(
+    (value) => {
+      setViewState((prev) => {
+        const currentRepo = prev.repos[0] ?? "all";
+        const nextValue = typeof value === "function" ? value(currentRepo) : value;
+        return {
+          ...prev,
+          repos: nextValue === "all" ? [] : [nextValue],
+        };
+      });
+    },
+    [setViewState]
+  );
+
+  const sortFieldOptions: Array<{ value: CentralSortField; label: string }> = useMemo(
+    () => [
+      { value: "name", label: t("central.sortByName") },
+      { value: "createdAt", label: t("central.sortByCreatedAt") },
+      { value: "updatedAt", label: t("central.sortByUpdatedAt") },
+      { value: "installedPlatformCount", label: t("central.sortByInstalledPlatformCount") },
+    ],
+    [t]
+  );
+
+  const sortDirectionOptions: Array<{ value: CentralSortDirection; label: string }> = useMemo(
+    () => [
+      { value: "asc", label: t("central.sortAscending") },
+      { value: "desc", label: t("central.sortDescending") },
+    ],
+    [t]
+  );
+
   const {
     installedSkillsFilterProps,
     isInstalledSkillsFilterActive,
     visibleCurrentViewSkills,
     visibleFilteredSkills,
-    visibleV2FilteredSkills,
   } = useCentralInstalledSkillsFilterBridge({
     availableInstallAgents,
-    currentViewSkills,
-    filteredSkills,
+    currentViewSkills: v2.sortedSkills,
+    filteredSkills: v2.filteredSkills,
     selectedSkillIds,
     setIsBatchInstallDialogOpen,
     setSelectedSkillIds,
-    v2FilteredSkills: v2.filteredSkills,
   });
 
-  // ─── Saved Views (M2) ────────────────────────────────────────
-  const savedViewsBridge = useCentralV2SavedViewsBridge({
-    enabled: v2Enabled,
-    v2ViewState,
-    setV2ViewState,
+  useEffect(() => {
+    const visibleIds = new Set(visibleCurrentViewSkills.map((skill) => skill.id));
+    setSelectedSkillIds((current) => {
+      const next = current.filter((skillId) => visibleIds.has(skillId));
+      return next.length === current.length ? current : next;
+    });
+  }, [visibleCurrentViewSkills]);
+
+  // ─── Saved Views ────────────────────────────────────────────
+  const savedViewsBridge = useCentralSavedViewsBridge({
+    enabled: true,
+    v2ViewState: viewState,
+    setV2ViewState: setViewState,
     t,
   });
 
-  // ─── Tag Groups (M3) ─────────────────────────────────────────
-  const tagGroupsBridge = useCentralV2TagGroupsBridge({ enabled: v2Enabled, t });
+  // ─── Tag Groups ─────────────────────────────────────────────
+  const tagGroupsBridge = useCentralTagGroupsBridge({ enabled: true, t });
 
-  // ─── Command palette state (M2) + actions (M6) ───────────────────────
+  // ─── Command palette state + actions ───────────────────────
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const updateProgressKey = useMemo(
-    () =>
-      [
-        updateJob.phase,
-        updateJob.status,
-        updateJob.total,
-        updateJob.completed,
-        updateJob.succeeded,
-        updateJob.skipped,
-        updateJob.failed,
-        updateJob.error ?? "",
-      ].join(":"),
-    [
-      updateJob.phase,
-      updateJob.status,
-      updateJob.total,
-      updateJob.completed,
-      updateJob.succeeded,
-      updateJob.skipped,
-      updateJob.failed,
-      updateJob.error,
-    ]
-  );
-  const isUpdateProgressDismissible =
-    updateJob.status === "completed" ||
-    updateJob.status === "failed" ||
-    updateJob.status === "cancelled";
+  const hasCurrentFilters =
+    viewState.repos.length > 0 ||
+    viewState.tags.length > 0 ||
+    v2.isSearchActive ||
+    isInstalledSkillsFilterActive;
+  const hasNonRepositoryFilters =
+    viewState.tags.length > 0 || v2.isSearchActive || isInstalledSkillsFilterActive;
   const checkButtonState = getCentralSkillsCheckButtonState({
     currentViewSkills: visibleCurrentViewSkills,
+    hasCurrentFilters,
+    hasNonRepositoryFilters,
     repositories,
-    repositoryFilter,
     selectedSkillIds,
+    selectedRepoIds: viewState.repos,
     sortedSkills: visibleCurrentViewSkills,
     t,
     totalSkillCount: skills.length,
-    v2Enabled,
-    v2HasCurrentFilters:
-      v2ViewState.repos.length > 0 ||
-      v2ViewState.tags.length > 0 ||
-      v2.isSearchActive ||
-      isInstalledSkillsFilterActive,
   });
-  const shouldShowUpdateProgress =
-    updateJob.status !== "idle" &&
-    (!isUpdateProgressDismissible || dismissedUpdateProgressKey !== updateProgressKey);
-  const updateProgressRatio =
-    updateJob.total > 0 ? Math.min(1, updateJob.completed / updateJob.total) : 0;
+
   // Load central skills on mount.
   useEffect(() => {
     loadCentralSkills();
@@ -307,23 +307,9 @@ export function CentralSkillsView() {
   }, [subscribePortabilityProgress]);
 
   useEffect(() => {
-    if (!isSearchActive || !contentRef.current) return;
+    if (!v2.isSearchActive || !contentRef.current) return;
     contentRef.current.scrollTop = 0;
-  }, [isSearchActive, normalizedSearchQuery]);
-
-  useEffect(() => {
-    if (updateJob.status === "running") {
-      setDismissedUpdateProgressKey(null);
-    }
-  }, [updateJob.phase, updateJob.status]);
-
-  useEffect(() => {
-    const visibleIds = new Set(skillIdsKey ? skillIdsKey.split("\0") : []);
-    setSelectedSkillIds((current) => {
-      const next = current.filter((skillId) => visibleIds.has(skillId));
-      return next.length === current.length ? current : next;
-    });
-  }, [skillIdsKey]);
+  }, [v2.isSearchActive, viewState.q]);
 
   useEffect(() => {
     if (!isLoading && skills.length > 0 && !hasMarkedCentralListReady.current) {
@@ -332,23 +318,13 @@ export function CentralSkillsView() {
     }
   }, [isLoading, skills.length]);
 
-  const sortFieldOptions: Array<{ value: CentralSortField; label: string }> = [
-    { value: "name", label: t("central.sortByName") },
-    { value: "createdAt", label: t("central.sortByCreatedAt") },
-    { value: "updatedAt", label: t("central.sortByUpdatedAt") },
-  ];
-
-  const sortDirectionOptions: Array<{ value: CentralSortDirection; label: string }> = [
-    { value: "asc", label: t("central.sortAscending") },
-    { value: "desc", label: t("central.sortDescending") },
-  ];
-
-  const { actions: paletteActions, groupByOptions } = useCentralV2PaletteActions({
-    t, viewState: v2ViewState, setViewState: setV2ViewState,
+  const { actions: paletteActions, groupByOptions } = useCentralPaletteActions({
+    t,
+    viewState,
+    setViewState,
     canSaveCurrent: savedViewsBridge.canSaveCurrent,
     onSaveCurrentView: savedViewsBridge.handleSaveCurrentView,
     onCreateTagGroup: tagGroupsBridge.handleCreateTagGroup,
-    onSwitchToClassic: () => setV2OverrideClassic(true),
   });
 
   const installableImportedSkills = useMemo(() => {
@@ -372,6 +348,9 @@ export function CentralSkillsView() {
     handleCancelAiTagJob,
     handleCancelCentralUpdates,
     handleCheckUpdates,
+    handleCheckRepositorySync,
+    handleRepositorySyncDialogOpenChange,
+    handleApplyRepositorySync,
     handleConfirmUpdateSkills,
     handleCreateManualTag,
     handleDeleteCentralSkill,
@@ -384,14 +363,11 @@ export function CentralSkillsView() {
     handleInstallClick,
     handleInstallImportedSkill,
     handleOpenDrawer,
-    handleRefresh,
     handleRemoteMissingDialogOpenChange,
     handleUpdateConfirmDialogOpenChange,
     handleRepositoryDeleteClick,
     handleRepositoryDeleteDialogOpenChange,
     handleResolveRemoteMissing,
-    handleSelectCurrentFilter,
-    handleSelectUncategorized,
     handleSkipReview,
     handleToggleManualTag,
     handleTogglePlatform,
@@ -407,8 +383,9 @@ export function CentralSkillsView() {
       manualSelectedTagIds,
       manualTagQuery,
       repositoryDeleteTarget,
-      repositoryFilter,
+      repositoryFilter: viewState.repos[0] ?? "all",
       queuedRemoteMissingStates,
+      queuedRepositorySyncPreview,
       selectedSkillIds,
       currentViewSkills: visibleCurrentViewSkills,
     },
@@ -428,6 +405,9 @@ export function CentralSkillsView() {
       setIsDrawerOpen,
       setIsRemoteMissingDialogOpen,
       setIsRemoteMissingPreviewLoading,
+      setIsRepositorySyncDialogOpen,
+      setIsRepositorySyncPreviewLoading,
+      setIsApplyingRepositorySync,
       setIsRepositoryDeleteDialogOpen,
       setIsRepositoryDeletePreviewLoading,
       setIsResolvingRemoteMissing,
@@ -436,9 +416,13 @@ export function CentralSkillsView() {
       setManualTagQuery,
       setPendingUpdateStates,
       setQueuedRemoteMissingStates,
+      setQueuedRepositorySyncPreview,
       setRemoteMissingError,
       setRemoteMissingPreview,
       setRemoteMissingStates,
+      setRepositorySyncDeletePreview,
+      setRepositorySyncError,
+      setRepositorySyncPreview,
       setRepositoryDeletePreview,
       setRepositoryDeletePreviewError,
       setRepositoryDeleteTarget,
@@ -447,7 +431,25 @@ export function CentralSkillsView() {
     },
   });
 
-  // ─── 共享 props（V1/V2 Shell 公用），保证两个 Shell 渲染一致的对话框、列表、进度 ───
+  const handleToggleSelectionPreservingScroll = useCallback(
+    (skillId: string) => {
+      const scrollContainer = contentRef.current;
+      const scrollTop = scrollContainer?.scrollTop;
+
+      handleToggleSelection(skillId);
+
+      if (scrollTop === undefined) return;
+
+      window.requestAnimationFrame(() => {
+        if (contentRef.current) {
+          contentRef.current.scrollTop = scrollTop;
+        }
+      });
+    },
+    [handleToggleSelection]
+  );
+
+  // ─── 共享 props ────────────────────────────────────────────────
   const dialogsProps = {
         agents,
         availableInstallAgents,
@@ -477,6 +479,9 @@ export function CentralSkillsView() {
         isPortabilityOpen,
         isRemoteMissingDialogOpen,
         isRemoteMissingPreviewLoading,
+        isRepositorySyncDialogOpen,
+        isRepositorySyncPreviewLoading,
+        isApplyingRepositorySync,
         isRepositoryDeleteDialogOpen,
         isRepositoryDeletePreviewLoading,
         isResolvingRemoteMissing,
@@ -488,6 +493,9 @@ export function CentralSkillsView() {
         remoteMissingError,
         remoteMissingPreview,
         remoteMissingStates,
+        repositorySyncError,
+        repositorySyncPreview,
+        repositorySyncDeletePreview,
         repositoryDeletePreview,
         repositoryDeletePreviewError,
         repositoryDeleteTarget,
@@ -532,34 +540,12 @@ export function CentralSkillsView() {
         onRefreshCounts: refreshCounts,
         onConfirmUpdateSkills: handleConfirmUpdateSkills,
         onRemoteMissingDialogOpenChange: handleRemoteMissingDialogOpenChange,
+        onRepositorySyncDialogOpenChange: handleRepositorySyncDialogOpenChange,
+        onApplyRepositorySync: handleApplyRepositorySync,
         onUpdateConfirmDialogOpenChange: handleUpdateConfirmDialogOpenChange,
         onRepositoryDeleteDialogOpenChange: handleRepositoryDeleteDialogOpenChange,
         onResetGitHubImport: resetGitHubImport,
         onResolveRemoteMissing: handleResolveRemoteMissing,
-  };
-
-  const filterSidebarProps = {
-        filterSidebarWidth,
-        isDeleting,
-        isRepositoryDeletePreviewLoading,
-        repositoryDeleteTargetId: repositoryDeleteTarget?.id,
-        repositoryFilter,
-        repositories,
-        setRepositoryFilter,
-        skillsCount: skills.length,
-        startFilterSidebarResize,
-        handleFilterSidebarResizeKeyDown,
-        onRepositoryDelete: (repository: SkillRepositoryWithStats) => {
-          void handleRepositoryDeleteClick(repository);
-        },
-  };
-
-  const tagSearchProps = {
-    setCategorizeTab,
-    tagCounts,
-    uncategorizedCount,
-    aiReviewCount: aiTagReviews.length,
-    totalSkillCount: skills.length,
   };
 
   const listContentProps = {
@@ -567,18 +553,18 @@ export function CentralSkillsView() {
         contentRef,
         filteredSkills: visibleFilteredSkills,
         isLoading,
-        isSearchActive,
+        isSearchActive: v2.isSearchActive || isInstalledSkillsFilterActive,
         onDelete: (skill: SkillWithLinks) => {
           void handleDeleteClick(skill);
         },
         onDetail: handleOpenDrawer,
         onInstallTo: handleInstallClick,
         onTogglePlatform: handleTogglePlatform,
-        onToggleSelection: handleToggleSelection,
+        onToggleSelection: handleToggleSelectionPreservingScroll,
         onUpdateCentral: (skillIds: string[]) => {
           void handleUpdateSkills(skillIds);
         },
-        searchQuery,
+        searchQuery: viewState.q,
         selectedSkillIdSet,
         setDetailButtonRef,
         skillsCount: skills.length,
@@ -597,35 +583,57 @@ export function CentralSkillsView() {
     targetSkillIds: updateTargetSkillIds,
   };
 
-  const aiProgressProps = {
+  const handleViewAiReviews = useCallback(() => {
+    setIsTaskCenterOpen(false);
+    setCategorizeTab("review");
+    setIsCategorizeDrawerOpen(true);
+  }, []);
+
+  const taskCenterProps = {
+    open: isTaskCenterOpen,
+    onOpenChange: setIsTaskCenterOpen,
     aiTagJob,
-    onCancel: () => {
+    updateJob,
+    portabilityJob,
+    onCancelAiTag: () => {
       void handleCancelAiTagJob();
     },
-    onViewReviews: () => {
-      setCategorizeTab("review");
-      setTagFilter("ai-review");
+    onCancelUpdate: () => {
+      void handleCancelCentralUpdates();
     },
+    onCancelPortability: () => {
+      void cancelSkillportStatePortability();
+    },
+    onViewAiReviews: handleViewAiReviews,
   };
+
+  const handleOpenCategorizeDrawer = useCallback(
+    (tab: CentralCategorizeTab) => {
+      setCategorizeTab(tab);
+      setIsCategorizeDrawerOpen(true);
+    },
+    []
+  );
+
+  const handleClearSelection = useCallback(() => setSelectedSkillIds([]), []);
+
+  const handleSelectCurrentResults = useCallback(() => {
+    setSelectedSkillIds(visibleCurrentViewSkills.map((skill) => skill.id));
+  }, [visibleCurrentViewSkills]);
 
   const categorizePanelProps = {
     aiTagJob,
     aiTagReviews,
     aiTaggingAvailable,
     canCreateManualTag,
-    categorizeSidebarWidth,
     categorizeTab,
     filteredManualTags,
-    isDeleting,
-    isInstalling,
     isMetadataUpdating,
     isSuggestingTags,
     manualSelectedTagIds,
     manualTagQuery,
     selectedSkillCount: selectedSkillIds.length,
     sortedSkillCount: visibleCurrentViewSkills.length,
-    startCategorizeSidebarResize,
-    handleCategorizeSidebarResizeKeyDown,
     onAcceptReview: (review: Parameters<typeof handleAcceptReview>[0]) => {
       void handleAcceptReview(review);
     },
@@ -635,19 +643,12 @@ export function CentralSkillsView() {
     onApplyManualTagsToReview: (review: Parameters<typeof handleApplyManualTagsToReview>[0]) => {
       void handleApplyManualTagsToReview(review);
     },
-    onBatchDelete: () => {
-      void handleBatchDeleteClick();
-    },
-    onBatchInstallOpen: () => setIsBatchInstallDialogOpen(true),
     onBulkSuggestTags: () => {
       void handleBulkSuggestTags();
     },
-    onClearSelection: () => setSelectedSkillIds([]),
     onCreateManualTag: () => {
       void handleCreateManualTag();
     },
-    onSelectCurrentFilter: handleSelectCurrentFilter,
-    onSelectUncategorized: handleSelectUncategorized,
     onSetCategorizeTab: setCategorizeTab,
     onSetManualTagQuery: setManualTagQuery,
     onSkipReview: (review: Parameters<typeof handleSkipReview>[0]) => {
@@ -656,15 +657,31 @@ export function CentralSkillsView() {
     onToggleManualTag: handleToggleManualTag,
   };
 
-  const updateProgressProps = {
-    isDismissible: isUpdateProgressDismissible,
-    updateJob,
-    updateProgressKey,
-    updateProgressRatio,
-    onCancel: () => {
-      void handleCancelCentralUpdates();
+  const bulkBarProps = {
+    selectedCount: selectedSkillIds.length,
+    isInstalling,
+    isDeleting,
+    isAiBusy: isSuggestingTags || aiTagJob.status === "running",
+    aiTaggingAvailable,
+    onBatchInstall: () => setIsBatchInstallDialogOpen(true),
+    onBatchDelete: () => {
+      void handleBatchDeleteClick();
     },
-    onDismiss: setDismissedUpdateProgressKey,
+    onClearSelection: handleClearSelection,
+  };
+
+  const selectionControlsProps = {
+    selectedCount: selectedSkillIds.length,
+    currentResultCount: visibleCurrentViewSkills.length,
+    onSelectCurrentResults: handleSelectCurrentResults,
+    onClearSelection: handleClearSelection,
+  };
+
+  const categorizeDrawerProps = {
+    open: isCategorizeDrawerOpen,
+    onOpenChange: setIsCategorizeDrawerOpen,
+    onOpenManual: () => handleOpenCategorizeDrawer("manual"),
+    onOpenAiSuggest: () => handleOpenCategorizeDrawer("ai"),
   };
 
   const checkButtonProps = {
@@ -675,125 +692,94 @@ export function CentralSkillsView() {
       updateJob.status === "cancelling" ||
       checkButtonState.targetSkillIds.length === 0,
     onClick: () => {
+      if (checkButtonState.mode === "repository-sync") {
+        void handleCheckRepositorySync(
+          checkButtonState.repositoryIds ?? [],
+          checkButtonState.scopedSkillIds
+        );
+        return;
+      }
       void handleCheckUpdates(checkButtonState.scopedSkillIds);
     },
   };
 
-  if (v2Enabled) {
-    // V2 Shell：listContent 用 V2 view-model 的 sortedSkills/filteredSkills/searchQuery/isSearchActive
-    const v2ListContentProps = {
-      ...listContentProps,
-      filteredSkills: visibleV2FilteredSkills,
-      sortedSkills: visibleCurrentViewSkills,
-      searchQuery: v2ViewState.q,
-      isSearchActive: v2.isSearchActive || isInstalledSkillsFilterActive,
-    };
-    const sidebarHeaderSlot = (
-      <CentralSidebarV2Header
-        savedViewsBridge={savedViewsBridge}
-        tagGroupsBridge={tagGroupsBridge}
-      />
-    );
-    return (
-      <>
-        <CentralSkillsShellV2
-          t={t}
-          centralSkillsDir={centralSkillsDir}
-          isLoading={isLoading}
-          isCheckingUpdates={isCheckingUpdates}
-          filterSidebarWidth={filterSidebarWidth}
-          startFilterSidebarResize={startFilterSidebarResize}
-          handleFilterSidebarResizeKeyDown={handleFilterSidebarResizeKeyDown}
-          viewState={v2ViewState}
-          setViewState={setV2ViewState}
-          queryAst={v2.queryAst}
-          facetCounts={v2.facetCounts}
-          repositories={repositories}
-          tags={tags}
-          sortFieldOptions={sortFieldOptions}
-          sortDirectionOptions={sortDirectionOptions}
-          groupByOptions={groupByOptions}
-          installedSkillsFilter={installedSkillsFilterProps}
-          listContent={v2ListContentProps}
-          categorizePanel={categorizePanelProps}
-          shouldShowCategorizePanel={skills.length > 0}
-          aiProgress={aiProgressProps}
-          updateProgress={updateProgressProps}
-          shouldShowUpdateProgress={shouldShowUpdateProgress}
-          dialogs={dialogsProps}
-          setIsGitHubImportOpen={setIsGitHubImportOpen}
-          setIsPlatformManageOpen={setIsPlatformManageOpen}
-          setIsPortabilityOpen={setIsPortabilityOpen}
-          onRefresh={() => {
-            void handleRefresh();
-          }}
-          onUpdateSkills={(skillIds) => {
-            void handleUpdateSkills(skillIds);
-          }}
-          updateAvailableSkillCount={updateAvailableSkillIds.length}
-          updateButton={updateButtonProps}
-          checkButton={checkButtonProps}
-          onSwitchToClassic={() => setV2OverrideClassic(true)}
-          onOpenPalette={() => setCommandPaletteOpen(true)}
-          savedViewsSlot={sidebarHeaderSlot}
-          tagGroups={tagGroupsBridge.tagGroups} onAssignTagToGroup={tagGroupsBridge.handleAssignTagToGroup}
-        />
-        <CommandPaletteV2
-          open={commandPaletteOpen}
-          onOpenChange={setCommandPaletteOpen}
-          savedViews={savedViewsBridge.savedViews}
-          tags={tags}
-          repositories={repositories}
-          actions={paletteActions}
-          onSelectSavedView={savedViewsBridge.handleApplySavedView}
-          onSelectTag={(tag) => addUniqueToCentralViewState(v2ViewState, setV2ViewState, "tags", tag.id)}
-          onSelectRepository={(repo) => addUniqueToCentralViewState(v2ViewState, setV2ViewState, "repos", repo.id)}
-        />
-      </>
-    );
-  }
-
-  return (
-    <CentralSkillsShell
-      centralSkillsDir={centralSkillsDir}
-      dialogs={dialogsProps}
-      filterSidebar={filterSidebarProps}
-      tagSearch={tagSearchProps}
-      isCheckingUpdates={isCheckingUpdates}
-      isLoading={isLoading}
-      listContent={listContentProps}
-      installedSkillsFilter={installedSkillsFilterProps}
-      searchQuery={searchQuery}
-      setIsGitHubImportOpen={setIsGitHubImportOpen}
-      setIsPlatformManageOpen={setIsPlatformManageOpen}
-      setIsPortabilityOpen={setIsPortabilityOpen}
-      setRepositoryFilter={setRepositoryFilter}
-      setSearchQuery={setSearchQuery}
-      setSortDirection={setSortDirection}
-      setSortField={setSortField}
-      setTagFilter={setTagFilter}
-      shouldShowCategorizePanel={skills.length > 0}
-      shouldShowUpdateProgress={shouldShowUpdateProgress}
-      sortDirection={sortDirection}
-      sortDirectionOptions={sortDirectionOptions}
-      sortField={sortField}
-      sortFieldOptions={sortFieldOptions}
-      tagFilter={tagFilter}
-      tags={tags}
-      t={t}
-      updateAvailableSkillCount={updateAvailableSkillIds.length}
-      updateButton={updateButtonProps}
-      aiProgress={aiProgressProps}
-      categorizePanel={categorizePanelProps}
-      updateProgress={updateProgressProps}
-      checkButton={checkButtonProps}
-      onRefresh={() => {
-        void handleRefresh();
-      }}
-      onUpdateSkills={(skillIds) => {
-        void handleUpdateSkills(skillIds);
-      }}
-      onSwitchToNew={v2EnabledFromFlag ? () => setV2OverrideClassic(false) : undefined}
+  const sidebarHeaderSlot = (
+    <CentralSidebarHeader
+      savedViewsBridge={savedViewsBridge}
+      tagGroupsBridge={tagGroupsBridge}
     />
   );
+
+  const handleCentralStoreLocationApplied = useCentralStoreLocationApplied({
+    loadCentralSkills,
+    refreshCounts,
+    t,
+  });
+
+  return (
+    <>
+      <CentralSkillsShell
+        t={t}
+        centralSkillsDir={centralSkillsDir}
+        isCheckingUpdates={isCheckingUpdates}
+        filterSidebarWidth={filterSidebarWidth}
+        startFilterSidebarResize={startFilterSidebarResize}
+        handleFilterSidebarResizeKeyDown={handleFilterSidebarResizeKeyDown}
+        viewState={viewState}
+        setViewState={setViewState}
+        queryAst={v2.queryAst}
+        facetCounts={v2.facetCounts}
+        repositories={repositories}
+        tags={tags}
+        sortFieldOptions={sortFieldOptions}
+        sortDirectionOptions={sortDirectionOptions}
+        groupByOptions={groupByOptions}
+        installedSkillsFilter={installedSkillsFilterProps}
+        listContent={listContentProps}
+        categorizePanel={categorizePanelProps}
+        bulkBar={bulkBarProps}
+        selectionControls={selectionControlsProps}
+        categorizeDrawer={categorizeDrawerProps}
+        taskCenter={taskCenterProps}
+        dialogs={dialogsProps}
+        centralStoreLocation={createCentralStoreLocationControls({
+          isRemoteTarget,
+          setIsStoreLocationDialogOpen,
+          t,
+        })}
+        setIsGitHubImportOpen={setIsGitHubImportOpen}
+        setIsPlatformManageOpen={setIsPlatformManageOpen}
+        setIsPortabilityOpen={setIsPortabilityOpen}
+        onUpdateSkills={(skillIds) => {
+          void handleUpdateSkills(skillIds);
+        }}
+        updateAvailableSkillCount={updateAvailableSkillIds.length}
+        updateButton={updateButtonProps}
+        checkButton={checkButtonProps}
+        onOpenPalette={() => setCommandPaletteOpen(true)}
+        savedViewsSlot={sidebarHeaderSlot}
+        tagGroups={tagGroupsBridge.tagGroups}
+        onAssignTagToGroup={tagGroupsBridge.handleAssignTagToGroup}
+        onDeleteRepository={(repo) => {
+          void handleRepositoryDeleteClick(repo);
+        }}
+        onToggleRepositoryPin={(repo) => {
+          void setRepositoryPinned(repo.id, !repo.pinned);
+        }}
+      />
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        savedViews={savedViewsBridge.savedViews}
+        tags={tags}
+        repositories={repositories}
+        actions={paletteActions}
+        onSelectSavedView={savedViewsBridge.handleApplySavedView}
+        onSelectTag={(tag) => addUniqueToCentralViewState(viewState, setViewState, "tags", tag.id)}
+        onSelectRepository={(repo) => addUniqueToCentralViewState(viewState, setViewState, "repos", repo.id)}
+      />
+      <CentralStoreLocationDialog open={isStoreLocationDialogOpen} onOpenChange={setIsStoreLocationDialogOpen} t={t} currentPath={centralSkillsDir} preview={previewCentralStoreLocationChange} apply={applyCentralStoreLocationChange} onApplied={handleCentralStoreLocationApplied} />
+    </>
+  );
 }
+

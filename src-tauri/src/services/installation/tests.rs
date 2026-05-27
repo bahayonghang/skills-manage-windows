@@ -24,8 +24,13 @@ use super::native::{
     install_skill_to_agent_impl, uninstall_skill_from_agent_impl,
     uninstall_skill_from_agent_with_row_impl,
 };
-use super::project::install_central_skill_to_project_outcome_impl;
+use super::project::{
+    classify_remote_project_existing_target, install_central_skill_to_project_outcome_impl,
+    normalize_remote_project_path, remote_project_install_paths, remote_project_method,
+    remote_project_relative_skills_dir, RemoteProjectExistingTargetAction,
+};
 use super::remote::{classify_remote_existing_install_target, RemoteExistingInstallAction};
+use super::types::BatchUninstallSkillRequest;
 use super::types::{BatchInstallResult, FailedInstall, InstallOutcome};
 
 // ── Test helpers ──────────────────────────────────────────────────────────
@@ -136,6 +141,8 @@ fn claude_observation(
         symlink_target: None,
         is_read_only,
         scanned_at: chrono::Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     }
 }
 
@@ -228,6 +235,135 @@ fn test_remote_symlink_install_rejects_unmanaged_dir() {
         }
         other => panic!("expected rejection, got {:?}", other),
     }
+}
+
+#[test]
+fn test_remote_project_paths_use_agent_project_dir() {
+    let agent = db::Agent {
+        id: "claude-code".to_string(),
+        display_name: "Claude Code".to_string(),
+        category: "coding".to_string(),
+        global_skills_dir: "/home/alice/.claude/skills".to_string(),
+        project_skills_dir: Some(".claude/skills".to_string()),
+        icon_name: None,
+        is_detected: true,
+        is_builtin: true,
+        is_enabled: true,
+    };
+
+    let paths =
+        remote_project_install_paths("/home/alice", "/work/demo/", &agent, "frontend-design")
+            .unwrap();
+
+    assert_eq!(paths.project_path, "/work/demo");
+    assert_eq!(paths.project_skills_dir, "/work/demo/.claude/skills");
+    assert_eq!(
+        paths.target_path,
+        "/work/demo/.claude/skills/frontend-design"
+    );
+}
+
+#[test]
+fn test_remote_project_paths_expand_home_and_universal_dir() {
+    let agent = db::Agent {
+        id: "codex".to_string(),
+        display_name: "Codex".to_string(),
+        category: "coding".to_string(),
+        global_skills_dir: "/home/alice/.agents/skills".to_string(),
+        project_skills_dir: Some(".codex/skills".to_string()),
+        icon_name: None,
+        is_detected: true,
+        is_builtin: true,
+        is_enabled: true,
+    };
+
+    assert_eq!(
+        remote_project_relative_skills_dir(&agent).unwrap(),
+        db::UNIVERSAL_PROJECT_SKILLS_DIR
+    );
+    let paths =
+        remote_project_install_paths("/home/alice", "~/repo", &agent, "code-reviewer").unwrap();
+
+    assert_eq!(paths.project_path, "/home/alice/repo");
+    assert_eq!(
+        paths.target_path,
+        "/home/alice/repo/.agents/skills/code-reviewer"
+    );
+}
+
+#[test]
+fn test_remote_project_path_requires_absolute_posix_path() {
+    let agent = db::Agent {
+        id: "claude-code".to_string(),
+        display_name: "Claude Code".to_string(),
+        category: "coding".to_string(),
+        global_skills_dir: "/home/alice/.claude/skills".to_string(),
+        project_skills_dir: Some(".claude/skills".to_string()),
+        icon_name: None,
+        is_detected: true,
+        is_builtin: true,
+        is_enabled: true,
+    };
+
+    let error =
+        remote_project_install_paths("/home/alice", "relative/repo", &agent, "demo").unwrap_err();
+
+    assert!(error.contains("absolute POSIX path"));
+}
+
+#[test]
+fn test_remote_project_install_replaces_existing_symlink_only() {
+    let info = RemotePathInfo {
+        file_type: "symlink".to_string(),
+        symlink_target: Some("/central/demo".to_string()),
+    };
+
+    let action = classify_remote_project_existing_target(
+        "/project/.agents/skills/demo",
+        "copy",
+        Some(&info),
+    );
+
+    assert_eq!(action, RemoteProjectExistingTargetAction::ReplaceSymlink);
+}
+
+#[test]
+fn test_remote_project_install_rejects_existing_real_directory() {
+    let info = RemotePathInfo {
+        file_type: "dir".to_string(),
+        symlink_target: None,
+    };
+
+    let action = classify_remote_project_existing_target(
+        "/project/.agents/skills/demo",
+        "copy",
+        Some(&info),
+    );
+
+    match action {
+        RemoteProjectExistingTargetAction::Reject(error) => {
+            assert!(error.contains("remote project directory"));
+            assert!(error.contains("/project/.agents/skills/demo"));
+        }
+        other => panic!("expected rejection, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_remote_project_method_rejects_disabled_symlink() {
+    assert_eq!(remote_project_method("copy", false).unwrap(), "copy");
+    let error = remote_project_method("symlink", false).unwrap_err();
+    assert!(error.contains("Remote symlink install is disabled"));
+    assert_eq!(remote_project_method("symlink", true).unwrap(), "symlink");
+}
+
+#[test]
+fn test_normalize_remote_project_path_keeps_root() {
+    assert_eq!(normalize_remote_project_path("/home/alice", "/"), "/");
+    assert_eq!(
+        normalize_remote_project_path("/home/alice", "~\\repo\\demo\\"),
+        "/home/alice/repo/demo"
+    );
 }
 
 // ── install_skill_to_agent_impl ───────────────────────────────────────────
@@ -751,6 +887,166 @@ async fn test_uninstall_claude_row_rejects_skill_id_mismatch() {
     );
 }
 
+#[tokio::test]
+async fn test_batch_uninstall_skills_from_agent_reports_partial_failure() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "batch-remove-ok");
+    install_skill_to_agent_impl(&pool, "batch-remove-ok", "claude-code")
+        .await
+        .unwrap();
+    fs::create_dir_all(agent_dir.join("protected-batch-dir")).unwrap();
+
+    let result = super::batch::batch_uninstall_skills_from_agent_impl(
+        &pool,
+        "claude-code",
+        vec![
+            BatchUninstallSkillRequest {
+                skill_id: "batch-remove-ok".to_string(),
+                row_id: None,
+            },
+            BatchUninstallSkillRequest {
+                skill_id: "protected-batch-dir".to_string(),
+                row_id: None,
+            },
+        ],
+    )
+    .await;
+
+    assert_eq!(result.succeeded.len(), 1);
+    assert_eq!(result.succeeded[0].skill_id, "batch-remove-ok");
+    assert_eq!(result.failed.len(), 1);
+    assert_eq!(result.failed[0].skill_id, "protected-batch-dir");
+    assert!(
+        fs::symlink_metadata(agent_dir.join("batch-remove-ok")).is_err(),
+        "successful batch item should remove the platform install"
+    );
+}
+
+#[tokio::test]
+async fn test_batch_uninstall_claude_user_rows_keep_row_identity() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&agent_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    let first_dir = create_user_skill(&agent_dir, "same-name-a");
+    let second_dir = create_user_skill(&agent_dir, "same-name-b");
+    let first_observation = claude_observation(&agent_dir, "same-skill", &first_dir, "user", false);
+    let second_observation =
+        claude_observation(&agent_dir, "same-skill", &second_dir, "user", false);
+    let first_row_id = first_observation.row_id.clone();
+    let second_row_id = second_observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &first_observation)
+        .await
+        .unwrap();
+    db::upsert_agent_skill_observation(&pool, &second_observation)
+        .await
+        .unwrap();
+
+    let result = super::batch::batch_uninstall_skills_from_agent_impl(
+        &pool,
+        "claude-code",
+        vec![BatchUninstallSkillRequest {
+            skill_id: "same-skill".to_string(),
+            row_id: Some(first_row_id.clone()),
+        }],
+    )
+    .await;
+
+    assert_eq!(result.succeeded.len(), 1);
+    assert!(result.failed.is_empty());
+    assert!(fs::symlink_metadata(&first_dir).is_err());
+    assert!(second_dir.join("SKILL.md").exists());
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &first_row_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &second_row_id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn test_batch_uninstall_rejects_read_only_and_shared_root_rows() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    let plugin_dir = tmp
+        .path()
+        .join("plugin")
+        .join("skills")
+        .join("plugin-batch-skill");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&claude_dir).unwrap();
+    fs::create_dir_all(&plugin_dir).unwrap();
+    fs::write(
+        plugin_dir.join("SKILL.md"),
+        "---\nname: plugin-batch-skill\n---\n\n# plugin\n",
+    )
+    .unwrap();
+
+    let pool = setup_db(&central_dir, &claude_dir).await;
+    let observation = claude_observation(
+        &claude_dir,
+        "plugin-batch-skill",
+        &plugin_dir,
+        "plugin",
+        true,
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+    point_codex_to_dir(&pool, &central_dir).await;
+    create_central_skill(&central_dir, "shared-root-batch-skill");
+    install_skill_to_agent_impl(&pool, "shared-root-batch-skill", "codex")
+        .await
+        .unwrap();
+
+    let plugin_result = super::batch::batch_uninstall_skills_from_agent_impl(
+        &pool,
+        "claude-code",
+        vec![BatchUninstallSkillRequest {
+            skill_id: "plugin-batch-skill".to_string(),
+            row_id: Some(row_id),
+        }],
+    )
+    .await;
+    let shared_result = super::batch::batch_uninstall_skills_from_agent_impl(
+        &pool,
+        "codex",
+        vec![BatchUninstallSkillRequest {
+            skill_id: "shared-root-batch-skill".to_string(),
+            row_id: None,
+        }],
+    )
+    .await;
+
+    assert!(plugin_result.succeeded.is_empty());
+    assert!(plugin_result.failed[0].error.contains("read-only"));
+    assert!(plugin_dir.join("SKILL.md").exists());
+    assert!(shared_result.succeeded.is_empty());
+    assert!(shared_result.failed[0]
+        .error
+        .contains("cannot be uninstalled independently"));
+    assert!(central_dir
+        .join("shared-root-batch-skill")
+        .join("SKILL.md")
+        .exists());
+}
+
 // ── batch install ─────────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -1093,6 +1389,102 @@ async fn test_project_install_uses_agents_dir_for_universal_representative() {
             .join("universal-project-skill")
             .exists(),
         "Universal project installs must not write the legacy .codex/skills path"
+    );
+}
+
+#[tokio::test]
+async fn test_project_install_uses_agents_dir_for_antigravity() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let codex_agent_dir = crate::paths::resolve_home_dir()
+        .join(".agents")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let pool = setup_db_with_codex(&central_dir, &claude_agent_dir, &codex_agent_dir).await;
+    create_central_skill(&central_dir, "antigravity-project-skill");
+
+    let result = install_central_skill_to_project_outcome_impl(
+        &pool,
+        "antigravity-project-skill",
+        "antigravity",
+        &project_dir,
+        "copy",
+    )
+    .await
+    .unwrap();
+    let result = match result {
+        InstallOutcome::Installed(result) => result,
+        InstallOutcome::Skipped(skipped) => panic!("expected install, got skip: {:?}", skipped),
+    };
+    let target = project_dir
+        .join(".agents")
+        .join("skills")
+        .join("antigravity-project-skill");
+
+    assert_eq!(PathBuf::from(result.symlink_path), target);
+    assert!(target.join("SKILL.md").exists());
+    assert!(
+        !project_dir
+            .join(".gemini")
+            .join("antigravity")
+            .join("skills")
+            .join("antigravity-project-skill")
+            .exists(),
+        "Antigravity project installs must use the shared .agents/skills directory"
+    );
+}
+
+#[tokio::test]
+async fn test_project_install_uses_agents_dir_for_antigravity_cli() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let codex_agent_dir = crate::paths::resolve_home_dir()
+        .join(".agents")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let pool = setup_db_with_codex(&central_dir, &claude_agent_dir, &codex_agent_dir).await;
+    create_central_skill(&central_dir, "antigravity-cli-project-skill");
+
+    let result = install_central_skill_to_project_outcome_impl(
+        &pool,
+        "antigravity-cli-project-skill",
+        "antigravity-cli",
+        &project_dir,
+        "copy",
+    )
+    .await
+    .unwrap();
+    let result = match result {
+        InstallOutcome::Installed(result) => result,
+        InstallOutcome::Skipped(skipped) => panic!("expected install, got skip: {:?}", skipped),
+    };
+    let target = project_dir
+        .join(".agents")
+        .join("skills")
+        .join("antigravity-cli-project-skill");
+
+    assert_eq!(PathBuf::from(result.symlink_path), target);
+    assert!(target.join("SKILL.md").exists());
+    assert!(
+        !project_dir
+            .join(".gemini")
+            .join("antigravity-cli")
+            .join("skills")
+            .join("antigravity-cli-project-skill")
+            .exists(),
+        "Antigravity CLI project installs must use the shared .agents/skills directory"
     );
 }
 

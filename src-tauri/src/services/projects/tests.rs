@@ -148,6 +148,85 @@ async fn rescan_finds_universal_skills_from_agents_dir() {
 }
 
 #[tokio::test]
+async fn rescan_uses_antigravity_as_universal_representative_when_it_is_the_enabled_member() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    sqlx::query("UPDATE agents SET is_enabled = CASE WHEN id = 'antigravity' THEN 1 ELSE 0 END")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let universal_skill = tmp.path().join(".agents/skills/antigravity-only");
+    write_skill_md(
+        &universal_skill,
+        "antigravity-only",
+        Some("Antigravity Universal skill"),
+    );
+
+    let project = add_project_impl(&pool, tmp.path().to_str().unwrap())
+        .await
+        .unwrap();
+    let count = rescan_project_impl(&pool, &project.id).await.unwrap();
+    assert_eq!(count, 1, "expected one Antigravity Universal project skill");
+
+    let skills = get_project_skills_impl(&pool, &project.id).await.unwrap();
+    assert_eq!(skills.len(), 1);
+    assert_eq!(skills[0].agent_id, "antigravity");
+    assert_eq!(skills[0].agent_display_name, "Antigravity");
+    assert_eq!(
+        skills[0].description.as_deref(),
+        Some("Antigravity Universal skill")
+    );
+    assert_eq!(
+        skills[0].installed_path,
+        crate::paths::normalize_stored_path(&universal_skill.to_string_lossy())
+    );
+}
+
+#[tokio::test]
+async fn rescan_uses_antigravity_cli_as_universal_representative_when_it_is_the_enabled_member() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    sqlx::query(
+        "UPDATE agents SET is_enabled = CASE WHEN id = 'antigravity-cli' THEN 1 ELSE 0 END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let universal_skill = tmp.path().join(".agents/skills/antigravity-cli-only");
+    write_skill_md(
+        &universal_skill,
+        "antigravity-cli-only",
+        Some("Antigravity CLI Universal skill"),
+    );
+
+    let project = add_project_impl(&pool, tmp.path().to_str().unwrap())
+        .await
+        .unwrap();
+    let count = rescan_project_impl(&pool, &project.id).await.unwrap();
+    assert_eq!(
+        count, 1,
+        "expected one Antigravity CLI Universal project skill"
+    );
+
+    let skills = get_project_skills_impl(&pool, &project.id).await.unwrap();
+    assert_eq!(skills.len(), 1);
+    assert_eq!(skills[0].agent_id, "antigravity-cli");
+    assert_eq!(skills[0].agent_display_name, "Antigravity CLI");
+    assert_eq!(
+        skills[0].description.as_deref(),
+        Some("Antigravity CLI Universal skill")
+    );
+    assert_eq!(
+        skills[0].installed_path,
+        crate::paths::normalize_stored_path(&universal_skill.to_string_lossy())
+    );
+}
+
+#[tokio::test]
 async fn rescan_prefers_universal_agents_dir_over_legacy_member_paths() {
     let tmp = TempDir::new().unwrap();
     let pool = setup_test_db().await;
@@ -401,6 +480,8 @@ async fn seed_central_skill(pool: &DbPool, canonical_dir: &Path, skill_id: &str)
         source: None,
         content: None,
         scanned_at: chrono::Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(pool, &skill).await.unwrap();
 }
@@ -545,6 +626,8 @@ async fn install_skill_rejects_non_central_skill() {
         source: None,
         content: None,
         scanned_at: chrono::Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(&pool, &skill).await.unwrap();
 

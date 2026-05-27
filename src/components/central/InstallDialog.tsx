@@ -18,6 +18,7 @@ import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
 import { ProjectPathPicker } from "@/components/central/ProjectPathPicker";
 import { AgentWithStatus, BatchInstallResult, SkillWithLinks } from "@/types";
 import { useTargetStore } from "@/stores/targetStore";
+import { isRemoteLikeTarget } from "@/lib/targetKind";
 import {
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberIds,
@@ -56,9 +57,9 @@ export function InstallDialog({
 }: InstallDialogProps) {
   const { t } = useTranslation();
   const activeTarget = useTargetStore((s) => s.activeTarget);
-  const isRemoteTarget = activeTarget.kind === "ssh";
+  const isRemoteTarget = isRemoteLikeTarget(activeTarget);
   const canUseSymlink = !isRemoteTarget || activeTarget.symlinkEnabled === true;
-  const canInstallToProject = Boolean(skill?.is_central) && !isRemoteTarget;
+  const canInstallToProject = Boolean(skill?.is_central);
   // Only show non-central agents in the install dialog.
   const targetAgents = useMemo(
     () => agents.filter((agent) => agent.id !== "central"),
@@ -243,6 +244,17 @@ export function InstallDialog({
                 onChange={setProjectPath}
                 onError={setError}
                 disabled={isLoading}
+                browseEnabled={!isRemoteTarget}
+                placeholder={
+                  isRemoteTarget
+                    ? t("central.batchInstallRemoteProjectPathPlaceholder")
+                    : undefined
+                }
+                hint={
+                  isRemoteTarget
+                    ? t("central.batchInstallRemoteProjectPathHint")
+                    : undefined
+                }
               />
             </div>
           )}

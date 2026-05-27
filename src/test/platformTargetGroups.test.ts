@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AgentWithStatus } from "../types";
 import {
+  getProjectPlatformTargetGroups,
   getPlatformTargetGroups,
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberIds,
@@ -76,6 +77,62 @@ describe("platformTargetGroups", () => {
       "claude-code",
       "kiro",
     ]);
+  });
+
+  it("keeps Antigravity as a standalone global install target", () => {
+    const agents = [
+      agent("codex", "Codex CLI", "~/.agents/skills"),
+      agent("antigravity", "Antigravity", "~/.gemini/antigravity/skills"),
+      agent(
+        "antigravity-cli",
+        "Antigravity CLI",
+        "~/.gemini/antigravity-cli/skills"
+      ),
+      agent("gemini-cli", "Gemini CLI (legacy)", "~/.gemini/skills", false),
+      agent("central", "Central Skills", "~/.skillsmanage/skills"),
+    ];
+
+    const groups = getPlatformTargetGroups(agents, {
+      coding: true,
+      lobster: true,
+    });
+
+    expect(groups.map((group) => group.id)).toEqual([
+      "universal-agents",
+      "antigravity",
+      "antigravity-cli",
+    ]);
+    expect(getPlatformTargetMemberIds(groups[0])).toEqual(["codex"]);
+    expect(isUniversalPlatformTarget(groups[1])).toBe(false);
+    expect(hasProjectSkillPattern(groups[1])).toBe(true);
+    expect(isUniversalPlatformTarget(groups[2])).toBe(false);
+    expect(hasProjectSkillPattern(groups[2])).toBe(true);
+  });
+
+  it("folds Antigravity into the project Universal target", () => {
+    const agents = [
+      agent("codex", "Codex CLI", "~/.agents/skills"),
+      agent("antigravity", "Antigravity", "~/.gemini/antigravity/skills"),
+      agent("antigravity-cli", "Antigravity CLI", "~/.gemini/antigravity-cli/skills"),
+      agent("claude-code", "Claude Code", "~/.claude/skills"),
+      agent("central", "Central Skills", "~/.skillsmanage/skills"),
+    ];
+
+    const groups = getProjectPlatformTargetGroups(agents, {
+      coding: true,
+      lobster: true,
+    });
+
+    expect(groups.map((group) => group.id)).toEqual([
+      "universal-agents",
+      "claude-code",
+    ]);
+    expect(getPlatformTargetMemberIds(groups[0])).toEqual([
+      "antigravity",
+      "antigravity-cli",
+      "codex",
+    ]);
+    expect(getPlatformTargetInstallAgentIds(groups[0])).toEqual(["codex"]);
   });
 
   it("hides the Universal target when every member is hidden", () => {

@@ -27,6 +27,7 @@ const BROWSER_UNKNOWN_REPOSITORY: SkillRepositoryWithStats = {
   id: "local-unknown",
   name: "本地 / 未知来源",
   source_type: "local",
+  pinned: false,
   is_unknown: true,
   created_at: "2026-04-17T00:00:00.000Z",
   updated_at: "2026-04-17T00:00:00.000Z",

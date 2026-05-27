@@ -272,6 +272,7 @@ impl TargetRegistry {
             host: Some(target.host.clone()),
             username: Some(target.username.clone()),
             port: Some(target.port),
+            distribution: None,
             auth_method: Some(target.auth_method),
             key_path: match target.auth_method {
                 SshAuthMethod::Key => Some(target.key_path.clone()),
@@ -292,6 +293,34 @@ impl TargetRegistry {
         }
     }
 
+    pub(super) fn wsl_target_summary(
+        &self,
+        target: &WslTargetConfig,
+        active_id: &str,
+    ) -> TargetSummary {
+        TargetSummary {
+            id: target.id.clone(),
+            kind: TargetKind::Wsl,
+            label: target.label.clone(),
+            host: None,
+            username: None,
+            port: None,
+            distribution: Some(target.distribution.clone()),
+            auth_method: None,
+            key_path: None,
+            remote_home: Some(target.remote_home.clone()),
+            remote_os: Some(target.remote_os.clone()),
+            cache_db_path: remote_cache_db_path(&target.id)
+                .ok()
+                .map(|path| path.to_string_lossy().into_owned()),
+            has_stored_password: None,
+            credential_status: None,
+            credential_error: None,
+            symlink_enabled: Some(wsl_symlink_allowed(target)),
+            is_active: target.id == active_id,
+        }
+    }
+
     pub async fn list_targets(&self, local_db: &DbPool) -> Result<Vec<TargetSummary>, String> {
         let active_id = active_target_id(local_db).await?;
         let mut targets = vec![TargetSummary {
@@ -301,6 +330,7 @@ impl TargetRegistry {
             host: None,
             username: None,
             port: None,
+            distribution: None,
             auth_method: None,
             key_path: None,
             remote_home: None,
@@ -316,50 +346,91 @@ impl TargetRegistry {
         for target in load_remote_targets(local_db).await? {
             targets.push(self.target_summary(&target, active_id.as_str()));
         }
+        for target in load_wsl_targets(local_db).await? {
+            targets.push(self.wsl_target_summary(&target, active_id.as_str()));
+        }
 
         Ok(targets)
     }
 
     pub async fn active_target(&self, local_db: &DbPool) -> Result<ActiveTarget, String> {
         let active_id = active_target_id(local_db).await?;
-        if active_id == LOCAL_TARGET_ID {
+        self.target_by_id(local_db, &active_id)
+            .await
+            .map_err(|error| {
+                if active_id == LOCAL_TARGET_ID {
+                    error
+                } else {
+                    format!(
+                        "Active target '{}' no longer exists. Switch back to Local.",
+                        active_id
+                    )
+                }
+            })
+    }
+
+    pub async fn target_by_id(
+        &self,
+        local_db: &DbPool,
+        target_id: &str,
+    ) -> Result<ActiveTarget, String> {
+        let target_id = target_id.trim();
+        if target_id == LOCAL_TARGET_ID {
             return Ok(ActiveTarget::Local);
         }
 
         let mut target = load_remote_targets(local_db)
             .await?
             .into_iter()
-            .find(|target| target.id == active_id)
-            .ok_or_else(|| {
-                format!(
-                    "Active target '{}' no longer exists. Switch back to Local.",
-                    active_id
-                )
-            })?;
-        self.attach_available_password(&mut target);
-        Ok(ActiveTarget::Ssh(Box::new(target)))
+            .find(|target| target.id == target_id)
+            .map(|target| ActiveTarget::Ssh(Box::new(target)));
+        if let Some(ActiveTarget::Ssh(target)) = target.as_mut() {
+            self.attach_available_password(target);
+        }
+        if let Some(target) = target {
+            return Ok(target);
+        }
+
+        if let Some(target) = load_wsl_targets(local_db)
+            .await?
+            .into_iter()
+            .find(|target| target.id == target_id)
+        {
+            return Ok(ActiveTarget::Wsl(Box::new(target)));
+        }
+
+        Err(format!("Target '{}' not found", target_id))
     }
 
     pub async fn active_db(&self, local_db: &DbPool) -> Result<DbPool, String> {
         match self.active_target(local_db).await? {
             ActiveTarget::Local => Ok(local_db.clone()),
             ActiveTarget::Ssh(target) => self.remote_db(&target).await,
+            ActiveTarget::Wsl(target) => self.remote_db_for(&target.id, &target.remote_home).await,
         }
     }
 
     pub async fn remote_db(&self, target: &RemoteTargetConfig) -> Result<DbPool, String> {
+        self.remote_db_for(&target.id, &target.remote_home).await
+    }
+
+    pub async fn remote_db_for(
+        &self,
+        target_id: &str,
+        remote_home: &str,
+    ) -> Result<DbPool, String> {
         match self.pools.lock() {
             Ok(pools) => {
-                if let Some(pool) = pools.get(&target.id) {
+                if let Some(pool) = pools.get(target_id) {
                     return Ok(pool.clone());
                 }
             }
             Err(error) => {
-                tracing::warn!(target_id = %target.id, error = %error, "SSH remote DB pool cache lock is poisoned during lookup");
+                tracing::warn!(target_id = %target_id, error = %error, "Remote DB pool cache lock is poisoned during lookup");
             }
         }
 
-        let db_path = remote_cache_db_path(&target.id)?;
+        let db_path = remote_cache_db_path(target_id)?;
         if let Some(parent) = db_path.parent() {
             fs::create_dir_all(parent).map_err(|e| {
                 format!(
@@ -372,14 +443,14 @@ impl TargetRegistry {
 
         let db_path = db_path.to_string_lossy().into_owned();
         let pool = db::create_pool(&db_path).await?;
-        db::init_database_for_remote_home(&pool, &target.remote_home).await?;
+        db::init_database_for_remote_home(&pool, remote_home).await?;
 
         match self.pools.lock() {
             Ok(mut pools) => {
-                pools.insert(target.id.clone(), pool.clone());
+                pools.insert(target_id.to_string(), pool.clone());
             }
             Err(error) => {
-                tracing::warn!(target_id = %target.id, error = %error, "SSH remote DB pool cache lock is poisoned during insert");
+                tracing::warn!(target_id = %target_id, error = %error, "Remote DB pool cache lock is poisoned during insert");
             }
         }
 

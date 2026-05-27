@@ -6,6 +6,8 @@ import {
   BatchDeleteCentralSkillResult,
   BatchInstallResult,
   CentralBatchInstallResult,
+  CentralStoreLocationChangeResult,
+  CentralStoreLocationPreview,
   CentralSkillUpdateJob,
   CentralSkillUpdateResult,
   CentralSkillUpdateState,
@@ -23,6 +25,11 @@ import {
   SkillTagSuggestionResult,
   SkillWithLinks,
 } from "@/types";
+import type {
+  CentralRepositorySyncApplyResult,
+  CentralRepositorySyncDecisions,
+  CentralRepositorySyncPreview,
+} from "@/types/centralRepositorySync";
 
 export interface CentralSkillsState {
   skills: SkillWithLinks[];
@@ -48,6 +55,10 @@ export interface CentralSkillsState {
 
   // Actions
   loadCentralSkills: () => Promise<void>;
+  previewCentralStoreLocationChange: (targetPath: string) => Promise<CentralStoreLocationPreview>;
+  applyCentralStoreLocationChange: (
+    targetPath: string
+  ) => Promise<CentralStoreLocationChangeResult>;
   installSkill: (
     skillId: string,
     agentIds: string[],
@@ -74,10 +85,18 @@ export interface CentralSkillsState {
   togglePlatformLink: (skillId: string, agentId: string) => Promise<void>;
   createRepository: (name: string) => Promise<SkillRepository>;
   assignSkillsToRepository: (skillIds: string[], repositoryId: string) => Promise<void>;
+  setRepositoryPinned: (repositoryId: string, pinned: boolean) => Promise<void>;
   createTag: (name: string) => Promise<SkillTag>;
   assignSkillTags: (skillIds: string[], tagIds: string[]) => Promise<void>;
   bulkSuggestSkillTags: (skillIds: string[]) => Promise<SkillTagSuggestionResult[]>;
   checkSkillUpdates: (skillIds?: string[]) => Promise<CentralSkillUpdateState[]>;
+  checkRepositorySync: (
+    repositoryIds: string[],
+    skillIds?: string[]
+  ) => Promise<CentralRepositorySyncPreview>;
+  applyRepositorySync: (
+    decisions: CentralRepositorySyncDecisions
+  ) => Promise<CentralRepositorySyncApplyResult>;
   updateSkills: (skillIds: string[]) => Promise<CentralSkillUpdateResult>;
   cancelCentralUpdates: () => Promise<void>;
   keepRemoteMissingSkills: (skillIds: string[]) => Promise<string[]>;

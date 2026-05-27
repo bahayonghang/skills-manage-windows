@@ -10,7 +10,7 @@
 
 ## 项目简介
 
-`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库使用私有目录 `~/.skillsmanage/skills/`。共享的 Universal Agents 目标仍是 `~/.agents/skills/`，只有显式安装到这里的技能才会暴露给 Codex CLI、Cursor、Gemini CLI 等读取该目录的工具。
+`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库默认使用私有目录 `~/.skillsmanage/skills/`。在本机 Local 目标下，可以在中央技能库页面修改这个位置：切换前会先预览，迁移时当前中央库覆盖目标目录同名技能，目标目录独有技能会保留并扫描导入，旧目录不会删除。共享的 Universal Agents 目标仍是 `~/.agents/skills/`，只有显式安装到这里的技能才会暴露给 Codex CLI、Cursor、OpenCode、Amp、Copilot 等读取该目录的工具。SkillPort 明确区分 Google 的 Antigravity 应用目标与 Antigravity CLI：Antigravity 全局技能保留在 `~/.gemini/antigravity/skills/`，Antigravity CLI 全局技能使用 `~/.gemini/antigravity-cli/skills/`，两者的 workspace / project 安装都使用 `.agents/skills/`。Gemini CLI 仍作为 legacy/shared Google 目标保留在 `~/.gemini/skills/`。
 
 ## 与上游关系
 
@@ -98,7 +98,10 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 | Coding | Claude Code | `~/.claude/skills/` |
 | Coding | Codex CLI | `~/.agents/skills/` |
 | Coding | Cursor | `~/.agents/skills/` |
-| Coding | Gemini CLI | `~/.agents/skills/` |
+| Coding | Antigravity | `~/.gemini/antigravity/skills/` |
+| Coding | Antigravity CLI | `~/.gemini/antigravity-cli/skills/` |
+| Coding | Zed（社区兼容） | `~/.config/zed/skills/` |
+| Coding | Gemini CLI（legacy） | `~/.gemini/skills/` |
 | Coding | Trae | `~/.trae/skills/` |
 | Coding | Factory Droid | `~/.factory/skills/` |
 | Coding | Junie | `~/.junie/skills/` |
@@ -124,7 +127,7 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 | Lobster | WorkBuddy（打工搭子） | `~/.workbuddy/skills-marketplace/skills/` |
 | Central | 中央技能库 | `~/.skillsmanage/skills/` |
 
-> 说明：Claude Code 还会把 `~/.claude/plugins/marketplaces/*` 下的 marketplace plugin 目录显示成只读行。这些条目只做展示，不按 `~/.claude/skills/` 里的原生技能那套方式管理。
+> 说明：Claude Code 还会把 `~/.claude/plugins/marketplaces/*` 下的 marketplace plugin 目录显示成只读行。这些条目只做展示，不按 `~/.claude/skills/` 里的原生技能那套方式管理。Antigravity plugin bundle 属于独立 CLI 插件机制；SkillPort 当前只管理 Google 平台的 `SKILL.md` 技能目录，不导入或导出 plugin bundle。 Zed 以社区兼容 skills 路径列出；SkillPort 不宣称该目录是 Zed 官方原生 skills 规范。
 
 也可以在 Settings 中添加自定义平台。
 

@@ -8,9 +8,11 @@ import type {
   GitHubRepoPreview,
   MarketplaceSkill,
   SkillRegistry,
+  SkillWithLinks,
   SkillsShSkill,
   TargetSummary,
 } from "@/types";
+import { isRemoteLikeTarget, requiresSshPasswordRepair } from "@/lib/targetKind";
 
 const mockLoadRegistries = vi.fn();
 const mockLoadPreviewSkills = vi.fn<() => Promise<MarketplaceSkill[]>>();
@@ -54,6 +56,7 @@ type StoreState = {
   skillsShQuery: string;
   isSkillsShLoading: boolean;
   skillsShError: string | null;
+  centralSkills: SkillWithLinks[];
   githubImport: {
     isPreviewLoading: boolean;
     isImporting: boolean;
@@ -71,6 +74,7 @@ export const storeState: StoreState = {
   skillsShQuery: "",
   isSkillsShLoading: false,
   skillsShError: null,
+  centralSkills: [],
   githubImport: {
     isPreviewLoading: false,
     isImporting: false,
@@ -137,12 +141,14 @@ vi.mock("@/components/skill/UnifiedSkillCard", () => ({
   onDetail,
   publisher,
   onInstall,
+  installLabel,
   }: {
     name: string;
     description?: string;
     onDetail?: () => void;
     publisher?: string;
     onInstall?: () => void;
+    installLabel?: string;
   }) => (
     <div>
       <button type="button" onClick={onDetail}>
@@ -152,7 +158,7 @@ vi.mock("@/components/skill/UnifiedSkillCard", () => ({
       {publisher ? <div>{publisher}</div> : null}
       {onInstall ? (
         <button type="button" onClick={onInstall}>
-          安装
+          {installLabel ?? "安装"}
         </button>
       ) : null}
     </div>
@@ -160,7 +166,13 @@ vi.mock("@/components/skill/UnifiedSkillCard", () => ({
 }));
 
 vi.mock("@/components/central/InstallDialog", () => ({
-  InstallDialog: () => null,
+  InstallDialog: ({
+    open,
+    skill,
+  }: {
+    open: boolean;
+    skill: SkillWithLinks | null;
+  }) => (open ? <div role="dialog">Central install {skill?.name}</div> : null),
 }));
 
 vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
@@ -279,13 +291,12 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
         (skill) => selectionState[skill.sourcePath]?.selected ?? false,
       );
       const showRemoteWorkspaceHint =
-        Boolean(preview?.previewWorkspaceId) && activeTarget.kind === "ssh";
-      const requiresSshPasswordRepair =
+        Boolean(preview?.previewWorkspaceId) && isRemoteLikeTarget(activeTarget);
+      const needsSshPasswordRepair =
         step === "confirm" &&
-        activeTarget.kind === "ssh" &&
-        activeTarget.authMethod === "password" &&
+        requiresSshPasswordRepair(activeTarget) &&
         !activeTarget.hasStoredPassword;
-      const showSshPasswordRepair = requiresSshPasswordRepair || Boolean(statusMessage);
+      const showSshPasswordRepair = needsSshPasswordRepair || Boolean(statusMessage);
       const footerMode = step === "confirm" ? "confirm" : "preview";
 
       async function handleImportConfirm() {
@@ -524,7 +535,7 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
             {step === "confirm" ? (
               <button
                 type="button"
-                disabled={requiresSshPasswordRepair || selectedSkills.length === 0}
+                disabled={needsSshPasswordRepair || selectedSkills.length === 0}
                 onClick={() => {
                   void handleImportConfirm();
                 }}
@@ -580,15 +591,19 @@ vi.mock("@/stores/platformStore", () => ({
     }),
 }));
 
-vi.mock("@/stores/centralSkillsStore", () => ({
-  useCentralSkillsStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector({
-      skills: [],
+vi.mock("@/stores/centralSkillsStore", () => {
+  const getState = () => ({
+      skills: storeState.centralSkills,
       agents: platformAgents,
       loadCentralSkills: mockLoadCentralSkills,
       installSkill: mockInstallCentralSkill,
-    }),
-}));
+    });
+  const useCentralSkillsStore = Object.assign(
+    (selector: (state: Record<string, unknown>) => unknown) => selector(getState()),
+    { getState }
+  );
+  return { useCentralSkillsStore };
+});
 
 vi.mock("@/stores/skillStore", () => ({
   useSkillStore: (selector: (state: Record<string, unknown>) => unknown) =>
@@ -666,6 +681,7 @@ export function resetMarketplaceViewTestState() {
   storeState.skillsShQuery = "webapp";
   storeState.isSkillsShLoading = false;
   storeState.skillsShError = null;
+  storeState.centralSkills = [];
   storeState.githubImport = {
     isPreviewLoading: false,
     isImporting: false,

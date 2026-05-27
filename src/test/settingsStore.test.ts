@@ -289,6 +289,20 @@ describe("settingsStore", () => {
     expect(useSettingsStore.getState().isLoadingGitHubPat).toBe(false);
   });
 
+  it("revealGitHubPat invokes the reveal command without mutating token state", async () => {
+    useSettingsStore.setState({
+      githubPatState: { configured: true, storageState: "stored", error: null },
+    });
+    vi.mocked(invoke).mockResolvedValueOnce("github_pat_secret");
+
+    const before = useSettingsStore.getState().githubPatState;
+    const result = await useSettingsStore.getState().revealGitHubPat();
+
+    expect(result).toBe("github_pat_secret");
+    expect(invoke).toHaveBeenCalledWith("reveal_github_pat");
+    expect(useSettingsStore.getState().githubPatState).toBe(before);
+  });
+
   it("saveGitHubPat persists a token through secure storage", async () => {
     vi.mocked(invoke).mockResolvedValueOnce({
       configured: true,
@@ -356,6 +370,8 @@ describe("settingsStore", () => {
       .mockResolvedValueOnce({
         configured: true,
         storageState: "stored",
+        fingerprint: "sha256:1234abcd",
+        provider: "glm",
         error: null,
       });
 
@@ -385,13 +401,56 @@ describe("settingsStore", () => {
       tagStopOnRateLimit: false,
     });
     expect(useSettingsStore.getState().aiApiKeyState.configured).toBe(true);
+    expect(useSettingsStore.getState().aiApiKeyState).toMatchObject({
+      provider: "glm",
+      fingerprint: "sha256:1234abcd",
+    });
     expect(invoke).toHaveBeenCalledWith("get_ai_api_key_state", { provider: "glm" });
+  });
+
+  it("revealAiApiKey invokes the provider-scoped reveal command without mutating ai state", async () => {
+    useSettingsStore.setState({
+      aiSettings: {
+        provider: "deepseek",
+        region: "intl",
+        apiKey: "",
+        model: "",
+        customUrl: "",
+        protocol: "",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+      aiApiKeyState: {
+        provider: "deepseek",
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:deepabcd",
+        error: null,
+      },
+    });
+    vi.mocked(invoke).mockResolvedValueOnce("sk-deepseek-secret");
+
+    const beforeSettings = useSettingsStore.getState().aiSettings;
+    const beforeKeyState = useSettingsStore.getState().aiApiKeyState;
+    const result = await useSettingsStore.getState().revealAiApiKey("deepseek");
+
+    expect(result).toBe("sk-deepseek-secret");
+    expect(invoke).toHaveBeenCalledWith("reveal_ai_api_key", { provider: "deepseek" });
+    expect(useSettingsStore.getState().aiSettings).toBe(beforeSettings);
+    expect(useSettingsStore.getState().aiApiKeyState).toBe(beforeKeyState);
   });
 
   it("debounces rapid AI setting edits into one batch save", async () => {
     vi.useFakeTimers();
     vi.mocked(invoke)
-      .mockResolvedValueOnce({ configured: true, storageState: "stored", error: null })
+      .mockResolvedValueOnce({
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:savedabc",
+        provider: "claude",
+        error: null,
+      })
       .mockResolvedValueOnce(undefined);
     useSettingsStore.setState({
       aiSettingsLoaded: true,
@@ -430,11 +489,21 @@ describe("settingsStore", () => {
       }),
     });
     expect(useSettingsStore.getState().aiSettings.apiKey).toBe("");
+    expect(useSettingsStore.getState().aiApiKeyState).toMatchObject({
+      configured: true,
+      fingerprint: "sha256:savedabc",
+    });
   });
 
   it("flushes AI settings before testing the connection", async () => {
     vi.mocked(invoke)
-      .mockResolvedValueOnce({ configured: true, storageState: "stored", error: null })
+      .mockResolvedValueOnce({
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:testabcd",
+        provider: "claude",
+        error: null,
+      })
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ ok: true, msg: "OK" });
     useSettingsStore.setState({
@@ -463,11 +532,19 @@ describe("settingsStore", () => {
       values: expect.not.objectContaining({ ai_api_key: expect.any(String) }),
     });
     expect(invoke).toHaveBeenNthCalledWith(3, "test_ai_connection");
+    expect(useSettingsStore.getState().aiSettings.apiKey).toBe("");
+    expect(useSettingsStore.getState().aiApiKeyState.fingerprint).toBe("sha256:testabcd");
   });
 
   it("switchAiProvider restores scoped settings and reads scoped key state", async () => {
     vi.mocked(invoke)
-      .mockResolvedValueOnce({ configured: true, storageState: "stored", error: null })
+      .mockResolvedValueOnce({
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:deepabcd",
+        provider: "deepseek",
+        error: null,
+      })
       .mockResolvedValueOnce(undefined);
     useSettingsStore.setState({
       aiSettingsLoaded: true,
@@ -499,6 +576,11 @@ describe("settingsStore", () => {
       model: "deepseek-v4-flash",
       protocol: "",
     });
+    expect(useSettingsStore.getState().aiApiKeyState).toMatchObject({
+      provider: "deepseek",
+      configured: true,
+      fingerprint: "sha256:deepabcd",
+    });
     expect(invoke).toHaveBeenNthCalledWith(1, "get_ai_api_key_state", { provider: "deepseek" });
     expect(invoke).toHaveBeenNthCalledWith(2, "set_settings", {
       values: expect.objectContaining({
@@ -506,6 +588,91 @@ describe("settingsStore", () => {
         ai_model__deepseek: "deepseek-v4-flash",
       }),
     });
+  });
+
+  it("switchAiProvider uses OpenRouter OpenAI-compatible defaults", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({
+        configured: false,
+        storageState: "missing",
+        fingerprint: null,
+        provider: "openrouter",
+        error: null,
+      })
+      .mockResolvedValueOnce(undefined);
+    useSettingsStore.setState({
+      aiSettingsLoaded: true,
+      aiRawSettings: {},
+      aiSettings: {
+        provider: "claude",
+        region: "intl",
+        apiKey: "",
+        model: "claude-sonnet-4-20250514",
+        customUrl: "",
+        protocol: "",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+    });
+
+    await useSettingsStore.getState().switchAiProvider("openrouter");
+
+    expect(useSettingsStore.getState().aiSettings).toMatchObject({
+      provider: "openrouter",
+      region: "intl",
+      model: "anthropic/claude-sonnet-4.6",
+      protocol: "openai",
+    });
+    expect(invoke).toHaveBeenNthCalledWith(2, "set_settings", {
+      values: expect.objectContaining({
+        ai_provider: "openrouter",
+        ai_api_url__openrouter: "https://openrouter.ai/api/v1/chat/completions",
+        ai_protocol__openrouter: "openai",
+      }),
+    });
+  });
+
+  it("normalizes the legacy OpenRouter messages endpoint to chat completions", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({
+        ai_provider: "openrouter",
+        ai_api_url__openrouter: "https://openrouter.ai/api/v1/messages",
+      })
+      .mockResolvedValueOnce({
+        configured: false,
+        storageState: "missing",
+        fingerprint: null,
+        provider: "openrouter",
+        error: null,
+      });
+
+    await useSettingsStore.getState().loadAiSettings();
+
+    expect(useSettingsStore.getState().aiSettings).toMatchObject({
+      provider: "openrouter",
+      customUrl: "https://openrouter.ai/api/v1/chat/completions",
+      protocol: "openai",
+    });
+  });
+
+  it("forces OpenRouter to OpenAI protocol even with legacy scoped protocol", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({
+        ai_provider: "openrouter",
+        ai_protocol__openrouter: "anthropic",
+      })
+      .mockResolvedValueOnce({
+        configured: false,
+        storageState: "missing",
+        fingerprint: null,
+        provider: "openrouter",
+        error: null,
+      });
+
+    await useSettingsStore.getState().loadAiSettings();
+
+    expect(useSettingsStore.getState().aiSettings.protocol).toBe("openai");
   });
 
   it("serializes custom base URL separately from resolved OpenAI URL", async () => {
@@ -538,11 +705,17 @@ describe("settingsStore", () => {
 
   it("clearAiApiKey clears the secure AI key state without touching other settings", async () => {
     useSettingsStore.setState({
-      aiApiKeyState: { configured: true, storageState: "stored", error: null },
+      aiApiKeyState: {
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:oldkey12",
+        error: null,
+      },
     });
     vi.mocked(invoke).mockResolvedValueOnce({
       configured: false,
       storageState: "missing",
+      fingerprint: null,
       error: null,
     });
 
@@ -550,6 +723,7 @@ describe("settingsStore", () => {
 
     expect(invoke).toHaveBeenCalledWith("clear_ai_api_key", { provider: "claude" });
     expect(useSettingsStore.getState().aiApiKeyState.configured).toBe(false);
+    expect(useSettingsStore.getState().aiApiKeyState.fingerprint).toBeNull();
     expect(useSettingsStore.getState().aiSettings.apiKey).toBe("");
   });
 });

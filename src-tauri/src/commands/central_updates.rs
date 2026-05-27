@@ -1,4 +1,5 @@
 use chrono::{Duration as ChronoDuration, Utc};
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -19,16 +20,70 @@ use super::central_updates_fs::{
 use super::github_import::{self, GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
 
 const UPDATE_PROGRESS_EVENT: &str = "central://skill-update-progress";
-const STATUS_UP_TO_DATE: &str = "up_to_date";
-const STATUS_UPDATE_AVAILABLE: &str = "update_available";
-const STATUS_UNSUPPORTED: &str = "unsupported";
-const STATUS_REMOTE_MISSING: &str = "remote_missing";
-const STATUS_ERROR: &str = "error";
-const STATUS_CANCELLED: &str = "cancelled";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillUpdateStatus {
+    UpToDate,
+    UpdateAvailable,
+    Unsupported,
+    RemoteMissing,
+    Error,
+    Cancelled,
+}
+
+impl SkillUpdateStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::UpToDate => "up_to_date",
+            Self::UpdateAvailable => "update_available",
+            Self::Unsupported => "unsupported",
+            Self::RemoteMissing => "remote_missing",
+            Self::Error => "error",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+impl std::fmt::Display for SkillUpdateStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for SkillUpdateStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "up_to_date" => Self::UpToDate,
+            "update_available" => Self::UpdateAvailable,
+            "unsupported" => Self::Unsupported,
+            "remote_missing" => Self::RemoteMissing,
+            "error" => Self::Error,
+            "cancelled" => Self::Cancelled,
+            other => return Err(format!("unknown SkillUpdateStatus: {other}")),
+        })
+    }
+}
 fn snapshot_cache_ttl() -> ChronoDuration {
     ChronoDuration::minutes(10)
 }
 const SNAPSHOT_DOWNLOAD_CONCURRENCY: usize = 4;
+const COPY_INSTALL_REFRESH_CONCURRENCY: usize = 4;
+
+pub mod repository_sync;
+#[allow(deprecated)]
+pub use repository_sync::{
+    apply_central_repository_sync, check_central_repository_sync, CentralRemoteAddedSkill,
+    CentralRemoteMissingSkill, CentralRepositoryAddedSkillSelection,
+    CentralRepositoryAdditionSkipRequest, CentralRepositoryAdditionUnskipRequest,
+    CentralRepositorySyncApplyResult, CentralRepositorySyncDecisions, CentralRepositorySyncFailure,
+    CentralRepositorySyncPreview, CentralRepositorySyncSummary,
+};
+// Phase P2: `skill_update_inventory` 模块复用这些 helper 拼装 inventory。
+// 内部用 pub(crate) 暴露最小接口；旧 command 行为保持不变。
+pub(crate) use repository_sync::{build_remote_missing_skills, collect_remote_added_skills};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,10 +133,10 @@ struct GitHubUpdateSource {
 }
 
 #[derive(Debug, Clone)]
-struct PreparedSkillUpdate {
-    skill: Skill,
+pub(crate) struct PreparedSkillUpdate {
+    pub(crate) skill: Skill,
     source: Option<GitHubUpdateSource>,
-    assignment: SkillRepositoryAssignment,
+    pub(crate) assignment: SkillRepositoryAssignment,
     target_dir: Option<PathBuf>,
     previous_state: Option<SkillUpdateState>,
     reuse_previous_local_hash: bool,
@@ -89,7 +144,7 @@ struct PreparedSkillUpdate {
 }
 
 #[derive(Debug, Clone)]
-struct RemoteSkillContent {
+pub(crate) struct RemoteSkillContent {
     source: GitHubUpdateSource,
     candidate: RemoteSkillCandidate,
     files: Vec<RemoteSkillFile>,
@@ -99,7 +154,7 @@ struct RemoteSkillContent {
 }
 
 #[derive(Debug, Clone, Default)]
-struct UpdateCounters {
+pub(crate) struct UpdateCounters {
     completed: usize,
     succeeded: usize,
     failed: usize,
@@ -107,7 +162,7 @@ struct UpdateCounters {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum RemoteSkillLoadError {
+pub(crate) enum RemoteSkillLoadError {
     RemoteMissing(String),
     Other(String),
 }
@@ -138,6 +193,9 @@ pub async fn get_central_skill_update_states(
 }
 
 #[tauri::command]
+#[deprecated(
+    note = "Use refresh_skill_update_inventory + apply_skill_update_decisions instead. See plans/update-mechanism-overhaul-plan.md."
+)]
 pub async fn check_central_skill_updates(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -172,7 +230,7 @@ pub async fn check_central_skill_updates(
             emit_update_progress(
                 &app,
                 "checking",
-                STATUS_CANCELLED,
+                SkillUpdateStatus::Cancelled.as_str(),
                 total,
                 &counters,
                 None,
@@ -222,6 +280,9 @@ pub async fn check_central_skill_updates(
 }
 
 #[tauri::command]
+#[deprecated(
+    note = "Use apply_skill_update_decisions with `updates` field instead. See plans/update-mechanism-overhaul-plan.md."
+)]
 pub async fn update_central_skills(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -263,7 +324,7 @@ pub async fn update_central_skills(
             emit_update_progress(
                 &app,
                 "updating",
-                STATUS_CANCELLED,
+                SkillUpdateStatus::Cancelled.as_str(),
                 total,
                 &counters,
                 None,
@@ -300,7 +361,7 @@ pub async fn update_central_skills(
                 emit_update_progress(
                     &app,
                     "updating",
-                    STATUS_UP_TO_DATE,
+                    SkillUpdateStatus::UpToDate.as_str(),
                     total,
                     &counters,
                     Some(skill),
@@ -317,7 +378,7 @@ pub async fn update_central_skills(
                     emit_update_progress(
                         &app,
                         "updating",
-                        STATUS_UP_TO_DATE,
+                        SkillUpdateStatus::UpToDate.as_str(),
                         total,
                         &counters,
                         Some(skill),
@@ -338,7 +399,7 @@ pub async fn update_central_skills(
                     emit_update_progress(
                         &app,
                         "updating",
-                        STATUS_ERROR,
+                        SkillUpdateStatus::Error.as_str(),
                         total,
                         &counters,
                         Some(skill),
@@ -363,7 +424,7 @@ pub async fn update_central_skills(
                 emit_update_progress(
                     &app,
                     "updating",
-                    STATUS_UNSUPPORTED,
+                    SkillUpdateStatus::Unsupported.as_str(),
                     total,
                     &counters,
                     Some(skill),
@@ -387,7 +448,7 @@ pub async fn update_central_skills(
                 emit_update_progress(
                     &app,
                     "updating",
-                    STATUS_REMOTE_MISSING,
+                    SkillUpdateStatus::RemoteMissing.as_str(),
                     total,
                     &counters,
                     Some(skill),
@@ -408,7 +469,7 @@ pub async fn update_central_skills(
                 emit_update_progress(
                     &app,
                     "updating",
-                    STATUS_ERROR,
+                    SkillUpdateStatus::Error.as_str(),
                     total,
                     &counters,
                     Some(skill),
@@ -470,7 +531,7 @@ pub async fn keep_remote_missing_central_skills_impl(
                 skill_id
             )
         })?;
-        if update_state.status != STATUS_REMOTE_MISSING {
+        if update_state.status != SkillUpdateStatus::RemoteMissing.as_str() {
             return Err(format!(
                 "Skill '{}' is not marked as removed remotely.",
                 skill_id
@@ -486,6 +547,9 @@ pub async fn keep_remote_missing_central_skills_impl(
 }
 
 #[tauri::command]
+#[deprecated(
+    note = "Use apply_skill_update_decisions with `keep_missing` field instead. See plans/update-mechanism-overhaul-plan.md."
+)]
 pub async fn keep_remote_missing_central_skills(
     state: State<'_, AppState>,
     skill_ids: Vec<String>,
@@ -504,7 +568,7 @@ async fn load_selected_central_skills(
     db::get_central_skills(pool).await
 }
 
-async fn prepare_skill_updates(
+pub(crate) async fn prepare_skill_updates(
     pool: &DbPool,
     fs: &CentralFs,
     skills: Vec<Skill>,
@@ -589,18 +653,33 @@ async fn prepare_snapshots(
     prepared: &[PreparedSkillUpdate],
     cache: &crate::CentralUpdateSnapshotCache,
 ) -> Result<HashMap<String, GitHubRepoSnapshot>, String> {
-    let mut repos = HashMap::<String, GitHubRepoRef>::new();
-    for prepared_skill in prepared {
-        if let Some(source) = &prepared_skill.source {
-            repos
-                .entry(repo_cache_key(&source.repo))
-                .or_insert_with(|| source.repo.clone());
-        }
-    }
+    let repos = prepared
+        .iter()
+        .filter_map(|prepared_skill| {
+            prepared_skill
+                .source
+                .as_ref()
+                .map(|source| source.repo.clone())
+        })
+        .collect::<Vec<_>>();
+    prepare_snapshots_for_repo_refs(client, auth_token, &repos, cache).await
+}
 
+pub(crate) async fn prepare_snapshots_for_repo_refs(
+    client: &reqwest::Client,
+    auth_token: Option<&str>,
+    repos: &[GitHubRepoRef],
+    cache: &crate::CentralUpdateSnapshotCache,
+) -> Result<HashMap<String, GitHubRepoSnapshot>, String> {
+    let mut repos_by_key = HashMap::<String, GitHubRepoRef>::new();
+    for repo in repos {
+        repos_by_key
+            .entry(repo_cache_key(repo))
+            .or_insert_with(|| repo.clone());
+    }
     let mut snapshots = HashMap::new();
     let mut missing = Vec::new();
-    for (key, repo) in repos {
+    for (key, repo) in repos_by_key {
         if let Some(snapshot) = cache.get_fresh(&key, snapshot_cache_ttl()) {
             snapshots.insert(key, snapshot);
         } else {
@@ -634,7 +713,7 @@ async fn prepare_snapshots(
     Ok(snapshots)
 }
 
-fn load_remote_skill_content(
+pub(crate) fn load_remote_skill_content(
     prepared: &PreparedSkillUpdate,
     snapshots: &HashMap<String, GitHubRepoSnapshot>,
 ) -> Result<Option<RemoteSkillContent>, RemoteSkillLoadError> {
@@ -768,20 +847,20 @@ fn repository_url(assignment: &SkillRepositoryAssignment) -> Option<String> {
     })
 }
 
-fn repo_cache_key(repo: &GitHubRepoRef) -> String {
+pub(crate) fn repo_cache_key(repo: &GitHubRepoRef) -> String {
     format!("{}/{}/{}", repo.owner, repo.repo, repo.branch)
 }
 
-fn state_from_remote(
+pub(crate) fn state_from_remote(
     skill: &Skill,
     remote: &RemoteSkillContent,
     updated: bool,
 ) -> SkillUpdateState {
     let now = Utc::now().to_rfc3339();
     let status = if remote.remote_hash == remote.local_hash {
-        STATUS_UP_TO_DATE
+        SkillUpdateStatus::UpToDate
     } else {
-        STATUS_UPDATE_AVAILABLE
+        SkillUpdateStatus::UpdateAvailable
     };
 
     SkillUpdateState {
@@ -799,7 +878,7 @@ fn state_from_remote(
         last_checked_at: Some(now.clone()),
         last_updated_at: if updated { Some(now) } else { None },
         status: if updated {
-            STATUS_UP_TO_DATE.to_string()
+            SkillUpdateStatus::UpToDate.to_string()
         } else {
             status.to_string()
         },
@@ -807,7 +886,7 @@ fn state_from_remote(
     }
 }
 
-fn unsupported_state_from_assignment(
+pub(crate) fn unsupported_state_from_assignment(
     skill: &Skill,
     assignment: &SkillRepositoryAssignment,
     reason: Option<&str>,
@@ -830,13 +909,13 @@ fn unsupported_state_from_assignment(
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: STATUS_UNSUPPORTED.to_string(),
+        status: SkillUpdateStatus::Unsupported.to_string(),
         error: Some(reason),
     }
 }
 
 fn is_fresh_update_available_state(state: &SkillUpdateState) -> bool {
-    if state.status != STATUS_UPDATE_AVAILABLE {
+    if state.status != SkillUpdateStatus::UpdateAvailable.as_str() {
         return false;
     }
     let Some(last_checked_at) = state.last_checked_at.as_deref() else {
@@ -850,7 +929,7 @@ fn is_fresh_update_available_state(state: &SkillUpdateState) -> bool {
             <= snapshot_cache_ttl()
 }
 
-fn remote_missing_state_from_assignment(
+pub(crate) fn remote_missing_state_from_assignment(
     skill: &Skill,
     assignment: &SkillRepositoryAssignment,
     reason: &str,
@@ -866,12 +945,12 @@ fn remote_missing_state_from_assignment(
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: STATUS_REMOTE_MISSING.to_string(),
+        status: SkillUpdateStatus::RemoteMissing.to_string(),
         error: Some(reason.to_string()),
     }
 }
 
-fn error_state_from_assignment(
+pub(crate) fn error_state_from_assignment(
     skill: &Skill,
     assignment: &SkillRepositoryAssignment,
     error: &str,
@@ -887,7 +966,7 @@ fn error_state_from_assignment(
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: STATUS_ERROR.to_string(),
+        status: SkillUpdateStatus::Error.to_string(),
         error: Some(error.to_string()),
     }
 }
@@ -937,6 +1016,8 @@ async fn update_one_skill(
         )),
         content: skill.content.clone(),
         scanned_at: Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
     };
     db::upsert_skill(pool, &updated_skill).await?;
     db::assign_github_repository_to_skill(
@@ -961,12 +1042,25 @@ async fn refresh_copy_installations(
     source_dir: &Path,
 ) -> Result<(), String> {
     let installations = db::get_skill_installations(pool, skill_id).await?;
-    for installation in installations {
-        if installation.link_type != "copy" {
-            continue;
-        }
-        fs.refresh_copy_install(skill_id, source_dir, &installation.installed_path)
-            .await?;
+    let mut seen_targets = HashSet::new();
+    let copy_targets = installations
+        .into_iter()
+        .filter(|installation| installation.link_type == "copy")
+        .filter_map(|installation| {
+            if seen_targets.insert(installation.installed_path.clone()) {
+                Some(installation.installed_path)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let mut results = futures_util::stream::iter(copy_targets)
+        .map(|target| async move { fs.refresh_copy_install(skill_id, source_dir, &target).await })
+        .buffer_unordered(COPY_INSTALL_REFRESH_CONCURRENCY);
+
+    while let Some(result) = futures_util::StreamExt::next(&mut results).await {
+        result?;
     }
     Ok(())
 }
@@ -982,11 +1076,16 @@ fn skill_target_dir(skill: &Skill) -> Result<PathBuf, String> {
 
 fn update_counters_for_state(counters: &mut UpdateCounters, state: &SkillUpdateState) {
     counters.completed += 1;
-    match state.status.as_str() {
-        STATUS_UP_TO_DATE | STATUS_UPDATE_AVAILABLE => counters.succeeded += 1,
-        STATUS_UNSUPPORTED | STATUS_REMOTE_MISSING => counters.skipped += 1,
-        STATUS_ERROR => counters.failed += 1,
-        _ => {}
+    let parsed = state.status.parse::<SkillUpdateStatus>().ok();
+    match parsed {
+        Some(SkillUpdateStatus::UpToDate) | Some(SkillUpdateStatus::UpdateAvailable) => {
+            counters.succeeded += 1;
+        }
+        Some(SkillUpdateStatus::Unsupported) | Some(SkillUpdateStatus::RemoteMissing) => {
+            counters.skipped += 1;
+        }
+        Some(SkillUpdateStatus::Error) => counters.failed += 1,
+        Some(SkillUpdateStatus::Cancelled) | None => {}
     }
 }
 

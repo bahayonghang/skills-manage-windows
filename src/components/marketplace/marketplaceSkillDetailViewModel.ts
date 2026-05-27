@@ -42,69 +42,103 @@ export function useMarketplaceSkillDetailViewModel({
   const [explanation, setExplanation] = useState<string | null>(null);
   const [isExplaining, setIsExplaining] = useState(false);
   const [explanationError, setExplanationError] = useState<string | null>(null);
+  const contentRequestRef = useRef(0);
   const explanationRequestRef = useRef(0);
   const explanationUnlistenRef = useRef<(() => void) | null>(null);
   const browserMode = !isTauriRuntime();
   const isSkillsShDetail = skill?.remoteKind === "skills_sh" && !!skill.source && !!skill.skillId;
+  const detailKey =
+    open && skill
+      ? isSkillsShDetail
+        ? `skills.sh:${skill.source}:${skill.skillId}`
+        : skill.downloadUrl
+      : null;
 
   const cleanupExplanation = useCallback(() => {
     explanationUnlistenRef.current?.();
     explanationUnlistenRef.current = null;
   }, []);
 
-  const fetchContent = useCallback(async (pathOverride?: string | null) => {
-    if (!open || !skill?.downloadUrl) {
-      return;
-    }
-
+  const fetchUrlContent = useCallback(async (url: string) => {
+    const requestId = contentRequestRef.current + 1;
+    contentRequestRef.current = requestId;
     setIsLoadingContent(true);
     setContentError(null);
     try {
-      if (isSkillsShDetail && skill.source && pathOverride) {
-        setContent(await readSkillsShFile(skill.source, pathOverride));
-        setSelectedFilePath(pathOverride);
-        return;
-      }
-
-    const response = await fetch(resolvedDownloadUrl ?? skill.downloadUrl);
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      setContent(await response.text());
+      const nextContent = await response.text();
+      if (requestId === contentRequestRef.current) {
+        setContent(nextContent);
+      }
     } catch {
-      setContent("");
-      setContentError(i18n.t("marketplace.previewLoadSkillError"));
+      if (requestId === contentRequestRef.current) {
+        setContent("");
+        setContentError(i18n.t("marketplace.previewLoadSkillError"));
+      }
     } finally {
-      setIsLoadingContent(false);
+      if (requestId === contentRequestRef.current) {
+        setIsLoadingContent(false);
+      }
+    }
+  }, []);
+
+  const fetchSkillsShFileContent = useCallback(async (path: string) => {
+    if (!open || !isSkillsShDetail || !skill?.source) {
+      return;
+    }
+
+    const requestId = contentRequestRef.current + 1;
+    contentRequestRef.current = requestId;
+    setIsLoadingContent(true);
+    setContentError(null);
+    try {
+      const nextContent = await readSkillsShFile(skill.source, path);
+      if (requestId === contentRequestRef.current) {
+        setContent(nextContent);
+        setSelectedFilePath(path);
+      }
+    } catch {
+      if (requestId === contentRequestRef.current) {
+        setContent("");
+        setContentError(i18n.t("marketplace.previewLoadSkillError"));
+      }
+    } finally {
+      if (requestId === contentRequestRef.current) {
+        setIsLoadingContent(false);
+      }
     }
   }, [
     isSkillsShDetail,
     open,
     readSkillsShFile,
-    resolvedDownloadUrl,
-    skill?.downloadUrl,
     skill?.source,
   ]);
 
   useEffect(() => {
-    if (!open || !skill?.downloadUrl) {
+    if (!detailKey || !skill?.downloadUrl) {
       return;
     }
+    contentRequestRef.current += 1;
     setContent("");
     setContentError(null);
+    setIsLoadingContent(false);
     setExplanation(null);
     setExplanationError(null);
     setFileTree([]);
+    setIsFileTreeLoading(false);
     setSelectedFilePath(null);
     setResolvedDownloadUrl(null);
     setViewMode("markdown");
     if (!isSkillsShDetail) {
-      void fetchContent();
+      void fetchUrlContent(skill.downloadUrl);
     }
-  }, [fetchContent, isSkillsShDetail, open, skill?.downloadUrl]);
+  }, [detailKey, fetchUrlContent, isSkillsShDetail, skill?.downloadUrl]);
 
   useEffect(() => {
-    if (!open || !isSkillsShDetail || !skill?.source || !skill.skillId) {
+    if (!detailKey || !isSkillsShDetail || !skill?.source || !skill.skillId) {
       return;
     }
 
@@ -127,8 +161,7 @@ export function useMarketplaceSkillDetailViewModel({
         setResolvedDownloadUrl(resolvedUrl);
         const skillMd = entries.find((entry) => /(^|\/)SKILL\.md$/i.test(entry.path));
         if (skillMd) {
-          setSelectedFilePath(skillMd.path);
-          void fetchContent(skillMd.path);
+          void fetchSkillsShFileContent(skillMd.path);
         }
       } catch (error) {
         if (!cancelled) {
@@ -144,9 +177,9 @@ export function useMarketplaceSkillDetailViewModel({
     };
   }, [
     browseSkillsShDirectory,
-    fetchContent,
+    detailKey,
+    fetchSkillsShFileContent,
     isSkillsShDetail,
-    open,
     resolveSkillsShUrl,
     skill?.skillId,
     skill?.source,
@@ -252,10 +285,18 @@ export function useMarketplaceSkillDetailViewModel({
           return findNode(node.children);
         });
       if (findNode(fileTree)) {
-        void fetchContent(path);
+        void fetchSkillsShFileContent(path);
       }
     },
-    retryContent: () => fetchContent(selectedFilePath),
+    retryContent: () => {
+      if (isSkillsShDetail && selectedFilePath) {
+        return fetchSkillsShFileContent(selectedFilePath);
+      }
+      if (skill?.downloadUrl) {
+        return fetchUrlContent(skill.downloadUrl);
+      }
+      return undefined;
+    },
     resolvedDownloadUrl,
     selectedFilePath,
     setViewMode,

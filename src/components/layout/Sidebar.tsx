@@ -7,9 +7,11 @@ import {
   LayoutDashboard,
   Layers,
   ScrollText,
+  Settings,
   Store,
   ChevronLeft,
   ChevronRight,
+  BarChart3,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
@@ -54,9 +56,10 @@ function NavItem({
         title={label}
         aria-label={label}
         className={cn(
-          "flex items-center w-full rounded-md transition-colors cursor-pointer",
+          "flex items-center w-full rounded-md transition-colors active:scale-[0.98] cursor-pointer",
           !isActive && "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-          isActive && "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm",
+          isActive &&
+            "bg-sidebar-primary text-sidebar-primary-foreground shadow-[inset_0_1px_0_color-mix(in_oklch,white_22%,transparent),0_10px_28px_color-mix(in_oklch,var(--sidebar-primary)_22%,transparent)] bg-[linear-gradient(145deg,color-mix(in_oklch,var(--sidebar-primary)_94%,white_12%),color-mix(in_oklch,var(--sidebar-primary)_82%,black_14%))]",
           expanded ? "gap-2.5 px-2.5 py-1.5 text-sm" : "justify-center py-2 px-1.5"
         )}
       >
@@ -130,6 +133,7 @@ export function Sidebar() {
   const isDashboardActive = pathname === "/dashboard" || pathname === "/";
   const isCollectionActive = pathname === "/collections";
   const isLogsActive = pathname === "/logs";
+  const isSettingsActive = pathname.startsWith("/settings");
 
   function platformRoute(agent: (typeof platformAgents)[number]) {
     return `/platform/${agent.id}`;
@@ -259,6 +263,15 @@ export function Sidebar() {
           expanded={expanded}
         />
 
+        {/* Skill Usage — skilled-style aggregated call stats across AI tools */}
+        <NavItem
+          label={t("sidebar.skillUsage")}
+          isActive={pathname === "/usage"}
+          onClick={() => navigate("/usage")}
+          icon={<BarChart3 className="size-4" />}
+          expanded={expanded}
+        />
+
         {/* Divider */}
         <div className="border-t border-sidebar-border/70 my-2" />
 
@@ -340,6 +353,16 @@ export function Sidebar() {
             {expanded && <span>{t("sidebar.scanning")}</span>}
           </div>
         )}
+      </div>
+
+      <div className="border-t border-sidebar-border/70 px-1.5 py-2">
+        <NavItem
+          label={t("sidebar.settings")}
+          isActive={isSettingsActive}
+          onClick={() => navigate("/settings")}
+          icon={<Settings className="size-4" />}
+          expanded={expanded}
+        />
       </div>
 
       {expanded && (

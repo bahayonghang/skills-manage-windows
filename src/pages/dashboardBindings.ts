@@ -71,6 +71,7 @@ export function useDashboardBindings() {
     (async (_query: DashboardLogQuery) => undefined);
 
   const activeTarget = useTargetStore((state) => state.activeTarget);
+  const targets = useTargetStore((state) => state.targets) ?? [];
 
   return {
     platformAgents,
@@ -105,6 +106,7 @@ export function useDashboardBindings() {
     logsError,
     loadLogs,
     activeTarget,
+    targets,
   };
 }
 

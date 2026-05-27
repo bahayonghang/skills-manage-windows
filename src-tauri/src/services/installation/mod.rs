@@ -21,7 +21,7 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
-pub use batch::batch_install_central_skills_impl;
+pub use batch::{batch_install_central_skills_impl, batch_uninstall_skills_from_agent_impl};
 pub(crate) use batch::{batch_operation_status, dedupe_ordered};
 pub use fs_util::{copy_dir_all, create_symlink, make_relative_path, symlink_target_path};
 pub(crate) use fs_util::{copy_dir_all_blocking, run_blocking_fs};
@@ -31,11 +31,16 @@ pub use native::{
     install_skill_to_agent_impl, uninstall_skill_from_agent_impl,
     uninstall_skill_from_agent_with_row_impl,
 };
+pub(crate) use project::install_central_skill_to_remote_project_outcome_impl;
 pub(crate) use remote::install_skill_to_agent_ssh_with_connection;
-pub use remote::{install_skill_to_agent_ssh_impl, uninstall_skill_from_agent_ssh_impl};
+pub use remote::{
+    install_skill_to_agent_remote_impl, install_skill_to_agent_ssh_impl,
+    uninstall_skill_from_agent_remote_impl, uninstall_skill_from_agent_ssh_impl,
+};
 pub(crate) use types::InstallOutcome;
 pub use types::{
-    BatchInstallResult, CentralBatchInstallFailure, CentralBatchInstallResult,
-    CentralBatchInstallSkipped, CentralBatchInstallSuccess, FailedInstall, InstallResult,
-    SkippedInstall,
+    BatchInstallResult, BatchUninstallSkillFailure, BatchUninstallSkillRequest,
+    BatchUninstallSkillResult, BatchUninstallSkillSuccess, CentralBatchInstallFailure,
+    CentralBatchInstallResult, CentralBatchInstallSkipped, CentralBatchInstallSuccess,
+    FailedInstall, InstallResult, SkippedInstall,
 };

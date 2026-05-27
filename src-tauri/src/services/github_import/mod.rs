@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{self, DbPool, Skill},
-    targets::{connect_ssh_target, remote_join, ActiveTarget, RemoteTargetConfig},
+    targets::{connect_remote_target, remote_join, ActiveTarget, ConnectedRemoteTarget},
     AppState,
 };
 
@@ -50,27 +50,28 @@ pub(crate) use archive::download_repo_snapshot;
 #[cfg(test)]
 pub(crate) use import::import_github_repo_skills_impl;
 pub(crate) use import::{
-    central_skills_root, import_github_repo_skills_from_snapshot_partially,
+    build_preview_skills, central_skills_root, import_github_repo_skills_from_snapshot_partially,
     import_github_repo_skills_partially_with_auth, import_github_repo_skills_with_auth,
 };
 pub(crate) use pat::{
     clear_github_pat_impl, get_github_pat_state_impl, github_client,
-    github_direct_auth_from_secret_store, migrate_github_pat_on_startup, set_github_pat_impl,
-    test_github_pat_impl,
+    github_direct_auth_from_secret_store, migrate_github_pat_on_startup, reveal_github_pat_impl,
+    set_github_pat_impl, test_github_pat_impl,
 };
 #[cfg(test)]
 use pat::{GITHUB_PAT_MIGRATION_SETTING_KEY, LEGACY_GITHUB_PAT_SETTING_KEY};
 pub(crate) use preview::{
-    preview_github_repo_import_ssh_with_auth, preview_github_repo_import_with_auth,
+    preview_github_repo_import_remote_with_auth, preview_github_repo_import_with_auth,
 };
 pub(crate) use raw_http::fetch_raw_text;
-pub(crate) use remote::import_github_repo_skills_ssh_with_auth;
+pub(crate) use remote::import_github_repo_skills_remote_with_auth;
 pub(crate) use remote::{
     discard_preview_workspace_for_active_target, fetch_github_skill_markdown_from_remote_workspace,
 };
 pub(crate) use source::{
     build_repo_skill_candidates_from_snapshot_at_path, fetch_repo_skill_candidates_from_source,
-    inspect_github_repo_skills_with_auth, resolve_repo_source,
+    inspect_github_repo_skills_with_auth, inspect_repo_skill_candidates_from_snapshot_at_path,
+    resolve_repo_source,
 };
 pub use types::{
     DuplicateResolution, GitHubImportProgressPayload, GitHubImportProgressPhase, GitHubPatState,
@@ -79,7 +80,8 @@ pub use types::{
     ImportedGitHubSkillSummary,
 };
 pub(crate) use types::{
-    GitHubRepoSnapshot, InspectedGitHubRepoSkills, RemoteSkillCandidate, ResolvedGitHubRepoSource,
+    GitHubRepoSnapshot, InspectedGitHubRepoSkills, InvalidRemoteSkillCandidate,
+    RemoteSkillCandidate, ResolvedGitHubRepoSource,
 };
 
 pub(crate) type Duration = ChronoDuration;

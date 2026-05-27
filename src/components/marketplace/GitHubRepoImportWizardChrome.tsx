@@ -30,6 +30,7 @@ import {
   normalizeMessage,
   type WizardStep,
 } from "@/components/marketplace/githubImportWizardUtils";
+import { isRemoteLikeTarget, isSshTarget } from "@/lib/targetKind";
 
 interface GitHubRepoImportWizardHeaderProps {
   launcherLabel: string;
@@ -306,7 +307,7 @@ function GitHubRepoImportPreviewToolbar({
               {preview.repo.normalizedUrl}
             </span>
           </div>
-          {activeTarget.kind === "ssh" && preview.previewWorkspaceId ? (
+          {isRemoteLikeTarget(activeTarget) && preview.previewWorkspaceId ? (
             <div
               className="text-[11px] text-primary"
               data-testid="github-import-remote-workspace-hint"
@@ -581,7 +582,7 @@ function GitHubRepoImportSshPasswordRepairPanel({
   onSaveSshPasswordForImport,
 }: GitHubRepoImportSshPasswordRepairPanelProps) {
   const { t } = useTranslation();
-  if (!showSshPasswordRepair || activeTarget.kind !== "ssh") return null;
+  if (!showSshPasswordRepair || !isSshTarget(activeTarget)) return null;
 
   return (
     <div

@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
+import { CompactCardMoreMenu } from "@/components/skill/CompactCardMoreMenu";
 import type { AgentWithStatus, CentralSkillUpdateState, ClaudeSourceKind } from "@/types";
 import { cn } from "@/lib/utils";
 import {
@@ -27,6 +28,10 @@ import {
   getPlatformTargetMemberNames,
   isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
+import {
+  selectSkillInventoryFlagsFromInventory,
+  useUpdateCenterStore,
+} from "@/stores/updateCenterStore";
 
 // ─── Platform Toggle Icon (internal) ──────────────────────────────────────────
 
@@ -87,7 +92,15 @@ export interface UnifiedSkillCardProps {
   /** Core data — always required. */
   name: string;
   description?: string;
+  aiSummary?: string | null;
+  summaryLabel?: string;
   className?: string;
+
+  /**
+   * 当前 skill 在中央库中的 id。设置后会从 `useUpdateCenterStore` 查询 inventory
+   * 派生 badge（platform duplicate / orphan）。central / project 卡片应传入。
+   */
+  skillId?: string;
 
   /** Click the card itself (platform variant navigates to detail). */
   onClick?: () => void;
@@ -118,6 +131,13 @@ export interface UnifiedSkillCardProps {
   isInstalled?: boolean;
   tags?: { key: string; label: string }[];
   publisher?: string;
+  installLabel?: string;
+
+  /**
+   * 「近 30 天调用 N 次」徽章 —— 由 useSkillCallCounts 注入。
+   * 仅当数值 > 0 时渲染；undefined 或 0 完全不出现，避免误导。
+   */
+  usageBadge?: number;
 
   // ── actions (pass only the ones relevant to the context) ──
   onDetail?: MouseEventHandler<HTMLButtonElement>;
@@ -133,6 +153,13 @@ export interface UnifiedSkillCardProps {
   onRemove?: () => void;
   isLoading?: boolean;
   detailButtonRef?: Ref<HTMLButtonElement>;
+  /**
+   * 视觉密度。
+   * - `default`：所有元素始终可见（platform / project / marketplace / collection 默认值）。
+   * - `compact`：central 变体优化。idle 时一级动作隐藏、平台图标条收成「已链接 N」徽章；
+   *   hover/focus-within 时露出完整图标条 + 动作；删除从一级图标行收进 `⋯` popover。
+   */
+  density?: "default" | "compact";
 }
 
 // ─── UnifiedSkillCard ─────────────────────────────────────────────────────────
@@ -142,7 +169,10 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   const {
     name,
     description,
+    aiSummary,
+    summaryLabel,
     className,
+    skillId,
     onClick,
     checkbox,
     isCentral,
@@ -156,6 +186,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     isInstalled,
     tags,
     publisher,
+    installLabel,
+    usageBadge,
     onDetail,
     onInstallTo,
     onUpdateCentral,
@@ -169,7 +201,22 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     onRemove,
     isLoading,
     detailButtonRef,
+    density = "default",
   } = props;
+
+  // 优先用显式传入的 skillId，没传时回退到 platformIcons.skillId（central 卡片）。
+  const inventorySkillId = skillId ?? platformIcons?.skillId ?? null;
+  const updateCenterInventory = useUpdateCenterStore((state) => state.inventory);
+  const inventoryFlags = useMemo(
+    () =>
+      inventorySkillId
+        ? selectSkillInventoryFlagsFromInventory(
+            updateCenterInventory,
+            inventorySkillId,
+          )
+        : null,
+    [inventorySkillId, updateCenterInventory],
+  );
 
   // Determine variant features
   const hasCheckbox = !!checkbox;
@@ -185,6 +232,11 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     onInstall ||
     onRemove
   );
+  const trimmedAiSummary = aiSummary?.trim() ?? "";
+  const hasAiSummary = trimmedAiSummary.length > 0;
+  const summaryText = hasAiSummary ? trimmedAiSummary : description;
+  const resolvedSummaryLabel = summaryLabel ?? t("common.aiSummaryLabel");
+  const canUpdateCentral = updateStatus?.status === "update_available";
 
   const targetAgents = useMemo(
     () => platformIcons?.agents.filter((a) => a.id !== "central") ?? [],
@@ -198,6 +250,17 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     () => new Set(platformIcons?.lockedAgentIds ?? []),
     [platformIcons?.lockedAgentIds]
   );
+
+  const isCompact = density === "compact";
+  const linkedTargetCount = useMemo(
+    () =>
+      targetAgents.filter((agent) =>
+        getPlatformTargetMemberIds(agent).some((agentId) => linkedAgentSet.has(agentId))
+      ).length,
+    [targetAgents, linkedAgentSet]
+  );
+  // compact 模式：删除从一级图标行收进 ⋯ popover。其他卡片动作（onRemove / onUninstall）保持现状。
+  const compactMoreMenuItems = isCompact && onDeleteFromCentral ? { onDeleteFromCentral } : null;
 
   // ── Platform variant: clickable card style ──
   if (onClick && !hasActions && !hasCheckbox && !hasPlatformIcons) {
@@ -215,8 +278,11 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
           <div className="flex flex-1 items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="font-medium text-sm text-foreground truncate">{name}</div>
-              {description && (
-                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{description}</p>
+              {summaryText && (
+                <SkillCardSummary
+                  text={summaryText}
+                  label={hasAiSummary ? resolvedSummaryLabel : undefined}
+                />
               )}
               {sourceType && <SourceIndicator sourceType={sourceType} />}
             </div>
@@ -231,13 +297,14 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   return (
     <div
       className={cn(
-        "rounded-xl bg-card ring-1 ring-border shadow-sm p-3 flex flex-col transition-colors",
+        "rounded-xl bg-card ring-1 ring-border shadow-sm flex flex-col transition-colors",
+        isCompact ? "group/skill-card p-4" : "p-3",
         checkbox?.checked && "ring-primary/40 bg-primary/5",
         isLoading && "opacity-50",
         className
       )}
     >
-      <div className="flex items-start gap-2.5">
+      <div className={cn("flex items-start", isCompact ? "gap-2" : "gap-2.5")}>
         {/* Optional checkbox (discover) */}
         {hasCheckbox && (
           <div className="pt-0.5">
@@ -250,7 +317,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
         )}
 
         {/* Main content */}
-        <div className="flex-1 min-w-0 space-y-1.5">
+        <div className={cn("flex-1 min-w-0", isCompact ? "space-y-2" : "space-y-1.5")}>
           {/* Row 1: Name + icon actions */}
           <div className="flex items-center justify-between gap-2">
             {/* Skill name — clickable if onDetail provided */}
@@ -269,7 +336,13 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
 
             {/* Icon action buttons */}
             {hasActions && (
-              <div className="flex items-center gap-0.5 shrink-0">
+              <div
+                className={cn(
+                  "flex items-center gap-0.5 shrink-0",
+                  isCompact &&
+                    "opacity-0 transition-opacity duration-150 group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100"
+                )}
+              >
                 {/* Install To... (central / platform / collection / marketplace) */}
                 {onInstallTo && (
                   <button
@@ -286,9 +359,13 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                 {onUpdateCentral && (
                   <button
                     onClick={onUpdateCentral}
-                    disabled={isLoading || updateStatus?.status !== "update_available" || updateStatus?.isUpdating}
+                    disabled={
+                      isLoading ||
+                      updateStatus?.isUpdating ||
+                      !canUpdateCentral
+                    }
                     title={
-                      updateStatus?.status === "update_available"
+                      canUpdateCentral
                         ? t("central.updateSkill")
                         : updateStatus?.error ?? t("central.checkUpdatesFirst")
                     }
@@ -299,7 +376,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   </button>
                 )}
 
-                {onDeleteFromCentral && (
+                {/* Delete — compact 模式收进下面的 ⋯ popover，default 保持一级图标。 */}
+                {onDeleteFromCentral && !isCompact && (
                   <button
                     onClick={onDeleteFromCentral}
                     disabled={isLoading}
@@ -353,8 +431,16 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   <button
                     onClick={isInstalled ? undefined : onInstall}
                     disabled={isInstalled || isLoading}
-                    title={isInstalled ? t("marketplace.installed") : t("marketplace.install")}
-                    aria-label={isInstalled ? t("marketplace.installed") : t("marketplace.install")}
+                    title={
+                      isInstalled
+                        ? t("marketplace.installed")
+                        : installLabel ?? t("marketplace.install")
+                    }
+                    aria-label={
+                      isInstalled
+                        ? t("marketplace.installed")
+                        : installLabel ?? t("marketplace.install")
+                    }
                     className={cn(
                       "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
                       isInstalled
@@ -383,13 +469,25 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                     icon={<X className="size-4" />}
                   />
                 )}
+
+                {/* compact 模式 ⋯ popover：承载 destructive 删除 */}
+                {compactMoreMenuItems && (
+                  <CompactCardMoreMenu
+                    skillName={name}
+                    isLoading={Boolean(isLoading)}
+                    onDeleteFromCentral={compactMoreMenuItems.onDeleteFromCentral}
+                  />
+                )}
               </div>
             )}
           </div>
 
           {/* Row 2: Description — full width, not compressed by actions */}
-          {description && (
-            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{description}</p>
+          {summaryText && (
+            <SkillCardSummary
+              text={summaryText}
+              label={hasAiSummary ? resolvedSummaryLabel : undefined}
+            />
           )}
 
           {/* Row 3: Info badges */}
@@ -401,6 +499,22 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             {sourceType && <SourceIndicator sourceType={sourceType} />}
 
             {originBadge && <ProjectSourceBadge originBadge={originBadge} />}
+
+            {/* Skill Usage 30d call count — emitted by useSkillCallCounts hook */}
+            {typeof usageBadge === "number" && usageBadge > 0 && (
+              <span
+                data-testid="usage-badge"
+                title={t("skillUsage.badge.tooltip", {
+                  count: usageBadge,
+                  days: 30,
+                  defaultValue: `${usageBadge} calls in last 30 days`,
+                })}
+                className="inline-flex items-center gap-1 text-xs text-primary bg-primary/12 px-1.5 py-0.5 rounded"
+              >
+                <span className="tabular-nums">{usageBadge}×</span>
+                <span className="text-[10px] uppercase tracking-wide opacity-80">30d</span>
+              </span>
+            )}
 
             {/* "Already in Central" badge */}
             {isCentral && (
@@ -426,7 +540,6 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
               </span>
             )}
 
-            {/* Publisher (marketplace recommended) */}
             {publisher && (
               <span className="text-[10px] text-muted-foreground truncate">{publisher}</span>
             )}
@@ -448,8 +561,32 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                 {t(`central.updateStatus.${updateStatus.status}`)}
               </span>
             )}
+            {/* Inventory 分类徽章：update / missing 由 updateStatus chip 覆盖。 */}
+            {inventoryFlags?.hasDuplicate && (
+              <span
+                data-testid={
+                  inventorySkillId
+                    ? `skill-card-duplicate-badge-${inventorySkillId}`
+                    : undefined
+                }
+                className="inline-flex items-center rounded-full bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 ring-1 ring-orange-500/30 dark:text-orange-300"
+              >
+                {t("central.updateCenter.badges.duplicate")}
+              </span>
+            )}
+            {inventoryFlags?.isOrphan && (
+              <span
+                data-testid={
+                  inventorySkillId
+                    ? `skill-card-orphan-badge-${inventorySkillId}`
+                    : undefined
+                }
+                className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border"
+              >
+                {t("central.updateCenter.badges.orphan")}
+              </span>
+            )}
 
-            {/* Tags (marketplace recommended) */}
             {tags && tags.length > 0 && (
               <div className="flex items-center gap-1">
                 {tags.slice(0, 2).map((tag) => (
@@ -463,11 +600,33 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
 
           {/* Row 3: Platform toggle icons (central) */}
           {hasPlatformIcons && targetAgents.length > 0 && (
-            <div className="space-y-1 mt-auto pt-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-14 shrink-0">
-                  {t("central.platformTargetsLabel")}
+            <div className={cn("mt-auto", isCompact ? "pt-2" : "space-y-1 pt-1")}>
+              {isCompact && (
+                <span
+                  data-testid={`skill-card-linked-summary-${platformIcons.skillId}`}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground",
+                    "group-hover/skill-card:hidden group-focus-within/skill-card:hidden"
+                  )}
+                >
+                  <Link2 className="size-3" aria-hidden />
+                  {linkedTargetCount > 0
+                    ? t("common.skillCardLinkedSummary", { count: linkedTargetCount })
+                    : t("common.skillCardLinkedSummaryNone")}
                 </span>
+              )}
+              <div
+                className={cn(
+                  "flex items-center gap-1.5",
+                  isCompact &&
+                    "hidden group-hover/skill-card:flex group-focus-within/skill-card:flex"
+                )}
+              >
+                {!isCompact && (
+                  <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-14 shrink-0">
+                    {t("central.platformTargetsLabel")}
+                  </span>
+                )}
                 <div className="flex items-center gap-0.5 flex-wrap">
                   {targetAgents.map((agent) => (
                     <PlatformToggleIcon
@@ -497,6 +656,25 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
 
 export const UnifiedSkillCard = memo(UnifiedSkillCardComponent);
 UnifiedSkillCard.displayName = "UnifiedSkillCard";
+
+function SkillCardSummary({
+  text,
+  label,
+}: {
+  text: string;
+  label?: string;
+}) {
+  return (
+    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+      {label && (
+        <span className="mr-1 inline-flex align-baseline rounded-sm bg-primary/10 px-1 py-0.5 text-[9px] font-medium leading-none text-primary ring-1 ring-primary/15">
+          {label}
+        </span>
+      )}
+      {text}
+    </p>
+  );
+}
 
 // ─── Source Indicator (internal) ──────────────────────────────────────────────
 

@@ -21,6 +21,7 @@ import hermesIcon from "@/assets/hermes.png";
 import ClaudeCodeIcon from "@lobehub/icons/es/ClaudeCode/components/Mono";
 import GithubCopilotIcon from "@lobehub/icons/es/GithubCopilot/components/Mono";
 import GeminiCliIcon from "@lobehub/icons/es/GeminiCLI/components/Mono";
+import AntigravityIcon from "@lobehub/icons/es/Antigravity/components/Mono";
 import JunieIcon from "@lobehub/icons/es/Junie/components/Mono";
 import QwenIcon from "@lobehub/icons/es/Qwen/components/Mono";
 import OpenCodeIcon from "@lobehub/icons/es/OpenCode/components/Mono";
@@ -56,6 +57,8 @@ type LobeIconProps = React.SVGProps<SVGSVGElement> & {
 
 const LOBEHUB_ICONS: Record<string, React.ComponentType<LobeIconProps>> = {
   "claude-code": ClaudeCodeIcon,
+  "antigravity": AntigravityIcon,
+  "antigravity-cli": AntigravityIcon,
   "copilot": GithubCopilotIcon,
   "gemini-cli": GeminiCliIcon,
   "junie": JunieIcon,
@@ -131,6 +134,15 @@ function PlatformIconComponent({ agentId, className, size = 16 }: PlatformIconPr
           <rect x="2" y="2.5" width="12" height="11" rx="1.5" fill="currentColor" opacity="0.15" />
           <path d="M2 2.5h12a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H2a1.5 1.5 0 0 1-1.5-1.5V4A1.5 1.5 0 0 1 2 2.5zm1 2v7h10v-7H3zm1 1.5L6 7.5 4 9V7.5z" fillRule="evenodd" />
           <rect x="7" y="8" width="3.5" height="1" rx="0.3" opacity="0.5" />
+        </svg>
+      );
+
+    case "zed":
+      // Zed — stylized Z mark, kept local to avoid adding another icon asset.
+      return (
+        <svg {...svgProps}>
+          <path d="M3 2.5h10v2H6.8l6.2 7V13.5H3v-2h6.2L3 4.5z" />
+          <path d="M5.8 6.1h4.4L8 8.6z" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
 

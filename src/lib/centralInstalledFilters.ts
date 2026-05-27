@@ -16,8 +16,21 @@ export function getInstalledFilterPlatformId(
   return value.startsWith("platform:") ? value.slice("platform:".length) : null;
 }
 
-function getSkillInstalledAgentIds(skill: SkillWithLinks): Set<string> {
+export function getSkillInstalledAgentIds(skill: SkillWithLinks): Set<string> {
   return new Set([...(skill.linked_agents ?? []), ...(skill.shared_root_agents ?? [])]);
+}
+
+export function getSkillInstalledPlatformCount(skill: SkillWithLinks): number {
+  return getSkillInstalledAgentIds(skill).size;
+}
+
+export function selectMostUniversalSkills(skills: readonly SkillWithLinks[]): SkillWithLinks[] {
+  const maxCount = skills.reduce(
+    (max, skill) => Math.max(max, getSkillInstalledPlatformCount(skill)),
+    0
+  );
+  if (maxCount <= 0) return [];
+  return skills.filter((skill) => getSkillInstalledPlatformCount(skill) === maxCount);
 }
 
 export function matchesInstalledSkillsFilter(

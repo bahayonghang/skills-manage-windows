@@ -1,6 +1,7 @@
 //! skills.sh Marketplace integration: search, GitHub-backed preview,
 //! remote file browsing, and full-directory installation.
 
+use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Component, Path};
@@ -31,6 +32,7 @@ pub struct SkillsShFileEntry {
 const SKILLS_SH_SEARCH_URL: &str = "https://skills.sh/api/search";
 const SKILLS_SH_DEFAULT_LIMIT: u32 = 20;
 const SKILLS_SH_MAX_LIMIT: u32 = 50;
+const SKILLS_SH_STARS_CONCURRENCY: usize = 4;
 
 #[derive(Debug, Deserialize)]
 struct SkillsShSearchResponse {
@@ -128,12 +130,15 @@ async fn enrich_skills_sh_stars(
         return;
     }
 
-    let mut star_map = HashMap::new();
-    for source in sources {
-        if let Some(stars) = fetch_github_star_count(client, &source, auth).await {
-            star_map.insert(source, stars);
-        }
-    }
+    let star_map = stream::iter(sources)
+        .map(|source| async move {
+            let stars = fetch_github_star_count(client, &source, auth).await?;
+            Some((source, stars))
+        })
+        .buffer_unordered(SKILLS_SH_STARS_CONCURRENCY)
+        .filter_map(|entry| async move { entry })
+        .collect::<HashMap<_, _>>()
+        .await;
 
     for skill in skills {
         skill.stars = star_map.get(&skill.source).copied();
@@ -232,7 +237,7 @@ pub async fn install_from_skills_sh_impl(
         renamed_skill_id: None,
     };
 
-    match active_target {
+    match &active_target {
         ActiveTarget::Local => {
             let inspected = github_import::InspectedGitHubRepoSkills {
                 repo: resolved.repo.clone(),
@@ -258,11 +263,11 @@ pub async fn install_from_skills_sh_impl(
                 .ok_or_else(|| format!("Skill '{}' was not imported.", skill_id))?;
             Ok(imported.imported_skill_id.clone())
         }
-        ActiveTarget::Ssh(target) => {
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let repo_url = source_to_github_url(&source)?;
-            let result = github_import::import_github_repo_skills_ssh_with_auth(
+            let result = github_import::import_github_repo_skills_remote_with_auth(
                 pool,
-                &target,
+                &active_target,
                 &repo_url,
                 vec![selection],
                 None,

@@ -8,6 +8,8 @@
 
 use tauri::{AppHandle, State};
 
+use std::collections::HashMap;
+
 use crate::services::ai_provider;
 use crate::services::marketplace;
 use crate::AppState;
@@ -186,6 +188,15 @@ pub async fn get_skill_explanation(
     lang: String,
 ) -> Result<Option<String>, String> {
     ai_provider::get_skill_explanation_impl(&state.db, skill_id, lang).await
+}
+
+#[tauri::command]
+pub async fn get_skill_explanation_summaries(
+    state: State<'_, AppState>,
+    skill_ids: Vec<String>,
+    lang: String,
+) -> Result<HashMap<String, String>, String> {
+    ai_provider::get_skill_explanation_summaries_impl(&state.db, skill_ids, lang).await
 }
 
 #[tauri::command]

@@ -45,6 +45,7 @@ export interface AiSettingsSliceActions {
   loadAiSettings: () => Promise<void>;
   updateAiSettings: (patch: Partial<AiSettings>) => void;
   switchAiProvider: (providerId: string) => Promise<void>;
+  revealAiApiKey: (providerId: string) => Promise<string | null>;
   clearAiApiKey: () => Promise<void>;
   flushAiSettings: () => Promise<void>;
   testAiConnection: () => Promise<AiConnectionTestResult>;
@@ -95,6 +96,7 @@ const AI_SAVE_DEBOUNCE_MS = 800;
 const BROWSER_FIXTURE_AI_API_KEY_STATE: AiApiKeyState = {
   configured: false,
   storageState: "missing",
+  fingerprint: null,
   error: null,
 };
 
@@ -136,6 +138,14 @@ function scopedValue(
   return values[providerScopedSettingKey(name, providerId)] ?? values[name];
 }
 
+function normalizeProviderApiUrl(providerId: string, value: string): string {
+  const normalized = value.trim().replace(/\/+$/, "");
+  if (providerId === "openrouter" && normalized === "https://openrouter.ai/api/v1/messages") {
+    return "https://openrouter.ai/api/v1/chat/completions";
+  }
+  return value;
+}
+
 function normalizeAiSettings(values: Record<string, string | null | undefined>): AiSettings {
   const provider = values.ai_provider || DEFAULT_AI_SETTINGS.provider;
   const providerMeta = AI_PROVIDERS.find((item) => item.id === provider);
@@ -144,7 +154,9 @@ function normalizeAiSettings(values: Record<string, string | null | undefined>):
     scopedValue(values, provider, "ai_custom_base_url") ??
     scopedValue(values, provider, "ai_api_url") ??
     DEFAULT_AI_SETTINGS.customUrl;
-  const protocol = normalizeApiProtocol(scopedValue(values, provider, "ai_protocol"));
+  const protocol =
+    providerMeta?.defaultProtocol ??
+    normalizeApiProtocol(scopedValue(values, provider, "ai_protocol"));
 
   return {
     provider,
@@ -154,8 +166,8 @@ function normalizeAiSettings(values: Record<string, string | null | undefined>):
       scopedValue(values, provider, "ai_model") ??
       providerMeta?.defaultModel ??
       DEFAULT_AI_SETTINGS.model,
-    customUrl,
-    protocol,
+    customUrl: normalizeProviderApiUrl(provider, customUrl),
+    protocol: protocol || DEFAULT_AI_SETTINGS.protocol,
     tagConcurrency: values.ai_tag_concurrency ?? DEFAULT_AI_SETTINGS.tagConcurrency,
     tagIntervalMs: values.ai_tag_interval_ms ?? DEFAULT_AI_SETTINGS.tagIntervalMs,
     tagStopOnRateLimit:
@@ -206,6 +218,7 @@ export function createAiSettingsInitialState(): AiSettingsSliceState {
     aiApiKeyState: {
       configured: false,
       storageState: "missing",
+      fingerprint: null,
       error: null,
     },
     aiSettingsLoaded: false,
@@ -343,6 +356,13 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
       }
     },
 
+    revealAiApiKey: async (providerId) => {
+      if (!isTauriRuntime()) {
+        return null;
+      }
+      return invoke<string | null>("reveal_ai_api_key", { provider: providerId });
+    },
+
     clearAiApiKey: async () => {
       set({ aiSaveStatus: "saving", aiSaveError: null } as Partial<TState>);
       if (!isTauriRuntime()) {
@@ -399,7 +419,7 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
               ...serializeAiSettings(settings),
             },
             aiApiKeyState: settings.apiKey.trim()
-              ? { configured: true, storageState: "session", error: null }
+              ? { configured: true, storageState: "session", fingerprint: null, error: null }
               : get().aiApiKeyState,
             aiSaveStatus: "saved",
             aiSaveError: null,

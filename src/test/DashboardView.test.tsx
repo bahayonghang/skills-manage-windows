@@ -98,6 +98,7 @@ const repositories: SkillRepositoryWithStats[] = [
     source_type: "github",
     owner: "openai",
     repo: "skills",
+    pinned: false,
     is_unknown: false,
     created_at: "2026-04-10T00:00:00Z",
     updated_at: "2026-04-10T00:00:00Z",
@@ -108,6 +109,7 @@ const repositories: SkillRepositoryWithStats[] = [
     id: "local-unknown",
     name: "Local / Unknown",
     source_type: "local",
+    pinned: false,
     is_unknown: true,
     created_at: "2026-04-10T00:00:00Z",
     updated_at: "2026-04-10T00:00:00Z",
@@ -230,6 +232,15 @@ const localTarget: TargetSummary = {
   isActive: true,
 };
 
+const wslTarget: TargetSummary = {
+  id: "wsl-demo",
+  kind: "wsl",
+  label: "Ubuntu",
+  distribution: "Ubuntu-24.04",
+  remoteHome: "/home/alice",
+  isActive: false,
+};
+
 let centralState: Record<string, unknown>;
 let collectionState: Record<string, unknown>;
 let marketplaceState: Record<string, unknown>;
@@ -239,7 +250,12 @@ let targetState: Record<string, unknown>;
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location">{location.pathname}</div>;
+  return (
+    <div data-testid="location">
+      {location.pathname}
+      {location.search}
+    </div>
+  );
 }
 
 function renderDashboard() {
@@ -373,6 +389,13 @@ describe("DashboardView", () => {
         aiReviewCount: 1,
         uncategorizedCount: 2,
         unassignedSourceCount: 1,
+        readiness: {
+          score: 65,
+          categorizedRatio: 0.34,
+          describedRatio: 0.82,
+          sourcedRatio: 0.67,
+          installHealthRatio: 0.5,
+        },
         sourceRepositories: repositories,
       },
       categoryVisibility: {
@@ -386,6 +409,7 @@ describe("DashboardView", () => {
     };
     targetState = {
       activeTarget: localTarget,
+      targets: [localTarget, wslTarget],
     };
     installStoreMocks();
   });
@@ -393,7 +417,7 @@ describe("DashboardView", () => {
   it("renders dashboard summaries from existing stores", () => {
     renderDashboard();
 
-    expect(screen.getByRole("heading", { name: /Dashboard/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-metric-central")).toHaveTextContent("3");
     expect(screen.getByTestId("dashboard-metric-collections")).toHaveTextContent("1");
     expect(screen.getByTestId("dashboard-metric-updates")).toHaveTextContent("1");
@@ -401,6 +425,13 @@ describe("DashboardView", () => {
     expect(screen.getByTestId("dashboard-metric-uncategorized")).toHaveTextContent("2");
     expect(screen.getByTestId("dashboard-metric-unassigned")).toHaveTextContent("1");
     expect(screen.getByTestId("dashboard-metric-targets")).toHaveTextContent("2");
+    expect(screen.getByTestId("dashboard-scroll-region")).toHaveClass(
+      "overflow-y-auto",
+      "scrollbar-subtle"
+    );
+    expect(screen.getByLabelText(/Readiness factors|就绪度组成项/)).toBeInTheDocument();
+    expect(screen.getByText(/Review gate|复核关口/)).toBeInTheDocument();
+    expect(screen.getByText(/Categorized|分类完成/)).toBeInTheDocument();
     expect(screen.getByText(/Enabled platforms|启用平台/)).toBeInTheDocument();
     expect(screen.getByText("Scanned 3 skills")).toBeInTheDocument();
   });
@@ -437,6 +468,24 @@ describe("DashboardView", () => {
     fireEvent.click(screen.getByTestId("dashboard-action-marketplace"));
 
     expect(screen.getByTestId("location")).toHaveTextContent("/marketplace");
+    expect(mockSyncRegistry).not.toHaveBeenCalled();
+  });
+
+  it("navigates to the quick migrate settings action without syncing", () => {
+    renderDashboard();
+
+    const quickMigrate = screen.getByTestId("dashboard-action-quick-migrate");
+    expect(quickMigrate).toHaveTextContent(/Quick migrate|快速迁移/);
+    expect(quickMigrate).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Open remote sync for Ubuntu\.|打开 Ubuntu 的远程同步。/)
+    );
+
+    fireEvent.click(quickMigrate);
+
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/settings/connections?action=local-remote-sync&section=remote-targets"
+    );
     expect(mockSyncRegistry).not.toHaveBeenCalled();
   });
 

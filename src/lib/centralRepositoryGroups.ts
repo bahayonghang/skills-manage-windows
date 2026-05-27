@@ -121,5 +121,8 @@ export function groupRepositoriesForSidebar(
 }
 
 function sortByRepoName(a: SkillRepositoryWithStats, b: SkillRepositoryWithStats): number {
+  if (a.pinned !== b.pinned) {
+    return a.pinned ? -1 : 1;
+  }
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }

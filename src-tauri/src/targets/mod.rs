@@ -17,8 +17,10 @@ mod cred;
 mod exec;
 mod model;
 mod registry;
+mod remote;
 #[cfg(test)]
 mod tests;
+mod wsl_discovery;
 
 #[cfg(test)]
 use askpass::*;
@@ -26,9 +28,13 @@ use commands::*;
 use cred::*;
 use exec::*;
 use model::*;
+#[cfg(test)]
+use wsl_discovery::*;
 
 pub use askpass::{connect_ssh_target, ConnectedSshTarget};
 pub use commands::*;
 pub use exec::*;
 pub use model::*;
 pub use registry::TargetRegistry;
+pub use remote::*;
+pub use wsl_discovery::list_wsl_distributions_impl;

@@ -1,14 +1,9 @@
-import { Search } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronRight, Eye, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
 import { Switch } from "@/components/ui/switch";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import {
@@ -52,16 +47,12 @@ export function PlatformVisibilitySettingsSection({
   const { t } = useTranslation();
 
   return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>{t("settings.platformVisibility")}</CardTitle>
-          <CardDescription className="mt-1">
-            {t("settings.platformVisibilityDesc")}
-          </CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <SettingsCollapsibleCard
+      sectionId="platform-visibility"
+      title={t("settings.platformVisibility")}
+      description={t("settings.platformVisibilityDesc")}
+      icon={<Eye className="size-5 shrink-0 text-muted-foreground" />}
+    >
         <div className="space-y-4">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -86,6 +77,7 @@ export function PlatformVisibilitySettingsSection({
             groups.map((group) => (
               <PlatformVisibilityGroup
                 key={group.category}
+                category={group.category}
                 title={group.title}
                 description={group.description}
                 agents={group.agents}
@@ -102,8 +94,7 @@ export function PlatformVisibilitySettingsSection({
             ))
           )}
         </div>
-      </CardContent>
-    </Card>
+    </SettingsCollapsibleCard>
   );
 }
 
@@ -202,6 +193,7 @@ function PlatformVisibilityUniversalRow({
 
 interface PlatformVisibilityGroupProps {
   agents: PlatformTarget[];
+  category: PlatformCategoryKey;
   description: string;
   enabledCount: number;
   groupVisible: boolean;
@@ -215,6 +207,7 @@ interface PlatformVisibilityGroupProps {
 
 function PlatformVisibilityGroup({
   agents,
+  category,
   description,
   enabledCount,
   groupVisible,
@@ -226,23 +219,57 @@ function PlatformVisibilityGroup({
   onToggleGroup,
 }: PlatformVisibilityGroupProps) {
   const { t } = useTranslation();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const detailsCollapsed = isCollapsed && !isSearchActive;
+  const detailsId = `platform-visibility-${category}-details`;
+  const ToggleIcon = detailsCollapsed ? ChevronRight : ChevronDown;
 
   return (
     <div className="rounded-lg border border-border/70">
       <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-medium">{title}</h3>
-            <span className="text-xs text-muted-foreground">
-              {t("settings.platformEnabledSummary", {
-                enabled: enabledCount,
-                total: totalCount,
-              })}
-            </span>
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          <button
+            type="button"
+            className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            aria-controls={detailsId}
+            aria-expanded={!detailsCollapsed}
+            aria-label={t(
+              detailsCollapsed
+                ? "settings.expandPlatformGroupDetailsLabel"
+                : "settings.collapsePlatformGroupDetailsLabel",
+              { name: title }
+            )}
+            onClick={() => setIsCollapsed((value) => !value)}
+          >
+            <ToggleIcon className="size-4" />
+          </button>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-medium">{title}</h3>
+              <span className="text-xs text-muted-foreground">
+                {t("settings.platformEnabledSummary", {
+                  enabled: enabledCount,
+                  total: totalCount,
+                })}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            aria-controls={detailsId}
+            aria-expanded={!detailsCollapsed}
+            onClick={() => setIsCollapsed((value) => !value)}
+          >
+            {t(
+              detailsCollapsed
+                ? "settings.platformGroupExpandDetails"
+                : "settings.platformGroupCollapseDetails"
+            )}
+          </button>
           <span className="text-xs text-muted-foreground">
             {t("settings.platformGroupVisible")}
           </span>
@@ -255,18 +282,30 @@ function PlatformVisibilityGroup({
       </div>
 
       {!groupVisible && !isSearchActive ? (
-        <div className="px-4 py-3 text-xs text-muted-foreground">
+        <div id={detailsId} className="px-4 py-3 text-xs text-muted-foreground">
           {t("settings.platformGroupHiddenSummary", {
             enabled: enabledCount,
             total: totalCount,
           })}
         </div>
+      ) : detailsCollapsed ? (
+        <div id={detailsId} className="px-4 py-3 text-xs text-muted-foreground">
+          {t("settings.platformGroupCollapsedSummary", {
+            enabled: enabledCount,
+            total: totalCount,
+            visibility: t(
+              groupVisible
+                ? "settings.platformGroupVisibilityOn"
+                : "settings.platformGroupVisibilityOff"
+            ),
+          })}
+        </div>
       ) : agents.length === 0 ? (
-        <div className="px-4 py-3 text-xs text-muted-foreground">
+        <div id={detailsId} className="px-4 py-3 text-xs text-muted-foreground">
           {t("settings.noPlatformItems")}
         </div>
       ) : (
-        <div className="space-y-2 p-3">
+        <div id={detailsId} className="space-y-2 p-3">
           {agents.map((agent) =>
             isUniversalPlatformTarget(agent) ? (
               <PlatformVisibilityUniversalRow

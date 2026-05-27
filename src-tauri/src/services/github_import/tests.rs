@@ -420,6 +420,8 @@ metadata:
                 source: Some("local".to_string()),
                 content: None,
                 scanned_at: Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
             },
         )
         .await
@@ -482,6 +484,8 @@ metadata:
                 source: Some("copy".to_string()),
                 content: None,
                 scanned_at: Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
             },
         )
         .await
@@ -552,6 +556,8 @@ metadata:
                 source: Some("local".to_string()),
                 content: None,
                 scanned_at: Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
             },
         )
         .await
@@ -568,6 +574,8 @@ metadata:
                 source: Some("local".to_string()),
                 content: None,
                 scanned_at: Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
             },
         )
         .await
@@ -584,6 +592,8 @@ metadata:
                 source: Some("local".to_string()),
                 content: None,
                 scanned_at: Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
             },
         )
         .await
@@ -1307,6 +1317,62 @@ metadata:
                 .expect("legacy token retained"),
             Some(" legacy-token ".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn reveal_github_pat_returns_stored_secret() {
+        let pool = setup_test_db().await;
+        let secrets = MockSecretStore::with_value(GITHUB_PAT_SECRET_KEY, " github_pat_saved ");
+
+        let revealed = reveal_github_pat_impl(&pool, &secrets)
+            .await
+            .expect("reveal token");
+
+        assert_eq!(revealed.as_deref(), Some("github_pat_saved"));
+    }
+
+    #[tokio::test]
+    async fn reveal_github_pat_returns_session_secret() {
+        let pool = setup_test_db().await;
+        let secrets = MockSecretStore::default();
+        secrets.set_next_state(SecretStorageState::Session);
+        secrets
+            .set(GITHUB_PAT_SECRET_KEY, "github_pat_session")
+            .expect("session secret");
+
+        let revealed = reveal_github_pat_impl(&pool, &secrets)
+            .await
+            .expect("reveal token");
+
+        assert_eq!(revealed.as_deref(), Some("github_pat_session"));
+    }
+
+    #[tokio::test]
+    async fn reveal_github_pat_uses_legacy_fallback_when_migration_fails() {
+        let pool = setup_test_db().await;
+        let secrets = MockSecretStore::default();
+        secrets.set_set_error(SecretError::Other("vault unavailable".to_string()));
+        db::set_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY, " legacy-token ")
+            .await
+            .expect("set legacy token");
+
+        let revealed = reveal_github_pat_impl(&pool, &secrets)
+            .await
+            .expect("legacy fallback");
+
+        assert_eq!(revealed.as_deref(), Some("legacy-token"));
+    }
+
+    #[tokio::test]
+    async fn reveal_github_pat_returns_none_when_missing() {
+        let pool = setup_test_db().await;
+        let secrets = MockSecretStore::default();
+
+        let revealed = reveal_github_pat_impl(&pool, &secrets)
+            .await
+            .expect("reveal missing");
+
+        assert_eq!(revealed, None);
     }
 
     #[tokio::test]

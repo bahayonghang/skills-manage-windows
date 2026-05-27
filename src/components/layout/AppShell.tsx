@@ -5,12 +5,13 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { GlobalSearchDialog } from "./GlobalSearchDialog";
+import { UpdateCenterDialog } from "@/components/central/UpdateCenterDialog";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
-import { isTauriRuntime, listen } from "@/lib/tauri";
+import { isTauriRuntime, listen, showMainWindowWhenReady } from "@/lib/tauri";
 
 type MigrationProgressPayload =
   | { phase: "started" }
@@ -47,6 +48,10 @@ export function AppShell() {
   const [hasLoadedTargets, setHasLoadedTargets] = useState(false);
   const lastTargetIdRef = useRef<string | null>(null);
   const isInitialTargetLoadRef = useRef(true);
+
+  useEffect(() => {
+    void showMainWindowWhenReady().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,6 +171,7 @@ export function AppShell() {
         onOpenChange={setIsSearchOpen}
         onAction={handleAction}
       />
+      <UpdateCenterDialog />
     </div>
   );
 }

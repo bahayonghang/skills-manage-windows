@@ -50,7 +50,7 @@ describe("CentralSkillsView GitHub import preview", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /从 GitHub 导入/i }));
+    fireEvent.click(screen.getByTestId("central-github-import-open"));
     fireEvent.click(await screen.findByRole("button", { name: /检查导入内容/i }));
 
     expect(await screen.findByTestId("github-import-confirm-summary")).toBeInTheDocument();

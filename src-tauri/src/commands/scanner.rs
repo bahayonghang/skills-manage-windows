@@ -14,7 +14,7 @@ use crate::db;
 use crate::operation_log::{
     record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
 };
-use crate::services::scanner::{scan_all_skills_impl, scan_ssh_skills_impl};
+use crate::services::scanner::{scan_all_skills_impl, scan_remote_skills_impl};
 use crate::targets::ActiveTarget;
 use crate::AppState;
 
@@ -26,14 +26,14 @@ pub use crate::services::scanner::{
     ScannedSkill, SkillInfo,
 };
 
-async fn run_ssh_scan_with_timeout<F>(future: F, timeout: Duration) -> Result<ScanResult, String>
+async fn run_remote_scan_with_timeout<F>(future: F, timeout: Duration) -> Result<ScanResult, String>
 where
     F: Future<Output = Result<ScanResult, String>>,
 {
     match tokio::time::timeout(timeout, future).await {
         Ok(result) => result,
         Err(_) => Err(format!(
-            "SSH skill scan timed out after {}s.",
+            "Remote skill scan timed out after {}s.",
             timeout.as_secs()
         )),
     }
@@ -51,9 +51,9 @@ pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, S
 
     let scan_result = match active_target {
         ActiveTarget::Local => scan_all_skills_impl(&pool).await,
-        ActiveTarget::Ssh(target) => {
-            run_ssh_scan_with_timeout(
-                scan_ssh_skills_impl(&pool, &target),
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            run_remote_scan_with_timeout(
+                scan_remote_skills_impl(&pool, &active_target),
                 Duration::from_secs(90),
             )
             .await
@@ -112,8 +112,8 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn ssh_scan_timeout_returns_timeout_error() {
-        let result = run_ssh_scan_with_timeout(
+    async fn remote_scan_timeout_returns_timeout_error() {
+        let result = run_remote_scan_with_timeout(
             async {
                 tokio::time::sleep(Duration::from_millis(50)).await;
                 Ok(ScanResult {

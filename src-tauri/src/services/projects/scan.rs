@@ -48,7 +48,7 @@ fn select_universal_representative(agents: &[db::Agent]) -> Option<db::Agent> {
 
     agents
         .iter()
-        .find(|agent| db::is_universal_agent(&agent.id))
+        .find(|agent| db::is_universal_project_agent(&agent.id))
         .cloned()
 }
 
@@ -62,7 +62,7 @@ fn build_project_scan_targets(enabled_agents: &[db::Agent]) -> Vec<ProjectScanTa
             continue;
         }
 
-        if db::is_universal_agent(&agent.id) {
+        if db::is_universal_project_agent(&agent.id) {
             continue;
         }
 
@@ -203,41 +203,65 @@ pub async fn rescan_project(pool: &DbPool, project_id: &str) -> Result<usize, St
     .await
     .map_err(|e| format!("Failed to join project scan task: {}", e))?;
 
-    // 先全量 upsert，再 reconcile 掉本项目下消失的 psi。
-    for scanned in &found {
-        let mut psi = scanned.clone();
-        if has_central_match(pool, &psi).await? {
-            psi.source_origin = "central".to_string();
-        }
-        db::upsert_project_skill_installation(pool, &psi).await?;
-    }
-
-    let kept_pairs: Vec<(String, String)> = found
+    let central_skills = central_skill_map_for_project_scan(pool, &found).await?;
+    let rows = found
         .iter()
-        .map(|p| (p.skill_id.clone(), p.agent_id.clone()))
-        .collect();
-    db::delete_stale_project_skill_installations(pool, project_id, &kept_pairs).await?;
+        .cloned()
+        .map(|mut psi| {
+            if has_central_match(&central_skills, &psi) {
+                psi.source_origin = "central".to_string();
+            }
+            psi
+        })
+        .collect::<Vec<_>>();
 
-    db::update_project_last_scanned(pool, project_id, &now).await?;
+    db::persist_project_skill_scan(pool, project_id, &rows, &now).await?;
 
     Ok(found.len())
 }
 
-async fn has_central_match(pool: &DbPool, psi: &ProjectSkillInstallation) -> Result<bool, String> {
+async fn central_skill_map_for_project_scan(
+    pool: &DbPool,
+    rows: &[ProjectSkillInstallation],
+) -> Result<HashMap<String, db::Skill>, String> {
+    let skill_ids = rows
+        .iter()
+        .filter(|psi| psi.link_type == "symlink")
+        .filter_map(|psi| {
+            psi.symlink_target
+                .as_deref()
+                .filter(|target| !target.trim().is_empty())
+                .map(|_| psi.skill_id.clone())
+        })
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    Ok(db::get_skills_by_ids(pool, &skill_ids)
+        .await?
+        .into_iter()
+        .filter(|(_, skill)| skill.is_central)
+        .collect())
+}
+
+fn has_central_match(
+    central_skills: &HashMap<String, db::Skill>,
+    psi: &ProjectSkillInstallation,
+) -> bool {
     if psi.link_type != "symlink" {
-        return Ok(false);
+        return false;
     }
 
     let target = match psi.symlink_target.as_deref() {
         Some(target) if !target.trim().is_empty() => target,
-        _ => return Ok(false),
+        _ => return false,
     };
-    let central_skill = match db::get_skill_by_id(pool, &psi.skill_id).await? {
-        Some(skill) if skill.is_central => skill,
-        _ => return Ok(false),
+    let central_skill = match central_skills.get(&psi.skill_id) {
+        Some(skill) => skill,
+        None => return false,
     };
-    let Some(canonical_path) = central_skill.canonical_path else {
-        return Ok(false);
+    let Some(canonical_path) = central_skill.canonical_path.as_deref() else {
+        return false;
     };
 
     let installed_parent = Path::new(&psi.installed_path)
@@ -251,8 +275,5 @@ async fn has_central_match(pool: &DbPool, psi: &ProjectSkillInstallation) -> Res
         installed_parent.join(target_path)
     };
 
-    Ok(crate::paths::paths_equivalent(
-        &target_path,
-        Path::new(&canonical_path),
-    ))
+    crate::paths::paths_equivalent(&target_path, Path::new(&canonical_path))
 }

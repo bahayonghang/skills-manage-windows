@@ -3,7 +3,6 @@ import { vi } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { CentralSkillsView as CentralSkillsViewComponent } from "../pages/CentralSkillsView";
-import { setFeatureFlag } from "../lib/featureFlags";
 import type {
   AgentWithStatus,
   SkillDetail,
@@ -266,6 +265,7 @@ export const mockSkills: SkillWithLinks[] = [
       repo: "skills",
       branch: "main",
       url: "https://github.com/openai/skills",
+      pinned: false,
       is_unknown: false,
       created_at: "2026-04-10T00:00:00Z",
       updated_at: "2026-04-10T00:00:00Z",
@@ -298,6 +298,7 @@ export const mockSkills: SkillWithLinks[] = [
       id: "local-unknown",
       name: "本地 / 未知来源",
       source_type: "local",
+      pinned: false,
       is_unknown: true,
       created_at: "2026-04-10T00:00:00Z",
       updated_at: "2026-04-10T00:00:00Z",
@@ -312,6 +313,7 @@ export const mockRepositories: SkillRepositoryWithStats[] = [
     id: "local-unknown",
     name: "本地 / 未知来源",
     source_type: "local",
+    pinned: false,
     is_unknown: true,
     created_at: "2026-04-10T00:00:00Z",
     updated_at: "2026-04-10T00:00:00Z",
@@ -326,6 +328,7 @@ export const mockRepositories: SkillRepositoryWithStats[] = [
     repo: "skills",
     branch: "main",
     url: "https://github.com/openai/skills",
+    pinned: false,
     is_unknown: false,
     created_at: "2026-04-10T00:00:00Z",
     updated_at: "2026-04-10T00:00:00Z",
@@ -402,8 +405,12 @@ export const mockCreateTag = vi.fn();
 export const mockAssignSkillTags = vi.fn();
 export const mockBulkSuggestSkillTags = vi.fn();
 export const mockCheckSkillUpdates = vi.fn();
+export const mockCheckRepositorySync = vi.fn();
+export const mockApplyRepositorySync = vi.fn();
 export const mockUpdateSkills = vi.fn();
 export const mockKeepRemoteMissingSkills = vi.fn();
+export const mockPreviewCentralStoreLocationChange = vi.fn();
+export const mockApplyCentralStoreLocationChange = vi.fn();
 export const mockCancelAiTagJob = vi.fn();
 export const mockAcceptAiTagReview = vi.fn();
 export const mockSkipAiTagReview = vi.fn();
@@ -484,8 +491,12 @@ export function buildCentralStoreState(overrides = {}) {
     assignSkillTags: mockAssignSkillTags,
     bulkSuggestSkillTags: mockBulkSuggestSkillTags,
     checkSkillUpdates: mockCheckSkillUpdates,
+    checkRepositorySync: mockCheckRepositorySync,
+    applyRepositorySync: mockApplyRepositorySync,
     updateSkills: mockUpdateSkills,
     keepRemoteMissingSkills: mockKeepRemoteMissingSkills,
+    previewCentralStoreLocationChange: mockPreviewCentralStoreLocationChange,
+    applyCentralStoreLocationChange: mockApplyCentralStoreLocationChange,
     cancelAiTagJob: mockCancelAiTagJob,
     acceptAiTagReview: mockAcceptAiTagReview,
     skipAiTagReview: mockSkipAiTagReview,
@@ -611,16 +622,52 @@ export const tauriBridge = tauriBridgeModule;
 
 export function resetCentralSkillsViewTestState() {
   vi.clearAllMocks();
-  // M6: V2 现在默认 ON，但这些测试是 V1 UI 的回归测试。
-  // 显式关闭以保留 V1 行为；要测 V2 的用例自行 setFeatureFlag(..., true)。
-  setFeatureFlag("central.newLayout", false);
+  // 重置 jsdom URL：CentralSkillsView 用 useCentralViewStateUrl 把 viewState（搜索/筛选/排序）写到 location.search，
+  // 测试间共享 jsdom 的 window.location 会导致前一个 case 的搜索文本污染下一个 case 的初始 state。
+  if (typeof window !== "undefined" && window.history && typeof window.history.replaceState === "function") {
+    window.history.replaceState({}, "", "/");
+  }
   useTargetStore.setState({
     targets: [localTarget],
     activeTarget: localTarget,
   });
   mockCheckSkillUpdates.mockResolvedValue([]);
+  mockCheckRepositorySync.mockResolvedValue({
+    states: [],
+    remoteAdded: [],
+    skippedRemoteAdded: [],
+    remoteMissing: [],
+    repositories: [],
+    failedRepositories: [],
+  });
+  mockApplyRepositorySync.mockResolvedValue({
+    keptSkillIds: [],
+    deleteResult: { succeeded: [], failed: [] },
+    importResults: [],
+    skippedAdditions: [],
+    unskippedAdditions: [],
+    failedRepositories: [],
+    states: [],
+  });
   mockUpdateSkills.mockResolvedValue({ succeeded: [], failed: [], skipped: [], states: [] });
   mockKeepRemoteMissingSkills.mockResolvedValue([]);
+  mockPreviewCentralStoreLocationChange.mockResolvedValue({
+    sourcePath: "/Users/test/.skillsmanage/skills",
+    targetPath: "/Users/test/SkillPort/skills",
+    skillsToCopy: 1,
+    skillsToOverwrite: 1,
+    targetOnlySkills: 1,
+  });
+  mockApplyCentralStoreLocationChange.mockResolvedValue({
+    sourcePath: "/Users/test/.skillsmanage/skills",
+    targetPath: "/Users/test/SkillPort/skills",
+    copied: 1,
+    overwritten: 1,
+    targetOnlyImported: 1,
+    symlinkRebuildFailed: 0,
+    symlinkFailures: [],
+    completedAt: "2026-05-24T00:00:00Z",
+  });
   mockExportSkillportState.mockResolvedValue(
     JSON.stringify({
       kind: "skillport/state-export",

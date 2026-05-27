@@ -25,6 +25,7 @@ export function useSettingsViewBindings() {
   const isSavingGitHubPat = useSettingsStore((state) => state.isSavingGitHubPat);
   const isTestingGitHubPat = useSettingsStore((state) => state.isTestingGitHubPat);
   const loadGitHubPat = useSettingsStore((state) => state.loadGitHubPat);
+  const revealGitHubPat = useSettingsStore((state) => state.revealGitHubPat);
   const saveGitHubPat = useSettingsStore((state) => state.saveGitHubPat);
   const clearGitHubPat = useSettingsStore((state) => state.clearGitHubPat);
   const testGitHubPat = useSettingsStore((state) => state.testGitHubPat);
@@ -39,6 +40,7 @@ export function useSettingsViewBindings() {
   const loadAiSettings = useSettingsStore((state) => state.loadAiSettings);
   const updateAiSettings = useSettingsStore((state) => state.updateAiSettings);
   const switchAiProvider = useSettingsStore((state) => state.switchAiProvider);
+  const revealAiApiKey = useSettingsStore((state) => state.revealAiApiKey);
   const clearAiApiKey = useSettingsStore((state) => state.clearAiApiKey);
   const testAiConnection = useSettingsStore((state) => state.testAiConnection);
 
@@ -62,7 +64,11 @@ export function useSettingsViewBindings() {
 
   const targets = useTargetStore((state) => state.targets);
   const activeTarget = useTargetStore((state) => state.activeTarget);
+  const wslDistributions = useTargetStore((state) => state.wslDistributions);
   const isLoadingTargets = useTargetStore((state) => state.isLoading);
+  const isLoadingWslDistributions = useTargetStore(
+    (state) => state.isLoadingWslDistributions
+  );
   const isCreatingTarget = useTargetStore((state) => state.isCreating);
   const updatingTargetId = useTargetStore((state) => state.updatingTargetId);
   const testingTargetId = useTargetStore((state) => state.testingTargetId);
@@ -71,10 +77,19 @@ export function useSettingsViewBindings() {
   );
   const switchingTargetId = useTargetStore((state) => state.switchingTargetId);
   const deletingTargetId = useTargetStore((state) => state.deletingTargetId);
+  const wslDistributionError = useTargetStore(
+    (state) => state.wslDistributionError
+  );
   const loadTargets = useTargetStore((state) => state.loadTargets);
+  const loadWslDistributions = useTargetStore(
+    (state) => state.loadWslDistributions
+  );
   const createSshTarget = useTargetStore((state) => state.createSshTarget);
   const updateSshTarget = useTargetStore((state) => state.updateSshTarget);
   const testSshTarget = useTargetStore((state) => state.testSshTarget);
+  const createWslTarget = useTargetStore((state) => state.createWslTarget);
+  const updateWslTarget = useTargetStore((state) => state.updateWslTarget);
+  const testWslTarget = useTargetStore((state) => state.testWslTarget);
   const updateSshTargetPassword = useTargetStore(
     (state) => state.updateSshTargetPassword
   );
@@ -101,6 +116,7 @@ export function useSettingsViewBindings() {
     isSavingGitHubPat,
     isTestingGitHubPat,
     loadGitHubPat,
+    revealGitHubPat,
     saveGitHubPat,
     clearGitHubPat,
     testGitHubPat,
@@ -115,6 +131,7 @@ export function useSettingsViewBindings() {
     loadAiSettings,
     updateAiSettings,
     switchAiProvider,
+    revealAiApiKey,
     clearAiApiKey,
     testAiConnection,
     agents,
@@ -129,17 +146,24 @@ export function useSettingsViewBindings() {
     loadMarketplaceSkills,
     targets,
     activeTarget,
+    wslDistributions,
     isLoadingTargets,
+    isLoadingWslDistributions,
     isCreatingTarget,
     updatingTargetId,
     testingTargetId,
     updatingPasswordTargetId,
     switchingTargetId,
     deletingTargetId,
+    wslDistributionError,
     loadTargets,
+    loadWslDistributions,
     createSshTarget,
     updateSshTarget,
     testSshTarget,
+    createWslTarget,
+    updateWslTarget,
+    testWslTarget,
     updateSshTargetPassword,
     deleteTarget,
     switchTarget,

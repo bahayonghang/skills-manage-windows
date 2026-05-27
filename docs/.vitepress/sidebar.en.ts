@@ -14,6 +14,7 @@ export const sidebarEn: DefaultTheme.SidebarMulti = {
       text: 'Core Workflows',
       items: [
         { text: 'Central Skills', link: '/guide/central-skills' },
+        { text: 'Update Center', link: '/guide/update-center' },
         { text: 'Platforms', link: '/guide/platforms' },
         { text: 'Collections', link: '/guide/collections' },
         { text: 'Projects', link: '/guide/projects' },

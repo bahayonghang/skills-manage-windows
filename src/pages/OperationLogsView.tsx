@@ -270,6 +270,7 @@ export function OperationLogsView() {
             <option value="">{t("logs.filters.allTargets")}</option>
             <option value="local">{t("logs.targets.local")}</option>
             <option value="ssh">{t("logs.targets.ssh")}</option>
+            <option value="wsl">{t("logs.targets.wsl")}</option>
           </select>
           <select
             value={filter.level ?? ""}

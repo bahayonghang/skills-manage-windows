@@ -155,12 +155,19 @@ describe("platformVisibility helpers", () => {
     ).toEqual(["claude-code"]);
   });
 
-  it("sorts enabled tools first and keeps the five defaults at the top", () => {
+  it("sorts enabled tools first and keeps default platforms at the top", () => {
     const agents: AgentWithStatus[] = [
       {
         ...baseAgent,
         id: "cursor",
         display_name: "Cursor",
+        category: "coding",
+        is_enabled: true,
+      },
+      {
+        ...baseAgent,
+        id: "antigravity-cli",
+        display_name: "Antigravity CLI",
         category: "coding",
         is_enabled: true,
       },
@@ -196,6 +203,7 @@ describe("platformVisibility helpers", () => {
 
     expect(sortPlatformVisibilityAgents(agents).map((agent) => agent.id)).toEqual([
       "codex",
+      "antigravity-cli",
       "opencode",
       "cursor",
       "kiro",

@@ -1,0 +1,198 @@
+import type { BatchDeleteCentralSkillRequest } from "@/types";
+import type {
+  CentralRepositoryAdditionSkipRequest,
+  CentralRepositoryAddedSkillSelection,
+} from "@/types/centralRepositorySync";
+import type { UpdateCenterTab } from "@/stores/updateCenterStore";
+import type {
+  PlatformDuplicateRemoval,
+  SkillUpdateDecisions,
+  SkillUpdateInventory,
+} from "@/types/skillUpdateInventory";
+
+import type { PlatformDuplicateRowState } from "@/components/central/updateCenter/PlatformDuplicatesTabPanel";
+import type { RemoteAddedRowState } from "@/components/central/updateCenter/RemoteAddedTabPanel";
+import type { RemoteMissingRowState } from "@/components/central/updateCenter/RemoteMissingTabPanel";
+import type { UpdatableRowState } from "@/components/central/updateCenter/UpdatableTabPanel";
+import {
+  duplicateGroupKey,
+  remoteAddedKey,
+} from "@/components/central/updateCenter/keys";
+
+export interface DecisionState {
+  updatable: Record<string, UpdatableRowState>;
+  added: Record<string, RemoteAddedRowState>;
+  missing: Record<string, RemoteMissingRowState>;
+  duplicates: Record<string, PlatformDuplicateRowState>;
+}
+
+export function emptyDecisionState(): DecisionState {
+  return { updatable: {}, added: {}, missing: {}, duplicates: {} };
+}
+
+export function buildInitialState(
+  inventory: SkillUpdateInventory | null,
+): DecisionState {
+  if (!inventory) return emptyDecisionState();
+  const updatable: Record<string, UpdatableRowState> = {};
+  for (const item of inventory.updatable) {
+    updatable[item.state.skill_id] = { selected: true };
+  }
+  const added: Record<string, RemoteAddedRowState> = {};
+  for (const item of inventory.remoteAdded) {
+    const key = remoteAddedKey(item.repositoryId, item.sourcePath);
+    const hasConflict = Boolean(item.conflictExistingSkillId);
+    added[key] = {
+      selected: true,
+      resolution: hasConflict ? "skip" : "overwrite",
+      renamedSkillId: item.skillId,
+    };
+  }
+  const missing: Record<string, RemoteMissingRowState> = {};
+  for (const item of inventory.remoteMissing) {
+    missing[item.state.skill_id] = { decision: "keep", removeAgentIds: [] };
+  }
+  const duplicates: Record<string, PlatformDuplicateRowState> = {};
+  for (const group of inventory.platformDuplicates) {
+    duplicates[duplicateGroupKey(group)] = {
+      selectedPaths: [...group.writablePaths],
+    };
+  }
+  return { updatable, added, missing, duplicates };
+}
+
+export function countsFromInventory(
+  inventory: SkillUpdateInventory | null,
+): Record<UpdateCenterTab, number> {
+  if (!inventory) {
+    return { updatable: 0, added: 0, missing: 0, duplicates: 0, orphans: 0 };
+  }
+  return {
+    updatable: inventory.updatable.length,
+    added: inventory.remoteAdded.length,
+    missing: inventory.remoteMissing.length,
+    duplicates: inventory.platformDuplicates.length,
+    orphans: inventory.orphans.length,
+  };
+}
+
+export function countDecisionSelections(
+  decisions: DecisionState,
+  inventory: SkillUpdateInventory | null,
+): number {
+  if (!inventory) return 0;
+  let count = 0;
+  for (const item of inventory.updatable) {
+    if (decisions.updatable[item.state.skill_id]?.selected) count += 1;
+  }
+  for (const item of inventory.remoteAdded) {
+    const key = remoteAddedKey(item.repositoryId, item.sourcePath);
+    if (decisions.added[key]?.selected) count += 1;
+  }
+  for (const item of inventory.remoteMissing) {
+    const decision = decisions.missing[item.state.skill_id]?.decision;
+    if (decision === "keep" || decision === "delete") count += 1;
+  }
+  for (const group of inventory.platformDuplicates) {
+    const paths = decisions.duplicates[duplicateGroupKey(group)]?.selectedPaths ?? [];
+    if (paths.length > 0) count += 1;
+  }
+  return count;
+}
+
+export function buildDecisions(
+  decisions: DecisionState,
+  inventory: SkillUpdateInventory,
+): SkillUpdateDecisions {
+  const updates: string[] = [];
+  for (const item of inventory.updatable) {
+    if (decisions.updatable[item.state.skill_id]?.selected) {
+      updates.push(item.state.skill_id);
+    }
+  }
+
+  const keepMissing: string[] = [];
+  const deleteMissing: BatchDeleteCentralSkillRequest[] = [];
+  for (const item of inventory.remoteMissing) {
+    const state = decisions.missing[item.state.skill_id];
+    if (state?.decision === "keep") {
+      keepMissing.push(item.state.skill_id);
+      continue;
+    }
+    if (state?.decision === "delete") {
+      deleteMissing.push({
+        skill_id: item.state.skill_id,
+        remove_agent_ids: state.removeAgentIds,
+      });
+    }
+  }
+
+  const additionsByRepo = new Map<string, CentralRepositoryAddedSkillSelection>();
+  const skipAdditions: CentralRepositoryAdditionSkipRequest[] = [];
+  for (const item of inventory.remoteAdded) {
+    const key = remoteAddedKey(item.repositoryId, item.sourcePath);
+    const decision = decisions.added[key];
+    if (!decision?.selected) continue;
+    if (decision.resolution === "skip") {
+      skipAdditions.push({
+        repositoryId: item.repositoryId,
+        sourcePath: item.sourcePath,
+        skillId: item.skillId,
+        skillName: item.skillName,
+      });
+      continue;
+    }
+    const entry = additionsByRepo.get(item.repositoryId) ?? {
+      repositoryId: item.repositoryId,
+      previewWorkspaceId: null,
+      selections: [],
+    };
+    entry.selections.push({
+      sourcePath: item.sourcePath,
+      resolution: decision.resolution,
+      renamedSkillId:
+        decision.resolution === "rename"
+          ? decision.renamedSkillId.trim() || item.skillId
+          : null,
+    });
+    additionsByRepo.set(item.repositoryId, entry);
+  }
+
+  const removePlatformDuplicates: PlatformDuplicateRemoval[] = [];
+  for (const group of inventory.platformDuplicates) {
+    const paths = decisions.duplicates[duplicateGroupKey(group)]?.selectedPaths ?? [];
+    if (paths.length === 0) continue;
+    removePlatformDuplicates.push({
+      agentId: group.agentId,
+      skillId: group.skillId,
+      paths,
+    });
+  }
+
+  return {
+    updates,
+    keepMissing,
+    deleteMissing,
+    importAdditions: Array.from(additionsByRepo.values()),
+    skipAdditions,
+    unskipAdditions: [],
+    removePlatformDuplicates,
+  };
+}
+
+export function inventorySignature(
+  inventory: SkillUpdateInventory | null,
+): string {
+  if (!inventory) return "empty";
+  const parts: string[] = [
+    ...inventory.updatable.map((item) => `u:${item.state.skill_id}`),
+    ...inventory.remoteAdded.map(
+      (item) => `a:${item.repositoryId}:${item.sourcePath}`,
+    ),
+    ...inventory.remoteMissing.map((item) => `m:${item.state.skill_id}`),
+    ...inventory.platformDuplicates.map(
+      (group) => `d:${group.agentId}:${group.skillId}`,
+    ),
+  ];
+  return parts.join("|");
+}

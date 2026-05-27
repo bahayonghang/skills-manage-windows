@@ -1,20 +1,18 @@
-//! Built-in seed data and init dispatch — Phase 2d.
-//!
-//! Owns:
-//! - `init_database` / `init_database_for_remote_home` / `init_database_with_agents`
-//!   that schedule schema creation (in `super::schema::init`) followed by seeding.
-//! - `seed_builtin_*` (agents / scan_directories / registries / skill_metadata).
-//! - `builtin_*` data (agents per host home, builtin skill tags).
-//!
-//! Runtime CRUD lives under `super::repos::*` and is bridged at `db/mod.rs`.
+//! Built-in seed data and init dispatch; runtime CRUD lives under `super::repos::*`.
 
 use chrono::Utc;
 use std::path::Path;
 
 use super::types::*;
 
-const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 5] =
-    ["claude-code", "codex", "gemini-cli", "opencode", "kiro"];
+const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 6] = [
+    "claude-code",
+    "codex",
+    "antigravity",
+    "antigravity-cli",
+    "opencode",
+    "kiro",
+];
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
@@ -36,8 +34,10 @@ async fn init_database_with_agents(
     // Seed built-in agents (INSERT OR IGNORE so repeated init is safe)
     seed_builtin_agents(pool, &builtin_agents).await?;
 
-    // Seed built-in scan directories from the built-in agent registry.
-    seed_builtin_scan_directories(pool, &builtin_agents).await?;
+    // Seed built-in scan directories from the DB rows after upsert so user
+    // customizations that are intentionally preserved (Central store path)
+    // remain the source of truth on the next startup.
+    seed_builtin_scan_directories(pool).await?;
 
     // Seed built-in skill registries (marketplace sources)
     seed_builtin_registries(pool).await?;
@@ -59,7 +59,10 @@ async fn seed_builtin_agents(pool: &DbPool, agents: &[Agent]) -> Result<(), Stri
              ON CONFLICT(id) DO UPDATE SET
               display_name = excluded.display_name,
               category = excluded.category,
-              global_skills_dir = excluded.global_skills_dir,
+              global_skills_dir = CASE
+                WHEN agents.id = 'central' THEN agents.global_skills_dir
+                ELSE excluded.global_skills_dir
+              END,
               project_skills_dir = excluded.project_skills_dir,
               icon_name = excluded.icon_name",
         )
@@ -95,14 +98,17 @@ async fn seed_builtin_agents(pool: &DbPool, agents: &[Agent]) -> Result<(), Stri
     Ok(())
 }
 
-/// Seed `scan_directories` with one row per unique `global_skills_dir` path
-/// across all built-in agents. Rows are marked `is_builtin = 1` and cannot
-/// be removed by the user. `INSERT OR IGNORE` keeps the operation idempotent:
-/// Universal agents share `~/.agents/skills`, while Central uses the private
-/// `~/.skillsmanage/skills` store.
-async fn seed_builtin_scan_directories(pool: &DbPool, agents: &[Agent]) -> Result<(), String> {
+/// Seed `scan_directories` with one row per unique DB built-in
+/// `global_skills_dir` path. Rows are marked `is_builtin = 1` and cannot be
+/// removed by the user. Reading from DB rather than the static registry keeps a
+/// user-selected Central store path from being reset by startup seeding.
+async fn seed_builtin_scan_directories(pool: &DbPool) -> Result<(), String> {
+    let agents: Vec<Agent> = sqlx::query_as("SELECT * FROM agents WHERE is_builtin = 1")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let now = Utc::now().to_rfc3339();
-    for agent in agents {
+    for agent in &agents {
         sqlx::query(
             "INSERT OR IGNORE INTO scan_directories
              (path, label, is_active, is_builtin, added_at)
@@ -181,8 +187,8 @@ async fn seed_builtin_skill_metadata(pool: &DbPool) -> Result<(), String> {
     let now = Utc::now().to_rfc3339();
     sqlx::query(
         "INSERT INTO skill_repositories
-         (id, name, source_type, owner, repo, branch, url, is_unknown, created_at, updated_at)
-         VALUES (?, ?, 'local', NULL, NULL, NULL, NULL, 1, ?, ?)
+         (id, name, source_type, owner, repo, branch, url, pinned, is_unknown, created_at, updated_at)
+         VALUES (?, ?, 'local', NULL, NULL, NULL, NULL, 0, 1, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            source_type = excluded.source_type,
@@ -370,6 +376,10 @@ pub fn is_universal_agent(agent_id: &str) -> bool {
     UNIVERSAL_AGENT_IDS.contains(&agent_id)
 }
 
+pub fn is_universal_project_agent(agent_id: &str) -> bool {
+    UNIVERSAL_PROJECT_AGENT_IDS.contains(&agent_id)
+}
+
 fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
     let central_skills_dir = crate::paths::central_skills_dir_from_home(home)
         .to_string_lossy()
@@ -431,9 +441,9 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
         },
         Agent {
             id: "gemini-cli".to_string(),
-            display_name: "Gemini CLI".to_string(),
+            display_name: "Gemini CLI (legacy)".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: agent_skill_dir("gemini-cli", &[".gemini", "skills"]),
+            global_skills_dir: skill_dir(&[".gemini", "skills"]),
             project_skills_dir: Some(UNIVERSAL_PROJECT_SKILLS_DIR.to_string()),
             icon_name: Some("gemini".to_string()),
             is_detected: false,
@@ -620,12 +630,34 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             id: "antigravity".to_string(),
             display_name: "Antigravity".to_string(),
             category: "coding".to_string(),
-            global_skills_dir: agent_skill_dir("antigravity", &[".antigravity", "skills"]),
-            project_skills_dir: None,
+            global_skills_dir: skill_dir(&[".gemini", "antigravity", "skills"]),
+            project_skills_dir: Some(UNIVERSAL_PROJECT_SKILLS_DIR.to_string()),
             icon_name: Some("antigravity".to_string()),
             is_detected: false,
             is_builtin: true,
             is_enabled: is_builtin_agent_enabled_by_default("antigravity", "coding"),
+        },
+        Agent {
+            id: "antigravity-cli".to_string(),
+            display_name: "Antigravity CLI".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: skill_dir(&[".gemini", "antigravity-cli", "skills"]),
+            project_skills_dir: Some(UNIVERSAL_PROJECT_SKILLS_DIR.to_string()),
+            icon_name: Some("antigravity".to_string()),
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: is_builtin_agent_enabled_by_default("antigravity-cli", "coding"),
+        },
+        Agent {
+            id: "zed".to_string(),
+            display_name: "Zed".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: skill_dir(&[".config", "zed", "skills"]),
+            project_skills_dir: None,
+            icon_name: Some("zed".to_string()),
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: is_builtin_agent_enabled_by_default("zed", "coding"),
         },
         Agent {
             id: "cline".to_string(),

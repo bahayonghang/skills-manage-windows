@@ -5,6 +5,7 @@ import { BatchDeleteCentralSkillsDialog } from "@/components/central/BatchDelete
 import { BatchInstallCentralSkillsDialog } from "@/components/central/BatchInstallCentralSkillsDialog";
 import { DeleteCentralSkillDialog } from "@/components/central/DeleteCentralSkillDialog";
 import { InstallDialog, type InstallMethod } from "@/components/central/InstallDialog";
+import { CentralRepositorySyncDialog } from "@/components/central/CentralRepositorySyncDialog";
 import { RemoteMissingSkillsDialog } from "@/components/central/RemoteMissingSkillsDialog";
 import { CentralUpdateConfirmDialog } from "@/components/central/CentralUpdateConfirmDialog";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
@@ -29,6 +30,12 @@ import type {
   SkillportStateImportResult,
   SkillportStatePortabilityJob,
 } from "@/types";
+import type {
+  CentralRepositoryAdditionSkipRequest,
+  CentralRepositoryAdditionUnskipRequest,
+  CentralRepositoryAddedSkillSelection,
+  CentralRepositorySyncPreview,
+} from "@/types/centralRepositorySync";
 
 type GitHubImportState = {
   isPreviewLoading: boolean;
@@ -87,6 +94,9 @@ export function CentralSkillDialogs({
   isPortabilityOpen,
   isRemoteMissingDialogOpen,
   isRemoteMissingPreviewLoading,
+  isRepositorySyncDialogOpen,
+  isRepositorySyncPreviewLoading,
+  isApplyingRepositorySync,
   isRepositoryDeleteDialogOpen,
   isRepositoryDeletePreviewLoading,
   isResolvingRemoteMissing,
@@ -98,6 +108,9 @@ export function CentralSkillDialogs({
   remoteMissingError,
   remoteMissingPreview,
   remoteMissingStates,
+  repositorySyncError,
+  repositorySyncPreview,
+  repositorySyncDeletePreview,
   repositoryDeletePreview,
   repositoryDeletePreviewError,
   repositoryDeleteTarget,
@@ -131,6 +144,8 @@ export function CentralSkillDialogs({
   onRefreshCounts,
   onConfirmUpdateSkills,
   onRemoteMissingDialogOpenChange,
+  onRepositorySyncDialogOpenChange,
+  onApplyRepositorySync,
   onUpdateConfirmDialogOpenChange,
   onRepositoryDeleteDialogOpenChange,
   onResetGitHubImport,
@@ -167,6 +182,9 @@ export function CentralSkillDialogs({
   isPortabilityOpen: boolean;
   isRemoteMissingDialogOpen: boolean;
   isRemoteMissingPreviewLoading: boolean;
+  isRepositorySyncDialogOpen: boolean;
+  isRepositorySyncPreviewLoading: boolean;
+  isApplyingRepositorySync: boolean;
   isRepositoryDeleteDialogOpen: boolean;
   isRepositoryDeletePreviewLoading: boolean;
   isResolvingRemoteMissing: boolean;
@@ -178,6 +196,9 @@ export function CentralSkillDialogs({
   remoteMissingError: string | null;
   remoteMissingPreview: BatchDeleteCentralSkillPreviewResult | null;
   remoteMissingStates: CentralSkillUpdateState[];
+  repositorySyncError: string | null;
+  repositorySyncPreview: CentralRepositorySyncPreview | null;
+  repositorySyncDeletePreview: BatchDeleteCentralSkillPreviewResult | null;
   repositoryDeletePreview: DeleteSkillRepositoryPreview | null;
   repositoryDeletePreviewError: string | null;
   repositoryDeleteTarget: SkillRepositoryWithStats | null;
@@ -229,6 +250,14 @@ export function CentralSkillDialogs({
   onRefreshCounts: () => Promise<void>;
   onConfirmUpdateSkills: (skillIds: string[]) => Promise<void>;
   onRemoteMissingDialogOpenChange: (open: boolean) => void;
+  onRepositorySyncDialogOpenChange: (open: boolean) => void;
+  onApplyRepositorySync: (
+    keepSkillIds: string[],
+    deleteRequests: BatchDeleteCentralSkillRequest[],
+    additions: CentralRepositoryAddedSkillSelection[],
+    skipAdditions: CentralRepositoryAdditionSkipRequest[],
+    unskipAdditions: CentralRepositoryAdditionUnskipRequest[]
+  ) => Promise<void>;
   onUpdateConfirmDialogOpenChange: (open: boolean) => void;
   onRepositoryDeleteDialogOpenChange: (open: boolean) => void;
   onResetGitHubImport: () => void;
@@ -253,6 +282,7 @@ export function CentralSkillDialogs({
         skillCount={selectedSkillIds.length}
         agents={availableInstallAgents}
         isInstalling={isInstalling}
+        onManagePlatforms={() => setIsPlatformManageOpen(true)}
         onInstall={onBatchInstallCentralSkills}
       />
 
@@ -290,6 +320,19 @@ export function CentralSkillDialogs({
         isApplying={isResolvingRemoteMissing || isDeleting}
         error={remoteMissingError}
         onConfirm={onResolveRemoteMissing}
+      />
+
+      <CentralRepositorySyncDialog
+        open={isRepositorySyncDialogOpen}
+        onOpenChange={onRepositorySyncDialogOpenChange}
+        preview={repositorySyncPreview}
+        deletePreview={repositorySyncDeletePreview}
+        agents={agents}
+        skills={skills}
+        isPreviewLoading={isRepositorySyncPreviewLoading}
+        isApplying={isApplyingRepositorySync || isDeleting}
+        error={repositorySyncError}
+        onConfirm={onApplyRepositorySync}
       />
 
       <CentralUpdateConfirmDialog

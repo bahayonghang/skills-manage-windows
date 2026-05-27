@@ -142,6 +142,10 @@ vi.mock("@/pages/CentralSkillsView", () => ({
   CentralSkillsView: () => <div>central-page</div>,
 }));
 
+vi.mock("@/pages/SettingsView", () => ({
+  SettingsView: () => new Promise(() => null),
+}));
+
 describe("App", () => {
   it("renders the app shell with top bar", async () => {
     await act(async () => {
@@ -169,6 +173,20 @@ describe("App", () => {
     expect(screen.queryByText("按工具")).not.toBeInTheDocument();
   });
 
+  it("keeps settings as a single sidebar entry instead of a top bar button", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/central"]}>
+          <App />
+        </MemoryRouter>
+      );
+    });
+
+    const settingsButtons = screen.getAllByRole("button", { name: "设置" });
+    expect(settingsButtons).toHaveLength(1);
+    expect(settingsButtons[0].closest("nav")).toHaveAttribute("aria-label", "主导航");
+  });
+
   it("redirects / to the Dashboard route", async () => {
     await act(async () => {
       render(
@@ -191,5 +209,17 @@ describe("App", () => {
     });
 
     expect(await screen.findByText("central-page")).toBeInTheDocument();
+  });
+
+  it("shows a page-level fallback while a lazy route chunk is loading", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/settings"]}>
+          <App />
+        </MemoryRouter>
+      );
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("加载中...");
   });
 });

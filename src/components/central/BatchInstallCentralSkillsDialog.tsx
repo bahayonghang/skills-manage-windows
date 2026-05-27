@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -19,6 +19,7 @@ import type { InstallMethod } from "@/components/central/InstallDialog";
 import { ProjectPathPicker } from "@/components/central/ProjectPathPicker";
 import { AgentWithStatus, CentralBatchInstallResult } from "@/types";
 import { useTargetStore } from "@/stores/targetStore";
+import { isRemoteLikeTarget } from "@/lib/targetKind";
 import {
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberNames,
@@ -34,11 +35,15 @@ interface BatchInstallCentralSkillsDialogProps {
   skillCount: number;
   agents: AgentWithStatus[];
   isInstalling: boolean;
+  title?: string;
+  description?: string;
+  defaultExcludedAgentIds?: string[];
   onInstall: (
     agentIds: string[],
     method: InstallMethod,
     projectPath?: string | null
   ) => Promise<CentralBatchInstallResult>;
+  onManagePlatforms?: () => void;
 }
 
 export function BatchInstallCentralSkillsDialog({
@@ -47,11 +52,15 @@ export function BatchInstallCentralSkillsDialog({
   skillCount,
   agents,
   isInstalling,
+  title,
+  description,
+  defaultExcludedAgentIds = [],
   onInstall,
+  onManagePlatforms,
 }: BatchInstallCentralSkillsDialogProps) {
   const { t } = useTranslation();
   const activeTarget = useTargetStore((s) => s.activeTarget);
-  const isRemoteTarget = activeTarget.kind === "ssh";
+  const isRemoteTarget = isRemoteLikeTarget(activeTarget);
   const canUseSymlink = !isRemoteTarget || activeTarget.symlinkEnabled === true;
   const targetAgents = useMemo(
     () => agents.filter((agent) => agent.id !== "central"),
@@ -63,7 +72,13 @@ export function BatchInstallCentralSkillsDialog({
   const [projectPath, setProjectPath] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CentralBatchInstallResult | null>(null);
-  const skipped = result?.skipped ?? [];
+  const defaultExcludedKey = defaultExcludedAgentIds.join("\0");
+  const defaultExcludedSet = useMemo(
+    () => new Set(defaultExcludedKey ? defaultExcludedKey.split("\0") : []),
+    [defaultExcludedKey]
+  );
+  const skipped = useMemo(() => result?.skipped ?? [], [result]);
+  const skippedSummary = useMemo(() => summarizeSkippedReasons(skipped), [skipped]);
 
   const isProjectTargetDisabled = (agent: AgentWithStatus) =>
     targetMode === "project" && !hasProjectSkillPattern(agent);
@@ -88,27 +103,21 @@ export function BatchInstallCentralSkillsDialog({
     const initialSelection = new Set(
       targetAgents
         .filter((agent) => targetMode === "platform" || hasProjectSkillPattern(agent))
+        .filter((agent) => !defaultExcludedSet.has(agent.id))
         .map((agent) => agent.id)
     );
     setSelectedAgentIds(initialSelection);
     setError(null);
     setResult(null);
-    if (isRemoteTarget) {
-      setTargetMode("platform");
-      setInstallMethod(canUseSymlink ? "symlink" : "copy");
-      setProjectPath("");
-    } else if (targetMode === "platform") {
+    if (targetMode === "platform") {
       setInstallMethod(canUseSymlink ? "symlink" : "copy");
       setProjectPath("");
     } else {
       setInstallMethod("copy");
     }
-  }, [open, targetAgents, targetMode, isRemoteTarget, canUseSymlink]);
+  }, [open, targetAgents, targetMode, isRemoteTarget, canUseSymlink, defaultExcludedSet]);
 
   function handleModeChange(mode: TargetMode) {
-    if (isRemoteTarget && mode === "project") {
-      return;
-    }
     setTargetMode(mode);
     setInstallMethod(mode === "project" || !canUseSymlink ? "copy" : "symlink");
     setError(null);
@@ -163,13 +172,13 @@ export function BatchInstallCentralSkillsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{t("central.batchInstallTitle")}</DialogTitle>
+          <DialogTitle>{title ?? t("central.batchInstallTitle")}</DialogTitle>
           <DialogClose />
         </DialogHeader>
 
         <DialogBody className="space-y-5">
           <DialogDescription>
-            {t("central.batchInstallDesc", { count: skillCount })}
+            {description ?? t("central.batchInstallDesc", { count: skillCount })}
           </DialogDescription>
 
           <div className="space-y-2">
@@ -182,11 +191,11 @@ export function BatchInstallCentralSkillsDialog({
                 <span className="text-sm">{t("central.batchInstallTargetPlatforms")}</span>
               </label>
               <label className="flex cursor-pointer items-center gap-2.5">
-                <RadioItem value="project" disabled={isRemoteTarget} />
+                <RadioItem value="project" />
                 <span className="text-sm">{t("central.batchInstallTargetProject")}</span>
                 {isRemoteTarget && (
                   <span className="text-xs text-muted-foreground">
-                    {t("targets.projectModeUnsupported")}
+                    {t("targets.projectModeRemoteHint")}
                   </span>
                 )}
               </label>
@@ -203,9 +212,39 @@ export function BatchInstallCentralSkillsDialog({
                 onChange={setProjectPath}
                 onError={setError}
                 disabled={isInstalling}
+                browseEnabled={!isRemoteTarget}
+                placeholder={
+                  isRemoteTarget
+                    ? t("central.batchInstallRemoteProjectPathPlaceholder")
+                    : undefined
+                }
+                hint={
+                  isRemoteTarget
+                    ? t("central.batchInstallRemoteProjectPathHint")
+                    : undefined
+                }
               />
             </div>
           )}
+
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {t("central.batchInstallPlatformsLabel")}
+            </p>
+            {onManagePlatforms && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={onManagePlatforms}
+                data-testid="batch-install-manage-platforms"
+              >
+                <Settings2 className="size-3.5" />
+                {t("central.batchInstallManagePlatforms")}
+              </Button>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-2" role="group" aria-label={t("central.batchInstallSelectPlatform")}>
             {targetAgents.length === 0 ? (
@@ -295,6 +334,18 @@ export function BatchInstallCentralSkillsDialog({
                   failedCount: result.failed.length,
                 })}
               </p>
+              {skippedSummary.length > 0 && (
+                <div className="rounded-md border border-border/70 bg-muted/35 p-2 text-xs text-muted-foreground" data-testid="batch-install-skipped-summary">
+                  <p className="font-medium text-foreground">{t("central.batchInstallSkippedDetails")}</p>
+                  <ul className="mt-1 space-y-0.5">
+                    {skippedSummary.map(({ reason, count }) => (
+                      <li key={reason}>
+                        {t(`central.batchInstallSkipReasons.${reason}`, { defaultValue: reason })}: {count}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <ul className="max-h-32 space-y-0.5 overflow-auto text-xs text-destructive">
                 {result.failed.map((failure) => (
                   <li key={`${failure.skill_id}:${failure.agent_id}`}>
@@ -347,5 +398,18 @@ export function BatchInstallCentralSkillsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+
+function summarizeSkippedReasons(
+  skipped: NonNullable<CentralBatchInstallResult["skipped"]>
+): Array<{ reason: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const item of skipped) {
+    counts.set(item.reason, (counts.get(item.reason) ?? 0) + 1);
+  }
+  return Array.from(counts, ([reason, count]) => ({ reason, count })).sort((a, b) =>
+    a.reason.localeCompare(b.reason)
   );
 }

@@ -1,10 +1,9 @@
 use super::*;
 pub(super) async fn cleanup_expired_preview_workspaces_for_connection(
-    connection: &crate::targets::ConnectedSshTarget,
-    target: &RemoteTargetConfig,
+    connection: &ConnectedRemoteTarget,
 ) {
     for workspace in prune_expired_preview_workspaces(Utc::now()) {
-        if workspace.target_id == target.id {
+        if workspace.target_id == connection.target_id() {
             let _ = connection
                 .remove_tree(&workspace.remote_workspace_dir)
                 .await;
@@ -13,8 +12,7 @@ pub(super) async fn cleanup_expired_preview_workspaces_for_connection(
 }
 
 pub(super) async fn create_remote_preview_workspace(
-    connection: &crate::targets::ConnectedSshTarget,
-    target: &RemoteTargetConfig,
+    connection: &ConnectedRemoteTarget,
     resolved: &ResolvedGitHubRepoSource,
     auth: Option<&str>,
 ) -> Result<GitHubPreviewWorkspace, String> {
@@ -38,7 +36,7 @@ pub(super) async fn create_remote_preview_workspace(
 
     Ok(GitHubPreviewWorkspace {
         id: format!("github-preview-{}", uuid::Uuid::new_v4()),
-        target_id: target.id.clone(),
+        target_id: connection.target_id().to_string(),
         repo: resolved.repo.clone(),
         source_path: resolved.source_path.clone(),
         remote_workspace_dir,
@@ -118,9 +116,9 @@ pub(super) fn curl_auth_header_config_line(token: &str) -> Result<String, String
     let escaped = token.replace('\\', "\\\\").replace('"', "\\\"");
     Ok(format!("header = \"Authorization: Bearer {escaped}\""))
 }
-pub(crate) async fn import_github_repo_skills_ssh_with_auth(
+pub(crate) async fn import_github_repo_skills_remote_with_auth(
     pool: &DbPool,
-    target: &RemoteTargetConfig,
+    active_target: &ActiveTarget,
     repo_url: &str,
     selections: Vec<GitHubSkillImportSelection>,
     preview_workspace_id: Option<&str>,
@@ -148,13 +146,12 @@ pub(crate) async fn import_github_repo_skills_ssh_with_auth(
         .await?
         .ok_or_else(|| "Central agent not found in database".to_string())?;
     let central_root = central.global_skills_dir;
-    let connection = connect_ssh_target(target).await?;
+    let connection = connect_remote_target(active_target).await?;
     connection.mkdir_p(&central_root).await?;
 
     let resolved = resolve_repo_source(repo_url, auth).await?;
     let workspace =
-        resolve_ssh_import_workspace(&connection, target, &resolved, preview_workspace_id, auth)
-            .await?;
+        resolve_remote_import_workspace(&connection, &resolved, preview_workspace_id, auth).await?;
     let candidates = build_remote_repo_skill_candidates_from_workspace(
         &connection,
         &resolved.repo,
@@ -272,6 +269,8 @@ pub(crate) async fn import_github_repo_skills_ssh_with_auth(
             )),
             content: None,
             scanned_at: Utc::now().to_rfc3339(),
+            fs_created_at: None,
+            fs_updated_at: None,
         };
         db::upsert_skill(pool, &db_skill).await?;
         db::assign_github_repository_to_skill(
@@ -324,19 +323,18 @@ pub(crate) async fn import_github_repo_skills_ssh_with_auth(
     })
 }
 
-pub(super) async fn resolve_ssh_import_workspace(
-    connection: &crate::targets::ConnectedSshTarget,
-    target: &RemoteTargetConfig,
+pub(super) async fn resolve_remote_import_workspace(
+    connection: &ConnectedRemoteTarget,
     resolved: &ResolvedGitHubRepoSource,
     preview_workspace_id: Option<&str>,
     auth: Option<&str>,
 ) -> Result<GitHubPreviewWorkspace, String> {
-    cleanup_expired_preview_workspaces_for_connection(connection, target).await;
+    cleanup_expired_preview_workspaces_for_connection(connection).await;
 
     if let Some(workspace_id) = preview_workspace_id {
         if let Some(workspace) = get_preview_workspace(workspace_id) {
             if !workspace.matches_source(
-                &target.id,
+                connection.target_id(),
                 &resolved.repo,
                 resolved.source_path.as_deref(),
             ) {
@@ -355,7 +353,7 @@ pub(super) async fn resolve_ssh_import_workspace(
         }
     }
 
-    let workspace = create_remote_preview_workspace(connection, target, resolved, auth).await?;
+    let workspace = create_remote_preview_workspace(connection, resolved, auth).await?;
     register_preview_workspace(workspace.clone());
     Ok(workspace)
 }
@@ -423,26 +421,23 @@ pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
         "A source path is required for remote GitHub markdown preview.".to_string()
     })?;
     let active_target = state.active_target().await?;
-    let target = match active_target {
-        ActiveTarget::Ssh(target) if target.id == workspace.target_id => target,
-        ActiveTarget::Ssh(_) => {
-            return Err(
-                "The active SSH target changed after preview. Preview the repository again."
-                    .to_string(),
-            )
-        }
-        ActiveTarget::Local => {
-            return Err(
-                "Remote GitHub preview workspace is only available on its SSH target.".to_string(),
-            )
-        }
-    };
+    if active_target.is_remote_like() && active_target.id() != workspace.target_id {
+        return Err(
+            "The active remote target changed after preview. Preview the repository again."
+                .to_string(),
+        );
+    }
+    if !active_target.is_remote_like() {
+        return Err(
+            "Remote GitHub preview workspace is only available on its remote target.".to_string(),
+        );
+    }
     let skill_md_path = if source_path == "." {
         "SKILL.md".to_string()
     } else {
         join_repo_path(source_path, "SKILL.md")?
     };
-    let connection = connect_ssh_target(&target).await?;
+    let connection = connect_remote_target(&active_target).await?;
     let bytes = connection
         .read_file(&remote_join(&workspace.remote_repo_dir, &skill_md_path))
         .await?;
@@ -459,13 +454,13 @@ pub(crate) async fn discard_preview_workspace_for_active_target(
     let Ok(active_target) = state.active_target().await else {
         return;
     };
-    let ActiveTarget::Ssh(target) = active_target else {
-        return;
-    };
-    if target.id != workspace.target_id {
+    if !active_target.is_remote_like() {
         return;
     }
-    if let Ok(connection) = connect_ssh_target(&target).await {
+    if active_target.id() != workspace.target_id {
+        return;
+    }
+    if let Ok(connection) = connect_remote_target(&active_target).await {
         let _ = connection
             .remove_tree(&workspace.remote_workspace_dir)
             .await;

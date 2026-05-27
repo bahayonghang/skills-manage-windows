@@ -224,6 +224,13 @@ pub(crate) async fn get_github_pat_state_impl(
     }
 }
 
+pub(crate) async fn reveal_github_pat_impl(
+    pool: &DbPool,
+    secrets: &dyn SecretStore,
+) -> Result<Option<String>, String> {
+    github_direct_auth_from_secret_store(pool, secrets).await
+}
+
 pub(crate) async fn set_github_pat_impl(
     pool: &DbPool,
     secrets: &dyn SecretStore,

@@ -2,11 +2,11 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::db::{self, Collection, DbPool, Skill};
-use crate::targets::ActiveTarget;
 use crate::AppState;
 
 use super::linker::{
-    install_skill_to_agent_impl, install_skill_to_agent_ssh_impl, BatchInstallResult, FailedInstall,
+    install_skill_to_agent_impl, install_skill_to_agent_remote_impl, BatchInstallResult,
+    FailedInstall,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -309,7 +309,7 @@ pub async fn batch_install_collection(
 ) -> Result<BatchInstallResult, String> {
     let active_target = state.active_target().await?;
     let pool = state.active_db().await?;
-    if let ActiveTarget::Ssh(target) = active_target {
+    if active_target.is_remote_like() {
         db::get_collection_by_id(&pool, &collection_id)
             .await?
             .ok_or_else(|| format!("Collection '{}' not found", collection_id))?;
@@ -318,8 +318,14 @@ pub async fn batch_install_collection(
         let mut failed = Vec::new();
         for skill in &skills {
             for agent_id in &agent_ids {
-                match install_skill_to_agent_ssh_impl(&pool, &target, &skill.id, agent_id, "copy")
-                    .await
+                match install_skill_to_agent_remote_impl(
+                    &pool,
+                    &active_target,
+                    &skill.id,
+                    agent_id,
+                    "copy",
+                )
+                .await
                 {
                     Ok(_) => succeeded.push(format!("{}:{}", skill.id, agent_id)),
                     Err(error) => failed.push(FailedInstall {
@@ -386,6 +392,8 @@ mod tests {
             source: Some("native".to_string()),
             content: None,
             scanned_at: Utc::now().to_rfc3339(),
+            fs_created_at: None,
+            fs_updated_at: None,
         }
     }
 
@@ -891,6 +899,8 @@ mod tests {
                 source: Some("native".to_string()),
                 content: None,
                 scanned_at: Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
             };
             db::upsert_skill(&pool, &skill).await.unwrap();
         }
@@ -968,6 +978,8 @@ mod tests {
                 source: None,
                 content: None,
                 scanned_at: Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
             };
             db::upsert_skill(&pool, &skill).await.unwrap();
         }

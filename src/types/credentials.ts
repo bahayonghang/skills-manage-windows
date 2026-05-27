@@ -1,4 +1,4 @@
-export type TargetKind = "local" | "ssh";
+export type TargetKind = "local" | "ssh" | "wsl";
 export type SshAuthMethod = "key" | "password";
 export type TargetCredentialStatus = "stored" | "session" | "missing" | "unreadable";
 export type SecretStorageState = "stored" | "session" | "missing" | "unreadable";
@@ -10,6 +10,7 @@ export interface TargetSummary {
   host?: string | null;
   username?: string | null;
   port?: number | null;
+  distribution?: string | null;
   authMethod?: SshAuthMethod | null;
   keyPath?: string | null;
   remoteHome?: string | null;
@@ -84,5 +85,37 @@ export interface AiApiKeyState {
   provider?: string | null;
   configured: boolean;
   storageState: SecretStorageState;
+  fingerprint?: string | null;
   error?: string | null;
+}
+
+export interface CreateWslTargetRequest {
+  label: string;
+  distribution: string;
+}
+
+export interface UpdateWslTargetRequest {
+  id: string;
+  label: string;
+  distribution: string;
+}
+
+export interface TestWslTargetRequest {
+  id?: string | null;
+  label?: string | null;
+  distribution?: string | null;
+}
+
+export interface WslTargetTestResult {
+  ok: boolean;
+  remoteHome?: string | null;
+  remoteOs?: string | null;
+  message: string;
+}
+
+export interface WslDistributionSummary {
+  name: string;
+  isDefault: boolean;
+  state?: string | null;
+  version?: string | null;
 }

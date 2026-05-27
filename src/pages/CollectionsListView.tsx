@@ -24,6 +24,7 @@ import { CollectionInstallDialog } from "@/components/collection/CollectionInsta
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
+import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { Collection, SkillWithLinks } from "@/types";
 import { cn } from "@/lib/utils";
 import {
@@ -183,6 +184,11 @@ export function CollectionsListView() {
       loadCentralSkills();
     }
   }, [centralSkills.length, loadCentralSkills]);
+  const selectedSkillIds = useMemo(
+    () => currentDetail?.skills.map((skill) => skill.id) ?? [],
+    [currentDetail?.skills]
+  );
+  const aiSummaries = useSkillExplanationSummaries(selectedSkillIds, "zh");
 
   // Scroll restoration: once the collection detail for the currently
   // selected collection has finished hydrating, restore the previously
@@ -479,6 +485,7 @@ export function CollectionsListView() {
                           key={skill.id}
                           name={skill.name}
                           description={skill.description}
+                          aiSummary={aiSummaries[skill.id]}
                           onDetail={() => handleOpenDrawer(skill.id)}
                           detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
                           onInstallTo={() => handleInstallSingleSkillClick(skill.id)}

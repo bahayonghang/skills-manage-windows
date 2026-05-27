@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter } from "react-router-dom";
 import type { AgentWithStatus, CentralSkillUpdateState, SkillWithLinks, TargetSummary } from "../types";
 import * as S from "./centralSkillsViewTestSupport";
-import { setFeatureFlag } from "../lib/featureFlags";
 
 const {
   CentralSkillsView,
@@ -16,6 +15,8 @@ const {
   mockLoadBatchDeletePreview,
   mockDeleteCentralSkills,
   mockCheckSkillUpdates,
+  mockCheckRepositorySync,
+  mockApplyRepositorySync,
   mockUpdateSkills,
   mockKeepRemoteMissingSkills,
   mockRescan,
@@ -27,8 +28,11 @@ const {
   useTargetStore,
 } = S;
 
-describe("CentralSkillsView", () => {
-  beforeEach(S.resetCentralSkillsViewTestState);
+describe("CentralSkillsView updates + search（V2 markup）", () => {
+  beforeEach(() => {
+    S.resetCentralSkillsViewTestState();
+    window.localStorage.clear();
+  });
   afterEach(S.cleanupCentralSkillsViewTestState);
 
   it("defaults remote batch install to symlink when the target supports symlinks", async () => {
@@ -54,7 +58,7 @@ describe("CentralSkillsView", () => {
     renderCentralSkillsView();
 
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-install"));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /将 1 个技能安装到 2 个平台/i }));
@@ -113,7 +117,7 @@ describe("CentralSkillsView", () => {
     screen.getAllByRole("checkbox").forEach((checkbox) => {
       fireEvent.click(checkbox);
     });
-    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-install"));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /将 7 个技能安装到 3 个平台/i }));
@@ -148,7 +152,7 @@ describe("CentralSkillsView", () => {
     const selectionCheckboxes = screen.getAllByRole("checkbox");
     fireEvent.click(selectionCheckboxes[0]);
     fireEvent.click(selectionCheckboxes[1]);
-    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-install"));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /将 2 个技能安装到 2 个平台/i }));
@@ -174,7 +178,7 @@ describe("CentralSkillsView", () => {
     renderCentralSkillsView();
 
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    fireEvent.click(screen.getByTestId("batch-install-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-install"));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByText("项目目录"));
@@ -245,7 +249,7 @@ describe("CentralSkillsView", () => {
     const selectionCheckboxes = screen.getAllByRole("checkbox");
     fireEvent.click(selectionCheckboxes[0]);
     fireEvent.click(selectionCheckboxes[1]);
-    fireEvent.click(screen.getByTestId("batch-delete-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-delete"));
 
     await waitFor(() => {
       expect(mockLoadBatchDeletePreview).toHaveBeenCalledWith([
@@ -301,7 +305,7 @@ describe("CentralSkillsView", () => {
     renderCentralSkillsView();
 
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    fireEvent.click(screen.getByTestId("batch-delete-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-delete"));
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("已安装的平台链接会自动移除")).toBeInTheDocument();
@@ -339,7 +343,7 @@ describe("CentralSkillsView", () => {
     renderCentralSkillsView();
 
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    fireEvent.click(screen.getByTestId("batch-delete-central-skills"));
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-delete"));
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/Universal/)).toBeInTheDocument();
@@ -378,6 +382,7 @@ describe("CentralSkillsView", () => {
     mockKeepRemoteMissingSkills.mockResolvedValueOnce(["frontend-design"]);
     renderCentralSkillsView();
 
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
     fireEvent.click(screen.getByRole("button", { name: /检查/i }));
 
     await waitFor(() => {
@@ -450,6 +455,7 @@ describe("CentralSkillsView", () => {
     });
     renderCentralSkillsView();
 
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
     fireEvent.click(screen.getByRole("button", { name: /检查/i }));
 
     const dialog = await screen.findByRole("dialog");
@@ -501,7 +507,14 @@ describe("CentralSkillsView", () => {
       targets: [localTarget, remoteTarget],
       activeTarget: remoteTarget,
     });
-    mockCheckSkillUpdates.mockResolvedValueOnce([]);
+    mockCheckRepositorySync.mockResolvedValueOnce({
+      states: [],
+      remoteAdded: [],
+      skippedRemoteAdded: [],
+      remoteMissing: [],
+      repositories: [],
+      failedRepositories: [],
+    });
     renderCentralSkillsView();
 
     const checkButton = screen.getByRole("button", { name: /检查/i });
@@ -510,7 +523,7 @@ describe("CentralSkillsView", () => {
     fireEvent.click(checkButton);
 
     await waitFor(() => {
-      expect(mockCheckSkillUpdates).toHaveBeenCalled();
+      expect(mockCheckRepositorySync).toHaveBeenCalled();
     });
   });
 
@@ -537,6 +550,7 @@ describe("CentralSkillsView", () => {
     });
     renderCentralSkillsView();
 
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
     fireEvent.click(screen.getByRole("button", { name: /检查/i }));
 
     const dialog = await screen.findByRole("dialog");
@@ -598,6 +612,8 @@ describe("CentralSkillsView", () => {
     });
     renderCentralSkillsView();
 
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    fireEvent.click(screen.getAllByLabelText("选择技能")[1]);
     fireEvent.click(screen.getByRole("button", { name: /检查/i }));
 
     const updateDialog = await screen.findByRole("dialog");
@@ -698,8 +714,8 @@ describe("CentralSkillsView", () => {
   });
 
   it("V2 selects only the current repository results for batch check updates", async () => {
-    setFeatureFlag("central.newLayout", true);
     window.history.replaceState(null, "", "/");
+    window.localStorage.setItem("central.sidebarPinned", "true");
     const githubRepo = mockRepositories[1]!;
     const localRepo = mockRepositories[0]!;
     const skills: SkillWithLinks[] = [
@@ -716,10 +732,13 @@ describe("CentralSkillsView", () => {
     fireEvent.click(screen.getByTestId(`repo-${githubRepo.id}`));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "检查当前结果（2）" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "检查 openai/skills（2）" })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "选择当前结果" }));
+    // V2：在批量条出现前先选两张卡片
+    const checkboxes = screen.getAllByLabelText("选择技能");
+    fireEvent.click(checkboxes[0]);
+    fireEvent.click(checkboxes[1]);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "检查所选（2）" })).toBeInTheDocument();
@@ -730,11 +749,12 @@ describe("CentralSkillsView", () => {
     await waitFor(() => {
       expect(mockCheckSkillUpdates).toHaveBeenCalledWith(["github-one", "github-two"]);
     });
+    expect(mockCheckRepositorySync).not.toHaveBeenCalled();
   });
 
-  it("V2 checks current filtered results when nothing is manually selected", async () => {
-    setFeatureFlag("central.newLayout", true);
+  it("V2 uses repository sync for a single repository filter when nothing is manually selected", async () => {
     window.history.replaceState(null, "", "/");
+    window.localStorage.setItem("central.sidebarPinned", "true");
     const githubRepo = mockRepositories[1]!;
     const localRepo = mockRepositories[0]!;
     const skills: SkillWithLinks[] = [
@@ -750,12 +770,242 @@ describe("CentralSkillsView", () => {
     fireEvent.click(screen.getByTestId(`repo-${githubRepo.id}`));
 
     const checkCurrentResults = await screen.findByRole("button", {
-      name: "检查当前结果（2）",
+      name: "检查 openai/skills（2）",
     });
     fireEvent.click(checkCurrentResults);
 
     await waitFor(() => {
-      expect(mockCheckSkillUpdates).toHaveBeenCalledWith(["github-one", "github-two"]);
+      expect(mockCheckRepositorySync).toHaveBeenCalledWith(
+        [githubRepo.id],
+        ["github-one", "github-two"]
+      );
+    });
+  });
+
+
+
+  it("loads repository sync delete preview from remote-missing and conflict existing skills as a deduped union", async () => {
+    window.history.replaceState(null, "", "/");
+    window.localStorage.setItem("central.sidebarPinned", "true");
+    const githubRepo = mockRepositories[1]!;
+    const remoteMissingState: CentralSkillUpdateState = {
+      skill_id: "code-reviewer",
+      source_type: "github",
+      source_url: "https://github.com/openai/skills",
+      ref: "main",
+      source_path: "skills/code-reviewer",
+      last_remote_hash: null,
+      latest_remote_hash: null,
+      last_checked_at: "2026-04-29T01:23:45Z",
+      last_updated_at: null,
+      status: "remote_missing",
+      error: "removed remotely",
+    };
+    const skills: SkillWithLinks[] = [
+      { ...mockSkills[0]!, id: "github-one", name: "github-one", repository: githubRepo },
+    ];
+    mockCheckRepositorySync.mockResolvedValueOnce({
+      states: [remoteMissingState],
+      remoteAdded: [
+        {
+          repositoryId: githubRepo.id,
+          repo: {
+            owner: "openai",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/openai/skills",
+          },
+          preview: {
+            sourcePath: "skills/github-one",
+            skillId: "github-one",
+            skillName: "GitHub One Remote",
+            description: null,
+            rootDirectory: "skills",
+            skillDirectoryName: "github-one",
+            downloadUrl: "https://raw.githubusercontent.com/openai/skills/main/skills/github-one/SKILL.md",
+            conflict: {
+              existingSkillId: "github-one",
+              existingName: "github-one",
+              existingCanonicalPath: "~/.skillsmanage/skills/github-one",
+              proposedSkillId: "github-one",
+              proposedName: "GitHub One Remote",
+            },
+          },
+        },
+      ],
+      skippedRemoteAdded: [
+        {
+          repositoryId: githubRepo.id,
+          repo: {
+            owner: "openai",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/openai/skills",
+          },
+          preview: {
+            sourcePath: "skills/github-one-skipped",
+            skillId: "github-one-skipped",
+            skillName: "GitHub One Skipped",
+            description: null,
+            rootDirectory: "skills",
+            skillDirectoryName: "github-one-skipped",
+            downloadUrl: "https://raw.githubusercontent.com/openai/skills/main/skills/github-one-skipped/SKILL.md",
+            conflict: {
+              existingSkillId: "github-one",
+              existingName: "github-one",
+              existingCanonicalPath: "~/.skillsmanage/skills/github-one",
+              proposedSkillId: "github-one-skipped",
+              proposedName: "GitHub One Skipped",
+            },
+          },
+        },
+      ],
+      remoteMissing: [
+        {
+          state: remoteMissingState,
+          repositoryId: githubRepo.id,
+          repositoryName: "openai/skills",
+          repo: {
+            owner: "openai",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/openai/skills",
+          },
+        },
+      ],
+      repositories: [],
+      failedRepositories: [],
+    });
+    mockLoadBatchDeletePreview.mockResolvedValueOnce({
+      previews: [
+        {
+          skill_id: "code-reviewer",
+          skill_name: "code-reviewer",
+          central_path: "~/.skillsmanage/skills/code-reviewer",
+          copy_installations: [],
+          auto_removed_agent_ids: [],
+        },
+        {
+          skill_id: "github-one",
+          skill_name: "github-one",
+          central_path: "~/.skillsmanage/skills/github-one",
+          copy_installations: [],
+          auto_removed_agent_ids: [],
+        },
+      ],
+      failed: [],
+    });
+
+    renderCentralSkillsView({ centralOverrides: { skills } });
+
+    fireEvent.click(screen.getByTestId(`repo-${githubRepo.id}`));
+    fireEvent.click(await screen.findByRole("button", { name: "检查 openai/skills（1）" }));
+
+    await waitFor(() => {
+      expect(mockLoadBatchDeletePreview).toHaveBeenCalledWith(["code-reviewer", "github-one"]);
+    });
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("GitHub One Remote")).toBeInTheDocument();
+  });
+
+  it("opens repository sync dialog for remote-added skills", async () => {
+    window.history.replaceState(null, "", "/");
+    window.localStorage.setItem("central.sidebarPinned", "true");
+    const githubRepo = mockRepositories[1]!;
+    const skills: SkillWithLinks[] = [
+      { ...mockSkills[0]!, id: "github-one", name: "github-one", repository: githubRepo },
+    ];
+    mockCheckRepositorySync.mockResolvedValueOnce({
+      states: [],
+      remoteAdded: [
+        {
+          repositoryId: githubRepo.id,
+          repo: {
+            owner: "openai",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/openai/skills",
+          },
+          preview: {
+            sourcePath: "skills/new-skill",
+            skillId: "new-skill",
+            skillName: "New Skill",
+            description: null,
+            rootDirectory: "skills",
+            skillDirectoryName: "new-skill",
+            downloadUrl: "https://raw.githubusercontent.com/openai/skills/main/skills/new-skill/SKILL.md",
+            conflict: null,
+          },
+        },
+      ],
+      skippedRemoteAdded: [],
+      remoteMissing: [],
+      repositories: [],
+      failedRepositories: [],
+    });
+    mockApplyRepositorySync.mockResolvedValueOnce({
+      keptSkillIds: [],
+      deleteResult: { succeeded: [], failed: [] },
+      importResults: [
+        {
+          repo: {
+            owner: "openai",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/openai/skills",
+          },
+          importedSkills: [
+            {
+              sourcePath: "skills/new-skill",
+              originalSkillId: "new-skill",
+              importedSkillId: "new-skill",
+              skillName: "New Skill",
+              targetDirectory: "~/.skillsmanage/skills/new-skill",
+              resolution: "overwrite",
+            },
+          ],
+          skippedSkills: [],
+        },
+      ],
+      skippedAdditions: [],
+      unskippedAdditions: [],
+      failedRepositories: [],
+      states: [],
+    });
+
+    renderCentralSkillsView({
+      centralOverrides: { skills },
+    });
+
+    fireEvent.click(screen.getByTestId(`repo-${githubRepo.id}`));
+    fireEvent.click(await screen.findByRole("button", { name: "检查 openai/skills（1）" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("仓库同步预览")).toBeInTheDocument();
+    expect(within(dialog).getByText("New Skill")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByTestId("confirm-repo-sync"));
+
+    await waitFor(() => {
+      expect(mockApplyRepositorySync).toHaveBeenCalledWith({
+        keepSkillIds: [],
+        deleteRequests: [],
+        additions: [
+          {
+            repositoryId: githubRepo.id,
+            previewWorkspaceId: null,
+            selections: [
+              {
+                sourcePath: "skills/new-skill",
+                resolution: "overwrite",
+                renamedSkillId: null,
+              },
+            ],
+          },
+        ],
+        skipAdditions: [],
+        unskipAdditions: [],
+      });
     });
   });
 });

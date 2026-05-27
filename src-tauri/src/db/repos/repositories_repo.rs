@@ -9,8 +9,8 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::db::types::{
-    DbPool, SkillRepository, SkillRepositoryAssignment, SkillRepositoryWithStats,
-    LOCAL_UNKNOWN_REPOSITORY_ID,
+    DbPool, SkillRepository, SkillRepositoryAssignment, SkillRepositoryMember,
+    SkillRepositorySyncSkip, SkillRepositoryWithStats, LOCAL_UNKNOWN_REPOSITORY_ID,
 };
 use crate::db::util::now_rfc3339;
 
@@ -73,6 +73,180 @@ pub async fn get_central_skill_ids_by_repository(
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())
+}
+
+pub async fn get_central_repository_members_by_repositories(
+    pool: &DbPool,
+    repository_ids: &[String],
+) -> Result<Vec<SkillRepositoryMember>, String> {
+    if repository_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = repository_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT
+            m.skill_id AS skill_id,
+            m.source_path AS source_path,
+            r.id AS repository_id,
+            r.name AS repository_name,
+            r.source_type AS repository_source_type,
+            r.owner AS repository_owner,
+            r.repo AS repository_repo,
+            r.branch AS repository_branch,
+            r.url AS repository_url,
+            r.pinned AS repository_pinned,
+            r.is_unknown AS repository_is_unknown,
+            r.created_at AS repository_created_at,
+            r.updated_at AS repository_updated_at,
+            r.last_synced_at AS repository_last_synced_at
+         FROM skill_repository_members m
+         JOIN skill_repositories r ON r.id = m.repository_id
+         JOIN skills s ON s.id = m.skill_id
+         WHERE m.repository_id IN ({})
+           AND s.is_central = 1
+           AND r.id <> ?
+           AND r.is_unknown = 0
+         ORDER BY r.name, s.name, s.id",
+        placeholders
+    );
+    let mut query = sqlx::query(&sql);
+    for repository_id in repository_ids {
+        query = query.bind(repository_id);
+    }
+    query = query.bind(LOCAL_UNKNOWN_REPOSITORY_ID);
+
+    let rows = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let mut members = Vec::with_capacity(rows.len());
+    for row in rows {
+        let repository = SkillRepository {
+            id: row.try_get("repository_id").map_err(|e| e.to_string())?,
+            name: row.try_get("repository_name").map_err(|e| e.to_string())?,
+            source_type: row
+                .try_get("repository_source_type")
+                .map_err(|e| e.to_string())?,
+            owner: row.try_get("repository_owner").map_err(|e| e.to_string())?,
+            repo: row.try_get("repository_repo").map_err(|e| e.to_string())?,
+            branch: row
+                .try_get("repository_branch")
+                .map_err(|e| e.to_string())?,
+            url: row.try_get("repository_url").map_err(|e| e.to_string())?,
+            pinned: row
+                .try_get("repository_pinned")
+                .map_err(|e| e.to_string())?,
+            is_unknown: row
+                .try_get("repository_is_unknown")
+                .map_err(|e| e.to_string())?,
+            created_at: row
+                .try_get("repository_created_at")
+                .map_err(|e| e.to_string())?,
+            updated_at: row
+                .try_get("repository_updated_at")
+                .map_err(|e| e.to_string())?,
+            last_synced_at: row
+                .try_get("repository_last_synced_at")
+                .map_err(|e| e.to_string())?,
+        };
+        members.push(SkillRepositoryMember {
+            skill_id: row.try_get("skill_id").map_err(|e| e.to_string())?,
+            source_path: row.try_get("source_path").map_err(|e| e.to_string())?,
+            repository,
+        });
+    }
+
+    Ok(members)
+}
+
+pub async fn get_skill_repository_sync_skips(
+    pool: &DbPool,
+    repository_ids: &[String],
+) -> Result<Vec<SkillRepositorySyncSkip>, String> {
+    if repository_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = repository_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT *
+         FROM skill_repository_sync_skips
+         WHERE repository_id IN ({})
+         ORDER BY repository_id, source_path",
+        placeholders
+    );
+    let mut query = sqlx::query_as::<_, SkillRepositorySyncSkip>(&sql);
+    for repository_id in repository_ids {
+        query = query.bind(repository_id);
+    }
+
+    query.fetch_all(pool).await.map_err(|e| e.to_string())
+}
+
+pub async fn upsert_skill_repository_sync_skip(
+    pool: &DbPool,
+    repository_id: &str,
+    source_path: &str,
+    skill_id: &str,
+    skill_name: &str,
+) -> Result<SkillRepositorySyncSkip, String> {
+    let now = now_rfc3339();
+    sqlx::query(
+        "INSERT INTO skill_repository_sync_skips
+         (repository_id, source_path, skill_id, skill_name, created_at, updated_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(repository_id, source_path) DO UPDATE SET
+           skill_id = excluded.skill_id,
+           skill_name = excluded.skill_name,
+           updated_at = excluded.updated_at,
+           last_seen_at = excluded.last_seen_at",
+    )
+    .bind(repository_id)
+    .bind(source_path)
+    .bind(skill_id)
+    .bind(skill_name)
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query_as::<_, SkillRepositorySyncSkip>(
+        "SELECT *
+         FROM skill_repository_sync_skips
+         WHERE repository_id = ? AND source_path = ?",
+    )
+    .bind(repository_id)
+    .bind(source_path)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "Failed to retrieve repository sync skip".to_string())
+}
+
+pub async fn delete_skill_repository_sync_skip(
+    pool: &DbPool,
+    repository_id: &str,
+    source_path: &str,
+) -> Result<bool, String> {
+    let result = sqlx::query(
+        "DELETE FROM skill_repository_sync_skips
+         WHERE repository_id = ? AND source_path = ?",
+    )
+    .bind(repository_id)
+    .bind(source_path)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(result.rows_affected() > 0)
 }
 
 pub async fn detach_skill_remote_source(pool: &DbPool, skill_id: &str) -> Result<(), String> {
@@ -158,8 +332,8 @@ pub async fn create_or_update_skill_repository(
 
     sqlx::query(
         "INSERT INTO skill_repositories
-         (id, name, source_type, owner, repo, branch, url, is_unknown, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (id, name, source_type, owner, repo, branch, url, pinned, is_unknown, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            source_type = excluded.source_type,
@@ -167,6 +341,7 @@ pub async fn create_or_update_skill_repository(
            repo = excluded.repo,
            branch = excluded.branch,
            url = excluded.url,
+           pinned = skill_repositories.pinned,
            is_unknown = excluded.is_unknown,
            updated_at = excluded.updated_at",
     )
@@ -221,6 +396,37 @@ pub async fn assign_github_repository_to_skill(
     )
     .await?;
     Ok(repository)
+}
+
+pub async fn set_skill_repository_pinned(
+    pool: &DbPool,
+    repository_id: &str,
+    pinned: bool,
+) -> Result<SkillRepository, String> {
+    let repository = get_skill_repository_by_id(pool, repository_id)
+        .await?
+        .ok_or_else(|| format!("Repository '{}' not found", repository_id))?;
+    if repository.id == LOCAL_UNKNOWN_REPOSITORY_ID || repository.is_unknown {
+        return Err("The system unknown-source repository cannot be pinned".to_string());
+    }
+
+    let now = now_rfc3339();
+    sqlx::query(
+        "UPDATE skill_repositories
+         SET pinned = ?, updated_at = ?
+         WHERE id = ? AND id <> ? AND is_unknown = 0",
+    )
+    .bind(pinned)
+    .bind(&now)
+    .bind(repository_id)
+    .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    get_skill_repository_by_id(pool, repository_id)
+        .await?
+        .ok_or_else(|| "Failed to retrieve repository metadata".to_string())
 }
 
 pub async fn assign_skills_to_repository(
@@ -315,9 +521,11 @@ pub async fn get_skill_repository_assignments_for_skills(
             r.repo AS repository_repo,
             r.branch AS repository_branch,
             r.url AS repository_url,
+            r.pinned AS repository_pinned,
             r.is_unknown AS repository_is_unknown,
             r.created_at AS repository_created_at,
-            r.updated_at AS repository_updated_at
+            r.updated_at AS repository_updated_at,
+            r.last_synced_at AS repository_last_synced_at
          FROM skill_repository_members m
          JOIN skill_repositories r ON r.id = m.repository_id
          WHERE m.skill_id IN ({})",
@@ -344,6 +552,9 @@ pub async fn get_skill_repository_assignments_for_skills(
                 .try_get("repository_branch")
                 .map_err(|e| e.to_string())?,
             url: row.try_get("repository_url").map_err(|e| e.to_string())?,
+            pinned: row
+                .try_get("repository_pinned")
+                .map_err(|e| e.to_string())?,
             is_unknown: row
                 .try_get("repository_is_unknown")
                 .map_err(|e| e.to_string())?,
@@ -352,6 +563,9 @@ pub async fn get_skill_repository_assignments_for_skills(
                 .map_err(|e| e.to_string())?,
             updated_at: row
                 .try_get("repository_updated_at")
+                .map_err(|e| e.to_string())?,
+            last_synced_at: row
+                .try_get("repository_last_synced_at")
                 .map_err(|e| e.to_string())?,
         };
         assignments.insert(
@@ -373,7 +587,7 @@ pub async fn get_skill_repositories_with_stats(
     let rows = sqlx::query(
         "SELECT
             r.id, r.name, r.source_type, r.owner, r.repo, r.branch, r.url,
-            r.is_unknown, r.created_at, r.updated_at,
+            r.pinned, r.is_unknown, r.created_at, r.updated_at, r.last_synced_at,
             CASE
               WHEN r.id = ? THEN (
                 SELECT COUNT(*)
@@ -398,7 +612,7 @@ pub async fn get_skill_repositories_with_stats(
          LEFT JOIN skill_repository_members m ON r.id = m.repository_id
          LEFT JOIN skills s ON s.id = m.skill_id AND s.is_central = 1
          GROUP BY r.id
-         ORDER BY r.is_unknown DESC, r.name",
+         ORDER BY r.is_unknown DESC, r.pinned DESC, r.name",
     )
     .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
     .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
@@ -416,9 +630,11 @@ pub async fn get_skill_repositories_with_stats(
             repo: row.try_get("repo").map_err(|e| e.to_string())?,
             branch: row.try_get("branch").map_err(|e| e.to_string())?,
             url: row.try_get("url").map_err(|e| e.to_string())?,
+            pinned: row.try_get("pinned").map_err(|e| e.to_string())?,
             is_unknown: row.try_get("is_unknown").map_err(|e| e.to_string())?,
             created_at: row.try_get("created_at").map_err(|e| e.to_string())?,
             updated_at: row.try_get("updated_at").map_err(|e| e.to_string())?,
+            last_synced_at: row.try_get("last_synced_at").map_err(|e| e.to_string())?,
         };
         result.push(SkillRepositoryWithStats {
             unknown_skill_count: row
@@ -430,4 +646,22 @@ pub async fn get_skill_repositories_with_stats(
     }
 
     Ok(result)
+}
+
+/// 写 `skill_repositories.last_synced_at` —— Phase P2 引入。
+///
+/// 仅由 inventory refresh 流程调用，所以无需走 upsert / unknown 守卫，直接 UPDATE。
+/// 未命中（repo 已被删除）静默忽略。
+pub async fn set_repository_last_synced_at(
+    pool: &DbPool,
+    repository_id: &str,
+    timestamp: &str,
+) -> Result<(), String> {
+    sqlx::query("UPDATE skill_repositories SET last_synced_at = ? WHERE id = ?")
+        .bind(timestamp)
+        .bind(repository_id)
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
