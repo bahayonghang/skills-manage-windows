@@ -5,10 +5,12 @@
 use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool};
+use crate::targets::{remote_join, ConnectedRemoteTarget, RemotePathInfo};
 
 use super::centralize::{ensure_centralized, ensure_replaceable_target};
 use super::fs_util::{copy_dir_all_blocking, create_symlink, run_blocking_fs, symlink_target_path};
 use super::native::should_fallback_to_copy;
+use super::remote::ensure_remote_centralized;
 use super::skip::detect_existing_project_install;
 use super::types::{InstallOutcome, InstallResult};
 
@@ -56,6 +58,223 @@ pub(crate) fn project_relative_skills_dir(agent: &db::Agent) -> Result<PathBuf, 
     }
 
     Ok(relative.to_path_buf())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RemoteProjectInstallPaths {
+    pub project_path: String,
+    pub project_skills_dir: String,
+    pub target_path: String,
+}
+
+pub(crate) fn remote_project_relative_skills_dir(agent: &db::Agent) -> Result<String, String> {
+    let relative = project_relative_skills_dir(agent)?;
+    let normalized = relative.to_string_lossy().replace('\\', "/");
+    let normalized = normalized.trim_matches('/').to_string();
+    if normalized.is_empty() || normalized == "." {
+        return Err(format!(
+            "Agent '{}' does not define a project skills directory pattern.",
+            agent.display_name
+        ));
+    }
+    Ok(normalized)
+}
+
+pub(crate) fn normalize_remote_project_path(remote_home: &str, project_path: &str) -> String {
+    let expanded =
+        crate::paths::expand_remote_home_path(project_path, remote_home).replace('\\', "/");
+    let trimmed = expanded.trim_end_matches('/');
+    if trimmed.is_empty() && expanded.starts_with('/') {
+        "/".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+pub(crate) fn remote_project_install_paths(
+    remote_home: &str,
+    project_path: &str,
+    agent: &db::Agent,
+    skill_id: &str,
+) -> Result<RemoteProjectInstallPaths, String> {
+    let project_path = normalize_remote_project_path(remote_home, project_path);
+    if !project_path.starts_with('/') {
+        return Err(format!(
+            "Remote project path '{}' must be an absolute POSIX path.",
+            project_path
+        ));
+    }
+
+    let relative_skills_dir = remote_project_relative_skills_dir(agent)?;
+    let project_skills_dir = remote_join(&project_path, &relative_skills_dir);
+    let target_path = remote_join(&project_skills_dir, skill_id);
+
+    Ok(RemoteProjectInstallPaths {
+        project_path,
+        project_skills_dir,
+        target_path,
+    })
+}
+
+pub(crate) fn remote_project_method(
+    method: &str,
+    symlink_allowed: bool,
+) -> Result<&'static str, String> {
+    if method == "symlink" {
+        if !symlink_allowed {
+            return Err("Remote symlink install is disabled for this target.".to_string());
+        }
+        Ok("symlink")
+    } else {
+        Ok("copy")
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum RemoteProjectExistingTargetAction {
+    UseEmptyPath,
+    ReplaceSymlink,
+    Reject(String),
+}
+
+pub(crate) fn classify_remote_project_existing_target(
+    target_path: &str,
+    method: &str,
+    path_info: Option<&RemotePathInfo>,
+) -> RemoteProjectExistingTargetAction {
+    let Some(path_info) = path_info else {
+        return RemoteProjectExistingTargetAction::UseEmptyPath;
+    };
+
+    if path_info.file_type == "symlink" {
+        return RemoteProjectExistingTargetAction::ReplaceSymlink;
+    }
+
+    let entry_type = match path_info.file_type.as_str() {
+        "dir" => "directory",
+        "file" => "file",
+        _ => "entry",
+    };
+    RemoteProjectExistingTargetAction::Reject(format!(
+        "A remote project {} already exists at '{}'. Delete it before installing with {}.",
+        entry_type, target_path, method
+    ))
+}
+
+async fn ensure_remote_project_dir(
+    connection: &ConnectedRemoteTarget,
+    project_path: &str,
+) -> Result<(), String> {
+    match connection.inspect_path(project_path).await? {
+        Some(info) if info.file_type == "dir" => Ok(()),
+        Some(_) => Err(format!(
+            "Remote project path '{}' is not a directory.",
+            project_path
+        )),
+        None => Err(format!(
+            "Remote project path '{}' does not exist.",
+            project_path
+        )),
+    }
+}
+
+async fn ensure_remote_project_target_replaceable(
+    connection: &ConnectedRemoteTarget,
+    target_path: &str,
+    method: &str,
+) -> Result<(), String> {
+    let info = connection.inspect_path(target_path).await?;
+    match classify_remote_project_existing_target(target_path, method, info.as_ref()) {
+        RemoteProjectExistingTargetAction::UseEmptyPath
+        | RemoteProjectExistingTargetAction::ReplaceSymlink => Ok(()),
+        RemoteProjectExistingTargetAction::Reject(error) => Err(error),
+    }
+}
+
+const REMOTE_PROJECT_INSTALL_SCRIPT: &str = r#"
+set -eu
+
+project_path=$1
+canonical_dir=$2
+target_path=$3
+project_skills_dir=$4
+method=$5
+
+if [ ! -d "$project_path" ]; then
+  printf 'Remote project path '\''%s'\'' is not a directory.\n' "$project_path" >&2
+  exit 44
+fi
+
+if [ ! -e "$canonical_dir/SKILL.md" ]; then
+  printf 'Central skill source not found at %s\n' "$canonical_dir/SKILL.md" >&2
+  exit 42
+fi
+
+mkdir -p "$project_skills_dir"
+
+if [ -L "$target_path" ]; then
+  rm -f -- "$target_path"
+elif [ -e "$target_path" ]; then
+  if [ -d "$target_path" ]; then
+    entry_type=directory
+  elif [ -f "$target_path" ]; then
+    entry_type=file
+  else
+    entry_type=entry
+  fi
+  printf 'A remote project %s already exists at '\''%s'\''. Delete it before installing with %s.\n' "$entry_type" "$target_path" "$method" >&2
+  exit 43
+fi
+
+if [ "$method" = "symlink" ]; then
+  ln -s "$canonical_dir" "$target_path"
+else
+  mkdir -p "$target_path"
+  cp -R "$canonical_dir/." "$target_path/"
+fi
+"#;
+
+pub(crate) async fn install_central_skill_to_remote_project_outcome_impl(
+    pool: &DbPool,
+    connection: &ConnectedRemoteTarget,
+    skill_id: &str,
+    agent_id: &str,
+    project_path: &str,
+    method: &str,
+) -> Result<InstallOutcome, String> {
+    let agent = db::get_agent_by_id(pool, agent_id)
+        .await?
+        .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
+    let central = db::get_agent_by_id(pool, "central")
+        .await?
+        .ok_or_else(|| "Central agent not found in database".to_string())?;
+    let canonical_dir = remote_join(&central.global_skills_dir, skill_id);
+
+    let method = remote_project_method(method, connection.symlink_allowed())?;
+    let paths =
+        remote_project_install_paths(connection.remote_home(), project_path, &agent, skill_id)?;
+
+    ensure_remote_project_dir(connection, &paths.project_path).await?;
+    ensure_remote_centralized(connection, pool, skill_id, &canonical_dir).await?;
+    ensure_remote_project_target_replaceable(connection, &paths.target_path, method).await?;
+
+    connection
+        .run_script(
+            REMOTE_PROJECT_INSTALL_SCRIPT,
+            &[
+                &paths.project_path,
+                &canonical_dir,
+                &paths.target_path,
+                &paths.project_skills_dir,
+                method,
+            ],
+        )
+        .await
+        .map(|_| {
+            InstallOutcome::Installed(InstallResult {
+                symlink_path: paths.target_path,
+            })
+        })
 }
 
 fn ensure_project_dir_sync(project_path: &Path) -> Result<(), String> {

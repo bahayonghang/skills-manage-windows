@@ -24,7 +24,11 @@ use super::native::{
     install_skill_to_agent_impl, uninstall_skill_from_agent_impl,
     uninstall_skill_from_agent_with_row_impl,
 };
-use super::project::install_central_skill_to_project_outcome_impl;
+use super::project::{
+    classify_remote_project_existing_target, install_central_skill_to_project_outcome_impl,
+    normalize_remote_project_path, remote_project_install_paths, remote_project_method,
+    remote_project_relative_skills_dir, RemoteProjectExistingTargetAction,
+};
 use super::remote::{classify_remote_existing_install_target, RemoteExistingInstallAction};
 use super::types::BatchUninstallSkillRequest;
 use super::types::{BatchInstallResult, FailedInstall, InstallOutcome};
@@ -231,6 +235,135 @@ fn test_remote_symlink_install_rejects_unmanaged_dir() {
         }
         other => panic!("expected rejection, got {:?}", other),
     }
+}
+
+#[test]
+fn test_remote_project_paths_use_agent_project_dir() {
+    let agent = db::Agent {
+        id: "claude-code".to_string(),
+        display_name: "Claude Code".to_string(),
+        category: "coding".to_string(),
+        global_skills_dir: "/home/alice/.claude/skills".to_string(),
+        project_skills_dir: Some(".claude/skills".to_string()),
+        icon_name: None,
+        is_detected: true,
+        is_builtin: true,
+        is_enabled: true,
+    };
+
+    let paths =
+        remote_project_install_paths("/home/alice", "/work/demo/", &agent, "frontend-design")
+            .unwrap();
+
+    assert_eq!(paths.project_path, "/work/demo");
+    assert_eq!(paths.project_skills_dir, "/work/demo/.claude/skills");
+    assert_eq!(
+        paths.target_path,
+        "/work/demo/.claude/skills/frontend-design"
+    );
+}
+
+#[test]
+fn test_remote_project_paths_expand_home_and_universal_dir() {
+    let agent = db::Agent {
+        id: "codex".to_string(),
+        display_name: "Codex".to_string(),
+        category: "coding".to_string(),
+        global_skills_dir: "/home/alice/.agents/skills".to_string(),
+        project_skills_dir: Some(".codex/skills".to_string()),
+        icon_name: None,
+        is_detected: true,
+        is_builtin: true,
+        is_enabled: true,
+    };
+
+    assert_eq!(
+        remote_project_relative_skills_dir(&agent).unwrap(),
+        db::UNIVERSAL_PROJECT_SKILLS_DIR
+    );
+    let paths =
+        remote_project_install_paths("/home/alice", "~/repo", &agent, "code-reviewer").unwrap();
+
+    assert_eq!(paths.project_path, "/home/alice/repo");
+    assert_eq!(
+        paths.target_path,
+        "/home/alice/repo/.agents/skills/code-reviewer"
+    );
+}
+
+#[test]
+fn test_remote_project_path_requires_absolute_posix_path() {
+    let agent = db::Agent {
+        id: "claude-code".to_string(),
+        display_name: "Claude Code".to_string(),
+        category: "coding".to_string(),
+        global_skills_dir: "/home/alice/.claude/skills".to_string(),
+        project_skills_dir: Some(".claude/skills".to_string()),
+        icon_name: None,
+        is_detected: true,
+        is_builtin: true,
+        is_enabled: true,
+    };
+
+    let error =
+        remote_project_install_paths("/home/alice", "relative/repo", &agent, "demo").unwrap_err();
+
+    assert!(error.contains("absolute POSIX path"));
+}
+
+#[test]
+fn test_remote_project_install_replaces_existing_symlink_only() {
+    let info = RemotePathInfo {
+        file_type: "symlink".to_string(),
+        symlink_target: Some("/central/demo".to_string()),
+    };
+
+    let action = classify_remote_project_existing_target(
+        "/project/.agents/skills/demo",
+        "copy",
+        Some(&info),
+    );
+
+    assert_eq!(action, RemoteProjectExistingTargetAction::ReplaceSymlink);
+}
+
+#[test]
+fn test_remote_project_install_rejects_existing_real_directory() {
+    let info = RemotePathInfo {
+        file_type: "dir".to_string(),
+        symlink_target: None,
+    };
+
+    let action = classify_remote_project_existing_target(
+        "/project/.agents/skills/demo",
+        "copy",
+        Some(&info),
+    );
+
+    match action {
+        RemoteProjectExistingTargetAction::Reject(error) => {
+            assert!(error.contains("remote project directory"));
+            assert!(error.contains("/project/.agents/skills/demo"));
+        }
+        other => panic!("expected rejection, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_remote_project_method_rejects_disabled_symlink() {
+    assert_eq!(remote_project_method("copy", false).unwrap(), "copy");
+    let error = remote_project_method("symlink", false).unwrap_err();
+    assert!(error.contains("Remote symlink install is disabled"));
+    assert_eq!(remote_project_method("symlink", true).unwrap(), "symlink");
+}
+
+#[test]
+fn test_normalize_remote_project_path_keeps_root() {
+    assert_eq!(normalize_remote_project_path("/home/alice", "/"), "/");
+    assert_eq!(
+        normalize_remote_project_path("/home/alice", "~\\repo\\demo\\"),
+        "/home/alice/repo/demo"
+    );
 }
 
 // ── install_skill_to_agent_impl ───────────────────────────────────────────

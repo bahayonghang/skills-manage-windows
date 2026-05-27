@@ -469,6 +469,43 @@ describe("InstallDialog", () => {
     expect(mockOnInstall).not.toHaveBeenCalled();
   });
 
+
+  it("allows remote project installs with manual POSIX path input", async () => {
+    const remoteTarget: TargetSummary = {
+      id: "ssh-demo",
+      kind: "ssh",
+      label: "Demo",
+      remoteOs: "Linux",
+      symlinkEnabled: true,
+      isActive: true,
+    };
+    useTargetStore.setState({
+      targets: [localTarget, remoteTarget],
+      activeTarget: remoteTarget,
+    });
+    mockOnInstall.mockResolvedValueOnce(successInstallResult);
+
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+    expect(screen.queryByRole("button", { name: "选择项目文件夹" })).not.toBeInTheDocument();
+    expect(screen.getByText("远程项目路径需要手动输入，并使用 POSIX 格式，例如 /home/me/project。")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("/home/me/project"), {
+      target: { value: "/home/test/project" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /安装到 .* 个平台/i }));
+
+    await waitFor(() => {
+      expect(mockOnInstall).toHaveBeenCalledWith(
+        "frontend-design",
+        expect.any(Array),
+        "copy",
+        "/home/test/project"
+      );
+    });
+    expect(openDialog).not.toHaveBeenCalled();
+  });
+
   it("defaults to symlink for remote targets that support symlinks", async () => {
     mockOnInstall.mockResolvedValueOnce(successInstallResult);
     const remoteTarget: TargetSummary = {

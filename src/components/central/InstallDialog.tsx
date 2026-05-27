@@ -59,7 +59,7 @@ export function InstallDialog({
   const activeTarget = useTargetStore((s) => s.activeTarget);
   const isRemoteTarget = isRemoteLikeTarget(activeTarget);
   const canUseSymlink = !isRemoteTarget || activeTarget.symlinkEnabled === true;
-  const canInstallToProject = Boolean(skill?.is_central) && !isRemoteTarget;
+  const canInstallToProject = Boolean(skill?.is_central);
   // Only show non-central agents in the install dialog.
   const targetAgents = useMemo(
     () => agents.filter((agent) => agent.id !== "central"),
@@ -244,6 +244,17 @@ export function InstallDialog({
                 onChange={setProjectPath}
                 onError={setError}
                 disabled={isLoading}
+                browseEnabled={!isRemoteTarget}
+                placeholder={
+                  isRemoteTarget
+                    ? t("central.batchInstallRemoteProjectPathPlaceholder")
+                    : undefined
+                }
+                hint={
+                  isRemoteTarget
+                    ? t("central.batchInstallRemoteProjectPathHint")
+                    : undefined
+                }
               />
             </div>
           )}

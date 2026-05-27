@@ -11,6 +11,9 @@ interface ProjectPathPickerProps {
   onChange: (value: string) => void;
   onError: (message: string | null) => void;
   disabled?: boolean;
+  browseEnabled?: boolean;
+  placeholder?: string;
+  hint?: string;
 }
 
 export function ProjectPathPicker({
@@ -18,11 +21,15 @@ export function ProjectPathPicker({
   onChange,
   onError,
   disabled = false,
+  browseEnabled = true,
+  placeholder,
+  hint,
 }: ProjectPathPickerProps) {
   const { t } = useTranslation();
   const [isPicking, setIsPicking] = useState(false);
 
   async function handleBrowseProjectPath() {
+    if (!browseEnabled) return;
     setIsPicking(true);
     try {
       const selectedPath = await open({
@@ -48,27 +55,33 @@ export function ProjectPathPicker({
   }
 
   return (
-    <div className="flex gap-2">
-      <Input
-        value={value}
-        onChange={(event) => {
-          onChange(event.target.value);
-          onError(null);
-        }}
-        placeholder={t("central.batchInstallProjectPathPlaceholder")}
-      />
-      <Button
-        type="button"
-        variant="outline"
-        onClick={handleBrowseProjectPath}
-        disabled={disabled || isPicking}
-        aria-label={t("central.batchInstallProjectPathBrowseAria")}
-      >
-        <FolderOpen className="size-3.5" aria-hidden="true" />
-        <span className="hidden sm:inline">
-          {t("central.batchInstallProjectPathBrowse")}
-        </span>
-      </Button>
+    <div className="space-y-1.5">
+      <div className="flex gap-2">
+        <Input
+          value={value}
+          onChange={(event) => {
+            onChange(event.target.value);
+            onError(null);
+          }}
+          placeholder={placeholder ?? t("central.batchInstallProjectPathPlaceholder")}
+          disabled={disabled}
+        />
+        {browseEnabled && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleBrowseProjectPath}
+            disabled={disabled || isPicking}
+            aria-label={t("central.batchInstallProjectPathBrowseAria")}
+          >
+            <FolderOpen className="size-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">
+              {t("central.batchInstallProjectPathBrowse")}
+            </span>
+          </Button>
+        )}
+      </div>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

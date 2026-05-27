@@ -174,6 +174,42 @@ describe("BatchInstallCentralSkillsDialog", () => {
     expect(mockOnInstall).not.toHaveBeenCalled();
   });
 
+
+  it("allows remote project installs with a manually typed POSIX path", async () => {
+    const remoteTarget: TargetSummary = {
+      id: "ssh-demo",
+      kind: "ssh",
+      label: "Demo",
+      remoteOs: "Linux",
+      symlinkEnabled: true,
+      isActive: true,
+    };
+    useTargetStore.setState({
+      targets: [localTarget, remoteTarget],
+      activeTarget: remoteTarget,
+    });
+    renderDialog();
+
+    fireEvent.click(screen.getByText("项目目录").closest("label")!);
+
+    expect(screen.queryByRole("button", { name: "选择项目文件夹" })).not.toBeInTheDocument();
+    expect(screen.getByText("请输入远程项目的绝对路径。")).toBeInTheDocument();
+    const input = screen.getByPlaceholderText("/home/me/project");
+    fireEvent.change(input, { target: { value: "/home/test/project" } });
+    fireEvent.click(screen.getByRole("button", {
+      name: /将 2 个技能安装到 .* 个平台/i,
+    }));
+
+    await waitFor(() =>
+      expect(mockOnInstall).toHaveBeenCalledWith(
+        expect.any(Array),
+        "copy",
+        "/home/test/project"
+      )
+    );
+    expect(openDialog).not.toHaveBeenCalled();
+  });
+
   it("closes without an error when every selected target is skipped", async () => {
     mockOnInstall.mockResolvedValueOnce({
       succeeded: [],

@@ -124,7 +124,7 @@
     "wslState": "State",
     "wslVersion": "Version",
     "symlinkDisabled": "This remote target does not support symlink install.",
-    "projectModeUnsupported": "Project-scoped install is not available for remote targets in this version.",
+    "projectModeUnsupported": "Project-scoped install is not available for this target.",
     "centralUpdatesUnsupported": "Remote Central update checks are not available in this version.",
     "pathCopied": "Remote path copied",
     "quickSwitch": {
@@ -132,7 +132,8 @@
       "manage": "Manage targets…",
       "useThis": "Use",
       "empty": "No remote targets configured."
-    }
+    },
+    "projectModeRemoteHint": "Enter an absolute remote project path."
   },
   "topbar": {
     "importSkill": "Import skill",
@@ -1208,7 +1209,9 @@
     "repositorySyncTabEmpty": "Nothing to handle in this category.",
     "repositorySyncRenameRequired": "Enter a new skill ID.",
     "repositorySyncRenameInvalid": "Skill IDs can only use lower-case letters, numbers, and single dashes.",
-    "repositorySyncApplyWithCount": "Apply sync ({{count}})"
+    "repositorySyncApplyWithCount": "Apply sync ({{count}})",
+    "batchInstallRemoteProjectPathPlaceholder": "/home/me/project",
+    "batchInstallRemoteProjectPathHint": "Remote project paths must be typed manually and use POSIX format, for example /home/me/project."
   },
   "installDialog": {
     "title": "Install {{name}}",

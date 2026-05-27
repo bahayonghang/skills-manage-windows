@@ -426,30 +426,9 @@ pub async fn batch_install_central_skills(
     let active_target = state.active_target().await?;
     let target_context = target_context_from_active_target(&active_target);
     let started_at = Instant::now();
-    if active_target.is_remote_like() && project_path.is_some() {
-        let error = "Remote project install is not supported in this version.".to_string();
-        record_operation_log_best_effort(
-            &state.db,
-            target_context,
-            OperationLogEvent::new(
-                "install",
-                "central.batch_install",
-                "failed",
-                "Failed to batch install Central skills",
-            )
-            .subject("batch", "central.batch_install", "Central batch install")
-            .error(&error)
-            .details(json!({
-                "skillIds": &skill_ids,
-                "agentIds": &agent_ids,
-                "method": method,
-                "projectPath": &project_path,
-            }))
-            .duration_ms(started_at.elapsed().as_millis() as i64),
-        )
-        .await;
-        return Err(error);
-    }
+    let project_path = project_path
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty());
     let pool = state.active_db().await?;
     if active_target.is_remote_like() {
         let remote_method = if method == "symlink" {
@@ -477,6 +456,7 @@ pub async fn batch_install_central_skills(
                     "skillIds": &skill_ids,
                     "agentIds": &agent_ids,
                     "method": method,
+                    "projectPath": &project_path,
                     "succeeded": &succeeded,
                     "skipped": &skipped,
                     "failed": &failed,
@@ -517,6 +497,7 @@ pub async fn batch_install_central_skills(
                         "skillIds": &skill_ids,
                         "agentIds": &agent_ids,
                         "method": method,
+                        "projectPath": &project_path,
                         "succeeded": &succeeded,
                         "skipped": &skipped,
                         "failed": &failed,
@@ -533,15 +514,28 @@ pub async fn batch_install_central_skills(
         };
         for skill_id in skill_ids {
             for agent_id in &agent_ids {
-                match installation::install_skill_to_agent_ssh_with_connection(
-                    &pool,
-                    &connection,
-                    &skill_id,
-                    agent_id,
-                    remote_method,
-                )
-                .await
-                {
+                let install_result = if let Some(project_path) = project_path.as_deref() {
+                    installation::install_central_skill_to_remote_project_outcome_impl(
+                        &pool,
+                        &connection,
+                        &skill_id,
+                        agent_id,
+                        project_path,
+                        remote_method,
+                    )
+                    .await
+                    .map(installation::InstallOutcome::into_install_result)
+                } else {
+                    installation::install_skill_to_agent_ssh_with_connection(
+                        &pool,
+                        &connection,
+                        &skill_id,
+                        agent_id,
+                        remote_method,
+                    )
+                    .await
+                };
+                match install_result {
                     Ok(result) => succeeded.push(CentralBatchInstallSuccess {
                         skill_id: skill_id.clone(),
                         agent_id: agent_id.clone(),
@@ -574,6 +568,7 @@ pub async fn batch_install_central_skills(
             .details(json!({
                 "agentIds": &agent_ids,
                 "method": method,
+                "projectPath": &project_path,
                 "succeeded": &succeeded,
                 "skipped": &skipped,
                 "failed": &failed,
@@ -588,11 +583,7 @@ pub async fn batch_install_central_skills(
         });
     }
 
-    let project_path_buf = project_path
-        .as_deref()
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
-        .map(PathBuf::from);
+    let project_path_buf = project_path.as_deref().map(PathBuf::from);
 
     let batch_result = installation::batch_install_central_skills_impl(
         &pool,

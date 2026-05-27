@@ -88,7 +88,7 @@ async fn record_remote_installation(
     })
 }
 
-async fn ensure_remote_centralized(
+pub(crate) async fn ensure_remote_centralized(
     connection: &ConnectedRemoteTarget,
     pool: &DbPool,
     skill_id: &str,

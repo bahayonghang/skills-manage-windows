@@ -31,6 +31,7 @@ pub use native::{
     install_skill_to_agent_impl, uninstall_skill_from_agent_impl,
     uninstall_skill_from_agent_with_row_impl,
 };
+pub(crate) use project::install_central_skill_to_remote_project_outcome_impl;
 pub(crate) use remote::install_skill_to_agent_ssh_with_connection;
 pub use remote::{
     install_skill_to_agent_remote_impl, install_skill_to_agent_ssh_impl,

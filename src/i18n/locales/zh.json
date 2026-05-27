@@ -124,7 +124,7 @@
     "wslState": "状态",
     "wslVersion": "版本",
     "symlinkDisabled": "远程目标默认使用 copy 安装。",
-    "projectModeUnsupported": "首版远程目标不支持项目级安装。",
+    "projectModeUnsupported": "此目标不支持项目级安装。",
     "centralUpdatesUnsupported": "首版远程目标不支持中央库更新检查。",
     "pathCopied": "远程路径已复制",
     "quickSwitch": {
@@ -132,7 +132,8 @@
       "manage": "管理目标…",
       "useThis": "切到这里",
       "empty": "尚未配置远程目标。"
-    }
+    },
+    "projectModeRemoteHint": "请输入远程项目的绝对路径。"
   },
   "topbar": {
     "importSkill": "导入技能",
@@ -1208,7 +1209,9 @@
     "repositorySyncTabEmpty": "此分类没有需要处理的项目。",
     "repositorySyncRenameRequired": "请输入新的技能 ID。",
     "repositorySyncRenameInvalid": "技能 ID 只能使用小写字母、数字和单个短横线。",
-    "repositorySyncApplyWithCount": "应用同步（{{count}} 项）"
+    "repositorySyncApplyWithCount": "应用同步（{{count}} 项）",
+    "batchInstallRemoteProjectPathPlaceholder": "/home/me/project",
+    "batchInstallRemoteProjectPathHint": "远程项目路径需要手动输入，并使用 POSIX 格式，例如 /home/me/project。"
   },
   "installDialog": {
     "title": "安装 {{name}}",

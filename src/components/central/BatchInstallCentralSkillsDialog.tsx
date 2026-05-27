@@ -109,11 +109,7 @@ export function BatchInstallCentralSkillsDialog({
     setSelectedAgentIds(initialSelection);
     setError(null);
     setResult(null);
-    if (isRemoteTarget) {
-      setTargetMode("platform");
-      setInstallMethod(canUseSymlink ? "symlink" : "copy");
-      setProjectPath("");
-    } else if (targetMode === "platform") {
+    if (targetMode === "platform") {
       setInstallMethod(canUseSymlink ? "symlink" : "copy");
       setProjectPath("");
     } else {
@@ -122,9 +118,6 @@ export function BatchInstallCentralSkillsDialog({
   }, [open, targetAgents, targetMode, isRemoteTarget, canUseSymlink, defaultExcludedSet]);
 
   function handleModeChange(mode: TargetMode) {
-    if (isRemoteTarget && mode === "project") {
-      return;
-    }
     setTargetMode(mode);
     setInstallMethod(mode === "project" || !canUseSymlink ? "copy" : "symlink");
     setError(null);
@@ -198,11 +191,11 @@ export function BatchInstallCentralSkillsDialog({
                 <span className="text-sm">{t("central.batchInstallTargetPlatforms")}</span>
               </label>
               <label className="flex cursor-pointer items-center gap-2.5">
-                <RadioItem value="project" disabled={isRemoteTarget} />
+                <RadioItem value="project" />
                 <span className="text-sm">{t("central.batchInstallTargetProject")}</span>
                 {isRemoteTarget && (
                   <span className="text-xs text-muted-foreground">
-                    {t("targets.projectModeUnsupported")}
+                    {t("targets.projectModeRemoteHint")}
                   </span>
                 )}
               </label>
@@ -219,6 +212,17 @@ export function BatchInstallCentralSkillsDialog({
                 onChange={setProjectPath}
                 onError={setError}
                 disabled={isInstalling}
+                browseEnabled={!isRemoteTarget}
+                placeholder={
+                  isRemoteTarget
+                    ? t("central.batchInstallRemoteProjectPathPlaceholder")
+                    : undefined
+                }
+                hint={
+                  isRemoteTarget
+                    ? t("central.batchInstallRemoteProjectPathHint")
+                    : undefined
+                }
               />
             </div>
           )}
