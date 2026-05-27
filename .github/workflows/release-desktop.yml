@@ -68,10 +68,24 @@ jobs:
           }
 
       - name: Build Windows bundles
+        shell: pwsh
         env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi --config '{"bundle":{"createUpdaterArtifacts":true},"plugins":{"updater":{"pubkey":"${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}"}}}' --ci
+        run: |
+          $releaseConfig = @{
+            bundle = @{
+              createUpdaterArtifacts = $true
+            }
+            plugins = @{
+              updater = @{
+                pubkey = $env:TAURI_UPDATER_PUBLIC_KEY
+              }
+            }
+          } | ConvertTo-Json -Depth 10 -Compress
+          Set-Content -LiteralPath release-updater-config.json -Value $releaseConfig -NoNewline -Encoding utf8
+          pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi --config release-updater-config.json --ci
 
       - name: Prepare Windows assets
         shell: pwsh
