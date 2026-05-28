@@ -291,6 +291,14 @@ export function CentralRepositorySyncDialog({
       if (decision.action === "unskip") {
         unskipAdditions.push({ repositoryId: item.repositoryId, sourcePath: item.preview.sourcePath });
       }
+      if (decision.action === "keep") {
+        skipAdditions.push({
+          repositoryId: item.repositoryId,
+          sourcePath: item.preview.sourcePath,
+          skillId: item.preview.skillId,
+          skillName: item.preview.skillName,
+        });
+      }
       if (decision.action === "import" || decision.action === "rename") {
         pushAdditionSelection(
           additionsByRepo,
@@ -341,8 +349,10 @@ export function CentralRepositorySyncDialog({
       if (decision?.deleteExisting || decision?.selected) count += 1;
     }
     for (const item of preview.skippedRemoteAdded) {
-      const decision = skippedDecisions[addedKey(item.repositoryId, item.preview.sourcePath)];
-      if (decision && decision.action !== "keep") count += 1;
+      const decision = skippedDecisions[addedKey(item.repositoryId, item.preview.sourcePath)] ?? {
+        action: "keep",
+      };
+      if (decision.action) count += 1;
     }
     return count;
   }, [addedDecisions, preview, skippedDecisions]);

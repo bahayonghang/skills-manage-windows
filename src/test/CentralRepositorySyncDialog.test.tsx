@@ -561,6 +561,69 @@ describe("CentralRepositorySyncDialog", () => {
     });
   });
 
+  it("treats remembered skipped additions as keep decisions by default", async () => {
+    const onConfirm = vi.fn();
+    render(
+      <CentralRepositorySyncDialog
+        open
+        onOpenChange={vi.fn()}
+        preview={{
+          ...preview,
+          remoteAdded: [],
+          skippedRemoteAdded: [
+            remoteAddedSkill("skills/skipped-one", "skipped-one", "Skipped One"),
+            remoteAddedSkill("skills/skipped-two", "skipped-two", "Skipped Two"),
+            remoteAddedSkill("skills/skipped-three", "skipped-three", "Skipped Three"),
+          ],
+          remoteMissing: [],
+        }}
+        deletePreview={{ previews: [], failed: [] }}
+        agents={agents}
+        skills={existingSkills}
+        isPreviewLoading={false}
+        isApplying={false}
+        error={null}
+        onConfirm={onConfirm}
+      />
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const applyButton = within(dialog).getByTestId("confirm-repo-sync");
+    expect(applyButton).toBeEnabled();
+    expect(applyButton).toHaveTextContent("应用同步（3 项）");
+
+    fireEvent.click(applyButton);
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledWith(
+        [],
+        [],
+        [],
+        [
+          {
+            repositoryId: "github-openai-skills-main",
+            sourcePath: "skills/skipped-one",
+            skillId: "skipped-one",
+            skillName: "Skipped One",
+          },
+          {
+            repositoryId: "github-openai-skills-main",
+            sourcePath: "skills/skipped-two",
+            skillId: "skipped-two",
+            skillName: "Skipped Two",
+          },
+          {
+            repositoryId: "github-openai-skills-main",
+            sourcePath: "skills/skipped-three",
+            skillId: "skipped-three",
+            skillName: "Skipped Three",
+          },
+        ],
+        []
+      );
+    });
+  });
+
   it("shows remote and existing source details for conflicting remote additions", () => {
     render(
       <CentralRepositorySyncDialog
