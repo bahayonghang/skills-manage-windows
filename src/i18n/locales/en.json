@@ -1724,7 +1724,7 @@
       "newVersion": "v{{version}} available",
       "releaseNotes": "Release notes",
       "upToDateMessage": "You are already on the latest version.",
-      "unsupportedMessage": "Built-in updates can only run inside the Tauri desktop app.",
+      "unsupportedMessage": "Built-in updates currently support only the Windows x64 desktop build.",
       "diagnosticsTitle": "Diagnostics",
       "diagnosticsDesc": "Quick checks for the Windows build chain and local data location.",
       "buildTarget": "Build target",

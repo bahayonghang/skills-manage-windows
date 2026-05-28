@@ -29,6 +29,10 @@ describe("useAppUpdateStore", () => {
     updaterMocks.check.mockReset();
     processMocks.relaunch.mockReset();
     vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(true);
+    vi.spyOn(tauriBridge, "invoke").mockResolvedValue({
+      platform: "windows",
+      windowsUpdaterSupported: true,
+    });
     useAppUpdateStore.getState().reset();
   });
 
@@ -39,6 +43,32 @@ describe("useAppUpdateStore", () => {
 
     expect(useAppUpdateStore.getState().status).toBe("unsupported");
     expect(useAppUpdateStore.getState().error).toBeNull();
+    expect(updaterMocks.check).not.toHaveBeenCalled();
+  });
+
+  it("marks non-Windows desktop builds as unsupported", async () => {
+    vi.spyOn(tauriBridge, "invoke").mockResolvedValueOnce({
+      platform: "macos",
+      windowsUpdaterSupported: false,
+    });
+
+    await useAppUpdateStore.getState().checkForUpdate();
+
+    expect(useAppUpdateStore.getState().status).toBe("unsupported");
+    expect(useAppUpdateStore.getState().error).toBeNull();
+    expect(updaterMocks.check).not.toHaveBeenCalled();
+  });
+
+  it("stores errors from runtime platform detection failures", async () => {
+    vi.spyOn(tauriBridge, "invoke").mockRejectedValueOnce(new Error("runtime unavailable"));
+
+    await useAppUpdateStore.getState().checkForUpdate();
+
+    expect(useAppUpdateStore.getState()).toMatchObject({
+      status: "error",
+      error: "runtime unavailable",
+      hasChecked: true,
+    });
     expect(updaterMocks.check).not.toHaveBeenCalled();
   });
 

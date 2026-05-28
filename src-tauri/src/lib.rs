@@ -288,6 +288,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap::get_bootstrap_snapshot,
             commands::bootstrap::get_skill_counts_summary,
+            commands::app_runtime::get_app_runtime_info,
             // Targets
             commands::targets::list_targets,
             commands::targets::list_wsl_distributions,

@@ -1472,7 +1472,7 @@ describe("SettingsView", () => {
 
   it.each([
     ["upToDate", "已是最新版本。"],
-    ["unsupported", "当前不是 Tauri 桌面运行环境，无法执行内置更新。"],
+    ["unsupported", "当前内置更新仅支持 Windows x64 桌面版。"],
     ["error", "metadata missing"],
   ] as const)("renders update state %s", (status, message) => {
     setupMocks({
@@ -1724,7 +1724,7 @@ describe("SettingsView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "展开 编程类 分组的平台详情" }));
 
-    expect(screen.getByText("Claude Code")).toBeTruthy();
+    expect(screen.getByLabelText("切换平台 Claude Code 的显示")).toBeTruthy();
   });
 
   it("keeps search results visible even when a platform group was collapsed", () => {

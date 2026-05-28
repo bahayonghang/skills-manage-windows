@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import { isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/tauri";
 
 export type AppUpdateStatus =
   | "idle"
@@ -32,6 +32,11 @@ interface UpdateLike {
   downloadAndInstall: (onEvent?: (event: DownloadEventLike) => void) => Promise<void>;
 }
 
+interface AppRuntimeInfo {
+  platform: "windows" | "macos" | "linux" | "other";
+  windowsUpdaterSupported: boolean;
+}
+
 interface AppUpdateState {
   status: AppUpdateStatus;
   currentVersion: string;
@@ -56,6 +61,15 @@ function toErrorMessage(error: unknown): string {
 
 function resetCachedUpdate() {
   cachedUpdate = null;
+}
+
+async function isWindowsUpdaterSupported(): Promise<boolean> {
+  if (!isTauriRuntime()) {
+    return false;
+  }
+
+  const runtimeInfo = await invoke<AppRuntimeInfo>("get_app_runtime_info");
+  return runtimeInfo.windowsUpdaterSupported;
 }
 
 export const useAppUpdateStore = create<AppUpdateState>((set, get) => ({
@@ -88,6 +102,15 @@ export const useAppUpdateStore = create<AppUpdateState>((set, get) => ({
     }
 
     try {
+      if (!(await isWindowsUpdaterSupported())) {
+        set({
+          status: "unsupported",
+          error: null,
+          hasChecked: true,
+        });
+        return;
+      }
+
       const { check } = await import("@tauri-apps/plugin-updater");
       const update = (await check()) as UpdateLike | null;
 
