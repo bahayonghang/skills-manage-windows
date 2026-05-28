@@ -117,7 +117,7 @@ describe("ProjectInstallDialog", () => {
       screen.getByText(/把中央 skill 装到项目「demo」/)
     ).toBeInTheDocument();
     expect(screen.getByText("Universal")).toBeInTheDocument();
-    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Claude Code/ })).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /Antigravity/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /Antigravity CLI/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Codex")).not.toBeInTheDocument();

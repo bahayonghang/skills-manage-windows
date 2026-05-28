@@ -6,3 +6,6 @@ allowBuilds:
   better-sqlite3: true
   "@tailwindcss/oxide": true
   msw: false
+
+minimumReleaseAgeExclude:
+  - shadcn@4.8.1

@@ -115,10 +115,14 @@ describe("UnifiedSkillCard", () => {
     ).toBeEnabled();
   });
 
-  it("renders usageBadge when count > 0", () => {
+  it("renders localized usageBadge text and tooltip when count > 0", () => {
     render(<UnifiedSkillCard name="review" usageBadge={12} />);
-    expect(screen.getByTestId("usage-badge")).toBeInTheDocument();
-    expect(screen.getByText("12×")).toBeInTheDocument();
+
+    const badge = screen.getByTestId("usage-badge");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute("title", "最近 30 天调用 12 次");
+    expect(screen.getByText("12 次")).toBeInTheDocument();
+    expect(screen.getByText("近 30 天")).toBeInTheDocument();
   });
 
   it("hides usageBadge when count is 0 or undefined", () => {

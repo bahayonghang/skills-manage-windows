@@ -1,0 +1,62 @@
+# Desktop release process
+
+SkillPort desktop releases are published from version tags through the canonical
+`Release Desktop` workflow at `.github/workflows/release-desktop.yml`.
+
+## Canonical workflow
+
+- Trigger: push a tag matching `v*`.
+- Release body source: `scripts/prepare-release-body.mjs`.
+- Updater metadata source: `scripts/generate-latest-json.mjs`.
+- Required Windows updater secrets:
+  - `TAURI_UPDATER_PUBLIC_KEY`
+  - `TAURI_SIGNING_PRIVATE_KEY`
+  - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+
+Do not add another release workflow for the same desktop assets. If the release
+flow changes, update `release-desktop.yml` and these scripts together so Windows
+signing and `latest.json` stay in sync.
+
+## Release checklist
+
+1. Bump `package.json`.
+2. Run `node scripts/sync-version.mjs`.
+3. Verify the version fields in:
+   - `package.json`
+   - `src-tauri/tauri.conf.json`
+   - `src-tauri/Cargo.toml`
+   - `src-tauri/Cargo.lock`
+4. Add release notes at `release-notes/<version>.md`, or a series fallback at
+   `release-notes/<major>.<minor>.md`.
+5. Run the local gates:
+   - `pnpm typecheck`
+   - `pnpm lint`
+   - `pnpm test`
+   - `pnpm sizecheck`
+   - `cargo test --manifest-path src-tauri/Cargo.toml`
+   - `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings`
+6. Merge the release commit to `main`.
+7. Push `v<version>`.
+8. Confirm the release contains:
+   - `latest.json`
+   - `skillport_<version>_windows_x64_nsis.exe`
+   - `skillport_<version>_windows_x64_nsis.exe.sig`
+   - Windows MSI / ZIP assets
+   - macOS and Linux install assets when those jobs pass
+9. Fetch
+   `https://github.com/bahayonghang/skills-manage-windows/releases/latest/download/latest.json`
+   and confirm it has the expected version, Windows URL, and signature.
+
+## Updater invariants
+
+- The Tauri config in `src-tauri/tauri.conf.json` intentionally keeps
+  `bundle.createUpdaterArtifacts` disabled and stores a placeholder updater
+  public key for local builds.
+- The release workflow must inject the real updater public key and enable
+  updater artifacts for Windows builds.
+- Built-in app updates are Windows x64 only until release metadata includes
+  macOS and Linux platform entries.
+- The `/releases/latest/download/latest.json` endpoint assumes the latest
+  GitHub release is a desktop release that includes `latest.json`.
+
+Last reviewed: 2026-05-27

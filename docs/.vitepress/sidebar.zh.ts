@@ -78,6 +78,7 @@ export const sidebarZh: DefaultTheme.SidebarMulti = {
       items: [
         { text: '快捷键', link: '/zh/reference/shortcuts' },
         { text: 'CLI：just', link: '/zh/reference/cli-just' },
+        { text: '桌面发布流程', link: '/zh/reference/release-process' },
       ],
     },
     {

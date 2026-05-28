@@ -5,6 +5,7 @@ import type { TFunction } from "i18next";
 
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
+import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type { SkillGroup } from "@/lib/centralGrouping";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,18 @@ export function CentralGroupedSkillList({
     [collapsed, groups]
   );
   const aiSummaries = useSkillExplanationSummaries(visibleSkillIds, "zh");
+  const skillNamesForUsage = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          groups.flatMap((group) =>
+            collapsed[group.key] ? [] : group.skills.map((skill) => skill.name)
+          )
+        )
+      ),
+    [collapsed, groups]
+  );
+  const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
 
   return (
     <div
@@ -108,6 +121,7 @@ export function CentralGroupedSkillList({
                       name={skill.name}
                       description={skill.description}
                       aiSummary={aiSummaries[skill.id]}
+                      usageBadge={usageCounts?.[skill.name]}
                       checkbox={{
                         checked: selectedSkillIdSet.has(skill.id),
                         onChange: () => onToggleSelection(skill.id),

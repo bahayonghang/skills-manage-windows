@@ -81,7 +81,7 @@ describe("ProviderHealthList", () => {
     );
 
     expect(screen.getByTestId("provider-row-claude-code")).toBeInTheDocument();
-    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+    expect(screen.getByTestId("provider-row-claude-code")).toHaveTextContent("Claude Code");
     expect(screen.getByText("42")).toBeInTheDocument();
 
     const antigravityRow = screen.getByTestId("provider-row-antigravity");

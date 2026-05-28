@@ -655,7 +655,7 @@ describe("PlatformView", () => {
 
   it("shows platform name in header", () => {
     renderPlatformView();
-    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Claude Code" })).toBeInTheDocument();
   });
 
   it("shows platform directory path in header", () => {
@@ -2060,7 +2060,7 @@ describe("PlatformView", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Claude Code" })).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("platform-select-current-results"));
     expect(await screen.findByTestId("platform-batch-action-bar")).toBeInTheDocument();
 

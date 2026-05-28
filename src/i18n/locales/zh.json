@@ -192,7 +192,12 @@
       "alpha": "按名称",
       "recent": "按最近"
     },
-    "remoteUnreachable": "无法连接到远程主机 {{host}}，已暂时显示空数据。请检查 SSH 状态后再次刷新。"
+    "remoteUnreachable": "无法连接到远程主机 {{host}}，已暂时显示空数据。请检查 SSH 状态后再次刷新。",
+    "badge": {
+      "countShort": "{{count}} 次",
+      "periodShort": "近 {{days}} 天",
+      "tooltip": "最近 {{days}} 天调用 {{count}} 次"
+    }
   },
   "dashboard": {
     "eyebrow": "本地操作控制台",
@@ -1724,7 +1729,7 @@
       "newVersion": "v{{version}} 可用",
       "releaseNotes": "Release notes",
       "upToDateMessage": "已是最新版本。",
-      "unsupportedMessage": "当前不是 Tauri 桌面运行环境，无法执行内置更新。",
+      "unsupportedMessage": "当前内置更新仅支持 Windows x64 桌面版。",
       "diagnosticsTitle": "诊断信息",
       "diagnosticsDesc": "Windows 构建链路和本地数据位置的快速核对。",
       "buildTarget": "构建目标",
