@@ -277,7 +277,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
         <div className="h-full flex flex-col rounded-xl bg-card ring-1 ring-border shadow-sm p-3 gap-3 transition-colors duration-150 hover:ring-primary/25 hover:bg-accent/30 cursor-pointer">
           <div className="flex flex-1 items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
-              <div className="font-medium text-sm text-foreground truncate">{name}</div>
+              <div className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground transition-colors group-hover/skill-card:text-primary">{name}</div>
               {summaryText && (
                 <SkillCardSummary
                   text={summaryText}
@@ -324,14 +324,14 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             {onDetail ? (
               <button
                 ref={detailButtonRef}
-                className="font-medium text-sm text-foreground truncate hover:text-primary hover:underline text-left min-w-0 flex-1"
+                className="min-w-0 flex-1 truncate rounded-sm text-left text-sm font-semibold tracking-[-0.01em] text-foreground underline-offset-4 transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={onDetail}
                 aria-label={t("central.viewDetailsLabel", { name })}
               >
                 {name}
               </button>
             ) : (
-              <h3 className="text-sm font-medium truncate min-w-0 flex-1">{name}</h3>
+              <h3 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-[-0.01em] text-foreground">{name}</h3>
             )}
 
             {/* Icon action buttons */}
@@ -509,10 +509,15 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   days: 30,
                   defaultValue: `${usageBadge} calls in last 30 days`,
                 })}
-                className="inline-flex items-center gap-1 text-xs text-primary bg-primary/12 px-1.5 py-0.5 rounded"
+                className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary shadow-sm"
               >
-                <span className="tabular-nums">{usageBadge}×</span>
-                <span className="text-[10px] uppercase tracking-wide opacity-80">30d</span>
+                <span className="tabular-nums">
+                  {t("skillUsage.badge.countShort", { count: usageBadge })}
+                </span>
+                <span aria-hidden="true" className="text-primary/45">·</span>
+                <span className="tabular-nums text-primary/80">
+                  {t("skillUsage.badge.periodShort", { days: 30 })}
+                </span>
               </span>
             )}
 
@@ -540,9 +545,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
               </span>
             )}
 
-            {publisher && (
-              <span className="text-[10px] text-muted-foreground truncate">{publisher}</span>
-            )}
+            {publisher && <SourceChip label={publisher} />}
 
             {updateStatus && updateStatus.status !== "up_to_date" && (
               <span
@@ -665,14 +668,22 @@ function SkillCardSummary({
   label?: string;
 }) {
   return (
-    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+    <p className="line-clamp-2 rounded-lg border border-border/60 bg-muted/35 px-2 py-1.5 text-xs leading-relaxed text-muted-foreground/90 shadow-[inset_0_1px_0_color-mix(in_oklch,white_16%,transparent)]">
       {label && (
-        <span className="mr-1 inline-flex align-baseline rounded-sm bg-primary/10 px-1 py-0.5 text-[9px] font-medium leading-none text-primary ring-1 ring-primary/15">
+        <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-[9px] font-medium leading-none text-primary/85">
           {label}
         </span>
       )}
       {text}
     </p>
+  );
+}
+
+function SourceChip({ label }: { label: string }) {
+  return (
+    <span className="inline-flex max-w-full items-center rounded-md border border-border/60 bg-muted/35 px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground/80 shadow-sm">
+      <span className="truncate">{label}</span>
+    </span>
   );
 }
 

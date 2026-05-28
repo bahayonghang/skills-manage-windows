@@ -192,7 +192,12 @@
       "alpha": "按名称",
       "recent": "按最近"
     },
-    "remoteUnreachable": "无法连接到远程主机 {{host}}，已暂时显示空数据。请检查 SSH 状态后再次刷新。"
+    "remoteUnreachable": "无法连接到远程主机 {{host}}，已暂时显示空数据。请检查 SSH 状态后再次刷新。",
+    "badge": {
+      "countShort": "{{count}} 次",
+      "periodShort": "近 {{days}} 天",
+      "tooltip": "最近 {{days}} 天调用 {{count}} 次"
+    }
   },
   "dashboard": {
     "eyebrow": "本地操作控制台",

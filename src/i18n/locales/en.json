@@ -192,7 +192,12 @@
       "alpha": "a–z",
       "recent": "recent"
     },
-    "remoteUnreachable": "Cannot reach remote host {{host}}; showing empty data temporarily. Check SSH status then refresh."
+    "remoteUnreachable": "Cannot reach remote host {{host}}; showing empty data temporarily. Check SSH status then refresh.",
+    "badge": {
+      "countShort": "{{count}}×",
+      "periodShort": "{{days}}d",
+      "tooltip": "{{count}} calls in the last {{days}} days"
+    }
   },
   "dashboard": {
     "eyebrow": "Local operations console",
