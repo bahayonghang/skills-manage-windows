@@ -705,7 +705,7 @@ export function PlatformView() {
         ) : filteredSkills.length > 40 ? (
           <VirtualizedGrid
             items={filteredSkills}
-            itemHeight={132}
+            itemHeight={196}
             rowGap={16}
             columnGap={16}
             overscanRows={3}
@@ -713,7 +713,7 @@ export function PlatformView() {
             maxColumns={2}
             scrollContainerRef={contentRef}
             itemKey={(skill) => getPlatformSkillRowKey(skill)}
-            renderItem={(skill) => renderSkillCard(skill, "h-[132px]")}
+            renderItem={(skill) => renderSkillCard(skill)}
           />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

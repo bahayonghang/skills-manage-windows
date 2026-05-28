@@ -62,9 +62,9 @@ export function CentralGroupedSkillList({
   const visibleSkillIds = useMemo(
     () =>
       groups.flatMap((group) =>
-        collapsed[group.key] ? [] : group.skills.map((skill) => skill.id)
+        collapsed[group.key] ? [] : group.skills.map((skill) => skill.id),
       ),
-    [collapsed, groups]
+    [collapsed, groups],
   );
   const aiSummaries = useSkillExplanationSummaries(visibleSkillIds, "zh");
   const skillNamesForUsage = useMemo(
@@ -72,11 +72,11 @@ export function CentralGroupedSkillList({
       Array.from(
         new Set(
           groups.flatMap((group) =>
-            collapsed[group.key] ? [] : group.skills.map((skill) => skill.name)
-          )
-        )
+            collapsed[group.key] ? [] : group.skills.map((skill) => skill.name),
+          ),
+        ),
       ),
-    [collapsed, groups]
+    [collapsed, groups],
   );
   const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
 
@@ -86,7 +86,7 @@ export function CentralGroupedSkillList({
       data-testid="central-skill-list-scroll"
       className={cn(
         "scrollbar-subtle flex-1 overflow-auto p-6",
-        selectedCount > 0 && "pb-28"
+        selectedCount > 0 && "pb-28",
       )}
     >
       <div className="space-y-6">
@@ -98,7 +98,10 @@ export function CentralGroupedSkillList({
               <button
                 type="button"
                 onClick={() =>
-                  setCollapsed((prev) => ({ ...prev, [group.key]: !isCollapsed }))
+                  setCollapsed((prev) => ({
+                    ...prev,
+                    [group.key]: !isCollapsed,
+                  }))
                 }
                 aria-expanded={!isCollapsed}
                 className="sticky top-0 z-10 mb-3 flex w-full items-center gap-2 rounded-md border border-border/60 bg-background/95 px-3 py-2 text-left text-sm font-medium backdrop-blur"
@@ -155,7 +158,6 @@ export function CentralGroupedSkillList({
                         togglingAgentId,
                       }}
                       density="compact"
-                      className="h-[212px]"
                     />
                   ))}
                 </div>

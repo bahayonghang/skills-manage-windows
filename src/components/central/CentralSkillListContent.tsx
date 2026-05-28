@@ -8,11 +8,27 @@ import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
+import type { ViewDensity, ViewMode } from "@/lib/centralViewState";
 import { cn } from "@/lib/utils";
 import type {
   CentralSkillUpdateState,
   SkillWithLinks,
 } from "@/types";
+
+// 卡片高度常量 —— 必须与 UnifiedSkillCard 的 min-h 保持一致，
+// 否则虚拟列表会出现间隙或重叠。
+const LIST_ITEM_HEIGHT_COMFORTABLE = 196;
+const LIST_ITEM_HEIGHT_COMPACT = 148;
+const GRID_ITEM_HEIGHT_COMFORTABLE = 224;
+const GRID_ITEM_HEIGHT_COMPACT = 184;
+
+function listItemHeight(density: ViewDensity): number {
+  return density === "compact" ? LIST_ITEM_HEIGHT_COMPACT : LIST_ITEM_HEIGHT_COMFORTABLE;
+}
+
+function gridItemHeight(density: ViewDensity): number {
+  return density === "compact" ? GRID_ITEM_HEIGHT_COMPACT : GRID_ITEM_HEIGHT_COMFORTABLE;
+}
 
 export function CentralSkillListContent({
   availableInstallAgents,
@@ -20,6 +36,8 @@ export function CentralSkillListContent({
   filteredSkills,
   isLoading,
   isSearchActive,
+  viewMode = "grid",
+  viewDensity = "comfortable",
   onDelete,
   onDetail,
   onInstallTo,
@@ -42,6 +60,8 @@ export function CentralSkillListContent({
   filteredSkills: SkillWithLinks[];
   isLoading: boolean;
   isSearchActive: boolean;
+  viewMode?: ViewMode;
+  viewDensity?: ViewDensity;
   onDelete: (skill: SkillWithLinks) => void;
   onDetail: (skillId: string) => void;
   onInstallTo: (skill: SkillWithLinks) => void;
@@ -70,7 +90,11 @@ export function CentralSkillListContent({
   );
   const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
 
-  function renderSearchResult(skill: SkillWithLinks) {
+  // 搜索激活时强制 list 单列（更易扫读结果）；其他场景遵循 viewMode。
+  const effectiveView: ViewMode = isSearchActive ? "list" : viewMode;
+  const cardDensity = viewDensity;
+
+  function renderListCard(skill: SkillWithLinks) {
     return (
       <UnifiedSkillCard
         key={skill.id}
@@ -97,8 +121,7 @@ export function CentralSkillListContent({
         onUpdateCentral={() => onUpdateCentral([skill.id])}
         onDeleteFromCentral={() => onDelete(skill)}
         detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
-        density="compact"
-        className="h-[132px]"
+        density={cardDensity}
       />
     );
   }
@@ -138,8 +161,7 @@ export function CentralSkillListContent({
           onToggle: onTogglePlatform,
           togglingAgentId,
         }}
-        density="compact"
-        className="h-[212px]"
+        density={cardDensity}
       />
     );
   }
@@ -159,26 +181,26 @@ export function CentralSkillListContent({
         <CentralSkillFirstVisitEmptyState />
       ) : filteredSkills.length === 0 ? (
         <CentralSkillEmptyState message={t("central.noMatch", { query: searchQuery })} />
-      ) : isSearchActive ? (
+      ) : effectiveView === "list" ? (
         sortedSkills.length > 60 ? (
           <VirtualizedList
             items={sortedSkills}
-            itemHeight={132}
+            itemHeight={listItemHeight(cardDensity)}
             itemGap={12}
             overscan={8}
             scrollContainerRef={contentRef}
             itemKey={(skill) => skill.id}
-            renderItem={(skill) => renderSearchResult(skill)}
+            renderItem={(skill) => renderListCard(skill)}
           />
         ) : (
           <div className="space-y-3">
-            {sortedSkills.map((skill) => renderSearchResult(skill))}
+            {sortedSkills.map((skill) => renderListCard(skill))}
           </div>
         )
       ) : sortedSkills.length > 40 ? (
         <VirtualizedGrid
           items={sortedSkills}
-          itemHeight={212}
+          itemHeight={gridItemHeight(cardDensity)}
           rowGap={16}
           columnGap={16}
           overscanRows={3}

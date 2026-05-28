@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
-import { BatchDeleteCentralSkillPreviewResult, CentralSkillUpdateState, DeleteSkillRepositoryPreview, SkillDetail, SkillRepositoryWithStats, SkillWithLinks } from "@/types";
+import {
+  BatchDeleteCentralSkillPreviewResult,
+  CentralSkillUpdateState,
+  DeleteSkillRepositoryPreview,
+  SkillDetail,
+  SkillRepositoryWithStats,
+  SkillWithLinks,
+} from "@/types";
 import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
 import { markAppPerformance } from "@/lib/performance";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
@@ -13,7 +20,10 @@ import { useCentralViewStateUrl } from "@/hooks/useCentralViewStateUrl";
 import { useCentralSkillsActions } from "@/pages/centralSkillsActions";
 import { getCentralSkillsCheckButtonState } from "@/pages/centralSkillsCheckButton";
 import { useCentralSkillsFacets } from "@/pages/centralSkillsFacets";
-import { addUniqueToCentralViewState, useCentralSavedViewsBridge } from "@/pages/centralSavedViewsBridge";
+import {
+  addUniqueToCentralViewState,
+  useCentralSavedViewsBridge,
+} from "@/pages/centralSavedViewsBridge";
 import { useCentralTagGroupsBridge } from "@/pages/centralTagGroupsBridge";
 import { useCentralPaletteActions } from "@/pages/centralPaletteActions";
 import {
@@ -26,7 +36,10 @@ import {
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralInstalledSkillsFilterBridge } from "@/pages/centralInstalledSkillsFilterBridge";
 import { useCentralSkillsLayoutSizing } from "@/pages/centralSkillsLayoutSizing";
-import { createCentralStoreLocationControls, useCentralStoreLocationApplied } from "@/pages/centralStoreLocationView";
+import {
+  createCentralStoreLocationControls,
+  useCentralStoreLocationApplied,
+} from "@/pages/centralStoreLocationView";
 
 export function CentralSkillsView() {
   const { t } = useTranslation();
@@ -69,9 +82,12 @@ export function CentralSkillsView() {
   } = useCentralSkillsStoreBindings(t);
 
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
-  const [categorizeTab, setCategorizeTab] = useState<CentralCategorizeTab>("manual");
+  const [categorizeTab, setCategorizeTab] =
+    useState<CentralCategorizeTab>("manual");
   const [manualTagQuery, setManualTagQuery] = useState("");
-  const [manualSelectedTagIds, setManualSelectedTagIds] = useState<string[]>([]);
+  const [manualSelectedTagIds, setManualSelectedTagIds] = useState<string[]>(
+    [],
+  );
   const [installTargetSkill, setInstallTargetSkill] =
     useState<SkillWithLinks | null>(null);
   const [deleteTargetSkill, setDeleteTargetSkill] =
@@ -79,10 +95,15 @@ export function CentralSkillsView() {
   const [deletePreview, setDeletePreview] = useState<SkillDetail | null>(null);
   const [batchDeletePreview, setBatchDeletePreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
-  const [pendingUpdateStates, setPendingUpdateStates] = useState<CentralSkillUpdateState[]>([]);
-  const [queuedRemoteMissingStates, setQueuedRemoteMissingStates] =
-    useState<CentralSkillUpdateState[]>([]);
-  const [remoteMissingStates, setRemoteMissingStates] = useState<CentralSkillUpdateState[]>([]);
+  const [pendingUpdateStates, setPendingUpdateStates] = useState<
+    CentralSkillUpdateState[]
+  >([]);
+  const [queuedRemoteMissingStates, setQueuedRemoteMissingStates] = useState<
+    CentralSkillUpdateState[]
+  >([]);
+  const [remoteMissingStates, setRemoteMissingStates] = useState<
+    CentralSkillUpdateState[]
+  >([]);
   const [remoteMissingPreview, setRemoteMissingPreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
   const [repositorySyncPreview, setRepositorySyncPreview] =
@@ -101,26 +122,49 @@ export function CentralSkillsView() {
     startFilterSidebarResize,
   } = useCentralSkillsLayoutSizing();
   const [isDeletePreviewLoading, setIsDeletePreviewLoading] = useState(false);
-  const [isBatchDeletePreviewLoading, setIsBatchDeletePreviewLoading] = useState(false);
-  const [isRemoteMissingPreviewLoading, setIsRemoteMissingPreviewLoading] = useState(false);
-  const [isRepositorySyncPreviewLoading, setIsRepositorySyncPreviewLoading] = useState(false);
-  const [isResolvingRemoteMissing, setIsResolvingRemoteMissing] = useState(false);
-  const [isApplyingRepositorySync, setIsApplyingRepositorySync] = useState(false);
-  const [isRepositoryDeletePreviewLoading, setIsRepositoryDeletePreviewLoading] = useState(false);
-  const [deletePreviewError, setDeletePreviewError] = useState<string | null>(null);
-  const [batchDeletePreviewError, setBatchDeletePreviewError] = useState<string | null>(null);
-  const [remoteMissingError, setRemoteMissingError] = useState<string | null>(null);
-  const [repositorySyncError, setRepositorySyncError] = useState<string | null>(null);
-  const [repositoryDeletePreviewError, setRepositoryDeletePreviewError] = useState<string | null>(null);
+  const [isBatchDeletePreviewLoading, setIsBatchDeletePreviewLoading] =
+    useState(false);
+  const [isRemoteMissingPreviewLoading, setIsRemoteMissingPreviewLoading] =
+    useState(false);
+  const [isRepositorySyncPreviewLoading, setIsRepositorySyncPreviewLoading] =
+    useState(false);
+  const [isResolvingRemoteMissing, setIsResolvingRemoteMissing] =
+    useState(false);
+  const [isApplyingRepositorySync, setIsApplyingRepositorySync] =
+    useState(false);
+  const [
+    isRepositoryDeletePreviewLoading,
+    setIsRepositoryDeletePreviewLoading,
+  ] = useState(false);
+  const [deletePreviewError, setDeletePreviewError] = useState<string | null>(
+    null,
+  );
+  const [batchDeletePreviewError, setBatchDeletePreviewError] = useState<
+    string | null
+  >(null);
+  const [remoteMissingError, setRemoteMissingError] = useState<string | null>(
+    null,
+  );
+  const [repositorySyncError, setRepositorySyncError] = useState<string | null>(
+    null,
+  );
+  const [repositoryDeletePreviewError, setRepositoryDeletePreviewError] =
+    useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isBatchInstallDialogOpen, setIsBatchInstallDialogOpen] = useState(false);
+  const [isBatchInstallDialogOpen, setIsBatchInstallDialogOpen] =
+    useState(false);
   const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
-  const [isUpdateConfirmDialogOpen, setIsUpdateConfirmDialogOpen] = useState(false);
-  const [isRemoteMissingDialogOpen, setIsRemoteMissingDialogOpen] = useState(false);
-  const [isRepositorySyncDialogOpen, setIsRepositorySyncDialogOpen] = useState(false);
-  const [isRepositoryDeleteDialogOpen, setIsRepositoryDeleteDialogOpen] = useState(false);
-  const [isStoreLocationDialogOpen, setIsStoreLocationDialogOpen] = useState(false);
+  const [isUpdateConfirmDialogOpen, setIsUpdateConfirmDialogOpen] =
+    useState(false);
+  const [isRemoteMissingDialogOpen, setIsRemoteMissingDialogOpen] =
+    useState(false);
+  const [isRepositorySyncDialogOpen, setIsRepositorySyncDialogOpen] =
+    useState(false);
+  const [isRepositoryDeleteDialogOpen, setIsRepositoryDeleteDialogOpen] =
+    useState(false);
+  const [isStoreLocationDialogOpen, setIsStoreLocationDialogOpen] =
+    useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isGitHubImportOpen, setIsGitHubImportOpen] = useState(false);
@@ -133,12 +177,19 @@ export function CentralSkillsView() {
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const hasMarkedCentralListReady = useRef(false);
   const categoryVisibility =
-    usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
-  const setCategoryVisibility = usePlatformStore((state) => state.setCategoryVisibility);
+    usePlatformStore((state) => state.categoryVisibility) ??
+    DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+  const setCategoryVisibility = usePlatformStore(
+    (state) => state.setCategoryVisibility,
+  );
   const setAgentEnabled = usePlatformStore((state) => state.setAgentEnabled);
   const addCustomAgent = usePlatformStore((state) => state.addCustomAgent);
-  const updateCustomAgent = usePlatformStore((state) => state.updateCustomAgent);
-  const removeCustomAgent = usePlatformStore((state) => state.removeCustomAgent);
+  const updateCustomAgent = usePlatformStore(
+    (state) => state.updateCustomAgent,
+  );
+  const removeCustomAgent = usePlatformStore(
+    (state) => state.removeCustomAgent,
+  );
 
   const [viewState, setViewState] = useCentralViewStateUrl();
   const v2 = useCentralSkillsFacets({
@@ -168,32 +219,40 @@ export function CentralSkillsView() {
     (value) => {
       setViewState((prev) => {
         const currentRepo = prev.repos[0] ?? "all";
-        const nextValue = typeof value === "function" ? value(currentRepo) : value;
+        const nextValue =
+          typeof value === "function" ? value(currentRepo) : value;
         return {
           ...prev,
           repos: nextValue === "all" ? [] : [nextValue],
         };
       });
     },
-    [setViewState]
+    [setViewState],
   );
 
-  const sortFieldOptions: Array<{ value: CentralSortField; label: string }> = useMemo(
-    () => [
-      { value: "name", label: t("central.sortByName") },
-      { value: "createdAt", label: t("central.sortByCreatedAt") },
-      { value: "updatedAt", label: t("central.sortByUpdatedAt") },
-      { value: "installedPlatformCount", label: t("central.sortByInstalledPlatformCount") },
-    ],
-    [t]
-  );
+  const sortFieldOptions: Array<{ value: CentralSortField; label: string }> =
+    useMemo(
+      () => [
+        { value: "name", label: t("central.sortByName") },
+        { value: "createdAt", label: t("central.sortByCreatedAt") },
+        { value: "updatedAt", label: t("central.sortByUpdatedAt") },
+        {
+          value: "installedPlatformCount",
+          label: t("central.sortByInstalledPlatformCount"),
+        },
+      ],
+      [t],
+    );
 
-  const sortDirectionOptions: Array<{ value: CentralSortDirection; label: string }> = useMemo(
+  const sortDirectionOptions: Array<{
+    value: CentralSortDirection;
+    label: string;
+  }> = useMemo(
     () => [
       { value: "asc", label: t("central.sortAscending") },
       { value: "desc", label: t("central.sortDescending") },
     ],
-    [t]
+    [t],
   );
 
   const {
@@ -211,7 +270,9 @@ export function CentralSkillsView() {
   });
 
   useEffect(() => {
-    const visibleIds = new Set(visibleCurrentViewSkills.map((skill) => skill.id));
+    const visibleIds = new Set(
+      visibleCurrentViewSkills.map((skill) => skill.id),
+    );
     setSelectedSkillIds((current) => {
       const next = current.filter((skillId) => visibleIds.has(skillId));
       return next.length === current.length ? current : next;
@@ -237,7 +298,9 @@ export function CentralSkillsView() {
     v2.isSearchActive ||
     isInstalledSkillsFilterActive;
   const hasNonRepositoryFilters =
-    viewState.tags.length > 0 || v2.isSearchActive || isInstalledSkillsFilterActive;
+    viewState.tags.length > 0 ||
+    v2.isSearchActive ||
+    isInstalledSkillsFilterActive;
   const checkButtonState = getCentralSkillsCheckButtonState({
     currentViewSkills: visibleCurrentViewSkills,
     hasCurrentFilters,
@@ -330,7 +393,9 @@ export function CentralSkillsView() {
   const installableImportedSkills = useMemo(() => {
     if (!githubImport.importResult) return [];
     const importedIds = new Set(
-      githubImport.importResult.importedSkills.map((skill) => skill.importedSkillId)
+      githubImport.importResult.importedSkills.map(
+        (skill) => skill.importedSkillId,
+      ),
     );
     return skills.filter((skill) => importedIds.has(skill.id));
   }, [githubImport.importResult, skills]);
@@ -446,132 +511,134 @@ export function CentralSkillsView() {
         }
       });
     },
-    [handleToggleSelection]
+    [handleToggleSelection],
   );
 
   // ─── 共享 props ────────────────────────────────────────────────
   const dialogsProps = {
-        agents,
-        availableInstallAgents,
-        batchDeletePreview,
-        batchDeletePreviewError,
-        deletePreview,
-        deletePreviewError,
-        deleteTargetSkill,
-        detailButtonRefs,
-        drawerSkillId,
-        githubImport,
-        githubRepoUrl,
-        importSkillportState,
-        installTargetSkill,
-        installableImportedSkills,
-        isBatchDeleteDialogOpen,
-        isBatchDeletePreviewLoading,
-        isBatchInstallDialogOpen,
-        isDeleteDialogOpen,
-        isDeletePreviewLoading,
-        isDeleting,
-        isDialogOpen,
-        isDrawerOpen,
-        isGitHubImportOpen,
-        isPlatformManageOpen,
-        isInstalling,
-        isPortabilityOpen,
-        isRemoteMissingDialogOpen,
-        isRemoteMissingPreviewLoading,
-        isRepositorySyncDialogOpen,
-        isRepositorySyncPreviewLoading,
-        isApplyingRepositorySync,
-        isRepositoryDeleteDialogOpen,
-        isRepositoryDeletePreviewLoading,
-        isResolvingRemoteMissing,
-        isUpdatingSkills: updatingSkillIds.length > 0,
-        isUpdateConfirmDialogOpen,
-        loadCentralSkills,
-        pendingUpdateStates,
-        previewSkillportStateImport,
-        remoteMissingError,
-        remoteMissingPreview,
-        remoteMissingStates,
-        repositorySyncError,
-        repositorySyncPreview,
-        repositorySyncDeletePreview,
-        repositoryDeletePreview,
-        repositoryDeletePreviewError,
-        repositoryDeleteTarget,
-        selectedSkillIds,
-        skills,
-        setDrawerSkillId,
-        setGithubRepoUrl: setGitHubRepoUrl,
-        setIsBatchInstallDialogOpen,
-        setIsDialogOpen,
-        setIsDrawerOpen,
-        setIsGitHubImportOpen,
-        setIsPlatformManageOpen,
-        setIsPortabilityOpen,
-        exportSkillportState,
-        portabilityJob,
-        cancelSkillportStatePortability,
-        platformManagement: {
-          agents,
-          categoryVisibility,
-          addCustomAgent,
-          updateCustomAgent,
-          removeCustomAgent,
-          setCategoryVisibility,
-          setAgentEnabled,
-          refreshAfterPlatformChange: async () => {
-            await loadCentralSkills();
-            await refreshCounts();
-          },
-        },
-        onAfterImportSuccess: handleAfterImportSuccess,
-        onBatchDeleteCentralSkills: handleBatchDeleteCentralSkills,
-        onBatchDeleteDialogOpenChange: handleBatchDeleteDialogOpenChange,
-        onBatchInstallCentralSkills: handleBatchInstallCentralSkills,
-        onDeleteCentralSkill: handleDeleteCentralSkill,
-        onDeleteDialogOpenChange: handleDeleteDialogOpenChange,
-        onDeleteSkillRepository: handleDeleteSkillRepository,
-        onGitHubImport: handleGitHubImport,
-        onGitHubPreview: handleGitHubPreview,
-        onInstall: handleInstall,
-        onInstallFromDrawer: handleInstallClick,
-        onInstallImportedSkill: handleInstallImportedSkill,
-        onRefreshCounts: refreshCounts,
-        onConfirmUpdateSkills: handleConfirmUpdateSkills,
-        onRemoteMissingDialogOpenChange: handleRemoteMissingDialogOpenChange,
-        onRepositorySyncDialogOpenChange: handleRepositorySyncDialogOpenChange,
-        onApplyRepositorySync: handleApplyRepositorySync,
-        onUpdateConfirmDialogOpenChange: handleUpdateConfirmDialogOpenChange,
-        onRepositoryDeleteDialogOpenChange: handleRepositoryDeleteDialogOpenChange,
-        onResetGitHubImport: resetGitHubImport,
-        onResolveRemoteMissing: handleResolveRemoteMissing,
+    agents,
+    availableInstallAgents,
+    batchDeletePreview,
+    batchDeletePreviewError,
+    deletePreview,
+    deletePreviewError,
+    deleteTargetSkill,
+    detailButtonRefs,
+    drawerSkillId,
+    githubImport,
+    githubRepoUrl,
+    importSkillportState,
+    installTargetSkill,
+    installableImportedSkills,
+    isBatchDeleteDialogOpen,
+    isBatchDeletePreviewLoading,
+    isBatchInstallDialogOpen,
+    isDeleteDialogOpen,
+    isDeletePreviewLoading,
+    isDeleting,
+    isDialogOpen,
+    isDrawerOpen,
+    isGitHubImportOpen,
+    isPlatformManageOpen,
+    isInstalling,
+    isPortabilityOpen,
+    isRemoteMissingDialogOpen,
+    isRemoteMissingPreviewLoading,
+    isRepositorySyncDialogOpen,
+    isRepositorySyncPreviewLoading,
+    isApplyingRepositorySync,
+    isRepositoryDeleteDialogOpen,
+    isRepositoryDeletePreviewLoading,
+    isResolvingRemoteMissing,
+    isUpdatingSkills: updatingSkillIds.length > 0,
+    isUpdateConfirmDialogOpen,
+    loadCentralSkills,
+    pendingUpdateStates,
+    previewSkillportStateImport,
+    remoteMissingError,
+    remoteMissingPreview,
+    remoteMissingStates,
+    repositorySyncError,
+    repositorySyncPreview,
+    repositorySyncDeletePreview,
+    repositoryDeletePreview,
+    repositoryDeletePreviewError,
+    repositoryDeleteTarget,
+    selectedSkillIds,
+    skills,
+    setDrawerSkillId,
+    setGithubRepoUrl: setGitHubRepoUrl,
+    setIsBatchInstallDialogOpen,
+    setIsDialogOpen,
+    setIsDrawerOpen,
+    setIsGitHubImportOpen,
+    setIsPlatformManageOpen,
+    setIsPortabilityOpen,
+    exportSkillportState,
+    portabilityJob,
+    cancelSkillportStatePortability,
+    platformManagement: {
+      agents,
+      categoryVisibility,
+      addCustomAgent,
+      updateCustomAgent,
+      removeCustomAgent,
+      setCategoryVisibility,
+      setAgentEnabled,
+      refreshAfterPlatformChange: async () => {
+        await loadCentralSkills();
+        await refreshCounts();
+      },
+    },
+    onAfterImportSuccess: handleAfterImportSuccess,
+    onBatchDeleteCentralSkills: handleBatchDeleteCentralSkills,
+    onBatchDeleteDialogOpenChange: handleBatchDeleteDialogOpenChange,
+    onBatchInstallCentralSkills: handleBatchInstallCentralSkills,
+    onDeleteCentralSkill: handleDeleteCentralSkill,
+    onDeleteDialogOpenChange: handleDeleteDialogOpenChange,
+    onDeleteSkillRepository: handleDeleteSkillRepository,
+    onGitHubImport: handleGitHubImport,
+    onGitHubPreview: handleGitHubPreview,
+    onInstall: handleInstall,
+    onInstallFromDrawer: handleInstallClick,
+    onInstallImportedSkill: handleInstallImportedSkill,
+    onRefreshCounts: refreshCounts,
+    onConfirmUpdateSkills: handleConfirmUpdateSkills,
+    onRemoteMissingDialogOpenChange: handleRemoteMissingDialogOpenChange,
+    onRepositorySyncDialogOpenChange: handleRepositorySyncDialogOpenChange,
+    onApplyRepositorySync: handleApplyRepositorySync,
+    onUpdateConfirmDialogOpenChange: handleUpdateConfirmDialogOpenChange,
+    onRepositoryDeleteDialogOpenChange: handleRepositoryDeleteDialogOpenChange,
+    onResetGitHubImport: resetGitHubImport,
+    onResolveRemoteMissing: handleResolveRemoteMissing,
   };
 
   const listContentProps = {
-        availableInstallAgents,
-        contentRef,
-        filteredSkills: visibleFilteredSkills,
-        isLoading,
-        isSearchActive: v2.isSearchActive || isInstalledSkillsFilterActive,
-        onDelete: (skill: SkillWithLinks) => {
-          void handleDeleteClick(skill);
-        },
-        onDetail: handleOpenDrawer,
-        onInstallTo: handleInstallClick,
-        onTogglePlatform: handleTogglePlatform,
-        onToggleSelection: handleToggleSelectionPreservingScroll,
-        onUpdateCentral: (skillIds: string[]) => {
-          void handleUpdateSkills(skillIds);
-        },
-        searchQuery: viewState.q,
-        selectedSkillIdSet,
-        setDetailButtonRef,
-        skillsCount: skills.length,
-        sortedSkills: visibleCurrentViewSkills,
-        togglingAgentId: togglingAgentId ?? null,
-        updateStatuses,
-        updatingSkillIds,
+    availableInstallAgents,
+    contentRef,
+    filteredSkills: visibleFilteredSkills,
+    isLoading,
+    isSearchActive: v2.isSearchActive || isInstalledSkillsFilterActive,
+    viewMode: viewState.view,
+    viewDensity: viewState.density,
+    onDelete: (skill: SkillWithLinks) => {
+      void handleDeleteClick(skill);
+    },
+    onDetail: handleOpenDrawer,
+    onInstallTo: handleInstallClick,
+    onTogglePlatform: handleTogglePlatform,
+    onToggleSelection: handleToggleSelectionPreservingScroll,
+    onUpdateCentral: (skillIds: string[]) => {
+      void handleUpdateSkills(skillIds);
+    },
+    searchQuery: viewState.q,
+    selectedSkillIdSet,
+    setDetailButtonRef,
+    skillsCount: skills.length,
+    sortedSkills: visibleCurrentViewSkills,
+    togglingAgentId: togglingAgentId ?? null,
+    updateStatuses,
+    updatingSkillIds,
   };
 
   const updateButtonProps = {
@@ -612,7 +679,7 @@ export function CentralSkillsView() {
       setCategorizeTab(tab);
       setIsCategorizeDrawerOpen(true);
     },
-    []
+    [],
   );
 
   const handleClearSelection = useCallback(() => setSelectedSkillIds([]), []);
@@ -640,7 +707,9 @@ export function CentralSkillsView() {
     onApplyManualTags: () => {
       void handleApplyManualTags();
     },
-    onApplyManualTagsToReview: (review: Parameters<typeof handleApplyManualTagsToReview>[0]) => {
+    onApplyManualTagsToReview: (
+      review: Parameters<typeof handleApplyManualTagsToReview>[0],
+    ) => {
       void handleApplyManualTagsToReview(review);
     },
     onBulkSuggestTags: () => {
@@ -695,7 +764,7 @@ export function CentralSkillsView() {
       if (checkButtonState.mode === "repository-sync") {
         void handleCheckRepositorySync(
           checkButtonState.repositoryIds ?? [],
-          checkButtonState.scopedSkillIds
+          checkButtonState.scopedSkillIds,
         );
         return;
       }
@@ -775,11 +844,22 @@ export function CentralSkillsView() {
         repositories={repositories}
         actions={paletteActions}
         onSelectSavedView={savedViewsBridge.handleApplySavedView}
-        onSelectTag={(tag) => addUniqueToCentralViewState(viewState, setViewState, "tags", tag.id)}
-        onSelectRepository={(repo) => addUniqueToCentralViewState(viewState, setViewState, "repos", repo.id)}
+        onSelectTag={(tag) =>
+          addUniqueToCentralViewState(viewState, setViewState, "tags", tag.id)
+        }
+        onSelectRepository={(repo) =>
+          addUniqueToCentralViewState(viewState, setViewState, "repos", repo.id)
+        }
       />
-      <CentralStoreLocationDialog open={isStoreLocationDialogOpen} onOpenChange={setIsStoreLocationDialogOpen} t={t} currentPath={centralSkillsDir} preview={previewCentralStoreLocationChange} apply={applyCentralStoreLocationChange} onApplied={handleCentralStoreLocationApplied} />
+      <CentralStoreLocationDialog
+        open={isStoreLocationDialogOpen}
+        onOpenChange={setIsStoreLocationDialogOpen}
+        t={t}
+        currentPath={centralSkillsDir}
+        preview={previewCentralStoreLocationChange}
+        apply={applyCentralStoreLocationChange}
+        onApplied={handleCentralStoreLocationApplied}
+      />
     </>
   );
 }
-
