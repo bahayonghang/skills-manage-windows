@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Platform 已删除 Skills 清理设计规范</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f3ea;
+      --surface: #fffaf0;
+      --text: #211f1a;
+      --muted: #655f52;
+      --line: #ded4c3;
+      --accent: #7c3aed;
+      --accent-contrast: #ffffff;
+      --danger: #dc2626;
+      --success: #15803d;
+      --shadow: 0 24px 70px rgba(44, 35, 20, 0.12);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #17130f;
+        --surface: #211b16;
+        --text: #f4eadb;
+        --muted: #c8bca9;
+        --line: #3d3329;
+        --accent: #a78bfa;
+        --accent-contrast: #19111f;
+        --danger: #f87171;
+        --success: #4ade80;
+        --shadow: none;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 16%, transparent), transparent 32rem), var(--bg);
+      color: var(--text);
+      line-height: 1.68;
+    }
+
+    a { color: var(--accent); }
+
+    .page {
+      display: grid;
+      grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+      gap: 2rem;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .toc {
+      position: sticky;
+      top: 1rem;
+      align-self: start;
+      padding: 1.25rem;
+      border: 1px solid var(--line);
+      border-radius: 1.25rem;
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      box-shadow: var(--shadow);
+    }
+
+    .toc strong {
+      display: block;
+      margin-bottom: 0.75rem;
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .toc ul {
+      display: grid;
+      gap: 0.4rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .toc a {
+      display: block;
+      padding: 0.35rem 0.5rem;
+      border-radius: 0.65rem;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a:focus-visible {
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      outline: none;
+    }
+
+    main {
+      min-width: 0;
+      padding: 2.5rem;
+      border: 1px solid var(--line);
+      border-radius: 1.6rem;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    header {
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 2rem;
+    }
+
+    h1 {
+      margin: 0 0 0.75rem;
+      font-size: clamp(2rem, 5vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .meta li {
+      padding: 0.2rem 0.65rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+
+    section {
+      padding: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    section:first-of-type { border-top: 0; }
+
+    h2 {
+      margin: 0 0 0.75rem;
+      font-size: clamp(1.35rem, 3vw, 2rem);
+      line-height: 1.2;
+    }
+
+    h3 { margin-top: 1.25rem; }
+    p, ul, ol, dl { margin-top: 0; }
+
+    .callout {
+      padding: 1rem 1.15rem;
+      border-left: 0.35rem solid var(--accent);
+      border-radius: 0.9rem;
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+
+    .danger {
+      border-left-color: var(--danger);
+      background: color-mix(in srgb, var(--danger) 10%, transparent);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      background: var(--accent);
+      color: var(--accent-contrast);
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      padding: 0.7rem;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+    code {
+      padding: 0.12rem 0.3rem;
+      border-radius: 0.35rem;
+      background: color-mix(in srgb, var(--text) 9%, transparent);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow-x: auto;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 0.9rem;
+      background: color-mix(in srgb, var(--text) 7%, transparent);
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+    }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+      gap: 1rem;
+      margin: 1rem 0;
+    }
+
+    .card {
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      background: color-mix(in srgb, var(--surface) 82%, var(--accent) 6%);
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 0.35rem;
+    }
+
+    @media (max-width: 860px) {
+      .page {
+        display: block;
+        padding: 1rem;
+      }
+
+      .toc {
+        position: static;
+        margin-bottom: 1rem;
+      }
+
+      .toc ul { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
+      main { padding: 1.25rem; }
+    }
+
+    @media print {
+      :root {
+        --bg: #ffffff;
+        --surface: #ffffff;
+        --text: #000000;
+        --muted: #333333;
+        --line: #cccccc;
+        --accent: #000000;
+        --accent-contrast: #ffffff;
+        --danger: #000000;
+        --success: #000000;
+      }
+
+      body { background: #ffffff; }
+
+      .page {
+        display: block;
+        max-width: none;
+        padding: 0;
+      }
+
+      .toc { display: none; }
+
+      main {
+        padding: 0;
+        border: 0;
+        box-shadow: none;
+      }
+
+      a { color: inherit; }
+      section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <nav class="toc" aria-label="Spec sections">
+      <strong>Contents</strong>
+      <ul>
+        <li><a href="#summary">Summary</a></li>
+        <li><a href="#goals">Goals</a></li>
+        <li><a href="#non-goals">Non-goals</a></li>
+        <li><a href="#context">Context</a></li>
+        <li><a href="#recommended-approach">Recommended Approach</a></li>
+        <li><a href="#alternatives">Alternatives</a></li>
+        <li><a href="#design-details">Design Details</a></li>
+        <li><a href="#risks">Risks</a></li>
+        <li><a href="#test-acceptance-criteria">Test/Acceptance Criteria</a></li>
+        <li><a href="#review-status">Review Status</a></li>
+      </ul>
+    </nav>
+
+    <main id="main">
+      <header>
+        <h1>Platform 已删除 Skills 清理设计规范</h1>
+        <ul class="meta" aria-label="Spec metadata">
+          <li>Date: 2026-05-29</li>
+          <li>Topic: Platform deleted skills cleanup</li>
+          <li>Status: Approved design, spec ready for user review</li>
+        </ul>
+      </header>
+
+      <section id="summary" aria-labelledby="summary-heading">
+        <h2 id="summary-heading">Summary</h2>
+        <p>为 Platform 页面增加“一键检测并清理已删除 Skills”的能力：当某个 skill 已经不在 Central 技能库中，但仍残留在一个或多个安装平台目录里时，用户可以从 Platform 页面触发扫描，在 Update Center 中预览所有可清理副本，并在确认后直接删除选中的平台副本。</p>
+        <p>本设计采用“Platform 入口 + Update Center 统一预览/应用”的路线。删除策略为预览确认后直接删除平台副本，不提供备份、不做自动后台清理。</p>
+      </section>
+
+      <section id="goals" aria-labelledby="goals-heading">
+        <h2 id="goals-heading">Goals</h2>
+        <ul>
+          <li>在 Platform 页面提供明确入口，帮助用户检测当前平台中因 Central 或源仓库删除而残留的 skills。</li>
+          <li>复用 Update Center 的统一 inventory、决策聚合、批量应用和 partial failure 体验。</li>
+          <li>默认勾选当前 Platform 的可清理项，同时在预览中展示所有可清理的平台副本。</li>
+          <li>删除前重新校验 Central 状态、agent 边界和路径安全，避免误删 Central 根目录、插件只读目录或越界路径。</li>
+          <li>保持 Windows-first 验收思路，同时兼容现有 Local、SSH、WSL active target 抽象。</li>
+          <li>所有用户可见文案通过 i18n 维护，不在组件中硬编码中英文文本。</li>
+        </ul>
+      </section>
+
+      <section id="non-goals" aria-labelledby="non-goals-heading">
+        <h2 id="non-goals-heading">Non-goals</h2>
+        <ul>
+          <li>不做删除前备份、恢复入口或备份目录生命周期管理。</li>
+          <li>不自动后台清理，也不在扫描后自动删除所有平台残留。</li>
+          <li>不追溯远端仓库历史，不尝试判断删除发生在哪个 commit。</li>
+          <li>不提供把已删除 skill 重新导入 Central 的功能。</li>
+          <li>不重写现有 Central 删除、平台卸载、重复项扫描的业务逻辑。</li>
+          <li>不把 plugin readonly 来源当作可清理目标。</li>
+        </ul>
+      </section>
+
+      <section id="context" aria-labelledby="context-heading">
+        <h2 id="context-heading">Context</h2>
+        <p>当前仓库已经具备 Update Center 基础设施：<code>refresh_skill_update_inventory</code> / <code>get_skill_update_inventory</code> 返回统一 inventory，<code>apply_skill_update_decisions</code> 负责把用户决策应用为更新、导入、删除或去重动作。Platform 页面也已经有类似入口：<code>handleScanDuplicates()</code> 会先 <code>rescan()</code>，再刷新当前平台列表，然后扫描重复项并打开 Update Center 的 duplicates tab。</p>
+        <p>现有 <code>remoteMissing</code> 语义是“Central 仍有记录，但远端源仓库已经删除该 skill”。用户截图中的目标还包含另一种情况：Central 本地条目已经不存在，但 Platform 中仍显示旧副本。因此需要新增一个更明确的 inventory bucket，避免把“远端缺失”和“平台残留副本”混在一起。</p>
+        <div class="callout">
+          <strong>用户确认的产品决策：</strong>入口采用 Platform 独立按钮与 Update Center 复用；清理流程必须先预览，再由用户确认；确认后直接删除平台副本，不做备份。
+        </div>
+      </section>
+
+      <section id="recommended-approach" aria-labelledby="recommended-approach-heading">
+        <h2 id="recommended-approach-heading">Recommended Approach</h2>
+        <p>推荐新增 <code>deletedPlatformCopies</code> inventory bucket，并通过 Platform 页面按钮触发当前平台范围扫描。扫描结果进入 Update Center 的新 tab：“已删除”。该 tab 展示所有可清理平台副本，默认勾选当前 Platform 的结果，用户可以调整选择后使用既有 Apply All 流程删除。</p>
+        <div class="decision-grid" aria-label="Key decisions">
+          <div class="card">
+            <strong>分类边界</strong>
+            <span><code>remoteMissing</code> 保持源仓库缺失语义；<code>deletedPlatformCopies</code> 专门表示 Central 已无记录的平台残留副本。</span>
+          </div>
+          <div class="card">
+            <strong>交互模式</strong>
+            <span>Platform 负责发起检测，Update Center 负责预览、选择和批量应用，避免新增一套独立删除弹窗。</span>
+          </div>
+          <div class="card">
+            <strong>删除策略</strong>
+            <span>预览确认后直接删除平台副本；执行前重新校验 Central 不存在和路径位于 agent 根目录内。</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="alternatives" aria-labelledby="alternatives-heading">
+        <h2 id="alternatives-heading">Alternatives</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Option</th>
+              <th>Why not chosen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Platform 独立弹窗</td>
+              <td>目标直接，但会重复实现 scan、preview、apply、partial failure 和批量选择逻辑，后续 Central 统一管理也看不到这些结果。</td>
+            </tr>
+            <tr>
+              <td>只增强现有 <code>remoteMissing</code> tab</td>
+              <td>改动较少，但无法表达 Central 已经删除、只剩平台残留副本的场景，会混淆两种不同生命周期状态。</td>
+            </tr>
+            <tr>
+              <td>扫描后自动删除</td>
+              <td>操作不可逆且容易误删，违背用户确认的“Preview first, user chooses”流程。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="design-details" aria-labelledby="design-details-heading">
+        <h2 id="design-details-heading">Design Details</h2>
+
+        <h3>Components and responsibilities</h3>
+        <ul>
+          <li><strong>PlatformView：</strong>在“检测重复”旁新增“检测已删除”按钮，负责当前平台范围的扫描入口、loading 状态和 toast 反馈。</li>
+          <li><strong>updateCenterStore：</strong>新增 <code>scanDeletedPlatformCopies(agentIds?: string[])</code>，调用 Tauri 命令并把结果写入 inventory。</li>
+          <li><strong>SkillUpdateInventory 类型：</strong>新增 <code>deletedPlatformCopies: DeletedPlatformCopyGroup[]</code>。</li>
+          <li><strong>UpdateCenterDialog：</strong>新增 tab，并把新 bucket 计数纳入 tab order、counts 和 empty state。</li>
+          <li><strong>DeletedPlatformCopiesTabPanel：</strong>展示 skill、platform、路径列表、Central 已不存在说明，以及默认选择状态。</li>
+          <li><strong>decisionAggregation：</strong>新增 deleted copy 的初始状态、计数和 <code>removeDeletedPlatformCopies</code> payload 构建。</li>
+          <li><strong>Rust inventory scan：</strong>新增 <code>scan_deleted_platform_copies</code> 命令与 pool-level helper，负责发现 Central 已无记录的平台可写残留副本。</li>
+          <li><strong>Rust apply step：</strong>新增 <code>apply_remove_deleted_platform_copies_step</code>，在 <code>apply_skill_update_decisions</code> 的 partial success 框架内执行删除。</li>
+        </ul>
+
+        <h3>Data model</h3>
+        <pre><code>interface DeletedPlatformCopyGroup {
+  agentId: string;
+  skillId: string;
+  skillName: string;
+  writablePaths: string[];
+}
+
+interface DeletedPlatformCopyRemoval {
+  agentId: string;
+  skillId: string;
+  paths: string[];
+}</code></pre>
+        <p><code>SkillUpdateDecisions</code> 增加 <code>removeDeletedPlatformCopies: DeletedPlatformCopyRemoval[]</code>；<code>SkillUpdateApplyResult</code> 增加 <code>removedDeletedPlatformCopyPaths: string[]</code>，失败仍进入统一 <code>failures</code> 数组。</p>
+
+        <h3>Data and control flow</h3>
+        <ol>
+          <li>用户在 Platform 页面点击“检测已删除”。</li>
+          <li>前端依次执行 <code>rescan()</code>、<code>getSkillsByAgent(resolvedAgentId)</code>、<code>scanDeletedPlatformCopies([resolvedAgentId])</code>。</li>
+          <li>无结果时 toast 提示“没有发现可清理的已删除 Skills”。</li>
+          <li>有结果时打开 Update Center 的 <code>deletedPlatformCopies</code> tab，并显示扫描到的可删除路径。</li>
+          <li>tab 默认勾选当前 Platform 的可删除副本；其他平台副本可见但不默认强制删除。</li>
+          <li>用户点击 Apply All 后，前端通过 decision aggregation 生成 <code>removeDeletedPlatformCopies</code>。</li>
+          <li>后端执行删除前重新读取 Central skills 与 agent 信息，确保 Central 仍不存在、路径仍在 agent 根目录内、目标不是只读/plugin 来源。</li>
+          <li>删除完成后重新加载 inventory，Platform 页面通过现有 refresh/rescan 机制更新显示。</li>
+        </ol>
+
+        <h3>Scan rules</h3>
+        <ul>
+          <li>目标 skill id 不在 Central skill id set 中。</li>
+          <li>候选项属于指定 agent，或当未指定 agent 时属于所有可扫描 agent。</li>
+          <li>候选路径位于该 agent 的 <code>global_skills_dir</code> 下。</li>
+          <li>候选项不是 plugin readonly，不是显式 read-only。</li>
+          <li>候选路径可以是目录或 symlink；文件和越界路径不进入可删除结果。</li>
+        </ul>
+
+        <h3>Apply-time safety checks</h3>
+        <ul>
+          <li>如果 Central 中重新出现同名 skill id，则拒绝删除该项并记录 failure。</li>
+          <li>如果 agent 不存在，则记录 failure。</li>
+          <li>如果路径不在 agent 根目录内，则拒绝删除并记录 failure。</li>
+          <li>如果路径已不存在，则视为 no-op success，避免阻塞整批清理。</li>
+          <li>Local 使用本地文件系统删除；SSH / WSL 使用 active target 的 remote remove tree 能力，避免写死 Windows 本地路径。</li>
+        </ul>
+
+        <h3>i18n keys</h3>
+        <ul>
+          <li><code>platform.scanDeleted</code>、<code>platform.scanningDeleted</code></li>
+          <li><code>platform.deletedNone</code>、<code>platform.deletedFound</code>、<code>platform.deletedScanError</code></li>
+          <li><code>central.updateCenter.tabs.deletedPlatformCopies</code></li>
+          <li><code>central.updateCenter.deletedPlatformCopies.*</code></li>
+        </ul>
+      </section>
+
+      <section id="risks" aria-labelledby="risks-heading">
+        <h2 id="risks-heading">Risks</h2>
+        <ul>
+          <li><strong>误删非管理目录：</strong>通过 agent 根目录边界校验、Central 重新出现校验、readonly/plugin 过滤和执行前二次检查缓解。</li>
+          <li><strong>分类名称混淆：</strong>UI 文案应明确显示“Central 已不存在的平台副本”，避免用户误以为这是远端更新或重复项。</li>
+          <li><strong>远程 target 行为差异：</strong>删除实现必须复用 active target 现有路径删除能力，并为 Local 与 remote helper 分别覆盖测试。</li>
+          <li><strong>inventory 复杂度上升：</strong>新增 bucket 要集中接入 counts、decision aggregation 和 apply result，避免散落在组件内形成平行状态。</li>
+          <li><strong>用户误操作：</strong>不提供自动删除；所有删除必须经过 Update Center 预览与用户确认。</li>
+        </ul>
+      </section>
+
+      <section id="test-acceptance-criteria" aria-labelledby="test-acceptance-criteria-heading">
+        <h2 id="test-acceptance-criteria-heading">Test/Acceptance Criteria</h2>
+        <h3>Rust acceptance</h3>
+        <ol>
+          <li>Central 不存在、Platform 有可写 copy 时，扫描返回可清理项。</li>
+          <li>Central 存在同 id skill 时，扫描不返回该项。</li>
+          <li>plugin readonly 或 read-only path 不进入扫描结果。</li>
+          <li>删除路径越界时返回 failure，不删除任何越界路径。</li>
+          <li>删除执行前 Central 重新出现时返回 failure。</li>
+          <li>路径已不存在时不阻断整体 apply。</li>
+        </ol>
+
+        <h3>Frontend acceptance</h3>
+        <ol>
+          <li>Platform 按钮扫描无结果时显示 info toast，不打开无意义的批量删除确认。</li>
+          <li>扫描有结果时打开 Update Center 新 tab。</li>
+          <li>新 tab 默认勾选当前 Platform 的副本，同时展示其他可清理平台副本。</li>
+          <li><code>buildDecisions</code> 能生成 <code>removeDeletedPlatformCopies</code> payload。</li>
+          <li>partial failure 显示成功数与失败数，并保留失败详情。</li>
+        </ol>
+
+        <h3>Suggested local gates</h3>
+        <pre><code>pnpm typecheck
+pnpm lint
+cd src-tauri; cargo test
+cd src-tauri; cargo clippy -- -D warnings</code></pre>
+        <p>完整实现后建议再跑 <code>just ci</code>，并在涉及打包链路时额外验证 Windows Tauri bundle。</p>
+      </section>
+
+      <section id="review-status" aria-labelledby="review-status-heading">
+        <h2 id="review-status-heading">Review Status</h2>
+        <p><span class="status">Spec ready for user review</span></p>
+        <p>本规范基于用户确认的方案：采用 Platform 入口与 Update Center 复用；预览后直接删除平台副本；不做备份。下一阶段只有在用户审阅并确认该 HTML spec 后，才应进入实现计划或编码。</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
