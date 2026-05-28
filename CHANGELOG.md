@@ -13,6 +13,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Consolidated desktop publishing on the tag-based `Release Desktop` workflow and documented the release checklist plus updater invariants.
+- Built-in app updates now fail closed on non-Windows desktop builds because the current updater metadata is Windows-only.
 - PlatformView's *Scan duplicates* button now opens the Update Center on the *Platform duplicates* tab instead of a standalone dialog.
 - `UnifiedSkillCard` shows additional badges for inventory-only signals (platform duplicate, orphan).
 - `DuplicatePlatformSkillsDialog`, `CentralUpdateConfirmDialog`, `RemoteMissingSkillsDialog`, `CentralRepositorySyncDialog` are marked `@deprecated` and will be removed after one minor release.

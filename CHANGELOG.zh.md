@@ -13,6 +13,8 @@
 
 ### 调整
 
+- 桌面发布收口到 tag 触发的 `Release Desktop` workflow，并补充发布检查清单与 updater 不变量文档。
+- 由于当前 updater metadata 仅覆盖 Windows，应用内更新现在会在非 Windows 桌面构建上 fail closed。
 - PlatformView 的 **扫描重复** 按钮现在跳转到更新中心的 **平台冗余** Tab，不再打开独立 dialog。
 - `UnifiedSkillCard` 新增 inventory-only 的 badge 展示（平台冗余、失链孤儿）。
 - `DuplicatePlatformSkillsDialog`、`CentralUpdateConfirmDialog`、`RemoteMissingSkillsDialog`、`CentralRepositorySyncDialog` 已标记 `@deprecated`，下一个 minor release 之后移除。

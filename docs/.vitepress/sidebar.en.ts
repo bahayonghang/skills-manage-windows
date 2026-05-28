@@ -78,6 +78,7 @@ export const sidebarEn: DefaultTheme.SidebarMulti = {
       items: [
         { text: 'Shortcuts', link: '/reference/shortcuts' },
         { text: 'CLI: just', link: '/reference/cli-just' },
+        { text: 'Desktop Release Process', link: '/reference/release-process' },
       ],
     },
     {

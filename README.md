@@ -71,7 +71,7 @@ Remote mode manages the selected remote user's directories only. It does not mod
 
 - Latest release: <https://github.com/bahayonghang/skills-manage-windows/releases/latest>
 - Current desktop release targets: Windows x64 (`.exe`, `.msi`, `.zip`), macOS Universal (`.dmg`, `.zip`, `.tar.gz`), and Linux x86_64 / arm64 (`.deb`, `.rpm`, `.AppImage`)
-- Desktop builds remain unsigned, and Linux arm64 availability depends on the GitHub Actions runner matrix
+- Windows auto-update uses a Tauri-signed NSIS artifact plus `latest.json`; macOS remains unsigned / not notarized, and Linux arm64 availability depends on the GitHub Actions runner matrix
 
 ### macOS Unsigned Build
 
