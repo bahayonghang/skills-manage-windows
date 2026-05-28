@@ -55,11 +55,12 @@ function NavItem({
         onClick={onClick}
         title={label}
         aria-label={label}
+        aria-current={isActive ? "page" : undefined}
         className={cn(
-          "flex items-center w-full rounded-md transition-colors active:scale-[0.98] cursor-pointer",
+          "flex items-center w-full rounded-md transition-colors active:scale-[0.98] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
           !isActive && "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
           isActive &&
-            "bg-sidebar-primary text-sidebar-primary-foreground shadow-[inset_0_1px_0_color-mix(in_oklch,white_22%,transparent),0_10px_28px_color-mix(in_oklch,var(--sidebar-primary)_22%,transparent)] bg-[linear-gradient(145deg,color-mix(in_oklch,var(--sidebar-primary)_94%,white_12%),color-mix(in_oklch,var(--sidebar-primary)_82%,black_14%))]",
+            "bg-sidebar-primary font-semibold text-sidebar-primary-foreground ring-1 ring-sidebar-primary/40 shadow-[inset_0_1px_0_color-mix(in_oklch,white_22%,transparent),0_10px_28px_color-mix(in_oklch,var(--sidebar-primary)_22%,transparent)] bg-[linear-gradient(145deg,color-mix(in_oklch,var(--sidebar-primary)_94%,white_12%),color-mix(in_oklch,var(--sidebar-primary)_82%,black_14%))]",
           expanded ? "gap-2.5 px-2.5 py-1.5 text-sm" : "justify-center py-2 px-1.5"
         )}
       >
@@ -71,7 +72,7 @@ function NavItem({
               <span className={cn(
                 "text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded-full shrink-0",
                 isActive
-                  ? "bg-sidebar-primary-foreground/15 text-sidebar-primary-foreground"
+                  ? "bg-sidebar-primary-foreground/25 text-sidebar-primary-foreground ring-1 ring-sidebar-primary-foreground/25"
                   : "bg-muted/60 text-muted-foreground"
               )}>
                 {count}
@@ -82,7 +83,7 @@ function NavItem({
       </button>
       {isActive && (
         <span
-          className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-sidebar-primary-foreground/80"
+          className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-sidebar-primary-foreground shadow-[0_0_10px_color-mix(in_oklch,currentColor_45%,transparent)]"
           aria-hidden="true"
         />
       )}

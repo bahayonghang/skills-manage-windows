@@ -176,6 +176,7 @@ describe("Sidebar", () => {
     renderSidebar("/usage");
     const usageButton = screen.getByRole("button", { name: /技能使用/ });
     expect(usageButton.className).toContain("bg-sidebar-primary");
+    expect(usageButton).toHaveAttribute("aria-current", "page");
   });
 
   it("shows a blocking loading row only during shell hydration", () => {
@@ -209,7 +210,10 @@ describe("Sidebar", () => {
     const centralButton = screen.getByRole("button", { name: /中央技能库/ });
 
     expect(settingsButton.className).toContain("bg-sidebar-primary");
+    expect(settingsButton.className).toContain("font-semibold");
+    expect(settingsButton).toHaveAttribute("aria-current", "page");
     expect(centralButton.className).not.toContain("bg-sidebar-primary");
+    expect(centralButton).not.toHaveAttribute("aria-current");
   });
 
   it("keeps platform entries visible during background refresh", () => {
@@ -236,6 +240,7 @@ describe("Sidebar", () => {
     renderSidebar("/platform/claude-code");
     const claudeButton = screen.getByRole("button", { name: /Claude Code/ });
     expect(claudeButton.className).toContain("bg-sidebar-primary");
+    expect(claudeButton).toHaveAttribute("aria-current", "page");
   });
 
   it("highlights Central Skills when on /central", () => {
