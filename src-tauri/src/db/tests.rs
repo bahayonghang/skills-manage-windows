@@ -354,7 +354,7 @@ async fn operation_log_export_contains_metadata_and_entries() {
 async fn test_builtin_agents_seeded() {
     let pool = setup_test_db().await;
     let agents = get_all_agents(&pool).await.unwrap();
-    assert_eq!(agents.len(), 35, "Should have exactly 35 built-in agents");
+    assert_eq!(agents.len(), 36, "Should have exactly 36 built-in agents");
 
     let ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
     // Coding platforms
@@ -387,6 +387,7 @@ async fn test_builtin_agents_seeded() {
     assert!(ids.contains(&"copilot"));
     assert!(ids.contains(&"warp"));
     assert!(ids.contains(&"aider"));
+    assert!(ids.contains(&"reasonix"));
     // Lobster platforms
     assert!(ids.contains(&"openclaw"));
     assert!(ids.contains(&"qclaw"));
@@ -585,7 +586,7 @@ async fn test_init_does_not_duplicate_agents_on_reinit() {
     let pool = setup_test_db().await;
     init_database(&pool).await.unwrap(); // Call a second time
     let agents = get_all_agents(&pool).await.unwrap();
-    assert_eq!(agents.len(), 35, "Reinit must not duplicate agents");
+    assert_eq!(agents.len(), 36, "Reinit must not duplicate agents");
 }
 
 // ── Skills ────────────────────────────────────────────────────────────────
@@ -980,7 +981,7 @@ async fn test_insert_custom_agent() {
     insert_custom_agent(&pool, &custom).await.unwrap();
 
     let all = get_all_agents(&pool).await.unwrap();
-    assert_eq!(all.len(), 36, "Should have 35 builtins + 1 custom");
+    assert_eq!(all.len(), 37, "Should have 36 builtins + 1 custom");
 
     let retrieved = get_agent_by_id(&pool, "my-custom-agent")
         .await

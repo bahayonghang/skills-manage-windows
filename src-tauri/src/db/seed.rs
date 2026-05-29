@@ -725,6 +725,17 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
             is_builtin: true,
             is_enabled: is_builtin_agent_enabled_by_default("aider", "coding"),
         },
+        Agent {
+            id: "reasonix".to_string(),
+            display_name: "Reasonix".to_string(),
+            category: "coding".to_string(),
+            global_skills_dir: skill_dir(&[".reasonix", "skills"]),
+            project_skills_dir: Some(".reasonix/skills".to_string()),
+            icon_name: Some("reasonix".to_string()),
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: is_builtin_agent_enabled_by_default("reasonix", "coding"),
+        },
         // ── Lobster platforms ────────────────────────────────────────────────
         Agent {
             id: "openclaw".to_string(),

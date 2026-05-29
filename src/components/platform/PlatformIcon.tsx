@@ -163,6 +163,20 @@ function PlatformIconComponent({ agentId, className, size = 16 }: PlatformIconPr
         </svg>
       );
 
+    case "reasonix":
+      // Reasonix official brand: blue rounded square with white geometric mark
+      // Simplified from docs/brand/reasonix-icon.svg (esengine/DeepSeek-Reasonix)
+      return (
+        <svg {...svgProps} fill="none">
+          <rect x="1" y="1" width="14" height="14" rx="3" fill="#0153e5" />
+          <path
+            d="M4.5 11V5h2.3c1.2 0 2 .3 2.5.9.5.6.7 1.4.5 2.2-.2.7-.6 1.2-1.2 1.5L10.2 11H8.8L7.2 9H5.5v2H4.5zM5.5 8.2h2c.4 0 .8-.1 1-.4.2-.3.3-.7.2-1-.1-.4-.4-.6-.8-.6h-2.4v2z"
+            fill="#fff"
+          />
+          <circle cx="11.5" cy="4.5" r="0.8" fill="#fff" />
+        </svg>
+      );
+
     default:
       // Generic terminal / code icon — used for unknown platforms
       return (
