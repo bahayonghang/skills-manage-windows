@@ -990,6 +990,8 @@ async fn apply_no_decisions_is_noop() {
     apply_skip_addition_step(&pool, vec![], &mut result).await;
     apply_unskip_addition_step(&pool, vec![], &mut result).await;
     apply_remove_platform_duplicates_step(&pool, vec![], &mut result).await;
+    apply_remove_deleted_platform_copies_step(&pool, &ActiveTarget::Local, vec![], &mut result)
+        .await;
 
     assert!(result.failures.is_empty());
     assert!(result.updated_skill_ids.is_empty());
@@ -999,6 +1001,7 @@ async fn apply_no_decisions_is_noop() {
     assert!(result.skipped_additions.is_empty());
     assert!(result.unskipped_additions.is_empty());
     assert!(result.removed_platform_duplicate_paths.is_empty());
+    assert!(result.removed_deleted_platform_copy_paths.is_empty());
 }
 
 #[tokio::test]
@@ -1373,6 +1376,72 @@ async fn apply_remove_platform_duplicates_uses_plain_uninstall_for_non_claude_ag
     assert!(!cursor_skill_dir.exists());
 }
 
+#[tokio::test]
+async fn apply_remove_deleted_platform_copies_removes_managed_copy() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_dir = temp.path().join("central");
+    let cursor_dir = temp.path().join("cursor");
+    let cursor_skill_dir = cursor_dir.join("removed-skill");
+    let central_dir_str = central_dir.to_string_lossy().into_owned();
+    let cursor_dir_str = cursor_dir.to_string_lossy().into_owned();
+    let cursor_skill_dir_str = cursor_skill_dir.to_string_lossy().into_owned();
+    std::fs::create_dir_all(&central_dir).unwrap();
+    std::fs::create_dir_all(&cursor_skill_dir).unwrap();
+    std::fs::write(
+        cursor_skill_dir.join("SKILL.md"),
+        b"---\nname: Removed Skill\n---",
+    )
+    .unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+        .bind(&central_dir_str)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+        .bind(&cursor_dir_str)
+        .execute(&pool)
+        .await
+        .unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "removed-skill".to_string(),
+            agent_id: "cursor".to_string(),
+            installed_path: cursor_skill_dir_str.clone(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut result = SkillUpdateApplyResult::default();
+    apply_remove_deleted_platform_copies_step(
+        &pool,
+        &ActiveTarget::Local,
+        vec![DeletedPlatformCopyRemoval {
+            agent_id: "cursor".to_string(),
+            skill_id: "removed-skill".to_string(),
+            paths: vec![cursor_skill_dir_str.clone()],
+        }],
+        &mut result,
+    )
+    .await;
+
+    assert!(result.failures.is_empty());
+    assert_eq!(
+        result.removed_deleted_platform_copy_paths,
+        vec![cursor_skill_dir_str]
+    );
+    assert!(!cursor_skill_dir.exists());
+    assert!(db::get_skill_installations(&pool, "removed-skill")
+        .await
+        .unwrap()
+        .is_empty());
+}
+
 /*
  * ========================================================================
  * C. scan_platform_duplicate_skills
@@ -1460,4 +1529,222 @@ async fn scan_platform_duplicates_filters_by_agent_ids() {
         .await
         .unwrap();
     assert_eq!(all.len(), 2);
+}
+
+#[test]
+fn scan_deleted_platform_copies_groups_writable_non_central_observations() {
+    let observations = vec![
+        make_observation(
+            "claude-code",
+            "removed-skill",
+            "/path/user/removed-skill",
+            "user",
+            false,
+        ),
+        make_observation(
+            "claude-code",
+            "central-skill",
+            "/path/user/central-skill",
+            "user",
+            false,
+        ),
+        make_observation(
+            "claude-code",
+            "plugin-only",
+            "/path/plugin/plugin-only",
+            "plugin",
+            true,
+        ),
+    ];
+    let central_skill_ids = std::collections::HashSet::from(["central-skill".to_string()]);
+
+    let groups = group_deleted_platform_copies(&observations, &central_skill_ids);
+
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].agent_id, "claude-code");
+    assert_eq!(groups[0].skill_id, "removed-skill");
+    assert_eq!(groups[0].writable_paths, vec!["/path/user/removed-skill"]);
+}
+
+#[tokio::test]
+async fn scan_deleted_platform_copies_detects_installations_missing_from_central() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_dir = temp.path().join("central");
+    let cursor_dir = temp.path().join("cursor");
+    let removed_dir = cursor_dir.join("removed-skill");
+    let central_dir_str = central_dir.to_string_lossy().into_owned();
+    let cursor_dir_str = cursor_dir.to_string_lossy().into_owned();
+    let removed_dir_str = removed_dir.to_string_lossy().into_owned();
+    std::fs::create_dir_all(&central_dir).unwrap();
+    std::fs::create_dir_all(&removed_dir).unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+        .bind(&central_dir_str)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+        .bind(&cursor_dir_str)
+        .execute(&pool)
+        .await
+        .unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "removed-skill".to_string(),
+            agent_id: "cursor".to_string(),
+            installed_path: removed_dir_str.clone(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let groups = scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]))
+        .await
+        .unwrap();
+
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].agent_id, "cursor");
+    assert_eq!(groups[0].skill_id, "removed-skill");
+    assert_eq!(groups[0].skill_name, "removed-skill");
+    assert_eq!(groups[0].writable_paths, vec![removed_dir_str]);
+}
+
+#[tokio::test]
+async fn scan_deleted_platform_copies_excludes_skills_that_still_exist_in_central() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_dir = temp.path().join("central");
+    let cursor_dir = temp.path().join("cursor");
+    let central_skill_dir = central_dir.join("kept-skill");
+    let cursor_skill_dir = cursor_dir.join("kept-skill");
+    let central_dir_str = central_dir.to_string_lossy().into_owned();
+    let cursor_dir_str = cursor_dir.to_string_lossy().into_owned();
+    let cursor_skill_dir_str = cursor_skill_dir.to_string_lossy().into_owned();
+    std::fs::create_dir_all(&central_skill_dir).unwrap();
+    std::fs::create_dir_all(&cursor_skill_dir).unwrap();
+    std::fs::write(
+        central_skill_dir.join("SKILL.md"),
+        b"---\nname: Kept Skill\n---",
+    )
+    .unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+        .bind(&central_dir_str)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+        .bind(&cursor_dir_str)
+        .execute(&pool)
+        .await
+        .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("kept-skill", &central_skill_dir))
+        .await
+        .unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "kept-skill".to_string(),
+            agent_id: "cursor".to_string(),
+            installed_path: cursor_skill_dir_str,
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let groups = scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]))
+        .await
+        .unwrap();
+
+    assert!(groups.is_empty());
+}
+
+#[tokio::test]
+async fn scan_deleted_platform_copies_excludes_paths_outside_agent_root() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let cursor_dir = temp.path().join("cursor");
+    let outside_dir = temp.path().join("outside").join("removed-skill");
+    let cursor_dir_str = cursor_dir.to_string_lossy().into_owned();
+    let outside_dir_str = outside_dir.to_string_lossy().into_owned();
+    std::fs::create_dir_all(&cursor_dir).unwrap();
+    std::fs::create_dir_all(&outside_dir).unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+        .bind(&cursor_dir_str)
+        .execute(&pool)
+        .await
+        .unwrap();
+    db::upsert_agent_skill_observation(
+        &pool,
+        &make_observation(
+            "cursor",
+            "removed-skill",
+            &outside_dir_str,
+            "writable",
+            false,
+        ),
+    )
+    .await
+    .unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "removed-skill".to_string(),
+            agent_id: "cursor".to_string(),
+            installed_path: outside_dir_str,
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let groups = scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]))
+        .await
+        .unwrap();
+
+    assert!(groups.is_empty());
+}
+
+#[tokio::test]
+async fn scan_deleted_platform_copies_excludes_file_paths() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let cursor_dir = temp.path().join("cursor");
+    let file_path = cursor_dir.join("removed-skill");
+    let cursor_dir_str = cursor_dir.to_string_lossy().into_owned();
+    let file_path_str = file_path.to_string_lossy().into_owned();
+    std::fs::create_dir_all(&cursor_dir).unwrap();
+    std::fs::write(&file_path, b"not a skill directory").unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+        .bind(&cursor_dir_str)
+        .execute(&pool)
+        .await
+        .unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "removed-skill".to_string(),
+            agent_id: "cursor".to_string(),
+            installed_path: file_path_str,
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let groups = scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]))
+        .await
+        .unwrap();
+
+    assert!(groups.is_empty());
 }

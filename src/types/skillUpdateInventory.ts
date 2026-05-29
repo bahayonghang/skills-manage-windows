@@ -49,6 +49,13 @@ export interface PlatformDuplicateGroup {
   pluginPaths: string[];
 }
 
+export interface DeletedPlatformCopyGroup {
+  agentId: string;
+  skillId: string;
+  skillName: string;
+  writablePaths: string[];
+}
+
 export interface OrphanSkillEntry {
   skillId: string;
   brokenPath: string;
@@ -64,6 +71,7 @@ export interface SkillUpdateInventory {
   remoteAdded: RemoteAddedSkill[];
   remoteMissing: RemoteMissingSkill[];
   platformDuplicates: PlatformDuplicateGroup[];
+  deletedPlatformCopies: DeletedPlatformCopyGroup[];
   /** P2 始终空，保留位给未来的 broken symlink / 孤儿副本扫描。 */
   orphans: OrphanSkillEntry[];
   failedRepositories: FailedRepository[];
@@ -71,6 +79,12 @@ export interface SkillUpdateInventory {
 }
 
 export interface PlatformDuplicateRemoval {
+  agentId: string;
+  skillId: string;
+  paths: string[];
+}
+
+export interface DeletedPlatformCopyRemoval {
   agentId: string;
   skillId: string;
   paths: string[];
@@ -84,6 +98,7 @@ export interface SkillUpdateDecisions {
   skipAdditions: CentralRepositoryAdditionSkipRequest[];
   unskipAdditions: CentralRepositoryAdditionUnskipRequest[];
   removePlatformDuplicates: PlatformDuplicateRemoval[];
+  removeDeletedPlatformCopies: DeletedPlatformCopyRemoval[];
 }
 
 export interface SkillUpdateApplyFailure {
@@ -100,5 +115,6 @@ export interface SkillUpdateApplyResult {
   skippedAdditions: string[];
   unskippedAdditions: string[];
   removedPlatformDuplicatePaths: string[];
+  removedDeletedPlatformCopyPaths: string[];
   failures: SkillUpdateApplyFailure[];
 }

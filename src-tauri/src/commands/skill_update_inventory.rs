@@ -268,6 +268,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         .collect::<Vec<_>>();
 
     let platform_duplicates = scan_platform_duplicate_skills_with_pool(pool, None).await?;
+    let deleted_platform_copies = scan_deleted_platform_copies_with_pool(pool, None).await?;
 
     let now = Utc::now().to_rfc3339();
     for repository_id in &repository_ids {
@@ -279,6 +280,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         remote_added,
         remote_missing,
         platform_duplicates,
+        deleted_platform_copies,
         orphans: Vec::new(),
         failed_repositories,
         generated_at: now,
@@ -357,12 +359,14 @@ pub(crate) async fn get_skill_update_inventory_impl(
      * ========================================================================
      */
     let platform_duplicates = scan_platform_duplicate_skills_with_pool(pool, None).await?;
+    let deleted_platform_copies = scan_deleted_platform_copies_with_pool(pool, None).await?;
 
     Ok(SkillUpdateInventory {
         updatable,
         remote_added,
         remote_missing,
         platform_duplicates,
+        deleted_platform_copies,
         orphans: Vec::new(),
         failed_repositories: Vec::new(),
         generated_at: Utc::now().to_rfc3339(),
@@ -582,6 +586,14 @@ pub async fn apply_skill_update_decisions(
     // 步骤6：remove_platform_duplicates
     apply_remove_platform_duplicates_step(&pool, decisions.remove_platform_duplicates, &mut result)
         .await;
+    // 步骤7：remove_deleted_platform_copies
+    apply_remove_deleted_platform_copies_step(
+        &pool,
+        &active_target,
+        decisions.remove_deleted_platform_copies,
+        &mut result,
+    )
+    .await;
 
     Ok(result)
 }
@@ -593,6 +605,15 @@ pub async fn scan_platform_duplicate_skills(
 ) -> Result<Vec<PlatformDuplicateGroup>, String> {
     let pool = state.active_db().await?;
     scan_platform_duplicate_skills_with_pool(&pool, agent_ids).await
+}
+
+#[tauri::command]
+pub async fn scan_deleted_platform_copies(
+    state: State<'_, AppState>,
+    agent_ids: Option<Vec<String>>,
+) -> Result<Vec<DeletedPlatformCopyGroup>, String> {
+    let pool = state.active_db().await?;
+    scan_deleted_platform_copies_with_pool(&pool, agent_ids).await
 }
 
 /*

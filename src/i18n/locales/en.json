@@ -565,7 +565,13 @@
     "transferDialogTitle": "Install selected platform skills",
     "transferDialogDesc": "Transfer {{count}} selected skill(s) from {{platform}} to other platforms. The current platform is unchecked by default.",
     "transferNoUniversalCoverage": "No selected result has Central platform coverage metadata.",
-    "transferInstallError": "Failed to install selected platform skills: {{error}}"
+    "transferInstallError": "Failed to install selected platform skills: {{error}}",
+    "scanDeleted": "Scan removed",
+    "scanDeletedLabel": "Scan removed-skill leftovers in {{platform}}",
+    "scanningDeleted": "Scanning...",
+    "deletedNone": "No cleanable removed-skill copies found",
+    "deletedFound": "Found {{skillCount}} removed skill(s); {{rowCount}} platform copy/copies can be cleaned",
+    "deletedScanError": "Failed to scan removed skills: {{error}}"
   },
   "central": {
     "title": "Central Skills",
@@ -1114,7 +1120,8 @@
         "added": "Added ({{count}})",
         "missing": "Removed ({{count}})",
         "duplicates": "Platform duplicates ({{count}})",
-        "orphans": "Orphans ({{count}})"
+        "orphans": "Orphans ({{count}})",
+        "deletedPlatformCopies": "Platform leftovers ({{count}})"
       },
       "applyAll": "Apply all ({{count}})",
       "clearInventory": "Clear inventory",
@@ -1150,7 +1157,12 @@
         "orphan": "Orphan"
       },
       "singleUpdateSuccess": "Updated \"{{skill}}\" to the latest version",
-      "singleUpdateFailed": "Failed to update \"{{skill}}\": {{error}}"
+      "singleUpdateFailed": "Failed to update \"{{skill}}\": {{error}}",
+      "deletedPlatformCopies": {
+        "group": "{{skill}} in {{agent}}",
+        "description": "This skill no longer exists in Central. Applying will directly delete the selected platform copies.",
+        "selectPath": "Select {{skill}} for deletion: {{path}}"
+      }
     },
     "sortByInstalledPlatformCount": "Installed platform count",
     "selectionSummary": "{{selectedCount}} selected / {{currentCount}} current result(s)",

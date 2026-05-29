@@ -35,6 +35,8 @@ pub struct SkillUpdateInventory {
     pub remote_added: Vec<RemoteAddedSkill>,
     pub remote_missing: Vec<RemoteMissingSkill>,
     pub platform_duplicates: Vec<PlatformDuplicateGroup>,
+    #[serde(default)]
+    pub deleted_platform_copies: Vec<DeletedPlatformCopyGroup>,
     /// Phase P2 始终空，留位给后续 orphan 扫描（broken symlink / 孤儿 .copy 目录）。
     pub orphans: Vec<OrphanSkillEntry>,
     pub failed_repositories: Vec<FailedRepository>,
@@ -77,6 +79,15 @@ pub struct PlatformDuplicateGroup {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DeletedPlatformCopyGroup {
+    pub agent_id: String,
+    pub skill_id: String,
+    pub skill_name: String,
+    pub writable_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OrphanSkillEntry {
     pub skill_id: String,
     pub broken_path: String,
@@ -106,11 +117,21 @@ pub struct SkillUpdateDecisions {
     pub unskip_additions: Vec<central_updates::CentralRepositoryAdditionUnskipRequest>,
     #[serde(default)]
     pub remove_platform_duplicates: Vec<PlatformDuplicateRemoval>,
+    #[serde(default)]
+    pub remove_deleted_platform_copies: Vec<DeletedPlatformCopyRemoval>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformDuplicateRemoval {
+    pub agent_id: String,
+    pub skill_id: String,
+    pub paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedPlatformCopyRemoval {
     pub agent_id: String,
     pub skill_id: String,
     pub paths: Vec<String>,
@@ -126,6 +147,7 @@ pub struct SkillUpdateApplyResult {
     pub skipped_additions: Vec<String>,
     pub unskipped_additions: Vec<String>,
     pub removed_platform_duplicate_paths: Vec<String>,
+    pub removed_deleted_platform_copy_paths: Vec<String>,
     pub failures: Vec<SkillUpdateApplyFailure>,
 }
 

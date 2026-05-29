@@ -565,7 +565,13 @@
     "transferDialogTitle": "安装已选平台技能",
     "transferDialogDesc": "将 {{platform}} 中已选的 {{count}} 个技能转运到其他平台。当前平台默认不勾选，可手动重新选择。",
     "transferNoUniversalCoverage": "当前结果没有可用于通用性选择的中央库覆盖数据。",
-    "transferInstallError": "批量安装平台技能失败：{{error}}"
+    "transferInstallError": "批量安装平台技能失败：{{error}}",
+    "scanDeleted": "检测已删除",
+    "scanDeletedLabel": "检测 {{platform}} 中已删除技能的残留副本",
+    "scanningDeleted": "检测中...",
+    "deletedNone": "未发现可清理的已删除技能副本",
+    "deletedFound": "发现 {{skillCount}} 个已删除技能，可清理 {{rowCount}} 个平台副本",
+    "deletedScanError": "检测已删除技能失败：{{error}}"
   },
   "central": {
     "title": "中央技能库",
@@ -1114,7 +1120,8 @@
         "added": "新增 ({{count}})",
         "missing": "已删除 ({{count}})",
         "duplicates": "平台冗余 ({{count}})",
-        "orphans": "失链 ({{count}})"
+        "orphans": "失链 ({{count}})",
+        "deletedPlatformCopies": "平台残留 ({{count}})"
       },
       "applyAll": "应用全部 ({{count}})",
       "clearInventory": "清空检查结果",
@@ -1150,7 +1157,12 @@
         "orphan": "失链"
       },
       "singleUpdateSuccess": "「{{skill}}」已更新到最新版本",
-      "singleUpdateFailed": "「{{skill}}」更新失败：{{error}}"
+      "singleUpdateFailed": "「{{skill}}」更新失败：{{error}}",
+      "deletedPlatformCopies": {
+        "group": "{{agent}} 中的 {{skill}}",
+        "description": "Central 技能库中已不存在该 skill。确认后将直接删除选中的平台副本。",
+        "selectPath": "选择删除 {{skill}}：{{path}}"
+      }
     },
     "sortByInstalledPlatformCount": "安装平台数",
     "selectionSummary": "已选 {{selectedCount}} / 当前结果 {{currentCount}}",

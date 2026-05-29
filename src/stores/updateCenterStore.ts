@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import type {
+  DeletedPlatformCopyGroup,
   PlatformDuplicateGroup,
   SkillRefreshScope,
   SkillUpdateApplyResult,
@@ -37,6 +38,7 @@ export type UpdateCenterTab =
   | "added"
   | "missing"
   | "duplicates"
+  | "deletedPlatformCopies"
   | "orphans";
 
 interface UpdateCenterState {
@@ -53,6 +55,7 @@ interface UpdateCenterState {
   clear(scope?: SkillRefreshScope): Promise<void>;
   loadInventory(): Promise<void>;
   scanDuplicates(agentIds?: string[]): Promise<void>;
+  scanDeletedPlatformCopies(agentIds?: string[]): Promise<void>;
   openDialog(tab?: UpdateCenterTab, context?: Partial<SkillRefreshContext>): void;
   closeDialog(): void;
   setActiveTab(tab: UpdateCenterTab): void;
@@ -64,6 +67,7 @@ function emptyInventory(): SkillUpdateInventory {
     remoteAdded: [],
     remoteMissing: [],
     platformDuplicates: [],
+    deletedPlatformCopies: [],
     orphans: [],
     failedRepositories: [],
     generatedAt: new Date().toISOString(),
@@ -79,6 +83,7 @@ function emptyApplyResult(): SkillUpdateApplyResult {
     skippedAdditions: [],
     unskippedAdditions: [],
     removedPlatformDuplicatePaths: [],
+    removedDeletedPlatformCopyPaths: [],
     failures: [],
   };
 }
@@ -167,6 +172,19 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     }));
   },
 
+  async scanDeletedPlatformCopies(agentIds) {
+    if (!isTauriRuntime()) return;
+    const deletedPlatformCopies = await invoke<DeletedPlatformCopyGroup[]>(
+      "scan_deleted_platform_copies",
+      { agentIds: agentIds ?? null },
+    );
+    set((state) => ({
+      inventory: state.inventory
+        ? { ...state.inventory, deletedPlatformCopies }
+        : { ...emptyInventory(), deletedPlatformCopies },
+    }));
+  },
+
   openDialog(tab, context) {
     set({
       isDialogOpen: true,
@@ -204,6 +222,8 @@ export function selectSkillInventoryFlagsFromInventory(
     isMissing: inventory.remoteMissing.some((entry) => entry.state.skill_id === skillId),
     isAdded: inventory.remoteAdded.some((entry) => entry.skillId === skillId),
     hasDuplicate: inventory.platformDuplicates.some((entry) => entry.skillId === skillId),
-    isOrphan: inventory.orphans.some((entry) => entry.skillId === skillId),
+    isOrphan:
+      inventory.orphans.some((entry) => entry.skillId === skillId)
+      || (inventory.deletedPlatformCopies ?? []).some((entry) => entry.skillId === skillId),
   };
 }

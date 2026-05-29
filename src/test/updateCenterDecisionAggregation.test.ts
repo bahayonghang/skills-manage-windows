@@ -18,16 +18,17 @@ import type {
 function emptyInventory(
   overrides: Partial<SkillUpdateInventory> = {},
 ): SkillUpdateInventory {
-  return {
+  const base: SkillUpdateInventory = {
     updatable: [],
     remoteAdded: [],
     remoteMissing: [],
     platformDuplicates: [],
+    deletedPlatformCopies: [],
     orphans: [],
     failedRepositories: [],
     generatedAt: "2026-05-23T00:00:00.000Z",
-    ...overrides,
   };
+  return { ...base, ...overrides };
 }
 
 function remoteMissing(skillId: string): RemoteMissingSkill {
@@ -74,6 +75,37 @@ describe("updateCenter decision aggregation", () => {
       keepMissing: [],
       deleteMissing: [
         { skill_id: "delete-local", remove_agent_ids: ["codex"] },
+      ],
+    });
+  });
+
+  it("defaults deleted platform copies to selected and sends removal payload", () => {
+    const inventory = emptyInventory({
+      deletedPlatformCopies: [
+        {
+          agentId: "claude-code",
+          skillId: "removed-skill",
+          skillName: "removed-skill",
+          writablePaths: [
+            "~/.claude/skills/removed-skill",
+            "~/.claude/skills/removed-skill-copy",
+          ],
+        },
+      ],
+    });
+    const decisions = buildInitialState(inventory);
+
+    expect(countDecisionSelections(decisions, inventory)).toBe(1);
+    expect(buildDecisions(decisions, inventory)).toMatchObject({
+      removeDeletedPlatformCopies: [
+        {
+          agentId: "claude-code",
+          skillId: "removed-skill",
+          paths: [
+            "~/.claude/skills/removed-skill",
+            "~/.claude/skills/removed-skill-copy",
+          ],
+        },
       ],
     });
   });

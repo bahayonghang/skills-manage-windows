@@ -5,16 +5,19 @@ import type {
 } from "@/types/centralRepositorySync";
 import type { UpdateCenterTab } from "@/stores/updateCenterStore";
 import type {
+  DeletedPlatformCopyRemoval,
   PlatformDuplicateRemoval,
   SkillUpdateDecisions,
   SkillUpdateInventory,
 } from "@/types/skillUpdateInventory";
 
+import type { DeletedPlatformCopyRowState } from "@/components/central/updateCenter/DeletedPlatformCopiesTabPanel";
 import type { PlatformDuplicateRowState } from "@/components/central/updateCenter/PlatformDuplicatesTabPanel";
 import type { RemoteAddedRowState } from "@/components/central/updateCenter/RemoteAddedTabPanel";
 import type { RemoteMissingRowState } from "@/components/central/updateCenter/RemoteMissingTabPanel";
 import type { UpdatableRowState } from "@/components/central/updateCenter/UpdatableTabPanel";
 import {
+  deletedPlatformCopyGroupKey,
   duplicateGroupKey,
   remoteAddedKey,
 } from "@/components/central/updateCenter/keys";
@@ -24,10 +27,17 @@ export interface DecisionState {
   added: Record<string, RemoteAddedRowState>;
   missing: Record<string, RemoteMissingRowState>;
   duplicates: Record<string, PlatformDuplicateRowState>;
+  deletedPlatformCopies: Record<string, DeletedPlatformCopyRowState>;
 }
 
 export function emptyDecisionState(): DecisionState {
-  return { updatable: {}, added: {}, missing: {}, duplicates: {} };
+  return {
+    updatable: {},
+    added: {},
+    missing: {},
+    duplicates: {},
+    deletedPlatformCopies: {},
+  };
 }
 
 export function buildInitialState(
@@ -58,20 +68,34 @@ export function buildInitialState(
       selectedPaths: [...group.writablePaths],
     };
   }
-  return { updatable, added, missing, duplicates };
+  const deletedPlatformCopies: Record<string, DeletedPlatformCopyRowState> = {};
+  for (const group of inventory.deletedPlatformCopies ?? []) {
+    deletedPlatformCopies[deletedPlatformCopyGroupKey(group)] = {
+      selectedPaths: [...group.writablePaths],
+    };
+  }
+  return { updatable, added, missing, duplicates, deletedPlatformCopies };
 }
 
 export function countsFromInventory(
   inventory: SkillUpdateInventory | null,
 ): Record<UpdateCenterTab, number> {
   if (!inventory) {
-    return { updatable: 0, added: 0, missing: 0, duplicates: 0, orphans: 0 };
+    return {
+      updatable: 0,
+      added: 0,
+      missing: 0,
+      duplicates: 0,
+      deletedPlatformCopies: 0,
+      orphans: 0,
+    };
   }
   return {
     updatable: inventory.updatable.length,
     added: inventory.remoteAdded.length,
     missing: inventory.remoteMissing.length,
     duplicates: inventory.platformDuplicates.length,
+    deletedPlatformCopies: inventory.deletedPlatformCopies?.length ?? 0,
     orphans: inventory.orphans.length,
   };
 }
@@ -95,6 +119,12 @@ export function countDecisionSelections(
   }
   for (const group of inventory.platformDuplicates) {
     const paths = decisions.duplicates[duplicateGroupKey(group)]?.selectedPaths ?? [];
+    if (paths.length > 0) count += 1;
+  }
+  for (const group of inventory.deletedPlatformCopies ?? []) {
+    const paths =
+      decisions.deletedPlatformCopies[deletedPlatformCopyGroupKey(group)]
+        ?.selectedPaths ?? [];
     if (paths.length > 0) count += 1;
   }
   return count;
@@ -169,6 +199,19 @@ export function buildDecisions(
     });
   }
 
+  const removeDeletedPlatformCopies: DeletedPlatformCopyRemoval[] = [];
+  for (const group of inventory.deletedPlatformCopies ?? []) {
+    const paths =
+      decisions.deletedPlatformCopies[deletedPlatformCopyGroupKey(group)]
+        ?.selectedPaths ?? [];
+    if (paths.length === 0) continue;
+    removeDeletedPlatformCopies.push({
+      agentId: group.agentId,
+      skillId: group.skillId,
+      paths,
+    });
+  }
+
   return {
     updates,
     keepMissing,
@@ -177,6 +220,7 @@ export function buildDecisions(
     skipAdditions,
     unskipAdditions: [],
     removePlatformDuplicates,
+    removeDeletedPlatformCopies,
   };
 }
 
@@ -192,6 +236,9 @@ export function inventorySignature(
     ...inventory.remoteMissing.map((item) => `m:${item.state.skill_id}`),
     ...inventory.platformDuplicates.map(
       (group) => `d:${group.agentId}:${group.skillId}`,
+    ),
+    ...(inventory.deletedPlatformCopies ?? []).map(
+      (group) => `x:${group.agentId}:${group.skillId}`,
     ),
   ];
   return parts.join("|");

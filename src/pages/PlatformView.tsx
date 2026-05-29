@@ -7,13 +7,12 @@ import { usePlatformStore } from "@/stores/platformStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
-import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { BatchDeletePlatformSkillsDialog } from "@/components/platform/BatchDeletePlatformSkillsDialog";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
+import { PlatformCleanupScanButtons } from "@/components/platform/PlatformCleanupScanButtons";
 import { PlatformGroupedSkillList } from "@/components/platform/PlatformGroupedSkillList";
 import { PlatformTransferActionBar, PlatformTransferRail } from "@/components/platform/PlatformTransferRail";
 import { PlatformSkillSortMenu, PlatformSkillViewMenu } from "@/components/platform/PlatformSkillToolbarMenus";
@@ -85,8 +84,6 @@ export function PlatformView() {
   const currentDetail = useSkillDetailStore((state) => state.detail);
   const refreshDetailInstallations = useSkillDetailStore((state) => state.refreshInstallations);
   const refreshCounts = usePlatformStore((state) => state.refreshCounts);
-  const scanDuplicates = useUpdateCenterStore((state) => state.scanDuplicates);
-  const openUpdateCenter = useUpdateCenterStore((state) => state.openDialog);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<ClaudeSourceFilter>("all");
@@ -101,7 +98,6 @@ export function PlatformView() {
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [drawerSkill, setDrawerSkill] = useState<ScannedSkill | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isDuplicateScanning, setIsDuplicateScanning] = useState(false);
   const [returnFocusRowKey, setReturnFocusRowKey] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -219,38 +215,6 @@ export function PlatformView() {
       await getSkillsByAgent(resolvedAgentId);
     } catch (err) {
       toast.error(t("detail.uninstallError", { error: String(err) }));
-    }
-  }
-
-  async function handleScanDuplicates() {
-    if (!resolvedAgentId) return;
-    setIsDuplicateScanning(true);
-    try {
-      await rescan();
-      await getSkillsByAgent(resolvedAgentId);
-      await scanDuplicates([resolvedAgentId]);
-      const inventory = useUpdateCenterStore.getState().inventory;
-      const groups = inventory?.platformDuplicates ?? [];
-      if (groups.length === 0) {
-        toast.info(t("platform.duplicatesNone"));
-        return;
-      }
-
-      const rowCount = groups.reduce(
-        (sum, group) => sum + group.writablePaths.length,
-        0
-      );
-      openUpdateCenter("duplicates");
-      toast.success(
-        t("platform.duplicatesFound", {
-          skillCount: groups.length,
-          rowCount,
-        })
-      );
-    } catch (err) {
-      toast.error(t("platform.duplicatesScanError", { error: String(err) }));
-    } finally {
-      setIsDuplicateScanning(false);
     }
   }
 
@@ -649,15 +613,16 @@ export function PlatformView() {
             groupByOptions={groupByOptions}
             onChangeGroupBy={setGroupBy}
           />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!resolvedAgentId || isDuplicateScanning || isLoading}
-            onClick={() => void handleScanDuplicates()}
-            aria-label={t("platform.scanDuplicatesLabel", { platform: platformDisplayName })}
-          >
-            {isDuplicateScanning ? t("platform.scanningDuplicates") : t("platform.scanDuplicates")}
-          </Button>
+          <PlatformCleanupScanButtons
+            agentId={resolvedAgentId}
+            platformName={platformDisplayName}
+            isLoading={isLoading}
+            onBeforeScan={async () => {
+              if (!resolvedAgentId) return;
+              await rescan();
+              await getSkillsByAgent(resolvedAgentId);
+            }}
+          />
         </div>
       </div>
 

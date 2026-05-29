@@ -16,6 +16,10 @@ import {
   PlatformDuplicatesTabPanel,
   type PlatformDuplicateRowState,
 } from "@/components/central/updateCenter/PlatformDuplicatesTabPanel";
+import {
+  DeletedPlatformCopiesTabPanel,
+  type DeletedPlatformCopyRowState,
+} from "@/components/central/updateCenter/DeletedPlatformCopiesTabPanel";
 import { OrphansTabPanel } from "@/components/central/updateCenter/OrphansTabPanel";
 import {
   countsFromInventory,
@@ -34,6 +38,10 @@ export interface UpdateCenterTabHandlers {
   updateDuplicates: (
     key: string,
     patch: Partial<PlatformDuplicateRowState>,
+  ) => void;
+  updateDeletedPlatformCopies: (
+    key: string,
+    patch: Partial<DeletedPlatformCopyRowState>,
   ) => void;
 }
 
@@ -111,6 +119,14 @@ export function UpdateCenterTabContent({
           items={inventory.platformDuplicates}
           state={decisions.duplicates}
           onChange={handlers.updateDuplicates}
+        />
+      );
+    case "deletedPlatformCopies":
+      return (
+        <DeletedPlatformCopiesTabPanel
+          items={inventory.deletedPlatformCopies ?? []}
+          state={decisions.deletedPlatformCopies}
+          onChange={handlers.updateDeletedPlatformCopies}
         />
       );
     default:

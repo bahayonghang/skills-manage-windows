@@ -51,6 +51,7 @@ const TAB_ORDER: readonly UpdateCenterTab[] = [
   "added",
   "missing",
   "duplicates",
+  "deletedPlatformCopies",
   "orphans",
 ] as const;
 
@@ -141,7 +142,8 @@ export function UpdateCenterDialog() {
         + result.importedSkillIds.length
         + result.skippedAdditions.length
         + result.unskippedAdditions.length
-        + result.removedPlatformDuplicatePaths.length;
+        + result.removedPlatformDuplicatePaths.length
+        + result.removedDeletedPlatformCopyPaths.length;
       const failedCount = result.failures.length;
       if (failedCount === 0) {
         toast.success(
@@ -226,6 +228,18 @@ export function UpdateCenterDialog() {
           ...current.duplicates,
           [key]: {
             ...(current.duplicates[key] ?? { selectedPaths: [] }),
+            ...patch,
+          },
+        },
+      }));
+    },
+    updateDeletedPlatformCopies(key, patch) {
+      setDecisions((current) => ({
+        ...current,
+        deletedPlatformCopies: {
+          ...current.deletedPlatformCopies,
+          [key]: {
+            ...(current.deletedPlatformCopies[key] ?? { selectedPaths: [] }),
             ...patch,
           },
         },

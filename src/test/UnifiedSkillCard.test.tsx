@@ -77,6 +77,7 @@ describe("UnifiedSkillCard", () => {
         remoteAdded: [],
         remoteMissing: [],
         platformDuplicates: [],
+        deletedPlatformCopies: [],
         orphans: [],
         failedRepositories: [],
         generatedAt: "2026-05-23T00:00:00.000Z",

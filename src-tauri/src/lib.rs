@@ -369,6 +369,7 @@ pub fn run() {
             commands::skill_update_inventory::clear_skill_update_inventory,
             commands::skill_update_inventory::apply_skill_update_decisions,
             commands::skill_update_inventory::scan_platform_duplicate_skills,
+            commands::skill_update_inventory::scan_deleted_platform_copies,
             // Collections
             commands::collections::create_collection,
             commands::collections::get_collections,
