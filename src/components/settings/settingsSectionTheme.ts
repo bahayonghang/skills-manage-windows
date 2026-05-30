@@ -7,6 +7,7 @@ export type SettingsSectionTone =
   | "platform-visibility"
   | "github-pat"
   | "ai-provider"
+  | "central-update-check-mode"
   | "scan-directories"
   | "about";
 
@@ -51,6 +52,10 @@ const SETTINGS_SECTION_THEMES: Record<string, SettingsSectionTheme> = {
   "ai-provider": {
     accentVar: "--ctp-lavender",
     tone: "ai-provider",
+  },
+  "central-update-check-mode": {
+    accentVar: "--ctp-sapphire",
+    tone: "central-update-check-mode",
   },
   "scan-directories": {
     accentVar: "--ctp-green",

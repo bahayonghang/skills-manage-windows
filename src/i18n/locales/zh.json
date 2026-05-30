@@ -1248,7 +1248,8 @@
         "scope": "单仓库筛选时只检查该仓库，否则检查所有可同步 GitHub 仓库。",
         "risk": "删除仍只进入更新中心决策，不会自动删除本地 skill。",
         "disabledNoRepository": "当前没有可同步的 GitHub 仓库。"
-      }
+      },
+      "syncConfirmTitle": "确认增量和删减检查"
     }
   },
   "installDialog": {
@@ -1800,7 +1801,14 @@
         }
       },
       "signingNote": "自动更新需要发布流水线注入 Tauri updater 公钥，并使用私钥签名 NSIS 产物。"
-    }
+    },
+    "centralUpdateCheckModeTitle": "更新检查模式",
+    "centralUpdateCheckModeDesc": "决定中央技能页“检查更新”按钮的默认行为。",
+    "centralUpdateCheckModeRegular": "常规检查",
+    "centralUpdateCheckModeRegularDesc": "仅检查已安装中央技能的内容更新，不处理远端新增或删除。",
+    "centralUpdateCheckModeSync": "增量和删减模式",
+    "centralUpdateCheckModeSyncDesc": "扫描可同步 GitHub 仓库的新增、删除与更新，点击检查时会先确认。",
+    "centralUpdateCheckModeHint": "常规检查默认低风险；需要导入新增技能或处理远端删除时再切到增量和删减模式。"
   },
   "addDir": {
     "title": "添加项目目录",

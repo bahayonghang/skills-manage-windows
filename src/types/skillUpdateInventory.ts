@@ -9,9 +9,11 @@ import type {
 } from "@/types/centralRepositorySync";
 
 export type SkillRefreshScopeKind = "all" | "skills" | "repositories";
+export type SkillRefreshMode = "regular" | "sync";
 
 export interface SkillRefreshScope {
   kind: SkillRefreshScopeKind;
+  mode?: SkillRefreshMode;
   skillIds?: string[] | null;
   repositoryIds?: string[] | null;
 }

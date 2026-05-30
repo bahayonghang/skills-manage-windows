@@ -153,9 +153,14 @@ const defaultAiSettings: AiSettings = {
 
 function setupMocks({
   scanDirs = [] as ScanDirectory[],
+  centralUpdateCheckMode = "regular" as const,
+  centralUpdateCheckModeLoaded = true,
+  isLoadingCentralUpdateCheckMode = false,
   isLoadingScanDirs = false,
   agents = [] as AgentWithStatus[],
   loadScanDirectories = vi.fn(),
+  loadCentralUpdateCheckMode = vi.fn(),
+  setCentralUpdateCheckMode = vi.fn(),
   addScanDirectory = vi.fn(),
   removeScanDirectory = vi.fn(),
   toggleScanDirectory = vi.fn(),
@@ -236,9 +241,14 @@ function setupMocks({
   vi.mocked(useSettingsStore).mockImplementation((selector) =>
     selector({
       scanDirectories: scanDirs,
+      centralUpdateCheckMode,
+      centralUpdateCheckModeLoaded,
+      isLoadingCentralUpdateCheckMode,
       isLoadingScanDirs,
       error: null,
       loadScanDirectories,
+      loadCentralUpdateCheckMode,
+      setCentralUpdateCheckMode,
       addScanDirectory,
       removeScanDirectory,
       toggleScanDirectory,
@@ -1191,6 +1201,26 @@ describe("SettingsView", () => {
     setupMocks({ isLoadingScanDirs: true });
     renderSettingsView("/settings/skill-sources");
     expect(screen.getByText("加载中...")).toBeTruthy();
+  });
+
+  it("renders and persists the Central update check mode preference", async () => {
+    const setCentralUpdateCheckMode = vi.fn().mockResolvedValue(undefined);
+    setupMocks({
+      centralUpdateCheckMode: "regular",
+      setCentralUpdateCheckMode,
+    });
+    renderSettingsView("/settings/skill-sources");
+
+    expect(screen.getByText("更新检查模式")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /常规检查/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /增量和删减模式/ }));
+
+    await waitFor(() => {
+      expect(setCentralUpdateCheckMode).toHaveBeenCalledWith("sync");
+    });
   });
 
   it("shows empty state when no scan directories", () => {

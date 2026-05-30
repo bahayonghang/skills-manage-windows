@@ -4,6 +4,7 @@ import { AboutSettingsSection } from "@/components/settings/AboutSettingsSection
 import { AiSettingsSection } from "@/components/settings/AiSettingsSection";
 import { AppearanceSettingsSection } from "@/components/settings/AppearanceSettingsSection";
 import { CustomPlatformsSettingsSection } from "@/components/settings/CustomPlatformsSettingsSection";
+import { CentralUpdateCheckModeSettingsSection } from "@/components/settings/CentralUpdateCheckModeSettingsSection";
 import { GitHubPatSettingsSection } from "@/components/settings/GitHubPatSettingsSection";
 import { LocalRemoteSyncDialog } from "@/components/settings/LocalRemoteSyncDialog";
 import { PlatformDialog } from "@/components/settings/PlatformDialog";
@@ -35,6 +36,7 @@ import type {
   AiSaveStatus,
   AiSettings,
 } from "@/stores/settingsStore";
+import type { UpdateCheckMode } from "@/pages/centralUpdateCheckMode";
 
 type Message = { type: "success" | "error"; text: string; detail?: string | null };
 type CatppuccinVarMap = Record<CatppuccinAccent, string>;
@@ -90,6 +92,8 @@ export interface SettingsPageSectionsProps {
   resolvedUrl: string;
   scanDirError: string | null;
   scanDirectories: ScanDirectory[];
+  centralUpdateCheckMode: UpdateCheckMode;
+  isLoadingCentralUpdateCheckMode: boolean;
   showAiTestDetails: boolean;
   showBuiltinDirs: boolean;
   sshTargetEditForm: SshTargetFormState;
@@ -153,6 +157,7 @@ export interface SettingsPageSectionsProps {
   onTestNewWslTarget: () => void;
   onToggleCategory: (category: PlatformCategoryKey, visible: boolean) => void;
   onToggleDirectory: (path: string, active: boolean) => void;
+  onCentralUpdateCheckModeChange: (mode: UpdateCheckMode) => void;
   onTogglePlatformVisibility: (agentId: string, enabled: boolean) => void;
   onUpdateAiSettings: (updates: Partial<AiSettings>) => void;
   onUpdateExistingTargetPassword: (targetId: string, password: string) => void;
@@ -351,19 +356,28 @@ function SettingsIntegrationsPage(props: SettingsPageSectionsProps) {
 
 function SettingsSkillSourcesPage(props: SettingsPageSectionsProps) {
   return (
-    <section id="scan-directories-section" className="scroll-mt-24">
-      <ScanDirectoriesSettingsSection
-        isLoadingScanDirs={props.isLoadingScanDirs}
-        removingDir={props.removingDir}
-        scanDirError={props.scanDirError}
-        scanDirectories={props.scanDirectories}
-        showBuiltinDirs={props.showBuiltinDirs}
-        onAddDirectory={props.onOpenAddDirectory}
-        onRemoveDirectory={props.onRemoveDirectory}
-        onToggleBuiltinDirs={props.onToggleBuiltinDirs}
-        onToggleDirectory={props.onToggleDirectory}
-      />
-    </section>
+    <div className="space-y-4">
+      <section id="central-update-check-mode-section" className="scroll-mt-24">
+        <CentralUpdateCheckModeSettingsSection
+          mode={props.centralUpdateCheckMode}
+          isLoading={props.isLoadingCentralUpdateCheckMode}
+          onChange={props.onCentralUpdateCheckModeChange}
+        />
+      </section>
+      <section id="scan-directories-section" className="scroll-mt-24">
+        <ScanDirectoriesSettingsSection
+          isLoadingScanDirs={props.isLoadingScanDirs}
+          removingDir={props.removingDir}
+          scanDirError={props.scanDirError}
+          scanDirectories={props.scanDirectories}
+          showBuiltinDirs={props.showBuiltinDirs}
+          onAddDirectory={props.onOpenAddDirectory}
+          onRemoveDirectory={props.onRemoveDirectory}
+          onToggleBuiltinDirs={props.onToggleBuiltinDirs}
+          onToggleDirectory={props.onToggleDirectory}
+        />
+      </section>
+    </div>
   );
 }
 

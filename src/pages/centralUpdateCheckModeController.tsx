@@ -1,11 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-  UpdateCheckModeDialog,
-  type UpdateCheckMode,
-} from "@/components/central/UpdateCheckModeDialog";
+import { UpdateCheckModeDialog } from "@/components/central/UpdateCheckModeDialog";
 import type { CentralSkillsShellProps } from "@/components/central/CentralSkillsShell";
 import type { CentralSkillsCheckButtonState } from "@/pages/centralSkillsCheckButton";
 import {
@@ -13,7 +10,9 @@ import {
   buildUpdateCheckScope,
   hasSyncableGitHubRepository,
   preferredUpdateCenterTab,
+  type UpdateCheckMode,
 } from "@/pages/centralUpdateCheckMode";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 import type { SkillRepositoryWithStats } from "@/types";
 
@@ -39,7 +38,16 @@ export function useCentralUpdateCheckModeController({
   const refreshUpdateInventory = useUpdateCenterStore((state) => state.refresh);
   const openUpdateCenter = useUpdateCenterStore((state) => state.openDialog);
   const isUpdateCenterRefreshing = useUpdateCenterStore((state) => state.isRefreshing);
+  const modePreference = useSettingsStore((state) => state.centralUpdateCheckMode);
+  const modeLoaded = useSettingsStore((state) => state.centralUpdateCheckModeLoaded);
+  const loadModePreference = useSettingsStore((state) => state.loadCentralUpdateCheckMode);
   const syncableRepositoryAvailable = hasSyncableGitHubRepository(repositories);
+
+  useEffect(() => {
+    if (!modeLoaded) {
+      void loadModePreference();
+    }
+  }, [loadModePreference, modeLoaded]);
 
   const handleConfirm = useCallback(
     async (mode: UpdateCheckMode) => {
@@ -59,6 +67,14 @@ export function useCentralUpdateCheckModeController({
     [checkButtonState, openUpdateCenter, refreshUpdateInventory],
   );
 
+  const handleClick = useCallback(() => {
+    if (modePreference === "regular") {
+      void handleConfirm("regular");
+      return;
+    }
+    setOpen(true);
+  }, [handleConfirm, modePreference]);
+
   return {
     checkButton: {
       label: checkButtonState.label,
@@ -67,12 +83,13 @@ export function useCentralUpdateCheckModeController({
         isUpdateCenterRefreshing ||
         isSubmitting ||
         checkButtonState.targetSkillIds.length === 0,
-      onClick: () => setOpen(true),
+      onClick: handleClick,
     },
     dialog: (
       <UpdateCheckModeDialog
         open={open}
         onOpenChange={setOpen}
+        mode="sync"
         scopeLabel={checkButtonState.label}
         isSubmitting={isSubmitting}
         syncDisabled={!syncableRepositoryAvailable}

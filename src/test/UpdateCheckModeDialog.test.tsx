@@ -2,10 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
-import {
-  UpdateCheckModeDialog,
-  type UpdateCheckMode,
-} from "@/components/central/UpdateCheckModeDialog";
+import { UpdateCheckModeDialog } from "@/components/central/UpdateCheckModeDialog";
+import type { UpdateCheckMode } from "@/pages/centralUpdateCheckMode";
 
 function renderDialog(overrides: Partial<ComponentProps<typeof UpdateCheckModeDialog>> = {}) {
   const onOpenChange = vi.fn();
@@ -45,6 +43,17 @@ describe("UpdateCheckModeDialog", () => {
     fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     expect(onConfirm).toHaveBeenCalledWith("sync" satisfies UpdateCheckMode);
+  });
+
+  it("renders sync confirmation without changing modes when fixed", () => {
+    const { onConfirm } = renderDialog({ mode: "sync" });
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).getByText("确认增量和删减检查")).toBeInTheDocument();
+    expect(within(dialog).queryByTestId("update-check-mode-regular")).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
+
+    expect(onConfirm).toHaveBeenCalledWith("sync");
   });
 
   it("cancels without confirming", () => {

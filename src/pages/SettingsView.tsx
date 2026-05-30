@@ -45,8 +45,13 @@ export function SettingsView() {
   const navigate = useNavigate();
   const {
     scanDirectories,
+    centralUpdateCheckMode,
+    centralUpdateCheckModeLoaded,
+    isLoadingCentralUpdateCheckMode,
     isLoadingScanDirs,
     loadScanDirectories,
+    loadCentralUpdateCheckMode,
+    setCentralUpdateCheckMode,
     addScanDirectory,
     removeScanDirectory,
     toggleScanDirectory,
@@ -193,10 +198,20 @@ export function SettingsView() {
 
   useEffect(() => {
     loadScanDirectories();
+    if (!centralUpdateCheckModeLoaded) {
+      void loadCentralUpdateCheckMode();
+    }
     loadGitHubPat();
     loadTargets();
     void loadWslDistributions().catch(() => undefined);
-  }, [loadScanDirectories, loadGitHubPat, loadTargets, loadWslDistributions]);
+  }, [
+    centralUpdateCheckModeLoaded,
+    loadCentralUpdateCheckMode,
+    loadScanDirectories,
+    loadGitHubPat,
+    loadTargets,
+    loadWslDistributions,
+  ]);
 
   useEffect(() => {
     if (wslTargetForm.distribution.trim() || wslDistributions.length !== 1) {
@@ -487,6 +502,8 @@ export function SettingsView() {
               resolvedUrl={resolvedUrl}
               scanDirError={scanDirError}
               scanDirectories={scanDirectories}
+              centralUpdateCheckMode={centralUpdateCheckMode}
+              isLoadingCentralUpdateCheckMode={isLoadingCentralUpdateCheckMode}
               showAiTestDetails={showAiTestDetails}
               showBuiltinDirs={showBuiltinDirs}
               sshTargetEditForm={sshTargetEditForm}
@@ -583,6 +600,9 @@ export function SettingsView() {
               }}
               onToggleDirectory={(path, active) => {
                 void handleToggleDirectory(path, active);
+              }}
+              onCentralUpdateCheckModeChange={(mode) => {
+                void setCentralUpdateCheckMode(mode);
               }}
               onTogglePlatformVisibility={(agentId, enabled) => {
                 void handleTogglePlatformVisibility(agentId, enabled);

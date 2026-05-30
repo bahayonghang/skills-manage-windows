@@ -17,6 +17,19 @@ export function useSettingsViewBindings() {
   const addScanDirectory = useSettingsStore((state) => state.addScanDirectory);
   const removeScanDirectory = useSettingsStore((state) => state.removeScanDirectory);
   const toggleScanDirectory = useSettingsStore((state) => state.toggleScanDirectory);
+  const centralUpdateCheckMode = useSettingsStore((state) => state.centralUpdateCheckMode);
+  const centralUpdateCheckModeLoaded = useSettingsStore(
+    (state) => state.centralUpdateCheckModeLoaded
+  );
+  const isLoadingCentralUpdateCheckMode = useSettingsStore(
+    (state) => state.isLoadingCentralUpdateCheckMode
+  );
+  const loadCentralUpdateCheckMode = useSettingsStore(
+    (state) => state.loadCentralUpdateCheckMode
+  );
+  const setCentralUpdateCheckMode = useSettingsStore(
+    (state) => state.setCentralUpdateCheckMode
+  );
   const addCustomAgent = usePlatformStore((state) => state.addCustomAgent);
   const updateCustomAgent = usePlatformStore((state) => state.updateCustomAgent);
   const removeCustomAgent = usePlatformStore((state) => state.removeCustomAgent);
@@ -108,6 +121,11 @@ export function useSettingsViewBindings() {
     addScanDirectory,
     removeScanDirectory,
     toggleScanDirectory,
+    centralUpdateCheckMode,
+    centralUpdateCheckModeLoaded,
+    isLoadingCentralUpdateCheckMode,
+    loadCentralUpdateCheckMode,
+    setCentralUpdateCheckMode,
     addCustomAgent,
     updateCustomAgent,
     removeCustomAgent,

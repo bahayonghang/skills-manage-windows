@@ -1248,7 +1248,8 @@
         "scope": "A single repository filter checks only that repository; otherwise all syncable GitHub repositories are checked.",
         "risk": "Removals still go to Update Center for review and never delete local skills automatically.",
         "disabledNoRepository": "No syncable GitHub repository is available."
-      }
+      },
+      "syncConfirmTitle": "Confirm incremental and removal check"
     }
   },
   "installDialog": {
@@ -1800,7 +1801,14 @@
         }
       },
       "signingNote": "Auto updates require the release workflow to inject the Tauri updater public key and sign the NSIS artifact with the private key."
-    }
+    },
+    "centralUpdateCheckModeTitle": "Update check mode",
+    "centralUpdateCheckModeDesc": "Controls the default behavior of the Central skills Check updates button.",
+    "centralUpdateCheckModeRegular": "Regular check",
+    "centralUpdateCheckModeRegularDesc": "Only checks installed Central skills for content updates; remote additions and removals are not offered.",
+    "centralUpdateCheckModeSync": "Incremental and removal mode",
+    "centralUpdateCheckModeSyncDesc": "Scans syncable GitHub repositories for additions, removals, and updates, with confirmation before each check.",
+    "centralUpdateCheckModeHint": "Regular checks are low risk by default; switch to incremental and removal mode when you need to import additions or handle remote removals."
   },
   "addDir": {
     "title": "Add Project Directory",

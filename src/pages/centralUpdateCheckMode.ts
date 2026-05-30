@@ -1,5 +1,4 @@
 import type { CentralSkillsCheckButtonState } from "@/pages/centralSkillsCheckButton";
-import type { UpdateCheckMode } from "@/components/central/UpdateCheckModeDialog";
 import type { UpdateCenterTab } from "@/stores/updateCenterStore";
 import type { SkillRepositoryWithStats } from "@/types";
 import type {
@@ -7,6 +6,15 @@ import type {
   SkillRefreshScope,
   SkillUpdateInventory,
 } from "@/types/skillUpdateInventory";
+
+export type UpdateCheckMode = "regular" | "sync";
+
+export const CENTRAL_UPDATE_CHECK_MODE_SETTING_KEY = "central_update_check_mode_v1";
+export const DEFAULT_UPDATE_CHECK_MODE: UpdateCheckMode = "regular";
+
+export function normalizeUpdateCheckMode(value: unknown): UpdateCheckMode {
+  return value === "sync" ? "sync" : DEFAULT_UPDATE_CHECK_MODE;
+}
 
 export function hasSyncableGitHubRepository(
   repositories: readonly SkillRepositoryWithStats[],
@@ -19,12 +27,12 @@ export function buildUpdateCheckScope(
   state: CentralSkillsCheckButtonState,
 ): SkillRefreshScope {
   if (mode === "regular") {
-    return { kind: "skills", skillIds: state.targetSkillIds };
+    return { kind: "skills", mode, skillIds: state.targetSkillIds };
   }
   if (state.scope === "current-results" && state.repositoryIds?.length === 1) {
-    return { kind: "repositories", repositoryIds: state.repositoryIds };
+    return { kind: "repositories", mode, repositoryIds: state.repositoryIds };
   }
-  return { kind: "all" };
+  return { kind: "all", mode };
 }
 
 export function buildUpdateCheckRefreshContext(

@@ -265,6 +265,10 @@ import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { useTargetStore as targetStoreHook } from "@/stores/targetStore";
+import {
+  createSettingsStoreInitialState,
+  useSettingsStore,
+} from "@/stores/settingsStore";
 import * as tauriBridgeModule from "@/lib/tauri";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -686,6 +690,7 @@ export const toast = mockedToast;
 export const CentralSkillsView = CentralSkillsViewComponent;
 export const useTargetStore = targetStoreHook;
 export const tauriBridge = tauriBridgeModule;
+export const settingsStore = useSettingsStore;
 
 export function resetCentralSkillsViewTestState() {
   vi.clearAllMocks();
@@ -697,6 +702,10 @@ export function resetCentralSkillsViewTestState() {
   useTargetStore.setState({
     targets: [localTarget],
     activeTarget: localTarget,
+  });
+  useSettingsStore.setState({
+    ...createSettingsStoreInitialState(),
+    centralUpdateCheckModeLoaded: true,
   });
   mockCheckSkillUpdates.mockResolvedValue([]);
   mockCheckRepositorySync.mockResolvedValue({

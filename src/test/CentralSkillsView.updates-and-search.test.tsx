@@ -27,6 +27,7 @@ const {
   localTarget,
   renderCentralSkillsView,
   useTargetStore,
+  settingsStore,
 } = S;
 
 describe("CentralSkillsView updates + search（V2 markup）", () => {
@@ -353,20 +354,21 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
   });
 
 
-  it("opens update mode selection before any backend check", async () => {
+  it("runs the default regular check immediately without opening mode selection", async () => {
     renderCentralSkillsView();
 
     fireEvent.click(screen.getByRole("button", { name: /检查/i }));
 
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("选择更新检查模式")).toBeInTheDocument();
-    expect(within(dialog).getByTestId("update-check-mode-regular")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await waitFor(() => {
+      expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({
+        kind: "skills",
+        mode: "regular",
+        skillIds: ["code-reviewer", "frontend-design"],
+      });
+    });
+    expect(screen.queryByText("选择更新检查模式")).not.toBeInTheDocument();
     expect(mockCheckSkillUpdates).not.toHaveBeenCalled();
     expect(mockCheckRepositorySync).not.toHaveBeenCalled();
-    expect(mockRefreshUpdateInventory).not.toHaveBeenCalled();
   });
 
   it("runs a regular check through Update Center with selected skill ids only", async () => {
@@ -397,12 +399,10 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
     fireEvent.click(screen.getByRole("button", { name: "检查所选（1）" }));
 
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
-
     await waitFor(() => {
       expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({
         kind: "skills",
+        mode: "regular",
         skillIds: ["code-reviewer"],
       });
     });
@@ -430,7 +430,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
   });
 
 
-  it("keeps the check-updates button enabled on SSH targets and waits for mode confirmation", async () => {
+  it("keeps the check-updates button enabled on SSH targets and runs regular check", async () => {
     const remoteTarget: TargetSummary = {
       id: "ssh-demo",
       kind: "ssh",
@@ -449,11 +449,17 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     expect(checkButton).not.toBeDisabled();
 
     fireEvent.click(checkButton);
-    expect(await screen.findByText("选择更新检查模式")).toBeInTheDocument();
-    expect(mockRefreshUpdateInventory).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({
+        kind: "skills",
+        mode: "regular",
+        skillIds: ["code-reviewer", "frontend-design"],
+      });
+    });
   });
 
   it("runs incremental and removal mode for all repositories when no single repo is scoped", async () => {
+    settingsStore.setState({ centralUpdateCheckMode: "sync", centralUpdateCheckModeLoaded: true });
     const inventory = {
       ...mockEmptyUpdateInventory,
       remoteAdded: [
@@ -471,11 +477,11 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "检查全部（2）" }));
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByTestId("update-check-mode-sync"));
+    expect(within(dialog).queryByTestId("update-check-mode-regular")).not.toBeInTheDocument();
     fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     await waitFor(() => {
-      expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({ kind: "all" });
+      expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({ kind: "all", mode: "sync" });
     });
     expect(mockOpenUpdateCenterDialog).toHaveBeenCalledWith("added", {});
     expect(mockCheckRepositorySync).not.toHaveBeenCalled();
@@ -591,12 +597,11 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "检查所选（2）" }));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     await waitFor(() => {
       expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({
         kind: "skills",
+        mode: "regular",
         skillIds: ["github-one", "github-two"],
       });
     });
@@ -605,6 +610,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
   });
 
   it("uses repository refresh for incremental mode on a single repository filter", async () => {
+    settingsStore.setState({ centralUpdateCheckMode: "sync", centralUpdateCheckModeLoaded: true });
     window.history.replaceState(null, "", "/");
     window.localStorage.setItem("central.sidebarPinned", "true");
     const githubRepo = mockRepositories[1]!;
@@ -626,12 +632,12 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     fireEvent.click(checkCurrentResults);
 
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByTestId("update-check-mode-sync"));
     fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     await waitFor(() => {
       expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({
         kind: "repositories",
+        mode: "sync",
         repositoryIds: [githubRepo.id],
       });
     });
@@ -642,6 +648,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
   });
 
   it("disables incremental mode when no syncable GitHub repository exists", async () => {
+    settingsStore.setState({ centralUpdateCheckMode: "sync", centralUpdateCheckModeLoaded: true });
     const localRepo = mockRepositories[0]!;
     const skills: SkillWithLinks[] = [
       { ...mockSkills[1]!, id: "local-one", name: "local-one", repository: localRepo },
