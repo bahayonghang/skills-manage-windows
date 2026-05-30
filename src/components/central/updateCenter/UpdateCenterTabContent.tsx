@@ -76,6 +76,10 @@ export function UpdateCenterTabContent({
     return <OrphansTabPanel />;
   }
 
+  if (tab === "failed") {
+    return <FailedRepositoriesPanel inventory={inventory} repositoryLabels={repositoryLabels} />;
+  }
+
   const counts = countsFromInventory(inventory);
   if (counts[tab] === 0) {
     return (
@@ -132,4 +136,36 @@ export function UpdateCenterTabContent({
     default:
       return null;
   }
+}
+
+function FailedRepositoriesPanel({
+  inventory,
+  repositoryLabels,
+}: {
+  inventory: SkillUpdateInventory;
+  repositoryLabels: ReadonlyMap<string, string>;
+}) {
+  const { t } = useTranslation();
+  if (inventory.failedRepositories.length === 0) {
+    return (
+      <p className="text-muted-foreground">
+        {t("central.updateCenter.tabEmpty")}
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {inventory.failedRepositories.map((item) => (
+        <div
+          key={`${item.repositoryId}:${item.error}`}
+          className="rounded-lg border border-destructive/30 bg-destructive/5 p-3"
+        >
+          <div className="text-sm font-medium">
+            {repositoryLabels.get(item.repositoryId) ?? item.repositoryId}
+          </div>
+          <p className="mt-1 text-xs text-destructive">{item.error}</p>
+        </div>
+      ))}
+    </div>
+  );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link2, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -65,10 +65,16 @@ export function InstallDialog({
     () => agents.filter((agent) => agent.id !== "central"),
     [agents]
   );
-  const sharedRootAgentIds = new Set(skill?.shared_root_agents ?? []);
+  const sharedRootAgentIds = useMemo(
+    () => new Set(skill?.shared_root_agents ?? []),
+    [skill?.shared_root_agents]
+  );
 
-  const isSharedRootTarget = (agent: AgentWithStatus) =>
-    getPlatformTargetMemberIds(agent).some((agentId) => sharedRootAgentIds.has(agentId));
+  const isSharedRootTarget = useCallback(
+    (agent: AgentWithStatus) =>
+      getPlatformTargetMemberIds(agent).some((agentId) => sharedRootAgentIds.has(agentId)),
+    [sharedRootAgentIds]
+  );
 
   const selectedInstallAgentIds = () =>
     Array.from(
@@ -119,9 +125,15 @@ export function InstallDialog({
       setError(null);
       setResult(null);
     }
-    // reason: dialog open/skill changes reset defaults; helper dependencies would reselect while the user edits.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, skill?.id, targetMode, targetAgents, canInstallToProject, canUseSymlink]);
+  }, [
+    canInstallToProject,
+    canUseSymlink,
+    isSharedRootTarget,
+    open,
+    skill,
+    targetAgents,
+    targetMode,
+  ]);
 
   const isProjectTargetDisabled = (agent: AgentWithStatus) =>
     targetMode === "project" && !hasProjectSkillPattern(agent);

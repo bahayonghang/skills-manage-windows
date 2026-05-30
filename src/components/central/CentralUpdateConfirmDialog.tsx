@@ -143,36 +143,38 @@ export function CentralUpdateConfirmDialog({
                             name: displayName,
                           })}
                         />
-                        <span className="min-w-0 flex-1 space-y-1">
-                          <span className="block truncate text-sm font-medium text-foreground">
-                            {displayName}
+                        <span className="min-w-0 flex-1 space-y-2">
+                          <span className="inline-flex max-w-full items-center rounded-md border border-primary/20 bg-primary/5 px-2 py-0.5 text-sm font-semibold text-primary">
+                            <span className="min-w-0 truncate">{displayName}</span>
                           </span>
                           {skill?.description && (
                             <span className="block line-clamp-2 text-xs leading-relaxed text-muted-foreground">
                               {skill.description}
                             </span>
                           )}
-                          <span className="block text-xs text-muted-foreground">
-                            {state.source_path ?? skill?.source_path
-                              ? t("central.updateConfirmSourcePath", {
-                                  path: state.source_path ?? skill?.source_path,
-                                })
-                              : t("central.updateConfirmSourceUnknown")}
+                          <span className="block space-y-1 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                            <span className="block break-all">
+                              {state.source_path ?? skill?.source_path
+                                ? t("central.updateConfirmSourcePath", {
+                                    path: state.source_path ?? skill?.source_path,
+                                  })
+                                : t("central.updateConfirmSourceUnknown")}
+                            </span>
+                            {skill?.repository?.name && (
+                              <span className="block break-words">
+                                {t("central.updateConfirmRepository", {
+                                  repo: skill.repository.name,
+                                })}
+                              </span>
+                            )}
+                            {lastChecked && (
+                              <span className="block break-words">
+                                {t("central.updateConfirmLastChecked", {
+                                  date: lastChecked,
+                                })}
+                              </span>
+                            )}
                           </span>
-                          {skill?.repository?.name && (
-                            <span className="block text-xs text-muted-foreground">
-                              {t("central.updateConfirmRepository", {
-                                repo: skill.repository.name,
-                              })}
-                            </span>
-                          )}
-                          {lastChecked && (
-                            <span className="block text-xs text-muted-foreground">
-                              {t("central.updateConfirmLastChecked", {
-                                date: lastChecked,
-                              })}
-                            </span>
-                          )}
                         </span>
                       </label>
                     </section>

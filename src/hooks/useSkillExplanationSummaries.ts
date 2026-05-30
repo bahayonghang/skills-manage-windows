@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import type { SkillExplanationSummaryMap } from "@/types/skillExplanation";
@@ -27,18 +27,24 @@ export function useSkillExplanationSummaries(
   const normalizedLang = lang.trim() || "zh";
   const normalizedSkillIds = useMemo(() => normalizeSkillIds(skillIds), [skillIds]);
   const skillIdsKey = useMemo(() => normalizedSkillIds.join("\0"), [normalizedSkillIds]);
+  const normalizedSkillIdsRef = useRef(normalizedSkillIds);
+
+  useEffect(() => {
+    normalizedSkillIdsRef.current = normalizedSkillIds;
+  }, [skillIdsKey, normalizedSkillIds]);
 
   useEffect(() => {
     let cancelled = false;
+    const requestSkillIds = normalizedSkillIdsRef.current;
 
-    if (!isTauriRuntime() || normalizedSkillIds.length === 0) {
+    if (!isTauriRuntime() || requestSkillIds.length === 0) {
       setSummaries({});
       return;
     }
 
     void Promise.resolve(
       invoke<SkillExplanationSummaryMap>("get_skill_explanation_summaries", {
-        skillIds: normalizedSkillIds,
+        skillIds: requestSkillIds,
         lang: normalizedLang,
       })
     )
@@ -56,9 +62,6 @@ export function useSkillExplanationSummaries(
     return () => {
       cancelled = true;
     };
-    // reason: `skillIdsKey` is the stable dependency for content; the array is
-    // rebuilt from it to keep IPC args deduplicated and in visible-list order.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skillIdsKey, normalizedLang]);
 
   return summaries;

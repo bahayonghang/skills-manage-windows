@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -50,6 +50,7 @@ const TAB_ORDER: readonly UpdateCenterTab[] = [
   "updatable",
   "added",
   "missing",
+  "failed",
   "duplicates",
   "deletedPlatformCopies",
   "orphans",
@@ -88,12 +89,15 @@ export function UpdateCenterDialog() {
     () => inventorySignature(inventory),
     [inventory],
   );
+  const inventoryRef = useRef(inventory);
+
+  useEffect(() => {
+    inventoryRef.current = inventory;
+  }, [inventory, inventoryKey]);
 
   useEffect(() => {
     if (!isDialogOpen) return;
-    setDecisions(buildInitialState(inventory));
-    // 依赖 inventory 内容签名而非引用，避免无意义重置。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setDecisions(buildInitialState(inventoryRef.current));
   }, [isDialogOpen, inventoryKey]);
 
   const counts = countsFromInventory(inventory);
@@ -117,6 +121,17 @@ export function UpdateCenterDialog() {
       setScopeKind(next);
     }
   }, [isDialogOpen, refreshContext, scopeKind]);
+
+  useEffect(() => {
+    if (!isDialogOpen) return;
+    if (refreshContext.repositoryIds.length > 0) {
+      setScopeKind("repositories");
+    } else if (refreshContext.skillIds.length > 0) {
+      setScopeKind("skills");
+    } else {
+      setScopeKind("all");
+    }
+  }, [isDialogOpen, refreshContext]);
 
   function handleRefresh() {
     const scope: SkillRefreshScope = buildRefreshScope(

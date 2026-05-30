@@ -1,0 +1,72 @@
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import type { ComponentProps } from "react";
+
+import {
+  UpdateCheckModeDialog,
+  type UpdateCheckMode,
+} from "@/components/central/UpdateCheckModeDialog";
+
+function renderDialog(overrides: Partial<ComponentProps<typeof UpdateCheckModeDialog>> = {}) {
+  const onOpenChange = vi.fn();
+  const onConfirm = vi.fn();
+  render(
+    <UpdateCheckModeDialog
+      open
+      onOpenChange={onOpenChange}
+      scopeLabel="检查所选（2）"
+      onConfirm={onConfirm}
+      {...overrides}
+    />,
+  );
+  return { onOpenChange, onConfirm };
+}
+
+describe("UpdateCheckModeDialog", () => {
+  it("renders mode copy and defaults to regular mode", () => {
+    renderDialog();
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("选择更新检查模式")).toBeInTheDocument();
+    expect(within(dialog).getByText(/当前范围：检查所选（2）/)).toBeInTheDocument();
+    expect(within(dialog).getByTestId("update-check-mode-regular")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(within(dialog).getByText("常规检查")).toBeInTheDocument();
+    expect(within(dialog).getByText("增量和删减模式")).toBeInTheDocument();
+  });
+
+  it("confirms the selected sync mode", () => {
+    const { onConfirm } = renderDialog();
+    const dialog = screen.getByRole("dialog");
+
+    fireEvent.click(within(dialog).getByTestId("update-check-mode-sync"));
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
+
+    expect(onConfirm).toHaveBeenCalledWith("sync" satisfies UpdateCheckMode);
+  });
+
+  it("cancels without confirming", () => {
+    const { onOpenChange, onConfirm } = renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("disables sync and submit while submitting", () => {
+    const { onConfirm } = renderDialog({
+      isSubmitting: true,
+      syncDisabled: true,
+      syncDisabledReason: "当前没有可同步的 GitHub 仓库。",
+    });
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).getByTestId("update-check-mode-sync")).toBeDisabled();
+    expect(within(dialog).getByTestId("confirm-update-check-mode")).toBeDisabled();
+    expect(within(dialog).getByText("当前没有可同步的 GitHub 仓库。")).toBeInTheDocument();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+});

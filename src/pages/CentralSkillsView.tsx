@@ -40,6 +40,7 @@ import {
   createCentralStoreLocationControls,
   useCentralStoreLocationApplied,
 } from "@/pages/centralStoreLocationView";
+import { useCentralUpdateCheckModeController } from "@/pages/centralUpdateCheckModeController";
 
 export function CentralSkillsView() {
   const { t } = useTranslation();
@@ -412,8 +413,6 @@ export function CentralSkillsView() {
     handleBulkSuggestTags,
     handleCancelAiTagJob,
     handleCancelCentralUpdates,
-    handleCheckUpdates,
-    handleCheckRepositorySync,
     handleRepositorySyncDialogOpenChange,
     handleApplyRepositorySync,
     handleConfirmUpdateSkills,
@@ -754,23 +753,16 @@ export function CentralSkillsView() {
   };
 
   const checkButtonProps = {
-    label: checkButtonState.label,
     disabled:
       isCheckingUpdates ||
       updateJob.status === "running" ||
-      updateJob.status === "cancelling" ||
-      checkButtonState.targetSkillIds.length === 0,
-    onClick: () => {
-      if (checkButtonState.mode === "repository-sync") {
-        void handleCheckRepositorySync(
-          checkButtonState.repositoryIds ?? [],
-          checkButtonState.scopedSkillIds,
-        );
-        return;
-      }
-      void handleCheckUpdates(checkButtonState.scopedSkillIds);
-    },
+      updateJob.status === "cancelling",
   };
+  const updateCheckMode = useCentralUpdateCheckModeController({
+    checkButtonState,
+    repositories,
+    disabled: checkButtonProps.disabled,
+  });
 
   const sidebarHeaderSlot = (
     <CentralSidebarHeader
@@ -824,7 +816,7 @@ export function CentralSkillsView() {
         }}
         updateAvailableSkillCount={updateAvailableSkillIds.length}
         updateButton={updateButtonProps}
-        checkButton={checkButtonProps}
+        checkButton={updateCheckMode.checkButton}
         onOpenPalette={() => setCommandPaletteOpen(true)}
         savedViewsSlot={sidebarHeaderSlot}
         tagGroups={tagGroupsBridge.tagGroups}
@@ -860,6 +852,7 @@ export function CentralSkillsView() {
         apply={applyCentralStoreLocationChange}
         onApplied={handleCentralStoreLocationApplied}
       />
+      {updateCheckMode.dialog}
     </>
   );
 }

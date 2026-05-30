@@ -37,6 +37,7 @@ export type UpdateCenterTab =
   | "updatable"
   | "added"
   | "missing"
+  | "failed"
   | "duplicates"
   | "deletedPlatformCopies"
   | "orphans";
@@ -50,7 +51,7 @@ interface UpdateCenterState {
   activeTab: UpdateCenterTab;
   refreshContext: SkillRefreshContext;
   error: string | null;
-  refresh(scope: SkillRefreshScope): Promise<void>;
+  refresh(scope: SkillRefreshScope): Promise<SkillUpdateInventory | null>;
   apply(decisions: SkillUpdateDecisions): Promise<SkillUpdateApplyResult>;
   clear(scope?: SkillRefreshScope): Promise<void>;
   loadInventory(): Promise<void>;
@@ -102,12 +103,13 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     set({ isRefreshing: true, error: null });
     try {
       if (!isTauriRuntime()) {
+        const inventory = emptyInventory();
         set({
-          inventory: emptyInventory(),
+          inventory,
           lastRefreshedAt: new Date().toISOString(),
           isRefreshing: false,
         });
-        return;
+        return inventory;
       }
       const inventory = await invoke<SkillUpdateInventory>(
         "refresh_skill_update_inventory",
@@ -118,6 +120,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
         lastRefreshedAt: new Date().toISOString(),
         isRefreshing: false,
       });
+      return inventory;
     } catch (err) {
       set({ error: String(err), isRefreshing: false });
       throw err;

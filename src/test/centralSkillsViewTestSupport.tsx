@@ -18,6 +18,47 @@ const mockedToast = vi.hoisted(() => ({
   info: vi.fn(),
 }));
 
+const mockedUpdateCenter = vi.hoisted(() => {
+  const emptyInventory = {
+    updatable: [],
+    remoteAdded: [],
+    remoteMissing: [],
+    failedRepositories: [],
+    platformDuplicates: [],
+    deletedPlatformCopies: [],
+    orphans: [],
+    generatedAt: "2026-05-30T00:00:00Z",
+  };
+  const refresh = vi.fn().mockResolvedValue(emptyInventory);
+  const openDialog = vi.fn();
+  return {
+    emptyInventory,
+    refresh,
+    openDialog,
+    closeDialog: vi.fn(),
+    setActiveTab: vi.fn(),
+    state: {
+      inventory: null,
+      isRefreshing: false,
+      isApplying: false,
+      lastRefreshedAt: null,
+      isDialogOpen: false,
+      activeTab: "updatable",
+      refreshContext: { repositoryIds: [], skillIds: [] },
+      error: null,
+      refresh,
+      apply: vi.fn(),
+      clear: vi.fn(),
+      loadInventory: vi.fn(),
+      scanDuplicates: vi.fn(),
+      scanDeletedPlatformCopies: vi.fn(),
+      openDialog,
+      closeDialog: vi.fn(),
+      setActiveTab: vi.fn(),
+    },
+  };
+});
+
 // Mock stores
 vi.mock("@/stores/centralSkillsStore", () => ({
   useCentralSkillsStore: vi.fn(),
@@ -37,6 +78,29 @@ vi.mock("@/stores/marketplaceStore", () => ({
 
 vi.mock("@/stores/skillDetailStore", () => ({
   useSkillDetailStore: vi.fn(),
+}));
+
+vi.mock("@/stores/updateCenterStore", () => ({
+  useUpdateCenterStore: vi.fn((selector?: unknown) => {
+    if (typeof selector === "function") {
+      return selector(mockedUpdateCenter.state);
+    }
+    return mockedUpdateCenter.state;
+  }),
+  selectSkillInventoryFlags: vi.fn(() => ({
+    hasUpdate: false,
+    isMissing: false,
+    isAdded: false,
+    hasDuplicate: false,
+    isOrphan: false,
+  })),
+  selectSkillInventoryFlagsFromInventory: vi.fn(() => ({
+    hasUpdate: false,
+    isMissing: false,
+    isAdded: false,
+    hasDuplicate: false,
+    isOrphan: false,
+  })),
 }));
 
 vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
@@ -430,6 +494,9 @@ export const mockUsePlatformStore = vi.mocked(usePlatformStore);
 export const mockUseSkillStore = vi.mocked(useSkillStore);
 export const mockUseMarketplaceStore = vi.mocked(useMarketplaceStore);
 export const mockUseSkillDetailStore = vi.mocked(useSkillDetailStore);
+export const mockRefreshUpdateInventory = mockedUpdateCenter.refresh;
+export const mockOpenUpdateCenterDialog = mockedUpdateCenter.openDialog;
+export const mockEmptyUpdateInventory = mockedUpdateCenter.emptyInventory;
 export const localTarget: TargetSummary = {
   id: "local",
   kind: "local",
@@ -651,6 +718,8 @@ export function resetCentralSkillsViewTestState() {
   });
   mockUpdateSkills.mockResolvedValue({ succeeded: [], failed: [], skipped: [], states: [] });
   mockKeepRemoteMissingSkills.mockResolvedValue([]);
+  mockRefreshUpdateInventory.mockResolvedValue(mockEmptyUpdateInventory);
+  mockOpenUpdateCenterDialog.mockClear();
   mockPreviewCentralStoreLocationChange.mockResolvedValue({
     sourcePath: "/Users/test/.skillsmanage/skills",
     targetPath: "/Users/test/SkillPort/skills",

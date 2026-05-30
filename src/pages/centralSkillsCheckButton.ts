@@ -2,7 +2,7 @@ import type { TFunction } from "i18next";
 
 import type { SkillRepositoryWithStats, SkillWithLinks } from "@/types";
 
-type CheckButtonScope = "selected" | "current-results" | "all";
+export type CheckButtonScope = "selected" | "current-results" | "all";
 type CheckButtonMode = "skill" | "repository-sync";
 
 export interface CentralSkillsCheckButtonInput {
@@ -20,6 +20,7 @@ export interface CentralSkillsCheckButtonInput {
 export interface CentralSkillsCheckButtonState {
   label: string;
   mode: CheckButtonMode;
+  scope: CheckButtonScope;
   repositoryIds?: string[];
   scopedSkillIds?: string[];
   targetSkillIds: string[];
@@ -62,6 +63,7 @@ export function getCentralSkillsCheckButtonState({
       repositoryName: isSingleRepoScope ? selectedRepository?.name : undefined,
     }),
     mode,
+    scope,
     repositoryIds,
     scopedSkillIds: scope === "all" ? undefined : targetSkillIds,
     targetSkillIds,

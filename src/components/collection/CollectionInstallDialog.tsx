@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -59,10 +59,13 @@ export function CollectionInstallDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CollectionBatchInstallResult | null>(null);
+  const wasOpenRef = useRef(false);
 
   // Reset when dialog opens.
   useEffect(() => {
-    if (open) {
+    const didOpen = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (didOpen) {
       // Default: select all enabled and visible platform targets.
       const initial = new Set<string>(
         targetAgents.map((agent) => agent.id)
@@ -71,9 +74,7 @@ export function CollectionInstallDialog({
       setError(null);
       setResult(null);
     }
-    // reason: opening the dialog intentionally snapshots currently visible targets as the default selection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, targetAgents]);
 
   function handleToggle(agentId: string, checked: boolean) {
     const target = targetAgents.find((agent) => agent.id === agentId);

@@ -1121,7 +1121,8 @@
         "missing": "已删除 ({{count}})",
         "duplicates": "平台冗余 ({{count}})",
         "orphans": "失链 ({{count}})",
-        "deletedPlatformCopies": "平台残留 ({{count}})"
+        "deletedPlatformCopies": "平台残留 ({{count}})",
+        "failed": "失败 ({{count}})"
       },
       "applyAll": "应用全部 ({{count}})",
       "clearInventory": "清空检查结果",
@@ -1228,7 +1229,27 @@
     "repositorySyncRenameInvalid": "技能 ID 只能使用小写字母、数字和单个短横线。",
     "repositorySyncApplyWithCount": "应用同步（{{count}} 项）",
     "batchInstallRemoteProjectPathPlaceholder": "/home/me/project",
-    "batchInstallRemoteProjectPathHint": "远程项目路径需要手动输入，并使用 POSIX 格式，例如 /home/me/project。"
+    "batchInstallRemoteProjectPathHint": "远程项目路径需要手动输入，并使用 POSIX 格式，例如 /home/me/project。",
+    "updateCheckMode": {
+      "title": "选择更新检查模式",
+      "description": "当前范围：{{scope}}。请选择本次检查是否包含仓库新增与删除。",
+      "note": "这里只执行检查并打开更新中心；新增导入、远端删除和更新应用仍需要在更新中心里再次确认。",
+      "confirm": "开始检查",
+      "confirming": "检查中…",
+      "regular": {
+        "title": "常规检查",
+        "description": "只检查当前已安装到中央技能库的技能内容是否可更新。",
+        "scope": "不会扫描远端新增 skill。",
+        "risk": "不会处理远端删除，适合日常低风险更新。"
+      },
+      "sync": {
+        "title": "增量和删减模式",
+        "description": "按仓库同步刷新，检查内容更新、远端新增和远端删除。",
+        "scope": "单仓库筛选时只检查该仓库，否则检查所有可同步 GitHub 仓库。",
+        "risk": "删除仍只进入更新中心决策，不会自动删除本地 skill。",
+        "disabledNoRepository": "当前没有可同步的 GitHub 仓库。"
+      }
+    }
   },
   "installDialog": {
     "title": "安装 {{name}}",

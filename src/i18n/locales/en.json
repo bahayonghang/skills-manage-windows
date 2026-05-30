@@ -1121,7 +1121,8 @@
         "missing": "Removed ({{count}})",
         "duplicates": "Platform duplicates ({{count}})",
         "orphans": "Orphans ({{count}})",
-        "deletedPlatformCopies": "Platform leftovers ({{count}})"
+        "deletedPlatformCopies": "Platform leftovers ({{count}})",
+        "failed": "Failed ({{count}})"
       },
       "applyAll": "Apply all ({{count}})",
       "clearInventory": "Clear inventory",
@@ -1228,7 +1229,27 @@
     "repositorySyncRenameInvalid": "Skill IDs can only use lower-case letters, numbers, and single dashes.",
     "repositorySyncApplyWithCount": "Apply sync ({{count}})",
     "batchInstallRemoteProjectPathPlaceholder": "/home/me/project",
-    "batchInstallRemoteProjectPathHint": "Remote project paths must be typed manually and use POSIX format, for example /home/me/project."
+    "batchInstallRemoteProjectPathHint": "Remote project paths must be typed manually and use POSIX format, for example /home/me/project.",
+    "updateCheckMode": {
+      "title": "Choose update check mode",
+      "description": "Current scope: {{scope}}. Choose whether this check should include repository additions and removals.",
+      "note": "This only checks and opens Update Center. Imports, removals, and update application still require another explicit decision there.",
+      "confirm": "Start check",
+      "confirming": "Checking…",
+      "regular": {
+        "title": "Regular check",
+        "description": "Only checks whether currently installed Central skills have content updates.",
+        "scope": "Does not scan for newly added remote skills.",
+        "risk": "Does not process remote deletions, so it is the lower-risk daily check."
+      },
+      "sync": {
+        "title": "Incremental and removal mode",
+        "description": "Refreshes by repository to check content updates, remote additions, and remote removals.",
+        "scope": "A single repository filter checks only that repository; otherwise all syncable GitHub repositories are checked.",
+        "risk": "Removals still go to Update Center for review and never delete local skills automatically.",
+        "disabledNoRepository": "No syncable GitHub repository is available."
+      }
+    }
   },
   "installDialog": {
     "title": "Install {{name}}",
