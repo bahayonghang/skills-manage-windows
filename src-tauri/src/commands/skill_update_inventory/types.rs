@@ -15,6 +15,8 @@ use crate::services::central_skills::BatchDeleteCentralSkillRequest;
 pub struct SkillRefreshScope {
     pub kind: SkillRefreshScopeKind,
     #[serde(default)]
+    pub mode: Option<SkillRefreshMode>,
+    #[serde(default)]
     pub skill_ids: Option<Vec<String>>,
     #[serde(default)]
     pub repository_ids: Option<Vec<String>>,
@@ -26,6 +28,13 @@ pub enum SkillRefreshScopeKind {
     All,
     Skills,
     Repositories,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillRefreshMode {
+    Regular,
+    Sync,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

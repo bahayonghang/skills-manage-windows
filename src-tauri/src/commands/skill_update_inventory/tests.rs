@@ -128,6 +128,7 @@ fn http_client() -> reqwest::Client {
 fn scope_all() -> SkillRefreshScope {
     SkillRefreshScope {
         kind: SkillRefreshScopeKind::All,
+        mode: None,
         skill_ids: None,
         repository_ids: None,
     }
@@ -136,6 +137,7 @@ fn scope_all() -> SkillRefreshScope {
 fn scope_skills(ids: Vec<&str>) -> SkillRefreshScope {
     SkillRefreshScope {
         kind: SkillRefreshScopeKind::Skills,
+        mode: None,
         skill_ids: Some(ids.into_iter().map(String::from).collect()),
         repository_ids: None,
     }
@@ -144,9 +146,15 @@ fn scope_skills(ids: Vec<&str>) -> SkillRefreshScope {
 fn scope_repos(ids: Vec<&str>) -> SkillRefreshScope {
     SkillRefreshScope {
         kind: SkillRefreshScopeKind::Repositories,
+        mode: None,
         skill_ids: None,
         repository_ids: Some(ids.into_iter().map(String::from).collect()),
     }
+}
+
+fn with_mode(mut scope: SkillRefreshScope, mode: SkillRefreshMode) -> SkillRefreshScope {
+    scope.mode = Some(mode);
+    scope
 }
 
 fn make_observation(
@@ -466,6 +474,92 @@ async fn refresh_scope_skills_does_not_scan_repo_additions() {
     assert!(inventory.remote_added.is_empty());
     let listed = db::list_pending_additions(&pool).await.unwrap();
     assert!(listed.is_empty());
+}
+
+#[tokio::test]
+async fn refresh_regular_mode_returns_only_content_update_buckets() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let update_dir = temp.path().join("with-update");
+    let missing_dir = temp.path().join("missing-local");
+    std::fs::create_dir_all(&update_dir).unwrap();
+    std::fs::create_dir_all(&missing_dir).unwrap();
+    std::fs::write(
+        update_dir.join("SKILL.md"),
+        b"---\nname: With Update\n---\n\nold",
+    )
+    .unwrap();
+    std::fs::write(
+        missing_dir.join("SKILL.md"),
+        b"---\nname: Missing Local\n---",
+    )
+    .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("with-update", &update_dir))
+        .await
+        .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("missing-local", &missing_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "with-update", "skills/with-update").await;
+    assign_test_repo(&pool, "missing-local", "skills/missing-local").await;
+    let assignment = db::get_skill_repository_assignment(&pool, "with-update")
+        .await
+        .unwrap();
+    let repository_id = assignment.repository.id.clone();
+
+    let snapshot = GitHubRepoSnapshot {
+        files: HashMap::from([
+            (
+                "skills/with-update/SKILL.md".to_string(),
+                b"---\nname: With Update\n---\n\nnew".to_vec(),
+            ),
+            (
+                "skills/new-skill/SKILL.md".to_string(),
+                b"---\nname: New Skill\n---".to_vec(),
+            ),
+        ]),
+    };
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        with_mode(scope_repos(vec![&repository_id]), SkillRefreshMode::Regular),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(inventory.updatable.len(), 1);
+    assert_eq!(inventory.updatable[0].state.skill_id, "with-update");
+    assert!(inventory.remote_added.is_empty());
+    assert!(inventory.remote_missing.is_empty());
+    assert!(inventory.platform_duplicates.is_empty());
+    assert!(inventory.deleted_platform_copies.is_empty());
+    assert_eq!(inventory.failed_repositories.len(), 1);
+    assert!(inventory.failed_repositories[0]
+        .error
+        .contains("incremental and removal mode"));
+    assert!(db::list_pending_additions(&pool).await.unwrap().is_empty());
+
+    let refreshed_repo = db::get_skill_repository_by_id(&pool, &repository_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(refreshed_repo.last_synced_at.is_none());
+
+    let states = db::get_skill_update_states(&pool).await.unwrap();
+    let missing = states
+        .iter()
+        .find(|state| state.skill_id == "missing-local")
+        .expect("missing skill state");
+    assert_eq!(missing.status, SkillUpdateStatus::Error.to_string());
+
+    let reloaded = get_skill_update_inventory_impl(&pool).await.unwrap();
+    assert!(reloaded.remote_missing.is_empty());
 }
 
 #[tokio::test]

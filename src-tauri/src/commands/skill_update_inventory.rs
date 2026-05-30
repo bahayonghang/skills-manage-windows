@@ -89,6 +89,8 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
      * 2) Skills：仅指定 skill_ids，不扫 repo additions
      * 3) Repositories：仅指定 repo_ids，skill_ids 从这些 repo members 推导
      */
+    let mode = scope.mode.unwrap_or(SkillRefreshMode::Sync);
+    let include_sync_buckets = mode == SkillRefreshMode::Sync;
 
     // 1.1 决定 repo_ids 与 skill_ids
     let (skill_ids_filter, repository_ids): (Option<Vec<String>>, Vec<String>) = match scope.kind {
@@ -165,15 +167,28 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
 
     let mut updatable = Vec::new();
     let mut remote_missing_states = Vec::new();
+    let mut failed_repositories = Vec::new();
 
     for prepared_skill in prepared {
         let skill = &prepared_skill.skill;
         let state_result = match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) => state_from_remote(skill, &remote, false),
             Ok(None) => unsupported_state_from_assignment(skill, &prepared_skill.assignment, None),
-            Err(RemoteSkillLoadError::RemoteMissing(reason)) => {
-                remote_missing_state_from_assignment(skill, &prepared_skill.assignment, &reason)
-            }
+            Err(RemoteSkillLoadError::RemoteMissing(reason)) => match mode {
+                SkillRefreshMode::Sync => {
+                    remote_missing_state_from_assignment(skill, &prepared_skill.assignment, &reason)
+                }
+                SkillRefreshMode::Regular => {
+                    failed_repositories.push(FailedRepository {
+                        repository_id: prepared_skill.assignment.repository.id.clone(),
+                        error: format!(
+                            "{} Switch to incremental and removal mode to decide whether to keep or delete '{}'.",
+                            reason, skill.id
+                        ),
+                    });
+                    error_state_from_assignment(skill, &prepared_skill.assignment, &reason)
+                }
+            },
             Err(RemoteSkillLoadError::Other(error)) => {
                 error_state_from_assignment(skill, &prepared_skill.assignment, &error)
             }
@@ -206,10 +221,9 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
      * pending_additions。已 skip 的 addition 由 skill_repository_sync_skips
      * 持久化，不再回写 pending，避免 reload 后重新变成可操作新增项。
      */
-    let mut failed_repositories = Vec::new();
     let mut remote_added = Vec::new();
 
-    if !repository_ids.is_empty() {
+    if include_sync_buckets && !repository_ids.is_empty() {
         let mut failed_collector = Vec::<central_updates::CentralRepositorySyncFailure>::new();
         let collection = central_updates::collect_remote_added_skills(
             pool,
@@ -257,22 +271,34 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
      * 步骤5：build remote_missing + 平台冗余 + 更新 repo.last_synced_at
      * ========================================================================
      */
-    let remote_missing_built =
-        central_updates::build_remote_missing_skills(&repo_by_id, remote_missing_states);
-    let remote_missing = remote_missing_built
-        .into_iter()
-        .map(|item| RemoteMissingSkill {
-            repository_id: item.repository_id,
-            state: item.state,
-        })
-        .collect::<Vec<_>>();
+    let remote_missing = if include_sync_buckets {
+        central_updates::build_remote_missing_skills(&repo_by_id, remote_missing_states)
+            .into_iter()
+            .map(|item| RemoteMissingSkill {
+                repository_id: item.repository_id,
+                state: item.state,
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
 
-    let platform_duplicates = scan_platform_duplicate_skills_with_pool(pool, None).await?;
-    let deleted_platform_copies = scan_deleted_platform_copies_with_pool(pool, None).await?;
+    let platform_duplicates = if include_sync_buckets {
+        scan_platform_duplicate_skills_with_pool(pool, None).await?
+    } else {
+        Vec::new()
+    };
+    let deleted_platform_copies = if include_sync_buckets {
+        scan_deleted_platform_copies_with_pool(pool, None).await?
+    } else {
+        Vec::new()
+    };
 
     let now = Utc::now().to_rfc3339();
-    for repository_id in &repository_ids {
-        db::set_repository_last_synced_at(pool, repository_id, &now).await?;
+    if include_sync_buckets {
+        for repository_id in &repository_ids {
+            db::set_repository_last_synced_at(pool, repository_id, &now).await?;
+        }
     }
 
     Ok(SkillUpdateInventory {
