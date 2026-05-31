@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>中央技能库优化 · 设计规格</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f3ea;
+      --surface: #fffaf0;
+      --text: #211f1a;
+      --muted: #655f52;
+      --line: #ded4c3;
+      --accent: #7c3aed;
+      --accent-contrast: #ffffff;
+      --shadow: 0 24px 70px rgba(44, 35, 20, 0.12);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #17130f;
+        --surface: #211b16;
+        --text: #f4eadb;
+        --muted: #c8bca9;
+        --line: #3d3329;
+        --accent: #a78bfa;
+        --accent-contrast: #19111f;
+        --shadow: none;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 16%, transparent), transparent 32rem), var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    a { color: var(--accent); }
+
+    .page {
+      display: grid;
+      grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+      gap: 2rem;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .toc {
+      position: sticky;
+      top: 1rem;
+      align-self: start;
+      padding: 1.25rem;
+      border: 1px solid var(--line);
+      border-radius: 1.25rem;
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      box-shadow: var(--shadow);
+    }
+
+    .toc strong {
+      display: block;
+      margin-bottom: 0.75rem;
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .toc ul {
+      display: grid;
+      gap: 0.4rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .toc a {
+      display: block;
+      padding: 0.35rem 0.5rem;
+      border-radius: 0.65rem;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a:focus-visible {
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      outline: none;
+    }
+
+    main {
+      min-width: 0;
+      padding: 2.5rem;
+      border: 1px solid var(--line);
+      border-radius: 1.6rem;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    header {
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 2rem;
+    }
+
+    h1 {
+      margin: 0 0 0.75rem;
+      font-size: clamp(2rem, 5vw, 3.4rem);
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .meta li {
+      padding: 0.2rem 0.65rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+
+    section {
+      padding: 1.5rem 0;
+      border-top: 1px solid var(--line);
+    }
+
+    section:first-of-type { border-top: 0; }
+
+    h2 {
+      margin: 0 0 0.75rem;
+      font-size: clamp(1.35rem, 3vw, 1.9rem);
+      line-height: 1.2;
+    }
+
+    h3 { margin-top: 1.25rem; }
+
+    p, ul, ol, dl { margin-top: 0; }
+
+    .callout {
+      padding: 1rem 1.15rem;
+      border-left: 0.35rem solid var(--accent);
+      border-radius: 0.9rem;
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      background: var(--accent);
+      color: var(--accent-contrast);
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      padding: 0.7rem;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+    code {
+      padding: 0.12rem 0.3rem;
+      border-radius: 0.35rem;
+      background: color-mix(in srgb, var(--text) 9%, transparent);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    .legend-swatch { display:inline-block; width:0.7rem; height:1rem; border-radius:0.2rem; vertical-align:middle; margin-right:0.3rem; }
+
+    @media (max-width: 860px) {
+      .page {
+        display: block;
+        padding: 1rem;
+      }
+
+      .toc {
+        position: static;
+        margin-bottom: 1rem;
+      }
+
+      .toc ul {
+        grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+      }
+
+      main { padding: 1.25rem; }
+    }
+
+    @media print {
+      :root {
+        --bg: #ffffff;
+        --surface: #ffffff;
+        --text: #000000;
+        --muted: #333333;
+        --line: #cccccc;
+        --accent: #000000;
+        --accent-contrast: #ffffff;
+      }
+
+      body { background: #ffffff; }
+
+      .page {
+        display: block;
+        max-width: none;
+        padding: 0;
+      }
+
+      .toc { display: none; }
+
+      main {
+        padding: 0;
+        border: 0;
+        box-shadow: none;
+      }
+
+      a { color: inherit; }
+
+      section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <nav class="toc" aria-label="规格章节">
+      <strong>目录</strong>
+      <ul>
+        <li><a href="#summary">摘要</a></li>
+        <li><a href="#goals">目标</a></li>
+        <li><a href="#non-goals">非目标</a></li>
+        <li><a href="#context">背景</a></li>
+        <li><a href="#recommended-approach">推荐方案</a></li>
+        <li><a href="#alternatives">备选方案</a></li>
+        <li><a href="#design-details">设计细节</a></li>
+        <li><a href="#risks">风险</a></li>
+        <li><a href="#test-acceptance-criteria">验收标准</a></li>
+        <li><a href="#review-status">评审状态</a></li>
+      </ul>
+    </nav>
+
+    <main id="main">
+      <header>
+        <h1>中央技能库优化 · 设计规格</h1>
+        <ul class="meta" aria-label="规格元信息">
+          <li>日期：2026-05-31</li>
+          <li>主题：中央技能库 UI 重排 / 卡片重设计</li>
+          <li>范围：选择性吸收（仅前端）</li>
+          <li>状态：待用户评审</li>
+        </ul>
+      </header>
+
+      <section id="summary" aria-labelledby="summary-heading">
+        <h2 id="summary-heading">摘要</h2>
+        <p>以参考项目 <code>skills-manager</code> 的 Library 页面为参照，对本项目中央技能库（<code>/central</code>）做<strong>纯前端</strong>的视觉与信息架构优化，<strong>不改动任何后端、IPC、数据流或既有功能</strong>。三条主线：</p>
+        <ol>
+          <li><strong>信息架构重构</strong>：把当前混在一个 facet 侧栏里的 repo 与标签拆开——<strong>仓库（repo）上升为左侧主导航</strong>，<strong>标签与来源筛选下沉为顶部横向 pill 行</strong>。</li>
+          <li><strong>头部 chrome 收敛</strong>：把现在的三层堆叠（标题按钮行 / 搜索行 / 常驻选择控制行）压成<strong>双行</strong>，删除常驻的"已选 0 · 共 N"行，选择控制上下文化。</li>
+          <li><strong>卡片重设计（方案 C）</strong>：升级 <code>UnifiedSkillCard</code>——左侧状态竖条、状态 chip、彩色可增删标签、底部分隔线 footer（来源 repo · preset · 调用次数 ｜ 平台点 + 启用状态），网格改为自适应换列。</li>
+        </ol>
+      </section>
+
+      <section id="goals" aria-labelledby="goals-heading">
+        <h2 id="goals-heading">目标</h2>
+        <ul>
+          <li>左侧栏成为<strong>仓库导航</strong>：列出"全部 + 各 repo"（色块头像 + 名称 + 数量 + 可更新提示）+「同步新源」入口；单选切换过滤。</li>
+          <li>顶部新增<strong>筛选 pill 行</strong>：来源（全部 / Local / Git / skills.sh 等）+ 彩色标签 pills +「更多▾」（容纳 Tag Groups）。</li>
+          <li>头部由 3 行压到 <strong>2 行</strong>；删除常驻选择行，选择摘要仅在有选中时内联到搜索行。</li>
+          <li>卡片采用方案 C：竖条编码状态、状态 chip、AI 摘要 chip、彩色可增删标签、footer 分隔线、平台点（已链接 N）。</li>
+          <li>卡片网格<strong>自适应换列</strong>（按最小列宽 2–4 列）。</li>
+          <li>选「全部」默认<strong>平铺</strong>，并保留「按 repo 分区」视图开关（复用现有 <code>groupByRepository</code>）；选某 repo 仅显示该 repo 技能。</li>
+          <li>标签配色：优先用 <code>SkillTag.color</code>，未设置则按标签名<strong>哈希</strong>到主题色板。</li>
+          <li>全部新增/改动文案走 i18n（中英双语）；通过 <code>pnpm typecheck</code> / <code>pnpm build</code> / <code>pnpm test</code>。</li>
+        </ul>
+      </section>
+
+      <section id="non-goals" aria-labelledby="non-goals-heading">
+        <h2 id="non-goals-heading">非目标（本次明确不做）</h2>
+        <ul>
+          <li>不改动 Rust 后端、任何 <code>#[tauri::command]</code> IPC、SQLite schema 或数据流。</li>
+          <li>不改动既有功能逻辑：更新中心、任务中心、平台管理、AI 标签建议、批量安装/删除、状态导入导出、自动中央化（<code>ensure_centralized</code>）等一律保留。</li>
+          <li>不重写已稳定的对话框 / 抽屉 / 进度渲染单元（dialogs / drawers / progress）。</li>
+          <li>不引入新的卡片组件——继续只用 <code>UnifiedSkillCard</code>（项目既定约定）。</li>
+          <li>不做"全面对齐参考密集风格"的大改（已在范围决策中排除）。</li>
+          <li>不改动其他页面（平台视图、集合、项目、市场、设置）；本次仅限 <code>/central</code>。<em>注：<code>UnifiedSkillCard</code> 为多页面共用，改动需保证其它场景（platform/project/marketplace/collection）视觉不回归——见风险。</em></li>
+        </ul>
+      </section>
+
+      <section id="context" aria-labelledby="context-heading">
+        <h2 id="context-heading">背景</h2>
+        <h3>当前实现</h3>
+        <ul>
+          <li><strong>Shell</strong>（<code>src/components/central/CentralSkillsShell.tsx</code>）：三层堆叠头部 = ①标题+路径+一排全文字按钮（GitHub导入 / 更新中心 / 检查更新 / 批量更新 / ⋯）②搜索 + 排序 + 视图 ③常驻选择控制行（<code>CentralSelectionControls</code>：已选 N · 共 M ｜ 全选当前 · 清空）。</li>
+          <li><strong>侧栏</strong>（<code>CentralSidebar.tsx</code>）：可调宽 facet 侧栏，<strong>repo 与标签混在一起</strong>，含 Saved Views、Tag Groups。</li>
+          <li><strong>卡片</strong>（<code>src/components/skill/UnifiedSkillCard.tsx</code>）：<code>rounded-xl + ring-1</code>，四行结构（名称+操作图标 / 描述 line-clamp / meta badges / 平台切换图标）；<strong>无 footer 分隔线、无状态竖条、标签不可在卡上增删</strong>。</li>
+          <li><strong>分组能力已存在但未突出</strong>：<code>centralViewState.ts</code> 的 <code>GroupByMode = "none" | "repository" | "owner" | "tag" | "status"</code>；<code>centralGrouping.ts</code> 的 <code>groupByRepository()</code> 已能按 <code>skill.repository</code> 切分。默认是 <code>"none"</code>（平铺），且开关藏在「视图▾」菜单里。</li>
+          <li><strong>数据模型已支持标签颜色</strong>：<code>SkillTag</code>（<code>src/types/index.ts</code>）已有可选 <code>color</code> 与 <code>group_id</code> 字段。</li>
+          <li>卡片已有 <code>comfortable</code> / <code>compact</code> 两档密度（<code>viewState.density</code>），描述行数随之 3 行 / 2 行。</li>
+        </ul>
+        <h3>用户意图</h3>
+        <p>用户提供参考图 <code>ref/skills-manager/assets/demo/library.png</code>，希望中央技能库在<strong>不损失现有功能</strong>的前提下，吸收参考的紧凑、信息密集、组织清晰的观感；并明确要求<strong>repo 分区放侧边、标签等筛选放顶部</strong>。本设计经可视化伴侣（浏览器线框/高保真 mockup）多轮确认。</p>
+      </section>
+
+      <section id="recommended-approach" aria-labelledby="recommended-approach-heading">
+        <h2 id="recommended-approach-heading">推荐方案</h2>
+        <p><strong>选择性吸收</strong>：保留全部既有功能与信息流，只重排前端布局并升级卡片。三块改动：</p>
+
+        <h3>1. 信息架构：repo 上侧边、标签上顶部</h3>
+        <ul>
+          <li><strong>左侧栏 = 仓库导航</strong>：<code>全部</code> + 各 repo（色块头像 + 名称 + 数量徽章 + 可更新数提示）+「同步新源」。单选，驱动现有 <code>viewState.repos</code>。<strong>Saved Views 留在侧栏底部</strong>。</li>
+          <li><strong>顶部筛选 pill 行</strong>（新）：<code>来源</code>（全部 / Local / Git / skills.sh…）+ 彩色<code>标签</code> pills +「更多▾」。<strong>Tag Groups 跟随标签迁到顶部「更多▾」</strong>。标签多时横向滚动 / 折叠。</li>
+        </ul>
+
+        <h3>2. 头部：双行紧凑</h3>
+        <ul>
+          <li><strong>行 1</strong>：标题 + 计数徽章 + 路径(次级) + 改位置 ｜ <code>检查更新</code>(主 CTA，带 +N 角标) · <code>更新中心</code> · <code>GitHub 导入</code> · <code>⋯</code>(任务中心 / 平台管理 / 状态导入导出)。</li>
+          <li><strong>行 2</strong>：搜索(flex) + 排序 + 视图 ｜ 选择摘要「已选 N · 全选当前 · 清空」<strong>仅选中时</strong>内联出现。</li>
+          <li><strong>删除</strong> <code>CentralSelectionControls</code> 常驻行：结果数并入头部计数徽章；批量动作仍走既有浮动 <code>BulkActionBar</code>。</li>
+        </ul>
+
+        <h3>3. 卡片：方案 C（信息分层型）</h3>
+        <ul>
+          <li><strong>左竖条编码状态</strong>（<code>::before</code>，仅"需关注"态上色，降低噪音）：
+            <span class="legend-swatch" style="background:transparent;border:1px solid var(--muted)"></span>无 = 正常 ·
+            <span class="legend-swatch" style="background:#f59e0b"></span>琥珀 = 可更新 ·
+            <span class="legend-swatch" style="background:#ef4444"></span>红 = 源缺失/需修复。
+            <strong>选中</strong>用蓝边 + 浅底（<code>outline</code>），与竖条互不冲突。</li>
+          <li><strong>行 1</strong>：名称 + 状态 chip（<code>可更新</code>/<code>源缺失</code>）+ 操作图标（安装 / 更新 / 删除）。</li>
+          <li><strong>行 2</strong>：描述（前置 <code>AI 摘要</code> chip），行数随现有 <code>comfortable</code>/<code>compact</code> 档。</li>
+          <li><strong>行 3</strong>：彩色标签 + <strong>卡上直接增删</strong>（hover 每个标签出 ×；点 <code>+</code> 内联输入/选择）。</li>
+          <li><strong>footer 分隔线</strong>：左 = repo 色块 + repo 名 · <code>preset</code> · 近 30 天 N 次；右 = 平台点（已链接 N）+ 启用状态。</li>
+          <li><strong>自适应网格</strong>：<code>repeat(auto-fill, minmax(~210px, 1fr))</code>，窗口宽自动 2–4 列。</li>
+        </ul>
+
+        <p class="callout">为何选这条路：本项目功能<strong>多于</strong>参考（更新中心 / facet / 批量 / AI 标签 / 任务中心），照搬参考的极简结构会挤压这些能力。选择性吸收在零数据流风险下拿到参考的"密集 + 清晰"观感，且复用已存在的 <code>groupByRepository</code>、<code>SkillTag.color</code>、密度档等基础设施。</p>
+      </section>
+
+      <section id="alternatives" aria-labelledby="alternatives-heading">
+        <h2 id="alternatives-heading">备选方案</h2>
+        <table>
+          <thead>
+            <tr><th>选项</th><th>未采用原因</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>全面对齐参考密集风格（大改信息架构）</td><td>需重排信息架构，且可能挤压本项目多出来的功能；风险高。</td></tr>
+            <tr><td>只重做卡片（不动排版）</td><td>不解决头部 chrome 过重与 repo 分类缺位的问题。</td></tr>
+            <tr><td>卡片方案 A（参考密集型）</td><td>信息量低于 C，丢失更新状态 / AI 摘要 / 已链接 N 等本项目特有信息。</td></tr>
+            <tr><td>卡片方案 B（平衡型）</td><td>无状态竖条，"可更新/源缺失"的可见性弱。</td></tr>
+            <tr><td>repo 方案 R1（主区默认分区）</td><td>纵向更长；改为"侧边导航 + 可选分区"更灵活。</td></tr>
+            <tr><td>repo 方案 R2（顶部 repo rail）</td><td>与左侧 repo 导航职责重叠。</td></tr>
+            <tr><td>标签继续留在侧栏</td><td>用户明确要求标签等筛选上移到顶部。</td></tr>
+            <tr><td>选「全部」时主区始终按 repo 分区</td><td>纵向更长；默认平铺 + 可选分区开关更轻，仍保留分区能力。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="design-details" aria-labelledby="design-details-heading">
+        <h2 id="design-details-heading">设计细节</h2>
+
+        <h3>组件与职责</h3>
+        <table>
+          <thead><tr><th>文件 / 组件</th><th>改动</th></tr></thead>
+          <tbody>
+            <tr><td><code>CentralSkillsShell.tsx</code></td><td>头部三行→双行；新增顶部筛选 pill 行容器；移除 <code>CentralSelectionControls</code> 常驻行；选择摘要内联进搜索行（条件渲染）。</td></tr>
+            <tr><td><code>CentralSidebar.tsx</code></td><td>重定位为<strong>仓库导航</strong>：保留 repos 区块 + Saved Views（底部）；移除标签 facet 区块（迁顶部）。repo 项加色块头像 + 数量 + 可更新提示。</td></tr>
+            <tr><td>新增 <code>CentralTopFilters.tsx</code>（建议）</td><td>顶部筛选行：来源 pills + 彩色标签 pills +「更多▾」（Tag Groups）。复用现有 <code>facetCounts</code>、<code>tags</code>、<code>viewState.tags</code> 多选、来源筛选。</td></tr>
+            <tr><td><code>CentralSearchBar.tsx</code></td><td>保留；右侧接受可选的"选择摘要"插槽（仅选中时）。</td></tr>
+            <tr><td><code>UnifiedSkillCard.tsx</code></td><td>新增：状态竖条（<code>::before</code>）、状态 chip、彩色可增删标签行、footer 分隔区（repo + preset + 调用次数 ｜ 平台点 + 状态）。保持向后兼容其它 variant。</td></tr>
+            <tr><td><code>CentralSkillListContent.tsx</code></td><td>网格模板改 <code>auto-fill / minmax</code> 自适应；保持 group=none 默认与「按 repo 分区」切换接入。</td></tr>
+            <tr><td>新增标签配色工具（如 <code>lib/tagColor.ts</code>）</td><td><code>tag.color</code> 优先，未设置按名哈希到 Catppuccin accent 色板（保证明暗主题对比度）。</td></tr>
+            <tr><td>i18n（<code>src/i18n/locales/*</code>）</td><td>新增"来源/仓库/全部/同步新源/按 repo 分区/已链接 N"等文案，中英双语。</td></tr>
+          </tbody>
+        </table>
+
+        <h3>数据与控制流（全部复用现有 store / viewState，不新增数据流）</h3>
+        <ul>
+          <li><strong>repo 导航点击</strong> → 写 <code>viewState.repos</code>（既有单选）→ <code>filteredSkills</code>。「全部」= 清空 repos。</li>
+          <li><strong>顶部标签 pill</strong> → 切换 <code>viewState.tags</code>（既有多选）；<strong>来源 pill</strong> → 复用既有来源筛选（查询 AST / facet 中的 source）。</li>
+          <li><strong>「全部」主区</strong>：默认 <code>group="none"</code> 平铺；「分组▾/按 repo」切到 <code>group="repository"</code>，走既有 <code>groupByRepository()</code> + <code>CentralGroupedSkillList</code>。</li>
+          <li><strong>卡上标签增删</strong> → 调既有 tag store 的 assign/unassign（乐观更新）；事件需 <code>stopPropagation</code> 防触发卡片导航/选择。</li>
+          <li><strong>竖条 / 状态 chip</strong> ← 既有 <code>updateStatus</code>（<code>CentralSkillUpdateState</code>）+ <code>inventoryFlags</code>。</li>
+          <li><strong>平台点（已链接 N）</strong> ← 既有 <code>platformIcons</code> / <code>togglePlatformLink</code>。</li>
+          <li><strong>选择摘要</strong> ← 既有 <code>selectedSkillIds</code>；批量动作仍走 <code>BulkActionBar</code>。</li>
+        </ul>
+
+        <h3>样式约定（沿用项目既有）</h3>
+        <ul>
+          <li>卡片壳层延续 <code>rounded-xl + ring-1 ring-border + bg-card + shadow-sm</code>；footer 用 <code>border-t border-border</code> 分隔。</li>
+          <li>主题：Catppuccin（Mocha/Frappe/Latte）+ accent 配色，标签哈希色取自 accent 色板，明暗自适应。</li>
+          <li>竖条用 <code>::before</code> 绝对定位（不占内容宽度）；选中态用 <code>outline</code>，两者叠加不冲突。</li>
+        </ul>
+      </section>
+
+      <section id="risks" aria-labelledby="risks-heading">
+        <h2 id="risks-heading">风险与对策</h2>
+        <ul>
+          <li><strong>UnifiedSkillCard 多页面共用</strong>：footer / 竖条 / 可增删标签等为 central 场景新增，需通过 props 条件启用，确保 platform / project / marketplace / collection 场景视觉不回归。→ 新行为仅在传入对应 props 时渲染；保留现有 variant 分支与测试。</li>
+          <li><strong>顶部多一筛选行增加纵向高度</strong>：但删除了常驻选择行抵消；筛选行横向滚动 / 可折叠避免换行。</li>
+          <li><strong>内联标签编辑事件冒泡</strong>：误触卡片导航/选择。→ 复用参考的 <code>stopPropagation</code> 模式，输入框 <code>onMouseDown preventDefault</code>。</li>
+          <li><strong>自适应列下极窄卡片 footer 溢出/换行</strong>：→ 设最小列宽 ~210px；footer 元素优先级截断（repo 名 <code>truncate</code>，平台点不收缩）。</li>
+          <li><strong>竖条噪音</strong>：每张都有竖条会变花。→ 仅"可更新/源缺失"上色，正常态留白。</li>
+          <li><strong>repo/标签从同一 facet 侧栏拆分</strong>：需保持 <code>viewState</code> 结构与 URL state / Saved Views 兼容。→ 仅重排 UI，<code>viewState</code> 字段（repos/tags/q/group/...）不变。</li>
+          <li><strong>遗留测试</strong>：项目已知 3 个遗留失败（Sidebar/Settings/PlatformIcon）。→ 不得新增失败；改动 Sidebar 时复核相关测试。</li>
+        </ul>
+      </section>
+
+      <section id="test-acceptance-criteria" aria-labelledby="test-acceptance-criteria-heading">
+        <h2 id="test-acceptance-criteria-heading">验收标准</h2>
+        <ol>
+          <li><code>pnpm typecheck</code>、<code>pnpm build</code>、<code>pnpm lint</code> 通过；<code>pnpm test</code> 不新增失败（除已知 3 个遗留）。</li>
+          <li>左侧栏仅显示<strong>仓库导航</strong>（全部 + 各 repo + 同步新源）+ 底部 Saved Views；标签与来源筛选出现在<strong>顶部 pill 行</strong>，Tag Groups 在顶部「更多▾」。</li>
+          <li>选「全部」→ 平铺；切「按 repo 分区」→ 区块视图（区头含 repo 名+数量）；选某 repo → 仅显示该 repo 技能。</li>
+          <li>卡片状态：可更新 → 琥珀竖条 + <code>可更新</code> chip；源缺失 → 红竖条 + <code>源缺失</code> chip；正常 → 无竖条；选中 → 蓝边 + 浅底。</li>
+          <li>卡片标签可 hover 删除、点 <code>+</code> 添加；颜色来自 <code>tag.color</code> 或哈希；点标签操作不触发卡片导航。</li>
+          <li>footer 显示「repo 色块 + repo 名 · preset · 调用次数 ｜ 平台点（已链接 N）+ 启用状态」。</li>
+          <li>头部为双行；常驻"已选 0 · 共 N"行已移除；选择摘要仅在选中 >0 时出现在搜索行。</li>
+          <li>网格自适应：窗口变宽列数增加（2–4 列），窄窗 footer 不溢出。</li>
+          <li>其它共用 <code>UnifiedSkillCard</code> 的页面（platform/project/marketplace/collection）视觉无回归。</li>
+          <li>新增文案中英双语完整；明暗主题下标签/竖条/chip 对比度可读。</li>
+        </ol>
+      </section>
+
+      <section id="review-status" aria-labelledby="review-status-heading">
+        <h2 id="review-status-heading">评审状态</h2>
+        <p><span class="status">已确认设计方向，待用户评审本规格文件</span></p>
+        <p>关键决策（经可视化伴侣多轮确认）：范围=选择性吸收；卡片=方案 C；标签=卡上直接增删；列数=自适应换列；头部=双行紧凑；信息架构=repo 上侧边 / 标签上顶部；「全部」=平铺 + 可选分区；Saved Views 留侧栏、Tag Groups 上顶部。</p>
+        <p>后续：本规格为 spark 阶段产物，仅描述设计，不含实现。用户评审通过后，再单独进入实现计划（writing-plans / 直接实现）阶段。</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
