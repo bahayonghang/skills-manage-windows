@@ -133,4 +133,19 @@ describe("UnifiedSkillCard", () => {
     rerender(<UnifiedSkillCard name="x" />);
     expect(screen.queryByTestId("usage-badge")).not.toBeInTheDocument();
   });
+
+  it("传入 statusAccent=amber 渲染琥珀状态竖条", () => {
+    const { container } = render(
+      <UnifiedSkillCard name="s" statusAccent="amber" statusChipLabel="可更新" />,
+    );
+    expect(
+      container.querySelector('[data-status-accent="amber"]'),
+    ).toBeTruthy();
+    expect(screen.getByText("可更新")).toBeInTheDocument();
+  });
+
+  it("不传 statusAccent 时无竖条", () => {
+    const { container } = render(<UnifiedSkillCard name="s" />);
+    expect(container.querySelector("[data-status-accent]")).toBeNull();
+  });
 });

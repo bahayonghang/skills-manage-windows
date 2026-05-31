@@ -161,6 +161,12 @@ export interface UnifiedSkillCardProps {
   isLoading?: boolean;
   detailButtonRef?: Ref<HTMLButtonElement>;
   density?: SkillCardDensity;
+
+  // ── central 重设计（方案 C）— 全部 prop 门控，其它 variant 不传则零回归 ──
+  /** 左侧状态竖条强度：amber=可更新，red=源缺失/错误；不传=无竖条。central 列表计算后传入。 */
+  statusAccent?: "amber" | "red";
+  /** 行 1 名称右侧的状态 chip 文案（如“可更新”/“源缺失”）；不传=不显示。 */
+  statusChipLabel?: string;
 }
 
 // ─── UnifiedSkillCard ─────────────────────────────────────────────────────────
@@ -203,6 +209,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     isLoading,
     detailButtonRef,
     density: rawDensity = "comfortable",
+    statusAccent,
+    statusChipLabel,
   } = props;
 
   // "default" 是旧别名，归一化为 "comfortable"
@@ -308,12 +316,22 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     <div
       className={cn(
         cardShellClass(checkbox?.checked),
-        "group/skill-card p-3.5 gap-2",
+        "group/skill-card relative overflow-hidden p-3.5 gap-2",
         isCompact ? "min-h-[148px]" : "min-h-[176px]",
         isLoading && "opacity-50",
         className
       )}
     >
+      {statusAccent && (
+        <span
+          aria-hidden
+          data-status-accent={statusAccent}
+          className={cn(
+            "pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-xl",
+            statusAccent === "amber" ? "bg-amber-500" : "bg-red-500"
+          )}
+        />
+      )}
       <div className="flex min-h-0 flex-1 items-start gap-2.5">
         {/* Optional checkbox (discover) */}
         {hasCheckbox && checkbox && (
@@ -343,6 +361,19 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
               <h3 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-[-0.01em] text-foreground">
                 {name}
               </h3>
+            )}
+
+            {statusChipLabel && (
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
+                  statusAccent === "red"
+                    ? "bg-red-500/10 text-red-700 ring-red-500/30 dark:text-red-300"
+                    : "bg-amber-500/10 text-amber-700 ring-amber-500/30 dark:text-amber-300"
+                )}
+              >
+                {statusChipLabel}
+              </span>
             )}
 
             {hasActions && (
