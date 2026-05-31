@@ -1504,6 +1504,44 @@ async fn test_assign_skill_tags_supports_multi_tag_binding() {
 }
 
 #[tokio::test]
+async fn test_unassign_skill_tags_removes_only_target_links() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("skill-a", "Skill A", true);
+    upsert_skill(&pool, &skill).await.unwrap();
+    let tag_keep = create_skill_tag(&pool, "keep", None, None).await.unwrap();
+    let tag_drop = create_skill_tag(&pool, "drop", None, None).await.unwrap();
+
+    assign_skill_tags(
+        &pool,
+        &["skill-a".to_string()],
+        &[tag_keep.id.clone(), tag_drop.id.clone()],
+        "manual",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    unassign_skill_tags(&pool, "skill-a", std::slice::from_ref(&tag_drop.id))
+        .await
+        .unwrap();
+
+    let tags = get_skill_tags_for_skill(&pool, "skill-a").await.unwrap();
+    let ids: Vec<String> = tags.into_iter().map(|t| t.id).collect();
+    assert!(ids.contains(&tag_keep.id), "kept tag must remain");
+    assert!(!ids.contains(&tag_drop.id), "dropped tag must be removed");
+}
+
+#[tokio::test]
+async fn test_unassign_skill_tags_empty_is_noop() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("skill-b", "Skill B", true);
+    upsert_skill(&pool, &skill).await.unwrap();
+    // 空 tag_ids 不应报错、不应影响其它行
+    unassign_skill_tags(&pool, "skill-b", &[]).await.unwrap();
+}
+
+#[tokio::test]
 async fn test_replace_skill_ai_tags_does_not_remove_manual_tags() {
     let pool = setup_test_db().await;
     let skill = make_skill("ai-tagged-skill", "AI Tagged Skill", true);

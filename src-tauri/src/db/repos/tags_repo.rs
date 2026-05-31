@@ -115,6 +115,29 @@ pub async fn assign_skill_tags(
     Ok(())
 }
 
+/// 删除指定 skill 的若干 tag 关联（只删传入的 tag_ids，其余保留）。
+/// 与 `assign_skill_tags` 对称；空 tag_ids 为 no-op。
+pub async fn unassign_skill_tags(
+    pool: &DbPool,
+    skill_id: &str,
+    tag_ids: &[String],
+) -> Result<(), String> {
+    if tag_ids.is_empty() {
+        return Ok(());
+    }
+    let placeholders = tag_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let sql = format!(
+        "DELETE FROM skill_tag_links WHERE skill_id = ? AND tag_id IN ({})",
+        placeholders
+    );
+    let mut q = sqlx::query(&sql).bind(skill_id);
+    for tag_id in tag_ids {
+        q = q.bind(tag_id);
+    }
+    q.execute(pool).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub async fn replace_skill_ai_tags(
     pool: &DbPool,
     skill_id: &str,
