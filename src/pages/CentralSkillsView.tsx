@@ -12,8 +12,6 @@ import {
 import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
 import { markAppPerformance } from "@/lib/performance";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
-import { CentralSavedViewsSection } from "@/components/central/CentralSavedViewsSection";
-import { CentralTagGroupsSection } from "@/components/central/CentralTagGroupsSection";
 import { CentralSkillsShell } from "@/components/central/CentralSkillsShell";
 import { CentralStoreLocationDialog } from "@/components/central/CentralStoreLocationDialog";
 import { CommandPalette } from "@/components/central/CommandPalette";
@@ -37,6 +35,7 @@ import {
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralInstalledSkillsFilterBridge } from "@/pages/centralInstalledSkillsFilterBridge";
 import { useCentralSkillsLayoutSizing } from "@/pages/centralSkillsLayoutSizing";
+import { useCentralSkillsViewChrome } from "@/pages/centralSkillsViewChrome";
 import {
   createCentralStoreLocationControls,
   useCentralStoreLocationApplied,
@@ -281,7 +280,6 @@ export function CentralSkillsView() {
     });
   }, [visibleCurrentViewSkills]);
 
-  // ─── Saved Views ────────────────────────────────────────────
   const savedViewsBridge = useCentralSavedViewsBridge({
     enabled: true,
     v2ViewState: viewState,
@@ -289,10 +287,8 @@ export function CentralSkillsView() {
     t,
   });
 
-  // ─── Tag Groups ─────────────────────────────────────────────
   const tagGroupsBridge = useCentralTagGroupsBridge({ enabled: true, t });
 
-  // ─── Command palette state + actions ───────────────────────
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const hasCurrentFilters =
     viewState.repos.length > 0 ||
@@ -695,12 +691,6 @@ export function CentralSkillsView() {
     [],
   );
 
-  const handleClearSelection = useCallback(() => setSelectedSkillIds([]), []);
-
-  const handleSelectCurrentResults = useCallback(() => {
-    setSelectedSkillIds(visibleCurrentViewSkills.map((skill) => skill.id));
-  }, [visibleCurrentViewSkills]);
-
   const categorizePanelProps = {
     aiTagJob,
     aiTagReviews,
@@ -739,6 +729,22 @@ export function CentralSkillsView() {
     onToggleManualTag: handleToggleManualTag,
   };
 
+  const {
+    savedViewsSlot,
+    tagGroupsSlot,
+    repoUpdateCounts,
+    selectionControlsProps,
+    handleClearSelection,
+  } = useCentralSkillsViewChrome({
+    savedViewsBridge,
+    tagGroupsBridge,
+    skills,
+    updateStatuses,
+    selectedSkillIds,
+    setSelectedSkillIds,
+    visibleCurrentViewSkills,
+  });
+
   const bulkBarProps = {
     selectedCount: selectedSkillIds.length,
     isInstalling,
@@ -749,13 +755,6 @@ export function CentralSkillsView() {
     onBatchDelete: () => {
       void handleBatchDeleteClick();
     },
-    onClearSelection: handleClearSelection,
-  };
-
-  const selectionControlsProps = {
-    selectedCount: selectedSkillIds.length,
-    currentResultCount: visibleCurrentViewSkills.length,
-    onSelectCurrentResults: handleSelectCurrentResults,
     onClearSelection: handleClearSelection,
   };
 
@@ -777,45 +776,6 @@ export function CentralSkillsView() {
     repositories,
     disabled: checkButtonProps.disabled,
   });
-
-  // Saved Views 下沉到侧栏底部（仅此段；Tag Groups 迁至顶部筛选「更多」）。
-  const savedViewsSlot = (
-    <CentralSavedViewsSection
-      savedViews={savedViewsBridge.savedViews}
-      activeSavedViewId={savedViewsBridge.activeSavedViewId}
-      currentQueryString={savedViewsBridge.v2QueryString}
-      canSaveCurrent={savedViewsBridge.canSaveCurrent}
-      onApply={savedViewsBridge.handleApplySavedView}
-      onSaveCurrent={savedViewsBridge.handleSaveCurrentView}
-      onRename={savedViewsBridge.handleRenameSavedView}
-      onDelete={savedViewsBridge.handleDeleteSavedView}
-      onTogglePin={savedViewsBridge.handleTogglePinSavedView}
-    />
-  );
-
-  // Tag Groups 管理迁至顶部筛选「更多▾」。
-  const tagGroupsSlot = (
-    <CentralTagGroupsSection
-      tagGroups={tagGroupsBridge.tagGroups}
-      onCreate={() => tagGroupsBridge.handleCreateTagGroup()}
-      onRename={tagGroupsBridge.handleRenameTagGroup}
-      onDelete={tagGroupsBridge.handleDeleteTagGroup}
-    />
-  );
-
-  // repo.id → 该 repo 下「可更新」skill 数（侧栏 repo 行角标）。
-  const repoUpdateCounts = useMemo(() => {
-    const acc: Record<string, number> = {};
-    for (const skill of skills) {
-      if (
-        updateStatuses[skill.id]?.status === "update_available" &&
-        skill.repository?.id
-      ) {
-        acc[skill.repository.id] = (acc[skill.repository.id] ?? 0) + 1;
-      }
-    }
-    return acc;
-  }, [skills, updateStatuses]);
 
   const handleCentralStoreLocationApplied = useCentralStoreLocationApplied({
     loadCentralSkills,

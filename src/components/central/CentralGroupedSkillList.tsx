@@ -3,10 +3,10 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 
-import { statusAccentOf } from "@/components/central/CentralSkillListContent";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
+import { statusAccentOf } from "@/lib/centralSkillCardStatus";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type { SkillGroup } from "@/lib/centralGrouping";
 import { getRepoDotColor } from "@/lib/tagColor";

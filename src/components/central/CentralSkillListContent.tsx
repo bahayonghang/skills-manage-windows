@@ -10,24 +10,12 @@ import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
+import { statusAccentOf } from "@/lib/centralSkillCardStatus";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type { ViewDensity, ViewMode } from "@/lib/centralViewState";
 import { getRepoDotColor } from "@/lib/tagColor";
 import { cn } from "@/lib/utils";
-import type {
-  CentralSkillUpdateState,
-  CentralSkillUpdateStatus,
-  SkillWithLinks,
-} from "@/types";
-
-/** 更新状态 → 卡片左侧状态竖条强度（仅可更新/源缺失/错误上色）。 */
-export function statusAccentOf(
-  status: CentralSkillUpdateStatus | undefined,
-): "amber" | "red" | undefined {
-  if (status === "update_available") return "amber";
-  if (status === "remote_missing" || status === "error") return "red";
-  return undefined;
-}
+import type { CentralSkillUpdateState, SkillWithLinks } from "@/types";
 
 // 卡片高度常量 —— 必须与 UnifiedSkillCard 的 min-h 保持一致，
 // 否则虚拟列表会出现间隙或重叠。

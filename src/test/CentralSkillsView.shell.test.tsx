@@ -81,34 +81,42 @@ describe("CentralSkillsView shell（V2 markup）", () => {
     expect(screen.getByTestId("central-toolbar-sort-installedPlatformCount-desc")).toBeInTheDocument();
   });
 
-  it("选择控制条支持全选当前结果和清空选择", async () => {
+  it("选择摘要仅在已选时内联出现，支持全选当前结果和清空选择", async () => {
     renderCentralSkillsView();
 
-    expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 0 / 当前结果 2");
-    expect(screen.queryByTestId("central-select-most-universal")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("central-select-current-results"));
+    // 0 选中：搜索行不渲染内联选择摘要
+    expect(screen.queryByTestId("central-selection-summary")).not.toBeInTheDocument();
 
+    // 勾选一个卡片 → 摘要出现
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    expect(await screen.findByTestId("central-selection-summary")).toHaveTextContent("已选 1");
     expect(await screen.findByTestId("central-bulk-action-bar")).toBeInTheDocument();
-    expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 2 / 当前结果 2");
 
+    // 全选当前结果
+    fireEvent.click(screen.getByTestId("central-select-current-results"));
+    expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 2");
+
+    // 清空 → 摘要与批量条均消失
     fireEvent.click(screen.getByTestId("central-clear-selection"));
     await waitFor(() => {
       expect(screen.queryByTestId("central-bulk-action-bar")).not.toBeInTheDocument();
     });
+    expect(screen.queryByTestId("central-selection-summary")).not.toBeInTheDocument();
   });
 
   it("筛选变化后移除不可见的已选技能", async () => {
     window.localStorage.setItem("central.sidebarPinned", "true");
     renderCentralSkillsView();
 
-    fireEvent.click(screen.getByTestId("central-select-current-results"));
-    expect(await screen.findByTestId("central-selection-summary")).toHaveTextContent("已选 2 / 当前结果 2");
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    fireEvent.click(await screen.findByTestId("central-select-current-results"));
+    expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 2");
 
     const sidebar = screen.getByTestId("central-sidebar-v2");
     fireEvent.click(within(sidebar).getByTestId("repo-github-openai-skills-main"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 1 / 当前结果 1");
+      expect(screen.getByTestId("central-selection-summary")).toHaveTextContent("已选 1");
     });
   });
 

@@ -14,8 +14,11 @@ import { memo, useMemo, type MouseEventHandler, type ReactNode, type Ref } from 
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
-import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { CompactCardMoreMenu } from "@/components/skill/CompactCardMoreMenu";
+import {
+  PlatformToggleIcon,
+  UnifiedSkillCardFooter,
+} from "@/components/skill/UnifiedSkillCardFooter";
 import { CardTagEditor } from "@/components/skill/CardTagEditor";
 import { SkillCardMeta } from "@/components/skill/SkillCardMeta";
 import { SourceIndicator } from "@/components/skill/SkillCardBadges";
@@ -25,66 +28,11 @@ import { cn } from "@/lib/utils";
 import {
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberIds,
-  getPlatformTargetMemberNames,
-  isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
 import {
   selectSkillInventoryFlagsFromInventory,
   useUpdateCenterStore,
 } from "@/stores/updateCenterStore";
-
-// ─── Platform Toggle Icon (internal) ──────────────────────────────────────────
-
-const PlatformToggleIcon = memo(function PlatformToggleIcon({
-  agent,
-  skillName,
-  isLinked,
-  isToggling,
-  isLocked,
-  onToggle,
-}: {
-  agent: AgentWithStatus;
-  skillName: string;
-  isLinked: boolean;
-  isToggling: boolean;
-  isLocked: boolean;
-  onToggle: () => void;
-}) {
-  const { t } = useTranslation();
-  const memberNames = getPlatformTargetMemberNames(agent).join(", ");
-  const displayName = isUniversalPlatformTarget(agent)
-    ? t("platformTargets.universalShortLabel")
-    : agent.display_name;
-  const isDisabled = isToggling || isLocked;
-  const title = isLocked
-    ? `${displayName} - ${t("platformTargets.alwaysIncluded")} - ${memberNames}`
-    : displayName;
-
-  return (
-    <button
-      className={cn(
-        "p-1 rounded-md transition-colors cursor-pointer",
-        isLocked
-          ? "text-primary cursor-default"
-          : isLinked
-          ? "text-primary hover:bg-primary/15"
-          : "text-muted-foreground/40 hover:bg-muted/60 hover:text-muted-foreground",
-        isToggling && "animate-pulse pointer-events-none"
-      )}
-      title={title}
-      aria-label={
-        isLocked
-          ? title
-          : t("central.toggleInstallLabel", { platform: displayName, skill: skillName })
-      }
-      disabled={isDisabled}
-      onClick={onToggle}
-    >
-      <PlatformIcon agentId={agent.id} className="size-4 shrink-0" size={16} />
-    </button>
-  );
-});
-PlatformToggleIcon.displayName = "PlatformToggleIcon";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -583,67 +531,18 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
 
           {/* Row 4: Footer (central 方案C) or Platform toggle icons */}
           {footer ? (
-            <div
-              data-testid="card-footer"
-              className="mt-auto flex items-center justify-between gap-2 border-t border-border/70 pt-2"
-            >
-              <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
-                {footer.repoName && (
-                  <span className="flex min-w-0 items-center gap-1">
-                    <span
-                      aria-hidden
-                      className="size-2 shrink-0 rounded-sm"
-                      style={{
-                        backgroundColor:
-                          footer.repoColor ?? "var(--muted-foreground)",
-                      }}
-                    />
-                    <span className="truncate">{footer.repoName}</span>
-                  </span>
-                )}
-                {typeof usageBadge === "number" && usageBadge > 0 && (
-                  <>
-                    <span aria-hidden className="text-muted-foreground/40">
-                      ·
-                    </span>
-                    <span className="shrink-0 tabular-nums">
-                      {t("skillUsage.badge.countShort", { count: usageBadge })}
-                    </span>
-                  </>
-                )}
-              </div>
-              {hasPlatformIcons && platformIcons && targetAgents.length > 0 && (
-                <div className="flex shrink-0 items-center gap-1">
-                  {targetAgents.map((agent) => (
-                    <PlatformToggleIcon
-                      key={agent.id}
-                      agent={agent}
-                      skillName={name}
-                      isLinked={getPlatformTargetMemberIds(agent).some(
-                        (agentId) => linkedAgentSet.has(agentId),
-                      )}
-                      isToggling={getPlatformTargetMemberIds(agent).some(
-                        (agentId) =>
-                          platformIcons.togglingAgentId === agentId,
-                      )}
-                      isLocked={getPlatformTargetMemberIds(agent).some(
-                        (agentId) => lockedAgentSet.has(agentId),
-                      )}
-                      onToggle={() => {
-                        const [agentId] =
-                          getPlatformTargetInstallAgentIds(agent);
-                        if (agentId) {
-                          platformIcons.onToggle(
-                            platformIcons.skillId,
-                            agentId,
-                          );
-                        }
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            <UnifiedSkillCardFooter
+              repoName={footer.repoName}
+              repoColor={footer.repoColor}
+              usageBadge={usageBadge}
+              agents={platformIcons?.agents ?? []}
+              linkedAgents={platformIcons?.linkedAgents ?? []}
+              lockedAgentIds={platformIcons?.lockedAgentIds}
+              skillId={platformIcons?.skillId}
+              togglingAgentId={platformIcons?.togglingAgentId ?? null}
+              skillName={name}
+              onToggle={platformIcons?.onToggle}
+            />
           ) : (
             hasPlatformIcons &&
             platformIcons &&

@@ -307,9 +307,17 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       {/* Header ─────────────────────────────────────────────────────── */}
       <div className="border-b border-border px-6 py-3 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold leading-tight">
-            {t("central.title")}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold leading-tight">
+              {t("central.title")}
+            </h1>
+            <span
+              data-testid="central-result-count"
+              className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground"
+            >
+              {listContent.sortedSkills.length}
+            </span>
+          </div>
           <div className="mt-0.5 flex min-w-0 items-center gap-2">
             <p
               className="truncate text-[11px] text-muted-foreground/70"
@@ -462,6 +470,39 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
               </span>
             </Button>
           )}
+          {selectionControls.selectedCount > 0 && (
+            <div
+              data-testid="central-selection-summary"
+              className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+            >
+              <span className="font-medium text-foreground">
+                {t("central.selectionInlineSummary", {
+                  count: selectionControls.selectedCount,
+                })}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={selectionControls.currentResultCount === 0}
+                onClick={selectionControls.onSelectCurrentResults}
+                data-testid="central-select-current-results"
+              >
+                {t("central.selectCurrentResults")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={selectionControls.onClearSelection}
+                data-testid="central-clear-selection"
+              >
+                {t("central.clearSelection")}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -474,14 +515,6 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
         activeSource={activeSource}
         onToggleSource={handleToggleSource}
         tagGroupsSlot={topFiltersTagGroups}
-      />
-
-      <CentralSelectionControls
-        t={t}
-        selectedCount={selectionControls.selectedCount}
-        currentResultCount={selectionControls.currentResultCount}
-        onSelectCurrentResults={selectionControls.onSelectCurrentResults}
-        onClearSelection={selectionControls.onClearSelection}
       />
 
       {/* Body: sidebar + list + categorize ───────────────────────────── */}
@@ -556,63 +589,6 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
         onCancelPortability={taskCenter.onCancelPortability}
         onViewAiReviews={taskCenter.onViewAiReviews}
       />
-    </div>
-  );
-}
-
-interface CentralSelectionControlsProps {
-  t: TFunction;
-  selectedCount: number;
-  currentResultCount: number;
-  onSelectCurrentResults: () => void;
-  onClearSelection: () => void;
-}
-
-function CentralSelectionControls({
-  t,
-  selectedCount,
-  currentResultCount,
-  onSelectCurrentResults,
-  onClearSelection,
-}: CentralSelectionControlsProps) {
-  const hasCurrentResults = currentResultCount > 0;
-
-  return (
-    <div className="border-b border-border/70 px-6 py-2">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span
-          data-testid="central-selection-summary"
-          className="font-medium text-foreground"
-        >
-          {t("central.selectionSummary", {
-            selectedCount,
-            currentCount: currentResultCount,
-          })}
-        </span>
-        <span className="hidden h-4 w-px bg-border sm:block" />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          disabled={!hasCurrentResults}
-          onClick={onSelectCurrentResults}
-          data-testid="central-select-current-results"
-        >
-          {t("central.selectCurrentResults")}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          disabled={selectedCount === 0}
-          onClick={onClearSelection}
-          data-testid="central-clear-selection"
-        >
-          {t("central.clearSelection")}
-        </Button>
-      </div>
     </div>
   );
 }
