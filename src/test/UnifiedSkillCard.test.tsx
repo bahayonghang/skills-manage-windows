@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
@@ -147,5 +148,28 @@ describe("UnifiedSkillCard", () => {
   it("不传 statusAccent 时无竖条", () => {
     const { container } = render(<UnifiedSkillCard name="s" />);
     expect(container.querySelector("[data-status-accent]")).toBeNull();
+  });
+
+  it("editableTags：渲染彩色标签，hover × 调用 onRemove", async () => {
+    const onRemove = vi.fn();
+    render(
+      <UnifiedSkillCard
+        name="s"
+        editableTags={{
+          tags: [{ id: "t1", name: "frontend" }],
+          allTags: [
+            { id: "t1", name: "frontend" },
+            { id: "t2", name: "backend" },
+          ],
+          onAdd: vi.fn(),
+          onCreate: vi.fn(),
+          onRemove,
+        }}
+      />,
+    );
+    await userEvent.click(
+      screen.getByLabelText(/移除标签 frontend|remove tag frontend/i),
+    );
+    expect(onRemove).toHaveBeenCalledWith("t1");
   });
 });

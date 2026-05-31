@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { CompactCardMoreMenu } from "@/components/skill/CompactCardMoreMenu";
+import { CardTagEditor } from "@/components/skill/CardTagEditor";
 import { SkillCardMeta } from "@/components/skill/SkillCardMeta";
 import { SourceIndicator } from "@/components/skill/SkillCardBadges";
 import { useTextTruncation } from "@/hooks/useTextTruncation";
@@ -167,6 +168,21 @@ export interface UnifiedSkillCardProps {
   statusAccent?: "amber" | "red";
   /** 行 1 名称右侧的状态 chip 文案（如“可更新”/“源缺失”）；不传=不显示。 */
   statusChipLabel?: string;
+  /**
+   * 可编辑标签行（central 专用）。不传 → 不渲染该行（其它 variant 仍用 SkillCardMeta 里的只读 tags）。
+   * - tags：已赋标签（含可选 color）
+   * - allTags：可选已存在标签（供 + 添加选择）
+   * - onAdd：选中一个已存在 tag
+   * - onCreate：输入新名创建并赋值
+   * - onRemove：移除一个 tag
+   */
+  editableTags?: {
+    tags: { id: string; name: string; color?: string | null }[];
+    allTags: { id: string; name: string; color?: string | null }[];
+    onAdd: (tagId: string) => void;
+    onCreate: (name: string) => void;
+    onRemove: (tagId: string) => void;
+  };
 }
 
 // ─── UnifiedSkillCard ─────────────────────────────────────────────────────────
@@ -211,6 +227,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     density: rawDensity = "comfortable",
     statusAccent,
     statusChipLabel,
+    editableTags,
   } = props;
 
   // "default" 是旧别名，归一化为 "comfortable"
@@ -534,6 +551,9 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             />
           )}
 
+          {/* Row 2.5: 可编辑彩色标签行（central 专用，prop 门控） */}
+          {editableTags && <CardTagEditor {...editableTags} />}
+
           {/* Row 3: Meta badges — 统一一行展示，flex-wrap */}
           <SkillCardMeta
             originKind={originKind ?? undefined}
@@ -548,7 +568,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             updateStatus={updateStatus}
             inventoryFlags={inventoryFlags ?? undefined}
             inventorySkillId={inventorySkillId ?? undefined}
-            tags={tags}
+            tags={editableTags ? undefined : tags}
           />
 
           {/* Row 4: Platform toggle icons (central) */}
