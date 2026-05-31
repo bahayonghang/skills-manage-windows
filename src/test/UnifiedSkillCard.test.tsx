@@ -172,4 +172,20 @@ describe("UnifiedSkillCard", () => {
     );
     expect(onRemove).toHaveBeenCalledWith("t1");
   });
+
+  it("footer：显示 repo 名", () => {
+    render(
+      <UnifiedSkillCard
+        name="s"
+        footer={{ repoName: "anthropics/skills", repoColor: "#7c3aed" }}
+        usageBadge={5}
+      />,
+    );
+    expect(screen.getByText("anthropics/skills")).toBeInTheDocument();
+  });
+
+  it("不传 footer 时不渲染 footer 区域", () => {
+    const { container } = render(<UnifiedSkillCard name="s" />);
+    expect(container.querySelector("[data-testid='card-footer']")).toBeNull();
+  });
 });

@@ -183,6 +183,15 @@ export interface UnifiedSkillCardProps {
     onCreate: (name: string) => void;
     onRemove: (tagId: string) => void;
   };
+  /**
+   * footer 分隔区（central 专用）。传入时：底部出现 border-t footer，
+   * 左 = repo 色块+名 + usage；右 = 平台点（由现有 platformIcons 渲染）。
+   * 同时 SkillCardMeta 不再重复渲染 publisher / usageBadge。
+   */
+  footer?: {
+    repoName?: string;
+    repoColor?: string;
+  };
 }
 
 // ─── UnifiedSkillCard ─────────────────────────────────────────────────────────
@@ -228,6 +237,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     statusAccent,
     statusChipLabel,
     editableTags,
+    footer,
   } = props;
 
   // "default" 是旧别名，归一化为 "comfortable"
@@ -560,59 +570,138 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             isReadOnly={isReadOnly}
             sourceType={sourceType}
             originBadge={originBadge}
-            usageBadge={usageBadge}
+            usageBadge={footer ? undefined : usageBadge}
             isCentral={isCentral}
             platformBadge={platformBadge}
             projectBadge={projectBadge}
-            publisher={publisher}
+            publisher={footer ? undefined : publisher}
             updateStatus={updateStatus}
             inventoryFlags={inventoryFlags ?? undefined}
             inventorySkillId={inventorySkillId ?? undefined}
             tags={editableTags ? undefined : tags}
           />
 
-          {/* Row 4: Platform toggle icons (central) */}
-          {hasPlatformIcons && platformIcons && targetAgents.length > 0 && (
-            <div className="mt-auto pt-1">
-              {isCompact && (
-                <span
-                  data-testid={`skill-card-linked-summary-${platformIcons.skillId}`}
+          {/* Row 4: Footer (central 方案C) or Platform toggle icons */}
+          {footer ? (
+            <div
+              data-testid="card-footer"
+              className="mt-auto flex items-center justify-between gap-2 border-t border-border/70 pt-2"
+            >
+              <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+                {footer.repoName && (
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span
+                      aria-hidden
+                      className="size-2 shrink-0 rounded-sm"
+                      style={{
+                        backgroundColor:
+                          footer.repoColor ?? "var(--muted-foreground)",
+                      }}
+                    />
+                    <span className="truncate">{footer.repoName}</span>
+                  </span>
+                )}
+                {typeof usageBadge === "number" && usageBadge > 0 && (
+                  <>
+                    <span aria-hidden className="text-muted-foreground/40">
+                      ·
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {t("skillUsage.badge.countShort", { count: usageBadge })}
+                    </span>
+                  </>
+                )}
+              </div>
+              {hasPlatformIcons && platformIcons && targetAgents.length > 0 && (
+                <div className="flex shrink-0 items-center gap-1">
+                  {targetAgents.map((agent) => (
+                    <PlatformToggleIcon
+                      key={agent.id}
+                      agent={agent}
+                      skillName={name}
+                      isLinked={getPlatformTargetMemberIds(agent).some(
+                        (agentId) => linkedAgentSet.has(agentId),
+                      )}
+                      isToggling={getPlatformTargetMemberIds(agent).some(
+                        (agentId) =>
+                          platformIcons.togglingAgentId === agentId,
+                      )}
+                      isLocked={getPlatformTargetMemberIds(agent).some(
+                        (agentId) => lockedAgentSet.has(agentId),
+                      )}
+                      onToggle={() => {
+                        const [agentId] =
+                          getPlatformTargetInstallAgentIds(agent);
+                        if (agentId) {
+                          platformIcons.onToggle(
+                            platformIcons.skillId,
+                            agentId,
+                          );
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            hasPlatformIcons &&
+            platformIcons &&
+            targetAgents.length > 0 && (
+              <div className="mt-auto pt-1">
+                {isCompact && (
+                  <span
+                    data-testid={`skill-card-linked-summary-${platformIcons.skillId}`}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground",
+                      "group-hover/skill-card:hidden group-focus-within/skill-card:hidden",
+                    )}
+                  >
+                    <Link2 className="size-3" aria-hidden />
+                    {linkedTargetCount > 0
+                      ? t("common.skillCardLinkedSummary", {
+                          count: linkedTargetCount,
+                        })
+                      : t("common.skillCardLinkedSummaryNone")}
+                  </span>
+                )}
+                <div
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground",
-                    "group-hover/skill-card:hidden group-focus-within/skill-card:hidden"
+                    "flex items-center gap-1 flex-wrap",
+                    isCompact &&
+                      "hidden group-hover/skill-card:flex group-focus-within/skill-card:flex",
                   )}
                 >
-                  <Link2 className="size-3" aria-hidden />
-                  {linkedTargetCount > 0
-                    ? t("common.skillCardLinkedSummary", { count: linkedTargetCount })
-                    : t("common.skillCardLinkedSummaryNone")}
-                </span>
-              )}
-              <div
-                className={cn(
-                  "flex items-center gap-1 flex-wrap",
-                  isCompact &&
-                    "hidden group-hover/skill-card:flex group-focus-within/skill-card:flex"
-                )}
-              >
-                {targetAgents.map((agent) => (
-                  <PlatformToggleIcon
-                    key={agent.id}
-                    agent={agent}
-                    skillName={name}
-                    isLinked={getPlatformTargetMemberIds(agent).some((agentId) => linkedAgentSet.has(agentId))}
-                    isToggling={getPlatformTargetMemberIds(agent).some((agentId) => platformIcons.togglingAgentId === agentId)}
-                    isLocked={getPlatformTargetMemberIds(agent).some((agentId) => lockedAgentSet.has(agentId))}
-                    onToggle={() => {
-                      const [agentId] = getPlatformTargetInstallAgentIds(agent);
-                      if (agentId) {
-                        platformIcons.onToggle(platformIcons.skillId, agentId);
-                      }
-                    }}
-                  />
-                ))}
+                  {targetAgents.map((agent) => (
+                    <PlatformToggleIcon
+                      key={agent.id}
+                      agent={agent}
+                      skillName={name}
+                      isLinked={getPlatformTargetMemberIds(agent).some(
+                        (agentId) => linkedAgentSet.has(agentId),
+                      )}
+                      isToggling={getPlatformTargetMemberIds(agent).some(
+                        (agentId) =>
+                          platformIcons.togglingAgentId === agentId,
+                      )}
+                      isLocked={getPlatformTargetMemberIds(agent).some(
+                        (agentId) => lockedAgentSet.has(agentId),
+                      )}
+                      onToggle={() => {
+                        const [agentId] =
+                          getPlatformTargetInstallAgentIds(agent);
+                        if (agentId) {
+                          platformIcons.onToggle(
+                            platformIcons.skillId,
+                            agentId,
+                          );
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
+            )
           )}
         </div>
       </div>
