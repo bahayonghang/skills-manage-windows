@@ -87,6 +87,8 @@ export interface CentralSkillsShellProps {
   // Facet 数据
   facetCounts: FacetCounts;
   repositories: readonly SkillRepositoryWithStats[];
+  /** repo.id → 可更新 skill 数（侧栏 repo 行角标）。 */
+  repoUpdateCounts?: Record<string, number>;
   tags: readonly SkillTag[];
   /** 标签分组（M3）。 */
   tagGroups?: readonly TagGroup[];
@@ -179,9 +181,8 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
     queryAst,
     facetCounts,
     repositories,
+    repoUpdateCounts,
     tags,
-    tagGroups,
-    onAssignTagToGroup,
     sortFieldOptions,
     sortDirectionOptions,
     groupByOptions,
@@ -460,11 +461,10 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           handleResizeKeyDown={handleFilterSidebarResizeKeyDown}
           facetCounts={facetCounts}
           repositories={repositories}
-          tags={tags}
-          tagGroups={tagGroups}
-          onAssignTagToGroup={onAssignTagToGroup}
+          repoUpdateCounts={repoUpdateCounts}
           onDeleteRepository={onDeleteRepository}
           onToggleRepositoryPin={onToggleRepositoryPin}
+          onSyncNewSource={() => setIsGitHubImportOpen(true)}
           selectedRepos={viewState.repos}
           selectedTags={viewState.tags}
           onToggleRepo={handleToggleRepo}

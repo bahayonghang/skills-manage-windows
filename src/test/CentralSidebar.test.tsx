@@ -5,7 +5,7 @@ import type { TFunction } from "i18next";
 import { CentralSidebar } from "../components/central/CentralSidebar";
 import { FacetSection } from "../components/central/FacetSection";
 import type { FacetCounts } from "../lib/centralFacetCounts";
-import type { SkillRepositoryWithStats, SkillTag, TagGroup } from "../types";
+import type { SkillRepositoryWithStats } from "../types";
 import zh from "../i18n/locales/zh.json";
 
 type TranslationObj = { [key: string]: TranslationObj | string };
@@ -56,36 +56,6 @@ const repositories: SkillRepositoryWithStats[] = [
   },
 ];
 
-const tagGroups: TagGroup[] = [
-  {
-    id: "group-design",
-    name: "设计类",
-    color: "#38bdf8",
-    sort_order: 0,
-    is_builtin: false,
-    created_at: "2026-05-11T00:00:00Z",
-    updated_at: "2026-05-11T00:00:00Z",
-  },
-];
-
-const tags: SkillTag[] = [
-  {
-    id: "frontend-visual-design",
-    name: "前端与视觉设计",
-    group_id: "group-design",
-    is_builtin: true,
-    created_at: "2026-04-10T00:00:00Z",
-    updated_at: "2026-04-10T00:00:00Z",
-  },
-  {
-    id: "uncategorized",
-    name: "未分类",
-    is_builtin: true,
-    created_at: "2026-04-10T00:00:00Z",
-    updated_at: "2026-04-10T00:00:00Z",
-  },
-];
-
 const facetCounts: FacetCounts = {
   repositories: {
     all: 2,
@@ -132,8 +102,6 @@ function renderSidebar(
       width={286}
       facetCounts={facetCounts}
       repositories={overrides.repositories ?? repositories}
-      tags={tags}
-      tagGroups={tagGroups}
       selectedRepos={overrides.selectedRepos ?? []}
       selectedTags={[]}
       savedViewsSlot={
@@ -176,57 +144,43 @@ describe("CentralSidebar", () => {
     const { sidebar } = renderSidebar();
     const toggle = within(sidebar).getByTestId("sidebar-bulk-expansion-toggle");
 
+    // 标签区块已迁至顶部筛选行：侧栏展开态不再渲染 sidebar-section-tags。
+    expect(within(sidebar).queryByTestId("sidebar-section-tags")).not.toBeInTheDocument();
+
     expect(within(sidebar).getByTestId("central-saved-views-content")).not.toHaveClass("hidden");
-    expect(within(sidebar).getByTestId("central-tag-groups-section-content")).not.toHaveClass(
-      "hidden"
-    );
     expect(within(sidebar).getByTestId("sidebar-section-smart-content")).not.toHaveClass("hidden");
     expect(within(sidebar).getByTestId("sidebar-section-repos-content")).not.toHaveClass("hidden");
-    expect(within(sidebar).getByTestId("sidebar-section-tags-content")).not.toHaveClass("hidden");
 
     fireEvent.click(toggle);
 
     expect(within(sidebar).getByTestId("central-saved-views-content")).toHaveClass("hidden");
-    expect(within(sidebar).getByTestId("central-tag-groups-section-content")).toHaveClass(
-      "hidden"
-    );
     expect(within(sidebar).getByTestId("sidebar-section-smart-content")).toHaveClass("hidden");
     expect(within(sidebar).getByTestId("sidebar-section-repos-content")).toHaveClass("hidden");
-    expect(within(sidebar).getByTestId("sidebar-section-tags-content")).toHaveClass("hidden");
 
     fireEvent.click(toggle);
 
     expect(within(sidebar).getByTestId("central-saved-views-content")).not.toHaveClass("hidden");
-    expect(within(sidebar).getByTestId("central-tag-groups-section-content")).not.toHaveClass(
-      "hidden"
-    );
     expect(within(sidebar).getByTestId("sidebar-section-smart-content")).not.toHaveClass("hidden");
     expect(within(sidebar).getByTestId("sidebar-section-repos-content")).not.toHaveClass(
       "hidden"
     );
-    expect(within(sidebar).getByTestId("sidebar-section-tags-content")).not.toHaveClass("hidden");
   });
 
-  it("applies the global signal to owner and tag subgroups while preserving local toggles", () => {
+  it("applies the global signal to owner subgroups while preserving local toggles", () => {
     const { sidebar } = renderSidebar();
     const toggle = within(sidebar).getByTestId("sidebar-bulk-expansion-toggle");
 
     fireEvent.click(within(sidebar).getByRole("button", { name: "收起 openai" }));
     expect(within(sidebar).queryByTestId("repo-github-openai-skills-main")).not.toBeInTheDocument();
-    expect(within(sidebar).getByTestId("tag-frontend-visual-design")).toBeInTheDocument();
-
-    fireEvent.click(within(sidebar).getByTestId("tag-group-group-design"));
-    expect(within(sidebar).queryByTestId("tag-frontend-visual-design")).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
     fireEvent.click(toggle);
 
     expect(within(sidebar).getByTestId("repo-github-openai-skills-main")).toBeInTheDocument();
-    expect(within(sidebar).getByTestId("tag-frontend-visual-design")).toBeInTheDocument();
 
     fireEvent.click(within(sidebar).getByRole("button", { name: "收起 openai" }));
     expect(within(sidebar).queryByTestId("repo-github-openai-skills-main")).not.toBeInTheDocument();
-    expect(within(sidebar).getByTestId("sidebar-section-tags-content")).not.toHaveClass("hidden");
+    expect(within(sidebar).getByTestId("sidebar-section-repos-content")).not.toHaveClass("hidden");
   });
 
   it("shows pinned repository styling and does not select the row when pin is clicked", () => {

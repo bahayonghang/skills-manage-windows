@@ -1,20 +1,56 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, FolderGit2, FolderOpen, Pin, PinOff, Tag, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FolderGit2,
+  Pin,
+  PinOff,
+  Tag,
+  Trash2,
+} from "lucide-react";
 import type { TFunction } from "i18next";
 
 import { FacetItem } from "@/components/central/FacetItem";
 import { useSidebarExpansionSignal } from "@/components/central/useSidebarExpansionSignal";
 import { groupRepositoriesForSidebar } from "@/lib/centralRepositoryGroups";
+import { getRepoDotColor } from "@/lib/tagColor";
 import { cn } from "@/lib/utils";
 import type { FacetCounts } from "@/lib/centralFacetCounts";
 import type { SkillRepositoryWithStats, SkillTag, TagGroup } from "@/types";
 
 // ─── Repository blocks ─────────────────────────────────────────────────────────
 
+/** repo 行左侧色块头像：名字哈希到稳定纯色。 */
+function RepoDot({ name }: { name: string }) {
+  return (
+    <span
+      aria-hidden
+      className="size-3 shrink-0 rounded-sm"
+      style={{ backgroundColor: getRepoDotColor(name) }}
+    />
+  );
+}
+
+/** 「N 可更新」琥珀角标，常驻显示；0 不渲染。 */
+function RepoUpdateBadge({ count, t }: { count: number; t: TFunction }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      data-testid="repo-update-badge"
+      title={t("central.v2.repoUpdateBadge", { count })}
+      className="shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums font-medium text-amber-700 dark:text-amber-300"
+    >
+      {count}
+    </span>
+  );
+}
+
 interface RepositorySectionBlockProps {
   section: ReturnType<typeof groupRepositoriesForSidebar>[number];
   facetCounts: FacetCounts;
   selectionSet: Set<string>;
+  /** repo.id → 该 repo 下可更新 skill 数（无/0 不显示角标）。 */
+  repoUpdateCounts?: Record<string, number>;
   onToggleRepo: (id: string) => void;
   onDeleteRepository?: (repository: SkillRepositoryWithStats) => void;
   onToggleRepositoryPin?: (repository: SkillRepositoryWithStats) => void;
@@ -25,13 +61,16 @@ export function RepositorySectionBlock({
   section,
   facetCounts,
   selectionSet,
+  repoUpdateCounts,
   onToggleRepo,
   onDeleteRepository,
   onToggleRepositoryPin,
   t,
 }: RepositorySectionBlockProps) {
   const sectionLabel =
-    section.kind === "github" ? t("central.v2.githubSection") : t("central.v2.localSection");
+    section.kind === "github"
+      ? t("central.v2.githubSection")
+      : t("central.v2.localSection");
 
   return (
     <div data-testid={`repo-source-${section.kind}`} className="space-y-1">
@@ -48,10 +87,11 @@ export function RepositorySectionBlock({
               totalCount={group.totalSkillCount}
               facetCounts={facetCounts}
               selectionSet={selectionSet}
-                    onToggleRepo={onToggleRepo}
-                    onDeleteRepository={onDeleteRepository}
-                    onToggleRepositoryPin={onToggleRepositoryPin}
-                    t={t}
+              repoUpdateCounts={repoUpdateCounts}
+              onToggleRepo={onToggleRepo}
+              onDeleteRepository={onDeleteRepository}
+              onToggleRepositoryPin={onToggleRepositoryPin}
+              t={t}
             />
           );
         }
@@ -61,7 +101,7 @@ export function RepositorySectionBlock({
             label={repo.name}
             active={selectionSet.has(repo.is_unknown ? "unassigned" : repo.id)}
             count={facetCounts.repositories[repo.id] ?? 0}
-            icon={<FolderOpen className="size-3.5" />}
+            icon={<RepoDot name={repo.name} />}
             testId={`repo-${repo.id}`}
             data-pinned={repo.pinned}
             className={
@@ -69,9 +109,15 @@ export function RepositorySectionBlock({
                 ? "border-primary/20 bg-primary/5 text-foreground"
                 : undefined
             }
-            onClick={() => onToggleRepo(repo.is_unknown ? "unassigned" : repo.id)}
+            onClick={() =>
+              onToggleRepo(repo.is_unknown ? "unassigned" : repo.id)
+            }
+            badge={
+              <RepoUpdateBadge count={repoUpdateCounts?.[repo.id] ?? 0} t={t} />
+            }
             trailingAction={
-              !repo.is_unknown && (onToggleRepositoryPin || onDeleteRepository) ? (
+              !repo.is_unknown &&
+              (onToggleRepositoryPin || onDeleteRepository) ? (
                 <RepoTrailingActions
                   repository={repo}
                   onTogglePin={onToggleRepositoryPin}
@@ -93,6 +139,7 @@ interface OwnerGroupProps {
   totalCount: number;
   facetCounts: FacetCounts;
   selectionSet: Set<string>;
+  repoUpdateCounts?: Record<string, number>;
   onToggleRepo: (id: string) => void;
   onDeleteRepository?: (repository: SkillRepositoryWithStats) => void;
   onToggleRepositoryPin?: (repository: SkillRepositoryWithStats) => void;
@@ -105,6 +152,7 @@ function OwnerGroup({
   totalCount,
   facetCounts,
   selectionSet,
+  repoUpdateCounts,
   onToggleRepo,
   onDeleteRepository,
   onToggleRepositoryPin,
@@ -129,12 +177,16 @@ function OwnerGroup({
         data-testid={`owner-${owner}`}
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        aria-label={expanded ? t("central.v2.ownerCollapse", { owner }) : t("central.v2.ownerExpand", { owner })}
+        aria-label={
+          expanded
+            ? t("central.v2.ownerCollapse", { owner })
+            : t("central.v2.ownerExpand", { owner })
+        }
         className={cn(
           "flex w-full items-center gap-1.5 rounded-md border px-2 py-1.5 text-left text-xs transition-colors",
           hasSelected
             ? "border-primary/20 bg-background text-foreground"
-            : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-background/70 hover:text-foreground"
+            : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-background/70 hover:text-foreground",
         )}
       >
         <Caret className="size-3 shrink-0" />
@@ -152,7 +204,7 @@ function OwnerGroup({
               label={repo.repo ?? repo.name}
               active={selectionSet.has(repo.id)}
               count={facetCounts.repositories[repo.id] ?? 0}
-              icon={<FolderOpen className="size-3 text-muted-foreground/70" />}
+              icon={<RepoDot name={repo.name} />}
               indentLevel={1}
               testId={`repo-${repo.id}`}
               data-pinned={repo.pinned}
@@ -162,6 +214,12 @@ function OwnerGroup({
                   : undefined
               }
               onClick={() => onToggleRepo(repo.id)}
+              badge={
+                <RepoUpdateBadge
+                  count={repoUpdateCounts?.[repo.id] ?? 0}
+                  t={t}
+                />
+              }
               trailingAction={
                 onToggleRepositoryPin || onDeleteRepository ? (
                   <RepoTrailingActions
@@ -204,10 +262,12 @@ function RepoTrailingActions({
             repository.pinned
               ? "central.v2.sidebarUnpinRepoLabel"
               : "central.v2.sidebarPinRepoLabel",
-            { name: displayName }
+            { name: displayName },
           )}
           title={t(
-            repository.pinned ? "central.v2.sidebarUnpinRepo" : "central.v2.sidebarPinRepo"
+            repository.pinned
+              ? "central.v2.sidebarUnpinRepo"
+              : "central.v2.sidebarPinRepo",
           )}
           onClick={(event) => {
             event.stopPropagation();
@@ -217,17 +277,23 @@ function RepoTrailingActions({
             "grid size-6 place-items-center rounded-md transition-colors",
             repository.pinned
               ? "text-primary hover:bg-primary/10"
-              : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
           )}
         >
-          {repository.pinned ? <PinOff className="size-3" /> : <Pin className="size-3" />}
+          {repository.pinned ? (
+            <PinOff className="size-3" />
+          ) : (
+            <Pin className="size-3" />
+          )}
         </button>
       )}
       {onDelete && (
         <button
           type="button"
           data-testid={`repo-delete-${repository.id}`}
-          aria-label={t("central.v2.sidebarDeleteRepoLabel", { name: displayName })}
+          aria-label={t("central.v2.sidebarDeleteRepoLabel", {
+            name: displayName,
+          })}
           title={t("central.v2.sidebarDeleteRepo")}
           onClick={(event) => {
             event.stopPropagation();
@@ -275,7 +341,10 @@ export function TagGroupBlock({
   const expansionToken = expansionSignal?.token;
   const forcedExpanded = expansionSignal?.expanded;
   const Caret = expanded ? ChevronDown : ChevronRight;
-  const totalCount = tags.reduce((acc, tag) => acc + (facetCounts.tags[tag.id] ?? 0), 0);
+  const totalCount = tags.reduce(
+    (acc, tag) => acc + (facetCounts.tags[tag.id] ?? 0),
+    0,
+  );
   const label = group?.name ?? ungroupedLabel ?? "Other";
   const testId = group ? `tag-group-${group.id}` : "tag-group-ungrouped";
 
@@ -292,7 +361,7 @@ export function TagGroupBlock({
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
         className={cn(
-          "flex w-full items-center gap-1.5 rounded-md border border-transparent px-2 py-1.5 text-left text-xs text-muted-foreground hover:border-border/70 hover:bg-background/70 hover:text-foreground"
+          "flex w-full items-center gap-1.5 rounded-md border border-transparent px-2 py-1.5 text-left text-xs text-muted-foreground hover:border-border/70 hover:bg-background/70 hover:text-foreground",
         )}
       >
         <Caret className="size-3 shrink-0" />
@@ -353,13 +422,22 @@ export function SidebarTagRow({
       aria-label={t ? t("central.v2.tagGroupsAssignTo") : "Assign tag to group"}
       data-testid={`tag-assign-${tag.id}`}
       value={tag.group_id ?? ""}
-      onChange={(e) => onAssignTagToGroup(tag.id, e.target.value === "" ? null : e.target.value)}
+      onChange={(e) =>
+        onAssignTagToGroup(
+          tag.id,
+          e.target.value === "" ? null : e.target.value,
+        )
+      }
       onClick={(e) => e.stopPropagation()}
       className="ml-1 rounded-md border border-border/60 bg-background px-1 py-0.5 text-[10px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
     >
-      <option value="">{t ? t("central.v2.tagGroupsAssignNone") : "None"}</option>
+      <option value="">
+        {t ? t("central.v2.tagGroupsAssignNone") : "None"}
+      </option>
       {tagGroups.map((g) => (
-        <option key={g.id} value={g.id}>{g.name}</option>
+        <option key={g.id} value={g.id}>
+          {g.name}
+        </option>
       ))}
     </select>
   ) : undefined;
@@ -369,7 +447,13 @@ export function SidebarTagRow({
       label={tag.name}
       active={active}
       count={count}
-      icon={<Tag className={indentLevel === 1 ? "size-3 text-muted-foreground/70" : "size-3.5"} />}
+      icon={
+        <Tag
+          className={
+            indentLevel === 1 ? "size-3 text-muted-foreground/70" : "size-3.5"
+          }
+        />
+      }
       indentLevel={indentLevel}
       testId={`tag-${tag.id}`}
       onClick={onToggle}

@@ -12,7 +12,7 @@ import {
 import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
 import { markAppPerformance } from "@/lib/performance";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
-import { CentralSidebarHeader } from "@/components/central/CentralSidebarHeader";
+import { CentralSavedViewsSection } from "@/components/central/CentralSavedViewsSection";
 import { CentralSkillsShell } from "@/components/central/CentralSkillsShell";
 import { CentralStoreLocationDialog } from "@/components/central/CentralStoreLocationDialog";
 import { CommandPalette } from "@/components/central/CommandPalette";
@@ -777,12 +777,34 @@ export function CentralSkillsView() {
     disabled: checkButtonProps.disabled,
   });
 
-  const sidebarHeaderSlot = (
-    <CentralSidebarHeader
-      savedViewsBridge={savedViewsBridge}
-      tagGroupsBridge={tagGroupsBridge}
+  // Saved Views 下沉到侧栏底部（仅此段；Tag Groups 迁至顶部筛选「更多」）。
+  const savedViewsSlot = (
+    <CentralSavedViewsSection
+      savedViews={savedViewsBridge.savedViews}
+      activeSavedViewId={savedViewsBridge.activeSavedViewId}
+      currentQueryString={savedViewsBridge.v2QueryString}
+      canSaveCurrent={savedViewsBridge.canSaveCurrent}
+      onApply={savedViewsBridge.handleApplySavedView}
+      onSaveCurrent={savedViewsBridge.handleSaveCurrentView}
+      onRename={savedViewsBridge.handleRenameSavedView}
+      onDelete={savedViewsBridge.handleDeleteSavedView}
+      onTogglePin={savedViewsBridge.handleTogglePinSavedView}
     />
   );
+
+  // repo.id → 该 repo 下「可更新」skill 数（侧栏 repo 行角标）。
+  const repoUpdateCounts = useMemo(() => {
+    const acc: Record<string, number> = {};
+    for (const skill of skills) {
+      if (
+        updateStatuses[skill.id]?.status === "update_available" &&
+        skill.repository?.id
+      ) {
+        acc[skill.repository.id] = (acc[skill.repository.id] ?? 0) + 1;
+      }
+    }
+    return acc;
+  }, [skills, updateStatuses]);
 
   const handleCentralStoreLocationApplied = useCentralStoreLocationApplied({
     loadCentralSkills,
@@ -804,6 +826,7 @@ export function CentralSkillsView() {
         queryAst={v2.queryAst}
         facetCounts={v2.facetCounts}
         repositories={repositories}
+        repoUpdateCounts={repoUpdateCounts}
         tags={tags}
         sortFieldOptions={sortFieldOptions}
         sortDirectionOptions={sortDirectionOptions}
@@ -831,7 +854,7 @@ export function CentralSkillsView() {
         updateButton={updateButtonProps}
         checkButton={updateCheckMode.checkButton}
         onOpenPalette={() => setCommandPaletteOpen(true)}
-        savedViewsSlot={sidebarHeaderSlot}
+        savedViewsSlot={savedViewsSlot}
         tagGroups={tagGroupsBridge.tagGroups}
         onAssignTagToGroup={tagGroupsBridge.handleAssignTagToGroup}
         onDeleteRepository={(repo) => {
