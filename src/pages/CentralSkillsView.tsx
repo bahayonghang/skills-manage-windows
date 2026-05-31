@@ -13,6 +13,7 @@ import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync
 import { markAppPerformance } from "@/lib/performance";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { CentralSavedViewsSection } from "@/components/central/CentralSavedViewsSection";
+import { CentralTagGroupsSection } from "@/components/central/CentralTagGroupsSection";
 import { CentralSkillsShell } from "@/components/central/CentralSkillsShell";
 import { CentralStoreLocationDialog } from "@/components/central/CentralStoreLocationDialog";
 import { CommandPalette } from "@/components/central/CommandPalette";
@@ -792,6 +793,16 @@ export function CentralSkillsView() {
     />
   );
 
+  // Tag Groups 管理迁至顶部筛选「更多▾」。
+  const tagGroupsSlot = (
+    <CentralTagGroupsSection
+      tagGroups={tagGroupsBridge.tagGroups}
+      onCreate={() => tagGroupsBridge.handleCreateTagGroup()}
+      onRename={tagGroupsBridge.handleRenameTagGroup}
+      onDelete={tagGroupsBridge.handleDeleteTagGroup}
+    />
+  );
+
   // repo.id → 该 repo 下「可更新」skill 数（侧栏 repo 行角标）。
   const repoUpdateCounts = useMemo(() => {
     const acc: Record<string, number> = {};
@@ -855,8 +866,7 @@ export function CentralSkillsView() {
         checkButton={updateCheckMode.checkButton}
         onOpenPalette={() => setCommandPaletteOpen(true)}
         savedViewsSlot={savedViewsSlot}
-        tagGroups={tagGroupsBridge.tagGroups}
-        onAssignTagToGroup={tagGroupsBridge.handleAssignTagToGroup}
+        topFiltersTagGroups={tagGroupsSlot}
         onDeleteRepository={(repo) => {
           void handleRepositoryDeleteClick(repo);
         }}

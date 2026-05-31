@@ -26,6 +26,10 @@ import { CentralSkillDialogs } from "@/components/central/CentralSkillDialogs";
 import { CentralSkillListContent } from "@/components/central/CentralSkillListContent";
 import { CentralSearchBar } from "@/components/central/CentralSearchBar";
 import { CentralSidebar } from "@/components/central/CentralSidebar";
+import {
+  CentralTopFilters,
+  type SourceFilterValue,
+} from "@/components/central/CentralTopFilters";
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";
@@ -44,7 +48,6 @@ import type {
   SkillRepositoryWithStats,
   SkillTag,
   SkillportStatePortabilityJob,
-  TagGroup,
 } from "@/types";
 
 /**
@@ -90,10 +93,8 @@ export interface CentralSkillsShellProps {
   /** repo.id → 可更新 skill 数（侧栏 repo 行角标）。 */
   repoUpdateCounts?: Record<string, number>;
   tags: readonly SkillTag[];
-  /** 标签分组（M3）。 */
-  tagGroups?: readonly TagGroup[];
-  /** 分配 tag 到分组（M6）。 */
-  onAssignTagToGroup?: (tagId: string, groupId: string | null) => void;
+  /** 顶部筛选「更多▾」内的 Tag Groups 管理 UI。 */
+  topFiltersTagGroups?: ReactNode;
 
   // 排序选项（与 V1 保持一致）
   sortFieldOptions: Array<{ value: CentralSortField; label: string }>;
@@ -183,6 +184,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
     repositories,
     repoUpdateCounts,
     tags,
+    topFiltersTagGroups,
     sortFieldOptions,
     sortDirectionOptions,
     groupByOptions,
@@ -233,6 +235,25 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   const handleToggleTag = (tagId: string) => {
     const next = toggleId(viewState.tags, tagId);
     setViewState({ ...viewState, tags: next });
+  };
+
+  // 来源筛选走 query AST 的 source: token（与 chip 渲染共享）。
+  const sourceFilter = queryAst.filters.find(
+    (f) => f.kind === "source" && !f.negated,
+  );
+  const activeSource: SourceFilterValue | null =
+    sourceFilter?.kind === "source" ? sourceFilter.value : null;
+
+  const handleToggleSource = (value: SourceFilterValue | null) => {
+    let q = viewState.q;
+    for (const f of queryAst.filters) {
+      if (f.kind === "source") {
+        const tok = filterToToken(f);
+        if (tok) q = stripFirstOccurrence(q, tok);
+      }
+    }
+    const nextQ = value ? `${q} source:${value}`.trim() : q.trim();
+    setViewState({ ...viewState, q: nextQ });
   };
 
   const handleClearAll = () => {
@@ -443,6 +464,17 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           )}
         </div>
       </div>
+
+      <CentralTopFilters
+        t={t}
+        tags={tags}
+        selectedTagIds={viewState.tags}
+        onToggleTag={handleToggleTag}
+        facetCounts={facetCounts}
+        activeSource={activeSource}
+        onToggleSource={handleToggleSource}
+        tagGroupsSlot={topFiltersTagGroups}
+      />
 
       <CentralSelectionControls
         t={t}

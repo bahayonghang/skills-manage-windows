@@ -1,0 +1,68 @@
+import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { TFunction } from "i18next";
+
+import { CentralTopFilters } from "../components/central/CentralTopFilters";
+import type { FacetCounts } from "../lib/centralFacetCounts";
+import type { SkillTag } from "../types";
+
+const t = ((key: string, options?: Record<string, unknown>) => {
+  if (options && "count" in options) return `${key}:${options.count}`;
+  return key;
+}) as TFunction;
+
+const tags: SkillTag[] = [
+  {
+    id: "t1",
+    name: "frontend",
+    is_builtin: false,
+    created_at: "",
+    updated_at: "",
+  },
+];
+
+const facetCounts: FacetCounts = {
+  repositories: { all: 1 },
+  tags: { t1: 3 },
+  smartViews: { all: 1, uncategorized: 0, updates: 0, aiReview: 0 },
+};
+
+function renderFilters(overrides: Partial<Parameters<typeof CentralTopFilters>[0]> = {}) {
+  const props = {
+    t,
+    tags,
+    selectedTagIds: [] as string[],
+    onToggleTag: vi.fn(),
+    facetCounts,
+    activeSource: null as "github" | "local" | "manual" | null,
+    onToggleSource: vi.fn(),
+    tagGroupsSlot: null,
+    ...overrides,
+  };
+  render(<CentralTopFilters {...props} />);
+  return props;
+}
+
+describe("CentralTopFilters", () => {
+  it("点击标签 pill 切换该标签", async () => {
+    const onToggleTag = vi.fn();
+    renderFilters({ onToggleTag });
+    await userEvent.click(screen.getByTestId("top-filter-tag-t1"));
+    expect(onToggleTag).toHaveBeenCalledWith("t1");
+  });
+
+  it("点击来源 pill 切换来源", async () => {
+    const onToggleSource = vi.fn();
+    renderFilters({ onToggleSource });
+    await userEvent.click(screen.getByTestId("top-filter-source-github"));
+    expect(onToggleSource).toHaveBeenCalledWith("github");
+  });
+
+  it("点击已选来源的「全部」清空来源", async () => {
+    const onToggleSource = vi.fn();
+    renderFilters({ onToggleSource, activeSource: "github" });
+    await userEvent.click(screen.getByTestId("top-filter-source-all"));
+    expect(onToggleSource).toHaveBeenCalledWith(null);
+  });
+});
