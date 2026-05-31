@@ -11,16 +11,11 @@ sync-version:
 # 步骤2：检查工作流
 # ========================================================================
 # 目标：
-# 1) 运行前端类型检查、ESLint
-# 2) 运行前端测试与源码体积预算检查
-# 3) 运行 Rust 单元测试与 clippy 静态检查
+# 1) 先同步版本元数据
+# 2) 并行运行 Web 链（typecheck -> lint -> sizecheck -> test）
+# 3) 并行运行 Rust 链（clippy -> test）
 ci: sync-version
-    pnpm typecheck
-    pnpm lint
-    pnpm test
-    pnpm sizecheck
-    cargo test --manifest-path src-tauri/Cargo.toml
-    cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+    node scripts/run-ci.mjs
 
 # ========================================================================
 # 步骤3：构建桌面应用

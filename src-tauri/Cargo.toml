@@ -45,3 +45,9 @@ tempfile = "3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+
+[profile.dev]
+debug = 0
+
+[profile.test]
+debug = 0
