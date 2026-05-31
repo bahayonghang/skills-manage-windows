@@ -3,14 +3,14 @@ import { getRepoDotColor, getTagColor } from "@/lib/tagColor";
 
 describe("getTagColor", () => {
   it("hex 颜色优先于哈希", () => {
-    const a = getTagColor({ id: "1", name: "anything", color: "#ff8800" });
+    const a = getTagColor({ name: "anything", color: "#ff8800" });
     expect(a.style?.color).toBeTruthy();
     expect(a.className).toBeUndefined();
   });
 
   it("无颜色时按名哈希且确定", () => {
-    const a = getTagColor({ id: "1", name: "frontend" });
-    const b = getTagColor({ id: "2", name: "frontend" });
+    const a = getTagColor({ name: "frontend" });
+    const b = getTagColor({ name: "frontend" });
     expect(a.className).toBe(b.className);
     expect(a.className).toBeTruthy();
   });
@@ -18,7 +18,7 @@ describe("getTagColor", () => {
   it("不同名分散到不同色（大概率）", () => {
     const names = ["a", "b", "c", "d", "e", "f", "g", "h"];
     const classes = new Set(
-      names.map((n) => getTagColor({ id: n, name: n }).className),
+      names.map((n) => getTagColor({ name: n }).className),
     );
     expect(classes.size).toBeGreaterThan(1);
   });

@@ -85,7 +85,9 @@ export interface CentralSkillsActionsDeps {
   t: TFunction;
 }
 
-function skippedCount(result: BatchInstallResult | CentralBatchInstallResult): number {
+function skippedCount(
+  result: BatchInstallResult | CentralBatchInstallResult,
+): number {
   return result.skipped?.length ?? 0;
 }
 
@@ -95,18 +97,37 @@ export function useCentralSkillsActions({
   setters,
   t,
 }: CentralSkillsActionsDeps) {
-  const acceptAiTagReview = useCentralSkillsStore((store) => store.acceptAiTagReview);
-  const assignSkillTags = useCentralSkillsStore((store) => store.assignSkillTags);
-  const batchInstallSkills = useCentralSkillsStore((store) => store.batchInstallSkills);
-  const bulkSuggestSkillTags = useCentralSkillsStore((store) => store.bulkSuggestSkillTags);
+  const acceptAiTagReview = useCentralSkillsStore(
+    (store) => store.acceptAiTagReview,
+  );
+  const assignSkillTags = useCentralSkillsStore(
+    (store) => store.assignSkillTags,
+  );
+  const unassignSkillTags = useCentralSkillsStore(
+    (store) => store.unassignSkillTags,
+  );
+  const batchInstallSkills = useCentralSkillsStore(
+    (store) => store.batchInstallSkills,
+  );
+  const bulkSuggestSkillTags = useCentralSkillsStore(
+    (store) => store.bulkSuggestSkillTags,
+  );
   const cancelAiTagJob = useCentralSkillsStore((store) => store.cancelAiTagJob);
   const createTag = useCentralSkillsStore((store) => store.createTag);
   const installSkill = useCentralSkillsStore((store) => store.installSkill);
-  const loadCentralSkills = useCentralSkillsStore((store) => store.loadCentralSkills);
-  const skipAiTagReview = useCentralSkillsStore((store) => store.skipAiTagReview);
-  const togglePlatformLink = useCentralSkillsStore((store) => store.togglePlatformLink);
+  const loadCentralSkills = useCentralSkillsStore(
+    (store) => store.loadCentralSkills,
+  );
+  const skipAiTagReview = useCentralSkillsStore(
+    (store) => store.skipAiTagReview,
+  );
+  const togglePlatformLink = useCentralSkillsStore(
+    (store) => store.togglePlatformLink,
+  );
   const currentDetail = useSkillDetailStore((store) => store.detail);
-  const refreshDetailInstallations = useSkillDetailStore((store) => store.refreshInstallations);
+  const refreshDetailInstallations = useSkillDetailStore(
+    (store) => store.refreshInstallations,
+  );
   const refreshCounts = usePlatformStore((store) => store.refreshCounts);
 
   const {
@@ -249,10 +270,15 @@ export function useCentralSkillsActions({
     skillId: string,
     agentIds: string[],
     method: "symlink" | "copy",
-    projectPath?: string | null
+    projectPath?: string | null,
   ) {
     try {
-      const result = await installSkill(skillId, agentIds, method, projectPath) as BatchInstallResult;
+      const result = (await installSkill(
+        skillId,
+        agentIds,
+        method,
+        projectPath,
+      )) as BatchInstallResult;
       await refreshCounts();
       if (currentDetail?.id === skillId) {
         await refreshDetailInstallations(skillId);
@@ -267,20 +293,20 @@ export function useCentralSkillsActions({
             skippedCount: skippedCount(result),
             failedCount: result.failed.length,
             platforms: failedNames,
-          })
+          }),
         );
       } else if (skippedCount(result) > 0) {
         toast.success(
           t("central.installSkippedToast", {
             succeededCount: result.succeeded.length,
             skippedCount: skippedCount(result),
-          })
+          }),
         );
       } else {
         toast.success(
           t("central.installSuccessToast", {
             succeededCount: result.succeeded.length,
-          })
+          }),
         );
       }
       return result;
@@ -293,19 +319,19 @@ export function useCentralSkillsActions({
   async function handleBatchInstallCentralSkills(
     agentIds: string[],
     method: "symlink" | "copy",
-    projectPath?: string | null
+    projectPath?: string | null,
   ) {
     const requestedSkillIds = [...selectedSkillIds];
     const requestedSkillCount = requestedSkillIds.length;
     const platformCount = agentIds.length;
 
     try {
-      const result = await batchInstallSkills(
+      const result = (await batchInstallSkills(
         requestedSkillIds,
         agentIds,
         method,
-        projectPath
-      ) as CentralBatchInstallResult;
+        projectPath,
+      )) as CentralBatchInstallResult;
       await refreshCounts();
       if (result.failed.length > 0) {
         toast.error(
@@ -315,7 +341,7 @@ export function useCentralSkillsActions({
             succeededCount: result.succeeded.length,
             skippedCount: skippedCount(result),
             failedCount: result.failed.length,
-          })
+          }),
         );
       } else if (skippedCount(result) > 0) {
         toast.success(
@@ -324,7 +350,7 @@ export function useCentralSkillsActions({
             platformCount,
             succeededCount: result.succeeded.length,
             skippedCount: skippedCount(result),
-          })
+          }),
         );
         setSelectedSkillIds([]);
       } else {
@@ -332,7 +358,7 @@ export function useCentralSkillsActions({
           t("central.batchInstallSuccess", {
             skillCount: requestedSkillCount,
             platformCount,
-          })
+          }),
         );
         setSelectedSkillIds([]);
       }
@@ -347,7 +373,7 @@ export function useCentralSkillsActions({
     setSelectedSkillIds((current) =>
       current.includes(skillId)
         ? current.filter((id) => id !== skillId)
-        : [...current, skillId]
+        : [...current, skillId],
     );
   }
 
@@ -360,9 +386,12 @@ export function useCentralSkillsActions({
       currentViewSkills
         .filter((skill) => {
           const skillTags = skill.tags ?? [];
-          return skillTags.length === 0 || skillTags.some((tag) => tag.id === "uncategorized");
+          return (
+            skillTags.length === 0 ||
+            skillTags.some((tag) => tag.id === "uncategorized")
+          );
         })
-        .map((skill) => skill.id)
+        .map((skill) => skill.id),
     );
   }
 
@@ -370,7 +399,7 @@ export function useCentralSkillsActions({
     setManualSelectedTagIds((current) =>
       current.includes(tagId)
         ? current.filter((id) => id !== tagId)
-        : [...current, tagId]
+        : [...current, tagId],
     );
   }
 
@@ -380,22 +409,33 @@ export function useCentralSkillsActions({
     try {
       const tag = await createTag(name);
       setManualSelectedTagIds((current) =>
-        current.includes(tag.id) ? current : [...current, tag.id]
+        current.includes(tag.id) ? current : [...current, tag.id],
       );
       setManualTagQuery("");
       toast.success(t("central.tagCreated"));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
+      toast.error(
+        t("central.metadataError", { error: formatBackendError(err, t) }),
+      );
     }
   }
 
   async function handleApplyManualTags() {
-    if (!assignSkillTags || selectedSkillIds.length === 0 || manualSelectedTagIds.length === 0) return;
+    if (
+      !assignSkillTags ||
+      selectedSkillIds.length === 0 ||
+      manualSelectedTagIds.length === 0
+    )
+      return;
     try {
       await assignSkillTags(selectedSkillIds, manualSelectedTagIds);
-      toast.success(t("central.tagsAssigned", { count: selectedSkillIds.length }));
+      toast.success(
+        t("central.tagsAssigned", { count: selectedSkillIds.length }),
+      );
     } catch (err) {
-      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
+      toast.error(
+        t("central.metadataError", { error: formatBackendError(err, t) }),
+      );
     }
   }
 
@@ -405,18 +445,27 @@ export function useCentralSkillsActions({
       await acceptAiTagReview(review.skill_id, [review.tag.id]);
       toast.success(t("central.reviewAccepted"));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
+      toast.error(
+        t("central.metadataError", { error: formatBackendError(err, t) }),
+      );
     }
   }
 
   async function handleApplyManualTagsToReview(review: SkillAiTagReview) {
-    if (!assignSkillTags || !skipAiTagReview || manualSelectedTagIds.length === 0) return;
+    if (
+      !assignSkillTags ||
+      !skipAiTagReview ||
+      manualSelectedTagIds.length === 0
+    )
+      return;
     try {
       await assignSkillTags([review.skill_id], manualSelectedTagIds);
       await skipAiTagReview(review.skill_id);
       toast.success(t("central.reviewChanged"));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
+      toast.error(
+        t("central.metadataError", { error: formatBackendError(err, t) }),
+      );
     }
   }
 
@@ -426,7 +475,9 @@ export function useCentralSkillsActions({
       await skipAiTagReview(review.skill_id);
       toast.success(t("central.reviewSkipped"));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
+      toast.error(
+        t("central.metadataError", { error: formatBackendError(err, t) }),
+      );
     }
   }
 
@@ -434,12 +485,19 @@ export function useCentralSkillsActions({
     if (!bulkSuggestSkillTags || selectedSkillIds.length === 0) return;
     try {
       const result = await bulkSuggestSkillTags(selectedSkillIds);
-      const succeeded = result.filter((item) => item.succeeded !== false && !item.error).length;
+      const succeeded = result.filter(
+        (item) => item.succeeded !== false && !item.error,
+      ).length;
       const failed = result.length - succeeded;
-      const review = result.reduce((count, item) => count + (item.low_confidence_count ?? 0), 0);
+      const review = result.reduce(
+        (count, item) => count + (item.low_confidence_count ?? 0),
+        0,
+      );
       toast.success(t("central.aiTagsFinished", { succeeded, failed, review }));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
+      toast.error(
+        t("central.metadataError", { error: formatBackendError(err, t) }),
+      );
     }
   }
 
@@ -449,7 +507,9 @@ export function useCentralSkillsActions({
       await cancelAiTagJob();
       toast.info(t("central.aiTagCancelRequested"));
     } catch (err) {
-      toast.error(t("central.metadataError", { error: formatBackendError(err, t) }));
+      toast.error(
+        t("central.metadataError", { error: formatBackendError(err, t) }),
+      );
     }
   }
 
@@ -462,6 +522,41 @@ export function useCentralSkillsActions({
     }
   }
 
+  // ── 卡上标签增删（central 方案C） ──
+  async function handleAddSkillTag(skillId: string, tagId: string) {
+    if (!assignSkillTags) return;
+    try {
+      await assignSkillTags([skillId], [tagId]);
+    } catch (err) {
+      toast.error(
+        t("central.metadataError", { error: formatBackendError(err, t) }),
+      );
+    }
+  }
+
+  async function handleCreateSkillTag(skillId: string, name: string) {
+    if (!createTag || !assignSkillTags) return;
+    try {
+      const tag = await createTag(name);
+      await assignSkillTags([skillId], [tag.id]);
+    } catch (err) {
+      toast.error(
+        t("central.metadataError", { error: formatBackendError(err, t) }),
+      );
+    }
+  }
+
+  async function handleRemoveSkillTag(skillId: string, tagId: string) {
+    if (!unassignSkillTags) return;
+    try {
+      await unassignSkillTags(skillId, [tagId]);
+    } catch (err) {
+      toast.error(
+        t("central.metadataError", { error: formatBackendError(err, t) }),
+      );
+    }
+  }
+
   return {
     ...deleteWorkflow,
     ...updateWorkflow,
@@ -469,6 +564,9 @@ export function useCentralSkillsActions({
     handleApplyManualTags,
     handleApplyManualTagsToReview,
     handleAcceptReview,
+    handleAddSkillTag,
+    handleCreateSkillTag,
+    handleRemoveSkillTag,
     handleBatchInstallCentralSkills,
     handleBulkSuggestTags,
     handleCancelAiTagJob,

@@ -3,11 +3,13 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 
+import { statusAccentOf } from "@/components/central/CentralSkillListContent";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type { SkillGroup } from "@/lib/centralGrouping";
+import { getRepoDotColor } from "@/lib/tagColor";
 import { cn } from "@/lib/utils";
 import type { CentralSkillUpdateState, SkillWithLinks } from "@/types";
 
@@ -37,6 +39,10 @@ export interface CentralGroupedSkillListProps {
   onUpdateCentral: (skillIds: string[]) => void;
   onDelete: (skill: SkillWithLinks) => void;
   onTogglePlatform: (skillId: string, agentId: string) => Promise<void>;
+  onAddSkillTag?: (skillId: string, tagId: string) => void;
+  onCreateSkillTag?: (skillId: string, name: string) => void;
+  onRemoveSkillTag?: (skillId: string, tagId: string) => void;
+  tags?: readonly { id: string; name: string; color?: string | null }[];
   t: TFunction;
 }
 
@@ -56,6 +62,10 @@ export function CentralGroupedSkillList({
   onUpdateCentral,
   onDelete,
   onTogglePlatform,
+  onAddSkillTag,
+  onCreateSkillTag,
+  onRemoveSkillTag,
+  tags,
   t,
 }: CentralGroupedSkillListProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -118,48 +128,89 @@ export function CentralGroupedSkillList({
                   className="grid grid-cols-1 gap-4 lg:grid-cols-2"
                   data-testid={`group-body-${group.key}`}
                 >
-                  {group.skills.map((skill) => (
-                    <UnifiedSkillCard
-                      key={skill.id}
-                      name={skill.name}
-                      description={skill.description}
-                      aiSummary={aiSummaries[skill.id]}
-                      usageBadge={usageCounts?.[skill.name]}
-                      checkbox={{
-                        checked: selectedSkillIdSet.has(skill.id),
-                        onChange: () => onToggleSelection(skill.id),
-                      }}
-                      tags={(skill.tags ?? []).map((tag) => ({
-                        key: tag.id,
-                        label: tag.name,
-                      }))}
-                      publisher={skill.repository?.name}
-                      updateStatus={
-                        updateStatuses[skill.id]
-                          ? {
-                              ...updateStatuses[skill.id],
-                              isUpdating: updatingSkillIds.includes(skill.id),
-                            }
-                          : undefined
-                      }
-                      onDetail={() => onDetail(skill.id)}
-                      onInstallTo={() => onInstallTo(skill)}
-                      onUpdateCentral={() => onUpdateCentral([skill.id])}
-                      onDeleteFromCentral={() => onDelete(skill)}
-                      detailButtonRef={(node) =>
-                        setDetailButtonRef(skill.id, node)
-                      }
-                      platformIcons={{
-                        agents: availableInstallAgents,
-                        linkedAgents: skill.linked_agents,
-                        lockedAgentIds: skill.shared_root_agents,
-                        skillId: skill.id,
-                        onToggle: onTogglePlatform,
-                        togglingAgentId,
-                      }}
-                      density="compact"
-                    />
-                  ))}
+                  {group.skills.map((skill) => {
+                    const skillTags = (skill.tags ?? []).map((tag) => ({
+                      id: tag.id,
+                      name: tag.name,
+                      color: tag.color,
+                    }));
+                    const allTags = (tags ?? []).map((tag) => ({
+                      id: tag.id,
+                      name: tag.name,
+                      color: tag.color,
+                    }));
+                    const status = updateStatuses[skill.id]?.status;
+                    const statusAccent = statusAccentOf(status);
+                    const statusChipLabel =
+                      statusAccent && status
+                        ? t(`central.updateStatus.${status}`)
+                        : undefined;
+
+                    return (
+                      <UnifiedSkillCard
+                        key={skill.id}
+                        name={skill.name}
+                        description={skill.description}
+                        aiSummary={aiSummaries[skill.id]}
+                        usageBadge={usageCounts?.[skill.name]}
+                        statusAccent={statusAccent}
+                        statusChipLabel={statusChipLabel}
+                        checkbox={{
+                          checked: selectedSkillIdSet.has(skill.id),
+                          onChange: () => onToggleSelection(skill.id),
+                        }}
+                        tags={(skill.tags ?? []).map((tag) => ({
+                          key: tag.id,
+                          label: tag.name,
+                        }))}
+                        publisher={skill.repository?.name}
+                        updateStatus={
+                          updateStatuses[skill.id]
+                            ? {
+                                ...updateStatuses[skill.id],
+                                isUpdating: updatingSkillIds.includes(skill.id),
+                              }
+                            : undefined
+                        }
+                        onDetail={() => onDetail(skill.id)}
+                        onInstallTo={() => onInstallTo(skill)}
+                        onUpdateCentral={() => onUpdateCentral([skill.id])}
+                        onDeleteFromCentral={() => onDelete(skill)}
+                        detailButtonRef={(node) =>
+                          setDetailButtonRef(skill.id, node)
+                        }
+                        platformIcons={{
+                          agents: availableInstallAgents,
+                          linkedAgents: skill.linked_agents,
+                          lockedAgentIds: skill.shared_root_agents,
+                          skillId: skill.id,
+                          onToggle: onTogglePlatform,
+                          togglingAgentId,
+                        }}
+                        editableTags={
+                          onAddSkillTag && onCreateSkillTag && onRemoveSkillTag
+                            ? {
+                                tags: skillTags,
+                                allTags,
+                                onAdd: (tagId) =>
+                                  onAddSkillTag(skill.id, tagId),
+                                onCreate: (name) =>
+                                  onCreateSkillTag(skill.id, name),
+                                onRemove: (tagId) =>
+                                  onRemoveSkillTag(skill.id, tagId),
+                              }
+                            : undefined
+                        }
+                        footer={{
+                          repoName: skill.repository?.name,
+                          repoColor: skill.repository?.name
+                            ? getRepoDotColor(skill.repository.name)
+                            : undefined,
+                        }}
+                        density="compact"
+                      />
+                    );
+                  })}
                 </div>
               )}
             </section>

@@ -16,13 +16,9 @@ import {
   ToolbarViewMenu,
   ToolbarMoreMenu,
 } from "@/components/central/CentralSkillsShellMenus";
-import {
-  CentralProgressTopLine,
-} from "@/components/central/CentralProgressTopLine";
+import { CentralProgressTopLine } from "@/components/central/CentralProgressTopLine";
 import { countActiveCentralTasks } from "@/components/central/centralTaskCenterHelpers";
-import {
-  TaskCenterDrawer,
-} from "@/components/central/TaskCenterDrawer";
+import { TaskCenterDrawer } from "@/components/central/TaskCenterDrawer";
 import { BulkActionBar } from "@/components/central/BulkActionBar";
 import { CategorizeDrawer } from "@/components/central/CategorizeDrawer";
 import type { CentralSkillCategorizePanelProps } from "@/components/central/CentralSkillCategorizePanel";
@@ -60,10 +56,16 @@ import type {
  * - 通过 viewState / setViewState 驱动新视图状态（repo 单选、tag 多选 + URL state 同步）
  */
 
-type ListContentProps = Omit<ComponentProps<typeof CentralSkillListContent>, "t" | "selectedCount">;
+type ListContentProps = Omit<
+  ComponentProps<typeof CentralSkillListContent>,
+  "t" | "selectedCount"
+>;
 type CategorizePanelProps = Omit<CentralSkillCategorizePanelProps, "t">;
 type DialogProps = Omit<ComponentProps<typeof CentralSkillDialogs>, "t">;
-type InstalledSkillsFilterProps = Omit<CentralInstalledSkillsQuickFilterProps, "t">;
+type InstalledSkillsFilterProps = Omit<
+  CentralInstalledSkillsQuickFilterProps,
+  "t"
+>;
 
 export interface CentralSkillsShellProps {
   t: TFunction;
@@ -73,7 +75,9 @@ export interface CentralSkillsShellProps {
   isCheckingUpdates: boolean;
   filterSidebarWidth: number;
   startFilterSidebarResize: (event: React.PointerEvent<HTMLElement>) => void;
-  handleFilterSidebarResizeKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+  handleFilterSidebarResizeKeyDown: (
+    event: React.KeyboardEvent<HTMLElement>,
+  ) => void;
 
   // V2 view state（来自 useCentralViewState 或 Shell 外维护的 hook）
   viewState: CentralViewState;
@@ -205,7 +209,8 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
 
   const openUpdateCenter = useUpdateCenterStore((s) => s.openDialog);
   const updateCenterRefreshContext = useMemo(() => {
-    const selectedRepoId = viewState.repos.length === 1 ? viewState.repos[0] : null;
+    const selectedRepoId =
+      viewState.repos.length === 1 ? viewState.repos[0] : null;
     const selectedRepo = selectedRepoId
       ? repositories.find((repo) => repo.id === selectedRepoId)
       : null;
@@ -267,7 +272,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   const activeTaskCount = countActiveCentralTasks(
     taskCenter.aiTagJob,
     taskCenter.updateJob,
-    taskCenter.portabilityJob
+    taskCenter.portabilityJob,
   );
 
   return (
@@ -280,9 +285,14 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       {/* Header ─────────────────────────────────────────────────────── */}
       <div className="border-b border-border px-6 py-3 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold leading-tight">{t("central.title")}</h1>
+          <h1 className="text-xl font-semibold leading-tight">
+            {t("central.title")}
+          </h1>
           <div className="mt-0.5 flex min-w-0 items-center gap-2">
-            <p className="truncate text-[11px] text-muted-foreground/70" title={centralSkillsDir}>
+            <p
+              className="truncate text-[11px] text-muted-foreground/70"
+              title={centralSkillsDir}
+            >
               {centralSkillsDir}
             </p>
             <Button
@@ -314,7 +324,9 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           {/* 入口：更新中心（聚合可更新 / 新增 / 已删除 / 平台冗余）─── */}
           <Button
             variant="outline"
-            onClick={() => openUpdateCenter(undefined, updateCenterRefreshContext)}
+            onClick={() =>
+              openUpdateCenter(undefined, updateCenterRefreshContext)
+            }
             data-testid="central-open-update-center"
           >
             <ListChecks className="size-3.5" />
@@ -328,7 +340,9 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
             disabled={checkButton.disabled}
             data-testid="central-check-updates"
           >
-            <RefreshCw className={cn("size-3.5", isCheckingUpdates && "animate-spin")} />
+            <RefreshCw
+              className={cn("size-3.5", isCheckingUpdates && "animate-spin")}
+            />
             {checkButton.label}
             {updateAvailableSkillCount > 0 && (
               <span
@@ -383,7 +397,9 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
               onRemoveTagFilter={handleRemoveTag}
               installedFilterValue={installedSkillsFilter.value}
               installedFilterMatchCount={installedSkillsFilter.filteredCount}
-              availableInstallAgents={installedSkillsFilter.availableInstallAgents}
+              availableInstallAgents={
+                installedSkillsFilter.availableInstallAgents
+              }
               onClearInstalledFilter={installedSkillsFilter.onClear}
             />
           </div>
@@ -512,7 +528,6 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   );
 }
 
-
 interface CentralSelectionControlsProps {
   t: TFunction;
   selectedCount: number;
@@ -533,7 +548,10 @@ function CentralSelectionControls({
   return (
     <div className="border-b border-border/70 px-6 py-2">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span data-testid="central-selection-summary" className="font-medium text-foreground">
+        <span
+          data-testid="central-selection-summary"
+          className="font-medium text-foreground"
+        >
           {t("central.selectionSummary", {
             selectedCount,
             currentCount: currentResultCount,
@@ -574,7 +592,12 @@ interface GroupedListViewProps {
   t: TFunction;
 }
 
-function GroupedListView({ listContent, selectedCount, group, t }: GroupedListViewProps) {
+function GroupedListView({
+  listContent,
+  selectedCount,
+  group,
+  t,
+}: GroupedListViewProps) {
   const groups = useMemo(
     () =>
       groupSkillsByMode(listContent.sortedSkills, group, {
@@ -609,6 +632,10 @@ function GroupedListView({ listContent, selectedCount, group, t }: GroupedListVi
       onUpdateCentral={listContent.onUpdateCentral}
       onDelete={listContent.onDelete}
       onTogglePlatform={listContent.onTogglePlatform}
+      onAddSkillTag={listContent.onAddSkillTag}
+      onCreateSkillTag={listContent.onCreateSkillTag}
+      onRemoveSkillTag={listContent.onRemoveSkillTag}
+      tags={listContent.tags}
       t={t}
     />
   );
@@ -622,9 +649,18 @@ function toggleId(arr: readonly string[], id: string): string[] {
   return [...set];
 }
 
-function filterToToken(filter: CentralQueryAst["filters"][number]): string | null {
+function filterToToken(
+  filter: CentralQueryAst["filters"][number],
+): string | null {
   const prefix = filter.negated ? "-" : "";
-  if (filter.kind === "tag" || filter.kind === "repo" || filter.kind === "owner" || filter.kind === "source" || filter.kind === "has" || filter.kind === "platform") {
+  if (
+    filter.kind === "tag" ||
+    filter.kind === "repo" ||
+    filter.kind === "owner" ||
+    filter.kind === "source" ||
+    filter.kind === "has" ||
+    filter.kind === "platform"
+  ) {
     return `${prefix}${filter.kind}:${filter.value}`;
   }
   if (filter.kind === "created" || filter.kind === "updated") {
@@ -635,7 +671,9 @@ function filterToToken(filter: CentralQueryAst["filters"][number]): string | nul
 
 function stripFirstOccurrence(query: string, token: string): string {
   const tokens = query.split(/\s+/).filter((tok) => tok.length > 0);
-  const idx = tokens.findIndex((tok) => tok.toLowerCase() === token.toLowerCase());
+  const idx = tokens.findIndex(
+    (tok) => tok.toLowerCase() === token.toLowerCase(),
+  );
   if (idx < 0) return query;
   tokens.splice(idx, 1);
   return tokens.join(" ");

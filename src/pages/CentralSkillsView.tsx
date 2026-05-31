@@ -403,6 +403,7 @@ export function CentralSkillsView() {
 
   const {
     handleAcceptReview,
+    handleAddSkillTag,
     handleAfterImportSuccess,
     handleApplyManualTags,
     handleApplyManualTagsToReview,
@@ -413,6 +414,7 @@ export function CentralSkillsView() {
     handleBulkSuggestTags,
     handleCancelAiTagJob,
     handleCancelCentralUpdates,
+    handleCreateSkillTag,
     handleRepositorySyncDialogOpenChange,
     handleApplyRepositorySync,
     handleConfirmUpdateSkills,
@@ -428,6 +430,7 @@ export function CentralSkillsView() {
     handleInstallImportedSkill,
     handleOpenDrawer,
     handleRemoteMissingDialogOpenChange,
+    handleRemoveSkillTag,
     handleUpdateConfirmDialogOpenChange,
     handleRepositoryDeleteClick,
     handleRepositoryDeleteDialogOpenChange,
@@ -630,11 +633,21 @@ export function CentralSkillsView() {
     onUpdateCentral: (skillIds: string[]) => {
       void handleUpdateSkills(skillIds);
     },
+    onAddSkillTag: (skillId: string, tagId: string) => {
+      void handleAddSkillTag(skillId, tagId);
+    },
+    onCreateSkillTag: (skillId: string, name: string) => {
+      void handleCreateSkillTag(skillId, name);
+    },
+    onRemoveSkillTag: (skillId: string, tagId: string) => {
+      void handleRemoveSkillTag(skillId, tagId);
+    },
     searchQuery: viewState.q,
     selectedSkillIdSet,
     setDetailButtonRef,
     skillsCount: skills.length,
     sortedSkills: visibleCurrentViewSkills,
+    tags,
     togglingAgentId: togglingAgentId ?? null,
     updateStatuses,
     updatingSkillIds,
