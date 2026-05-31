@@ -33,8 +33,9 @@ export function statusAccentOf(
 // 否则虚拟列表会出现间隙或重叠。
 const LIST_ITEM_HEIGHT_COMFORTABLE = 196;
 const LIST_ITEM_HEIGHT_COMPACT = 148;
-const GRID_ITEM_HEIGHT_COMFORTABLE = 224;
-const GRID_ITEM_HEIGHT_COMPACT = 184;
+// 方案 C grid 卡新增 footer 分隔区（border-t + repo·调用数｜平台点），约 +24px。
+const GRID_ITEM_HEIGHT_COMFORTABLE = 248;
+const GRID_ITEM_HEIGHT_COMPACT = 208;
 
 function listItemHeight(density: ViewDensity): number {
   return density === "compact"
@@ -300,14 +301,20 @@ export function CentralSkillListContent({
           rowGap={16}
           columnGap={16}
           overscanRows={3}
-          minColumnWidth={420}
-          maxColumns={2}
+          minColumnWidth={240}
+          maxColumns={4}
           scrollContainerRef={contentRef}
           itemKey={(skill) => skill.id}
           renderItem={(skill) => renderGridCard(skill)}
         />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div
+          className="grid gap-4"
+          style={{
+            gridTemplateColumns:
+              "repeat(auto-fill, minmax(min(100%, 240px), 1fr))",
+          }}
+        >
           {sortedSkills.map((skill) => renderGridCard(skill))}
         </div>
       )}
