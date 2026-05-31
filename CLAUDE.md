@@ -10,7 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pnpm install              # 安装依赖
 pnpm dev                  # 启动 Vite 开发服务器（端口 24200，单独前端调试用）
 pnpm build                # TypeScript 编译 + Vite 构建
-pnpm test                 # Vitest 运行全部测试（370+，含 3 个遗留的 Sidebar/Settings/PlatformIcon 失败，非本次改动引入）
+pnpm test                 # Vitest 原生单次运行全部测试
+pnpm test:serial          # 逐文件串行 Vitest 回退/隔离排障
 pnpm test -- src/test/skillStore.test.ts  # 运行单个测试文件
 pnpm test:watch           # Vitest 监听模式
 pnpm typecheck            # tsc --noEmit 类型检查
@@ -28,6 +29,7 @@ cd src-tauri && cargo clippy -- -D warnings  # Lint 检查
 ### 完整应用
 
 ```bash
+just ci                   # 完整门禁：先 sync-version，再并行跑 Web 与 Rust 检查链
 pnpm tauri dev             # 启动 Tauri 开发模式（含前端热重载）
 pnpm tauri build           # 构建可分发的桌面应用
 ```
