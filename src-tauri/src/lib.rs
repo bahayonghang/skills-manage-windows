@@ -347,6 +347,7 @@ pub fn run() {
             commands::central_metadata::get_skill_tags,
             commands::central_metadata::create_skill_tag,
             commands::central_metadata::assign_skill_tags,
+            commands::central_metadata::unassign_skill_tags,
             commands::central_metadata::suggest_skill_tags,
             commands::central_metadata::bulk_suggest_skill_tags,
             commands::central_metadata::cancel_ai_tag_job,

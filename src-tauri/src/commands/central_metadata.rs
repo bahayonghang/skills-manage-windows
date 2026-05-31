@@ -103,6 +103,16 @@ pub async fn assign_skill_tags(
 }
 
 #[tauri::command]
+pub async fn unassign_skill_tags(
+    state: State<'_, AppState>,
+    skill_id: String,
+    tag_ids: Vec<String>,
+) -> Result<(), String> {
+    let pool = state.active_db().await?;
+    db::unassign_skill_tags(&pool, &skill_id, &tag_ids).await
+}
+
+#[tauri::command]
 pub async fn get_pending_ai_tag_reviews(
     state: State<'_, AppState>,
 ) -> Result<Vec<SkillAiTagReview>, String> {
