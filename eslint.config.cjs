@@ -6,7 +6,7 @@ const reactRefresh = reactRefreshPlugin.default || reactRefreshPlugin;
 
 module.exports = [
   {
-    ignores: ["dist", ".eslintrc.cjs"],
+    ignores: ["dist", ".eslintrc.cjs", "ref/**"],
   },
   {
     files: ["src/**/*.{ts,tsx}"],
