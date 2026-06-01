@@ -21,9 +21,9 @@ import type { CentralSkillUpdateState, SkillWithLinks } from "@/types";
 // 否则虚拟列表会出现间隙或重叠。
 const LIST_ITEM_HEIGHT_COMFORTABLE = 196;
 const LIST_ITEM_HEIGHT_COMPACT = 148;
-// 方案 C grid 卡新增 footer 分隔区（border-t + repo·调用数｜平台点），约 +24px。
-const GRID_ITEM_HEIGHT_COMFORTABLE = 248;
-const GRID_ITEM_HEIGHT_COMPACT = 208;
+// grid 卡含 footer 分隔区（repo·调用数｜平台点）+ 底部 tag 行；高度贴合内容，消除中部死白。
+const GRID_ITEM_HEIGHT_COMFORTABLE = 192;
+const GRID_ITEM_HEIGHT_COMPACT = 172;
 
 function listItemHeight(density: ViewDensity): number {
   return density === "compact"

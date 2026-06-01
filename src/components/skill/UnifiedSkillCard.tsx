@@ -292,7 +292,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
       className={cn(
         cardShellClass(checkbox?.checked),
         "group/skill-card relative overflow-hidden p-3.5 gap-2",
-        isCompact ? "min-h-[148px]" : "min-h-[176px]",
+        isCompact ? "min-h-[168px]" : "min-h-[188px]",
         isLoading && "opacity-50",
         className
       )}
@@ -509,9 +509,6 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             />
           )}
 
-          {/* Row 2.5: 可编辑彩色标签行（central 专用，prop 门控） */}
-          {editableTags && <CardTagEditor {...editableTags} />}
-
           {/* Row 3: Meta badges — 统一一行展示，flex-wrap */}
           <SkillCardMeta
             originKind={originKind ?? undefined}
@@ -528,6 +525,13 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             inventorySkillId={inventorySkillId ?? undefined}
             tags={editableTags ? undefined : tags}
           />
+
+          {/* Row 末: 彩色标签行（central 专用）— 收于 footer 上方，固定单行 */}
+          {editableTags && (
+            <div className="flex h-5 items-center overflow-hidden [&>div]:flex-nowrap">
+              <CardTagEditor {...editableTags} />
+            </div>
+          )}
 
           {/* Row 4: Footer (central 方案C) or Platform toggle icons */}
           {footer ? (

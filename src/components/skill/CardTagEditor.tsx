@@ -80,7 +80,12 @@ export function CardTagEditor({
             stop(e);
             setOpen((v) => !v);
           }}
-          className="grid size-5 place-items-center rounded-full border border-dashed border-border/70 text-muted-foreground hover:border-primary/40 hover:text-primary"
+          className={cn(
+            "grid size-5 place-items-center rounded-full border border-dashed border-border/70 text-muted-foreground",
+            "opacity-60 transition-opacity hover:border-primary/40 hover:text-primary",
+            "group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100",
+            tags.length === 0 && "opacity-40",
+          )}
         >
           <Plus className="size-3" />
         </button>
