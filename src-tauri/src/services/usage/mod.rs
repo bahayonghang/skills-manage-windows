@@ -319,12 +319,13 @@ async fn refresh_with_providers(
 pub async fn build_overview(
     pool: &DbPool,
     target_id: &str,
+    source: Option<&str>,
     top_skills_limit: usize,
 ) -> Result<aggregate::UsageOverview, String> {
-    let kpis_row = db::get_usage_kpis(pool, target_id).await?;
-    let top_skill_rows = db::list_top_skills(pool, target_id, top_skills_limit).await?;
+    let kpis_row = db::get_usage_kpis(pool, target_id, source).await?;
+    let top_skill_rows = db::list_top_skills(pool, target_id, source, top_skills_limit).await?;
     let cutoff_ms = Utc::now().timestamp_millis() - (16 * 7 * 86_400_000);
-    let day_rows = db::list_daily_counts_since(pool, target_id, cutoff_ms).await?;
+    let day_rows = db::list_daily_counts_since(pool, target_id, source, cutoff_ms).await?;
     let last_scan_ms = db::get_last_scan_ms(pool, target_id).await?;
 
     Ok(aggregate::UsageOverview {
@@ -333,6 +334,7 @@ pub async fn build_overview(
             unique_skills: kpis_row.unique_skills,
             unique_projects: kpis_row.unique_projects,
             unique_sources: kpis_row.unique_sources,
+            unique_sessions: kpis_row.unique_sessions,
         },
         top_skills: top_skill_rows
             .into_iter()
@@ -521,7 +523,7 @@ mod refresh_tests {
         assert!(s3.calls_written >= 2);
 
         // overview 拉得到数据
-        let overview = build_overview(&pool, "local", 50).await.unwrap();
+        let overview = build_overview(&pool, "local", None, 50).await.unwrap();
         assert!(overview.kpis.total_calls >= 2);
         assert!(overview.heatmap.len() == 16 * 7);
         assert!(overview.last_scan_ms.is_some());
@@ -554,5 +556,78 @@ mod refresh_tests {
         assert_eq!(health[0].provider_id, "failing");
         assert!(!health[0].available);
         assert_eq!(health[0].call_count, 0);
+    }
+
+    #[tokio::test]
+    async fn build_overview_and_recent_filter_by_source() {
+        let pool = setup_pool().await;
+        let now = Utc::now().timestamp_millis();
+
+        // Claude Code 2 条（2 skills / 2 sessions），Codex CLI 1 条；时间戳取近几秒，
+        // 确保落在 16 周热力图窗口内。
+        let calls = vec![
+            NewSkillCall {
+                skill: "review".into(),
+                timestamp_ms: now - 3_000,
+                project: "/p1".into(),
+                session_id: "s1".into(),
+                source: "Claude Code".into(),
+            },
+            NewSkillCall {
+                skill: "commit".into(),
+                timestamp_ms: now - 2_000,
+                project: "/p1".into(),
+                session_id: "s2".into(),
+                source: "Claude Code".into(),
+            },
+            NewSkillCall {
+                skill: "review".into(),
+                timestamp_ms: now - 1_000,
+                project: "/p2".into(),
+                session_id: "s3".into(),
+                source: "Codex CLI".into(),
+            },
+        ];
+        db::replace_calls_for_target(&pool, "local", &calls, &[], now)
+            .await
+            .unwrap();
+
+        // 全部平台（source = None）：聚合全集
+        let all = build_overview(&pool, "local", None, 50).await.unwrap();
+        assert_eq!(all.kpis.total_calls, 3);
+        assert_eq!(all.kpis.unique_sources, 2);
+        assert_eq!(all.kpis.unique_sessions, 3);
+
+        // 只看 Claude Code：KPI / topSkills / heatmap 全部只含该源
+        let claude = build_overview(&pool, "local", Some("Claude Code"), 50)
+            .await
+            .unwrap();
+        assert_eq!(claude.kpis.total_calls, 2);
+        assert_eq!(claude.kpis.unique_sources, 1);
+        assert_eq!(claude.kpis.unique_sessions, 2);
+        assert_eq!(claude.top_skills.len(), 2);
+        let claude_heatmap_total: i64 = claude.heatmap.iter().map(|d| d.count).sum();
+        assert_eq!(claude_heatmap_total, 2, "热力图只应计入 Claude Code 调用");
+
+        // 只看 Codex CLI
+        let codex = build_overview(&pool, "local", Some("Codex CLI"), 50)
+            .await
+            .unwrap();
+        assert_eq!(codex.kpis.total_calls, 1);
+        assert_eq!(codex.kpis.unique_sessions, 1);
+        assert_eq!(codex.top_skills.len(), 1);
+        assert_eq!(codex.top_skills[0].skill, "review");
+
+        // recent feed 同样按 source 过滤
+        let recent_claude = db::list_recent_calls(&pool, "local", Some("Claude Code"), 20)
+            .await
+            .unwrap();
+        assert_eq!(recent_claude.len(), 2);
+        assert!(recent_claude.iter().all(|c| c.source == "Claude Code"));
+
+        let recent_all = db::list_recent_calls(&pool, "local", None, 20)
+            .await
+            .unwrap();
+        assert_eq!(recent_all.len(), 3);
     }
 }

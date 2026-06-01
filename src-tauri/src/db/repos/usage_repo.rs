@@ -66,6 +66,7 @@ pub struct UsageKpisRow {
     pub unique_skills: i64,
     pub unique_projects: i64,
     pub unique_sources: i64,
+    pub unique_sessions: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq, Default)]
@@ -213,33 +214,45 @@ pub async fn list_calls_for_target(
 pub async fn list_recent_calls(
     pool: &DbPool,
     target_id: &str,
+    source: Option<&str>,
     limit: i64,
 ) -> Result<Vec<SkillCallRow>, String> {
     sqlx::query_as::<_, SkillCallRow>(
         "SELECT id, target_id, skill, timestamp_ms, project, session_id, source
          FROM skill_calls
          WHERE target_id = ?
+           AND (? IS NULL OR source = ?)
          ORDER BY timestamp_ms DESC
          LIMIT ?",
     )
     .bind(target_id)
+    .bind(source)
+    .bind(source)
     .bind(limit)
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())
 }
 
-pub async fn get_usage_kpis(pool: &DbPool, target_id: &str) -> Result<UsageKpisRow, String> {
+pub async fn get_usage_kpis(
+    pool: &DbPool,
+    target_id: &str,
+    source: Option<&str>,
+) -> Result<UsageKpisRow, String> {
     sqlx::query_as::<_, UsageKpisRow>(
         "SELECT
             COUNT(*) AS total_calls,
             COUNT(DISTINCT skill) AS unique_skills,
             COUNT(DISTINCT project) AS unique_projects,
-            COUNT(DISTINCT source) AS unique_sources
+            COUNT(DISTINCT source) AS unique_sources,
+            COUNT(DISTINCT session_id) AS unique_sessions
          FROM skill_calls
-         WHERE target_id = ?",
+         WHERE target_id = ?
+           AND (? IS NULL OR source = ?)",
     )
     .bind(target_id)
+    .bind(source)
+    .bind(source)
     .fetch_one(pool)
     .await
     .map_err(|e| e.to_string())
@@ -248,6 +261,7 @@ pub async fn get_usage_kpis(pool: &DbPool, target_id: &str) -> Result<UsageKpisR
 pub async fn list_top_skills(
     pool: &DbPool,
     target_id: &str,
+    source: Option<&str>,
     limit: usize,
 ) -> Result<Vec<SkillCountRow>, String> {
     let limit = if limit == 0 { i64::MAX } else { limit as i64 };
@@ -260,11 +274,14 @@ pub async fn list_top_skills(
             MAX(timestamp_ms) AS last_used_ms
          FROM skill_calls
          WHERE target_id = ?
+           AND (? IS NULL OR source = ?)
          GROUP BY skill
          ORDER BY count DESC, last_used_ms DESC, skill ASC
          LIMIT ?",
     )
     .bind(target_id)
+    .bind(source)
+    .bind(source)
     .bind(limit)
     .fetch_all(pool)
     .await
@@ -274,6 +291,7 @@ pub async fn list_top_skills(
 pub async fn list_daily_counts_since(
     pool: &DbPool,
     target_id: &str,
+    source: Option<&str>,
     cutoff_ms: i64,
 ) -> Result<Vec<DayCountRow>, String> {
     sqlx::query_as::<_, DayCountRow>(
@@ -282,11 +300,14 @@ pub async fn list_daily_counts_since(
             COUNT(*) AS count
          FROM skill_calls
          WHERE target_id = ?
+           AND (? IS NULL OR source = ?)
            AND timestamp_ms >= ?
          GROUP BY date
          ORDER BY date ASC",
     )
     .bind(target_id)
+    .bind(source)
+    .bind(source)
     .bind(cutoff_ms)
     .fetch_all(pool)
     .await

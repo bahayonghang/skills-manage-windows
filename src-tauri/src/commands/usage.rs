@@ -104,9 +104,10 @@ async fn build_refresh_page(
     used_cached_data: bool,
     refresh_error: Option<String>,
 ) -> Result<UsageRefreshResult, String> {
-    let overview = usage::build_overview(&state.db, target_id, 50).await?;
-    let recent =
-        usage::rows_to_skill_calls(crate::db::list_recent_calls(&state.db, target_id, 20).await?);
+    let overview = usage::build_overview(&state.db, target_id, None, 50).await?;
+    let recent = usage::rows_to_skill_calls(
+        crate::db::list_recent_calls(&state.db, target_id, None, 20).await?,
+    );
     let providers = usage::list_provider_health(&state.db, target_id).await?;
 
     Ok(UsageRefreshResult {
@@ -211,20 +212,23 @@ pub async fn usage_refresh(
 pub async fn usage_get_overview(
     state: State<'_, AppState>,
     top_skills_limit: Option<usize>,
+    source: Option<String>,
 ) -> Result<UsageOverview, String> {
     let target = active_usage_target(&state).await?;
     let limit = top_skills_limit.unwrap_or(50);
-    usage::build_overview(&state.db, &target.target_id, limit).await
+    usage::build_overview(&state.db, &target.target_id, source.as_deref(), limit).await
 }
 
 #[tauri::command]
 pub async fn usage_get_recent(
     state: State<'_, AppState>,
     limit: Option<i64>,
+    source: Option<String>,
 ) -> Result<Vec<SkillCall>, String> {
     let n = limit.unwrap_or(20).max(1);
     let target = active_usage_target(&state).await?;
-    let rows = crate::db::list_recent_calls(&state.db, &target.target_id, n).await?;
+    let rows =
+        crate::db::list_recent_calls(&state.db, &target.target_id, source.as_deref(), n).await?;
     Ok(usage::rows_to_skill_calls(rows))
 }
 

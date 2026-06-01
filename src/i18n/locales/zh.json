@@ -171,11 +171,15 @@
     "lastRefreshed": "{{time}} 前刷新",
     "neverRefreshed": "尚未扫描",
     "notDetected": "未检测到",
+    "platformFilter": {
+      "all": "全部平台"
+    },
     "kpi": {
       "calls": "调用次数",
       "skills": "技能数",
       "projects": "项目数",
-      "sources": "数据源"
+      "sources": "数据源",
+      "sessions": "会话数"
     },
     "panels": {
       "topSkills": "技能频次",

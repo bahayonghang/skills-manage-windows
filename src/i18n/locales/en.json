@@ -171,11 +171,15 @@
     "lastRefreshed": "Refreshed {{time}} ago",
     "neverRefreshed": "Not scanned yet",
     "notDetected": "not detected",
+    "platformFilter": {
+      "all": "All platforms"
+    },
     "kpi": {
       "calls": "Calls",
       "skills": "Skills",
       "projects": "Projects",
-      "sources": "Sources"
+      "sources": "Sources",
+      "sessions": "Sessions"
     },
     "panels": {
       "topSkills": "Top skills",

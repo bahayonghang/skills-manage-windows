@@ -34,6 +34,7 @@ pub struct UsageKpis {
     pub unique_skills: i64,
     pub unique_projects: i64,
     pub unique_sources: i64,
+    pub unique_sessions: i64,
 }
 
 /// `usage_get_overview` 的返回包。
@@ -52,16 +53,19 @@ pub fn kpis_from_rows(rows: &[SkillCallRow]) -> UsageKpis {
     let mut skills = HashSet::new();
     let mut projects = HashSet::new();
     let mut sources = HashSet::new();
+    let mut sessions = HashSet::new();
     for r in rows {
         skills.insert(r.skill.as_str());
         projects.insert(r.project.as_str());
         sources.insert(r.source.as_str());
+        sessions.insert(r.session_id.as_str());
     }
     UsageKpis {
         total_calls: rows.len() as i64,
         unique_skills: skills.len() as i64,
         unique_projects: projects.len() as i64,
         unique_sources: sources.len() as i64,
+        unique_sessions: sessions.len() as i64,
     }
 }
 
@@ -185,16 +189,20 @@ mod tests {
 
     #[test]
     fn kpis_count_unique_dimensions() {
-        let rows = vec![
-            row("a", "/p1", "Claude Code", 1),
-            row("a", "/p1", "Claude Code", 2),
-            row("b", "/p2", "Codex CLI", 3),
-        ];
+        // 两条同会话(s1) + 一条新会话(s2) → unique_sessions=2，区别于 total_calls=3
+        let mut r1 = row("a", "/p1", "Claude Code", 1);
+        r1.session_id = "s1".into();
+        let mut r2 = row("a", "/p1", "Claude Code", 2);
+        r2.session_id = "s1".into();
+        let mut r3 = row("b", "/p2", "Codex CLI", 3);
+        r3.session_id = "s2".into();
+        let rows = vec![r1, r2, r3];
         let k = kpis_from_rows(&rows);
         assert_eq!(k.total_calls, 3);
         assert_eq!(k.unique_skills, 2);
         assert_eq!(k.unique_projects, 2);
         assert_eq!(k.unique_sources, 2);
+        assert_eq!(k.unique_sessions, 2);
     }
 
     #[test]

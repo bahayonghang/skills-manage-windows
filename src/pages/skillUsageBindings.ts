@@ -33,13 +33,13 @@ export function useUsageBootstrap() {
     } = initialBootstrapStateRef.current;
     const now = Date.now();
     const targetMismatch = Boolean(
-      initialOverview
-        && (!initialScope || initialScope.targetId !== initialActiveTargetId)
+      initialOverview &&
+      (!initialScope || initialScope.targetId !== initialActiveTargetId),
     );
     const stale =
-      !initialOverview
-      || initialLastRefreshMs === null
-      || now - initialLastRefreshMs > AUTO_REFRESH_TTL_MS;
+      !initialOverview ||
+      initialLastRefreshMs === null ||
+      now - initialLastRefreshMs > AUTO_REFRESH_TTL_MS;
     if (stale || targetMismatch) {
       void initialRefresh(false);
     }
@@ -77,10 +77,12 @@ export function useUsageBindings() {
   const providers = useUsageStore((s) => s.providers);
   const detail = useUsageStore((s) => s.detail);
   const scope = useUsageStore((s) => s.scope);
+  const selectedSource = useUsageStore((s) => s.selectedSource);
   const refreshing = useUsageStore((s) => s.refreshing);
   const error = useUsageStore((s) => s.error);
   const lastRefreshMs = useUsageStore((s) => s.lastRefreshMs);
   const refresh = useUsageStore((s) => s.refresh);
+  const selectSource = useUsageStore((s) => s.selectSource);
   const loadDetail = useUsageStore((s) => s.loadDetail);
   const clearDetail = useUsageStore((s) => s.clearDetail);
   const resolveSkillId = useUsageStore((s) => s.resolveSkillId);
@@ -91,10 +93,12 @@ export function useUsageBindings() {
     providers,
     detail,
     scope,
+    selectedSource,
     refreshing,
     error,
     lastRefreshMs,
     refresh,
+    selectSource,
     loadDetail,
     clearDetail,
     resolveSkillId,

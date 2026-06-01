@@ -1,17 +1,29 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, Layers, FolderOpen, Wrench } from "lucide-react";
+import {
+  Activity,
+  Layers,
+  FolderOpen,
+  Wrench,
+  MessagesSquare,
+} from "lucide-react";
 
 import type { UsageKpis } from "@/types/usage";
 import { cn } from "@/lib/utils";
 
 interface KpiStripProps {
   kpis: UsageKpis;
+  /** 单平台筛选时第 4 张卡从「数据源」换成「会话数」（uniqueSources 恒为 1 无信息量）。 */
+  singlePlatform?: boolean;
   className?: string;
 }
 
-/** 顶部 4 张卡：CALLS / SKILLS / PROJECTS / SOURCES。等价 skilled 顶部条。 */
-export function KpiStrip({ kpis, className }: KpiStripProps) {
+/** 顶部 4 张卡：CALLS / SKILLS / PROJECTS / SOURCES（单平台时第 4 张为 SESSIONS）。 */
+export function KpiStrip({
+  kpis,
+  singlePlatform = false,
+  className,
+}: KpiStripProps) {
   const { t } = useTranslation();
 
   return (
@@ -34,12 +46,21 @@ export function KpiStrip({ kpis, className }: KpiStripProps) {
         icon={<FolderOpen className="size-4" />}
         tone="neutral"
       />
-      <KpiCard
-        label={t("skillUsage.kpi.sources")}
-        value={kpis.uniqueSources}
-        icon={<Layers className="size-4" />}
-        tone="success"
-      />
+      {singlePlatform ? (
+        <KpiCard
+          label={t("skillUsage.kpi.sessions")}
+          value={kpis.uniqueSessions}
+          icon={<MessagesSquare className="size-4" />}
+          tone="success"
+        />
+      ) : (
+        <KpiCard
+          label={t("skillUsage.kpi.sources")}
+          value={kpis.uniqueSources}
+          icon={<Layers className="size-4" />}
+          tone="success"
+        />
+      )}
     </div>
   );
 }
@@ -65,7 +86,7 @@ function KpiCard({ label, value, icon, tone }: KpiCardProps) {
       className={cn(
         "rounded-lg border border-border bg-card px-4 py-3",
         "bg-gradient-to-br to-transparent",
-        TONE_CLASS[tone]
+        TONE_CLASS[tone],
       )}
     >
       <div className="flex items-center justify-between">
