@@ -71,6 +71,36 @@ describe("CentralSkillsView drawer + focus（V2 markup）", () => {
     await waitFor(() => expect(mockCancelAiTagJob).toHaveBeenCalled());
   });
 
+  it("Categorize 抽屉 AI tab 取消按钮调用 cancelAiTagJob", async () => {
+    mockCancelAiTagJob.mockResolvedValue(undefined);
+    renderCentralSkillsView({
+      centralOverrides: {
+        aiTagJob: {
+          jobId: "job-1",
+          status: "running",
+          total: 2,
+          completed: 0,
+          succeeded: 0,
+          failed: 0,
+          lowConfidenceCount: 0,
+          currentSkillName: "frontend-design",
+          items: {
+            "frontend-design": "running",
+            "code-reviewer": "queued",
+          },
+        },
+        isSuggestingTags: true,
+      },
+    });
+
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    fireEvent.click(await screen.findByTestId("bulk-bar-open-categorize"));
+    fireEvent.click(await screen.findByRole("tab", { name: "AI" }));
+    fireEvent.click(await screen.findByTestId("ai-tag-panel-cancel"));
+
+    await waitFor(() => expect(mockCancelAiTagJob).toHaveBeenCalled());
+  });
+
   it("任务中心抽屉内 AI 完成时展示「查看复核」入口，并能打开 Categorize 抽屉", async () => {
     renderCentralSkillsView({
       centralOverrides: {

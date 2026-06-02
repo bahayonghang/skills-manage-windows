@@ -41,6 +41,7 @@ import {
   useCentralStoreLocationApplied,
 } from "@/pages/centralStoreLocationView";
 import { useCentralUpdateCheckModeController } from "@/pages/centralUpdateCheckModeController";
+import { useCentralAiTagDashboardView } from "@/pages/centralAiTagDashboardView";
 
 export function CentralSkillsView() {
   const { t } = useTranslation();
@@ -83,22 +84,14 @@ export function CentralSkillsView() {
   } = useCentralSkillsStoreBindings(t);
 
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
-  const [categorizeTab, setCategorizeTab] =
-    useState<CentralCategorizeTab>("manual");
+  const [categorizeTab, setCategorizeTab] = useState<CentralCategorizeTab>("manual");
   const [manualTagQuery, setManualTagQuery] = useState("");
-  const [manualSelectedTagIds, setManualSelectedTagIds] = useState<string[]>(
-    [],
-  );
-  const [installTargetSkill, setInstallTargetSkill] =
-    useState<SkillWithLinks | null>(null);
-  const [deleteTargetSkill, setDeleteTargetSkill] =
-    useState<SkillWithLinks | null>(null);
+  const [manualSelectedTagIds, setManualSelectedTagIds] = useState<string[]>([]);
+  const [installTargetSkill, setInstallTargetSkill] = useState<SkillWithLinks | null>(null);
+  const [deleteTargetSkill, setDeleteTargetSkill] = useState<SkillWithLinks | null>(null);
   const [deletePreview, setDeletePreview] = useState<SkillDetail | null>(null);
-  const [batchDeletePreview, setBatchDeletePreview] =
-    useState<BatchDeleteCentralSkillPreviewResult | null>(null);
-  const [pendingUpdateStates, setPendingUpdateStates] = useState<
-    CentralSkillUpdateState[]
-  >([]);
+  const [batchDeletePreview, setBatchDeletePreview] = useState<BatchDeleteCentralSkillPreviewResult | null>(null);
+  const [pendingUpdateStates, setPendingUpdateStates] = useState<CentralSkillUpdateState[]>([]);
   const [queuedRemoteMissingStates, setQueuedRemoteMissingStates] = useState<
     CentralSkillUpdateState[]
   >([]);
@@ -658,6 +651,7 @@ export function CentralSkillsView() {
         : t("central.updateAvailable", { count: updateTargetSkillIds.length }),
     targetSkillIds: updateTargetSkillIds,
   };
+  const { aiTagProgressItems, aiTagRateProfile } = useCentralAiTagDashboardView({ aiTagJob, skills });
 
   const handleViewAiReviews = useCallback(() => {
     setIsTaskCenterOpen(false);
@@ -693,6 +687,8 @@ export function CentralSkillsView() {
 
   const categorizePanelProps = {
     aiTagJob,
+    aiTagProgressItems,
+    aiTagRateProfile,
     aiTagReviews,
     aiTaggingAvailable,
     canCreateManualTag,
@@ -717,6 +713,9 @@ export function CentralSkillsView() {
     },
     onBulkSuggestTags: () => {
       void handleBulkSuggestTags();
+    },
+    onCancelAiTag: () => {
+      void handleCancelAiTagJob();
     },
     onCreateManualTag: () => {
       void handleCreateManualTag();

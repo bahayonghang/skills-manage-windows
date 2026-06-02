@@ -1190,6 +1190,50 @@ describe("centralSkillsStore", () => {
     expect(state.aiTagJob.items["frontend-design"]).toBe("succeeded");
   });
 
+  it("marks queued and running AI tag items cancelled on job-level cancellation", async () => {
+    useCentralSkillsStore.setState({
+      aiTagJob: {
+        jobId: "job-1",
+        status: "running",
+        total: 3,
+        completed: 1,
+        succeeded: 1,
+        failed: 0,
+        lowConfidenceCount: 0,
+        items: {
+          "frontend-design": "succeeded",
+          "code-reviewer": "running",
+          queued: "queued",
+        },
+      },
+    });
+    let handler: ((event: { payload: unknown }) => void) | undefined;
+    const unlisten = vi.fn();
+    vi.mocked(listen).mockImplementation(async (_event, callback) => {
+      handler = callback as (event: { payload: unknown }) => void;
+      return unlisten;
+    });
+
+    await useCentralSkillsStore.getState().subscribeAiTagProgress();
+    handler?.({
+      payload: {
+        jobId: "job-1",
+        status: "cancelled",
+        total: 3,
+        completed: 1,
+        succeeded: 1,
+        failed: 0,
+        lowConfidenceCount: 0,
+      },
+    });
+
+    const state = useCentralSkillsStore.getState();
+    expect(state.aiTagJob.status).toBe("cancelled");
+    expect(state.aiTagJob.items["frontend-design"]).toBe("succeeded");
+    expect(state.aiTagJob.items["code-reviewer"]).toBe("cancelled");
+    expect(state.aiTagJob.items.queued).toBe("cancelled");
+  });
+
   it("updates central update job state from progress events", async () => {
     let handler: ((event: { payload: unknown }) => void) | undefined;
     const unlisten = vi.fn();

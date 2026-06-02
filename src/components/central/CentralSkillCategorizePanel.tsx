@@ -1,6 +1,5 @@
 import {
   AlertTriangle,
-  Bot,
   Check,
   Plus,
   Tags,
@@ -10,13 +9,20 @@ import type { ReactNode } from "react";
 import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
+import { CentralSkillAiTagPanel } from "@/components/central/CentralSkillAiTagPanel";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type {
+  AiTagProgressItem,
+  AiTagRateProfile,
+} from "@/lib/centralAiTagDashboard";
 import type { CentralCategorizeTab } from "@/pages/centralSkillsViewModel";
 import type { AiTagJob, SkillAiTagReview, SkillTag } from "@/types";
 
 export interface CentralSkillCategorizePanelProps {
   aiTagJob: AiTagJob;
+  aiTagProgressItems: AiTagProgressItem[];
+  aiTagRateProfile: AiTagRateProfile;
   aiTagReviews: SkillAiTagReview[];
   aiTaggingAvailable: boolean;
   canCreateManualTag: boolean;
@@ -33,6 +39,7 @@ export interface CentralSkillCategorizePanelProps {
   onApplyManualTags: () => void;
   onApplyManualTagsToReview: (review: SkillAiTagReview) => void;
   onBulkSuggestTags: () => void;
+  onCancelAiTag: () => void;
   onCreateManualTag: () => void;
   onSetCategorizeTab: (tab: CentralCategorizeTab) => void;
   onSetManualTagQuery: (query: string) => void;
@@ -46,6 +53,8 @@ export interface CentralSkillCategorizePanelProps {
  */
 export function CentralSkillCategorizePanel({
   aiTagJob,
+  aiTagProgressItems,
+  aiTagRateProfile,
   aiTagReviews,
   aiTaggingAvailable,
   canCreateManualTag,
@@ -62,6 +71,7 @@ export function CentralSkillCategorizePanel({
   onApplyManualTags,
   onApplyManualTagsToReview,
   onBulkSuggestTags,
+  onCancelAiTag,
   onCreateManualTag,
   onSetCategorizeTab,
   onSetManualTagQuery,
@@ -207,31 +217,18 @@ export function CentralSkillCategorizePanel({
         )}
 
         {categorizeTab === "ai" && (
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-border/90 bg-background p-3 text-xs shadow-sm">
-              <div className="mb-1 flex items-center gap-1.5 font-medium text-foreground">
-                <Bot className="size-3.5 text-primary" />
-                {t("central.aiScopeTitle")}
-              </div>
-              <p className="leading-relaxed text-foreground/75">
-                {t("central.aiScopeDesc", {
-                  selected: selectedSkillCount,
-                  total: sortedSkillCount,
-                })}
-              </p>
-            </div>
-            {!aiTaggingAvailable && (
-              <div className="rounded-2xl border border-border/90 bg-muted/20 p-3 text-xs text-foreground/75">
-                {t("central.aiTaggingNeedsConfig")}
-              </div>
-            )}
-            <div className="rounded-2xl border border-border/90 bg-muted/10 p-3 text-xs text-foreground/75">
-              {t("central.aiPreview", { count: selectedSkillCount })}
-            </div>
-            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-              {t("central.aiTagRateHint")}
-            </div>
-          </div>
+          <CentralSkillAiTagPanel
+            aiTagJob={aiTagJob}
+            aiTagProgressItems={aiTagProgressItems}
+            aiTagRateProfile={aiTagRateProfile}
+            aiTagReviews={aiTagReviews}
+            aiTaggingAvailable={aiTaggingAvailable}
+            selectedSkillCount={selectedSkillCount}
+            sortedSkillCount={sortedSkillCount}
+            t={t}
+            onCancelAiTag={onCancelAiTag}
+            onOpenReviewTab={() => onSetCategorizeTab("review")}
+          />
         )}
 
         {categorizeTab === "review" && (

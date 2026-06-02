@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import * as S from "./centralSkillsViewTestSupport";
 
 const {
@@ -78,5 +78,90 @@ describe("CentralSkillsView categorize（V2 markup）", () => {
     fireEvent.click(await screen.findByTestId("bulk-bar-open-categorize"));
 
     expect(await screen.findByTestId("categorize-primary-action")).toBeDisabled();
+  });
+
+  it("AI tab running 时展示当前任务、多个 running 项、进度和取消按钮", async () => {
+    renderCentralSkillsView({
+      centralOverrides: {
+        aiTagJob: {
+          jobId: "job-1",
+          status: "running",
+          total: 4,
+          completed: 2,
+          succeeded: 1,
+          failed: 1,
+          lowConfidenceCount: 1,
+          currentSkillName: "code-reviewer",
+          items: {
+            "frontend-design": "running",
+            "code-reviewer": "running",
+            queued: "queued",
+            done: "succeeded",
+          },
+        },
+        isSuggestingTags: true,
+      },
+    });
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    fireEvent.click(await screen.findByTestId("bulk-bar-open-categorize"));
+    fireEvent.click(await screen.findByRole("tab", { name: "AI" }));
+
+    const cockpit = await screen.findByTestId("ai-tag-running-cockpit");
+    expect(within(cockpit).getByText("frontend-design")).toBeInTheDocument();
+    expect(within(cockpit).getByText("code-reviewer")).toBeInTheDocument();
+    expect(
+      within(cockpit).getByRole("progressbar", { name: "AI 标注进度 50%" })
+    ).toHaveAttribute("aria-valuenow", "50");
+    expect(within(cockpit).getByTestId("ai-tag-panel-cancel")).toBeInTheDocument();
+  });
+
+  it("AI tab 对 unsafe rate profile 显示风险提示", async () => {
+    S.settingsStore.setState({
+      aiSettings: {
+        ...S.settingsStore.getState().aiSettings,
+        tagConcurrency: "2",
+        tagIntervalMs: "1000",
+        tagStopOnRateLimit: false,
+      },
+      aiSettingsLoaded: true,
+    });
+    renderCentralSkillsView();
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    fireEvent.click(await screen.findByTestId("bulk-bar-open-categorize"));
+    fireEvent.click(await screen.findByRole("tab", { name: "AI" }));
+
+    const rateRisk = await screen.findByTestId("ai-tag-rate-risk");
+    expect(rateRisk).toHaveTextContent(
+      "当前配置存在限速风险"
+    );
+    expect(screen.getByText(/并发 2/)).toBeInTheDocument();
+    expect(rateRisk).toHaveTextContent("1000ms");
+  });
+
+  it("AI tab cancelled job 将剩余项显示为 cancelled", async () => {
+    renderCentralSkillsView({
+      centralOverrides: {
+        aiTagJob: {
+          jobId: "job-1",
+          status: "cancelled",
+          total: 2,
+          completed: 1,
+          succeeded: 1,
+          failed: 0,
+          lowConfidenceCount: 0,
+          items: {
+            "frontend-design": "succeeded",
+            "code-reviewer": "cancelled",
+          },
+        },
+      },
+    });
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    fireEvent.click(await screen.findByTestId("bulk-bar-open-categorize"));
+    fireEvent.click(await screen.findByRole("tab", { name: "AI" }));
+
+    const result = await screen.findByTestId("ai-tag-result-cockpit");
+    expect(within(result).getByText("code-reviewer")).toBeInTheDocument();
+    expect(within(result).getByText("已取消")).toBeInTheDocument();
   });
 });
