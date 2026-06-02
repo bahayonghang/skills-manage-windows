@@ -354,10 +354,18 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
   });
 
 
-  it("runs the default regular check immediately without opening mode selection", async () => {
+  it("opens mode selection before running the default regular check", async () => {
     renderCentralSkillsView();
 
-    fireEvent.click(screen.getByRole("button", { name: /检查/i }));
+    expect(screen.getByTestId("central-update-check-mode-select")).toHaveValue("regular");
+
+    fireEvent.click(screen.getByTestId("central-check-updates"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("选择更新检查模式")).toBeInTheDocument();
+    expect(mockRefreshUpdateInventory).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     await waitFor(() => {
       expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({
@@ -366,9 +374,20 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
         skillIds: ["code-reviewer", "frontend-design"],
       });
     });
-    expect(screen.queryByText("选择更新检查模式")).not.toBeInTheDocument();
     expect(mockCheckSkillUpdates).not.toHaveBeenCalled();
     expect(mockCheckRepositorySync).not.toHaveBeenCalled();
+  });
+
+  it("persists the visible update mode selector preference", async () => {
+    renderCentralSkillsView();
+
+    fireEvent.change(screen.getByTestId("central-update-check-mode-select"), {
+      target: { value: "sync" },
+    });
+
+    await waitFor(() => {
+      expect(settingsStore.getState().centralUpdateCheckMode).toBe("sync");
+    });
   });
 
   it("runs a regular check through Update Center with selected skill ids only", async () => {
@@ -398,6 +417,8 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
 
     fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
     fireEvent.click(screen.getByRole("button", { name: "检查所选（1）" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     await waitFor(() => {
       expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({
@@ -408,6 +429,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     });
     expect(mockOpenUpdateCenterDialog).toHaveBeenCalledWith("updatable", {
       skillIds: ["code-reviewer"],
+      mode: "regular",
     });
     expect(mockCheckSkillUpdates).not.toHaveBeenCalled();
     expect(mockCheckRepositorySync).not.toHaveBeenCalled();
@@ -445,10 +467,13 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     });
     renderCentralSkillsView();
 
-    const checkButton = screen.getByRole("button", { name: /检查/i });
+    const checkButton = screen.getByTestId("central-check-updates");
     expect(checkButton).not.toBeDisabled();
 
     fireEvent.click(checkButton);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
+
     await waitFor(() => {
       expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({
         kind: "skills",
@@ -477,13 +502,17 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "检查全部（2）" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).queryByTestId("update-check-mode-regular")).not.toBeInTheDocument();
+    expect(within(dialog).getByTestId("update-check-mode-regular")).toBeInTheDocument();
+    expect(within(dialog).getByTestId("update-check-mode-sync")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     await waitFor(() => {
       expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({ kind: "all", mode: "sync" });
     });
-    expect(mockOpenUpdateCenterDialog).toHaveBeenCalledWith("added", {});
+    expect(mockOpenUpdateCenterDialog).toHaveBeenCalledWith("added", { mode: "sync" });
     expect(mockCheckRepositorySync).not.toHaveBeenCalled();
   });
   it("routes single-card update actions through the same confirmation dialog", async () => {
@@ -597,6 +626,8 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "检查所选（2）" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     await waitFor(() => {
       expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({
@@ -644,6 +675,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     expect(mockOpenUpdateCenterDialog).toHaveBeenCalledWith("updatable", {
       repositoryIds: [githubRepo.id],
       skillIds: ["github-one", "github-two"],
+      mode: "sync",
     });
   });
 

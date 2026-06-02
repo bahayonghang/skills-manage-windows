@@ -806,6 +806,14 @@ describe("SettingsView", () => {
     expect(screen.getByText("新增 SSH 目标")).toBeTruthy();
   });
 
+  it("maps Central update mode hashes to Skill Sources", async () => {
+    setupMocks();
+    renderSettingsView("/settings#central-update-check-mode");
+
+    expect(await screen.findByRole("heading", { name: "技能来源" })).toBeTruthy();
+    expect(screen.getByText("更新检查模式")).toBeTruthy();
+  });
+
   it("persists collapsed settings sections in localStorage", () => {
     setupMocks();
     const { unmount } = renderSettingsView("/settings/skill-sources");

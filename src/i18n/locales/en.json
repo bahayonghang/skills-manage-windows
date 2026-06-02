@@ -1135,6 +1135,9 @@
       "scopeAll": "All",
       "scopeRepository": "Current repository",
       "scopeCurrent": "Current results",
+      "modeLabel": "Refresh mode",
+      "modeRegular": "Regular check",
+      "modeSync": "Incremental and removal",
       "tabs": {
         "updatable": "Updatable ({{count}})",
         "added": "Added ({{count}})",
@@ -1256,6 +1259,8 @@
       "note": "This only checks and opens Update Center. Imports, removals, and update application still require another explicit decision there.",
       "confirm": "Start check",
       "confirming": "Checking…",
+      "inlineLabel": "Update mode",
+      "inlineHint": "Each check opens a confirmation with the selected mode.",
       "regular": {
         "title": "Regular check",
         "description": "Only checks whether currently installed Central skills have content updates.",

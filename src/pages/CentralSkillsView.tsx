@@ -823,6 +823,7 @@ export function CentralSkillsView() {
         }}
         updateAvailableSkillCount={updateAvailableSkillIds.length}
         updateButton={updateButtonProps}
+        checkModeControl={updateCheckMode.modeControl}
         checkButton={updateCheckMode.checkButton}
         onOpenPalette={() => setCommandPaletteOpen(true)}
         savedViewsSlot={savedViewsSlot}

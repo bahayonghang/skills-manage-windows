@@ -38,14 +38,15 @@ export function buildUpdateCheckScope(
 export function buildUpdateCheckRefreshContext(
   scope: SkillRefreshScope,
   state: CentralSkillsCheckButtonState,
-): Partial<SkillRefreshContext> {
+): Partial<SkillRefreshContext> & Pick<SkillRefreshScope, "mode"> {
+  const mode = scope.mode;
   if (scope.kind === "repositories") {
-    return { repositoryIds: scope.repositoryIds ?? [], skillIds: state.targetSkillIds };
+    return { mode, repositoryIds: scope.repositoryIds ?? [], skillIds: state.targetSkillIds };
   }
   if (scope.kind === "skills") {
-    return { skillIds: scope.skillIds ?? [] };
+    return { mode, skillIds: scope.skillIds ?? [] };
   }
-  return {};
+  return { mode };
 }
 
 export function preferredUpdateCenterTab(

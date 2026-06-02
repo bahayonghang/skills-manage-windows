@@ -45,12 +45,16 @@ describe("UpdateCheckModeDialog", () => {
     expect(onConfirm).toHaveBeenCalledWith("sync" satisfies UpdateCheckMode);
   });
 
-  it("renders sync confirmation without changing modes when fixed", () => {
+  it("defaults to the saved sync preference while keeping both choices visible", () => {
     const { onConfirm } = renderDialog({ mode: "sync" });
     const dialog = screen.getByRole("dialog");
 
-    expect(within(dialog).getByText("确认增量和删减检查")).toBeInTheDocument();
-    expect(within(dialog).queryByTestId("update-check-mode-regular")).not.toBeInTheDocument();
+    expect(within(dialog).getByText("选择更新检查模式")).toBeInTheDocument();
+    expect(within(dialog).getByTestId("update-check-mode-regular")).toBeInTheDocument();
+    expect(within(dialog).getByTestId("update-check-mode-sync")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     expect(onConfirm).toHaveBeenCalledWith("sync");
@@ -77,5 +81,24 @@ describe("UpdateCheckModeDialog", () => {
     expect(within(dialog).getByTestId("confirm-update-check-mode")).toBeDisabled();
     expect(within(dialog).getByText("当前没有可同步的 GitHub 仓库。")).toBeInTheDocument();
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("falls back to regular mode when saved sync preference is unavailable", () => {
+    const { onConfirm } = renderDialog({
+      mode: "sync",
+      syncDisabled: true,
+      syncDisabledReason: "当前没有可同步的 GitHub 仓库。",
+    });
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).getByTestId("update-check-mode-sync")).toBeDisabled();
+    expect(within(dialog).getByTestId("update-check-mode-regular")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
+
+    expect(onConfirm).toHaveBeenCalledWith("regular");
   });
 });

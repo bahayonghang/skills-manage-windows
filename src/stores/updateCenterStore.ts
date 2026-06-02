@@ -5,12 +5,14 @@ import type {
   DeletedPlatformCopyGroup,
   PlatformDuplicateGroup,
   SkillRefreshScope,
+  SkillRefreshMode,
   SkillUpdateApplyResult,
   SkillUpdateDecisions,
   SkillRefreshContext,
   SkillUpdateInventory,
 } from "@/types/skillUpdateInventory";
 import { normalizeRefreshContext } from "@/lib/updateCenterRefreshScope";
+import { normalizeUpdateCheckMode } from "@/pages/centralUpdateCheckMode";
 
 export interface SkillInventoryFlags {
   /** inventory.updatable 中含此 skill_id（远端有新版本可拉取）。 */
@@ -50,6 +52,7 @@ interface UpdateCenterState {
   isDialogOpen: boolean;
   activeTab: UpdateCenterTab;
   refreshContext: SkillRefreshContext;
+  refreshMode: SkillRefreshMode;
   error: string | null;
   refresh(scope: SkillRefreshScope): Promise<SkillUpdateInventory | null>;
   apply(decisions: SkillUpdateDecisions): Promise<SkillUpdateApplyResult>;
@@ -57,9 +60,13 @@ interface UpdateCenterState {
   loadInventory(): Promise<void>;
   scanDuplicates(agentIds?: string[]): Promise<void>;
   scanDeletedPlatformCopies(agentIds?: string[]): Promise<void>;
-  openDialog(tab?: UpdateCenterTab, context?: Partial<SkillRefreshContext>): void;
+  openDialog(
+    tab?: UpdateCenterTab,
+    context?: Partial<SkillRefreshContext> & { mode?: SkillRefreshMode },
+  ): void;
   closeDialog(): void;
   setActiveTab(tab: UpdateCenterTab): void;
+  setRefreshMode(mode: SkillRefreshMode): void;
 }
 
 function emptyInventory(): SkillUpdateInventory {
@@ -97,6 +104,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   isDialogOpen: false,
   activeTab: "updatable",
   refreshContext: { repositoryIds: [], skillIds: [] },
+  refreshMode: "sync",
   error: null,
 
   async refresh(scope) {
@@ -193,6 +201,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
       isDialogOpen: true,
       activeTab: tab ?? "updatable",
       refreshContext: normalizeRefreshContext(context),
+      refreshMode: normalizeUpdateCheckMode(context?.mode ?? get().refreshMode),
     });
   },
   closeDialog() {
@@ -200,6 +209,9 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   },
   setActiveTab(tab) {
     set({ activeTab: tab });
+  },
+  setRefreshMode(mode) {
+    set({ refreshMode: normalizeUpdateCheckMode(mode) });
   },
 }));
 

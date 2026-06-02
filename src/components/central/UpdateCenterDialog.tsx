@@ -64,6 +64,7 @@ export function UpdateCenterDialog() {
   const isApplying = useUpdateCenterStore((state) => state.isApplying);
   const activeTab = useUpdateCenterStore((state) => state.activeTab);
   const refreshContext = useUpdateCenterStore((state) => state.refreshContext);
+  const refreshMode = useUpdateCenterStore((state) => state.refreshMode);
   const lastRefreshedAt = useUpdateCenterStore((state) => state.lastRefreshedAt);
   const error = useUpdateCenterStore((state) => state.error);
   const closeDialog = useUpdateCenterStore((state) => state.closeDialog);
@@ -71,6 +72,7 @@ export function UpdateCenterDialog() {
   const apply = useUpdateCenterStore((state) => state.apply);
   const clear = useUpdateCenterStore((state) => state.clear);
   const setActiveTab = useUpdateCenterStore((state) => state.setActiveTab);
+  const setRefreshMode = useUpdateCenterStore((state) => state.setRefreshMode);
   const skills = useCentralSkillsStore((state) => state.skills ?? []);
   const repositories = useCentralSkillsStore((state) => state.repositories ?? []);
 
@@ -137,6 +139,7 @@ export function UpdateCenterDialog() {
     const scope: SkillRefreshScope = buildRefreshScope(
       scopeKind,
       refreshContext,
+      refreshMode,
     );
     void refresh(scope);
   }
@@ -278,6 +281,8 @@ export function UpdateCenterDialog() {
           <UpdateCenterToolbar
             scopeKind={scopeKind}
             onScopeKindChange={setScopeKind}
+            refreshMode={refreshMode}
+            onRefreshModeChange={setRefreshMode}
             isRefreshing={isRefreshing}
             onRefresh={handleRefresh}
             lastRefreshedAt={lastRefreshedAt}

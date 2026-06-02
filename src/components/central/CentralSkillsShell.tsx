@@ -157,6 +157,7 @@ export interface CentralSkillsShellProps {
   onUpdateSkills: (skillIds: string[]) => void;
   updateAvailableSkillCount: number;
   updateButton: { disabled: boolean; label: string; targetSkillIds: string[] };
+  checkModeControl?: ReactNode;
   checkButton: { label: string; disabled: boolean; onClick: () => void };
 
   /** 仓库删除（M4 回填）。 */
@@ -203,6 +204,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
     onUpdateSkills,
     updateAvailableSkillCount,
     updateButton,
+    checkModeControl,
     checkButton,
     onDeleteRepository,
     onToggleRepositoryPin,
@@ -362,6 +364,8 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
             <ListChecks className="size-3.5" />
             {t("central.updateCenter.openButton")}
           </Button>
+
+          {checkModeControl}
 
           {/* 主 CTA：检查更新 ────────────────────────────────────── */}
           <Button

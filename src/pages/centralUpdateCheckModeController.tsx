@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { UpdateCheckModeDialog } from "@/components/central/UpdateCheckModeDialog";
+import { UpdateModePreferenceSelect } from "@/components/central/UpdateModePreferenceSelect";
 import type { CentralSkillsShellProps } from "@/components/central/CentralSkillsShell";
 import type { CentralSkillsCheckButtonState } from "@/pages/centralSkillsCheckButton";
 import {
@@ -24,6 +25,7 @@ interface UseCentralUpdateCheckModeControllerInput {
 
 interface UseCentralUpdateCheckModeControllerResult {
   checkButton: CentralSkillsShellProps["checkButton"];
+  modeControl: ReactNode;
   dialog: ReactNode;
 }
 
@@ -40,8 +42,13 @@ export function useCentralUpdateCheckModeController({
   const isUpdateCenterRefreshing = useUpdateCenterStore((state) => state.isRefreshing);
   const modePreference = useSettingsStore((state) => state.centralUpdateCheckMode);
   const modeLoaded = useSettingsStore((state) => state.centralUpdateCheckModeLoaded);
+  const isSavingModePreference = useSettingsStore(
+    (state) => state.isLoadingCentralUpdateCheckMode,
+  );
   const loadModePreference = useSettingsStore((state) => state.loadCentralUpdateCheckMode);
+  const setModePreference = useSettingsStore((state) => state.setCentralUpdateCheckMode);
   const syncableRepositoryAvailable = hasSyncableGitHubRepository(repositories);
+  const syncDisabledReason = t("central.updateCheckMode.sync.disabledNoRepository");
 
   useEffect(() => {
     if (!modeLoaded) {
@@ -68,12 +75,21 @@ export function useCentralUpdateCheckModeController({
   );
 
   const handleClick = useCallback(() => {
-    if (modePreference === "regular") {
-      void handleConfirm("regular");
-      return;
-    }
     setOpen(true);
-  }, [handleConfirm, modePreference]);
+  }, []);
+
+  const handleModePreferenceChange = useCallback(
+    (mode: UpdateCheckMode) => {
+      if (mode === "sync" && !syncableRepositoryAvailable) {
+        return;
+      }
+      void setModePreference(mode);
+    },
+    [setModePreference, syncableRepositoryAvailable],
+  );
+
+  const modeControlDisabled =
+    disabled || isUpdateCenterRefreshing || isSubmitting || isSavingModePreference;
 
   return {
     checkButton: {
@@ -85,15 +101,24 @@ export function useCentralUpdateCheckModeController({
         checkButtonState.targetSkillIds.length === 0,
       onClick: handleClick,
     },
+    modeControl: (
+      <UpdateModePreferenceSelect
+        mode={modePreference}
+        disabled={modeControlDisabled}
+        syncDisabled={!syncableRepositoryAvailable}
+        syncDisabledReason={syncDisabledReason}
+        onChange={handleModePreferenceChange}
+      />
+    ),
     dialog: (
       <UpdateCheckModeDialog
         open={open}
         onOpenChange={setOpen}
-        mode="sync"
+        mode={modePreference}
         scopeLabel={checkButtonState.label}
         isSubmitting={isSubmitting}
         syncDisabled={!syncableRepositoryAvailable}
-        syncDisabledReason={t("central.updateCheckMode.sync.disabledNoRepository")}
+        syncDisabledReason={syncDisabledReason}
         onConfirm={handleConfirm}
       />
     ),

@@ -1135,6 +1135,9 @@
       "scopeAll": "全部",
       "scopeRepository": "当前仓库",
       "scopeCurrent": "当前结果",
+      "modeLabel": "刷新模式",
+      "modeRegular": "常规检查",
+      "modeSync": "增量和删减",
       "tabs": {
         "updatable": "可更新 ({{count}})",
         "added": "新增 ({{count}})",
@@ -1256,6 +1259,8 @@
       "note": "这里只执行检查并打开更新中心；新增导入、远端删除和更新应用仍需要在更新中心里再次确认。",
       "confirm": "开始检查",
       "confirming": "检查中…",
+      "inlineLabel": "更新模式",
+      "inlineHint": "点击检查时会先确认本次使用的模式。",
       "regular": {
         "title": "常规检查",
         "description": "只检查当前已安装到中央技能库的技能内容是否可更新。",

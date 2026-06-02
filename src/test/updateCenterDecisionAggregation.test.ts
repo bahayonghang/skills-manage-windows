@@ -120,10 +120,12 @@ describe("updateCenter refresh scope", () => {
 
     expect(buildRefreshScope("repositories", context)).toEqual({
       kind: "repositories",
+      mode: "sync",
       repositoryIds: ["github:owner-repo-main"],
     });
-    expect(buildRefreshScope("skills", context)).toEqual({
+    expect(buildRefreshScope("skills", context, "regular")).toEqual({
       kind: "skills",
+      mode: "regular",
       skillIds: ["a", "b"],
     });
   });
@@ -134,6 +136,6 @@ describe("updateCenter refresh scope", () => {
     expect(isRefreshScopeEnabled("repositories", empty)).toBe(false);
     expect(isRefreshScopeEnabled("skills", empty)).toBe(false);
     expect(coerceRefreshScopeKind("repositories", empty)).toBe("all");
-    expect(buildRefreshScope("skills", empty)).toEqual({ kind: "all" });
+    expect(buildRefreshScope("skills", empty)).toEqual({ kind: "all", mode: "sync" });
   });
 });

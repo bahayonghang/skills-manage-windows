@@ -31,7 +31,7 @@ export function UpdateCheckModeDialog({
   open,
   onOpenChange,
   scopeLabel,
-  mode: fixedMode,
+  mode: initialMode = "regular",
   isSubmitting = false,
   syncDisabled = false,
   syncDisabledReason,
@@ -42,19 +42,18 @@ export function UpdateCheckModeDialog({
 
   useEffect(() => {
     if (open) {
-      setMode(fixedMode ?? "regular");
+      setMode(initialMode === "sync" && syncDisabled ? "regular" : initialMode);
     }
-  }, [fixedMode, open]);
+  }, [initialMode, open, syncDisabled]);
 
-  const effectiveMode = fixedMode ?? (mode === "sync" && syncDisabled ? "regular" : mode);
-  const isFixedSync = fixedMode === "sync";
+  const effectiveMode = mode === "sync" && syncDisabled ? "regular" : mode;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl" data-testid="update-check-mode-dialog">
         <DialogHeader>
           <DialogTitle>
-            {t(isFixedSync ? "central.updateCheckMode.syncConfirmTitle" : "central.updateCheckMode.title")}
+            {t("central.updateCheckMode.title")}
           </DialogTitle>
           <DialogDescription>
             {t("central.updateCheckMode.description", { scope: scopeLabel })}
@@ -62,21 +61,19 @@ export function UpdateCheckModeDialog({
         </DialogHeader>
 
         <DialogBody className="space-y-3">
-          {!fixedMode ? (
-            <ModeCard
-              checked={effectiveMode === "regular"}
-              icon={<RefreshCw className="size-4" aria-hidden="true" />}
-              title={t("central.updateCheckMode.regular.title")}
-              description={t("central.updateCheckMode.regular.description")}
-              bullets={[
-                t("central.updateCheckMode.regular.scope"),
-                t("central.updateCheckMode.regular.risk"),
-              ]}
-              disabled={isSubmitting}
-              testId="update-check-mode-regular"
-              onSelect={() => setMode("regular")}
-            />
-          ) : null}
+          <ModeCard
+            checked={effectiveMode === "regular"}
+            icon={<RefreshCw className="size-4" aria-hidden="true" />}
+            title={t("central.updateCheckMode.regular.title")}
+            description={t("central.updateCheckMode.regular.description")}
+            bullets={[
+              t("central.updateCheckMode.regular.scope"),
+              t("central.updateCheckMode.regular.risk"),
+            ]}
+            disabled={isSubmitting}
+            testId="update-check-mode-regular"
+            onSelect={() => setMode("regular")}
+          />
           <ModeCard
             checked={effectiveMode === "sync"}
             icon={<GitPullRequestArrow className="size-4" aria-hidden="true" />}

@@ -31,6 +31,7 @@ const mockedUpdateCenter = vi.hoisted(() => {
   };
   const refresh = vi.fn().mockResolvedValue(emptyInventory);
   const openDialog = vi.fn();
+  const setRefreshMode = vi.fn();
   return {
     emptyInventory,
     refresh,
@@ -45,6 +46,7 @@ const mockedUpdateCenter = vi.hoisted(() => {
       isDialogOpen: false,
       activeTab: "updatable",
       refreshContext: { repositoryIds: [], skillIds: [] },
+      refreshMode: "sync",
       error: null,
       refresh,
       apply: vi.fn(),
@@ -55,6 +57,7 @@ const mockedUpdateCenter = vi.hoisted(() => {
       openDialog,
       closeDialog: vi.fn(),
       setActiveTab: vi.fn(),
+      setRefreshMode,
     },
   };
 });
