@@ -20,6 +20,8 @@ pub struct SkillRefreshScope {
     pub skill_ids: Option<Vec<String>>,
     #[serde(default)]
     pub repository_ids: Option<Vec<String>>,
+    #[serde(default)]
+    pub agent_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -28,6 +30,7 @@ pub enum SkillRefreshScopeKind {
     All,
     Skills,
     Repositories,
+    Platform,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -112,6 +115,8 @@ pub struct FailedRepository {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillUpdateDecisions {
+    #[serde(default)]
+    pub allowed_agent_ids: Option<Vec<String>>,
     #[serde(default)]
     pub updates: Vec<String>,
     #[serde(default)]

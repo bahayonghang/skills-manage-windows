@@ -26,17 +26,21 @@ use crate::commands::central_updates::{
     unsupported_state_from_assignment, RemoteSkillLoadError, SkillUpdateStatus,
 };
 use crate::commands::central_updates_fs::{normalize_repo_path, CentralFs};
-use crate::commands::github_import::{self, GitHubRepoRef};
-use crate::db::{self, DbPool, SkillRepository, SkillRepositoryPendingAddition, SkillUpdateState};
+use crate::commands::github_import;
+use crate::db::{self, DbPool, SkillRepositoryPendingAddition};
 use crate::targets::ActiveTarget;
 use crate::AppState;
 
 mod apply_steps;
+mod repositories;
 mod scan;
+mod scope;
 mod types;
 
 pub(crate) use apply_steps::*;
+pub(crate) use repositories::*;
 pub(crate) use scan::*;
+pub(crate) use scope::*;
 pub use types::*;
 
 /*
@@ -88,12 +92,17 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
      * 1) All：全部 central skill_ids + 全部 syncable github repo_ids
      * 2) Skills：仅指定 skill_ids，不扫 repo additions
      * 3) Repositories：仅指定 repo_ids，skill_ids 从这些 repo members 推导
+     * 4) Platform：从当前平台 agent_ids 已安装/已观测到的 central skills 推导
      */
     let mode = scope.mode.unwrap_or(SkillRefreshMode::Sync);
     let include_sync_buckets = mode == SkillRefreshMode::Sync;
 
     // 1.1 决定 repo_ids 与 skill_ids
-    let (skill_ids_filter, repository_ids): (Option<Vec<String>>, Vec<String>) = match scope.kind {
+    let (skill_ids_filter, repository_ids, platform_agent_ids): (
+        Option<Vec<String>>,
+        Vec<String>,
+        Option<Vec<String>>,
+    ) = match scope.kind {
         SkillRefreshScopeKind::All => {
             let repo_ids = db::get_skill_repositories_with_stats(pool)
                 .await?
@@ -101,20 +110,25 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                 .filter(|r| !r.repository.is_unknown && r.repository.source_type == "github")
                 .map(|r| r.repository.id)
                 .collect::<Vec<_>>();
-            (None, repo_ids)
+            (None, repo_ids, None)
         }
         SkillRefreshScopeKind::Skills => {
-            let ids = scope.skill_ids.clone().unwrap_or_default();
-            (Some(ids), Vec::new())
+            let ids = normalize_ids(scope.skill_ids.clone().unwrap_or_default());
+            (Some(ids), Vec::new(), None)
         }
         SkillRefreshScopeKind::Repositories => {
-            let repo_ids = scope.repository_ids.clone().unwrap_or_default();
+            let repo_ids = normalize_ids(scope.repository_ids.clone().unwrap_or_default());
             let mut skill_ids = Vec::new();
             for repository_id in &repo_ids {
                 let ids = db::get_central_skill_ids_by_repository(pool, repository_id).await?;
                 skill_ids.extend(ids);
             }
-            (Some(skill_ids), repo_ids)
+            (Some(normalize_ids(skill_ids)), repo_ids, None)
+        }
+        SkillRefreshScopeKind::Platform => {
+            let agent_ids = normalize_ids(scope.agent_ids.clone().unwrap_or_default());
+            let skill_ids = central_skill_ids_for_agents(pool, &agent_ids).await?;
+            (Some(skill_ids), Vec::new(), Some(agent_ids))
         }
     };
 
@@ -284,12 +298,12 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
     };
 
     let platform_duplicates = if include_sync_buckets {
-        scan_platform_duplicate_skills_with_pool(pool, None).await?
+        scan_platform_duplicate_skills_with_pool(pool, platform_agent_ids.clone()).await?
     } else {
         Vec::new()
     };
     let deleted_platform_copies = if include_sync_buckets {
-        scan_deleted_platform_copies_with_pool(pool, None).await?
+        scan_deleted_platform_copies_with_pool(pool, platform_agent_ids.clone()).await?
     } else {
         Vec::new()
     };
@@ -316,14 +330,15 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
 #[tauri::command]
 pub async fn get_skill_update_inventory(
     state: State<'_, AppState>,
+    scope: Option<SkillRefreshScope>,
 ) -> Result<SkillUpdateInventory, String> {
     let pool = state.active_db().await?;
-    get_skill_update_inventory_impl(&pool).await
+    get_skill_update_inventory_impl_scoped(&pool, scope).await
 }
 
-/// 内核版本：不依赖 `State<AppState>`，便于单元测试。
-pub(crate) async fn get_skill_update_inventory_impl(
+pub(crate) async fn get_skill_update_inventory_impl_scoped(
     pool: &DbPool,
+    scope: Option<SkillRefreshScope>,
 ) -> Result<SkillUpdateInventory, String> {
     /*
      * ========================================================================
@@ -332,6 +347,7 @@ pub(crate) async fn get_skill_update_inventory_impl(
      * 这是不触网的"读视图"，仅汇总 DB 既有状态。
      */
 
+    let scope_filter = InventoryScopeFilter::from_scope(pool, scope).await?;
     let states = db::get_skill_update_states(pool).await?;
     let repo_with_stats = db::get_skill_repositories_with_stats(pool).await?;
     let repo_by_id = repo_with_stats
@@ -342,6 +358,9 @@ pub(crate) async fn get_skill_update_inventory_impl(
     let mut updatable = Vec::new();
     let mut remote_missing = Vec::new();
     for state_row in states {
+        if !scope_filter.includes_skill(&state_row.skill_id) {
+            continue;
+        }
         let parsed = state_row.status.parse::<SkillUpdateStatus>().ok();
         match parsed {
             Some(SkillUpdateStatus::UpdateAvailable) => {
@@ -367,7 +386,19 @@ pub(crate) async fn get_skill_update_inventory_impl(
      * 步骤2：读 pending_additions 转 remote_added
      * ========================================================================
      */
-    let pending = db::list_pending_additions(pool).await?;
+    let pending = match &scope_filter.pending {
+        PendingAdditionScope::All => db::list_pending_additions(pool).await?,
+        PendingAdditionScope::Repositories(repository_ids) => {
+            let ids = repository_ids.iter().cloned().collect::<Vec<_>>();
+            db::list_pending_additions_for_repos(pool, &ids).await?
+        }
+        PendingAdditionScope::SkillIds(skill_ids) => db::list_pending_additions(pool)
+            .await?
+            .into_iter()
+            .filter(|p| skill_ids.contains(&p.skill_id))
+            .collect(),
+        PendingAdditionScope::None => Vec::new(),
+    };
     let remote_added = pending
         .into_iter()
         .map(|p| RemoteAddedSkill {
@@ -384,8 +415,10 @@ pub(crate) async fn get_skill_update_inventory_impl(
      * 步骤3：平台冗余 + 组装
      * ========================================================================
      */
-    let platform_duplicates = scan_platform_duplicate_skills_with_pool(pool, None).await?;
-    let deleted_platform_copies = scan_deleted_platform_copies_with_pool(pool, None).await?;
+    let platform_duplicates =
+        scan_platform_duplicate_skills_with_pool(pool, scope_filter.agent_ids.clone()).await?;
+    let deleted_platform_copies =
+        scan_deleted_platform_copies_with_pool(pool, scope_filter.agent_ids.clone()).await?;
 
     Ok(SkillUpdateInventory {
         updatable,
@@ -438,6 +471,9 @@ pub(crate) async fn clear_skill_update_inventory_impl(
                     db::clear_pending_additions_for_repos(pool, &ids).await?;
                 }
             }
+            SkillRefreshScopeKind::Platform => {
+                // Platform scope does not own remote additions.
+            }
         },
     }
     Ok(())
@@ -464,6 +500,7 @@ pub async fn apply_skill_update_decisions(
             .await?;
 
     let mut result = SkillUpdateApplyResult::default();
+    let allowed_agent_ids = normalize_optional_id_set(decisions.allowed_agent_ids.as_deref());
 
     // 步骤1：keep_missing
     apply_keep_missing_step(&pool, &decisions.keep_missing, &mut result).await;
@@ -610,14 +647,20 @@ pub async fn apply_skill_update_decisions(
     }
 
     // 步骤6：remove_platform_duplicates
-    apply_remove_platform_duplicates_step(&pool, decisions.remove_platform_duplicates, &mut result)
-        .await;
+    apply_remove_platform_duplicates_step(
+        &pool,
+        decisions.remove_platform_duplicates,
+        &mut result,
+        allowed_agent_ids.as_ref(),
+    )
+    .await;
     // 步骤7：remove_deleted_platform_copies
     apply_remove_deleted_platform_copies_step(
         &pool,
         &active_target,
         decisions.remove_deleted_platform_copies,
         &mut result,
+        allowed_agent_ids.as_ref(),
     )
     .await;
 
@@ -647,132 +690,6 @@ pub async fn scan_deleted_platform_copies(
  * 内部 helpers
  * ========================================================================
  */
-
-fn prepared_repo_ref(prepared: &central_updates::PreparedSkillUpdate) -> Option<GitHubRepoRef> {
-    repo_ref_for_repository(&prepared.assignment.repository)
-}
-
-fn remote_added_from_item(item: central_updates::CentralRemoteAddedSkill) -> RemoteAddedSkill {
-    let conflict_existing_skill_id = item
-        .preview
-        .conflict
-        .as_ref()
-        .map(|c| c.existing_skill_id.clone());
-    RemoteAddedSkill {
-        repository_id: item.repository_id,
-        source_path: item.preview.source_path,
-        skill_id: item.preview.skill_id,
-        skill_name: item.preview.skill_name,
-        conflict_existing_skill_id,
-    }
-}
-
-fn repo_ref_for_repository(repository: &SkillRepository) -> Option<GitHubRepoRef> {
-    if repository.source_type != "github" || repository.is_unknown {
-        return None;
-    }
-    let (Some(owner), Some(repo), Some(branch)) = (
-        repository.owner.as_ref(),
-        repository.repo.as_ref(),
-        repository.branch.as_ref(),
-    ) else {
-        return None;
-    };
-    Some(GitHubRepoRef {
-        owner: owner.clone(),
-        repo: repo.clone(),
-        branch: branch.clone(),
-        normalized_url: repository
-            .url
-            .clone()
-            .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}")),
-    })
-}
-
-fn repository_import_url(repository: &SkillRepository) -> Option<String> {
-    if repository.source_type != "github" || repository.is_unknown {
-        return None;
-    }
-    if let Some(url) = repository
-        .url
-        .as_deref()
-        .filter(|url| !url.trim().is_empty())
-    {
-        if let Some(branch) = repository
-            .branch
-            .as_deref()
-            .filter(|branch| !branch.is_empty())
-        {
-            return Some(format!(
-                "{}/tree/{}",
-                url.trim().trim_end_matches('/'),
-                branch
-            ));
-        }
-        return Some(url.to_string());
-    }
-    match (&repository.owner, &repository.repo, &repository.branch) {
-        (Some(owner), Some(repo), Some(branch)) => {
-            Some(format!("https://github.com/{owner}/{repo}/tree/{branch}"))
-        }
-        (Some(owner), Some(repo), None) => Some(format!("https://github.com/{owner}/{repo}")),
-        _ => None,
-    }
-}
-
-fn repository_id_for_state(
-    repo_by_id: &HashMap<String, SkillRepository>,
-    state_row: &SkillUpdateState,
-) -> Option<String> {
-    repo_by_id
-        .iter()
-        .find(|(_, repository)| {
-            repository.source_type == state_row.source_type
-                && repository.url == state_row.source_url
-                && repository.branch == state_row.ref_name
-        })
-        .map(|(id, _)| id.clone())
-}
-
-async fn load_syncable_github_repositories(
-    pool: &DbPool,
-    repository_ids: &[String],
-    auth_token: Option<&str>,
-) -> Result<Vec<(SkillRepository, GitHubRepoRef)>, String> {
-    let mut repositories = Vec::new();
-    for repository_id in repository_ids {
-        let Some(repository) = db::get_skill_repository_by_id(pool, repository_id).await? else {
-            continue;
-        };
-        if repository.is_unknown || repository.source_type != "github" {
-            continue;
-        }
-        let repo_ref = if let (Some(owner), Some(repo), Some(branch)) = (
-            repository.owner.as_ref(),
-            repository.repo.as_ref(),
-            repository.branch.as_ref(),
-        ) {
-            GitHubRepoRef {
-                owner: owner.clone(),
-                repo: repo.clone(),
-                branch: branch.clone(),
-                normalized_url: repository
-                    .url
-                    .clone()
-                    .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}")),
-            }
-        } else {
-            let Some(url) = repository_import_url(&repository) else {
-                continue;
-            };
-            github_import::resolve_repo_source(&url, auth_token)
-                .await?
-                .repo
-        };
-        repositories.push((repository, repo_ref));
-    }
-    Ok(repositories)
-}
 
 #[cfg(test)]
 mod tests;

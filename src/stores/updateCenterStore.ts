@@ -55,9 +55,12 @@ interface UpdateCenterState {
   refreshMode: SkillRefreshMode;
   error: string | null;
   refresh(scope: SkillRefreshScope): Promise<SkillUpdateInventory | null>;
-  apply(decisions: SkillUpdateDecisions): Promise<SkillUpdateApplyResult>;
+  apply(
+    decisions: SkillUpdateDecisions,
+    scope?: SkillRefreshScope,
+  ): Promise<SkillUpdateApplyResult>;
   clear(scope?: SkillRefreshScope): Promise<void>;
-  loadInventory(): Promise<void>;
+  loadInventory(scope?: SkillRefreshScope): Promise<void>;
   scanDuplicates(agentIds?: string[]): Promise<void>;
   scanDeletedPlatformCopies(agentIds?: string[]): Promise<void>;
   openDialog(
@@ -103,7 +106,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   lastRefreshedAt: null,
   isDialogOpen: false,
   activeTab: "updatable",
-  refreshContext: { repositoryIds: [], skillIds: [] },
+  refreshContext: { repositoryIds: [], skillIds: [], agentIds: [] },
   refreshMode: "sync",
   error: null,
 
@@ -135,7 +138,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     }
   },
 
-  async apply(decisions) {
+  async apply(decisions, scope) {
     set({ isApplying: true, error: null });
     try {
       const result = isTauriRuntime()
@@ -143,7 +146,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
             decisions,
           })
         : emptyApplyResult();
-      await get().loadInventory();
+      await get().loadInventory(scope);
       set({ isApplying: false });
       return result;
     } catch (err) {
@@ -159,13 +162,14 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     set({ inventory: emptyInventory() });
   },
 
-  async loadInventory() {
+  async loadInventory(scope) {
     if (!isTauriRuntime()) {
       set({ inventory: emptyInventory() });
       return;
     }
     const inventory = await invoke<SkillUpdateInventory>(
       "get_skill_update_inventory",
+      { scope: scope ?? null },
     );
     set({ inventory });
   },

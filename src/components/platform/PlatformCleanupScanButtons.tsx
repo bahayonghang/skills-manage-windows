@@ -45,7 +45,7 @@ export function PlatformCleanupScanButtons({
         (sum, group) => sum + group.writablePaths.length,
         0,
       );
-      openUpdateCenter("duplicates");
+      openUpdateCenter("duplicates", { agentIds: [agentId], mode: "sync" });
       toast.success(
         t("platform.duplicatesFound", {
           skillCount: groups.length,
@@ -76,7 +76,7 @@ export function PlatformCleanupScanButtons({
         (sum, group) => sum + group.writablePaths.length,
         0,
       );
-      openUpdateCenter("deletedPlatformCopies");
+      openUpdateCenter("deletedPlatformCopies", { agentIds: [agentId], mode: "sync" });
       toast.success(
         t("platform.deletedFound", {
           skillCount: groups.length,

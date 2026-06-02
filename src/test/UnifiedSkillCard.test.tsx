@@ -13,7 +13,7 @@ function resetUpdateCenterStore() {
     lastRefreshedAt: null,
     isDialogOpen: false,
     activeTab: "updatable",
-    refreshContext: { repositoryIds: [], skillIds: [] },
+    refreshContext: { repositoryIds: [], skillIds: [], agentIds: [] },
     error: null,
   });
 }

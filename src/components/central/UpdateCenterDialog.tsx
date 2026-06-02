@@ -34,6 +34,7 @@ import {
   countsFromInventory,
   emptyDecisionState,
   inventorySignature,
+  summarizeDecisionSelections,
   type DecisionState,
 } from "@/components/central/updateCenter/decisionAggregation";
 import {
@@ -99,20 +100,25 @@ export function UpdateCenterDialog() {
 
   useEffect(() => {
     if (!isDialogOpen) return;
-    setDecisions(buildInitialState(inventoryRef.current));
-  }, [isDialogOpen, inventoryKey]);
+    setDecisions(buildInitialState(inventoryRef.current, scopeKind));
+  }, [isDialogOpen, inventoryKey, scopeKind]);
 
   const counts = countsFromInventory(inventory);
   const scopeEnabled = useMemo(
     () => ({
       all: true,
       repositories: isRefreshScopeEnabled("repositories", refreshContext),
+      platform: isRefreshScopeEnabled("platform", refreshContext),
       skills: isRefreshScopeEnabled("skills", refreshContext),
     }),
     [refreshContext],
   );
   const totalSelected = useMemo(
     () => countDecisionSelections(decisions, inventory),
+    [decisions, inventory],
+  );
+  const selectionSummary = useMemo(
+    () => summarizeDecisionSelections(decisions, inventory),
     [decisions, inventory],
   );
 
@@ -126,7 +132,9 @@ export function UpdateCenterDialog() {
 
   useEffect(() => {
     if (!isDialogOpen) return;
-    if (refreshContext.repositoryIds.length > 0) {
+    if (refreshContext.agentIds.length > 0) {
+      setScopeKind("platform");
+    } else if (refreshContext.repositoryIds.length > 0) {
       setScopeKind("repositories");
     } else if (refreshContext.skillIds.length > 0) {
       setScopeKind("skills");
@@ -135,24 +143,33 @@ export function UpdateCenterDialog() {
     }
   }, [isDialogOpen, refreshContext]);
 
-  function handleRefresh() {
-    const scope: SkillRefreshScope = buildRefreshScope(
+  function currentRefreshScope(): SkillRefreshScope {
+    return buildRefreshScope(
       scopeKind,
       refreshContext,
       refreshMode,
     );
+  }
+
+  function handleRefresh() {
+    const scope = currentRefreshScope();
     void refresh(scope);
   }
 
   function handleClear() {
-    void clear();
+    void clear(currentRefreshScope());
   }
 
-  async function handleApplyAll() {
+  async function handleApplySelected() {
     if (!inventory) return;
-    const payload = buildDecisions(decisions, inventory);
+    const scope = currentRefreshScope();
+    const payload = buildDecisions(
+      decisions,
+      inventory,
+      scope.kind === "platform" ? scope.agentIds ?? [] : undefined,
+    );
     try {
-      const result = await apply(payload);
+      const result = await apply(payload, scope);
       const succeeded =
         result.updatedSkillIds.length
         + result.keptMissingSkillIds.length
@@ -329,7 +346,7 @@ export function UpdateCenterDialog() {
           </Button>
           <Button
             size="sm"
-            onClick={handleApplyAll}
+            onClick={handleApplySelected}
             disabled={isApplying || totalSelected === 0 || !inventory}
           >
             {isApplying ? (
@@ -338,10 +355,15 @@ export function UpdateCenterDialog() {
                 {t("central.updateCenter.applyingChanges")}
               </>
             ) : (
-              t("central.updateCenter.applyAll", { count: totalSelected })
+              t("central.updateCenter.applySelected", { count: totalSelected })
             )}
           </Button>
         </DialogFooter>
+        <p className="px-6 pb-4 text-xs text-muted-foreground">
+          {t("central.updateCenter.selectionSummary", {
+            ...selectionSummary,
+          })}
+        </p>
       </DialogContent>
     </Dialog>
   );

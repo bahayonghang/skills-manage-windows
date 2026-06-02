@@ -22,7 +22,7 @@ use crate::targets::ActiveTarget;
 use crate::CentralUpdateSnapshotCache;
 use chrono::Utc;
 use sqlx::SqlitePool;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -131,6 +131,7 @@ fn scope_all() -> SkillRefreshScope {
         mode: None,
         skill_ids: None,
         repository_ids: None,
+        agent_ids: None,
     }
 }
 
@@ -140,6 +141,7 @@ fn scope_skills(ids: Vec<&str>) -> SkillRefreshScope {
         mode: None,
         skill_ids: Some(ids.into_iter().map(String::from).collect()),
         repository_ids: None,
+        agent_ids: None,
     }
 }
 
@@ -149,6 +151,17 @@ fn scope_repos(ids: Vec<&str>) -> SkillRefreshScope {
         mode: None,
         skill_ids: None,
         repository_ids: Some(ids.into_iter().map(String::from).collect()),
+        agent_ids: None,
+    }
+}
+
+fn scope_platform(ids: Vec<&str>) -> SkillRefreshScope {
+    SkillRefreshScope {
+        kind: SkillRefreshScopeKind::Platform,
+        mode: None,
+        skill_ids: None,
+        repository_ids: None,
+        agent_ids: Some(ids.into_iter().map(String::from).collect()),
     }
 }
 
@@ -558,7 +571,9 @@ async fn refresh_regular_mode_returns_only_content_update_buckets() {
         .expect("missing skill state");
     assert_eq!(missing.status, SkillUpdateStatus::Error.to_string());
 
-    let reloaded = get_skill_update_inventory_impl(&pool).await.unwrap();
+    let reloaded = get_skill_update_inventory_impl_scoped(&pool, None)
+        .await
+        .unwrap();
     assert!(reloaded.remote_missing.is_empty());
 }
 
@@ -636,6 +651,141 @@ async fn refresh_scope_repositories_ignores_unrelated_repos() {
         .remote_added
         .iter()
         .all(|item| item.repository_id != repo_b));
+}
+
+#[tokio::test]
+async fn refresh_scope_platform_only_checks_observed_current_agent_skills() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let codex_dir = temp.path().join("codex-skill");
+    let claude_dir = temp.path().join("claude-skill");
+    let codex_platform_dir = temp.path().join("codex-platform");
+    let claude_platform_dir = temp.path().join("claude-platform");
+    let codex_writable_dir = codex_platform_dir.join("codex-skill");
+    let codex_plugin_dir = temp.path().join("codex-plugin").join("codex-skill");
+    let claude_writable_dir = claude_platform_dir.join("claude-skill");
+    let claude_plugin_dir = temp.path().join("claude-plugin").join("claude-skill");
+
+    for dir in [
+        &codex_dir,
+        &claude_dir,
+        &codex_writable_dir,
+        &codex_plugin_dir,
+        &claude_writable_dir,
+        &claude_plugin_dir,
+    ] {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(dir.join("SKILL.md"), b"---\nname: Skill\n---\n\nold").unwrap();
+    }
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'codex'")
+        .bind(codex_platform_dir.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'claude-code'")
+        .bind(claude_platform_dir.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    db::upsert_skill(&pool, &make_central_skill("codex-skill", &codex_dir))
+        .await
+        .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("claude-skill", &claude_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "codex-skill", "skills/codex-skill").await;
+    assign_test_repo(&pool, "claude-skill", "skills/claude-skill").await;
+
+    db::upsert_agent_skill_observation(
+        &pool,
+        &make_observation(
+            "codex",
+            "codex-skill",
+            &codex_writable_dir.to_string_lossy(),
+            "writable",
+            false,
+        ),
+    )
+    .await
+    .unwrap();
+    db::upsert_agent_skill_observation(
+        &pool,
+        &make_observation(
+            "codex",
+            "codex-skill",
+            &codex_plugin_dir.to_string_lossy(),
+            "plugin",
+            true,
+        ),
+    )
+    .await
+    .unwrap();
+    db::upsert_agent_skill_observation(
+        &pool,
+        &make_observation(
+            "claude-code",
+            "claude-skill",
+            &claude_writable_dir.to_string_lossy(),
+            "writable",
+            false,
+        ),
+    )
+    .await
+    .unwrap();
+    db::upsert_agent_skill_observation(
+        &pool,
+        &make_observation(
+            "claude-code",
+            "claude-skill",
+            &claude_plugin_dir.to_string_lossy(),
+            "plugin",
+            true,
+        ),
+    )
+    .await
+    .unwrap();
+
+    let snapshot = GitHubRepoSnapshot {
+        files: HashMap::from([
+            (
+                "skills/codex-skill/SKILL.md".to_string(),
+                b"---\nname: Codex Skill\n---\n\nnew".to_vec(),
+            ),
+            (
+                "skills/claude-skill/SKILL.md".to_string(),
+                b"---\nname: Claude Skill\n---\n\nnew".to_vec(),
+            ),
+            (
+                "skills/new-remote/SKILL.md".to_string(),
+                b"---\nname: New Remote\n---".to_vec(),
+            ),
+        ]),
+    };
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        scope_platform(vec!["codex"]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(inventory.updatable.len(), 1);
+    assert_eq!(inventory.updatable[0].state.skill_id, "codex-skill");
+    assert!(inventory.remote_added.is_empty());
+    assert_eq!(inventory.platform_duplicates.len(), 1);
+    assert_eq!(inventory.platform_duplicates[0].agent_id, "codex");
+    assert_eq!(inventory.platform_duplicates[0].skill_id, "codex-skill");
+    assert!(inventory
+        .platform_duplicates
+        .iter()
+        .all(|group| group.agent_id != "claude-code"));
 }
 
 #[tokio::test]
@@ -748,7 +898,9 @@ async fn refresh_persists_actionable_states_for_get_inventory_reload() {
     assert_eq!(refreshed.updatable.len(), 1);
     assert_eq!(refreshed.remote_missing.len(), 1);
 
-    let reloaded = get_skill_update_inventory_impl(&pool).await.unwrap();
+    let reloaded = get_skill_update_inventory_impl_scoped(&pool, None)
+        .await
+        .unwrap();
     assert_eq!(reloaded.updatable.len(), 1);
     assert_eq!(reloaded.updatable[0].state.skill_id, "with-update");
     assert_eq!(reloaded.remote_missing.len(), 1);
@@ -809,7 +961,9 @@ async fn refresh_persists_non_actionable_state_to_clear_stale_update() {
     .await
     .unwrap();
 
-    let inventory = get_skill_update_inventory_impl(&pool).await.unwrap();
+    let inventory = get_skill_update_inventory_impl_scoped(&pool, None)
+        .await
+        .unwrap();
     assert!(inventory.updatable.is_empty());
     let states = db::get_skill_update_states_for_skills(&pool, &["already-fresh".to_string()])
         .await
@@ -885,7 +1039,9 @@ async fn refresh_does_not_persist_skipped_remote_added_as_pending() {
 
     assert!(refreshed.remote_added.is_empty());
     assert!(db::list_pending_additions(&pool).await.unwrap().is_empty());
-    let reloaded = get_skill_update_inventory_impl(&pool).await.unwrap();
+    let reloaded = get_skill_update_inventory_impl_scoped(&pool, None)
+        .await
+        .unwrap();
     assert!(reloaded.remote_added.is_empty());
 }
 
@@ -932,12 +1088,143 @@ async fn get_inventory_returns_persisted_state_without_remote_fetch() {
     .await
     .unwrap();
 
-    let inventory = get_skill_update_inventory_impl(&pool).await.unwrap();
+    let inventory = get_skill_update_inventory_impl_scoped(&pool, None)
+        .await
+        .unwrap();
 
     assert_eq!(inventory.updatable.len(), 1);
     assert_eq!(inventory.updatable[0].state.skill_id, "with-update");
     assert_eq!(inventory.remote_added.len(), 1);
     assert_eq!(inventory.remote_added[0].skill_id, "persisted");
+}
+
+#[tokio::test]
+async fn get_inventory_scope_platform_filters_state_additions_and_platform_buckets() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let codex_dir = temp.path().join("codex-skill");
+    let claude_dir = temp.path().join("claude-skill");
+    let codex_platform_dir = temp.path().join("codex-platform");
+    let claude_platform_dir = temp.path().join("claude-platform");
+    let codex_writable_dir = codex_platform_dir.join("codex-skill");
+    let codex_plugin_dir = temp.path().join("codex-plugin").join("codex-skill");
+    let claude_writable_dir = claude_platform_dir.join("claude-skill");
+    let claude_plugin_dir = temp.path().join("claude-plugin").join("claude-skill");
+
+    for dir in [
+        &codex_dir,
+        &claude_dir,
+        &codex_writable_dir,
+        &codex_plugin_dir,
+        &claude_writable_dir,
+        &claude_plugin_dir,
+    ] {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(dir.join("SKILL.md"), b"---\nname: Skill\n---").unwrap();
+    }
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'codex'")
+        .bind(codex_platform_dir.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'claude-code'")
+        .bind(claude_platform_dir.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    db::upsert_skill(&pool, &make_central_skill("codex-skill", &codex_dir))
+        .await
+        .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("claude-skill", &claude_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "codex-skill", "skills/codex-skill").await;
+    assign_test_repo(&pool, "claude-skill", "skills/claude-skill").await;
+    for skill_id in ["codex-skill", "claude-skill"] {
+        db::upsert_skill_update_state(
+            &pool,
+            &SkillUpdateState {
+                skill_id: skill_id.to_string(),
+                source_type: "github".to_string(),
+                source_url: Some("https://github.com/owner/repo".to_string()),
+                ref_name: Some("main".to_string()),
+                source_path: Some(format!("skills/{skill_id}")),
+                last_remote_hash: Some("fnv1a64:old".to_string()),
+                latest_remote_hash: Some("fnv1a64:new".to_string()),
+                last_checked_at: Some(Utc::now().to_rfc3339()),
+                last_updated_at: None,
+                status: SkillUpdateStatus::UpdateAvailable.to_string(),
+                error: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    db::upsert_pending_addition(
+        &pool,
+        &db::SkillRepositoryPendingAddition {
+            repository_id: "github:owner-repo-main".to_string(),
+            source_path: "skills/new-remote".to_string(),
+            skill_id: "new-remote".to_string(),
+            skill_name: "New Remote".to_string(),
+            conflict_existing_skill_id: None,
+            discovered_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    for (agent_id, skill_id, writable, plugin) in [
+        (
+            "codex",
+            "codex-skill",
+            &codex_writable_dir,
+            &codex_plugin_dir,
+        ),
+        (
+            "claude-code",
+            "claude-skill",
+            &claude_writable_dir,
+            &claude_plugin_dir,
+        ),
+    ] {
+        db::upsert_agent_skill_observation(
+            &pool,
+            &make_observation(
+                agent_id,
+                skill_id,
+                &writable.to_string_lossy(),
+                "writable",
+                false,
+            ),
+        )
+        .await
+        .unwrap();
+        db::upsert_agent_skill_observation(
+            &pool,
+            &make_observation(
+                agent_id,
+                skill_id,
+                &plugin.to_string_lossy(),
+                "plugin",
+                true,
+            ),
+        )
+        .await
+        .unwrap();
+    }
+
+    let inventory =
+        get_skill_update_inventory_impl_scoped(&pool, Some(scope_platform(vec!["codex"])))
+            .await
+            .unwrap();
+
+    assert_eq!(inventory.updatable.len(), 1);
+    assert_eq!(inventory.updatable[0].state.skill_id, "codex-skill");
+    assert!(inventory.remote_added.is_empty());
+    assert_eq!(inventory.platform_duplicates.len(), 1);
+    assert_eq!(inventory.platform_duplicates[0].agent_id, "codex");
 }
 
 #[tokio::test]
@@ -1083,9 +1370,15 @@ async fn apply_no_decisions_is_noop() {
     apply_delete_missing_step(&pool, &ActiveTarget::Local, &[], &mut result).await;
     apply_skip_addition_step(&pool, vec![], &mut result).await;
     apply_unskip_addition_step(&pool, vec![], &mut result).await;
-    apply_remove_platform_duplicates_step(&pool, vec![], &mut result).await;
-    apply_remove_deleted_platform_copies_step(&pool, &ActiveTarget::Local, vec![], &mut result)
-        .await;
+    apply_remove_platform_duplicates_step(&pool, vec![], &mut result, None).await;
+    apply_remove_deleted_platform_copies_step(
+        &pool,
+        &ActiveTarget::Local,
+        vec![],
+        &mut result,
+        None,
+    )
+    .await;
 
     assert!(result.failures.is_empty());
     assert!(result.updated_skill_ids.is_empty());
@@ -1451,6 +1744,7 @@ async fn apply_remove_platform_duplicates_uses_plain_uninstall_for_non_claude_ag
             paths: vec![cursor_skill_dir_str.clone()],
         }],
         &mut result,
+        None,
     )
     .await;
 
@@ -1521,6 +1815,7 @@ async fn apply_remove_deleted_platform_copies_removes_managed_copy() {
             paths: vec![cursor_skill_dir_str.clone()],
         }],
         &mut result,
+        None,
     )
     .await;
 
@@ -1534,6 +1829,109 @@ async fn apply_remove_deleted_platform_copies_removes_managed_copy() {
         .await
         .unwrap()
         .is_empty());
+}
+
+#[tokio::test]
+async fn apply_rejects_platform_cleanup_outside_allowed_agents() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let codex_dir = temp.path().join("codex");
+    let cursor_dir = temp.path().join("cursor");
+    let cursor_skill_dir = cursor_dir.join("dup");
+    std::fs::create_dir_all(&cursor_skill_dir).unwrap();
+    std::fs::write(cursor_skill_dir.join("SKILL.md"), b"---\nname: Dup\n---").unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'codex'")
+        .bind(codex_dir.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+        .bind(cursor_dir.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+    db::upsert_agent_skill_observation(
+        &pool,
+        &make_observation(
+            "cursor",
+            "dup",
+            &cursor_skill_dir.to_string_lossy(),
+            "writable",
+            false,
+        ),
+    )
+    .await
+    .unwrap();
+
+    let allowed = HashSet::from(["codex".to_string()]);
+    let mut result = SkillUpdateApplyResult::default();
+    apply_remove_platform_duplicates_step(
+        &pool,
+        vec![PlatformDuplicateRemoval {
+            agent_id: "cursor".to_string(),
+            skill_id: "dup".to_string(),
+            paths: vec![cursor_skill_dir.to_string_lossy().into_owned()],
+        }],
+        &mut result,
+        Some(&allowed),
+    )
+    .await;
+
+    assert_eq!(result.failures.len(), 1);
+    assert_eq!(result.failures[0].step, "remove_platform_duplicate");
+    assert!(result.failures[0]
+        .error
+        .contains("outside the allowed platform scope"));
+    assert!(cursor_skill_dir.exists());
+    assert!(result.removed_platform_duplicate_paths.is_empty());
+}
+
+#[tokio::test]
+async fn apply_rejects_deleted_platform_copy_outside_allowed_agents() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let codex_dir = temp.path().join("codex");
+    let cursor_dir = temp.path().join("cursor");
+    let cursor_skill_dir = cursor_dir.join("removed-skill");
+    std::fs::create_dir_all(&cursor_skill_dir).unwrap();
+    std::fs::write(
+        cursor_skill_dir.join("SKILL.md"),
+        b"---\nname: Removed Skill\n---",
+    )
+    .unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'codex'")
+        .bind(codex_dir.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'cursor'")
+        .bind(cursor_dir.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let allowed = HashSet::from(["codex".to_string()]);
+    let mut result = SkillUpdateApplyResult::default();
+    apply_remove_deleted_platform_copies_step(
+        &pool,
+        &ActiveTarget::Local,
+        vec![DeletedPlatformCopyRemoval {
+            agent_id: "cursor".to_string(),
+            skill_id: "removed-skill".to_string(),
+            paths: vec![cursor_skill_dir.to_string_lossy().into_owned()],
+        }],
+        &mut result,
+        Some(&allowed),
+    )
+    .await;
+
+    assert_eq!(result.failures.len(), 1);
+    assert_eq!(result.failures[0].step, "remove_deleted_platform_copy");
+    assert!(result.failures[0]
+        .error
+        .contains("outside the allowed platform scope"));
+    assert!(cursor_skill_dir.exists());
+    assert!(result.removed_deleted_platform_copy_paths.is_empty());
 }
 
 /*

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::commands::central_updates::{self, keep_remote_missing_central_skills_impl};
@@ -157,8 +157,20 @@ pub(crate) async fn apply_remove_platform_duplicates_step(
     pool: &DbPool,
     removals: Vec<PlatformDuplicateRemoval>,
     result: &mut SkillUpdateApplyResult,
+    allowed_agent_ids: Option<&HashSet<String>>,
 ) {
     for removal in removals {
+        if !is_agent_allowed(&removal.agent_id, allowed_agent_ids) {
+            result.failures.push(SkillUpdateApplyFailure {
+                step: "remove_platform_duplicate".to_string(),
+                identifier: format!("{}::{}", removal.agent_id, removal.skill_id),
+                error: format!(
+                    "Agent '{}' is outside the allowed platform scope.",
+                    removal.agent_id
+                ),
+            });
+            continue;
+        }
         let observations = match db::get_agent_skill_observations(pool, &removal.agent_id).await {
             Ok(rows) => rows,
             Err(error) => {
@@ -205,8 +217,20 @@ pub(crate) async fn apply_remove_deleted_platform_copies_step(
     active_target: &ActiveTarget,
     removals: Vec<DeletedPlatformCopyRemoval>,
     result: &mut SkillUpdateApplyResult,
+    allowed_agent_ids: Option<&HashSet<String>>,
 ) {
     for removal in removals {
+        if !is_agent_allowed(&removal.agent_id, allowed_agent_ids) {
+            result.failures.push(SkillUpdateApplyFailure {
+                step: "remove_deleted_platform_copy".to_string(),
+                identifier: format!("{}::{}", removal.agent_id, removal.skill_id),
+                error: format!(
+                    "Agent '{}' is outside the allowed platform scope.",
+                    removal.agent_id
+                ),
+            });
+            continue;
+        }
         for path in &removal.paths {
             match remove_deleted_platform_copy(pool, active_target, &removal, path).await {
                 Ok(()) => result
@@ -220,6 +244,10 @@ pub(crate) async fn apply_remove_deleted_platform_copies_step(
             }
         }
     }
+}
+
+fn is_agent_allowed(agent_id: &str, allowed_agent_ids: Option<&HashSet<String>>) -> bool {
+    allowed_agent_ids.is_none_or(|ids| ids.contains(agent_id))
 }
 
 async fn remove_deleted_platform_copy(

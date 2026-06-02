@@ -1603,7 +1603,10 @@ describe("PlatformView", () => {
       expect(mockRescan).toHaveBeenCalledTimes(1);
       expect(mockGetSkillsByAgent).toHaveBeenCalledWith("claude-code");
       expect(mockScanDuplicates).toHaveBeenCalledWith(["claude-code"]);
-      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("duplicates");
+      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("duplicates", {
+        agentIds: ["claude-code"],
+        mode: "sync",
+      });
     });
     expect(toast.success).toHaveBeenCalled();
   });
@@ -1655,7 +1658,10 @@ describe("PlatformView", () => {
 
     await waitFor(() => {
       expect(mockScanDuplicates).toHaveBeenCalledWith(["codex"]);
-      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("duplicates");
+      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("duplicates", {
+        agentIds: ["codex"],
+        mode: "sync",
+      });
     });
   });
 
@@ -1697,7 +1703,10 @@ describe("PlatformView", () => {
       expect(mockRescan).toHaveBeenCalledTimes(1);
       expect(mockGetSkillsByAgent).toHaveBeenCalledWith("claude-code");
       expect(mockScanDeletedPlatformCopies).toHaveBeenCalledWith(["claude-code"]);
-      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("deletedPlatformCopies");
+      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("deletedPlatformCopies", {
+        agentIds: ["claude-code"],
+        mode: "sync",
+      });
     });
     expect(toast.success).toHaveBeenCalledWith(
       "发现 1 个已删除技能，可清理 1 个平台副本",

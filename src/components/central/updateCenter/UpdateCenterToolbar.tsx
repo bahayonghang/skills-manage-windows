@@ -59,6 +59,9 @@ export function UpdateCenterToolbar({
           <option value="repositories" disabled={!scopeEnabled.repositories}>
             {t("central.updateCenter.scopeRepository")}
           </option>
+          <option value="platform" disabled={!scopeEnabled.platform}>
+            {t("central.updateCenter.scopePlatform")}
+          </option>
           <option value="skills" disabled={!scopeEnabled.skills}>
             {t("central.updateCenter.scopeCurrent")}
           </option>

@@ -41,7 +41,7 @@ describe("UpdateCenterToolbar", () => {
         onTabChange={vi.fn()}
         tabOrder={TAB_ORDER}
         counts={EMPTY_COUNTS}
-        scopeEnabled={{ all: true, repositories: false, skills: false }}
+        scopeEnabled={{ all: true, repositories: false, platform: false, skills: false }}
       />,
     );
 

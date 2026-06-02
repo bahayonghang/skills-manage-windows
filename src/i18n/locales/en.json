@@ -1134,6 +1134,7 @@
       "scopeLabel": "Scope",
       "scopeAll": "All",
       "scopeRepository": "Current repository",
+      "scopePlatform": "Current platform",
       "scopeCurrent": "Current results",
       "modeLabel": "Refresh mode",
       "modeRegular": "Regular check",
@@ -1148,6 +1149,8 @@
         "failed": "Failed ({{count}})"
       },
       "applyAll": "Apply all ({{count}})",
+      "applySelected": "Apply selected ({{count}})",
+      "selectionSummary": "Selected: {{updatable}} update(s), {{added}} addition(s), {{missing}} removal decision(s), {{duplicates}} duplicate path(s), {{deletedPlatformCopies}} leftover path(s)",
       "clearInventory": "Clear inventory",
       "emptyAllClean": "Everything is up to date",
       "tabEmpty": "No entries in this category",

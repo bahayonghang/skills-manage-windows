@@ -1134,6 +1134,7 @@
       "scopeLabel": "范围",
       "scopeAll": "全部",
       "scopeRepository": "当前仓库",
+      "scopePlatform": "当前平台",
       "scopeCurrent": "当前结果",
       "modeLabel": "刷新模式",
       "modeRegular": "常规检查",
@@ -1148,6 +1149,8 @@
         "failed": "失败 ({{count}})"
       },
       "applyAll": "应用全部 ({{count}})",
+      "applySelected": "应用已选项 ({{count}})",
+      "selectionSummary": "已选：可更新 {{updatable}} 项，远端新增 {{added}} 项，删除决策 {{missing}} 项，平台冗余路径 {{duplicates}} 条，平台残留路径 {{deletedPlatformCopies}} 条",
       "clearInventory": "清空检查结果",
       "emptyAllClean": "所有内容都是最新的",
       "tabEmpty": "该分类暂无条目",

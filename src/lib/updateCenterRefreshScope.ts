@@ -12,29 +12,31 @@ export function normalizeRefreshContext(
   return {
     repositoryIds: uniqueNonEmpty(context?.repositoryIds ?? []),
     skillIds: uniqueNonEmpty(context?.skillIds ?? []),
+    agentIds: uniqueNonEmpty(context?.agentIds ?? []),
   };
 }
 
 export function isRefreshScopeEnabled(
   kind: SkillRefreshScopeKind,
-  context: SkillRefreshContext | null | undefined,
+  context: Partial<SkillRefreshContext> | null | undefined,
 ): boolean {
   if (kind === "all") return true;
   const normalized = normalizeRefreshContext(context);
   if (kind === "repositories") return normalized.repositoryIds.length > 0;
+  if (kind === "platform") return normalized.agentIds.length > 0;
   return normalized.skillIds.length > 0;
 }
 
 export function coerceRefreshScopeKind(
   kind: SkillRefreshScopeKind,
-  context: SkillRefreshContext | null | undefined,
+  context: Partial<SkillRefreshContext> | null | undefined,
 ): SkillRefreshScopeKind {
   return isRefreshScopeEnabled(kind, context) ? kind : "all";
 }
 
 export function buildRefreshScope(
   kind: SkillRefreshScopeKind,
-  context: SkillRefreshContext | null | undefined,
+  context: Partial<SkillRefreshContext> | null | undefined,
   mode: SkillRefreshMode = "sync",
 ): SkillRefreshScope {
   const normalized = normalizeRefreshContext(context);
@@ -49,6 +51,9 @@ export function buildRefreshScope(
   }
   if (effectiveKind === "skills") {
     return { kind: "skills", mode: normalizedMode, skillIds: normalized.skillIds };
+  }
+  if (effectiveKind === "platform") {
+    return { kind: "platform", mode: normalizedMode, agentIds: normalized.agentIds };
   }
   return { kind: "all", mode: normalizedMode };
 }

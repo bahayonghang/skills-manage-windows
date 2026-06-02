@@ -8,7 +8,7 @@ import type {
   CentralRepositoryAdditionUnskipRequest,
 } from "@/types/centralRepositorySync";
 
-export type SkillRefreshScopeKind = "all" | "skills" | "repositories";
+export type SkillRefreshScopeKind = "all" | "skills" | "repositories" | "platform";
 export type SkillRefreshMode = "regular" | "sync";
 
 export interface SkillRefreshScope {
@@ -16,6 +16,7 @@ export interface SkillRefreshScope {
   mode?: SkillRefreshMode;
   skillIds?: string[] | null;
   repositoryIds?: string[] | null;
+  agentIds?: string[] | null;
 }
 
 export interface SkillRefreshContext {
@@ -23,6 +24,8 @@ export interface SkillRefreshContext {
   repositoryIds: string[];
   /** 当前结果列表中可见的 Central skill ids。 */
   skillIds: string[];
+  /** 当前平台入口对应的 agent ids。 */
+  agentIds: string[];
 }
 
 export interface UpdatableSkill {
@@ -93,6 +96,7 @@ export interface DeletedPlatformCopyRemoval {
 }
 
 export interface SkillUpdateDecisions {
+  allowedAgentIds?: string[] | null;
   updates: string[];
   keepMissing: string[];
   deleteMissing: BatchDeleteCentralSkillRequest[];

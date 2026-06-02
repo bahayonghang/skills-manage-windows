@@ -45,7 +45,7 @@ const mockedUpdateCenter = vi.hoisted(() => {
       lastRefreshedAt: null,
       isDialogOpen: false,
       activeTab: "updatable",
-      refreshContext: { repositoryIds: [], skillIds: [] },
+      refreshContext: { repositoryIds: [], skillIds: [], agentIds: [] },
       refreshMode: "sync",
       error: null,
       refresh,

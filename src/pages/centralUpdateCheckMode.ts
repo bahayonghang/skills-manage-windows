@@ -46,6 +46,9 @@ export function buildUpdateCheckRefreshContext(
   if (scope.kind === "skills") {
     return { mode, skillIds: scope.skillIds ?? [] };
   }
+  if (scope.kind === "platform") {
+    return { mode, agentIds: scope.agentIds ?? [] };
+  }
   return { mode };
 }
 

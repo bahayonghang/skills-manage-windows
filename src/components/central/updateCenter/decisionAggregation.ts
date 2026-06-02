@@ -7,6 +7,7 @@ import type { UpdateCenterTab } from "@/stores/updateCenterStore";
 import type {
   DeletedPlatformCopyRemoval,
   PlatformDuplicateRemoval,
+  SkillRefreshScopeKind,
   SkillUpdateDecisions,
   SkillUpdateInventory,
 } from "@/types/skillUpdateInventory";
@@ -42,8 +43,10 @@ export function emptyDecisionState(): DecisionState {
 
 export function buildInitialState(
   inventory: SkillUpdateInventory | null,
+  scopeKind: SkillRefreshScopeKind = "all",
 ): DecisionState {
   if (!inventory) return emptyDecisionState();
+  const shouldSelectPlatformCleanup = scopeKind === "platform";
   const updatable: Record<string, UpdatableRowState> = {};
   for (const item of inventory.updatable) {
     updatable[item.state.skill_id] = { selected: true };
@@ -65,13 +68,13 @@ export function buildInitialState(
   const duplicates: Record<string, PlatformDuplicateRowState> = {};
   for (const group of inventory.platformDuplicates) {
     duplicates[duplicateGroupKey(group)] = {
-      selectedPaths: [...group.writablePaths],
+      selectedPaths: shouldSelectPlatformCleanup ? [...group.writablePaths] : [],
     };
   }
   const deletedPlatformCopies: Record<string, DeletedPlatformCopyRowState> = {};
   for (const group of inventory.deletedPlatformCopies ?? []) {
     deletedPlatformCopies[deletedPlatformCopyGroupKey(group)] = {
-      selectedPaths: [...group.writablePaths],
+      selectedPaths: shouldSelectPlatformCleanup ? [...group.writablePaths] : [],
     };
   }
   return { updatable, added, missing, duplicates, deletedPlatformCopies };
@@ -121,20 +124,72 @@ export function countDecisionSelections(
   }
   for (const group of inventory.platformDuplicates) {
     const paths = decisions.duplicates[duplicateGroupKey(group)]?.selectedPaths ?? [];
-    if (paths.length > 0) count += 1;
+    count += paths.length;
   }
   for (const group of inventory.deletedPlatformCopies ?? []) {
     const paths =
       decisions.deletedPlatformCopies[deletedPlatformCopyGroupKey(group)]
         ?.selectedPaths ?? [];
-    if (paths.length > 0) count += 1;
+    count += paths.length;
   }
   return count;
+}
+
+export interface DecisionSelectionSummary {
+  updatable: number;
+  added: number;
+  missing: number;
+  duplicates: number;
+  deletedPlatformCopies: number;
+}
+
+export function summarizeDecisionSelections(
+  decisions: DecisionState,
+  inventory: SkillUpdateInventory | null,
+): DecisionSelectionSummary {
+  if (!inventory) {
+    return {
+      updatable: 0,
+      added: 0,
+      missing: 0,
+      duplicates: 0,
+      deletedPlatformCopies: 0,
+    };
+  }
+  let updatable = 0;
+  let added = 0;
+  let missing = 0;
+  let duplicates = 0;
+  let deletedPlatformCopies = 0;
+
+  for (const item of inventory.updatable) {
+    if (decisions.updatable[item.state.skill_id]?.selected) updatable += 1;
+  }
+  for (const item of inventory.remoteAdded) {
+    const key = remoteAddedKey(item.repositoryId, item.sourcePath);
+    if (decisions.added[key]?.selected) added += 1;
+  }
+  for (const item of inventory.remoteMissing) {
+    const decision = decisions.missing[item.state.skill_id]?.decision;
+    if (decision === "keep" || decision === "delete") missing += 1;
+  }
+  for (const group of inventory.platformDuplicates) {
+    duplicates +=
+      decisions.duplicates[duplicateGroupKey(group)]?.selectedPaths.length ?? 0;
+  }
+  for (const group of inventory.deletedPlatformCopies ?? []) {
+    deletedPlatformCopies +=
+      decisions.deletedPlatformCopies[deletedPlatformCopyGroupKey(group)]
+        ?.selectedPaths.length ?? 0;
+  }
+
+  return { updatable, added, missing, duplicates, deletedPlatformCopies };
 }
 
 export function buildDecisions(
   decisions: DecisionState,
   inventory: SkillUpdateInventory,
+  allowedAgentIds?: string[],
 ): SkillUpdateDecisions {
   const updates: string[] = [];
   for (const item of inventory.updatable) {
@@ -215,6 +270,8 @@ export function buildDecisions(
   }
 
   return {
+    allowedAgentIds:
+      allowedAgentIds && allowedAgentIds.length > 0 ? allowedAgentIds : null,
     updates,
     keepMissing,
     deleteMissing,
