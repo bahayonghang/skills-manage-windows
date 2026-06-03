@@ -23,7 +23,7 @@ Run `pnpm docs:gen` to refresh. CI runs the same script before `pnpm docs:build`
 
 - **Naming.** Snake-case Rust function names map 1:1 to the JS `invoke()` argument: `invoke('scan_all_skills', {})`.
 - **Inputs.** Tauri serializes camelCase JS keys to snake-case parameters via serde. Pass a plain object.
-- **Returns.** All commands return `Result<T, String>`. The frontend treats the string as a user-visible error message; rich diagnostics go through `operation_logs` instead.
+- **Returns.** All commands return `Result<T, String>`. The frontend treats the string as a user-visible error message; rich diagnostics go through Runtime Log instead of `operation_logs`.
 - **Injected parameters.** `State<AppState>`, `Window`, `AppHandle`, and `Emitter` are injected by Tauri and do not appear in the JS payload.
 
 ## Source of truth

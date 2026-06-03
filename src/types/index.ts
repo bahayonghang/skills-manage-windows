@@ -462,6 +462,8 @@ export type {
   OperationLogTargetKind,
 } from "./operationLogs";
 
+export type * from "./runtimeLogs";
+
 export type {
   AiApiKeyState,
   CreateSshTargetRequest,

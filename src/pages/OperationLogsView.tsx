@@ -8,6 +8,7 @@ import {
   RotateCcw,
   Rows3,
   Search,
+  Terminal,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,8 +32,21 @@ import { useLogsKeyboard } from "@/components/logs/useLogsKeyboard";
 import { Button } from "@/components/ui/button";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { Input } from "@/components/ui/input";
+import { RuntimeLogsPanel } from "@/components/logs/RuntimeLogsPanel";
 import { useOperationLogStore } from "@/stores/operationLogStore";
 import { OperationLogEntry, OperationLogFilter } from "@/types";
+
+function downloadText(payload: string, fileName: string, type: string) {
+  const blob = new Blob([payload], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 function downloadJson(payload: string) {
   const now = new Date();
@@ -40,15 +54,11 @@ function downloadJson(payload: string) {
     .toISOString()
     .replace(/[-:]/g, "")
     .replace(/\.\d{3}Z$/, "");
-  const blob = new Blob([payload], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `skillport-operation-logs-${timestamp}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadText(
+    payload,
+    `skillport-operation-logs-${timestamp}.json`,
+    "application/json"
+  );
 }
 
 function toDateInput(value?: string): string {
@@ -71,7 +81,7 @@ function loadDensity(): LogsListDensity {
   return stored === "compact" ? "compact" : "comfortable";
 }
 
-export function OperationLogsView() {
+function OperationLogsPanel() {
   const { t } = useTranslation();
   const entries = useOperationLogStore((s) => s.entries);
   const total = useOperationLogStore((s) => s.total);
@@ -431,6 +441,65 @@ export function OperationLogsView() {
           if (!open) closeDetail();
         }}
       />
+    </div>
+  );
+}
+
+
+type LogConsoleMode = "operation" | "runtime";
+
+export function OperationLogsView() {
+  const { t } = useTranslation();
+  const [mode, setMode] = useState<LogConsoleMode>("operation");
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="shrink-0 border-b border-border bg-gradient-to-r from-background via-muted/20 to-background px-5 py-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
+              {t("logs.console.eyebrow")}
+            </div>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+              {t("logs.console.title")}
+            </h1>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              {t("logs.console.description")}
+            </p>
+          </div>
+          <div
+            role="tablist"
+            aria-label={t("logs.console.modeLabel")}
+            className="inline-flex rounded-xl border border-border bg-card/80 p-1 shadow-sm"
+          >
+            {(["operation", "runtime"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="tab"
+                aria-selected={mode === item}
+                onClick={() => setMode(item)}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  mode === item
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {item === "operation" ? (
+                  <Rows3 className="size-4" />
+                ) : (
+                  <Terminal className="size-4" />
+                )}
+                {t(`logs.console.modes.${item}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1">
+        {mode === "operation" ? <OperationLogsPanel /> : <RuntimeLogsPanel />}
+      </div>
     </div>
   );
 }

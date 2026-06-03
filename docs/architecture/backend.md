@@ -6,7 +6,7 @@ The Rust side is a Tauri v2 application split into thin IPC handlers, domain ser
 
 ```text
 src-tauri/src/
-├── lib.rs             Tauri builder + invoke_handler list (107 commands)
+├── lib.rs             Tauri builder + invoke_handler list
 ├── main.rs            Entry point — calls lib::run()
 ├── path_utils.rs      Cross-platform path helpers
 ├── paths.rs           Stable application paths (~/.skillsmanage)
@@ -37,7 +37,7 @@ Every `#[tauri::command]` lives under `src-tauri/src/commands/`. Files are domai
 | --- | --- |
 | `bootstrap.rs` | Cold-start snapshot for the dashboard |
 | `targets.rs` | Active target + SSH target CRUD |
-| `logs.rs` | Operation log list / get / clear / export |
+| `logs.rs` | Operation Log list / get / clear / export + Runtime Log diagnostics |
 | `scanner.rs` | On-demand `scan_all_skills` |
 | `agents.rs` | 27 built-in + custom agents, enable/disable |
 | `linker.rs` | Install / uninstall / batch install |
@@ -107,7 +107,8 @@ See [Data Model](./data-model.md) for the table layout.
 
 ## Logging and Errors
 
-- **Operation logs.** Long-lived, structured rows in `operation_logs`. Inserted by the linker / projects / marketplace services; surfaced in the Logs page.
+- **Operation logs.** Long-lived, structured rows in `operation_logs`. Inserted by the linker / projects / marketplace services; surfaced in the Operation layer of the Logs page.
+- **Runtime logs.** Short-lived daily files named `skillport-YYYY-MM-DD.log`. Written by backend tracing and frontend diagnostics, read/exported through whitelisted IPC helpers, and cleaned after the retention window.
 - **Errors.** All commands return `Result<T, String>`. Services bubble `String` for the IPC boundary; rich error context stays inside services until the boundary collapses it for serialization.
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-06-03

@@ -309,6 +309,11 @@ pub fn run() {
             commands::logs::get_operation_log,
             commands::logs::clear_operation_logs,
             commands::logs::export_operation_logs,
+            commands::logs::list_runtime_log_files,
+            commands::logs::read_runtime_log_file,
+            commands::logs::export_runtime_log_file,
+            commands::logs::clear_runtime_logs,
+            commands::logs::record_frontend_runtime_log,
             // Scanner
             commands::scanner::scan_all_skills,
             // Agents

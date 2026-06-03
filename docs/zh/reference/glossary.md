@@ -21,7 +21,9 @@ UI、源码、文档中使用的术语。
 | 集合 | Collection | 用户自定义的技能分组，用于批量安装与导入导出 |
 | 技能仓库 | Repository | 按源仓库分组 Central 技能的本地元数据 |
 | 标签 | Tag | 本地分类项，可手动也可由 AI 建议 |
-| 操作日志 | Operation Log | `operation_logs` 中的结构化行，记录安装 / 卸载事件 |
+| 操作日志 | Operation Log | `operation_logs` 中的结构化行，记录安装、卸载、扫描、设置、target 切换、导入、导出等用户可见操作 |
+| 运行时日志 | Runtime Log | 有界日文件 `skillport-YYYY-MM-DD.log`，用于前后端诊断；与 Operation Log 分离 |
+| 可观测性控制台 | Observability Console | `/logs` UI，包含独立的 Operation 与 Runtime 模式 |
 | 目标 | Target | Local 或 SSH 主机；命令解析的目的端 |
 | 活动目标 | Active Target | SSH 横幅当前选中的 Target |
 | Vault | Vault | Obsidian 管理的目录；SkillPort 在 `/obsidian` 下做仅源扫描 |
@@ -44,4 +46,4 @@ UI、源码、文档中使用的术语。
 - 平台 → 目录：见[平台路径](./platform-paths.md)
 - 安装方式语义：见[架构 → 安装引擎](../architecture/installation-engine.md)
 
-Last reviewed: 2026-05-25
+Last reviewed: 2026-06-03

@@ -18,7 +18,7 @@ The frontend is a single Vite-bundled React 19 app served inside Tauri's webview
 | `/projects` | `ProjectsView` | Project list + skill detail |
 | `/projects/:projectId` | `ProjectsView` | Same view, filtered |
 | `/obsidian` / `/obsidian/:vaultId` | `ObsidianVaultView` | Vault list + skills |
-| `/logs` | `OperationLogsView` | Filterable log table |
+| `/logs` | `OperationLogsView` | Operation / Runtime Observability Console |
 | `/settings` | `SettingsView` | Cards by section |
 
 Lazy imports keep first-paint cost low — the dashboard route does not pull in marketplace HTTP code.
@@ -41,7 +41,8 @@ Zustand stores in `src/stores/` are the only place that calls `invoke()`. Each s
 │ projectsStore                │ Projects + per-project skills   │
 │ obsidianStore                │ Vault list + vault skills       │
 │ targetStore                  │ Active target + SSH targets     │
-│ operationLogStore            │ Log paging + filters            │
+│ operationLogStore            │ Operation Log paging + filters  │
+│ runtimeLogStore              │ Runtime Log files + tail reads  │
 │ settingsStore                │ Key/value settings + scan dirs  │
 │ themeStore                   │ Catppuccin variant + accent     │
 └──────────────────────────────┴─────────────────────────────────┘
@@ -81,4 +82,4 @@ Catppuccin Mocha / Frappé / Latte plus 14 accent colors are toggled by the `dat
 
 This rule keeps the test surface small: `vitest` mocks `window.__TAURI_INTERNALS__.invoke` once and every store cooperates. Look at `src/stores/*.test.ts` for the pattern.
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-06-03

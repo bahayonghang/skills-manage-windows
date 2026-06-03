@@ -1,5 +1,8 @@
 use crate::paths;
-use chrono::Local;
+use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
+use regex::{Captures, Regex};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -8,6 +11,16 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 
 static LOG_GUARD: OnceLock<WorkerGuard> = OnceLock::new();
+static REDACTION_PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
+
+const RUNTIME_LOG_RETENTION_DAYS: i64 = 14;
+const RUNTIME_LOG_PREFIX: &str = "skillport-";
+const RUNTIME_LOG_SUFFIX: &str = ".log";
+const DEFAULT_RUNTIME_LOG_LIMIT: usize = 200;
+const MAX_RUNTIME_LOG_LIMIT: usize = 1_000;
+const MAX_FRONTEND_SOURCE_CHARS: usize = 80;
+const MAX_FRONTEND_MESSAGE_CHARS: usize = 2_000;
+const MAX_FRONTEND_DETAILS_CHARS: usize = 4_000;
 
 #[derive(Debug)]
 struct DailyLogWriter {
@@ -40,6 +53,74 @@ impl Write for DailyLogWriter {
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeLogFile {
+    pub file_name: String,
+    pub date: String,
+    pub size_bytes: u64,
+    pub modified_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeLogReadRequest {
+    pub file_name: String,
+    pub query: Option<String>,
+    pub level: Option<String>,
+    pub source: Option<String>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+    #[serde(default)]
+    pub tail: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeLogLine {
+    pub line_number: usize,
+    pub timestamp: Option<String>,
+    pub level: Option<String>,
+    pub source: String,
+    pub message: String,
+    pub raw: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeLogReadResult {
+    pub file_name: String,
+    pub total: usize,
+    pub limit: usize,
+    pub offset: usize,
+    pub lines: Vec<RuntimeLogLine>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeLogClearRequest {
+    pub file_name: Option<String>,
+    pub older_than_days: Option<i64>,
+    pub all: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrontendRuntimeLogPayload {
+    pub level: Option<String>,
+    pub source: Option<String>,
+    pub message: Option<String>,
+    pub details: Option<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SanitizedFrontendRuntimeLog {
+    level: String,
+    source: String,
+    message: String,
+    details: String,
 }
 
 pub fn logs_dir() -> PathBuf {
@@ -80,6 +161,10 @@ pub fn init_file_logging_with_dir(log_dir: &Path) -> Result<(), String> {
         )
     })?;
 
+    if let Err(error) = cleanup_expired_runtime_logs_in_dir(log_dir, RUNTIME_LOG_RETENTION_DAYS) {
+        eprintln!("Failed to clean expired SkillPort runtime logs: {error}");
+    }
+
     let appender = DailyLogWriter::new(log_dir.to_path_buf());
     init_file_logging_with_appender(appender)
 }
@@ -118,66 +203,493 @@ fn default_env_filter() -> EnvFilter {
     EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub fn list_runtime_log_files() -> Result<Vec<RuntimeLogFile>, String> {
+    list_runtime_log_files_in_dir(&logs_dir())
+}
 
-    #[test]
-    fn logs_dir_is_under_app_data_dir() {
-        assert!(logs_dir().ends_with(".skillsmanage/logs"));
+fn list_runtime_log_files_in_dir(log_dir: &Path) -> Result<Vec<RuntimeLogFile>, String> {
+    if !log_dir.exists() {
+        return Ok(Vec::new());
     }
 
-    #[test]
-    fn daily_log_writer_writes_skillport_dated_log_file() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let mut appender = DailyLogWriter::new(temp_dir.path().to_path_buf());
-
-        appender
-            .write_all(b"SkillPort file logging initialized\n")
-            .unwrap();
-        appender.flush().unwrap();
-
-        let entries = fs::read_dir(temp_dir.path())
-            .unwrap()
-            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
-
-        assert_eq!(entries.len(), 1);
-        assert!(entries[0].starts_with("skillport-"));
-        assert!(entries[0].ends_with(".log"));
-        let content = fs::read_to_string(temp_dir.path().join(&entries[0])).unwrap();
-        assert!(content.contains("SkillPort file logging initialized"));
-    }
-
-    #[test]
-    fn operation_log_failure_warning_enters_daily_log_file() {
-        // M6 稳定化：直接测 tracing → DailyLogWriter 集成链路，不经过 sqlx / tokio runtime。
-        //
-        // 原实现触发 `record_operation_log_best_effort(:memory:)` 的失败路径，但跨
-        // test-thread + sqlx spawn_blocking 会使 thread-local dispatcher 不稳定，
-        // 在并发跑整个 lib 测试时偶发失败。错误路径本身已在 operation_log 模块测试中
-        // 覆盖（`records_failure_when_insert_errors`），此处只需验证 warn! 能穿过
-        // DailyLogWriter 写入每日日志文件。
-        let temp_dir = tempfile::tempdir().unwrap();
-        let log_dir = temp_dir.path().to_path_buf();
-        let make_writer = move || DailyLogWriter::new(log_dir.clone());
-        let subscriber = tracing_subscriber::fmt()
-            .with_writer(make_writer)
-            .with_ansi(false)
-            .compact()
-            .finish();
-        let dispatch = tracing::Dispatch::new(subscriber);
-
-        tracing::dispatcher::with_default(&dispatch, || {
-            tracing::warn!("Failed to record operation log: simulated error");
+    let mut files = Vec::new();
+    for entry in fs::read_dir(log_dir).map_err(|error| {
+        format!(
+            "Failed to read runtime log directory '{}': {error}",
+            log_dir.display()
+        )
+    })? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let file_name = entry.file_name().to_string_lossy().into_owned();
+        let Some(date) = runtime_log_file_date(&file_name) else {
+            continue;
+        };
+        let metadata = entry.metadata().map_err(|error| error.to_string())?;
+        if !metadata.is_file() {
+            continue;
+        }
+        files.push(RuntimeLogFile {
+            file_name,
+            date: date.to_string(),
+            size_bytes: metadata.len(),
+            modified_at: metadata
+                .modified()
+                .ok()
+                .map(|modified| DateTime::<Utc>::from(modified).to_rfc3339()),
         });
+    }
 
-        let entries = fs::read_dir(temp_dir.path())
-            .unwrap()
-            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
-        assert_eq!(entries.len(), 1);
-        let content = fs::read_to_string(temp_dir.path().join(&entries[0])).unwrap();
-        assert!(content.contains("Failed to record operation log"));
+    files.sort_by(|left, right| right.date.cmp(&left.date));
+    Ok(files)
+}
+
+pub fn read_runtime_log_file(
+    request: RuntimeLogReadRequest,
+) -> Result<RuntimeLogReadResult, String> {
+    read_runtime_log_file_from_dir(&logs_dir(), request)
+}
+
+fn read_runtime_log_file_from_dir(
+    log_dir: &Path,
+    request: RuntimeLogReadRequest,
+) -> Result<RuntimeLogReadResult, String> {
+    let path = runtime_log_path(log_dir, &request.file_name)?;
+    let content = fs::read_to_string(&path).map_err(|error| {
+        format!(
+            "Failed to read runtime log file '{}': {error}",
+            request.file_name
+        )
+    })?;
+
+    let query = normalize_filter_value(request.query.as_deref()).map(|value| value.to_lowercase());
+    let level = normalize_filter_value(request.level.as_deref()).map(|value| value.to_lowercase());
+    let source =
+        normalize_filter_value(request.source.as_deref()).map(|value| value.to_lowercase());
+
+    let filtered = content
+        .lines()
+        .enumerate()
+        .map(|(index, raw)| parse_runtime_log_line(index + 1, raw))
+        .filter(|line| {
+            runtime_line_matches(line, query.as_deref(), level.as_deref(), source.as_deref())
+        })
+        .collect::<Vec<_>>();
+
+    let total = filtered.len();
+    let limit = runtime_log_limit(request.limit);
+    let requested_offset = request.offset.unwrap_or(0).min(total);
+    let offset = if request.tail {
+        total.saturating_sub(limit)
+    } else {
+        requested_offset
+    };
+    let lines = filtered.into_iter().skip(offset).take(limit).collect();
+
+    Ok(RuntimeLogReadResult {
+        file_name: request.file_name,
+        total,
+        limit,
+        offset,
+        lines,
+    })
+}
+
+pub fn export_runtime_log_file(file_name: String) -> Result<String, String> {
+    export_runtime_log_file_from_dir(&logs_dir(), &file_name)
+}
+
+fn export_runtime_log_file_from_dir(log_dir: &Path, file_name: &str) -> Result<String, String> {
+    let path = runtime_log_path(log_dir, file_name)?;
+    let content = fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to export runtime log file '{file_name}': {error}"))?;
+    Ok(content
+        .lines()
+        .map(redact_sensitive_line)
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
+pub fn clear_runtime_logs(request: RuntimeLogClearRequest) -> Result<u64, String> {
+    clear_runtime_logs_in_dir(&logs_dir(), request)
+}
+
+fn clear_runtime_logs_in_dir(
+    log_dir: &Path,
+    request: RuntimeLogClearRequest,
+) -> Result<u64, String> {
+    if !log_dir.exists() {
+        return Ok(0);
+    }
+
+    if let Some(file_name) = request.file_name {
+        let path = runtime_log_path(log_dir, &file_name)?;
+        if path.exists() {
+            fs::remove_file(&path).map_err(|error| {
+                format!("Failed to delete runtime log file '{file_name}': {error}")
+            })?;
+            return Ok(1);
+        }
+        return Ok(0);
+    }
+
+    let cutoff = if request.all.unwrap_or(false) {
+        None
+    } else if let Some(days) = request.older_than_days {
+        let days = days.max(0);
+        Some((Local::now() - Duration::days(days)).date_naive())
+    } else {
+        return Err(
+            "Runtime log clear request must include fileName, all, or olderThanDays.".to_string(),
+        );
+    };
+
+    let mut deleted = 0;
+    for file in list_runtime_log_files_in_dir(log_dir)? {
+        let Some(date) = runtime_log_file_date(&file.file_name) else {
+            continue;
+        };
+        if cutoff.is_some_and(|cutoff| date >= cutoff) {
+            continue;
+        }
+        let path = runtime_log_path(log_dir, &file.file_name)?;
+        fs::remove_file(&path).map_err(|error| {
+            format!(
+                "Failed to delete runtime log file '{}': {error}",
+                file.file_name
+            )
+        })?;
+        deleted += 1;
+    }
+
+    Ok(deleted)
+}
+
+pub fn cleanup_expired_runtime_logs() -> Result<u64, String> {
+    cleanup_expired_runtime_logs_in_dir(&logs_dir(), RUNTIME_LOG_RETENTION_DAYS)
+}
+
+fn cleanup_expired_runtime_logs_in_dir(log_dir: &Path, retention_days: i64) -> Result<u64, String> {
+    clear_runtime_logs_in_dir(
+        log_dir,
+        RuntimeLogClearRequest {
+            file_name: None,
+            older_than_days: Some(retention_days),
+            all: None,
+        },
+    )
+}
+
+pub fn record_frontend_runtime_log(payload: FrontendRuntimeLogPayload) {
+    let log = sanitize_frontend_runtime_log_payload(payload);
+    match log.level.as_str() {
+        "error" => tracing::error!(
+            target: "skillport::frontend",
+            source = %log.source,
+            details = %log.details,
+            "{}",
+            log.message
+        ),
+        "warn" => tracing::warn!(
+            target: "skillport::frontend",
+            source = %log.source,
+            details = %log.details,
+            "{}",
+            log.message
+        ),
+        "debug" => tracing::debug!(
+            target: "skillport::frontend",
+            source = %log.source,
+            details = %log.details,
+            "{}",
+            log.message
+        ),
+        _ => tracing::info!(
+            target: "skillport::frontend",
+            source = %log.source,
+            details = %log.details,
+            "{}",
+            log.message
+        ),
     }
 }
+
+fn runtime_log_limit(limit: Option<usize>) -> usize {
+    limit
+        .unwrap_or(DEFAULT_RUNTIME_LOG_LIMIT)
+        .clamp(1, MAX_RUNTIME_LOG_LIMIT)
+}
+
+fn normalize_filter_value(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn runtime_line_matches(
+    line: &RuntimeLogLine,
+    query: Option<&str>,
+    level: Option<&str>,
+    source: Option<&str>,
+) -> bool {
+    if let Some(level) = level {
+        if line.level.as_deref().map(str::to_lowercase).as_deref() != Some(level) {
+            return false;
+        }
+    }
+
+    if let Some(source) = source {
+        let line_source = line.source.to_lowercase();
+        let raw = line.raw.to_lowercase();
+        if !line_source.contains(source) && !raw.contains(source) {
+            return false;
+        }
+    }
+
+    if let Some(query) = query {
+        let haystack = format!("{} {} {}", line.source, line.message, line.raw).to_lowercase();
+        if !haystack.contains(query) {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn parse_runtime_log_line(line_number: usize, raw: &str) -> RuntimeLogLine {
+    let raw = redact_sensitive_line(raw);
+    let level = detect_runtime_level(&raw);
+    let timestamp = detect_runtime_timestamp(&raw);
+    let target_source = detect_runtime_target_source(&raw);
+    let source = extract_log_field(&raw, "source")
+        .or(target_source)
+        .unwrap_or_else(|| "runtime".to_string());
+    let message = detect_runtime_message(&raw);
+
+    RuntimeLogLine {
+        line_number,
+        timestamp,
+        level,
+        source,
+        message,
+        raw,
+    }
+}
+
+fn detect_runtime_level(raw: &str) -> Option<String> {
+    raw.split_whitespace().find_map(|token| {
+        let cleaned = token
+            .trim_matches(|value: char| !value.is_ascii_alphabetic())
+            .to_uppercase();
+        match cleaned.as_str() {
+            "ERROR" | "WARN" | "INFO" | "DEBUG" | "TRACE" => Some(cleaned.to_lowercase()),
+            _ => None,
+        }
+    })
+}
+
+fn detect_runtime_timestamp(raw: &str) -> Option<String> {
+    let first = raw.split_whitespace().next()?;
+    if first.len() >= 10
+        && first.as_bytes().get(4) == Some(&b'-')
+        && first.as_bytes().get(7) == Some(&b'-')
+    {
+        Some(first.trim_end_matches(',').to_string())
+    } else {
+        None
+    }
+}
+
+fn detect_runtime_target_source(raw: &str) -> Option<String> {
+    let markers = ["skillport::", "src_tauri::", "src-tauri::"];
+    for marker in markers {
+        if let Some(index) = raw.find(marker) {
+            let rest = &raw[index..];
+            let end = rest
+                .find([':', ' ', '\t'])
+                .filter(|end| *end > 0)
+                .unwrap_or(rest.len());
+            return Some(rest[..end].to_string());
+        }
+    }
+    None
+}
+
+fn detect_runtime_message(raw: &str) -> String {
+    if let Some(index) = raw.rfind(": ") {
+        return raw[index + 2..].trim().to_string();
+    }
+    raw.trim().to_string()
+}
+
+fn extract_log_field(raw: &str, key: &str) -> Option<String> {
+    let needle = format!("{key}=");
+    let start = raw.find(&needle)? + needle.len();
+    let rest = &raw[start..];
+    let trimmed = rest.trim_start_matches(['\"', '\'']);
+    let end = trimmed
+        .find([' ', ',', ';', '\"', '\''])
+        .unwrap_or(trimmed.len());
+    let value = trimmed[..end].trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn runtime_log_path(log_dir: &Path, file_name: &str) -> Result<PathBuf, String> {
+    validate_runtime_log_file_name(file_name)?;
+    Ok(log_dir.join(file_name))
+}
+
+fn validate_runtime_log_file_name(file_name: &str) -> Result<(), String> {
+    if runtime_log_file_date(file_name).is_some() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Invalid runtime log file name '{file_name}'. Expected skillport-YYYY-MM-DD.log."
+        ))
+    }
+}
+
+fn runtime_log_file_date(file_name: &str) -> Option<NaiveDate> {
+    if file_name.contains('/') || file_name.contains('\\') || file_name.contains("..") {
+        return None;
+    }
+    let date = file_name
+        .strip_prefix(RUNTIME_LOG_PREFIX)?
+        .strip_suffix(RUNTIME_LOG_SUFFIX)?;
+    if date.len() != 10 {
+        return None;
+    }
+    NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()
+}
+
+fn redact_sensitive_line(raw: &str) -> String {
+    let patterns = REDACTION_PATTERNS.get_or_init(|| {
+        vec![
+            Regex::new(
+                r#"(?ix)(?P<prefix>["']?(?:password|token|pat|api[_-]?key|apikey|secret|private[_-]?key|credential)["']?\s*:\s*["'])[^"']+(?P<suffix>["'])"#,
+            )
+            .expect("valid JSON redaction regex"),
+            Regex::new(
+                r#"(?ix)(?P<prefix>\b(?:password|token|pat|api[_-]?key|apikey|secret|private[_-]?key|credential)\b\s*=\s*["']?)[^"'\s,;})\]]+"#,
+            )
+            .expect("valid key-value redaction regex"),
+        ]
+    });
+
+    let mut redacted = patterns[0]
+        .replace_all(raw, |captures: &Captures<'_>| {
+            format!("{}[REDACTED]{}", &captures["prefix"], &captures["suffix"])
+        })
+        .to_string();
+    redacted = patterns[1]
+        .replace_all(&redacted, |captures: &Captures<'_>| {
+            format!("{}[REDACTED]", &captures["prefix"])
+        })
+        .to_string();
+    redacted
+}
+
+fn sanitize_frontend_runtime_log_payload(
+    payload: FrontendRuntimeLogPayload,
+) -> SanitizedFrontendRuntimeLog {
+    let level = match payload
+        .level
+        .as_deref()
+        .map(str::trim)
+        .map(str::to_lowercase)
+        .as_deref()
+    {
+        Some("error") => "error",
+        Some("warn") | Some("warning") => "warn",
+        Some("debug") => "debug",
+        _ => "info",
+    }
+    .to_string();
+
+    let source = truncate_chars(
+        payload
+            .source
+            .as_deref()
+            .map(str::trim)
+            .filter(|source| !source.is_empty())
+            .unwrap_or("frontend.runtime"),
+        MAX_FRONTEND_SOURCE_CHARS,
+    );
+    let message = truncate_chars(
+        &redact_sensitive_line(
+            payload
+                .message
+                .as_deref()
+                .map(str::trim)
+                .filter(|message| !message.is_empty())
+                .unwrap_or("Frontend runtime event"),
+        ),
+        MAX_FRONTEND_MESSAGE_CHARS,
+    );
+    let details = payload
+        .details
+        .map(redact_json_value)
+        .and_then(|value| serde_json::to_string(&value).ok())
+        .map(|value| truncate_chars(&value, MAX_FRONTEND_DETAILS_CHARS))
+        .unwrap_or_else(|| "{}".to_string());
+
+    SanitizedFrontendRuntimeLog {
+        level,
+        source,
+        message,
+        details: redact_sensitive_line(&details),
+    }
+}
+
+fn redact_json_value(value: Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(redact_json_map(map)),
+        Value::Array(items) => Value::Array(items.into_iter().map(redact_json_value).collect()),
+        other => other,
+    }
+}
+
+fn redact_json_map(map: Map<String, Value>) -> Map<String, Value> {
+    map.into_iter()
+        .map(|(key, value)| {
+            if is_sensitive_key(&key) {
+                (key, Value::String("[REDACTED]".to_string()))
+            } else {
+                (key, redact_json_value(value))
+            }
+        })
+        .collect()
+}
+
+fn is_sensitive_key(key: &str) -> bool {
+    let key = key.to_lowercase();
+    [
+        "password",
+        "token",
+        "pat",
+        "api_key",
+        "apikey",
+        "secret",
+        "private_key",
+        "credential",
+    ]
+    .into_iter()
+    .any(|needle| key.contains(needle))
+}
+
+fn truncate_chars(value: &str, max_chars: usize) -> String {
+    let mut iter = value.chars();
+    let truncated = iter.by_ref().take(max_chars).collect::<String>();
+    if iter.next().is_some() {
+        format!("{truncated}…")
+    } else {
+        truncated
+    }
+}
+
+#[cfg(test)]
+mod tests;

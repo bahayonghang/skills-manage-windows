@@ -18,7 +18,7 @@
 | `/projects` | `ProjectsView` | 项目列表 + 技能详情 |
 | `/projects/:projectId` | `ProjectsView` | 同上，按项目过滤 |
 | `/obsidian` / `/obsidian/:vaultId` | `ObsidianVaultView` | Vault 列表 + 技能 |
-| `/logs` | `OperationLogsView` | 可过滤的日志表 |
+| `/logs` | `OperationLogsView` | Operation / Runtime 可观测性控制台 |
 | `/settings` | `SettingsView` | 分区卡片 |
 
 懒加载确保首屏成本可控，dashboard 路由不会拉入 marketplace 的 HTTP 代码。
@@ -41,7 +41,8 @@
 │ projectsStore                │ 项目 + 项目内技能               │
 │ obsidianStore                │ Vault 列表 + Vault 技能         │
 │ targetStore                  │ 活动目标 + SSH 目标             │
-│ operationLogStore            │ 日志分页 + 过滤                 │
+│ operationLogStore            │ Operation Log 分页 + 过滤       │
+│ runtimeLogStore              │ Runtime Log 文件 + tail 读取    │
 │ settingsStore                │ 键值设置 + 扫描目录             │
 │ themeStore                   │ Catppuccin 风格 + accent        │
 └──────────────────────────────┴─────────────────────────────────┘
@@ -77,4 +78,4 @@ components/
 
 vitest 一次 mock `window.__TAURI_INTERNALS__.invoke`，所有 store 自动配合。
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-06-03

@@ -16,7 +16,7 @@ vi.mock("sonner", () => ({
 import { invoke } from "@/lib/tauri";
 import { OperationLogsView } from "@/pages/OperationLogsView";
 import { useOperationLogStore } from "@/stores/operationLogStore";
-import { OperationLogEntry, OperationLogPage } from "@/types";
+import { OperationLogEntry, OperationLogPage, RuntimeLogReadResult } from "@/types";
 
 const mockEntry: OperationLogEntry = {
   id: "log-1",
@@ -41,6 +41,23 @@ const mockPage: OperationLogPage = {
   total: 1,
   limit: 100,
   offset: 0,
+};
+
+const mockRuntimeReadResult: RuntimeLogReadResult = {
+  fileName: "skillport-2026-06-03.log",
+  total: 1,
+  limit: 200,
+  offset: 0,
+  lines: [
+    {
+      lineNumber: 1,
+      timestamp: "2026-06-03T10:00:00Z",
+      level: "error",
+      source: "window.error",
+      message: "Render exploded",
+      raw: "2026-06-03T10:00:00Z ERROR skillport::frontend: Render exploded source=window.error token=[REDACTED]",
+    },
+  ],
 };
 
 const mockEntry2: OperationLogEntry = {
@@ -77,11 +94,25 @@ describe("OperationLogsView", () => {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
       configurable: true,
     });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "list_operation_logs") return mockPage;
       if (command === "get_operation_log") return mockEntry;
       if (command === "clear_operation_logs") return 1;
       if (command === "export_operation_logs") return '{"entries":[]}';
+      if (command === "list_runtime_log_files") {
+        return [
+          {
+            fileName: "skillport-2026-06-03.log",
+            date: "2026-06-03",
+            sizeBytes: 512,
+            modifiedAt: "2026-06-03T10:00:00Z",
+          },
+        ];
+      }
+      if (command === "read_runtime_log_file") return mockRuntimeReadResult;
+      if (command === "export_runtime_log_file") return "runtime log";
+      if (command === "clear_runtime_logs") return 1;
       return null;
     });
   });
@@ -201,6 +232,47 @@ describe("OperationLogsView", () => {
 
     await waitFor(() => {
       expect(document.activeElement).toBe(searchInput);
+    });
+  });
+
+  it("renders runtime logs, filters, exports, and clears the selected file", async () => {
+    render(<OperationLogsView />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /运行日志/ }));
+
+    expect(await screen.findByText("运行时诊断")).toBeInTheDocument();
+    expect(await screen.findByText("Render exploded")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("级别"), { target: { value: "error" } });
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenLastCalledWith("read_runtime_log_file", {
+        request: {
+          fileName: "skillport-2026-06-03.log",
+          query: undefined,
+          level: "error",
+          source: undefined,
+          limit: 200,
+          offset: 0,
+          tail: true,
+        },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /导出|Export/ }));
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("export_runtime_log_file", {
+        fileName: "skillport-2026-06-03.log",
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "清理选中的运行日志" }));
+    fireEvent.click(screen.getByRole("button", { name: "清理文件" }));
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("clear_runtime_logs", {
+        request: { fileName: "skillport-2026-06-03.log" },
+      });
     });
   });
 });
