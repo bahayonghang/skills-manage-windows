@@ -1,17 +1,8 @@
 name: CI
 
 on:
-  pull_request:
-    branches:
-      - main
-      - dev
-  push:
-    branches:
-      - main
-      - dev
   release:
     types: [published]
-  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -70,7 +61,6 @@ jobs:
 
   windows-package:
     name: Windows x64 smoke package
-    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -114,7 +104,6 @@ jobs:
 
   linux-package:
     name: Linux ${{ matrix.asset-arch }} smoke packages
-    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ matrix.runner }}
     continue-on-error: ${{ matrix.continue_on_error }}
     strategy:
@@ -186,7 +175,6 @@ jobs:
 
   macos-package:
     name: macOS universal smoke packages
-    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
     runs-on: macos-14
     steps:
       - name: Checkout
