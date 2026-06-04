@@ -1,13 +1,18 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+const APP_DATA_DIR_NAME: &str = ".skillsmanage";
+#[cfg(windows)]
+const APP_DATABASE_FILE_NAME: &str = "db.sqlite";
+
 /*
  * ========================================================================
  * 步骤1：解析用户家目录
  * ========================================================================
  * 目标：
  * 1) 统一后端家目录解析规则
- * 2) 在 Windows 下优先兼容 USERPROFILE 与 HOMEDRIVE/HOMEPATH
+ * 2) 在 Windows 下优先兼容 USERPROFILE 与 HOMEDRIVE/HOMEPATH，
+ *    非 Windows 平台保持 HOME 优先
  */
 pub fn resolve_home_dir() -> PathBuf {
     resolve_home_dir_from_env_vars(
@@ -24,29 +29,58 @@ fn resolve_home_dir_from_env_vars(
     homedrive: Option<OsString>,
     homepath: Option<OsString>,
 ) -> PathBuf {
-    // 1.1 优先使用 HOME
-    if let Some(home) = non_empty_os_env(home) {
-        return PathBuf::from(home);
-    }
-
-    // 1.2 Windows 环境优先回退到 USERPROFILE
-    if let Some(user_profile) = non_empty_os_env(userprofile) {
-        return PathBuf::from(user_profile);
-    }
-
-    // 1.3 最后尝试 HOMEDRIVE + HOMEPATH
-    if let (Some(home_drive), Some(home_path)) =
-        (non_empty_os_env(homedrive), non_empty_os_env(homepath))
+    #[cfg(windows)]
     {
-        return PathBuf::from(format!(
-            "{}{}",
-            home_drive.to_string_lossy(),
-            home_path.to_string_lossy()
-        ));
+        // 1.1 Windows 优先使用 USERPROFILE
+        if let Some(user_profile) = non_empty_os_env(userprofile) {
+            return PathBuf::from(user_profile);
+        }
+
+        // 1.2 再回退到 HOMEDRIVE + HOMEPATH
+        if let (Some(home_drive), Some(home_path)) =
+            (non_empty_os_env(homedrive), non_empty_os_env(homepath))
+        {
+            return PathBuf::from(format!(
+                "{}{}",
+                home_drive.to_string_lossy(),
+                home_path.to_string_lossy()
+            ));
+        }
+
+        // 1.3 Windows 兼容 Git Bash / MSYS HOME，但只作为最后的 shell fallback
+        if let Some(home) = non_empty_os_env(home) {
+            return PathBuf::from(home);
+        }
+
+        // 1.4 全部缺失时保底回退到当前平台临时目录
+        std::env::temp_dir()
     }
 
-    // 1.4 全部缺失时保底回退到当前平台临时目录
-    std::env::temp_dir()
+    #[cfg(not(windows))]
+    {
+        // 1.1 非 Windows 平台优先使用 HOME
+        if let Some(home) = non_empty_os_env(home) {
+            return PathBuf::from(home);
+        }
+
+        // 1.2 兼容 USERPROFILE / HOMEDRIVE+HOMEPATH 的跨平台测试夹具
+        if let Some(user_profile) = non_empty_os_env(userprofile) {
+            return PathBuf::from(user_profile);
+        }
+
+        if let (Some(home_drive), Some(home_path)) =
+            (non_empty_os_env(homedrive), non_empty_os_env(homepath))
+        {
+            return PathBuf::from(format!(
+                "{}{}",
+                home_drive.to_string_lossy(),
+                home_path.to_string_lossy()
+            ));
+        }
+
+        // 1.3 全部缺失时保底回退到当前平台临时目录
+        std::env::temp_dir()
+    }
 }
 
 pub fn resolve_home_dir_with<F>(mut get_var: F) -> PathBuf
@@ -70,7 +104,10 @@ where
  * 2) 保留 `~/.agents/skills` 作为 Universal Agents 安装目标
  */
 pub fn central_skills_dir() -> PathBuf {
-    central_skills_dir_from_home(&resolve_home_dir())
+    // Keep Central store writes next to the selected app data DB. On Windows
+    // this preserves an existing Git Bash HOME-backed DB/store until the user
+    // explicitly moves it through Central store location preview/apply.
+    app_data_dir().join("skills")
 }
 
 pub fn central_skills_dir_from_home(home_dir: &Path) -> PathBuf {
@@ -162,8 +199,13 @@ fn non_empty_str(value: &str) -> Option<&str> {
  * 2) 统一 `~` 展开与 Path -> String 转换
  */
 pub fn app_data_dir() -> PathBuf {
-    // 3.1 复用家目录规则构造应用数据目录
-    resolve_home_dir().join(".skillsmanage")
+    // 3.1 复用家目录规则构造应用数据目录；Windows 兼容旧 Git Bash HOME 数据目录
+    app_data_dir_from_env_vars(
+        std::env::var_os("HOME"),
+        std::env::var_os("USERPROFILE"),
+        std::env::var_os("HOMEDRIVE"),
+        std::env::var_os("HOMEPATH"),
+    )
 }
 
 pub fn expand_home_path(path: &str) -> PathBuf {
@@ -248,6 +290,71 @@ fn expand_home_path_with_home(path: &str, home_dir: &Path) -> PathBuf {
     PathBuf::from(trimmed)
 }
 
+fn app_data_dir_from_env_vars(
+    home: Option<OsString>,
+    userprofile: Option<OsString>,
+    homedrive: Option<OsString>,
+    homepath: Option<OsString>,
+) -> PathBuf {
+    let preferred_home = resolve_home_dir_from_env_vars(
+        home.clone(),
+        userprofile.clone(),
+        homedrive.clone(),
+        homepath.clone(),
+    );
+    let preferred_app_dir = app_data_dir_from_home(&preferred_home);
+
+    #[cfg(windows)]
+    {
+        if preferred_app_dir.join(APP_DATABASE_FILE_NAME).exists() {
+            return preferred_app_dir;
+        }
+
+        let legacy_home =
+            resolve_windows_legacy_home_dir_from_env_vars(home, userprofile, homedrive, homepath);
+        if !paths_equivalent(&preferred_home, &legacy_home) {
+            let legacy_app_dir = app_data_dir_from_home(&legacy_home);
+            if legacy_app_dir.join(APP_DATABASE_FILE_NAME).exists() {
+                return legacy_app_dir;
+            }
+        }
+    }
+
+    preferred_app_dir
+}
+
+fn app_data_dir_from_home(home_dir: &Path) -> PathBuf {
+    home_dir.join(APP_DATA_DIR_NAME)
+}
+
+#[cfg(windows)]
+fn resolve_windows_legacy_home_dir_from_env_vars(
+    home: Option<OsString>,
+    userprofile: Option<OsString>,
+    homedrive: Option<OsString>,
+    homepath: Option<OsString>,
+) -> PathBuf {
+    if let Some(home) = non_empty_os_env(home) {
+        return PathBuf::from(home);
+    }
+
+    if let Some(user_profile) = non_empty_os_env(userprofile) {
+        return PathBuf::from(user_profile);
+    }
+
+    if let (Some(home_drive), Some(home_path)) =
+        (non_empty_os_env(homedrive), non_empty_os_env(homepath))
+    {
+        return PathBuf::from(format!(
+            "{}{}",
+            home_drive.to_string_lossy(),
+            home_path.to_string_lossy()
+        ));
+    }
+
+    std::env::temp_dir()
+}
+
 fn non_empty_os_env(value: Option<OsString>) -> Option<OsString> {
     value.and_then(|value| {
         if value.to_string_lossy().trim().is_empty() {
@@ -277,9 +384,26 @@ fn remote_join_home(remote_home: &str, child: &str) -> String {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    #[cfg(windows)]
+    use tempfile::TempDir;
 
+    #[cfg(windows)]
     #[test]
-    fn resolve_home_dir_prefers_home() {
+    fn resolve_home_dir_prefers_userprofile_on_windows_even_when_home_is_set() {
+        let home = resolve_home_dir_with(|key| match key {
+            "HOME" => Some("/custom/home".to_string()),
+            "USERPROFILE" => Some(r"C:\Users\fallback".to_string()),
+            "HOMEDRIVE" => Some("D:".to_string()),
+            "HOMEPATH" => Some(r"\Users\drive-path".to_string()),
+            _ => None,
+        });
+
+        assert_eq!(home, PathBuf::from(r"C:\Users\fallback"));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn resolve_home_dir_prefers_home_on_non_windows() {
         let home = resolve_home_dir_with(|key| match key {
             "HOME" => Some("/custom/home".to_string()),
             "USERPROFILE" => Some(r"C:\Users\fallback".to_string()),
@@ -289,6 +413,20 @@ mod tests {
         });
 
         assert_eq!(home, PathBuf::from("/custom/home"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_home_dir_uses_home_drive_and_path_before_home_on_windows() {
+        let home = resolve_home_dir_with(|key| match key {
+            "HOME" => Some("/custom/home".to_string()),
+            "USERPROFILE" => None,
+            "HOMEDRIVE" => Some("D:".to_string()),
+            "HOMEPATH" => Some(r"\Users\drive-path".to_string()),
+            _ => None,
+        });
+
+        assert_eq!(home, PathBuf::from(r"D:\Users\drive-path"));
     }
 
     #[test]
@@ -304,10 +442,11 @@ mod tests {
         assert_eq!(home, PathBuf::from(r"C:\Users\lyh"));
     }
 
+    #[cfg(windows)]
     #[test]
     fn resolve_home_dir_falls_back_to_home_drive_and_path() {
         let home = resolve_home_dir_with(|key| match key {
-            "HOME" => None,
+            "HOME" => Some("/custom/home".to_string()),
             "USERPROFILE" => None,
             "HOMEDRIVE" => Some("D:".to_string()),
             "HOMEPATH" => Some(r"\Users\lyh".to_string()),
@@ -361,6 +500,54 @@ mod tests {
     fn app_data_dir_is_built_under_home() {
         let app_dir = app_data_dir();
         assert!(app_dir.ends_with(".skillsmanage"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn app_data_dir_uses_legacy_home_db_when_preferred_windows_profile_is_empty() {
+        let temp = TempDir::new().unwrap();
+        let preferred_home = temp.path().join("userprofile-home");
+        let legacy_home = temp.path().join("git-bash-home");
+        std::fs::create_dir_all(&preferred_home).unwrap();
+        let legacy_app_dir = app_data_dir_from_home(&legacy_home);
+        std::fs::create_dir_all(&legacy_app_dir).unwrap();
+        std::fs::write(legacy_app_dir.join(APP_DATABASE_FILE_NAME), b"legacy-db").unwrap();
+
+        let app_dir = app_data_dir_from_env_vars(
+            Some(OsString::from(legacy_home.as_os_str())),
+            Some(OsString::from(preferred_home.as_os_str())),
+            None,
+            None,
+        );
+
+        assert!(paths_equivalent(&app_dir, &legacy_app_dir));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn app_data_dir_prefers_windows_profile_when_it_already_has_a_db() {
+        let temp = TempDir::new().unwrap();
+        let preferred_home = temp.path().join("userprofile-home");
+        let legacy_home = temp.path().join("git-bash-home");
+        let preferred_app_dir = app_data_dir_from_home(&preferred_home);
+        let legacy_app_dir = app_data_dir_from_home(&legacy_home);
+        std::fs::create_dir_all(&preferred_app_dir).unwrap();
+        std::fs::create_dir_all(&legacy_app_dir).unwrap();
+        std::fs::write(
+            preferred_app_dir.join(APP_DATABASE_FILE_NAME),
+            b"preferred-db",
+        )
+        .unwrap();
+        std::fs::write(legacy_app_dir.join(APP_DATABASE_FILE_NAME), b"legacy-db").unwrap();
+
+        let app_dir = app_data_dir_from_env_vars(
+            Some(OsString::from(legacy_home.as_os_str())),
+            Some(OsString::from(preferred_home.as_os_str())),
+            None,
+            None,
+        );
+
+        assert!(paths_equivalent(&app_dir, &preferred_app_dir));
     }
 
     #[test]

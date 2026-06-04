@@ -31,7 +31,8 @@ pub use crate::services::central_skills::{
     BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, CentralSkillsPage,
     CentralSkillsPageRequest, DeleteCentralSkillPreview, DeleteCentralSkillResult,
     DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult, DirectoryTreeEntry,
-    FailedCentralSkillDelete, SkillDetail, SkillInstallationDetail, SkillWithLinks,
+    FailedCentralSkillDelete, SkillDetail, SkillInstallationDetail, SkillPathAccessContext,
+    SkillWithLinks,
 };
 
 /// Tauri command: return all skills installed for a given agent, including
@@ -334,22 +335,59 @@ pub async fn read_skill_content(
 }
 
 #[tauri::command]
-pub async fn read_file_by_path(state: State<'_, AppState>, path: String) -> Result<String, String> {
+pub async fn read_file_by_path(
+    state: State<'_, AppState>,
+    path: String,
+    skill_id: Option<String>,
+    agent_id: Option<String>,
+    row_id: Option<String>,
+) -> Result<String, String> {
+    let pool = state.active_db().await?;
     let active_target = state.active_target().await?;
-    central_skills::read_file_by_path_for_target_impl(active_target, &path).await
+    let access = path_access_context(skill_id, agent_id, row_id)?;
+    central_skills::read_file_by_path_for_target_impl(&pool, active_target, &path, &access).await
 }
 
 #[tauri::command]
-pub async fn open_in_file_manager(state: State<'_, AppState>, path: String) -> Result<(), String> {
+pub async fn open_in_file_manager(
+    state: State<'_, AppState>,
+    path: String,
+    skill_id: Option<String>,
+    agent_id: Option<String>,
+    row_id: Option<String>,
+) -> Result<(), String> {
+    let pool = state.active_db().await?;
     let active_target = state.active_target().await?;
-    central_skills::open_in_file_manager_for_target_impl(active_target, &path)
+    let access = path_access_context(skill_id, agent_id, row_id)?;
+    central_skills::open_in_file_manager_for_target_impl(&pool, active_target, &path, &access).await
 }
 
 #[tauri::command]
 pub async fn list_directory_tree(
     state: State<'_, AppState>,
     path: String,
+    skill_id: Option<String>,
+    agent_id: Option<String>,
+    row_id: Option<String>,
 ) -> Result<Vec<DirectoryTreeEntry>, String> {
+    let pool = state.active_db().await?;
     let active_target = state.active_target().await?;
-    central_skills::list_directory_tree_for_target_impl(active_target, &path).await
+    let access = path_access_context(skill_id, agent_id, row_id)?;
+    central_skills::list_directory_tree_for_target_impl(&pool, active_target, &path, &access).await
+}
+
+fn path_access_context(
+    skill_id: Option<String>,
+    agent_id: Option<String>,
+    row_id: Option<String>,
+) -> Result<SkillPathAccessContext, String> {
+    let skill_id = skill_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "A skill context is required for file access.".to_string())?;
+    Ok(SkillPathAccessContext {
+        skill_id,
+        agent_id,
+        row_id,
+    })
 }

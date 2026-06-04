@@ -1,4 +1,7 @@
+use crate::services::resource_budget::ResourceBudget;
+
 use super::*;
+
 pub(crate) async fn download_repo_snapshot(
     client: &reqwest::Client,
     repo: &GitHubRepoRef,
@@ -12,6 +15,21 @@ pub(super) async fn download_repository_archive(
     client: &reqwest::Client,
     repo: &GitHubRepoRef,
     auth_token: Option<&str>,
+) -> Result<Vec<u8>, String> {
+    download_repository_archive_with_budget(
+        client,
+        repo,
+        auth_token,
+        ResourceBudget::default_skill(),
+    )
+    .await
+}
+
+async fn download_repository_archive_with_budget(
+    client: &reqwest::Client,
+    repo: &GitHubRepoRef,
+    auth_token: Option<&str>,
+    budget: ResourceBudget,
 ) -> Result<Vec<u8>, String> {
     let response = send_github_request_with_fallback(
         client,
@@ -49,16 +67,30 @@ pub(super) async fn download_repository_archive(
         }));
     }
 
-    response
+    if let Some(content_length) = response.content_length() {
+        budget.reject_archive_size(content_length)?;
+    }
+
+    let bytes = response
         .bytes()
         .await
-        .map(|bytes| bytes.to_vec())
-        .map_err(|e| format!("Failed to read GitHub repository archive: {}", e))
+        .map_err(|e| format!("Failed to read GitHub repository archive: {}", e))?;
+    budget.reject_archive_size(bytes.len() as u64)?;
+    Ok(bytes.to_vec())
 }
 
 pub(super) fn snapshot_from_repository_archive(
     archive_bytes: &[u8],
 ) -> Result<GitHubRepoSnapshot, String> {
+    snapshot_from_repository_archive_with_budget(archive_bytes, ResourceBudget::default_skill())
+}
+
+pub(super) fn snapshot_from_repository_archive_with_budget(
+    archive_bytes: &[u8],
+    budget: ResourceBudget,
+) -> Result<GitHubRepoSnapshot, String> {
+    budget.reject_archive_size(archive_bytes.len() as u64)?;
+
     let cursor = Cursor::new(archive_bytes);
     let decoder = GzDecoder::new(cursor);
     let mut archive = tar::Archive::new(decoder);
@@ -75,7 +107,22 @@ pub(super) fn snapshot_from_repository_archive(
             continue;
         }
 
+        if files.len() >= budget.archive_files {
+            return Err(format!(
+                "GitHub repository archive exceeds the resource budget (more than {} files).",
+                budget.archive_files
+            ));
+        }
+
         let relative_path = relative_archive_path(&entry)?;
+        let entry_size = entry.header().size().map_err(|e| {
+            format!(
+                "Failed to inspect GitHub repository archive entry size: {}",
+                e
+            )
+        })?;
+        budget.reject_archive_entry_size(&relative_path, entry_size)?;
+
         let mut content = Vec::new();
         entry.read_to_end(&mut content).map_err(|e| {
             format!(
@@ -83,6 +130,7 @@ pub(super) fn snapshot_from_repository_archive(
                 relative_path, e
             )
         })?;
+        budget.reject_archive_entry_size(&relative_path, content.len() as u64)?;
         files.insert(relative_path, content);
     }
 

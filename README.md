@@ -72,6 +72,7 @@ Remote mode manages the selected remote user's directories only. It does not mod
 - Latest release: <https://github.com/bahayonghang/skills-manage-windows/releases/latest>
 - Current desktop release targets: Windows x64 (`.exe`, `.msi`, `.zip`), macOS Universal (`.dmg`, `.zip`, `.tar.gz`), and Linux x86_64 / arm64 (`.deb`, `.rpm`, `.AppImage`)
 - Windows auto-update uses a Tauri-signed NSIS artifact plus `latest.json`; macOS remains unsigned / not notarized, and Linux arm64 availability depends on the GitHub Actions runner matrix
+- Maintainers: before publishing a desktop tag, run the scripted release preflight documented in `docs/reference/release-process.md` to validate the updater config, NSIS signature, and `latest.json`.
 
 ### macOS Unsigned Build
 
@@ -138,7 +139,8 @@ Custom platforms can be added through Settings.
 - **No telemetry** — the app does not include analytics, crash reporting, or usage tracking.
 - **Network access is feature-driven** — outbound requests only happen when you explicitly use marketplace sync/download, GitHub import, or AI explanation generation.
 - **SSH is target-scoped** - SSH connections are made only for the active remote target, and remote file changes stay under that remote user's configured skills directories.
-- **Credentials are stored locally** — GitHub PAT and AI API keys are kept in the local SQLite settings table and are not encrypted at rest by the app.
+- **Credentials stay on this device** — GitHub PATs, AI API keys, and SSH passwords are saved through the OS credential store when available. On Windows, if the credential store is unavailable, SkillPort falls back to an app-local DPAPI-protected secret file under `~/.skillsmanage/protected-secrets/`.
+- **Legacy secret migration** — older GitHub PAT and AI API key values found in SQLite settings are migrated to the secret store and then removed from settings. If no persistent protected store is available, the value is kept only for the current app session.
 - Never post real secrets in issues, pull requests, screenshots, or logs.
 
 ## Tech Stack

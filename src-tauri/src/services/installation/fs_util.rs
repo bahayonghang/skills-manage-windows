@@ -4,6 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::services::resource_budget::ResourceBudget;
+
 pub(crate) async fn run_blocking_fs<T, F>(label: &'static str, task: F) -> Result<T, String>
 where
     T: Send + 'static,
@@ -196,11 +198,72 @@ pub fn symlink_target_path(from_dir: &Path, to_path: &Path) -> PathBuf {
 
 // ─── Recursive Directory Copy ─────────────────────────────────────────────────
 
+#[derive(Debug)]
+struct CopyBudgetTracker {
+    limits: ResourceBudget,
+    root: PathBuf,
+    remaining_entries: usize,
+    remaining_bytes: u64,
+}
+
+impl CopyBudgetTracker {
+    fn new(root: &Path, limits: ResourceBudget) -> Self {
+        Self {
+            remaining_entries: limits.copy_entries,
+            remaining_bytes: limits.copy_bytes,
+            limits,
+            root: root.to_path_buf(),
+        }
+    }
+
+    fn consume_entry(&mut self) -> Result<(), String> {
+        if self.remaining_entries == 0 {
+            return Err(format!(
+                "Refusing to copy '{}': directory tree exceeds {} entries.",
+                self.root.display(),
+                self.limits.copy_entries
+            ));
+        }
+        self.remaining_entries -= 1;
+        Ok(())
+    }
+
+    fn consume_file_bytes(&mut self, path: &Path, bytes: u64) -> Result<(), String> {
+        if bytes > self.remaining_bytes {
+            return Err(format!(
+                "Refusing to copy '{}': total copied bytes would exceed {} while copying '{}'.",
+                self.root.display(),
+                self.limits.copy_bytes,
+                path.display()
+            ));
+        }
+        self.remaining_bytes -= bytes;
+        Ok(())
+    }
+}
+
 /// Recursively copy a directory tree from `src` to `dst`.
 ///
 /// `dst` must not exist prior to the call (or may be an empty dir).
 /// The behaviour mirrors `cp -r src dst` on Unix.
 pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
+    copy_dir_all_with_budget(src, dst, ResourceBudget::default_skill())
+}
+
+pub(crate) fn copy_dir_all_with_budget(
+    src: &Path,
+    dst: &Path,
+    limits: ResourceBudget,
+) -> Result<(), String> {
+    let mut tracker = CopyBudgetTracker::new(src, limits);
+    copy_dir_all_with_tracker(src, dst, &mut tracker)
+}
+
+fn copy_dir_all_with_tracker(
+    src: &Path,
+    dst: &Path,
+    tracker: &mut CopyBudgetTracker,
+) -> Result<(), String> {
     std::fs::create_dir_all(dst).map_err(|e| {
         format!(
             "Failed to create destination directory '{}': {}",
@@ -215,14 +278,20 @@ pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
         let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
+        tracker.consume_entry()?;
 
         let file_type = entry
             .file_type()
             .map_err(|e| format!("Failed to determine file type: {}", e))?;
 
         if file_type.is_dir() {
-            copy_dir_all(&src_path, &dst_path)?;
+            copy_dir_all_with_tracker(&src_path, &dst_path, tracker)?;
         } else {
+            let file_size = entry
+                .metadata()
+                .map_err(|e| format!("Failed to inspect '{}': {}", src_path.display(), e))?
+                .len();
+            tracker.consume_file_bytes(&src_path, file_size)?;
             std::fs::copy(&src_path, &dst_path).map_err(|e| {
                 format!(
                     "Failed to copy '{}' -> '{}': {}",
@@ -241,4 +310,49 @@ pub(crate) async fn copy_dir_all_blocking(src: &Path, dst: &Path) -> Result<(), 
     let src = src.to_path_buf();
     let dst = dst.to_path_buf();
     run_blocking_fs("directory copy", move || copy_dir_all(&src, &dst)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn write_file(path: &Path, size: usize) {
+        std::fs::write(path, vec![b'a'; size]).unwrap();
+    }
+
+    #[test]
+    fn copy_dir_all_with_budget_rejects_total_bytes() {
+        let temp = TempDir::new().unwrap();
+        let src = temp.path().join("src");
+        let dst = temp.path().join("dst");
+        std::fs::create_dir_all(&src).unwrap();
+        write_file(&src.join("big.txt"), 8);
+
+        let budget = ResourceBudget {
+            copy_bytes: 4,
+            ..ResourceBudget::default()
+        };
+        let err = copy_dir_all_with_budget(&src, &dst, budget).unwrap_err();
+
+        assert!(err.contains("total copied bytes"));
+    }
+
+    #[test]
+    fn copy_dir_all_with_budget_rejects_entry_limit() {
+        let temp = TempDir::new().unwrap();
+        let src = temp.path().join("src");
+        let dst = temp.path().join("dst");
+        std::fs::create_dir_all(src.join("nested")).unwrap();
+        write_file(&src.join("nested").join("a.txt"), 1);
+        write_file(&src.join("nested").join("b.txt"), 1);
+
+        let budget = ResourceBudget {
+            copy_entries: 2,
+            ..ResourceBudget::default()
+        };
+        let err = copy_dir_all_with_budget(&src, &dst, budget).unwrap_err();
+
+        assert!(err.contains("exceeds 2 entries"));
+    }
 }

@@ -124,6 +124,12 @@ jobs:
           node scripts/prepare-release-body.mjs --version $version --output release-body.md
           node scripts/generate-latest-json.mjs --version $version --tag $env:GITHUB_REF_NAME --asset-dir release-assets
 
+      - name: Release preflight
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          node scripts/release-preflight.mjs --version $version --tag $env:GITHUB_REF_NAME --config release-updater-config.json --asset-dir release-assets
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:

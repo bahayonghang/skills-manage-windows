@@ -1691,18 +1691,21 @@ async fn test_get_skills_by_agent_impl_copy_link_type() {
 #[tokio::test]
 async fn test_read_file_by_path_success() {
     let tmp = TempDir::new().unwrap();
-    let file_path = tmp.path().join("test-skill.md");
+    let skill_dir = tmp.path().join("test-skill");
+    fs::create_dir_all(&skill_dir).unwrap();
+    let file_path = skill_dir.join("SKILL.md");
     let content = "---\nname: Test\n---\n\n# Test Skill";
     fs::write(&file_path, content).unwrap();
 
-    let result = read_file_by_path_impl(&file_path.to_string_lossy());
+    let result = read_file_by_path_impl(&file_path.to_string_lossy(), &skill_dir.to_string_lossy());
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), content);
 }
 
 #[tokio::test]
 async fn test_read_file_by_path_not_found() {
-    let result = read_file_by_path_impl("/nonexistent/file.md");
+    let tmp = TempDir::new().unwrap();
+    let result = read_file_by_path_impl("/nonexistent/file.md", &tmp.path().to_string_lossy());
     assert!(result.is_err());
 }
 
@@ -1711,7 +1714,11 @@ async fn test_list_directory_tree_reads_nested_local_structure() {
     let tmp = TempDir::new().unwrap();
     make_directory_tree_fixture(tmp.path());
 
-    let result = super::files::list_directory_tree_impl(&tmp.path().to_string_lossy()).unwrap();
+    let result = super::files::list_directory_tree_impl(
+        &tmp.path().to_string_lossy(),
+        &tmp.path().to_string_lossy(),
+    )
+    .unwrap();
 
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].name, "examples");
@@ -1723,7 +1730,11 @@ async fn test_list_directory_tree_reads_nested_local_structure() {
 
 #[tokio::test]
 async fn test_list_directory_tree_rejects_missing_path() {
-    let result = super::files::list_directory_tree_impl("/definitely/missing/path");
+    let tmp = TempDir::new().unwrap();
+    let result = super::files::list_directory_tree_impl(
+        "/definitely/missing/path",
+        &tmp.path().to_string_lossy(),
+    );
     assert!(result.is_err());
 }
 
@@ -1731,6 +1742,10 @@ async fn test_list_directory_tree_rejects_missing_path() {
 
 #[tokio::test]
 async fn test_open_in_file_manager_nonexistent_path() {
-    let result = open_in_file_manager_checked_impl("/nonexistent/path/that/does/not/exist");
+    let tmp = TempDir::new().unwrap();
+    let result = open_in_file_manager_checked_impl(
+        "/nonexistent/path/that/does/not/exist",
+        &tmp.path().to_string_lossy(),
+    );
     assert!(result.is_err());
 }

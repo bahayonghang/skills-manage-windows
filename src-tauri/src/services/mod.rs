@@ -14,5 +14,6 @@ pub mod marketplace;
 pub mod obsidian;
 pub mod portable_state;
 pub mod projects;
+pub mod resource_budget;
 pub mod scanner;
 pub mod usage;

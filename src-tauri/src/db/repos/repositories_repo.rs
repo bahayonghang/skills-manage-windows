@@ -8,8 +8,9 @@ use std::collections::HashMap;
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::db::repos::skills_repo::upsert_skill_in_transaction;
 use crate::db::types::{
-    DbPool, SkillRepository, SkillRepositoryAssignment, SkillRepositoryMember,
+    DbPool, Skill, SkillRepository, SkillRepositoryAssignment, SkillRepositoryMember,
     SkillRepositorySyncSkip, SkillRepositoryWithStats, LOCAL_UNKNOWN_REPOSITORY_ID,
 };
 use crate::db::util::now_rfc3339;
@@ -396,6 +397,78 @@ pub async fn assign_github_repository_to_skill(
     )
     .await?;
     Ok(repository)
+}
+
+/// Atomically persist an imported GitHub skill row and its repository assignment.
+///
+/// GitHub imports write files before touching the database. Keeping the skill
+/// upsert and repository membership in one transaction prevents a half-state
+/// where the Central skill row exists without source metadata (or vice versa)
+/// if the second write fails.
+#[allow(clippy::too_many_arguments)]
+pub async fn upsert_skill_with_github_repository(
+    pool: &DbPool,
+    skill: &Skill,
+    owner: &str,
+    repo: &str,
+    branch: &str,
+    url: &str,
+    source_path: &str,
+) -> Result<(), String> {
+    let mut transaction = pool.begin().await.map_err(|e| e.to_string())?;
+
+    upsert_skill_in_transaction(&mut transaction, skill).await?;
+
+    let repository_id = github_repository_id(owner, repo, branch);
+    let repository_name = format!("{owner}/{repo}");
+    let now = now_rfc3339();
+
+    sqlx::query(
+        "INSERT INTO skill_repositories
+         (id, name, source_type, owner, repo, branch, url, pinned, is_unknown, created_at, updated_at)
+         VALUES (?, ?, 'github', ?, ?, ?, ?, 0, 0, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           source_type = excluded.source_type,
+           owner = excluded.owner,
+           repo = excluded.repo,
+           branch = excluded.branch,
+           url = excluded.url,
+           pinned = skill_repositories.pinned,
+           is_unknown = excluded.is_unknown,
+           updated_at = excluded.updated_at",
+    )
+    .bind(&repository_id)
+    .bind(&repository_name)
+    .bind(owner)
+    .bind(repo)
+    .bind(branch)
+    .bind(url)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *transaction)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "INSERT INTO skill_repository_members
+         (skill_id, repository_id, source_path, added_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(skill_id) DO UPDATE SET
+           repository_id = excluded.repository_id,
+           source_path = COALESCE(excluded.source_path, skill_repository_members.source_path),
+           updated_at = excluded.updated_at",
+    )
+    .bind(&skill.id)
+    .bind(&repository_id)
+    .bind(source_path)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *transaction)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    transaction.commit().await.map_err(|e| e.to_string())
 }
 
 pub async fn set_skill_repository_pinned(

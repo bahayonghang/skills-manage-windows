@@ -39,7 +39,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
             skill_id       TEXT NOT NULL,
             agent_id       TEXT NOT NULL,
             installed_path TEXT NOT NULL,
-            link_type      TEXT NOT NULL,
+            link_type      TEXT NOT NULL CHECK (link_type IN ('native', 'symlink', 'copy', 'writable')),
             symlink_target TEXT,
             created_at     TEXT NOT NULL DEFAULT (datetime('now')),
             PRIMARY KEY (skill_id, agent_id)
@@ -78,7 +78,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
             dir_path       TEXT NOT NULL,
             source_kind    TEXT NOT NULL,
             source_root    TEXT NOT NULL,
-            link_type      TEXT NOT NULL,
+            link_type      TEXT NOT NULL CHECK (link_type IN ('native', 'symlink', 'copy', 'writable')),
             symlink_target TEXT,
             is_read_only   BOOLEAN NOT NULL DEFAULT 0,
             scanned_at     TEXT NOT NULL,

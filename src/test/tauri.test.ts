@@ -20,6 +20,7 @@ import {
   registerIpcFailureRecorder,
   showMainWindowWhenReady,
 } from "@/lib/tauri";
+import { invokeCommand } from "@/lib/ipc";
 
 describe("tauri helpers", () => {
   beforeEach(() => {
@@ -79,5 +80,21 @@ describe("tauri helpers", () => {
     ).rejects.toThrow("logger failed");
 
     expect(recorder).not.toHaveBeenCalled();
+  });
+
+  it("invokes typed IPC commands through the shared bridge", async () => {
+    mockTauriInvoke.mockResolvedValueOnce("skill-content");
+
+    await expect(
+      invokeCommand("read_file_by_path", {
+        path: "/tmp/skill/SKILL.md",
+        skillId: "skill-1",
+      })
+    ).resolves.toBe("skill-content");
+
+    expect(mockTauriInvoke).toHaveBeenCalledWith("read_file_by_path", {
+      path: "/tmp/skill/SKILL.md",
+      skillId: "skill-1",
+    });
   });
 });

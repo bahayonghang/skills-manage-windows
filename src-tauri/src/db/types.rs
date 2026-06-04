@@ -70,6 +70,50 @@ pub const LOCAL_UNKNOWN_REPOSITORY_ID: &str = "local-unknown";
 /// 占位标签 ID：`uncategorized` 表示尚未归类的技能。
 pub const UNCATEGORIZED_TAG_ID: &str = "uncategorized";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkType {
+    Native,
+    Symlink,
+    Copy,
+    Writable,
+}
+
+impl LinkType {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Native => "native",
+            Self::Symlink => "symlink",
+            Self::Copy => "copy",
+            Self::Writable => "writable",
+        }
+    }
+}
+
+impl std::fmt::Display for LinkType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for LinkType {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(match value {
+            "native" => Self::Native,
+            "symlink" => Self::Symlink,
+            "copy" => Self::Copy,
+            "writable" => Self::Writable,
+            other => {
+                return Err(format!(
+                    "Unsupported link_type '{other}'. Expected one of: native, symlink, copy, writable."
+                ))
+            }
+        })
+    }
+}
+
 // ─── Skill / Installation / Observation ──────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

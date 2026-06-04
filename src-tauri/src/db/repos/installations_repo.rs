@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use sqlx::Row;
 
-use crate::db::types::{DbPool, SkillInstallation};
+use crate::db::types::{DbPool, LinkType, SkillInstallation};
 
 /// Insert or update a skill installation record.
 ///
@@ -16,6 +16,7 @@ pub async fn upsert_skill_installation(
     pool: &DbPool,
     installation: &SkillInstallation,
 ) -> Result<(), String> {
+    installation.link_type.parse::<LinkType>()?;
     sqlx::query(
         "INSERT INTO skill_installations
          (skill_id, agent_id, installed_path, link_type, symlink_target, created_at)

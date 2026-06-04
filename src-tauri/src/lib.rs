@@ -410,6 +410,7 @@ pub fn run() {
             // through the standalone obsidian module below.
             commands::obsidian::get_obsidian_vaults,
             commands::obsidian::get_obsidian_vault_skills,
+            commands::obsidian::open_obsidian_path,
             commands::obsidian::import_obsidian_skill_to_central,
             commands::obsidian::import_obsidian_skill_to_platform,
             commands::github_import::preview_github_repo_import,

@@ -865,6 +865,49 @@ async fn test_upsert_and_get_skill_installation() {
 }
 
 #[tokio::test]
+async fn test_upsert_skill_installation_rejects_invalid_link_type() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("bad-link", "Bad Link", false);
+    upsert_skill(&pool, &skill).await.unwrap();
+
+    let err = upsert_skill_installation(&pool, &make_installation("bad-link", "cursor", "weird"))
+        .await
+        .unwrap_err();
+
+    assert!(err.contains("Unsupported link_type"));
+}
+
+#[tokio::test]
+async fn test_upsert_agent_skill_observation_rejects_invalid_link_type() {
+    let pool = setup_test_db().await;
+
+    let err = upsert_agent_skill_observation(
+        &pool,
+        &AgentSkillObservation {
+            row_id: "row-1".to_string(),
+            agent_id: "cursor".to_string(),
+            skill_id: "bad-link".to_string(),
+            name: "Bad Link".to_string(),
+            description: None,
+            file_path: "/tmp/cursor/bad-link/SKILL.md".to_string(),
+            dir_path: "/tmp/cursor/bad-link".to_string(),
+            source_kind: "user".to_string(),
+            source_root: "/tmp/cursor".to_string(),
+            link_type: "broken".to_string(),
+            symlink_target: None,
+            is_read_only: false,
+            scanned_at: Utc::now().to_rfc3339(),
+            fs_created_at: None,
+            fs_updated_at: None,
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert!(err.contains("Unsupported link_type"));
+}
+
+#[tokio::test]
 async fn test_delete_skill_installation() {
     let pool = setup_test_db().await;
     let skill = make_skill("del-skill", "Del Skill", false);

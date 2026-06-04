@@ -1,11 +1,12 @@
 //! `agent_skill_observations` table CRUD — Phase 2c.
 
-use crate::db::types::{AgentSkillObservation, DbPool};
+use crate::db::types::{AgentSkillObservation, DbPool, LinkType};
 
 pub async fn upsert_agent_skill_observation(
     pool: &DbPool,
     observation: &AgentSkillObservation,
 ) -> Result<(), String> {
+    observation.link_type.parse::<LinkType>()?;
     sqlx::query(
         "INSERT INTO agent_skill_observations
          (row_id, agent_id, skill_id, name, description, file_path, dir_path,

@@ -111,11 +111,18 @@ describe("CentralStatePortabilityDialog", () => {
   });
 
   it("keeps Tauri FS permissions for user-selected JSON files", () => {
-    const capability = defaultCapability as { permissions: string[] };
+    const capability = defaultCapability as { permissions: Array<string | { identifier: string }> };
+    const scopePermission = capability.permissions.find(
+      (permission): permission is { identifier: string } =>
+        typeof permission === "object" && permission.identifier === "fs:scope"
+    );
 
-    expect(capability.permissions).toContain("dialog:default");
+    expect(capability.permissions).toContain("dialog:allow-open");
+    expect(capability.permissions).toContain("dialog:allow-save");
+    expect(capability.permissions).not.toContain("dialog:default");
     expect(capability.permissions).toContain("fs:allow-read-text-file");
     expect(capability.permissions).toContain("fs:allow-write-text-file");
+    expect(scopePermission).toBeDefined();
   });
 
   it("saves the exported state JSON", async () => {

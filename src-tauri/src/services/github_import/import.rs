@@ -43,11 +43,33 @@ pub(crate) async fn import_github_repo_skills_with_auth(
     let central_root = central_skills_root(pool).await?;
     std::fs::create_dir_all(&central_root)
         .map_err(|e| format!("Failed to create central skills directory: {}", e))?;
+
+    import_github_repo_skills_from_snapshot(
+        pool,
+        &resolved.repo,
+        &snapshot,
+        &candidates,
+        selections,
+        &central_root,
+        app,
+    )
+    .await
+}
+
+pub(super) async fn import_github_repo_skills_from_snapshot(
+    pool: &DbPool,
+    repo: &GitHubRepoRef,
+    snapshot: &GitHubRepoSnapshot,
+    candidates: &[RemoteSkillCandidate],
+    selections: Vec<GitHubSkillImportSelection>,
+    central_root: &Path,
+    app: Option<&AppHandle>,
+) -> Result<GitHubRepoImportResult, String> {
     let (mut staging_ops, skipped_skills) =
-        plan_import_staging(pool, &candidates, selections).await?;
+        plan_import_staging(pool, candidates, selections).await?;
 
     for op in &mut staging_ops {
-        op.source_files = collect_snapshot_source_files(&snapshot, &op.candidate.source_path)?;
+        op.source_files = collect_snapshot_source_files(snapshot, &op.candidate.source_path)?;
     }
 
     let total_files = staging_ops
@@ -80,90 +102,19 @@ pub(crate) async fn import_github_repo_skills_with_auth(
     );
 
     let mut imported_skills = Vec::new();
-    let mut created_paths = Vec::new();
 
     for op in &staging_ops {
-        let target_dir = central_root.join(&op.final_skill_id);
-        if target_dir.exists() {
-            if op.resolution == DuplicateResolution::Overwrite {
-                std::fs::remove_dir_all(&target_dir).map_err(|e| {
-                    format!(
-                        "Failed to replace existing canonical skill '{}': {}",
-                        op.final_skill_id, e
-                    )
-                })?;
-            } else {
-                cleanup_created_directories(&created_paths);
-                return Err(format!(
-                    "Target directory '{}' already exists.",
-                    target_dir.display()
-                ));
-            }
-        }
-
-        if let Err(error) = write_snapshot_source_to_target(
-            &snapshot,
-            &op.source_files,
-            &target_dir,
-            &op.candidate.source_path,
+        let summary = import_single_staged_skill(
+            pool,
+            repo,
+            snapshot,
+            central_root,
+            op,
             &mut progress_state,
             app,
-        ) {
-            cleanup_created_directories(&created_paths);
-            if target_dir.exists() {
-                let _ = std::fs::remove_dir_all(&target_dir);
-            }
-            return Err(error);
-        }
-
-        created_paths.push(target_dir.clone());
-
-        let skill_md_path = target_dir.join("SKILL.md");
-        let raw = std::fs::read_to_string(&skill_md_path)
-            .map_err(|e| format!("Failed to read imported SKILL.md: {}", e))?;
-        let frontmatter = parse_frontmatter(&raw).ok_or_else(|| {
-            format!(
-                "Imported skill '{}' is missing valid frontmatter.",
-                op.candidate.source_path
-            )
-        })?;
-
-        let db_skill = Skill {
-            id: op.final_skill_id.clone(),
-            name: frontmatter.name.clone(),
-            description: frontmatter.description.clone(),
-            file_path: skill_md_path.to_string_lossy().into_owned(),
-            canonical_path: Some(target_dir.to_string_lossy().into_owned()),
-            is_central: true,
-            source: Some(format!(
-                "github:{}/{}",
-                resolved.repo.owner, resolved.repo.repo
-            )),
-            content: None,
-            scanned_at: Utc::now().to_rfc3339(),
-            fs_created_at: None,
-            fs_updated_at: None,
-        };
-        db::upsert_skill(pool, &db_skill).await?;
-        db::assign_github_repository_to_skill(
-            pool,
-            &resolved.repo.owner,
-            &resolved.repo.repo,
-            &resolved.repo.branch,
-            &resolved.repo.normalized_url,
-            &op.final_skill_id,
-            &op.candidate.source_path,
         )
         .await?;
-
-        imported_skills.push(ImportedGitHubSkillSummary {
-            source_path: op.candidate.source_path.clone(),
-            original_skill_id: op.candidate.skill_id.clone(),
-            imported_skill_id: op.final_skill_id.clone(),
-            skill_name: frontmatter.name,
-            target_directory: target_dir.to_string_lossy().into_owned(),
-            resolution: op.resolution.clone(),
-        });
+        imported_skills.push(summary);
     }
 
     emit_github_import_progress(
@@ -180,7 +131,7 @@ pub(crate) async fn import_github_repo_skills_with_auth(
     );
 
     Ok(GitHubRepoImportResult {
-        repo: resolved.repo,
+        repo: repo.clone(),
         imported_skills,
         skipped_skills,
     })
@@ -550,17 +501,13 @@ pub(super) async fn import_single_staged_skill(
         fs_created_at: None,
         fs_updated_at: None,
     };
-    if let Err(error) = db::upsert_skill(pool, &db_skill).await {
-        restore_or_cleanup_target_dir(&target_dir, existing_backup);
-        return Err(error);
-    }
-    if let Err(error) = db::assign_github_repository_to_skill(
+    if let Err(error) = db::upsert_skill_with_github_repository(
         pool,
+        &db_skill,
         &repo.owner,
         &repo.repo,
         &repo.branch,
         &repo.normalized_url,
-        &op.final_skill_id,
         &op.candidate.source_path,
     )
     .await
@@ -624,12 +571,6 @@ pub(super) fn create_unique_work_dir(parent: &Path, prefix: &str) -> Result<Path
         )
     })?;
     Ok(path)
-}
-
-pub(super) fn cleanup_created_directories(paths: &[PathBuf]) {
-    for path in paths.iter().rev() {
-        let _ = std::fs::remove_dir_all(path);
-    }
 }
 
 pub(crate) async fn central_skills_root(pool: &DbPool) -> Result<PathBuf, String> {

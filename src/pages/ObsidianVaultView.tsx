@@ -10,7 +10,7 @@ import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { Input } from "@/components/ui/input";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
-import { invoke } from "@/lib/tauri";
+import { invokeCommand } from "@/lib/ipc";
 import { getPathBasename } from "@/lib/path";
 import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
@@ -223,7 +223,7 @@ export function ObsidianVaultView() {
         toast.success(t("targets.pathCopied"));
         return;
       }
-      await invoke("open_in_file_manager", { path });
+      await invokeCommand("open_obsidian_path", { path });
     } catch (err) {
       toast.error(t("obsidian.openPathError", { error: String(err) }));
     }

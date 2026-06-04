@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, Row};
+use sqlx::{query::Query, sqlite::SqliteArguments, FromRow, Row, Sqlite, Transaction};
 
 use crate::db::repos::observations_repo::get_agent_skill_observations;
 use crate::db::repos::repositories_repo::{
@@ -19,15 +19,7 @@ use crate::db::types::{
 };
 use crate::skill_time::skill_filesystem_timestamps;
 
-/// Insert or update a skill record.
-///
-/// Uses `ON CONFLICT DO UPDATE` to preserve the private Central record if a
-/// platform scan later observes the same skill id in an agent directory.
-/// Once a skill is flagged as central it must never be downgraded to non-central
-/// or have its canonical file path overwritten by a platform copy.
-pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
-    sqlx::query(
-        "INSERT INTO skills
+const UPSERT_SKILL_SQL: &str = "INSERT INTO skills
          (id, name, description, file_path, canonical_path, is_central, source, content,
           scanned_at, fs_created_at, fs_updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -65,23 +57,49 @@ pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
            fs_updated_at  = CASE
                               WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.fs_updated_at
                               ELSE COALESCE(excluded.fs_updated_at, skills.fs_updated_at)
-                            END",
-    )
-    .bind(&skill.id)
-    .bind(&skill.name)
-    .bind(&skill.description)
-    .bind(&skill.file_path)
-    .bind(&skill.canonical_path)
-    .bind(skill.is_central)
-    .bind(&skill.source)
-    .bind(&skill.content)
-    .bind(&skill.scanned_at)
-    .bind(&skill.fs_created_at)
-    .bind(&skill.fs_updated_at)
-    .execute(pool)
-    .await
-    .map(|_| ())
-    .map_err(|e| e.to_string())
+                            END";
+
+fn bind_upsert_skill<'q>(
+    query: Query<'q, Sqlite, SqliteArguments<'q>>,
+    skill: &'q Skill,
+) -> Query<'q, Sqlite, SqliteArguments<'q>> {
+    query
+        .bind(&skill.id)
+        .bind(&skill.name)
+        .bind(&skill.description)
+        .bind(&skill.file_path)
+        .bind(&skill.canonical_path)
+        .bind(skill.is_central)
+        .bind(&skill.source)
+        .bind(&skill.content)
+        .bind(&skill.scanned_at)
+        .bind(&skill.fs_created_at)
+        .bind(&skill.fs_updated_at)
+}
+
+/// Insert or update a skill record.
+///
+/// Uses `ON CONFLICT DO UPDATE` to preserve the private Central record if a
+/// platform scan later observes the same skill id in an agent directory.
+/// Once a skill is flagged as central it must never be downgraded to non-central
+/// or have its canonical file path overwritten by a platform copy.
+pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
+    bind_upsert_skill(sqlx::query(UPSERT_SKILL_SQL), skill)
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+pub(crate) async fn upsert_skill_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+    skill: &Skill,
+) -> Result<(), String> {
+    bind_upsert_skill(sqlx::query(UPSERT_SKILL_SQL), skill)
+        .execute(&mut **transaction)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 fn observation_to_skill(observation: AgentSkillObservation) -> Skill {

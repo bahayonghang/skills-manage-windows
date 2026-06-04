@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::db::{self, AgentSkillObservation, DbPool, Skill, SkillInstallation};
+use crate::db::{self, AgentSkillObservation, DbPool, LinkType, Skill, SkillInstallation};
 
 #[derive(Default)]
 pub(super) struct ScanPersistenceBatch {
@@ -123,6 +123,7 @@ async fn upsert_scan_installation(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     installation: &SkillInstallation,
 ) -> Result<(), String> {
+    installation.link_type.parse::<LinkType>()?;
     execute_scan_query(
         tx,
         sqlx::query(
@@ -148,6 +149,7 @@ async fn upsert_scan_observation(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     observation: &AgentSkillObservation,
 ) -> Result<(), String> {
+    observation.link_type.parse::<LinkType>()?;
     execute_scan_query(
         tx,
         sqlx::query(

@@ -15,6 +15,7 @@
     "sizecheck": "node scripts/check-size-budget.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --cache --cache-location node_modules/.cache/eslint/ --report-unused-disable-directives --max-warnings 0",
+    "release:preflight": "node scripts/release-preflight.mjs",
     "docs:gen": "node scripts/build-ipc-dict.mjs && node scripts/build-schema-table.mjs",
     "docs:dev": "pnpm docs:gen && vitepress dev docs",
     "docs:build": "pnpm docs:gen && vitepress build docs",

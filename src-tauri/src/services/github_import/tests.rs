@@ -5,6 +5,7 @@ pub(super) mod tests {
     use crate::secrets::{
         MockSecretStore, SecretError, SecretStorageState, SecretStore, GITHUB_PAT_SECRET_KEY,
     };
+    use crate::services::resource_budget::ResourceBudget;
     use flate2::{write::GzEncoder, Compression};
     use serde_json::Value;
     use std::collections::HashMap;
@@ -390,6 +391,20 @@ metadata:
         assert!(snapshot.files.contains_key("README.md"));
     }
 
+    #[test]
+    fn snapshot_from_repository_archive_rejects_entry_over_budget() {
+        let oversized = vec![b'a'; 9];
+        let archive = repository_archive(&[("skills/demo/SKILL.md", oversized.as_slice())]);
+        let budget = ResourceBudget {
+            archive_entry_bytes: 8,
+            ..ResourceBudget::default()
+        };
+
+        let err = snapshot_from_repository_archive_with_budget(&archive, budget).unwrap_err();
+
+        assert!(err.contains("resource budget"));
+    }
+
     #[tokio::test]
     async fn preview_marks_canonical_conflicts_without_writing() {
         let pool = setup_test_db().await;
@@ -773,6 +788,130 @@ metadata:
             .join("SKILL.md")
             .exists());
         assert!(conflicting_dir.join("sentinel.txt").exists());
+
+        let leaked_staging = std::fs::read_dir(central_root.path())
+            .expect("read central")
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| {
+                name.starts_with(".skillport-import-") || name.starts_with(".skillport-backup-")
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            leaked_staging.is_empty(),
+            "temporary staging directories should be cleaned up: {leaked_staging:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn full_import_restores_overwrite_target_when_db_assignment_fails() {
+        let pool = setup_test_db().await;
+        let central_root = tempdir().expect("central");
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+            .bind(central_root.path().to_string_lossy().into_owned())
+            .execute(&pool)
+            .await
+            .expect("update central");
+
+        let repo = GitHubRepoRef {
+            owner: "anthropics".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/anthropics/skills".to_string(),
+        };
+        let snapshot = multi_skill_snapshot();
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &snapshot).expect("candidates");
+        let source_path = "skills/code-review";
+        let candidate = candidates
+            .iter()
+            .find(|candidate| candidate.source_path == source_path)
+            .expect("code review candidate");
+
+        let existing_dir = central_root.path().join(&candidate.skill_id);
+        std::fs::create_dir_all(&existing_dir).expect("mkdir existing");
+        std::fs::write(
+            existing_dir.join("SKILL.md"),
+            sample_frontmatter("Code Review", "existing description"),
+        )
+        .expect("write existing skill");
+        std::fs::write(existing_dir.join("old-only.txt"), "keep").expect("write sentinel");
+        db::upsert_skill(
+            &pool,
+            &Skill {
+                id: candidate.skill_id.clone(),
+                name: "Code Review".to_string(),
+                description: Some("existing description".to_string()),
+                file_path: existing_dir.join("SKILL.md").to_string_lossy().into_owned(),
+                canonical_path: Some(existing_dir.to_string_lossy().into_owned()),
+                is_central: true,
+                source: Some("local".to_string()),
+                content: None,
+                scanned_at: Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
+            },
+        )
+        .await
+        .expect("seed existing skill");
+
+        sqlx::query("DROP TABLE skill_repository_members")
+            .execute(&pool)
+            .await
+            .expect("simulate repository assignment failure");
+
+        let result = import_github_repo_skills_from_snapshot(
+            &pool,
+            &repo,
+            &snapshot,
+            &candidates,
+            vec![GitHubSkillImportSelection {
+                source_path: source_path.to_string(),
+                resolution: DuplicateResolution::Overwrite,
+                renamed_skill_id: None,
+            }],
+            central_root.path(),
+            None,
+        )
+        .await;
+
+        let error = result.expect_err("import should fail on DB assignment");
+        assert!(
+            error.contains("skill_repository_members"),
+            "error should identify the failed assignment table: {error}"
+        );
+        assert!(
+            existing_dir.join("old-only.txt").exists(),
+            "overwrite backup should be restored when DB assignment fails"
+        );
+        let restored =
+            std::fs::read_to_string(existing_dir.join("SKILL.md")).expect("read restored SKILL.md");
+        assert!(
+            restored.contains("existing description"),
+            "restored target should keep the original skill content"
+        );
+
+        let db_skill = db::get_skill_by_id(&pool, &candidate.skill_id)
+            .await
+            .expect("read skill")
+            .expect("existing skill remains");
+        assert_eq!(
+            db_skill.description.as_deref(),
+            Some("existing description")
+        );
+        assert_eq!(db_skill.source.as_deref(), Some("local"));
+
+        let repository_id = db::github_repository_id(&repo.owner, &repo.repo, &repo.branch);
+        let imported_repo_rows: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM skill_repositories WHERE id = ?")
+                .bind(repository_id)
+                .fetch_one(&pool)
+                .await
+                .expect("count repository rows");
+        assert_eq!(
+            imported_repo_rows, 0,
+            "repository upsert should roll back with the failed assignment"
+        );
 
         let leaked_staging = std::fs::read_dir(central_root.path())
             .expect("read central")
