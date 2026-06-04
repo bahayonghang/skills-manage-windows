@@ -44,11 +44,53 @@ const chains = [
 ];
 
 function resolveCommand(command) {
+  if (isWindows) {
+    const result = spawnSync("where.exe", [command], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    });
+
+    if (result.status === 0) {
+      const candidates = result.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      return (
+        candidates.find((candidate) => /\.(cmd|bat)$/i.test(candidate)) ??
+        candidates[0] ??
+        command
+      );
+    }
+  }
+
   return command;
+}
+
+function createSpawnConfig(command, args) {
+  const resolvedCommand = resolveCommand(command);
+
+  if (isWindows && /\.(cmd|bat)$/i.test(resolvedCommand)) {
+    return {
+      command: [resolvedCommand, ...args].map(quoteCmdArg).join(" "),
+      args: [],
+      options: { shell: true },
+    };
+  }
+
+  return { command: resolvedCommand, args, options: {} };
 }
 
 function quoteArg(arg) {
   return /\s/.test(arg) ? JSON.stringify(arg) : arg;
+}
+
+function quoteCmdArg(arg) {
+  if (!/[()\s"&^<>|]/.test(arg)) {
+    return arg;
+  }
+
+  return `"${arg.replace(/"/g, '""')}"`;
 }
 
 function formatCommand(command, args) {
@@ -118,17 +160,18 @@ async function runProcess(chainName, step) {
   }
 
   const label = `${chainName}:${step.name}`;
-  const command = resolveCommand(step.command);
+  const spawnConfig = createSpawnConfig(step.command, step.args);
   const startedAt = Date.now();
 
   console.log(`[${label}] $ ${formatCommand(step.command, step.args)}`);
 
   return new Promise((resolve, reject) => {
-    const child = spawn(command, step.args, {
+    const child = spawn(spawnConfig.command, spawnConfig.args, {
       cwd: repoRoot,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
+      ...spawnConfig.options,
     });
     const stdout = createLineWriter(label, console.log);
     const stderr = createLineWriter(label, console.error);
