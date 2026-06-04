@@ -31,6 +31,10 @@ vi.mock("../stores/updateCenterStore", () => ({
   useUpdateCenterStore: vi.fn(),
 }));
 
+vi.mock("@/hooks/useSkillCallCounts", () => ({
+  useSkillCallCounts: vi.fn(() => ({})),
+}));
+
 vi.mock("sonner", () => ({
   toast: {
     success: vi.fn(),
@@ -84,6 +88,7 @@ import { useSkillStore } from "../stores/skillStore";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
 import { useSkillDetailStore } from "../stores/skillDetailStore";
 import { useUpdateCenterStore } from "../stores/updateCenterStore";
+import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
 import * as tauriBridge from "@/lib/tauri";
 
 const userSourceText = /用户来源|User source/i;
@@ -478,6 +483,7 @@ const mockUseSkillStore = vi.mocked(useSkillStore);
 const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
 const mockUseSkillDetailStore = vi.mocked(useSkillDetailStore);
 const mockUseUpdateCenterStore = vi.mocked(useUpdateCenterStore);
+const mockUseSkillCallCounts = vi.mocked(useSkillCallCounts);
 const centralStoreHarness = mockUseCentralSkillsStore as typeof mockUseCentralSkillsStore & {
   setState: (nextState: Record<string, unknown>) => void;
 };
@@ -649,6 +655,8 @@ describe("PlatformView", () => {
     mockScanDuplicates.mockReset();
     mockScanDeletedPlatformCopies.mockReset();
     mockOpenUpdateCenter.mockReset();
+    mockUseSkillCallCounts.mockReset();
+    mockUseSkillCallCounts.mockReturnValue({});
     vi.mocked(toast.success).mockReset();
     vi.mocked(toast.error).mockReset();
     vi.mocked(toast.info).mockReset();
@@ -1251,6 +1259,47 @@ describe("PlatformView", () => {
 
     await waitFor(() => {
       expect(visibleSkillNames()).toEqual(["Gamma Skill", "Beta Skill", "Alpha Skill"]);
+    });
+  });
+
+  it("sorts platform skills by 30-day call count using all platform skill names", async () => {
+    mockUseSkillCallCounts.mockReturnValue({
+      "Alpha Skill": 10,
+      "Beta Skill": 2,
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockSortablePlatformSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    expect(mockUseSkillCallCounts).toHaveBeenCalledWith(
+      ["Beta Skill", "Alpha Skill", "Gamma Skill"],
+      30
+    );
+
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort"));
+    expect(screen.getByTestId("platform-toolbar-sort-callCount-asc")).toHaveTextContent(
+      "调用次数"
+    );
+    expect(screen.getByTestId("platform-toolbar-sort-callCount-desc")).toHaveTextContent(
+      "调用次数"
+    );
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort-callCount-asc"));
+
+    await waitFor(() => {
+      expect(visibleSkillNames()).toEqual(["Gamma Skill", "Beta Skill", "Alpha Skill"]);
+    });
+
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort"));
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort-callCount-desc"));
+
+    await waitFor(() => {
+      expect(visibleSkillNames()).toEqual(["Alpha Skill", "Beta Skill", "Gamma Skill"]);
     });
   });
 

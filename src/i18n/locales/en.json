@@ -574,7 +574,8 @@
       "repository": "Repository",
       "name": "Name",
       "installedAt": "Installed",
-      "updatedAt": "Updated"
+      "updatedAt": "Updated",
+      "callCount": "Call count"
     },
     "sortDirections": {
       "asc": "Ascending",

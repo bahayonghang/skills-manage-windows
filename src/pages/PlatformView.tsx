@@ -253,6 +253,11 @@ export function PlatformView() {
     }),
     [t]
   );
+  const skillNamesForUsage = useMemo(
+    () => Array.from(new Set(skills.map((s) => s.name))),
+    [skills]
+  );
+  const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
   const platformRows = useMemo(
     () =>
       derivePlatformSkillRows({
@@ -262,6 +267,7 @@ export function PlatformView() {
         sort: { field: sortField, direction: sortDirection },
         groupBy,
         labels: platformGroupLabels,
+        usageCounts,
       }),
     [
       groupBy,
@@ -272,6 +278,7 @@ export function PlatformView() {
       sortDirection,
       sortField,
       sourceFilter,
+      usageCounts,
     ]
   );
   const sourceFilteredSkills = platformRows.sourceFilteredSkills;
@@ -281,11 +288,6 @@ export function PlatformView() {
     [filteredSkills]
   );
   const aiSummaries = useSkillExplanationSummaries(summarySkillIds, "zh");
-  const skillNamesForUsage = useMemo(
-    () => Array.from(new Set(filteredSkills.map((s) => s.name))),
-    [filteredSkills]
-  );
-  const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
 
   function getAiSummary(skill: ScannedSkill) {
     return (skill.row_id ? aiSummaries[skill.row_id] : undefined) ?? aiSummaries[skill.id];
@@ -479,6 +481,7 @@ export function PlatformView() {
     { value: "name", label: t("platform.sortFields.name") },
     { value: "installedAt", label: t("platform.sortFields.installedAt") },
     { value: "updatedAt", label: t("platform.sortFields.updatedAt") },
+    { value: "callCount", label: t("platform.sortFields.callCount") },
   ];
   const sortDirectionOptions: Array<{ value: PlatformSortDirection; label: string }> = [
     { value: "asc", label: t("platform.sortDirections.asc") },
