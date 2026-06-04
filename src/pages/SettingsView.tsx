@@ -426,7 +426,7 @@ export function SettingsView() {
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
           {t("settings.pages.eyebrow")}
         </p>
-        <h1 className="mt-1 text-xl font-semibold">{t("settings.title")}</h1>
+        <h1 className="mt-1 font-heading text-xl font-semibold">{t("settings.title")}</h1>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -439,7 +439,7 @@ export function SettingsView() {
                   <PageIcon className="size-5" aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="text-2xl font-semibold tracking-tight">
+                  <h2 className="font-heading text-2xl font-semibold tracking-tight">
                     {t(activePage.titleKey)}
                   </h2>
                   <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">

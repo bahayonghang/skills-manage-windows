@@ -407,7 +407,9 @@ describe("SettingsView", () => {
   it("renders the settings header", () => {
     setupMocks();
     renderSettingsView();
-    expect(screen.getByRole("heading", { name: "设置" })).toBeTruthy();
+    const heading = screen.getByRole("heading", { name: "设置" });
+    expect(heading).toBeTruthy();
+    expect(heading).toHaveClass("font-heading");
   });
 
   it("renders the github token section", () => {
@@ -779,6 +781,26 @@ describe("SettingsView", () => {
     expect(
       container.querySelector('[data-settings-page-nav="appearance"]')
     ).toBeTruthy();
+  });
+
+  it("wires settings titles through heading font and descriptive text through body defaults", () => {
+    setupMocks();
+    const { container } = renderSettingsView("/settings/connections");
+
+    expect(screen.getByRole("heading", { name: "设置" })).toHaveClass(
+      "font-heading"
+    );
+    expect(screen.getByRole("heading", { name: "连接与同步" })).toHaveClass(
+      "font-heading"
+    );
+    expect(
+      container.querySelector('[data-slot="card-title"]')
+    ).toHaveClass("font-heading");
+    expect(
+      screen
+        .getAllByText("管理本机、SSH 与 WSL 目标，并启动本机到远程同步。")
+        .every((node) => !node.className.includes("font-heading"))
+    ).toBe(true);
   });
 
   it("keeps the settings side navigation aria-current state when navigating pages", async () => {

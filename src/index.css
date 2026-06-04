@@ -122,8 +122,9 @@
 }
 
 @theme inline {
-    --font-heading: var(--font-sans);
-    --font-sans: 'JetBrains Mono Variable', 'Geist Variable', monospace;
+    --font-heading: var(--font-display);
+    --font-sans: var(--font-body);
+    --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
     --color-hover-bg: var(--hover-bg);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
@@ -679,6 +680,7 @@
     @apply bg-background text-foreground;
   }
   html {
+    font-size: calc(16px * var(--font-scale));
     @apply font-sans;
   }
   #root {
