@@ -878,11 +878,37 @@ describe("SettingsView", () => {
     expect(loadGitHubPat).toHaveBeenCalled();
   });
 
-  it("loads WSL distributions on mount", () => {
+  it("does not load targets or WSL distributions outside the connections page", () => {
+    const loadTargets = vi.fn().mockResolvedValue(undefined);
+    const loadWslDistributions = vi.fn().mockResolvedValue(undefined);
+    setupMocks({ loadTargets, loadWslDistributions });
+    renderSettingsView("/settings");
+    expect(loadTargets).not.toHaveBeenCalled();
+    expect(loadWslDistributions).not.toHaveBeenCalled();
+  });
+
+  it("loads targets on connections page without auto-discovering WSL distributions", () => {
+    const loadTargets = vi.fn().mockResolvedValue(undefined);
+    const loadWslDistributions = vi.fn().mockResolvedValue(undefined);
+    setupMocks({ loadTargets, loadWslDistributions });
+    renderSettingsView("/settings/connections");
+    expect(loadTargets).toHaveBeenCalledTimes(1);
+    expect(loadWslDistributions).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("不会自动探测 WSL。点击“刷新 WSL 列表”后再选择发行版。")
+    ).toBeTruthy();
+  });
+
+  it("discovers WSL distributions only after manual refresh", () => {
     const loadWslDistributions = vi.fn().mockResolvedValue(undefined);
     setupMocks({ loadWslDistributions });
     renderSettingsView("/settings/connections");
-    expect(loadWslDistributions).toHaveBeenCalled();
+
+    expect(loadWslDistributions).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新 WSL 列表" }));
+
+    expect(loadWslDistributions).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the saved github pat hidden until reveal", async () => {

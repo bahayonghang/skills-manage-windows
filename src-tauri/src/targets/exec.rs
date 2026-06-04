@@ -144,8 +144,7 @@ impl ConnectedSshTarget {
         let mut command = Command::new(ssh_program());
         #[cfg(windows)]
         {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(CREATE_NO_WINDOW);
+            hide_child_window(&mut command);
         }
         command
             .arg("-p")
@@ -454,8 +453,7 @@ impl ConnectedWslTarget {
         let mut command = Command::new(wsl_program());
         #[cfg(windows)]
         {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(CREATE_NO_WINDOW);
+            hide_child_window(&mut command);
         }
         command.arg("-d").arg(&self.target.distribution).arg("--");
         command

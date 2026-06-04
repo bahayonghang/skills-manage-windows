@@ -202,16 +202,19 @@ export function SettingsView() {
       void loadCentralUpdateCheckMode();
     }
     loadGitHubPat();
-    loadTargets();
-    void loadWslDistributions().catch(() => undefined);
   }, [
     centralUpdateCheckModeLoaded,
     loadCentralUpdateCheckMode,
     loadScanDirectories,
     loadGitHubPat,
-    loadTargets,
-    loadWslDistributions,
   ]);
+
+  useEffect(() => {
+    if (activePageId !== "connections") {
+      return;
+    }
+    void loadTargets();
+  }, [activePageId, loadTargets]);
 
   useEffect(() => {
     if (wslTargetForm.distribution.trim() || wslDistributions.length !== 1) {

@@ -8,10 +8,7 @@ pub async fn list_wsl_distributions_impl() -> Result<Vec<WslDistributionSummary>
 
     #[cfg(windows)]
     {
-        let output = Command::new(super::wsl_program())
-            .arg("-l")
-            .arg("-v")
-            .stdin(Stdio::null())
+        let output = wsl_distribution_list_command()
             .output()
             .map_err(|e| format!("Failed to start wsl.exe: {}", e))?;
         if !output.status.success() {
@@ -29,6 +26,14 @@ pub async fn list_wsl_distributions_impl() -> Result<Vec<WslDistributionSummary>
             &output.stdout,
         )))
     }
+}
+
+#[cfg(windows)]
+pub(super) fn wsl_distribution_list_command() -> Command {
+    let mut command = Command::new(super::wsl_program());
+    hide_child_window(&mut command);
+    command.arg("-l").arg("-v").stdin(Stdio::null());
+    command
 }
 
 pub(super) fn normalize_wsl_list_output(bytes: &[u8]) -> String {
