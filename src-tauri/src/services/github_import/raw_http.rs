@@ -1,3 +1,5 @@
+use crate::services::resource_budget::ResourceBudget;
+
 use super::*;
 pub(crate) async fn fetch_raw_text(
     client: &reqwest::Client,
@@ -27,10 +29,18 @@ pub(crate) async fn fetch_raw_text(
         );
     }
 
-    response
-        .text()
+    let budget = ResourceBudget::default_skill();
+    if let Some(content_length) = response.content_length() {
+        budget.reject_file_read_size(url, content_length)?;
+    }
+
+    let bytes = response
+        .bytes()
         .await
-        .map_err(|e| format!("Failed to read skill metadata: {}", e))
+        .map_err(|e| format!("Failed to read skill metadata: {}", e))?;
+    budget.reject_file_read_size(url, bytes.len() as u64)?;
+    String::from_utf8(bytes.to_vec())
+        .map_err(|e| format!("Skill metadata is not valid UTF-8: {}", e))
 }
 
 #[derive(Debug, Clone)]

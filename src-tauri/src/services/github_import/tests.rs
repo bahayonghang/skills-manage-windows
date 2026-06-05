@@ -405,6 +405,42 @@ metadata:
         assert!(err.contains("resource budget"));
     }
 
+    #[test]
+    fn snapshot_from_repository_archive_accepts_default_32mb_entry_budget() {
+        let large_font = vec![0_u8; 18_948_244];
+        let archive = repository_archive(&[("skills/demo/assets/font.ttf", large_font.as_slice())]);
+
+        let snapshot = snapshot_from_repository_archive(&archive).expect("snapshot");
+
+        assert_eq!(
+            snapshot
+                .files
+                .get("skills/demo/assets/font.ttf")
+                .map(Vec::len),
+            Some(18_948_244)
+        );
+    }
+
+    #[test]
+    fn snapshot_from_repository_archive_rejects_expanded_contents_over_budget() {
+        let first = vec![b'a'; 6];
+        let second = vec![b'b'; 6];
+        let archive = repository_archive(&[
+            ("skills/demo/one.txt", first.as_slice()),
+            ("skills/demo/two.txt", second.as_slice()),
+        ]);
+        let budget = ResourceBudget {
+            archive_expanded_bytes: 10,
+            archive_entry_bytes: 8,
+            ..ResourceBudget::default()
+        };
+
+        let err = snapshot_from_repository_archive_with_budget(&archive, budget).unwrap_err();
+
+        assert!(err.contains("expanded archive contents"));
+        assert!(err.contains("12 bytes > 10 bytes"));
+    }
+
     #[tokio::test]
     async fn preview_marks_canonical_conflicts_without_writing() {
         let pool = setup_test_db().await;
@@ -1315,6 +1351,19 @@ metadata:
             !command.contains(token),
             "ssh command string must not contain the GitHub token"
         );
+    }
+
+    #[test]
+    fn remote_workspace_download_script_enforces_archive_budgets() {
+        let script = remote_workspace_download_script(None).expect("script");
+
+        assert!(script.contains("archive_limit=134217728"));
+        assert!(script.contains("archive_files_limit=20000"));
+        assert!(script.contains("archive_expanded_limit=268435456"));
+        assert!(script.contains("archive_entry_limit=33554432"));
+        assert!(script.contains("wc -c < \"$archive_file\""));
+        assert!(script.contains("find \"$repo_dir\" -type f -print"));
+        assert!(script.contains("GitHub repository archive entry"));
     }
 
     #[test]

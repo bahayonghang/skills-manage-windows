@@ -1,3 +1,5 @@
+use crate::services::resource_budget::ResourceBudget;
+
 use super::*;
 pub(crate) async fn resolve_repo_source(
     repo_url: &str,
@@ -280,6 +282,8 @@ pub(super) async fn build_remote_repo_skill_candidates_from_workspace(
     for manifest in manifests {
         let skill_md_remote_path = remote_join(remote_repo_dir, &manifest.skill_md_path);
         let raw = connection.read_file(&skill_md_remote_path).await?;
+        ResourceBudget::default_skill()
+            .reject_file_read_size(&skill_md_remote_path, raw.len() as u64)?;
         let candidate = build_remote_skill_candidate(repo, &manifest, raw, direct_endpoint)
             .map_err(|invalid| invalid.detail)?;
         if !seen_names.insert(candidate.skill_name.clone()) {

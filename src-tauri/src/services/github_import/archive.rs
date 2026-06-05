@@ -95,6 +95,7 @@ pub(super) fn snapshot_from_repository_archive_with_budget(
     let decoder = GzDecoder::new(cursor);
     let mut archive = tar::Archive::new(decoder);
     let mut files = HashMap::new();
+    let mut expanded_bytes = 0_u64;
 
     for entry_result in archive
         .entries()
@@ -122,6 +123,10 @@ pub(super) fn snapshot_from_repository_archive_with_budget(
             )
         })?;
         budget.reject_archive_entry_size(&relative_path, entry_size)?;
+        expanded_bytes = expanded_bytes.checked_add(entry_size).ok_or_else(|| {
+            "GitHub repository expanded archive contents size overflowed.".to_string()
+        })?;
+        budget.reject_archive_expanded_size(expanded_bytes)?;
 
         let mut content = Vec::new();
         entry.read_to_end(&mut content).map_err(|e| {
@@ -130,7 +135,18 @@ pub(super) fn snapshot_from_repository_archive_with_budget(
                 relative_path, e
             )
         })?;
-        budget.reject_archive_entry_size(&relative_path, content.len() as u64)?;
+        let actual_entry_size = content.len() as u64;
+        budget.reject_archive_entry_size(&relative_path, actual_entry_size)?;
+        if actual_entry_size != entry_size {
+            let corrected_expanded_bytes = expanded_bytes
+                .checked_sub(entry_size)
+                .and_then(|size| size.checked_add(actual_entry_size))
+                .ok_or_else(|| {
+                    "GitHub repository expanded archive contents size overflowed.".to_string()
+                })?;
+            budget.reject_archive_expanded_size(corrected_expanded_bytes)?;
+            expanded_bytes = corrected_expanded_bytes;
+        }
         files.insert(relative_path, content);
     }
 

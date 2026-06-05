@@ -1,3 +1,5 @@
+use crate::services::resource_budget::ResourceBudget;
+
 use super::*;
 pub(super) async fn cleanup_expired_preview_workspaces_for_connection(
     connection: &ConnectedRemoteTarget,
@@ -54,6 +56,7 @@ pub(super) fn github_archive_url(repo: &GitHubRepoRef) -> String {
 }
 
 pub(super) fn remote_workspace_download_script(auth: Option<&str>) -> Result<String, String> {
+    let budget = ResourceBudget::default_skill();
     let auth_block = match auth.filter(|token| !token.trim().is_empty()) {
         Some(token) => {
             let header = curl_auth_header_config_line(token)?;
@@ -73,6 +76,10 @@ SKILLPORT_CURL_CONF
         r#"set -eu
 archive_url=$1
 user_agent=$2
+archive_limit={archive_limit}
+archive_files_limit={archive_files_limit}
+archive_expanded_limit={archive_expanded_limit}
+archive_entry_limit={archive_entry_limit}
 workspace=""
 curl_conf=""
 cleanup() {{
@@ -86,7 +93,7 @@ cleanup() {{
   exit "$status"
 }}
 trap cleanup EXIT
-for tool in sh curl tar find mktemp; do
+for tool in sh curl tar find mktemp wc; do
   command -v "$tool" >/dev/null 2>&1 || {{
     printf 'Missing required remote tool: %s\n' "$tool" >&2
     exit 127
@@ -102,10 +109,40 @@ if [ -n "$curl_conf" ]; then
 else
   curl -fL --retry 2 --connect-timeout 30 -A "$user_agent" -o "$archive_file" "$archive_url"
 fi
+set -- $(wc -c < "$archive_file")
+archive_size=$1
+if [ "$archive_size" -gt "$archive_limit" ]; then
+  printf 'GitHub repository archive exceeds the resource budget (%s bytes > %s bytes).\n' "$archive_size" "$archive_limit" >&2
+  exit 24
+fi
 tar -xzf "$archive_file" -C "$repo_dir" --strip-components=1
+file_count=0
+expanded_size=0
+find "$repo_dir" -type f -print | while IFS= read -r file; do
+  file_count=$((file_count + 1))
+  if [ "$file_count" -gt "$archive_files_limit" ]; then
+    printf 'GitHub repository archive exceeds the resource budget (more than %s files).\n' "$archive_files_limit" >&2
+    exit 25
+  fi
+  set -- $(wc -c < "$file")
+  file_size=$1
+  if [ "$file_size" -gt "$archive_entry_limit" ]; then
+    printf "GitHub repository archive entry '%s' exceeds the resource budget (%s bytes > %s bytes).\n" "$file" "$file_size" "$archive_entry_limit" >&2
+    exit 26
+  fi
+  expanded_size=$((expanded_size + file_size))
+  if [ "$expanded_size" -gt "$archive_expanded_limit" ]; then
+    printf 'GitHub repository expanded archive contents exceeds the resource budget (%s bytes > %s bytes).\n' "$expanded_size" "$archive_expanded_limit" >&2
+    exit 27
+  fi
+done
 rm -f -- "$archive_file"
 printf '%s\n' "$workspace"
-"#
+"#,
+        archive_limit = budget.archive_bytes,
+        archive_files_limit = budget.archive_files,
+        archive_expanded_limit = budget.archive_expanded_bytes,
+        archive_entry_limit = budget.archive_entry_bytes,
     ))
 }
 
@@ -441,6 +478,7 @@ pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
     let bytes = connection
         .read_file(&remote_join(&workspace.remote_repo_dir, &skill_md_path))
         .await?;
+    ResourceBudget::default_skill().reject_file_read_size(&skill_md_path, bytes.len() as u64)?;
     String::from_utf8(bytes).map_err(|e| format!("Remote SKILL.md is not valid UTF-8: {}", e))
 }
 
