@@ -10,7 +10,7 @@ describe("font contract", () => {
     expect(indexCss).toContain("--font-heading: var(--font-display);");
     expect(indexCss).toContain("--font-sans: var(--font-body);");
     expect(indexCss).toContain(
-      "--font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;"
+      '--font-mono: "JetBrains Mono Variable", ui-monospace, monospace;',
     );
   });
 
