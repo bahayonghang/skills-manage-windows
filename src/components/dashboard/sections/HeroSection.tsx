@@ -28,7 +28,7 @@ export function HeroSection({
       ? "border-destructive/30 bg-destructive/10 text-destructive"
       : scanState === "refreshing"
         ? "border-primary/35 bg-primary/15 text-primary"
-        : "border-emerald-500/35 bg-emerald-500/10 text-emerald-500";
+        : "border-success/35 bg-success/10 text-success-foreground";
 
   return (
     <section className="surface-glass relative overflow-hidden rounded-3xl px-6 py-7 sm:px-8 sm:py-9">

@@ -76,7 +76,7 @@ const TONE_CLASS: Record<KpiCardProps["tone"], string> = {
   primary: "from-primary/14 via-primary/6 text-primary",
   accent: "from-chart-1/14 via-chart-1/6 text-chart-1",
   neutral: "from-muted/40 via-muted/20 text-muted-foreground",
-  success: "from-emerald-500/14 via-emerald-500/6 text-emerald-500",
+  success: "from-success/14 via-success/6 text-success",
 };
 
 function KpiCard({ label, value, icon, tone }: KpiCardProps) {

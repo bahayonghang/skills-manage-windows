@@ -42,7 +42,7 @@ interface ProjectInstallDialogProps {
   onConfirm: (
     skillId: string,
     agentIds: string[],
-    method: InstallMethod
+    method: InstallMethod,
   ) => Promise<void>;
 }
 
@@ -59,7 +59,7 @@ export function ProjectInstallDialog({
   const { t } = useTranslation();
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [installMethod, setInstallMethod] = useState<InstallMethod>("symlink");
   const [skillSearch, setSkillSearch] = useState("");
@@ -71,22 +71,26 @@ export function ProjectInstallDialog({
         (target) =>
           target.id !== "central" &&
           target.is_enabled &&
-          hasProjectSkillPattern(target)
+          hasProjectSkillPattern(target),
       ),
-    [platformTargets]
+    [platformTargets],
   );
 
   const selectedTargets = useMemo(
     () => eligibleTargets.filter((target) => selectedTargetIds.has(target.id)),
-    [eligibleTargets, selectedTargetIds]
+    [eligibleTargets, selectedTargetIds],
   );
 
   const selectedInstallAgentIds = useMemo(
     () =>
       Array.from(
-        new Set(selectedTargets.flatMap((target) => getPlatformTargetInstallAgentIds(target)))
+        new Set(
+          selectedTargets.flatMap((target) =>
+            getPlatformTargetInstallAgentIds(target),
+          ),
+        ),
       ),
-    [selectedTargets]
+    [selectedTargets],
   );
 
   const filteredSkills = useMemo(() => {
@@ -95,7 +99,7 @@ export function ProjectInstallDialog({
     return centralSkills.filter(
       (s) =>
         s.name.toLowerCase().includes(q) ||
-        (s.description ?? "").toLowerCase().includes(q)
+        (s.description ?? "").toLowerCase().includes(q),
     );
   }, [centralSkills, skillSearch]);
 
@@ -122,11 +126,11 @@ export function ProjectInstallDialog({
 
   function existingForTarget(
     skillId: string,
-    target: PlatformTarget
+    target: PlatformTarget,
   ): ProjectSkill | undefined {
     const memberIds = new Set(getPlatformTargetMemberIds(target));
     return existingSkills.find(
-      (s) => s.skillId === skillId && memberIds.has(s.agentId)
+      (s) => s.skillId === skillId && memberIds.has(s.agentId),
     );
   }
 
@@ -150,11 +154,7 @@ export function ProjectInstallDialog({
     }
     setError(null);
     try {
-      await onConfirm(
-        selectedSkillId,
-        selectedInstallAgentIds,
-        installMethod
-      );
+      await onConfirm(selectedSkillId, selectedInstallAgentIds, installMethod);
       onOpenChange(false);
     } catch (err) {
       setError(String(err));
@@ -220,7 +220,7 @@ export function ProjectInstallDialog({
                         "w-full text-left px-3 py-2 text-sm border-b border-border last:border-0 cursor-pointer transition-colors",
                         isSelected
                           ? "bg-primary/10 text-foreground"
-                          : "hover:bg-muted/40"
+                          : "hover:bg-muted/40",
                       )}
                     >
                       <div className="font-medium truncate">{skill.name}</div>
@@ -266,11 +266,9 @@ export function ProjectInstallDialog({
                         agentId={target.id}
                         className="size-3.5 shrink-0"
                       />
-                      <span className="flex-1 truncate">
-                        {displayName}
-                      </span>
+                      <span className="flex-1 truncate">{displayName}</span>
                       {exists ? (
-                        <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
+                        <span className="text-[10px] text-warning-foreground shrink-0">
                           {t("projectInstall.willReplace", {
                             type: exists.linkType,
                           })}
@@ -330,7 +328,9 @@ export function ProjectInstallDialog({
           <Button
             onClick={handleConfirm}
             disabled={
-              isInstalling || !selectedSkillId || selectedInstallAgentIds.length === 0
+              isInstalling ||
+              !selectedSkillId ||
+              selectedInstallAgentIds.length === 0
             }
           >
             {isInstalling ? (

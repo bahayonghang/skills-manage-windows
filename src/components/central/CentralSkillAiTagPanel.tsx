@@ -108,7 +108,7 @@ function IdleAiTagPanel({
         </p>
       </DashboardCard>
       <DashboardCard
-        icon={<ShieldCheck className="size-3.5 text-emerald-500" />}
+        icon={<ShieldCheck className="size-3.5 text-success-foreground" />}
         title={t("central.aiTagReadyTitle")}
       >
         <p className="leading-relaxed text-foreground/75">
@@ -148,7 +148,9 @@ function RunningAiTagPanel({
 
   return (
     <DashboardCard
-      icon={<Loader2 className="size-3.5 animate-spin text-primary motion-reduce:animate-none" />}
+      icon={
+        <Loader2 className="size-3.5 animate-spin text-primary motion-reduce:animate-none" />
+      }
       title={t("central.aiTagCockpitRunningTitle")}
       testId="ai-tag-running-cockpit"
     >
@@ -239,7 +241,7 @@ function SettledAiTagPanel({
               "rounded-xl border p-2.5 text-xs leading-relaxed",
               job.status === "failed"
                 ? "border-destructive/30 bg-destructive/10 text-destructive"
-                : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                : "border-warning/30 bg-warning/10 text-warning-foreground",
             )}
           >
             {message}
@@ -294,8 +296,14 @@ function AiTagRateCard({
       title={t("central.aiTagRateProfileTitle")}
     >
       <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
-        <RateMetric label={t("settings.aiTagConcurrencyLabel")} value={profile.concurrency} />
-        <RateMetric label={t("settings.aiTagIntervalLabel")} value={`${profile.intervalMs}ms`} />
+        <RateMetric
+          label={t("settings.aiTagConcurrencyLabel")}
+          value={profile.concurrency}
+        />
+        <RateMetric
+          label={t("settings.aiTagIntervalLabel")}
+          value={`${profile.intervalMs}ms`}
+        />
         <RateMetric
           label={t("settings.aiTagStopOn429Label")}
           value={formatToggle(profile.stopOnRateLimit, t)}
@@ -303,7 +311,7 @@ function AiTagRateCard({
       </div>
       {!profile.isSafeProfile && (
         <div
-          className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs leading-relaxed text-amber-700 dark:text-amber-300"
+          className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-2.5 text-xs leading-relaxed text-warning-foreground"
           data-testid="ai-tag-rate-risk"
         >
           <div className="mb-1 flex items-center gap-1.5 font-semibold">
@@ -329,7 +337,10 @@ function AiTagStats({ job, t }: { job: AiTagJob; t: TFunction }) {
   return (
     <div className="grid grid-cols-4 gap-2 text-center text-[11px]">
       <RateMetric label={t("central.aiTagStatDone")} value={job.completed} />
-      <RateMetric label={t("central.aiTagStatSucceeded")} value={job.succeeded} />
+      <RateMetric
+        label={t("central.aiTagStatSucceeded")}
+        value={job.succeeded}
+      />
       <RateMetric label={t("central.aiTagStatFailed")} value={job.failed} />
       <RateMetric
         label={t("central.aiTagStatReview")}
@@ -363,10 +374,12 @@ function ItemCluster({
               "flex min-w-0 items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-xs",
               emphasized
                 ? "border-primary/25 bg-primary/10 text-primary"
-                : "border-border/80 bg-muted/10 text-foreground/75"
+                : "border-border/80 bg-muted/10 text-foreground/75",
             )}
           >
-            <span className="min-w-0 truncate font-medium">{item.skillName}</span>
+            <span className="min-w-0 truncate font-medium">
+              {item.skillName}
+            </span>
             <StatusPill status={item.status} t={t} />
           </div>
         ))}
@@ -375,13 +388,7 @@ function ItemCluster({
   );
 }
 
-function StatusPill({
-  status,
-  t,
-}: {
-  status: AiTagItemStatus;
-  t: TFunction;
-}) {
+function StatusPill({ status, t }: { status: AiTagItemStatus; t: TFunction }) {
   return (
     <span
       className={cn(
@@ -389,10 +396,11 @@ function StatusPill({
         status === "running" && "bg-primary/10 text-primary ring-primary/20",
         status === "queued" && "bg-muted text-muted-foreground ring-border",
         status === "succeeded" &&
-          "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-300",
-        status === "failed" && "bg-destructive/10 text-destructive ring-destructive/20",
+          "bg-success/10 text-success-foreground ring-success/20",
+        status === "failed" &&
+          "bg-destructive/10 text-destructive ring-destructive/20",
         status === "cancelled" &&
-          "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300"
+          "bg-warning/10 text-warning-foreground ring-warning/20",
       )}
     >
       {status === "running" ? (
@@ -476,9 +484,9 @@ function getSettledIcon(status: AiTagJob["status"]) {
     return <XCircle className="size-3.5 text-destructive" />;
   }
   if (status === "cancelled") {
-    return <AlertTriangle className="size-3.5 text-amber-500" />;
+    return <AlertTriangle className="size-3.5 text-warning-foreground" />;
   }
-  return <CheckCircle2 className="size-3.5 text-emerald-500" />;
+  return <CheckCircle2 className="size-3.5 text-success-foreground" />;
 }
 
 function getSettledMessage(job: AiTagJob, t: TFunction): string | null {

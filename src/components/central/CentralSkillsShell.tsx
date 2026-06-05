@@ -381,7 +381,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
             {updateAvailableSkillCount > 0 && (
               <span
                 data-testid="central-update-count-chip"
-                className="ml-1.5 inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300 dark:bg-amber-500/20"
+                className="ml-1.5 inline-flex items-center rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning-foreground ring-1 ring-warning/30"
               >
                 +{updateAvailableSkillCount}
               </span>

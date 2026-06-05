@@ -50,11 +50,12 @@ export function UpdateCheckModeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl" data-testid="update-check-mode-dialog">
+      <DialogContent
+        className="sm:max-w-2xl"
+        data-testid="update-check-mode-dialog"
+      >
         <DialogHeader>
-          <DialogTitle>
-            {t("central.updateCheckMode.title")}
-          </DialogTitle>
+          <DialogTitle>{t("central.updateCheckMode.title")}</DialogTitle>
           <DialogDescription>
             {t("central.updateCheckMode.description", { scope: scopeLabel })}
           </DialogDescription>
@@ -88,8 +89,11 @@ export function UpdateCheckModeDialog({
             testId="update-check-mode-sync"
             onSelect={() => setMode("sync")}
           />
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
+            <AlertTriangle
+              className="mt-0.5 size-3.5 shrink-0"
+              aria-hidden="true"
+            />
             <span>{t("central.updateCheckMode.note")}</span>
           </div>
         </DialogBody>
@@ -107,7 +111,9 @@ export function UpdateCheckModeDialog({
           <Button
             type="button"
             size="sm"
-            disabled={isSubmitting || (effectiveMode === "sync" && syncDisabled)}
+            disabled={
+              isSubmitting || (effectiveMode === "sync" && syncDisabled)
+            }
             data-testid="confirm-update-check-mode"
             onClick={() => onConfirm(effectiveMode)}
           >
@@ -163,7 +169,9 @@ function ModeCard({
         <span
           className={cn(
             "mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full border",
-            checked ? "border-primary bg-primary text-primary-foreground" : "border-border bg-muted",
+            checked
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-muted",
           )}
         >
           {icon}
@@ -175,11 +183,15 @@ function ModeCard({
           </span>
           <span className="mt-2 block space-y-1 text-xs text-muted-foreground">
             {bullets.map((item) => (
-              <span key={item} className="block">• {item}</span>
+              <span key={item} className="block">
+                • {item}
+              </span>
             ))}
           </span>
           {disabledReason ? (
-            <span className="mt-2 block text-xs text-destructive">{disabledReason}</span>
+            <span className="mt-2 block text-xs text-destructive">
+              {disabledReason}
+            </span>
           ) : null}
         </span>
       </div>

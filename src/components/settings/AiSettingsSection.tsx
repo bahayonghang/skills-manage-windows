@@ -1,4 +1,12 @@
-import { Bot, ChevronDown, ChevronRight, KeyRound, Loader2, ServerCog, SlidersHorizontal } from "lucide-react";
+import {
+  Bot,
+  ChevronDown,
+  ChevronRight,
+  KeyRound,
+  Loader2,
+  ServerCog,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -38,7 +46,9 @@ interface AiSettingsSectionProps {
   onProviderChange: (id: string) => void;
   onClearApiKey: () => void;
   onRevealApiKey: (providerId: string) => Promise<string | null>;
-  onSetShowAiTestDetails: (value: boolean | ((current: boolean) => boolean)) => void;
+  onSetShowAiTestDetails: (
+    value: boolean | ((current: boolean) => boolean),
+  ) => void;
   onTestConnection: () => void;
   onUpdateAiSettings: (patch: Partial<AiSettings>) => void;
 }
@@ -63,8 +73,12 @@ export function AiSettingsSection({
 }: AiSettingsSectionProps) {
   const { t } = useTranslation();
   const [revealError, setRevealError] = useState<string | null>(null);
-  const currentProvider = AI_PROVIDERS.find((provider) => provider.id === aiSettings.provider);
-  const currentProviderLabel = currentProvider ? t(currentProvider.labelKey) : aiSettings.provider;
+  const currentProvider = AI_PROVIDERS.find(
+    (provider) => provider.id === aiSettings.provider,
+  );
+  const currentProviderLabel = currentProvider
+    ? t(currentProvider.labelKey)
+    : aiSettings.provider;
   const aiControlsDisabled = isLoadingAiSettings || aiSaveStatus === "saving";
 
   useEffect(() => {
@@ -78,204 +92,235 @@ export function AiSettingsSection({
       description={t("settings.aiProviderDesc")}
       icon={<Bot className="size-5 shrink-0 text-muted-foreground" />}
     >
-        <div className="space-y-4">
-          <div className="rounded-xl border border-border/70 bg-background/70 p-3 shadow-sm">
-            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div id="settings-ai-provider-label" className="text-xs font-medium text-foreground">
-                  {t("settings.aiProviderLabel")}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("settings.aiProviderConsoleHint")}
-                </p>
-              </div>
-              <span
-                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${secretStorageTone(aiApiKeyState.storageState)}`}
+      <div className="space-y-4">
+        <div className="rounded-xl border border-border/70 bg-background/70 p-3 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div
+                id="settings-ai-provider-label"
+                className="text-xs font-medium text-foreground"
               >
-                {aiApiKeyState.configured || aiApiKeyState.storageState === "unreadable"
-                  ? t(`settings.aiApiKeyStorageState.${aiApiKeyState.storageState}`)
-                  : t("settings.aiApiKeyNotConfigured")}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby="settings-ai-provider-label">
-              {AI_PROVIDERS.map((provider) => (
-                <button
-                  key={provider.id}
-                  type="button"
-                  onClick={() => onProviderChange(provider.id)}
-                  disabled={aiControlsDisabled}
-                  aria-pressed={aiSettings.provider === provider.id}
-                  className={`min-h-8 px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border md:min-h-7 ${aiSettings.provider === provider.id ? "bg-primary/15 border-primary text-foreground font-medium" : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-hover-bg/10"}`}
-                >
-                  {t(provider.labelKey)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-3 xl:grid-cols-2">
-            <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
-              <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <KeyRound className="size-3.5" />
-                {t("settings.aiSecretConsoleTitle")}
+                {t("settings.aiProviderLabel")}
               </div>
-              <SecretValueInput
-                id="settings-ai-api-key"
-                label={t("settings.aiApiKeyLabel")}
-                value={aiSettings.apiKey}
-                configured={aiApiKeyState.configured}
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("settings.aiProviderConsoleHint")}
+              </p>
+            </div>
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${secretStorageTone(aiApiKeyState.storageState)}`}
+            >
+              {aiApiKeyState.configured ||
+              aiApiKeyState.storageState === "unreadable"
+                ? t(
+                    `settings.aiApiKeyStorageState.${aiApiKeyState.storageState}`,
+                  )
+                : t("settings.aiApiKeyNotConfigured")}
+            </span>
+          </div>
+          <div
+            className="flex flex-wrap gap-1.5"
+            role="group"
+            aria-labelledby="settings-ai-provider-label"
+          >
+            {AI_PROVIDERS.map((provider) => (
+              <button
+                key={provider.id}
+                type="button"
+                onClick={() => onProviderChange(provider.id)}
                 disabled={aiControlsDisabled}
-                placeholder={t("settings.aiApiKeyPlaceholder")}
-                revealScopeKey={aiSettings.provider}
-                inputShowLabel={t("settings.aiApiKeyShow")}
-                inputHideLabel={t("settings.aiApiKeyHide")}
-                savedRevealLabel={t("settings.aiApiKeyRevealSaved")}
-                savedHideLabel={t("settings.aiApiKeyHideSaved")}
-                savedHiddenHint={t("settings.aiApiKeySavedHiddenHint", {
-                  provider: currentProviderLabel,
-                })}
-                savedRevealedHint={t("settings.aiApiKeySavedRevealedHint", {
-                  provider: currentProviderLabel,
-                })}
-                inputReplacementHint={t("settings.aiApiKeyWillReplace", {
-                  provider: currentProviderLabel,
-                })}
-                onChange={(nextValue) => onUpdateAiSettings({ apiKey: nextValue })}
-                onRevealSaved={() => onRevealApiKey(aiSettings.provider)}
-                onRevealError={setRevealError}
-              />
-              <div className="mt-3 space-y-2 text-xs text-muted-foreground">
-                <p>
-                  {t("settings.aiApiKeyActiveState", {
-                    provider: currentProviderLabel,
-                    state: getAiApiKeyActiveStateLabel(t, aiApiKeyState),
-                  })}
-                </p>
-                {aiApiKeyState.configured && aiApiKeyState.fingerprint ? (
-                  <p>
-                    {t("settings.aiApiKeyFingerprint", {
-                      fingerprint: aiApiKeyState.fingerprint,
-                    })}
-                  </p>
-                ) : null}
-                {revealError ? (
-                  <p className="text-destructive">
-                    {t("settings.aiApiKeyRevealFailed", { error: revealError })}
-                  </p>
-                ) : null}
-                {aiApiKeyState.error ? (
-                  <p className="text-amber-600 dark:text-amber-400">
-                    {t("settings.aiApiKeyMigrationWarning")}
-                  </p>
-                ) : null}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                disabled={aiControlsDisabled || !aiApiKeyState.configured}
-                onClick={onClearApiKey}
+                aria-pressed={aiSettings.provider === provider.id}
+                className={`min-h-8 px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer border md:min-h-7 ${aiSettings.provider === provider.id ? "bg-primary/15 border-primary text-foreground font-medium" : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-hover-bg/10"}`}
               >
-                {t("settings.aiApiKeyClear")}
-              </Button>
-            </div>
-
-            <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
-              <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <ServerCog className="size-3.5" />
-                {t("settings.aiRuntimeConsoleTitle")}
-              </div>
-              <div className="space-y-3">
-                {currentProvider && currentProvider.regions.length > 1 ? (
-                  <AiRegionPicker
-                    lang={lang}
-                    region={aiSettings.region}
-                    regions={currentProvider.regions}
-                    disabled={aiControlsDisabled}
-                    onChange={(region) => onUpdateAiSettings({ region })}
-                  />
-                ) : null}
-                <div>
-                  <label htmlFor="settings-ai-model" className="text-xs text-muted-foreground mb-1 block">
-                    {t("settings.aiModelLabel")}
-                  </label>
-                  <Input
-                    id="settings-ai-model"
-                    placeholder={t("settings.aiModelPlaceholder")}
-                    value={aiSettings.model}
-                    disabled={aiControlsDisabled}
-                    onChange={(event) => onUpdateAiSettings({ model: event.target.value })}
-                  />
-                </div>
-                {aiSettings.provider === "custom" && (
-                  <div className="space-y-3">
-                    <div>
-                      <label htmlFor="settings-ai-api-url" className="text-xs text-muted-foreground mb-1 block">
-                        {t("settings.aiApiUrlLabel")}
-                      </label>
-                      <Input
-                        id="settings-ai-api-url"
-                        placeholder={t("settings.aiApiUrlPlaceholder")}
-                        value={aiSettings.customUrl}
-                        disabled={aiControlsDisabled}
-                        onChange={(event) => onUpdateAiSettings({ customUrl: event.target.value })}
-                      />
-                    </div>
-                    <AiProtocolPicker
-                      protocol={aiSettings.protocol}
-                      disabled={aiControlsDisabled}
-                      onChange={(protocol) => onUpdateAiSettings({ protocol })}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
+                {t(provider.labelKey)}
+              </button>
+            ))}
           </div>
-          <AiSaveStatusRow
-            aiSaveError={aiSaveError}
-            aiSaveStatus={aiSaveStatus}
-            isLoadingAiSettings={isLoadingAiSettings}
-          />
+        </div>
 
+        <div className="grid gap-3 xl:grid-cols-2">
           <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
             <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              <SlidersHorizontal className="size-3.5" />
-              {t("settings.aiControlsConsoleTitle")}
+              <KeyRound className="size-3.5" />
+              {t("settings.aiSecretConsoleTitle")}
             </div>
-            <AiTagRateSettings
-              aiSettings={aiSettings}
-              onUpdateAiSettings={onUpdateAiSettings}
+            <SecretValueInput
+              id="settings-ai-api-key"
+              label={t("settings.aiApiKeyLabel")}
+              value={aiSettings.apiKey}
+              configured={aiApiKeyState.configured}
+              disabled={aiControlsDisabled}
+              placeholder={t("settings.aiApiKeyPlaceholder")}
+              revealScopeKey={aiSettings.provider}
+              inputShowLabel={t("settings.aiApiKeyShow")}
+              inputHideLabel={t("settings.aiApiKeyHide")}
+              savedRevealLabel={t("settings.aiApiKeyRevealSaved")}
+              savedHideLabel={t("settings.aiApiKeyHideSaved")}
+              savedHiddenHint={t("settings.aiApiKeySavedHiddenHint", {
+                provider: currentProviderLabel,
+              })}
+              savedRevealedHint={t("settings.aiApiKeySavedRevealedHint", {
+                provider: currentProviderLabel,
+              })}
+              inputReplacementHint={t("settings.aiApiKeyWillReplace", {
+                provider: currentProviderLabel,
+              })}
+              onChange={(nextValue) =>
+                onUpdateAiSettings({ apiKey: nextValue })
+              }
+              onRevealSaved={() => onRevealApiKey(aiSettings.provider)}
+              onRevealError={setRevealError}
             />
-          </div>
-          <div className="flex items-center gap-3">
-            {resolvedUrl && (
-              <div className="text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2 font-mono truncate flex-1 min-w-0">
-                {resolvedUrl}
-              </div>
-            )}
+            <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+              <p>
+                {t("settings.aiApiKeyActiveState", {
+                  provider: currentProviderLabel,
+                  state: getAiApiKeyActiveStateLabel(t, aiApiKeyState),
+                })}
+              </p>
+              {aiApiKeyState.configured && aiApiKeyState.fingerprint ? (
+                <p>
+                  {t("settings.aiApiKeyFingerprint", {
+                    fingerprint: aiApiKeyState.fingerprint,
+                  })}
+                </p>
+              ) : null}
+              {revealError ? (
+                <p className="text-destructive">
+                  {t("settings.aiApiKeyRevealFailed", { error: revealError })}
+                </p>
+              ) : null}
+              {aiApiKeyState.error ? (
+                <p className="text-warning-foreground">
+                  {t("settings.aiApiKeyMigrationWarning")}
+                </p>
+              ) : null}
+            </div>
             <Button
               variant="outline"
               size="sm"
-              disabled={aiControlsDisabled || aiTesting || (!aiSettings.apiKey && !aiApiKeyState.configured) || !resolvedUrl}
-              onClick={onTestConnection}
-              className="shrink-0"
+              className="mt-3"
+              disabled={aiControlsDisabled || !aiApiKeyState.configured}
+              onClick={onClearApiKey}
             >
-              {aiTesting ? <Loader2 className="size-3.5 animate-spin" /> : <Bot className="size-3.5" />}
-              <span>{t("settings.aiTestConnection")}</span>
+              {t("settings.aiApiKeyClear")}
             </Button>
           </div>
-          {aiTestResult && currentProvider && (
-            <AiTestResultPanel
-              aiRegion={aiSettings.region}
-              aiTestResult={aiTestResult}
-              currentProviderRegionCount={currentProvider.regions.length}
-              lang={lang}
-              providerLabel={t(currentProvider.labelKey)}
-              showAiTestDetails={showAiTestDetails}
-              onSetShowAiTestDetails={onSetShowAiTestDetails}
-            />
-          )}
+
+          <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
+            <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <ServerCog className="size-3.5" />
+              {t("settings.aiRuntimeConsoleTitle")}
+            </div>
+            <div className="space-y-3">
+              {currentProvider && currentProvider.regions.length > 1 ? (
+                <AiRegionPicker
+                  lang={lang}
+                  region={aiSettings.region}
+                  regions={currentProvider.regions}
+                  disabled={aiControlsDisabled}
+                  onChange={(region) => onUpdateAiSettings({ region })}
+                />
+              ) : null}
+              <div>
+                <label
+                  htmlFor="settings-ai-model"
+                  className="text-xs text-muted-foreground mb-1 block"
+                >
+                  {t("settings.aiModelLabel")}
+                </label>
+                <Input
+                  id="settings-ai-model"
+                  placeholder={t("settings.aiModelPlaceholder")}
+                  value={aiSettings.model}
+                  disabled={aiControlsDisabled}
+                  onChange={(event) =>
+                    onUpdateAiSettings({ model: event.target.value })
+                  }
+                />
+              </div>
+              {aiSettings.provider === "custom" && (
+                <div className="space-y-3">
+                  <div>
+                    <label
+                      htmlFor="settings-ai-api-url"
+                      className="text-xs text-muted-foreground mb-1 block"
+                    >
+                      {t("settings.aiApiUrlLabel")}
+                    </label>
+                    <Input
+                      id="settings-ai-api-url"
+                      placeholder={t("settings.aiApiUrlPlaceholder")}
+                      value={aiSettings.customUrl}
+                      disabled={aiControlsDisabled}
+                      onChange={(event) =>
+                        onUpdateAiSettings({ customUrl: event.target.value })
+                      }
+                    />
+                  </div>
+                  <AiProtocolPicker
+                    protocol={aiSettings.protocol}
+                    disabled={aiControlsDisabled}
+                    onChange={(protocol) => onUpdateAiSettings({ protocol })}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+        <AiSaveStatusRow
+          aiSaveError={aiSaveError}
+          aiSaveStatus={aiSaveStatus}
+          isLoadingAiSettings={isLoadingAiSettings}
+        />
+
+        <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <SlidersHorizontal className="size-3.5" />
+            {t("settings.aiControlsConsoleTitle")}
+          </div>
+          <AiTagRateSettings
+            aiSettings={aiSettings}
+            onUpdateAiSettings={onUpdateAiSettings}
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          {resolvedUrl && (
+            <div className="text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2 font-mono truncate flex-1 min-w-0">
+              {resolvedUrl}
+            </div>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={
+              aiControlsDisabled ||
+              aiTesting ||
+              (!aiSettings.apiKey && !aiApiKeyState.configured) ||
+              !resolvedUrl
+            }
+            onClick={onTestConnection}
+            className="shrink-0"
+          >
+            {aiTesting ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Bot className="size-3.5" />
+            )}
+            <span>{t("settings.aiTestConnection")}</span>
+          </Button>
+        </div>
+        {aiTestResult && currentProvider && (
+          <AiTestResultPanel
+            aiRegion={aiSettings.region}
+            aiTestResult={aiTestResult}
+            currentProviderRegionCount={currentProvider.regions.length}
+            lang={lang}
+            providerLabel={t(currentProvider.labelKey)}
+            showAiTestDetails={showAiTestDetails}
+            onSetShowAiTestDetails={onSetShowAiTestDetails}
+          />
+        )}
+      </div>
     </SettingsCollapsibleCard>
   );
 }
@@ -283,9 +328,9 @@ export function AiSettingsSection({
 function secretStorageTone(state: SecretStorageState) {
   switch (state) {
     case "stored":
-      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return "bg-success/10 text-success-foreground";
     case "session":
-      return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+      return "bg-warning/10 text-warning-foreground";
     case "unreadable":
       return "bg-destructive/10 text-destructive";
     case "missing":
@@ -296,7 +341,7 @@ function secretStorageTone(state: SecretStorageState) {
 
 function getAiApiKeyActiveStateLabel(
   t: TFunction,
-  aiApiKeyState: AiApiKeyState
+  aiApiKeyState: AiApiKeyState,
 ) {
   if (aiApiKeyState.storageState === "unreadable") {
     return t("settings.aiApiKeyActiveUnavailable");
@@ -314,15 +359,28 @@ interface AiRegionPickerProps {
   onChange: (region: RegionId) => void;
 }
 
-function AiRegionPicker({ lang: _lang, region, regions, disabled = false, onChange }: AiRegionPickerProps) {
+function AiRegionPicker({
+  lang: _lang,
+  region,
+  regions,
+  disabled = false,
+  onChange,
+}: AiRegionPickerProps) {
   const { t } = useTranslation();
 
   return (
     <div>
-      <div id="settings-ai-region-label" className="text-xs text-muted-foreground mb-2">
+      <div
+        id="settings-ai-region-label"
+        className="text-xs text-muted-foreground mb-2"
+      >
         {t("settings.aiRegionLabel")}
       </div>
-      <div className="flex gap-1.5" role="group" aria-labelledby="settings-ai-region-label">
+      <div
+        className="flex gap-1.5"
+        role="group"
+        aria-labelledby="settings-ai-region-label"
+      >
         {regions.map((item) => (
           <button
             key={item}
@@ -355,10 +413,17 @@ function AiProtocolPicker({
 
   return (
     <div>
-      <div id="settings-ai-protocol-label" className="text-xs text-muted-foreground mb-2">
+      <div
+        id="settings-ai-protocol-label"
+        className="text-xs text-muted-foreground mb-2"
+      >
         {t("settings.aiProtocolLabel")}
       </div>
-      <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-labelledby="settings-ai-protocol-label">
+      <div
+        className="grid gap-2 sm:grid-cols-3"
+        role="radiogroup"
+        aria-labelledby="settings-ai-protocol-label"
+      >
         {API_PROTOCOLS.map((item) => (
           <button
             key={item.id || "auto"}
@@ -398,10 +463,14 @@ function AiSaveStatusRow({
       {aiSaveStatus === "saving" || isLoadingAiSettings ? (
         <>
           <Loader2 className="size-3 animate-spin text-muted-foreground" />
-          <span className="text-muted-foreground">{t("settings.aiSaveSaving")}</span>
+          <span className="text-muted-foreground">
+            {t("settings.aiSaveSaving")}
+          </span>
         </>
       ) : aiSaveStatus === "saved" ? (
-        <span className="text-emerald-600 dark:text-emerald-400">{t("settings.aiSaveSaved")}</span>
+        <span className="text-success-foreground">
+          {t("settings.aiSaveSaved")}
+        </span>
       ) : aiSaveStatus === "error" ? (
         <span className="text-destructive">
           {t("settings.aiSaveError", { error: aiSaveError ?? "" })}
@@ -434,19 +503,27 @@ function AiTagRateSettings({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span id="settings-ai-tag-stop-on-rate-limit-label" className="text-xs text-muted-foreground">
+          <span
+            id="settings-ai-tag-stop-on-rate-limit-label"
+            className="text-xs text-muted-foreground"
+          >
             {t("settings.aiTagStopOn429Label")}
           </span>
           <Switch
             checked={aiSettings.tagStopOnRateLimit}
-            onCheckedChange={(checked) => onUpdateAiSettings({ tagStopOnRateLimit: checked })}
+            onCheckedChange={(checked) =>
+              onUpdateAiSettings({ tagStopOnRateLimit: checked })
+            }
             aria-labelledby="settings-ai-tag-stop-on-rate-limit-label"
           />
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label htmlFor="settings-ai-tag-concurrency" className="text-xs text-muted-foreground mb-1 block">
+          <label
+            htmlFor="settings-ai-tag-concurrency"
+            className="text-xs text-muted-foreground mb-1 block"
+          >
             {t("settings.aiTagConcurrencyLabel")}
           </label>
           <Input
@@ -455,11 +532,16 @@ function AiTagRateSettings({
             min={1}
             max={8}
             value={aiSettings.tagConcurrency}
-            onChange={(event) => onUpdateAiSettings({ tagConcurrency: event.target.value })}
+            onChange={(event) =>
+              onUpdateAiSettings({ tagConcurrency: event.target.value })
+            }
           />
         </div>
         <div>
-          <label htmlFor="settings-ai-tag-interval" className="text-xs text-muted-foreground mb-1 block">
+          <label
+            htmlFor="settings-ai-tag-interval"
+            className="text-xs text-muted-foreground mb-1 block"
+          >
             {t("settings.aiTagIntervalLabel")}
           </label>
           <Input
@@ -469,7 +551,9 @@ function AiTagRateSettings({
             max={60000}
             step={500}
             value={aiSettings.tagIntervalMs}
-            onChange={(event) => onUpdateAiSettings({ tagIntervalMs: event.target.value })}
+            onChange={(event) =>
+              onUpdateAiSettings({ tagIntervalMs: event.target.value })
+            }
           />
         </div>
       </div>
@@ -484,7 +568,9 @@ interface AiTestResultPanelProps {
   lang: string;
   providerLabel: string;
   showAiTestDetails: boolean;
-  onSetShowAiTestDetails: (value: boolean | ((current: boolean) => boolean)) => void;
+  onSetShowAiTestDetails: (
+    value: boolean | ((current: boolean) => boolean),
+  ) => void;
 }
 
 function AiTestResultPanel({
@@ -504,8 +590,13 @@ function AiTestResultPanel({
       : aiTestResult.msg;
 
   return (
-    <div className={`text-xs rounded-md px-3 py-2 space-y-1.5 ${aiTestResult.ok ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-destructive/10 text-destructive"}`}>
-      <p>{aiTestResult.ok ? "✓ " : "✕ "}{message}</p>
+    <div
+      className={`text-xs rounded-md px-3 py-2 space-y-1.5 ${aiTestResult.ok ? "bg-success/10 text-success-foreground" : "bg-destructive/10 text-destructive"}`}
+    >
+      <p>
+        {aiTestResult.ok ? "✓ " : "✕ "}
+        {message}
+      </p>
       {!aiTestResult.ok && aiTestResult.details && (
         <div>
           <button
@@ -514,7 +605,11 @@ function AiTestResultPanel({
             onClick={() => onSetShowAiTestDetails((current) => !current)}
             aria-expanded={showAiTestDetails}
           >
-            {showAiTestDetails ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            {showAiTestDetails ? (
+              <ChevronDown className="size-3" />
+            ) : (
+              <ChevronRight className="size-3" />
+            )}
             {t("settings.aiTestDetails")}
           </button>
           {showAiTestDetails && (
@@ -529,8 +624,8 @@ function AiTestResultPanel({
           {t("settings.aiTestRegionHint", {
             region:
               lang === "zh"
-                ? REGION_LABELS[aiRegion]?.zh ?? aiRegion
-                : REGION_LABELS[aiRegion]?.en ?? aiRegion,
+                ? (REGION_LABELS[aiRegion]?.zh ?? aiRegion)
+                : (REGION_LABELS[aiRegion]?.en ?? aiRegion),
           })}
         </p>
       )}

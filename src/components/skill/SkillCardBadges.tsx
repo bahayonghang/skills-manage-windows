@@ -65,8 +65,8 @@ export function SourceOriginBadge({
       className={cn(
         "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
         isPlugin
-          ? "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300"
-          : "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:text-sky-300",
+          ? "bg-warning/10 text-warning-foreground ring-warning/20"
+          : "bg-info/10 text-info-foreground ring-info/20",
       )}
     >
       {isPlugin
@@ -109,7 +109,7 @@ export function ProjectSourceBadge({
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
         isCentral
-          ? "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:text-sky-300"
+          ? "bg-info/10 text-info-foreground ring-info/20"
           : "bg-muted text-muted-foreground ring-border/70",
       )}
     >

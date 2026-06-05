@@ -41,7 +41,7 @@ interface BatchInstallCentralSkillsDialogProps {
   onInstall: (
     agentIds: string[],
     method: InstallMethod,
-    projectPath?: string | null
+    projectPath?: string | null,
   ) => Promise<CentralBatchInstallResult>;
   onManagePlatforms?: () => void;
 }
@@ -64,10 +64,12 @@ export function BatchInstallCentralSkillsDialog({
   const canUseSymlink = !isRemoteTarget || activeTarget.symlinkEnabled === true;
   const targetAgents = useMemo(
     () => agents.filter((agent) => agent.id !== "central"),
-    [agents]
+    [agents],
   );
   const [targetMode, setTargetMode] = useState<TargetMode>("platform");
-  const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(new Set());
+  const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [installMethod, setInstallMethod] = useState<InstallMethod>("symlink");
   const [projectPath, setProjectPath] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -75,10 +77,13 @@ export function BatchInstallCentralSkillsDialog({
   const defaultExcludedKey = defaultExcludedAgentIds.join("\0");
   const defaultExcludedSet = useMemo(
     () => new Set(defaultExcludedKey ? defaultExcludedKey.split("\0") : []),
-    [defaultExcludedKey]
+    [defaultExcludedKey],
   );
   const skipped = useMemo(() => result?.skipped ?? [], [result]);
-  const skippedSummary = useMemo(() => summarizeSkippedReasons(skipped), [skipped]);
+  const skippedSummary = useMemo(
+    () => summarizeSkippedReasons(skipped),
+    [skipped],
+  );
 
   const isProjectTargetDisabled = (agent: AgentWithStatus) =>
     targetMode === "project" && !hasProjectSkillPattern(agent);
@@ -89,11 +94,14 @@ export function BatchInstallCentralSkillsDialog({
         new Set(
           targetAgents
             .filter((agent) => selectedAgentIds.has(agent.id))
-            .filter((agent) => targetMode !== "project" || hasProjectSkillPattern(agent))
-            .flatMap((agent) => getPlatformTargetInstallAgentIds(agent))
-        )
+            .filter(
+              (agent) =>
+                targetMode !== "project" || hasProjectSkillPattern(agent),
+            )
+            .flatMap((agent) => getPlatformTargetInstallAgentIds(agent)),
+        ),
       ),
-    [selectedAgentIds, targetAgents, targetMode]
+    [selectedAgentIds, targetAgents, targetMode],
   );
   const platformCount = selectedInstallAgentIds.length;
 
@@ -102,9 +110,11 @@ export function BatchInstallCentralSkillsDialog({
 
     const initialSelection = new Set(
       targetAgents
-        .filter((agent) => targetMode === "platform" || hasProjectSkillPattern(agent))
+        .filter(
+          (agent) => targetMode === "platform" || hasProjectSkillPattern(agent),
+        )
         .filter((agent) => !defaultExcludedSet.has(agent.id))
-        .map((agent) => agent.id)
+        .map((agent) => agent.id),
     );
     setSelectedAgentIds(initialSelection);
     setError(null);
@@ -115,7 +125,14 @@ export function BatchInstallCentralSkillsDialog({
     } else {
       setInstallMethod("copy");
     }
-  }, [open, targetAgents, targetMode, isRemoteTarget, canUseSymlink, defaultExcludedSet]);
+  }, [
+    open,
+    targetAgents,
+    targetMode,
+    isRemoteTarget,
+    canUseSymlink,
+    defaultExcludedSet,
+  ]);
 
   function handleModeChange(mode: TargetMode) {
     setTargetMode(mode);
@@ -157,7 +174,7 @@ export function BatchInstallCentralSkillsDialog({
       const installResult = await onInstall(
         selectedInstallAgentIds,
         installMethod,
-        targetMode === "project" ? trimmedProjectPath : null
+        targetMode === "project" ? trimmedProjectPath : null,
       );
       setResult(installResult);
       if (installResult.failed.length === 0) {
@@ -178,21 +195,29 @@ export function BatchInstallCentralSkillsDialog({
 
         <DialogBody className="space-y-5">
           <DialogDescription>
-            {description ?? t("central.batchInstallDesc", { count: skillCount })}
+            {description ??
+              t("central.batchInstallDesc", { count: skillCount })}
           </DialogDescription>
 
           <div className="space-y-2">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {t("central.batchInstallTargetMode")}
             </p>
-            <RadioGroup value={targetMode} onValueChange={(value) => handleModeChange(value as TargetMode)}>
+            <RadioGroup
+              value={targetMode}
+              onValueChange={(value) => handleModeChange(value as TargetMode)}
+            >
               <label className="flex cursor-pointer items-center gap-2.5">
                 <RadioItem value="platform" />
-                <span className="text-sm">{t("central.batchInstallTargetPlatforms")}</span>
+                <span className="text-sm">
+                  {t("central.batchInstallTargetPlatforms")}
+                </span>
               </label>
               <label className="flex cursor-pointer items-center gap-2.5">
                 <RadioItem value="project" />
-                <span className="text-sm">{t("central.batchInstallTargetProject")}</span>
+                <span className="text-sm">
+                  {t("central.batchInstallTargetProject")}
+                </span>
                 {isRemoteTarget && (
                   <span className="text-xs text-muted-foreground">
                     {t("targets.projectModeRemoteHint")}
@@ -246,7 +271,11 @@ export function BatchInstallCentralSkillsDialog({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2" role="group" aria-label={t("central.batchInstallSelectPlatform")}>
+          <div
+            className="grid grid-cols-2 gap-x-4 gap-y-2"
+            role="group"
+            aria-label={t("central.batchInstallSelectPlatform")}
+          >
             {targetAgents.length === 0 ? (
               <p className="col-span-2 text-sm text-muted-foreground">
                 {t("central.batchInstallNoPlatforms")}
@@ -259,14 +288,17 @@ export function BatchInstallCentralSkillsDialog({
                 const displayName = isUniversal
                   ? t("platformTargets.universalLabel")
                   : agent.display_name;
-                const memberNames = getPlatformTargetMemberNames(agent).join(", ");
+                const memberNames =
+                  getPlatformTargetMemberNames(agent).join(", ");
 
                 return (
                   <div key={agent.id} className="flex items-center gap-2">
                     <Checkbox
                       checked={isChecked}
                       disabled={isDisabled}
-                      onCheckedChange={(checked) => handleToggle(agent.id, !!checked)}
+                      onCheckedChange={(checked) =>
+                        handleToggle(agent.id, !!checked)
+                      }
                       aria-label={displayName}
                     />
                     <div
@@ -275,8 +307,12 @@ export function BatchInstallCentralSkillsDialog({
                           ? "cursor-default text-muted-foreground"
                           : "cursor-pointer text-foreground"
                       }`}
-                      title={isUniversal ? memberNames : agent.global_skills_dir}
-                      onClick={() => !isDisabled && handleToggle(agent.id, !isChecked)}
+                      title={
+                        isUniversal ? memberNames : agent.global_skills_dir
+                      }
+                      onClick={() =>
+                        !isDisabled && handleToggle(agent.id, !isChecked)
+                      }
                     >
                       <div className="truncate text-sm">{displayName}</div>
                       {isUniversal && (
@@ -302,11 +338,15 @@ export function BatchInstallCentralSkillsDialog({
             </p>
             <RadioGroup
               value={installMethod}
-              onValueChange={(value) => setInstallMethod(value as InstallMethod)}
+              onValueChange={(value) =>
+                setInstallMethod(value as InstallMethod)
+              }
             >
               <label className="flex cursor-pointer items-center gap-2.5">
                 <RadioItem value="symlink" disabled={!canUseSymlink} />
-                <span className="text-sm">{t("central.batchInstallSymlink")}</span>
+                <span className="text-sm">
+                  {t("central.batchInstallSymlink")}
+                </span>
                 <span className="text-xs text-muted-foreground">
                   {!canUseSymlink && isRemoteTarget
                     ? t("targets.symlinkDisabled")
@@ -325,7 +365,7 @@ export function BatchInstallCentralSkillsDialog({
 
           {result && result.failed.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+              <p className="text-xs font-medium text-warning-foreground">
                 {t("central.batchInstallPartial", {
                   skillCount,
                   platformCount,
@@ -335,12 +375,20 @@ export function BatchInstallCentralSkillsDialog({
                 })}
               </p>
               {skippedSummary.length > 0 && (
-                <div className="rounded-md border border-border/70 bg-muted/35 p-2 text-xs text-muted-foreground" data-testid="batch-install-skipped-summary">
-                  <p className="font-medium text-foreground">{t("central.batchInstallSkippedDetails")}</p>
+                <div
+                  className="rounded-md border border-border/70 bg-muted/35 p-2 text-xs text-muted-foreground"
+                  data-testid="batch-install-skipped-summary"
+                >
+                  <p className="font-medium text-foreground">
+                    {t("central.batchInstallSkippedDetails")}
+                  </p>
                   <ul className="mt-1 space-y-0.5">
                     {skippedSummary.map(({ reason, count }) => (
                       <li key={reason}>
-                        {t(`central.batchInstallSkipReasons.${reason}`, { defaultValue: reason })}: {count}
+                        {t(`central.batchInstallSkipReasons.${reason}`, {
+                          defaultValue: reason,
+                        })}
+                        : {count}
                       </li>
                     ))}
                   </ul>
@@ -380,7 +428,9 @@ export function BatchInstallCentralSkillsDialog({
             onClick={() => onOpenChange(false)}
             disabled={isInstalling}
           >
-            {result?.failed.length ? t("central.batchInstallClose") : t("installDialog.cancel")}
+            {result?.failed.length
+              ? t("central.batchInstallClose")
+              : t("installDialog.cancel")}
           </Button>
           <Button
             onClick={handleConfirm}
@@ -401,15 +451,14 @@ export function BatchInstallCentralSkillsDialog({
   );
 }
 
-
 function summarizeSkippedReasons(
-  skipped: NonNullable<CentralBatchInstallResult["skipped"]>
+  skipped: NonNullable<CentralBatchInstallResult["skipped"]>,
 ): Array<{ reason: string; count: number }> {
   const counts = new Map<string, number>();
   for (const item of skipped) {
     counts.set(item.reason, (counts.get(item.reason) ?? 0) + 1);
   }
-  return Array.from(counts, ([reason, count]) => ({ reason, count })).sort((a, b) =>
-    a.reason.localeCompare(b.reason)
+  return Array.from(counts, ([reason, count]) => ({ reason, count })).sort(
+    (a, b) => a.reason.localeCompare(b.reason),
   );
 }

@@ -44,21 +44,26 @@ export function CollectionInstallDialog({
 }: CollectionInstallDialogProps) {
   const { t } = useTranslation();
   const targetAgents = agents.filter((a) => a.id !== "central");
-  const isLockedTarget = (agent: AgentWithStatus) => isUniversalPlatformTarget(agent);
+  const isLockedTarget = (agent: AgentWithStatus) =>
+    isUniversalPlatformTarget(agent);
   const selectedInstallAgentIds = () =>
     Array.from(
       new Set(
         targetAgents
           .filter((agent) => selectedAgentIds.has(agent.id))
           .filter((agent) => !isLockedTarget(agent))
-          .flatMap((agent) => getPlatformTargetInstallAgentIds(agent))
-      )
+          .flatMap((agent) => getPlatformTargetInstallAgentIds(agent)),
+      ),
     );
 
-  const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(new Set());
+  const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<CollectionBatchInstallResult | null>(null);
+  const [result, setResult] = useState<CollectionBatchInstallResult | null>(
+    null,
+  );
   const wasOpenRef = useRef(false);
 
   // Reset when dialog opens.
@@ -67,9 +72,7 @@ export function CollectionInstallDialog({
     wasOpenRef.current = open;
     if (didOpen) {
       // Default: select all enabled and visible platform targets.
-      const initial = new Set<string>(
-        targetAgents.map((agent) => agent.id)
-      );
+      const initial = new Set<string>(targetAgents.map((agent) => agent.id));
       setSelectedAgentIds(initial);
       setError(null);
       setResult(null);
@@ -117,7 +120,9 @@ export function CollectionInstallDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{t("batchInstall.title", { name: collectionName })}</DialogTitle>
+          <DialogTitle>
+            {t("batchInstall.title", { name: collectionName })}
+          </DialogTitle>
           <DialogClose />
         </DialogHeader>
 
@@ -127,7 +132,11 @@ export function CollectionInstallDialog({
           </DialogDescription>
 
           {/* Platform checkboxes */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2" role="group" aria-label={t("batchInstall.selectPlatforms")}>
+          <div
+            className="grid grid-cols-2 gap-x-4 gap-y-2"
+            role="group"
+            aria-label={t("batchInstall.selectPlatforms")}
+          >
             {targetAgents.length === 0 ? (
               <p className="col-span-2 text-sm text-muted-foreground">
                 {t("batchInstall.noPlatforms")}
@@ -140,7 +149,8 @@ export function CollectionInstallDialog({
                 const displayName = isUniversal
                   ? t("platformTargets.universalLabel")
                   : agent.display_name;
-                const memberNames = getPlatformTargetMemberNames(agent).join(", ");
+                const memberNames =
+                  getPlatformTargetMemberNames(agent).join(", ");
                 return (
                   <div key={agent.id} className="flex items-center gap-2">
                     <Checkbox
@@ -157,8 +167,12 @@ export function CollectionInstallDialog({
                           ? "text-muted-foreground cursor-default"
                           : "text-foreground cursor-pointer"
                       }`}
-                      title={isUniversal ? memberNames : agent.global_skills_dir}
-                      onClick={() => !isLocked && handleToggle(agent.id, !isChecked)}
+                      title={
+                        isUniversal ? memberNames : agent.global_skills_dir
+                      }
+                      onClick={() =>
+                        !isLocked && handleToggle(agent.id, !isChecked)
+                      }
                     >
                       <div className="truncate text-sm">{displayName}</div>
                       {isUniversal && (
@@ -186,7 +200,7 @@ export function CollectionInstallDialog({
           {/* Result summary if partial failure */}
           {result && result.failed.length > 0 && (
             <div className="space-y-1">
-              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+              <p className="text-xs text-warning-foreground font-medium">
                 {t("batchInstall.succeeded", {
                   succeeded: result.succeeded.length,
                   failed: result.failed.length,
@@ -236,7 +250,9 @@ export function CollectionInstallDialog({
                   {t("batchInstall.installing")}
                 </>
               ) : (
-                t("batchInstall.install", { count: selectedInstallAgentIds().length })
+                t("batchInstall.install", {
+                  count: selectedInstallAgentIds().length,
+                })
               )}
             </Button>
           </DialogFooter>

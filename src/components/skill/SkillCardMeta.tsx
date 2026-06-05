@@ -109,7 +109,7 @@ export function SkillCardMeta({
               : updateStatus.status === "error"
                 ? "bg-destructive/10 text-destructive ring-destructive/20"
                 : updateStatus.status === "remote_missing"
-                  ? "bg-amber-500/10 text-amber-700 ring-amber-500/30 dark:text-amber-300"
+                  ? "bg-warning/10 text-warning-foreground ring-warning/30"
                   : "bg-muted text-muted-foreground ring-border",
           )}
           title={updateStatus.error ?? undefined}
@@ -125,7 +125,7 @@ export function SkillCardMeta({
               ? `skill-card-duplicate-badge-${inventorySkillId}`
               : undefined
           }
-          className="inline-flex items-center rounded-full bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 ring-1 ring-orange-500/30 dark:text-orange-300"
+          className="inline-flex items-center rounded-full bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning-foreground ring-1 ring-warning/30"
         >
           {t("central.updateCenter.badges.duplicate")}
         </span>

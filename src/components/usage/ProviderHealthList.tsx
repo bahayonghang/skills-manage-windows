@@ -32,7 +32,10 @@ export function ProviderHealthList({
   if (providers.length === 0) {
     return (
       <div
-        className={cn("rounded border border-dashed border-border/60 p-6", className)}
+        className={cn(
+          "rounded border border-dashed border-border/60 p-6",
+          className,
+        )}
       >
         <p className="text-center text-xs text-muted-foreground">
           {t("skillUsage.empty.placeholder")}
@@ -41,7 +44,8 @@ export function ProviderHealthList({
     );
   }
 
-  const rowClass = "flex w-full items-center justify-between px-3 py-2 text-left";
+  const rowClass =
+    "flex w-full items-center justify-between px-3 py-2 text-left";
 
   return (
     <ul className={cn("divide-y divide-border/60", className)}>
@@ -54,13 +58,13 @@ export function ProviderHealthList({
               aria-hidden
               className={cn(
                 "size-2 rounded-full",
-                p.available ? "bg-emerald-500" : "bg-muted-foreground/30"
+                p.available ? "bg-success" : "bg-muted-foreground/30",
               )}
             />
             <span
               className={cn(
                 "text-sm",
-                p.available ? "text-foreground" : "text-muted-foreground"
+                p.available ? "text-foreground" : "text-muted-foreground",
               )}
             >
               {p.displayName}
@@ -102,7 +106,7 @@ export function ProviderHealthList({
                 className={cn(
                   rowClass,
                   "transition-colors hover:bg-muted/40",
-                  active && "text-primary"
+                  active && "text-primary",
                 )}
               >
                 {left}

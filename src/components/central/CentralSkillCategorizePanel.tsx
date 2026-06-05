@@ -1,10 +1,4 @@
-import {
-  AlertTriangle,
-  Check,
-  Plus,
-  Tags,
-  Wand2,
-} from "lucide-react";
+import { AlertTriangle, Check, Plus, Tags, Wand2 } from "lucide-react";
 import type { ReactNode } from "react";
 import type { TFunction } from "i18next";
 
@@ -79,29 +73,37 @@ export function CentralSkillCategorizePanel({
   onToggleManualTag,
 }: CentralSkillCategorizePanelProps) {
   function getManualPrimaryLabel() {
-    if (selectedSkillCount === 0) return t("central.categorizeSelectSkillsFirst");
-    if (manualSelectedTagIds.length === 0) return t("central.categorizeSelectTagsFirst");
+    if (selectedSkillCount === 0)
+      return t("central.categorizeSelectSkillsFirst");
+    if (manualSelectedTagIds.length === 0)
+      return t("central.categorizeSelectTagsFirst");
     return t("central.applyToSelectedSkills", { count: selectedSkillCount });
   }
 
   function getManualDisabledReason() {
-    if (selectedSkillCount === 0) return t("central.categorizeSelectSkillsReason");
-    if (manualSelectedTagIds.length === 0) return t("central.categorizeSelectTagsReason");
+    if (selectedSkillCount === 0)
+      return t("central.categorizeSelectSkillsReason");
+    if (manualSelectedTagIds.length === 0)
+      return t("central.categorizeSelectTagsReason");
     if (isMetadataUpdating) return t("central.categorizeApplyingReason");
     return null;
   }
 
   function getAiPrimaryLabel() {
-    if (selectedSkillCount === 0) return t("central.categorizeSelectSkillsFirst");
+    if (selectedSkillCount === 0)
+      return t("central.categorizeSelectSkillsFirst");
     if (!aiTaggingAvailable) return t("central.aiTaggingConfigureFirst");
-    if (isSuggestingTags || aiTagJob.status === "running") return t("central.aiTaggingRunning");
+    if (isSuggestingTags || aiTagJob.status === "running")
+      return t("central.aiTaggingRunning");
     return t("central.aiSuggestSelected", { count: selectedSkillCount });
   }
 
   function getAiDisabledReason() {
     if (!aiTaggingAvailable) return t("central.aiTaggingConfigureReason");
-    if (selectedSkillCount === 0) return t("central.categorizeSelectSkillsReason");
-    if (isSuggestingTags || aiTagJob.status === "running") return t("central.aiTaggingRunningReason");
+    if (selectedSkillCount === 0)
+      return t("central.categorizeSelectSkillsReason");
+    if (isSuggestingTags || aiTagJob.status === "running")
+      return t("central.aiTaggingRunningReason");
     return null;
   }
 
@@ -123,7 +125,7 @@ export function CentralSkillCategorizePanel({
           <span
             className={cn(
               "font-medium",
-              selectedSkillCount > 0 ? "text-primary" : "text-foreground/70"
+              selectedSkillCount > 0 ? "text-primary" : "text-foreground/70",
             )}
           >
             {t("central.selectedSkillSummary", { count: selectedSkillCount })}
@@ -132,13 +134,20 @@ export function CentralSkillCategorizePanel({
           <span
             className={cn(
               "font-medium",
-              manualSelectedTagIds.length > 0 ? "text-primary" : "text-foreground/70"
+              manualSelectedTagIds.length > 0
+                ? "text-primary"
+                : "text-foreground/70",
             )}
           >
-            {t("central.pendingTagSummary", { count: manualSelectedTagIds.length })}
+            {t("central.pendingTagSummary", {
+              count: manualSelectedTagIds.length,
+            })}
           </span>
           <span className="ml-auto text-muted-foreground">
-            {t("central.aiScopeDesc", { selected: selectedSkillCount, total: sortedSkillCount })}
+            {t("central.aiScopeDesc", {
+              selected: selectedSkillCount,
+              total: sortedSkillCount,
+            })}
           </span>
         </div>
       </div>
@@ -162,13 +171,13 @@ export function CentralSkillCategorizePanel({
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
                 categorizeTab === tab
                   ? "border-primary/35 bg-background text-primary shadow-sm ring-1 ring-primary/15"
-                  : "border-transparent text-foreground/60 hover:border-border/80 hover:bg-background/80 hover:text-foreground"
+                  : "border-transparent text-foreground/60 hover:border-border/80 hover:bg-background/80 hover:text-foreground",
               )}
             >
               {tabIcons[tab]}
               <span>{t(`central.categorizeTab.${tab}`)}</span>
               {tab === "review" && aiTagReviews.length > 0 && (
-                <span className="ml-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-500/30 dark:bg-amber-500/20 dark:text-amber-300">
+                <span className="ml-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-warning/15 px-1.5 text-[10px] font-semibold text-warning-foreground ring-1 ring-warning/30">
                   {aiTagReviews.length}
                 </span>
               )}
@@ -204,7 +213,7 @@ export function CentralSkillCategorizePanel({
                       "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                       selected
                         ? "border-primary/70 bg-primary/15 text-primary shadow-sm ring-1 ring-primary/20"
-                        : "border-border bg-background text-foreground/75 hover:border-primary/40 hover:text-foreground"
+                        : "border-border bg-background text-foreground/75 hover:border-primary/40 hover:text-foreground",
                     )}
                   >
                     {selected && <Check className="size-3" />}
@@ -250,7 +259,9 @@ export function CentralSkillCategorizePanel({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{review.skill_name}</div>
+                      <div className="truncate text-sm font-medium">
+                        {review.skill_name}
+                      </div>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-foreground/70">
                         <span className="rounded-full bg-muted px-2 py-0.5">
                           {review.tag.name}
@@ -258,13 +269,17 @@ export function CentralSkillCategorizePanel({
                         <span>{Math.round(review.confidence * 100)}%</span>
                       </div>
                     </div>
-                    <AlertTriangle className="size-4 shrink-0 text-amber-500" />
+                    <AlertTriangle className="size-4 shrink-0 text-warning-foreground" />
                   </div>
                   <p className="mt-2 text-xs leading-relaxed text-foreground/75">
                     {review.reason}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={() => onAcceptReview(review)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onAcceptReview(review)}
+                    >
                       {t("central.reviewAccept")}
                     </Button>
                     <Button
@@ -275,7 +290,11 @@ export function CentralSkillCategorizePanel({
                     >
                       {t("central.reviewChange")}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => onSkipReview(review)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onSkipReview(review)}
+                    >
                       {t("central.reviewSkip")}
                     </Button>
                   </div>
@@ -295,7 +314,7 @@ export function CentralSkillCategorizePanel({
                 "w-full",
                 isManualActionDisabled
                   ? "border border-dashed border-border bg-muted/30 text-foreground/60 shadow-none"
-                  : "shadow-sm"
+                  : "shadow-sm",
               )}
               disabled={isManualActionDisabled}
               onClick={onApplyManualTags}
@@ -321,7 +340,7 @@ export function CentralSkillCategorizePanel({
                 "w-full",
                 isAiActionDisabled
                   ? "border border-dashed border-border bg-muted/30 text-foreground/60 shadow-none"
-                  : "shadow-sm"
+                  : "shadow-sm",
               )}
               disabled={isAiActionDisabled}
               onClick={onBulkSuggestTags}

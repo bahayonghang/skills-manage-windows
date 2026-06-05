@@ -569,10 +569,10 @@ export function SkillDetailSidebar({
                       </div>
                       <span
                         className={cn(
-                          "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1",
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
                           row.linkType === "symlink"
-                            ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-300"
-                            : "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300"
+                            ? "bg-success/10 text-success-foreground ring-success/20"
+                            : "bg-warning/10 text-warning-foreground ring-warning/20"
                         )}
                       >
                         {row.linkType}

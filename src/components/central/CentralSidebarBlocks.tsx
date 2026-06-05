@@ -38,7 +38,7 @@ function RepoUpdateBadge({ count, t }: { count: number; t: TFunction }) {
     <span
       data-testid="repo-update-badge"
       title={t("central.v2.repoUpdateBadge", { count })}
-      className="shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums font-medium text-amber-700 dark:text-amber-300"
+      className="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums font-medium text-warning-foreground"
     >
       {count}
     </span>
@@ -190,7 +190,7 @@ function OwnerGroup({
         )}
       >
         <Caret className="size-3 shrink-0" />
-        <FolderGit2 className="size-3.5 shrink-0 text-sky-600 dark:text-sky-300" />
+        <FolderGit2 className="size-3.5 shrink-0 text-info" />
         <span className="min-w-0 flex-1 truncate font-medium">{owner}</span>
         <span className="shrink-0 rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
           {totalCount}

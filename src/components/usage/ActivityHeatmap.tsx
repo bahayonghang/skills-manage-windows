@@ -26,10 +26,7 @@ const LABELED_WEEKDAY_ROWS = new Set([0, 2, 4]); // Mon / Wed / Fri
  */
 export function ActivityHeatmap({ days, className }: ActivityHeatmapProps) {
   const { i18n } = useTranslation();
-  const max = useMemo(
-    () => Math.max(1, ...days.map((d) => d.count)),
-    [days]
-  );
+  const max = useMemo(() => Math.max(1, ...days.map((d) => d.count)), [days]);
   const weekdayLabels = useMemo(() => {
     const mondayUtc = Date.UTC(2024, 0, 1); // 2024-01-01 is a Monday.
     const formatter = new Intl.DateTimeFormat(i18n.language || undefined, {
@@ -40,7 +37,7 @@ export function ActivityHeatmap({ days, className }: ActivityHeatmapProps) {
     return Array.from({ length: 7 }, (_, index) =>
       LABELED_WEEKDAY_ROWS.has(index)
         ? formatter.format(new Date(mondayUtc + index * 86_400_000))
-        : ""
+        : "",
     );
   }, [i18n.language]);
 
@@ -49,7 +46,7 @@ export function ActivityHeatmap({ days, className }: ActivityHeatmapProps) {
       <div
         className={cn(
           "rounded border border-dashed border-border/60 px-3 py-8 text-center text-xs text-muted-foreground",
-          className
+          className,
         )}
       >
         —
@@ -62,7 +59,7 @@ export function ActivityHeatmap({ days, className }: ActivityHeatmapProps) {
       data-testid="heatmap-shell"
       className={cn(
         "flex h-full min-h-[16rem] items-center justify-center gap-3 overflow-hidden",
-        className
+        className,
       )}
     >
       {/* Weekday labels (sparse) */}
@@ -87,7 +84,7 @@ export function ActivityHeatmap({ days, className }: ActivityHeatmapProps) {
               title={`${d.date} • ${d.count}`}
               className={cn(
                 "block aspect-square w-full rounded-[4px]",
-                CELL_LEVEL_CLASS[lvl]
+                CELL_LEVEL_CLASS[lvl],
               )}
             />
           );
@@ -113,8 +110,8 @@ function levelFor(count: number, max: number): 0 | 1 | 2 | 3 | 4 {
 
 const CELL_LEVEL_CLASS: Record<0 | 1 | 2 | 3 | 4, string> = {
   0: "bg-muted/30",
-  1: "bg-emerald-500/25",
-  2: "bg-emerald-500/45",
-  3: "bg-emerald-500/70",
-  4: "bg-emerald-500",
+  1: "bg-success/25",
+  2: "bg-success/45",
+  3: "bg-success/70",
+  4: "bg-success",
 };

@@ -63,11 +63,16 @@ export function RemoteAddedTabPanel({
           renamedSkillId: item.skillId,
         };
         return (
-          <article key={key} className="rounded-xl border border-border bg-background p-3">
+          <article
+            key={key}
+            className="rounded-xl border border-border bg-background p-3"
+          >
             <div className="flex items-start gap-3">
               <Checkbox
                 checked={decision.selected}
-                onCheckedChange={(value) => onChange(key, { selected: !!value })}
+                onCheckedChange={(value) =>
+                  onChange(key, { selected: !!value })
+                }
                 aria-label={item.skillName}
               />
               <div className="min-w-0 flex-1">
@@ -78,10 +83,12 @@ export function RemoteAddedTabPanel({
                   {item.repositoryId} · {item.sourcePath}
                 </div>
                 {hasConflict && (
-                  <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  <div className="mt-1 text-xs text-warning-foreground">
                     {t("central.repositorySyncConflict", {
                       remoteSource,
-                      skill: existingConflict?.skillName ?? item.conflictExistingSkillId,
+                      skill:
+                        existingConflict?.skillName ??
+                        item.conflictExistingSkillId,
                       existingSource,
                     })}
                   </div>

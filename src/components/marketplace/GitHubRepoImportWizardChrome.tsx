@@ -102,9 +102,9 @@ export function GitHubRepoImportWizardHeader({
             const isActive =
               step === item || (item === "preview" && step === "confirm");
             const isComplete =
-              (["input", "preview", "confirm", "result"] as WizardStep[]).indexOf(
-                step,
-              ) > index;
+              (
+                ["input", "preview", "confirm", "result"] as WizardStep[]
+              ).indexOf(step) > index;
 
             return (
               <Fragment key={item}>
@@ -120,7 +120,7 @@ export function GitHubRepoImportWizardHeader({
                 >
                   <span
                     className={cn(
-                      "flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold",
+                      "flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
                       isActive || isComplete
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground",
@@ -454,7 +454,10 @@ export function GitHubRepoImportWizardFooter({
           <Button variant="outline" onClick={onBackToPreview}>
             <span>{t("marketplace.githubImportBackToPreview")}</span>
           </Button>
-          <Button onClick={onImportConfirm} disabled={!canConfirm || isImporting}>
+          <Button
+            onClick={onImportConfirm}
+            disabled={!canConfirm || isImporting}
+          >
             {isImporting ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
@@ -586,11 +589,11 @@ function GitHubRepoImportSshPasswordRepairPanel({
 
   return (
     <div
-      className="mb-3 rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3"
+      className="mb-3 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3"
       data-testid="github-import-ssh-password-repair"
     >
       <div className="flex flex-wrap items-start gap-3">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-amber-500" />
+        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-warning-foreground" />
         <div className="min-w-0 flex-1 space-y-2">
           <div>
             <div className="text-sm font-semibold">

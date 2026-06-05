@@ -99,7 +99,7 @@ export function SkillUsageView() {
           <div
             role="alert"
             data-testid="remote-unreachable-banner"
-            className="mb-4 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400"
+            className="mb-4 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning-foreground"
           >
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <span>
@@ -170,8 +170,8 @@ function ScopeBadge({ scope }: { scope: UsageScopeInfo }) {
   const Icon = scope.isRemote ? Globe2 : Monitor;
   const tone = scope.isRemote
     ? scope.remoteReachable
-      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-      : "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+      ? "border-success/40 bg-success/10 text-success-foreground"
+      : "border-warning/40 bg-warning/10 text-warning-foreground"
     : "border-border bg-muted text-muted-foreground";
   return (
     <span
