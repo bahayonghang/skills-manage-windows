@@ -135,19 +135,16 @@ describe("UnifiedSkillCard", () => {
     expect(screen.queryByTestId("usage-badge")).not.toBeInTheDocument();
   });
 
-  it("传入 statusAccent=amber 渲染琥珀状态竖条", () => {
-    const { container } = render(
+  it("传入 statusChipLabel 渲染文字状态 chip", () => {
+    render(
       <UnifiedSkillCard name="s" statusAccent="amber" statusChipLabel="可更新" />,
     );
-    expect(
-      container.querySelector('[data-status-accent="amber"]'),
-    ).toBeTruthy();
     expect(screen.getByText("可更新")).toBeInTheDocument();
   });
 
-  it("不传 statusAccent 时无竖条", () => {
-    const { container } = render(<UnifiedSkillCard name="s" />);
-    expect(container.querySelector("[data-status-accent]")).toBeNull();
+  it("不传 statusChipLabel 时无状态 chip", () => {
+    render(<UnifiedSkillCard name="s" />);
+    expect(screen.queryByText("可更新")).not.toBeInTheDocument();
   });
 
   it("editableTags：渲染彩色标签，hover × 调用 onRemove", async () => {

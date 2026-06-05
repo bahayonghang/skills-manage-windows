@@ -297,16 +297,6 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
         className
       )}
     >
-      {statusAccent && (
-        <span
-          aria-hidden
-          data-status-accent={statusAccent}
-          className={cn(
-            "pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-xl",
-            statusAccent === "amber" ? "bg-amber-500" : "bg-red-500"
-          )}
-        />
-      )}
       <div className="flex min-h-0 flex-1 items-start gap-2.5">
         {/* Optional checkbox (discover) */}
         {hasCheckbox && checkbox && (
@@ -343,8 +333,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                 className={cn(
                   "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
                   statusAccent === "red"
-                    ? "bg-red-500/10 text-red-700 ring-red-500/30 dark:text-red-300"
-                    : "bg-amber-500/10 text-amber-700 ring-amber-500/30 dark:text-amber-300"
+                    ? "bg-destructive/10 text-destructive ring-destructive/30"
+                    : "bg-warning/10 text-warning-foreground ring-warning/30"
                 )}
               >
                 {statusChipLabel}
@@ -679,7 +669,7 @@ function SkillCardSummary({
   return (
     <div className="relative">
       {label && (
-        <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-[9px] font-medium leading-none text-primary/85">
+        <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary/85">
           {label}
         </span>
       )}
