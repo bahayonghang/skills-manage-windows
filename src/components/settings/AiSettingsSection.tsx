@@ -2,6 +2,7 @@ import {
   Bot,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   KeyRound,
   Loader2,
   ServerCog,
@@ -20,6 +21,7 @@ import {
   API_PROTOCOLS,
   REGION_LABEL_KEYS,
   REGION_LABELS,
+  resolveProviderApiKeyUrl,
   type ApiProtocol,
   type RegionId,
 } from "@/data/aiProviders";
@@ -79,6 +81,10 @@ export function AiSettingsSection({
   const currentProviderLabel = currentProvider
     ? t(currentProvider.labelKey)
     : aiSettings.provider;
+  const providerApiKeyUrl = resolveProviderApiKeyUrl(
+    currentProvider,
+    aiSettings.region,
+  );
   const aiControlsDisabled = isLoadingAiSettings || aiSaveStatus === "saving";
 
   useEffect(() => {
@@ -137,7 +143,7 @@ export function AiSettingsSection({
           </div>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="space-y-3">
           <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
             <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               <KeyRound className="size-3.5" />
@@ -146,6 +152,22 @@ export function AiSettingsSection({
             <SecretValueInput
               id="settings-ai-api-key"
               label={t("settings.aiApiKeyLabel")}
+              labelAction={
+                providerApiKeyUrl ? (
+                  <a
+                    href={providerApiKeyUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80"
+                    aria-label={t("settings.aiApiKeyGetLinkAria", {
+                      provider: currentProviderLabel,
+                    })}
+                  >
+                    <span>{t("settings.aiApiKeyGetLink")}</span>
+                    <ExternalLink className="size-3" aria-hidden="true" />
+                  </a>
+                ) : null
+              }
               value={aiSettings.apiKey}
               configured={aiApiKeyState.configured}
               disabled={aiControlsDisabled}
@@ -266,12 +288,12 @@ export function AiSettingsSection({
               )}
             </div>
           </div>
+          <AiSaveStatusRow
+            aiSaveError={aiSaveError}
+            aiSaveStatus={aiSaveStatus}
+            isLoadingAiSettings={isLoadingAiSettings}
+          />
         </div>
-        <AiSaveStatusRow
-          aiSaveError={aiSaveError}
-          aiSaveStatus={aiSaveStatus}
-          isLoadingAiSettings={isLoadingAiSettings}
-        />
 
         <div className="rounded-xl border border-border/70 bg-muted/10 p-3">
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">

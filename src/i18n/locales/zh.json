@@ -1727,6 +1727,8 @@
     "aiProviderConsoleHint": "可在同页切换提供商。已保存密钥默认保持隐藏，只有显式点击眼睛才会读取。",
     "aiRegionLabel": "区域",
     "aiApiKeyLabel": "API Key",
+    "aiApiKeyGetLink": "获取 Key",
+    "aiApiKeyGetLinkAria": "打开 {{provider}} API Key 获取页面",
     "aiApiKeyActiveState": "当前 {{provider}} Key：{{state}}",
     "aiApiKeyActiveConfigured": "已配置",
     "aiApiKeyActiveMissing": "未配置",

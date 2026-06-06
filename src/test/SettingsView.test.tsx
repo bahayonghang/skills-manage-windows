@@ -518,6 +518,82 @@ describe("SettingsView", () => {
     expect(screen.getByLabelText("请求间隔 ms")).toBeTruthy();
   });
 
+  it("shows the selected provider API key acquisition link", () => {
+    setupMocks({
+      aiSettings: {
+        ...defaultAiSettings,
+        provider: "openrouter",
+        model: "anthropic/claude-sonnet-4.6",
+      },
+    });
+    renderSettingsView("/settings/integrations");
+
+    const link = screen.getByRole("link", {
+      name: "打开 OpenRouter API Key 获取页面",
+    });
+    expect(link).toHaveAttribute("href", "https://openrouter.ai/keys");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  it("uses the selected region for provider API key acquisition links", () => {
+    setupMocks({
+      aiSettings: {
+        ...defaultAiSettings,
+        provider: "glm",
+        region: "cn",
+        model: "glm-5",
+      },
+    });
+    const view = renderSettingsView("/settings/integrations");
+
+    expect(
+      screen.getByRole("link", {
+        name: "打开 智谱 GLM API Key 获取页面",
+      })
+    ).toHaveAttribute("href", "https://bigmodel.cn/usercenter/proj-mgmt/apikeys");
+
+    setupMocks({
+      aiSettings: {
+        ...defaultAiSettings,
+        provider: "glm",
+        region: "intl",
+        model: "glm-5",
+      },
+    });
+    view.rerender(
+      <MemoryRouter initialEntries={["/settings/integrations"]}>
+        <Routes>
+          <Route path="/settings/*" element={<SettingsView />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByRole("link", {
+        name: "打开 智谱 GLM API Key 获取页面",
+      })
+    ).toHaveAttribute("href", "https://z.ai/manage-apikey/apikey-list");
+  });
+
+  it("hides the API key acquisition link for custom providers", () => {
+    setupMocks({
+      aiSettings: {
+        provider: "custom",
+        region: "intl",
+        apiKey: "",
+        model: "custom-model",
+        customUrl: "https://proxy.example.com/v1",
+        protocol: "openai",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+    });
+    renderSettingsView("/settings/integrations");
+
+    expect(screen.queryByRole("link", { name: /API Key 获取页面/ })).toBeNull();
+  });
+
   it("hides a saved AI API key until the reveal eye is clicked", async () => {
     const revealAiApiKey = vi.fn().mockResolvedValue("sk-openrouter-secret");
     setupMocks({

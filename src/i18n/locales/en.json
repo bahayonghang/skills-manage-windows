@@ -1727,6 +1727,8 @@
     "aiProviderConsoleHint": "Switch providers without leaving the page. Saved secrets stay hidden until you explicitly reveal them.",
     "aiRegionLabel": "Region",
     "aiApiKeyLabel": "API Key",
+    "aiApiKeyGetLink": "Get key",
+    "aiApiKeyGetLinkAria": "Open {{provider}} API key page",
     "aiApiKeyActiveState": "Current {{provider}} key: {{state}}",
     "aiApiKeyActiveConfigured": "configured",
     "aiApiKeyActiveMissing": "not configured",

@@ -1,5 +1,5 @@
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ const SAVED_SECRET_MASK = "••••••••••••";
 interface SecretValueInputProps {
   id: string;
   label: string;
+  labelAction?: ReactNode;
   value: string;
   configured: boolean;
   disabled?: boolean;
@@ -30,6 +31,7 @@ interface SecretValueInputProps {
 export function SecretValueInput({
   id,
   label,
+  labelAction,
   value,
   configured,
   disabled = false,
@@ -115,9 +117,12 @@ export function SecretValueInput({
 
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-xs text-muted-foreground">
-        {label}
-      </label>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <label htmlFor={id} className="block text-xs text-muted-foreground">
+          {label}
+        </label>
+        {labelAction}
+      </div>
       <div className="relative">
         <Input
           id={id}
