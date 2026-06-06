@@ -10,20 +10,20 @@ The repository ships a `justfile` for repeatable development and packaging tasks
 | `just ci` | Runs frontend `typecheck` → `lint` → `sizecheck` → `test` in parallel with Rust `cargo clippy -- -D warnings` → `cargo test`. The full local gate. |
 | `just dev` | Starts the Tauri development app (`pnpm tauri dev`). |
 | `just build` | Builds the desktop app for the current platform and copies the bundle to `outputs/`. |
-| `just install` | Windows-only. Builds the NSIS installer, copies it to `outputs/`, and runs it in passive mode. |
+| `just install` | On Windows, builds the NSIS installer, copies it to `outputs/`, and runs it in passive mode. On macOS, prints a reminder and runs `just build` instead. |
 
 ## Implementation
 
-Each recipe is a thin wrapper around a Node script under `scripts/`:
+Most recipes are thin wrappers around Node scripts under `scripts/`; `just install` adds platform routing before invoking the build or install path:
 
 ```text
 just sync-version  →  node scripts/sync-version.mjs
 just ci            →  node scripts/run-ci.mjs
 just build         →  node scripts/build.mjs
-just install       →  node scripts/install.mjs
+just install       →  macOS: just build; Windows: node scripts/install.mjs after just build
 ```
 
-Reading the Node scripts is the fastest way to learn what each recipe will do on your OS.
+Reading the `justfile` plus the referenced Node scripts is the fastest way to learn what each recipe will do on your OS.
 
 ## Local Gate
 

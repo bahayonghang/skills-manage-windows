@@ -10,20 +10,20 @@
 | `just ci` | 并行运行前端 `typecheck` → `lint` → `sizecheck` → `test`，以及 Rust `cargo clippy -- -D warnings` → `cargo test`。完整本地门禁。 |
 | `just dev` | 启动 Tauri 开发模式（`pnpm tauri dev`）。 |
 | `just build` | 按当前平台构建，并把产物拷入 `outputs/`。 |
-| `just install` | 仅 Windows。构建 NSIS 安装包并以 passive 模式启动安装。 |
+| `just install` | Windows 上构建 NSIS 安装包并以 passive 模式启动安装；macOS 上显示提醒并改为运行 `just build`。 |
 
 ## 实现
 
-每个配方都是 `scripts/` 下 Node 脚本的薄包装：
+大多数配方都是 `scripts/` 下 Node 脚本的薄包装；`just install` 会先做平台分流，再进入构建或安装路径：
 
 ```text
 just sync-version  →  node scripts/sync-version.mjs
 just ci            →  node scripts/run-ci.mjs
 just build         →  node scripts/build.mjs
-just install       →  node scripts/install.mjs
+just install       →  macOS：just build；Windows：先 just build，再 node scripts/install.mjs
 ```
 
-要看每条配方实际做什么，最快的方式是直接读对应 Node 脚本。
+要看每条配方实际做什么，最快的方式是同时读 `justfile` 和对应 Node 脚本。
 
 ## 本地门禁
 

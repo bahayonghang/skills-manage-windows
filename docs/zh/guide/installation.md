@@ -69,7 +69,7 @@ just install
 - `just ci` 运行前端 `typecheck` + `lint` + `test` + `sizecheck`，以及 Rust `cargo test` 和 `cargo clippy`。
 - `just dev` 启动 Tauri 开发应用。
 - `just build` 按当前平台构建桌面应用，并把最新打包产物复制到 `outputs/`。
-- `just install` 构建 Windows NSIS 安装包，复制到 `outputs/`，并以 passive 模式运行安装器。该命令仅支持 Windows。
+- `just install` 在 Windows 上构建 Windows NSIS 安装包，复制到 `outputs/`，并以 passive 模式运行安装器；在 macOS 上会显示提醒并改为运行 `just build`。
 
 ## 文档站点
 

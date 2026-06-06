@@ -30,9 +30,19 @@ build: sync-version
 # 步骤4：构建并安装桌面应用
 # ========================================================================
 # 目标：
-# 1) 复用 build 生成的当前平台产物
-# 2) Windows 上以 passive 模式运行 NSIS 安装器
+# 1) macOS 上提示并转为 just build
+# 2) Windows 上复用 build 生成的 NSIS 产物并以 passive 模式运行安装器
 install:
+    @just {{ if os() == "macos" { "_install_macos" } else if os() == "windows" { "_install_windows" } else { "_install_unsupported" } }}
+
+_install_macos:
+    @echo "[install] macOS detected; running just build instead of installing."
+    @just build
+
+_install_windows: build
+    node scripts/install.mjs
+
+_install_unsupported:
     node scripts/install.mjs
 
 # ========================================================================
