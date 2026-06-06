@@ -314,7 +314,7 @@ function SettingsPlatformsPage(props: SettingsPageSectionsProps) {
 
 function SettingsIntegrationsPage(props: SettingsPageSectionsProps) {
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+    <div className="space-y-4">
       <section id="github-pat-section" className="scroll-mt-24">
         <GitHubPatSettingsSection
           githubPatState={props.githubPatState}

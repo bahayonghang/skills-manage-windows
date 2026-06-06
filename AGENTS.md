@@ -50,6 +50,7 @@ pnpm tauri build
 
 ## 验证要求
 
+- 任何任务收尾前，至少跑一遍 `just ci` 并确认通过；如果失败，先修到通过再宣布完成。
 - 前端改动：默认跑 `pnpm typecheck && pnpm lint`
 - 交互或状态相关改动：按改动范围补跑对应的 Vitest 用例
 - Rust 改动：默认跑 `cargo clippy -- -D warnings`

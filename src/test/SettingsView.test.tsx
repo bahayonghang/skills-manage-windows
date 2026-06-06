@@ -783,6 +783,22 @@ describe("SettingsView", () => {
     ).toBeTruthy();
   });
 
+  it("stacks the integrations sections vertically", () => {
+    setupMocks();
+    const { container } = renderSettingsView("/settings/integrations");
+
+    const integrationsLayout = container.querySelector(
+      'div.space-y-4 > section#github-pat-section + section#ai-section'
+    );
+
+    expect(integrationsLayout).toBeTruthy();
+    expect(
+      container.querySelector(
+        'div.grid.xl\\:grid-cols-\\[minmax\\(0\\,0\\.85fr\\)_minmax\\(0\\,1\\.15fr\\)\\]'
+      )
+    ).toBeNull();
+  });
+
   it("wires settings titles through heading font and descriptive text through body defaults", () => {
     setupMocks();
     const { container } = renderSettingsView("/settings/connections");
