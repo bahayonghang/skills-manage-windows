@@ -146,7 +146,7 @@ export function AppearanceSettingsSection({
           <div className="relative grid gap-5 xl:grid-cols-[1.12fr_0.88fr] xl:items-stretch">
             <div className="flex min-w-0 flex-col justify-between gap-5">
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[color:var(--settings-section-accent)]">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[color:var(--settings-section-accent-text)]">
                   <Sparkles className="size-3.5" aria-hidden="true" />
                   {t("settings.appearance.labEyebrow")}
                 </div>
@@ -189,7 +189,7 @@ export function AppearanceSettingsSection({
                 </div>
 
                 <div className="min-w-0 rounded-2xl border border-[color:var(--settings-section-accent-border)] bg-[linear-gradient(145deg,var(--settings-section-accent-soft),var(--card))] p-4">
-                  <div className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-[color:var(--settings-section-accent)]">
+                  <div className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-[color:var(--settings-section-accent-text)]">
                     {t("settings.appearance.previewKicker")}
                   </div>
                   <div
@@ -450,7 +450,7 @@ export function AppearanceSettingsSection({
                 })}
               </div>
               <div className="mt-3 rounded-xl border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] p-3">
-                <div className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-[color:var(--settings-section-accent)]">
+                <div className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-[color:var(--settings-section-accent-text)]">
                   {t("settings.appearance.scaleSpecimen")}
                 </div>
                 <div className="mt-2 font-display text-3xl font-semibold tabular-nums tracking-[-0.06em]">
@@ -482,7 +482,7 @@ function ControlGroup({
   return (
     <section className="rounded-[1.35rem] border border-border/80 bg-card/70 p-3 shadow-sm sm:p-4">
       <div className="mb-3 flex items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-[color:var(--settings-section-accent)]">
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-[color:var(--settings-section-accent-text)]">
           {icon}
         </span>
         <div className="min-w-0">
@@ -587,7 +587,7 @@ function TypeSpecimenTile({
           {sample}
         </span>
         {active ? (
-          <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[color:var(--settings-section-accent)] text-background">
+          <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[color:var(--settings-section-accent)] text-primary-foreground">
             <Check className="size-3" aria-hidden="true" />
           </span>
         ) : null}

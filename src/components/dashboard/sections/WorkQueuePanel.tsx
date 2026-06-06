@@ -73,7 +73,7 @@ export function WorkQueuePanel({
                   className={cn(
                     "rounded-full px-2.5 py-1 text-[0.7rem] font-medium transition-colors",
                     active
-                      ? "bg-primary/15 text-primary"
+                      ? "bg-primary/15 text-primary-text"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -94,7 +94,7 @@ export function WorkQueuePanel({
                   onClick={() => onNavigate(queueDestination(item.key))}
                   className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/25"
                 >
-                  <span className="grid size-10 place-items-center rounded-xl border border-primary/25 bg-primary/10 font-display text-base font-semibold tabular-nums text-primary">
+                  <span className="grid size-10 place-items-center rounded-xl border border-primary/25 bg-primary/10 font-display text-base font-semibold tabular-nums text-primary-text">
                     {item.count}
                   </span>
                   <span className="min-w-0">

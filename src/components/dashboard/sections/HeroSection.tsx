@@ -27,18 +27,14 @@ export function HeroSection({
     scanState === "error"
       ? "border-destructive/30 bg-destructive/10 text-destructive"
       : scanState === "refreshing"
-        ? "border-primary/35 bg-primary/15 text-primary"
+        ? "border-primary/35 bg-primary/15 text-primary-text"
         : "border-success/35 bg-success/10 text-success-foreground";
 
   return (
     <section className="surface-glass relative overflow-hidden rounded-3xl px-6 py-7 sm:px-8 sm:py-9">
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute -right-24 -top-16 h-64 w-64 rounded-full opacity-60 blur-3xl"
-        style={{
-          background:
-            "radial-gradient(circle, color-mix(in oklch, var(--primary) 38%, transparent), transparent 70%)",
-        }}
+        className="dashboard-hero-glow pointer-events-none absolute -right-24 -top-16 h-64 w-64 rounded-full opacity-60 blur-3xl"
       />
       <div className="relative flex max-w-3xl flex-col gap-5">
         <div className="inline-flex items-center gap-2 self-start rounded-full border border-border/70 bg-card/60 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">

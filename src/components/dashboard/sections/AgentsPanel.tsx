@@ -65,7 +65,7 @@ export function AgentsPanel({
                     className="grid w-full grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left transition-colors first:border-t-0 hover:bg-muted/25"
                     aria-label={t("dashboard.agents.openLabel", { name: label })}
                   >
-                    <span className="grid size-8 place-items-center rounded-md border border-border/80 bg-background text-primary">
+                    <span className="grid size-8 place-items-center rounded-md border border-border/80 bg-background text-primary-text">
                       <PlatformIcon agentId={agent.id} className="size-4" />
                     </span>
                     <span className="min-w-0">

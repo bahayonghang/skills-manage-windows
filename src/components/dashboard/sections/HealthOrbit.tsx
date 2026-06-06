@@ -35,7 +35,7 @@ const FACTOR_TONE_CLASS: Record<FactorProps["tone"], string> = {
 
 const STATUS_CLASS: Record<ReadinessStatus, string> = {
   ready: "border-success/30 bg-success/10 text-success-foreground",
-  review: "border-primary/35 bg-primary/10 text-primary",
+  review: "border-primary/35 bg-primary/10 text-primary-text",
   triage: "border-destructive/30 bg-destructive/10 text-destructive",
 };
 

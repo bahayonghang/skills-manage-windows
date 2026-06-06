@@ -75,7 +75,7 @@ export function ActivityPanel({
               viewBox="0 0 220 78"
               role="img"
               aria-label={t("dashboard.sparkline.ariaLabel")}
-              className="h-20 w-full text-primary"
+              className="h-20 w-full text-primary-text"
             >
               <path
                 d={sparkPath}
@@ -108,7 +108,7 @@ export function ActivityPanel({
                   className={cn(
                     "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs",
                     index === 0
-                      ? "border-primary/30 bg-primary/10 text-primary"
+                      ? "border-primary/30 bg-primary/10 text-primary-text"
                       : "border-border bg-background text-muted-foreground",
                   )}
                 >

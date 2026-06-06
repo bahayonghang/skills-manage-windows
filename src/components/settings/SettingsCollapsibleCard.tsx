@@ -80,7 +80,7 @@ function renderSectionIcon(icon: ReactNode) {
     ? cloneElement(icon as ReactElement<{ className?: string }>, {
         className: cn(
           icon.props.className,
-          "size-4 text-[color:var(--settings-section-accent)]"
+          "size-4 text-[color:var(--settings-section-accent-text)]"
         ),
       })
     : icon ?? (
@@ -89,7 +89,7 @@ function renderSectionIcon(icon: ReactNode) {
 
   return (
     <span
-      className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-[color:var(--settings-section-accent)] shadow-sm"
+      className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-[color:var(--settings-section-accent-text)] shadow-sm"
       data-settings-section-icon=""
       aria-hidden="true"
     >
@@ -144,7 +144,7 @@ export function SettingsCollapsibleCard({
             {renderSectionIcon(icon)}
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-[color:var(--settings-section-accent)]">
+                <CardTitle className="text-[color:var(--settings-section-accent-text)]">
                   {title}
                 </CardTitle>
                 <span
@@ -169,7 +169,7 @@ export function SettingsCollapsibleCard({
               type="button"
               variant="ghost"
               size="sm"
-              className="px-2 text-[color:var(--settings-section-accent)] hover:bg-[color:var(--settings-section-accent-soft)]"
+              className="px-2 text-[color:var(--settings-section-accent-text)] hover:bg-[color:var(--settings-section-accent-soft)]"
               aria-controls={contentId}
               aria-expanded={!isCollapsed}
               aria-label={t(
