@@ -97,6 +97,20 @@ pub async fn clear_pending_additions(pool: &DbPool) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+pub async fn prune_orphaned_pending_additions(pool: &DbPool) -> Result<u64, String> {
+    sqlx::query(
+        "DELETE FROM skill_repository_pending_additions
+         WHERE NOT EXISTS (
+           SELECT 1 FROM skill_repositories
+           WHERE skill_repositories.id = skill_repository_pending_additions.repository_id
+         )",
+    )
+    .execute(pool)
+    .await
+    .map(|result| result.rows_affected())
+    .map_err(|e| e.to_string())
+}
+
 pub async fn clear_pending_additions_for_repos(
     pool: &DbPool,
     repository_ids: &[String],

@@ -348,6 +348,7 @@ pub(crate) async fn get_skill_update_inventory_impl_scoped(
      */
 
     let scope_filter = InventoryScopeFilter::from_scope(pool, scope).await?;
+    db::prune_orphaned_pending_additions(pool).await?;
     let states = db::get_skill_update_states(pool).await?;
     let repo_with_stats = db::get_skill_repositories_with_stats(pool).await?;
     let repo_by_id = repo_with_stats
@@ -545,14 +546,9 @@ pub async fn apply_skill_update_decisions(
             continue;
         }
 
-        let repository = match db::get_skill_repository_by_id(&pool, &repository_id).await? {
-            Some(r) => r,
+        let repository = match load_repository_for_import_addition(&pool, &repository_id).await? {
+            Some(repository) => repository,
             None => {
-                result.failures.push(SkillUpdateApplyFailure {
-                    step: "import_addition".to_string(),
-                    identifier: repository_id,
-                    error: "Repository no longer exists.".to_string(),
-                });
                 continue;
             }
         };
@@ -690,6 +686,19 @@ pub async fn scan_deleted_platform_copies(
  * 内部 helpers
  * ========================================================================
  */
+
+async fn load_repository_for_import_addition(
+    pool: &DbPool,
+    repository_id: &str,
+) -> Result<Option<db::SkillRepository>, String> {
+    match db::get_skill_repository_by_id(pool, repository_id).await? {
+        Some(repository) => Ok(Some(repository)),
+        None => {
+            db::clear_pending_additions_for_repos(pool, &[repository_id.to_string()]).await?;
+            Ok(None)
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests;

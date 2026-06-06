@@ -122,7 +122,7 @@ fn snapshots_cache_with(
 }
 
 fn http_client() -> reqwest::Client {
-    reqwest::Client::builder().build().unwrap()
+    reqwest::Client::builder().no_proxy().build().unwrap()
 }
 
 fn scope_all() -> SkillRefreshScope {
@@ -1099,6 +1099,31 @@ async fn get_inventory_returns_persisted_state_without_remote_fetch() {
 }
 
 #[tokio::test]
+async fn get_inventory_prunes_pending_additions_for_deleted_repositories() {
+    let pool = setup_test_db().await;
+    db::upsert_pending_addition(
+        &pool,
+        &db::SkillRepositoryPendingAddition {
+            repository_id: "github:deleted-repo-main".to_string(),
+            source_path: "skills/stale".to_string(),
+            skill_id: "stale".to_string(),
+            skill_name: "Stale".to_string(),
+            conflict_existing_skill_id: None,
+            discovered_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let inventory = get_skill_update_inventory_impl_scoped(&pool, None)
+        .await
+        .unwrap();
+
+    assert!(inventory.remote_added.is_empty());
+    assert!(db::list_pending_additions(&pool).await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn get_inventory_scope_platform_filters_state_additions_and_platform_buckets() {
     let pool = setup_test_db().await;
     let temp = TempDir::new().unwrap();
@@ -1480,6 +1505,31 @@ async fn apply_imports_remote_added_and_clears_pending_row() {
     // 占位骨架：apply 的 import 分支无法在不触网的情况下完整测试。
     // 已通过 apply_skip_addition_step / apply_unskip_addition_step / 其它单元
     // 覆盖核心 partial-success 语义；端到端 import 留给集成测试。
+}
+
+#[tokio::test]
+async fn apply_import_prunes_pending_additions_for_deleted_repository() {
+    let pool = setup_test_db().await;
+    db::upsert_pending_addition(
+        &pool,
+        &db::SkillRepositoryPendingAddition {
+            repository_id: "github:deleted-repo-main".to_string(),
+            source_path: "skills/stale".to_string(),
+            skill_id: "stale".to_string(),
+            skill_name: "Stale".to_string(),
+            conflict_existing_skill_id: None,
+            discovered_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let repository = load_repository_for_import_addition(&pool, "github:deleted-repo-main")
+        .await
+        .unwrap();
+
+    assert!(repository.is_none());
+    assert!(db::list_pending_additions(&pool).await.unwrap().is_empty());
 }
 
 #[tokio::test]
