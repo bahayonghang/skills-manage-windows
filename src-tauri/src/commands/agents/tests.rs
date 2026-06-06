@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 use std::fs;
 use tempfile::TempDir;
 
-const BUILTIN_AGENT_COUNT: usize = 36;
+const BUILTIN_AGENT_COUNT: usize = 37;
 
 async fn setup_test_db() -> DbPool {
     let pool = SqlitePool::connect(":memory:").await.unwrap();
@@ -89,6 +89,9 @@ async fn test_list_platform_paths_resolves_remote_paths() {
         antigravity_cli.project_skills_dir.as_deref(),
         Some(".agents/skills")
     );
+    let grok = paths.get("grok").unwrap();
+    assert_eq!(grok.global_skills_dir, "/home/alice/.grok/skills");
+    assert_eq!(grok.project_skills_dir.as_deref(), Some(".grok/skills"));
 }
 
 #[tokio::test]

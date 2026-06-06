@@ -21,6 +21,7 @@ const ORIGINAL_PLATFORM_IDS = [
 ];
 
 const NEW_PLATFORM_IDS = [
+  "grok",
   "junie",
   "qwen",
   "trae-cn",
@@ -202,6 +203,11 @@ describe("PlatformIcon", () => {
 
   it("renders an SVG element for universal-agents", () => {
     const { container } = render(<PlatformIcon agentId="universal-agents" />);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("renders an SVG element for grok", () => {
+    const { container } = render(<PlatformIcon agentId="grok" />);
     expect(container.querySelector("svg")).toBeInTheDocument();
   });
 

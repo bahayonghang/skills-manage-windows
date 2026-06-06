@@ -292,6 +292,34 @@ fn test_remote_project_paths_expand_home_and_universal_dir() {
 }
 
 #[test]
+fn test_remote_project_paths_use_grok_project_dir() {
+    let agent = db::Agent {
+        id: "grok".to_string(),
+        display_name: "Grok".to_string(),
+        category: "coding".to_string(),
+        global_skills_dir: "/home/alice/.grok/skills".to_string(),
+        project_skills_dir: Some(".grok/skills".to_string()),
+        icon_name: None,
+        is_detected: true,
+        is_builtin: true,
+        is_enabled: true,
+    };
+
+    assert_eq!(
+        remote_project_relative_skills_dir(&agent).unwrap(),
+        ".grok/skills"
+    );
+    let paths =
+        remote_project_install_paths("/home/alice", "~/repo", &agent, "code-reviewer").unwrap();
+
+    assert_eq!(paths.project_path, "/home/alice/repo");
+    assert_eq!(
+        paths.target_path,
+        "/home/alice/repo/.grok/skills/code-reviewer"
+    );
+}
+
+#[test]
 fn test_remote_project_path_requires_absolute_posix_path() {
     let agent = db::Agent {
         id: "claude-code".to_string(),
@@ -1485,6 +1513,50 @@ async fn test_project_install_uses_agents_dir_for_antigravity_cli() {
             .join("antigravity-cli-project-skill")
             .exists(),
         "Antigravity CLI project installs must use the shared .agents/skills directory"
+    );
+}
+
+#[tokio::test]
+async fn test_project_install_uses_grok_project_dir() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "grok-project-skill");
+
+    let result = install_central_skill_to_project_outcome_impl(
+        &pool,
+        "grok-project-skill",
+        "grok",
+        &project_dir,
+        "copy",
+    )
+    .await
+    .unwrap();
+    let result = match result {
+        InstallOutcome::Installed(result) => result,
+        InstallOutcome::Skipped(skipped) => panic!("expected install, got skip: {:?}", skipped),
+    };
+    let target = project_dir
+        .join(".grok")
+        .join("skills")
+        .join("grok-project-skill");
+
+    assert_eq!(PathBuf::from(result.symlink_path), target);
+    assert!(target.join("SKILL.md").exists());
+    assert!(
+        !project_dir
+            .join(".agents")
+            .join("skills")
+            .join("grok-project-skill")
+            .exists(),
+        "Grok project installs must stay in .grok/skills, not Universal Agents"
     );
 }
 

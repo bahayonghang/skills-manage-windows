@@ -194,6 +194,13 @@ describe("platformVisibility helpers", () => {
       },
       {
         ...baseAgent,
+        id: "grok",
+        display_name: "Grok",
+        category: "coding",
+        is_enabled: true,
+      },
+      {
+        ...baseAgent,
         id: "aider",
         display_name: "Aider",
         category: "coding",
@@ -203,6 +210,7 @@ describe("platformVisibility helpers", () => {
 
     expect(sortPlatformVisibilityAgents(agents).map((agent) => agent.id)).toEqual([
       "codex",
+      "grok",
       "antigravity-cli",
       "opencode",
       "cursor",

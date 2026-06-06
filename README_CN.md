@@ -10,7 +10,7 @@
 
 ## 项目简介
 
-`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库默认使用私有目录 `~/.skillsmanage/skills/`。在本机 Local 目标下，可以在中央技能库页面修改这个位置：切换前会先预览，迁移时当前中央库覆盖目标目录同名技能，目标目录独有技能会保留并扫描导入，旧目录不会删除。共享的 Universal Agents 目标仍是 `~/.agents/skills/`，只有显式安装到这里的技能才会暴露给 Codex CLI、Cursor、OpenCode、Amp、Copilot 等读取该目录的工具。SkillPort 明确区分 Google 的 Antigravity 应用目标与 Antigravity CLI：Antigravity 全局技能保留在 `~/.gemini/antigravity/skills/`，Antigravity CLI 全局技能使用 `~/.gemini/antigravity-cli/skills/`，两者的 workspace / project 安装都使用 `.agents/skills/`。Gemini CLI 仍作为 legacy/shared Google 目标保留在 `~/.gemini/skills/`。
+`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库默认使用私有目录 `~/.skillsmanage/skills/`。在本机 Local 目标下，可以在中央技能库页面修改这个位置：切换前会先预览，迁移时当前中央库覆盖目标目录同名技能，目标目录独有技能会保留并扫描导入，旧目录不会删除。共享的 Universal Agents 目标仍是 `~/.agents/skills/`，只有显式安装到这里的技能才会暴露给 Codex CLI、Cursor、OpenCode、Amp、Copilot 等读取该目录的工具。Grok 按上游兼容的独立目标管理，全局目录为 `~/.grok/skills/`，项目安装目录为 `.grok/skills/`。SkillPort 明确区分 Google 的 Antigravity 应用目标与 Antigravity CLI：Antigravity 全局技能保留在 `~/.gemini/antigravity/skills/`，Antigravity CLI 全局技能使用 `~/.gemini/antigravity-cli/skills/`，两者的 workspace / project 安装都使用 `.agents/skills/`。Gemini CLI 仍作为 legacy/shared Google 目标保留在 `~/.gemini/skills/`。
 
 ## 与上游关系
 
@@ -33,7 +33,7 @@ SkillPort 可以通过 SSH 管理远程 Linux 或 macOS 用户目录里的全局
 
 - 在 Settings 中新增、测试、删除和切换 SSH 目标。
 - SSH 目标支持 key 和账号密码两种 OpenSSH 登录方式。SkillPort 不保存私钥内容；密码登录会把密码存入系统凭据库，不写入 SQLite。
-- 连接成功后探测远程 HOME；远程 Central Skills 使用该主机上的 `~/.skillsmanage/skills/`，Universal Agents 使用 `~/.agents/skills/`。
+- 连接成功后探测远程 HOME；远程 Central Skills 使用该主机上的 `~/.skillsmanage/skills/`，Universal Agents 使用 `~/.agents/skills/`，Grok 使用 `~/.grok/skills/`。
 - 每个 SSH 目标都有独立的本机缓存数据库：`~/.skillsmanage/targets/<target_id>/db.sqlite`。
 - 远程安装默认使用 copy。首版不启用 symlink 安装，也不启用远程 Discover 项目扫描。
 - 文件管理器打开动作会改为复制远程路径，因为该路径存在于远程主机，不存在于本机。
@@ -98,6 +98,7 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 |------|------|------------|
 | Coding | Claude Code | `~/.claude/skills/` |
 | Coding | Codex CLI | `~/.agents/skills/` |
+| Coding | Grok | `~/.grok/skills/` |
 | Coding | Cursor | `~/.agents/skills/` |
 | Coding | Antigravity | `~/.gemini/antigravity/skills/` |
 | Coding | Antigravity CLI | `~/.gemini/antigravity-cli/skills/` |

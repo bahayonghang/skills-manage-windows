@@ -10,6 +10,10 @@ export const BROWSER_PLATFORM_PATHS: PlatformPathMap = {
     global_skills_dir: "~/.agents/skills/",
     project_skills_dir: ".codex/skills",
   },
+  grok: {
+    global_skills_dir: "~/.grok/skills/",
+    project_skills_dir: ".grok/skills",
+  },
   "gemini-cli": {
     global_skills_dir: "~/.gemini/skills/",
     project_skills_dir: ".agents/skills",

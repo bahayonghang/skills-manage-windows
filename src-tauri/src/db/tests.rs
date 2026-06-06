@@ -354,12 +354,13 @@ async fn operation_log_export_contains_metadata_and_entries() {
 async fn test_builtin_agents_seeded() {
     let pool = setup_test_db().await;
     let agents = get_all_agents(&pool).await.unwrap();
-    assert_eq!(agents.len(), 36, "Should have exactly 36 built-in agents");
+    assert_eq!(agents.len(), 37, "Should have exactly 37 built-in agents");
 
     let ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
     // Coding platforms
     assert!(ids.contains(&"claude-code"));
     assert!(ids.contains(&"codex"));
+    assert!(ids.contains(&"grok"));
     assert!(ids.contains(&"cursor"));
     assert!(ids.contains(&"gemini-cli"));
     assert!(ids.contains(&"trae"));
@@ -461,6 +462,25 @@ async fn test_universal_agents_share_universal_skills_dir() {
         Some(UNIVERSAL_PROJECT_SKILLS_DIR)
     );
 
+    let grok = agents
+        .iter()
+        .find(|agent| agent.id == "grok")
+        .expect("grok agent should exist");
+    assert_eq!(grok.display_name, "Grok");
+    assert_eq!(grok.category, "coding");
+    assert_eq!(grok.icon_name.as_deref(), Some("grok"));
+    assert!(
+        !crate::paths::paths_equivalent(Path::new(&grok.global_skills_dir), &universal_dir),
+        "grok global skills should stay separate from ~/.agents/skills"
+    );
+    assert!(
+        grok.global_skills_dir
+            .replace('\\', "/")
+            .ends_with(".grok/skills"),
+        "grok should use ~/.grok/skills"
+    );
+    assert_eq!(grok.project_skills_dir.as_deref(), Some(".grok/skills"));
+
     let antigravity_cli = agents
         .iter()
         .find(|agent| agent.id == "antigravity-cli")
@@ -529,6 +549,10 @@ async fn test_universal_agents_share_universal_skills_dir() {
 fn test_remote_builtin_agents_rewrite_google_platform_paths() {
     let agents = builtin_agents_for_posix_home("/home/alice");
 
+    let grok = agents
+        .iter()
+        .find(|agent| agent.id == "grok")
+        .expect("grok agent should exist");
     let antigravity = agents
         .iter()
         .find(|agent| agent.id == "antigravity")
@@ -542,6 +566,8 @@ fn test_remote_builtin_agents_rewrite_google_platform_paths() {
         .find(|agent| agent.id == "gemini-cli")
         .expect("gemini-cli agent should exist");
 
+    assert_eq!(grok.global_skills_dir, "/home/alice/.grok/skills");
+    assert_eq!(grok.project_skills_dir.as_deref(), Some(".grok/skills"));
     assert_eq!(
         antigravity.global_skills_dir,
         "/home/alice/.gemini/antigravity/skills"
@@ -571,6 +597,7 @@ async fn test_builtin_agents_seed_default_enabled_subset() {
     let expected_enabled_ids = std::collections::HashSet::from([
         "claude-code",
         "codex",
+        "grok",
         "antigravity",
         "antigravity-cli",
         "opencode",
@@ -586,7 +613,7 @@ async fn test_init_does_not_duplicate_agents_on_reinit() {
     let pool = setup_test_db().await;
     init_database(&pool).await.unwrap(); // Call a second time
     let agents = get_all_agents(&pool).await.unwrap();
-    assert_eq!(agents.len(), 36, "Reinit must not duplicate agents");
+    assert_eq!(agents.len(), 37, "Reinit must not duplicate agents");
 }
 
 // ── Skills ────────────────────────────────────────────────────────────────
@@ -1024,7 +1051,7 @@ async fn test_insert_custom_agent() {
     insert_custom_agent(&pool, &custom).await.unwrap();
 
     let all = get_all_agents(&pool).await.unwrap();
-    assert_eq!(all.len(), 37, "Should have 36 builtins + 1 custom");
+    assert_eq!(all.len(), 38, "Should have 37 builtins + 1 custom");
 
     let retrieved = get_agent_by_id(&pool, "my-custom-agent")
         .await

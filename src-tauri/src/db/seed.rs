@@ -5,9 +5,10 @@ use std::path::Path;
 
 use super::types::*;
 
-const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 6] = [
+const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 7] = [
     "claude-code",
     "codex",
+    "grok",
     "antigravity",
     "antigravity-cli",
     "opencode",
@@ -380,6 +381,26 @@ pub fn is_universal_project_agent(agent_id: &str) -> bool {
     UNIVERSAL_PROJECT_AGENT_IDS.contains(&agent_id)
 }
 
+fn builtin_coding_agent(
+    id: &str,
+    display_name: &str,
+    global_skills_dir: String,
+    project_skills_dir: Option<&str>,
+    icon_name: &str,
+) -> Agent {
+    Agent {
+        id: id.to_string(),
+        display_name: display_name.to_string(),
+        category: "coding".to_string(),
+        global_skills_dir,
+        project_skills_dir: project_skills_dir.map(str::to_string),
+        icon_name: Some(icon_name.to_string()),
+        is_detected: false,
+        is_builtin: true,
+        is_enabled: is_builtin_agent_enabled_by_default(id, "coding"),
+    }
+}
+
 fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
     let central_skills_dir = crate::paths::central_skills_dir_from_home(home)
         .to_string_lossy()
@@ -406,94 +427,69 @@ fn builtin_agents_for_home(home: &Path) -> Vec<Agent> {
 
     vec![
         // ── Coding platforms ─────────────────────────────────────────────────
-        Agent {
-            id: "claude-code".to_string(),
-            display_name: "Claude Code".to_string(),
-            category: "coding".to_string(),
-            global_skills_dir: skill_dir(&[".claude", "skills"]),
-            project_skills_dir: Some(".claude/skills".to_string()),
-            icon_name: Some("claude".to_string()),
-            is_detected: false,
-            is_builtin: true,
-            is_enabled: is_builtin_agent_enabled_by_default("claude-code", "coding"),
-        },
-        Agent {
-            id: "codex".to_string(),
-            display_name: "Codex CLI".to_string(),
-            category: "coding".to_string(),
-            global_skills_dir: agent_skill_dir("codex", &[".codex", "skills"]),
-            project_skills_dir: Some(UNIVERSAL_PROJECT_SKILLS_DIR.to_string()),
-            icon_name: Some("codex".to_string()),
-            is_detected: false,
-            is_builtin: true,
-            is_enabled: is_builtin_agent_enabled_by_default("codex", "coding"),
-        },
-        Agent {
-            id: "cursor".to_string(),
-            display_name: "Cursor".to_string(),
-            category: "coding".to_string(),
-            global_skills_dir: agent_skill_dir("cursor", &[".cursor", "skills"]),
-            project_skills_dir: Some(UNIVERSAL_PROJECT_SKILLS_DIR.to_string()),
-            icon_name: Some("cursor".to_string()),
-            is_detected: false,
-            is_builtin: true,
-            is_enabled: is_builtin_agent_enabled_by_default("cursor", "coding"),
-        },
-        Agent {
-            id: "gemini-cli".to_string(),
-            display_name: "Gemini CLI (legacy)".to_string(),
-            category: "coding".to_string(),
-            global_skills_dir: skill_dir(&[".gemini", "skills"]),
-            project_skills_dir: Some(UNIVERSAL_PROJECT_SKILLS_DIR.to_string()),
-            icon_name: Some("gemini".to_string()),
-            is_detected: false,
-            is_builtin: true,
-            is_enabled: is_builtin_agent_enabled_by_default("gemini-cli", "coding"),
-        },
-        Agent {
-            id: "trae".to_string(),
-            display_name: "Trae".to_string(),
-            category: "coding".to_string(),
-            global_skills_dir: skill_dir(&[".trae", "skills"]),
-            project_skills_dir: None,
-            icon_name: Some("trae".to_string()),
-            is_detected: false,
-            is_builtin: true,
-            is_enabled: is_builtin_agent_enabled_by_default("trae", "coding"),
-        },
-        Agent {
-            id: "factory-droid".to_string(),
-            display_name: "Factory Droid".to_string(),
-            category: "coding".to_string(),
-            global_skills_dir: skill_dir(&[".factory", "skills"]),
-            project_skills_dir: None,
-            icon_name: Some("factory".to_string()),
-            is_detected: false,
-            is_builtin: true,
-            is_enabled: is_builtin_agent_enabled_by_default("factory-droid", "coding"),
-        },
-        Agent {
-            id: "junie".to_string(),
-            display_name: "Junie".to_string(),
-            category: "coding".to_string(),
-            global_skills_dir: skill_dir(&[".junie", "skills"]),
-            project_skills_dir: None,
-            icon_name: Some("junie".to_string()),
-            is_detected: false,
-            is_builtin: true,
-            is_enabled: is_builtin_agent_enabled_by_default("junie", "coding"),
-        },
-        Agent {
-            id: "qwen".to_string(),
-            display_name: "Qwen".to_string(),
-            category: "coding".to_string(),
-            global_skills_dir: skill_dir(&[".qwen", "skills"]),
-            project_skills_dir: None,
-            icon_name: Some("qwen".to_string()),
-            is_detected: false,
-            is_builtin: true,
-            is_enabled: is_builtin_agent_enabled_by_default("qwen", "coding"),
-        },
+        builtin_coding_agent(
+            "claude-code",
+            "Claude Code",
+            skill_dir(&[".claude", "skills"]),
+            Some(".claude/skills"),
+            "claude",
+        ),
+        builtin_coding_agent(
+            "codex",
+            "Codex CLI",
+            agent_skill_dir("codex", &[".codex", "skills"]),
+            Some(UNIVERSAL_PROJECT_SKILLS_DIR),
+            "codex",
+        ),
+        builtin_coding_agent(
+            "grok",
+            "Grok",
+            skill_dir(&[".grok", "skills"]),
+            Some(".grok/skills"),
+            "grok",
+        ),
+        builtin_coding_agent(
+            "cursor",
+            "Cursor",
+            agent_skill_dir("cursor", &[".cursor", "skills"]),
+            Some(UNIVERSAL_PROJECT_SKILLS_DIR),
+            "cursor",
+        ),
+        builtin_coding_agent(
+            "gemini-cli",
+            "Gemini CLI (legacy)",
+            skill_dir(&[".gemini", "skills"]),
+            Some(UNIVERSAL_PROJECT_SKILLS_DIR),
+            "gemini",
+        ),
+        builtin_coding_agent(
+            "trae",
+            "Trae",
+            skill_dir(&[".trae", "skills"]),
+            None,
+            "trae",
+        ),
+        builtin_coding_agent(
+            "factory-droid",
+            "Factory Droid",
+            skill_dir(&[".factory", "skills"]),
+            None,
+            "factory",
+        ),
+        builtin_coding_agent(
+            "junie",
+            "Junie",
+            skill_dir(&[".junie", "skills"]),
+            None,
+            "junie",
+        ),
+        builtin_coding_agent(
+            "qwen",
+            "Qwen",
+            skill_dir(&[".qwen", "skills"]),
+            None,
+            "qwen",
+        ),
         Agent {
             id: "trae-cn".to_string(),
             display_name: "Trae CN".to_string(),
