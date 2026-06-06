@@ -332,10 +332,13 @@ fn preview_item(
 }
 
 pub fn repo_slug(root: &Path) -> String {
-    let slug = root
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("repo")
+    let root_string = root.to_string_lossy().replace('\\', "/");
+    let name = root_string
+        .rsplit('/')
+        .find(|segment| !segment.is_empty())
+        .unwrap_or("repo");
+
+    let slug = name
         .chars()
         .map(|ch| {
             if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {

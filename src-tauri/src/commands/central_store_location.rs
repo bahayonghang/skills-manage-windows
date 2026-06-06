@@ -224,9 +224,9 @@ fn is_nested_path(parent: &Path, child: &Path) -> bool {
 }
 
 fn equivalence_components(path: &Path) -> Vec<String> {
-    let mut value = crate::paths::normalize_stored_path(&path.to_string_lossy());
+    let value = crate::paths::normalize_stored_path(&path.to_string_lossy());
     #[cfg(windows)]
-    value.make_ascii_lowercase();
+    let value = value.to_ascii_lowercase();
     value
         .split('/')
         .filter(|part| !part.is_empty())

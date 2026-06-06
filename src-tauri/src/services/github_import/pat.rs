@@ -38,10 +38,10 @@ pub(super) async fn record_github_pat_migration_failure(pool: &DbPool, error: &s
 pub(crate) fn github_client() -> Result<reqwest::Client, String> {
     GITHUB_SHARED_CLIENT
         .get_or_init(|| {
-            reqwest::Client::builder()
-                .user_agent(crate::commands::APP_USER_AGENT)
-                .build()
-                .map_err(|e| e.to_string())
+            let builder = reqwest::Client::builder().user_agent(crate::commands::APP_USER_AGENT);
+            #[cfg(test)]
+            let builder = builder.no_proxy();
+            builder.build().map_err(|e| e.to_string())
         })
         .clone()
 }

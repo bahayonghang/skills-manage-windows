@@ -124,7 +124,7 @@ pub async fn connect_wsl_target(target: &WslTargetConfig) -> Result<ConnectedWsl
     #[cfg(not(windows))]
     {
         let _ = target;
-        return Err("WSL targets are only supported on Windows.".to_string());
+        Err("WSL targets are only supported on Windows.".to_string())
     }
 
     #[cfg(windows)]

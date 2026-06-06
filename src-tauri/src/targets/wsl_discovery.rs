@@ -3,7 +3,7 @@ use super::*;
 pub async fn list_wsl_distributions_impl() -> Result<Vec<WslDistributionSummary>, String> {
     #[cfg(not(windows))]
     {
-        return Err("WSL distributions can only be discovered on Windows.".to_string());
+        Err("WSL distributions can only be discovered on Windows.".to_string())
     }
 
     #[cfg(windows)]
@@ -22,9 +22,7 @@ pub async fn list_wsl_distributions_impl() -> Result<Vec<WslDistributionSummary>
             });
         }
 
-        Ok(parse_wsl_distribution_list(&normalize_wsl_list_output(
-            &output.stdout,
-        )))
+        Ok(parse_wsl_distribution_list(&normalize_wsl_list_output(&output.stdout)))
     }
 }
 
@@ -36,6 +34,7 @@ pub(super) fn wsl_distribution_list_command() -> Command {
     command
 }
 
+#[cfg(any(test, windows))]
 pub(super) fn normalize_wsl_list_output(bytes: &[u8]) -> String {
     let nul_count = bytes.iter().filter(|byte| **byte == 0).count();
     if !bytes.is_empty() && nul_count > bytes.len() / 4 {
@@ -56,6 +55,7 @@ pub(super) fn normalize_wsl_list_output(bytes: &[u8]) -> String {
     }
 }
 
+#[cfg(any(test, windows))]
 pub(super) fn parse_wsl_distribution_list(output: &str) -> Vec<WslDistributionSummary> {
     output
         .lines()
@@ -63,6 +63,7 @@ pub(super) fn parse_wsl_distribution_list(output: &str) -> Vec<WslDistributionSu
         .collect()
 }
 
+#[cfg(any(test, windows))]
 fn parse_wsl_distribution_row(line: &str) -> Option<WslDistributionSummary> {
     let trimmed = line.trim();
     let is_default = trimmed.starts_with('*');

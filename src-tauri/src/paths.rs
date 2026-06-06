@@ -254,10 +254,36 @@ pub fn strip_windows_extended_path_prefix(path: &str) -> String {
 
 pub fn normalize_stored_path(path: &str) -> String {
     let mut value = strip_windows_extended_path_prefix(path.trim());
+    #[cfg(target_os = "macos")]
+    {
+        value = strip_macos_private_aliases(&value);
+    }
     while value.len() > 1 && value.ends_with('/') {
         value.pop();
     }
     value
+}
+
+#[cfg(target_os = "macos")]
+fn strip_macos_private_aliases(path: &str) -> String {
+    const ALIASES: [(&str, &str); 3] = [
+        ("/private/var", "/var"),
+        ("/private/tmp", "/tmp"),
+        ("/private/etc", "/etc"),
+    ];
+
+    for (private_root, public_root) in ALIASES {
+        if let Some(rest) = path.strip_prefix(private_root) {
+            if rest.is_empty() {
+                return public_root.to_string();
+            }
+            if rest.starts_with('/') {
+                return format!("{public_root}{rest}");
+            }
+        }
+    }
+
+    path.to_string()
 }
 
 pub fn paths_equivalent(left: &Path, right: &Path) -> bool {
@@ -266,10 +292,10 @@ pub fn paths_equivalent(left: &Path, right: &Path) -> bool {
 
 fn normalize_equivalence_path(path: &Path) -> String {
     let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let mut value = normalize_stored_path(&resolved.to_string_lossy());
+    let value = normalize_stored_path(&resolved.to_string_lossy());
 
     #[cfg(windows)]
-    value.make_ascii_lowercase();
+    let value = value.to_ascii_lowercase();
 
     value
 }
@@ -384,7 +410,7 @@ fn remote_join_home(remote_home: &str, child: &str) -> String {
 mod tests {
     use super::*;
     use std::ffi::OsString;
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     use tempfile::TempDir;
 
     #[cfg(windows)]
@@ -646,6 +672,27 @@ mod tests {
     fn path_to_string_serializes_lossy_paths() {
         let path = Path::new(r"C:\Users\lyh\.agents\skills");
         assert_eq!(path_to_string(path), r"C:\Users\lyh\.agents\skills");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn normalize_stored_path_collapses_private_system_aliases() {
+        assert_eq!(
+            normalize_stored_path("/private/var/folders/demo"),
+            "/var/folders/demo"
+        );
+        assert_eq!(normalize_stored_path("/private/tmp/demo"), "/tmp/demo");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn paths_equivalent_treats_private_system_aliases_as_same_location() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("demo");
+        std::fs::create_dir_all(&path).unwrap();
+        let canonical = path.canonicalize().unwrap();
+
+        assert!(paths_equivalent(&path, &canonical));
     }
 
     #[test]

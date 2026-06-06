@@ -127,18 +127,21 @@ pub(crate) async fn explain_skill(
             )
         })?;
 
-    let client = reqwest::Client::builder()
-        .user_agent(crate::commands::APP_USER_AGENT)
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(60))
-        .build()
-        .map_err(|e| {
+    let client = {
+        let builder = reqwest::Client::builder()
+            .user_agent(crate::commands::APP_USER_AGENT)
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(60));
+        #[cfg(test)]
+        let builder = builder.no_proxy();
+        builder.build().map_err(|e| {
             super::coded_error_with_details(
                 super::AI_CLIENT_BUILD_FAILED,
                 "Failed to initialize the AI HTTP client.",
                 e.to_string(),
             )
-        })?;
+        })?
+    };
 
     let truncated = truncate_content(&content);
     let prompt = build_explanation_prompt(&truncated, "zh");
@@ -228,18 +231,21 @@ pub(crate) async fn test_ai_connection(
         });
     };
 
-    let client = reqwest::Client::builder()
-        .user_agent(crate::commands::APP_USER_AGENT)
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(|e| {
+    let client = {
+        let builder = reqwest::Client::builder()
+            .user_agent(crate::commands::APP_USER_AGENT)
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(15));
+        #[cfg(test)]
+        let builder = builder.no_proxy();
+        builder.build().map_err(|e| {
             super::coded_error_with_details(
                 super::AI_CLIENT_BUILD_FAILED,
                 "Failed to initialize the AI HTTP client.",
                 e.to_string(),
             )
-        })?;
+        })?
+    };
 
     let request = ClaudeRequest {
         model: config.model.clone(),

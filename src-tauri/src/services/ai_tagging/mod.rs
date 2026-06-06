@@ -226,16 +226,18 @@ async fn prepare_ai_tagging_context(
     if tags.is_empty() {
         return Err("No candidate tags are available.".to_string());
     }
-    let client = Client::builder()
-        .user_agent(crate::commands::APP_USER_AGENT)
-        .build()
-        .map_err(|e| {
+    let client = {
+        let builder = Client::builder().user_agent(crate::commands::APP_USER_AGENT);
+        #[cfg(test)]
+        let builder = builder.no_proxy();
+        builder.build().map_err(|e| {
             ai_provider::coded_error_with_details(
                 ai_provider::AI_CLIENT_BUILD_FAILED,
                 "Failed to initialize the AI HTTP client.",
                 e.to_string(),
             )
-        })?;
+        })?
+    };
 
     Ok(AiTaggingContext {
         pool: pool.clone(),
