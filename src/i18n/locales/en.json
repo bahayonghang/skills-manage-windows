@@ -817,6 +817,7 @@
       "sidebarUnpinRepoLabel": "Unpin repository {{name}}",
       "sidebarDeleteRepo": "Delete repository",
       "sidebarDeleteRepoLabel": "Delete repository {{name}}",
+      "sidebarSyncNewSource": "Sync new source",
       "sidebarCollapseAllGroups": "Collapse all groups",
       "sidebarExpandAllGroups": "Expand all groups",
       "sidebarCollapseAllGroupsAria": "Collapse all Central Skills sidebar groups",

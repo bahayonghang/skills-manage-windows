@@ -80,6 +80,7 @@ function renderSidebar(
     repositories: SkillRepositoryWithStats[];
     selectedRepos: string[];
     onToggleRepositoryPin: (repository: SkillRepositoryWithStats) => void;
+    onSyncNewSource: () => void;
   }> = {}
 ) {
   const handlers = {
@@ -116,6 +117,7 @@ function renderSidebar(
       }
       {...handlers}
       onToggleRepositoryPin={overrides.onToggleRepositoryPin ?? handlers.onToggleRepositoryPin}
+      onSyncNewSource={overrides.onSyncNewSource}
     />
   );
 
@@ -205,6 +207,18 @@ describe("CentralSidebar", () => {
       expect.objectContaining({ id: "github-openai-skills-main", pinned: true })
     );
     expect(handlers.onToggleRepo).not.toHaveBeenCalled();
+  });
+
+  it("renders the sync new source action with localized copy", () => {
+    const onSyncNewSource = vi.fn();
+    const { sidebar } = renderSidebar({ onSyncNewSource });
+
+    const button = within(sidebar).getByTestId("sidebar-sync-new-source");
+    expect(button).toHaveTextContent("同步新来源");
+    expect(button).not.toHaveTextContent("central.v2.sidebarSyncNewSource");
+
+    fireEvent.click(button);
+    expect(onSyncNewSource).toHaveBeenCalled();
   });
 });
 

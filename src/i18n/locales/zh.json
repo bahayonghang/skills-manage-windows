@@ -817,6 +817,7 @@
       "sidebarUnpinRepoLabel": "取消置顶仓库 {{name}}",
       "sidebarDeleteRepo": "删除仓库",
       "sidebarDeleteRepoLabel": "删除仓库 {{name}}",
+      "sidebarSyncNewSource": "同步新来源",
       "sidebarCollapseAllGroups": "收起全部分组",
       "sidebarExpandAllGroups": "展开全部分组",
       "sidebarCollapseAllGroupsAria": "收起中央技能库侧栏全部分组",
