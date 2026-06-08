@@ -12,9 +12,9 @@ use super::progress::{check_cancel, emit_portability_step};
 use super::types::{
     CancelFlag, PortableCentralSkillSource, RemoteCatalogEntry, RemoteCatalogInvalidCandidate,
     RepoKey, SkillManifestKey, SkillPreviewStatus, SkillportStateImportPreview,
-    SkillportStateImportPreviewSummary, SkillportStateManifest, SkillportStatePortabilityPhase,
-    SkillportStateSkillPreview, SkillportStateSourcePreview, SourcePreviewStatus, EXPORT_KIND,
-    EXPORT_VERSION, REMOTE_CATALOG_CONCURRENCY_LIMIT,
+    SkillportStateImportPreviewSummary, SkillportStateImportPreviewWarning, SkillportStateManifest,
+    SkillportStatePortabilityPhase, SkillportStateSkillPreview, SkillportStateSourcePreview,
+    SourcePreviewStatus, EXPORT_KIND, EXPORT_VERSION, REMOTE_CATALOG_CONCURRENCY_LIMIT,
 };
 use super::{
     existing_registry_identities, import_source_path, normalize_registry_identity, repo_key,
@@ -91,6 +91,8 @@ pub(crate) async fn preview_skillport_state_import_impl(
 
     let mut skills =
         Vec::with_capacity(manifest.central_skills.len() + manifest.unrestorable_skills.len());
+    let mut warnings = Vec::new();
+    let mut seen_warnings = HashSet::new();
     let mut seen_skill_keys = HashSet::new();
     let mut seen_skill_ids = HashMap::<String, String>::new();
     for skill in &manifest.central_skills {
@@ -127,10 +129,46 @@ pub(crate) async fn preview_skillport_state_import_impl(
                 Some("source_unknown".to_string()),
                 None,
             )
-        } else if let Some((status, reason, detail)) =
+        } else if let Some(issue) =
             remote_catalog_issue(remote_catalog, &skill.source, &source_path)
         {
-            (status, None, Some(reason), detail)
+            if issue.is_warning {
+                let warning_key = format!(
+                    "{}\u{1f}{}\u{1f}{}",
+                    issue.reason,
+                    issue.repo_url.as_deref().unwrap_or_default(),
+                    issue.source_path.as_deref().unwrap_or_default()
+                );
+                if seen_warnings.insert(warning_key) {
+                    warnings.push(SkillportStateImportPreviewWarning {
+                        reason: issue.reason,
+                        detail: issue.detail.unwrap_or_default(),
+                        source_path: issue.source_path,
+                        repo_url: issue.repo_url,
+                    });
+                }
+                if let Some(existing) = existing_skills.get(&skill.id) {
+                    if existing.is_central {
+                        (
+                            SkillPreviewStatus::Conflict,
+                            Some(existing.id.clone()),
+                            Some("central_skill_exists".to_string()),
+                            None,
+                        )
+                    } else {
+                        (
+                            SkillPreviewStatus::Unrestorable,
+                            Some(existing.id.clone()),
+                            Some("non_central_conflict".to_string()),
+                            None,
+                        )
+                    }
+                } else {
+                    (SkillPreviewStatus::Ready, None, None, None)
+                }
+            } else {
+                (issue.status, None, Some(issue.reason), issue.detail)
+            }
         } else if let Some(existing) = existing_skills.get(&skill.id) {
             if existing.is_central {
                 (
@@ -191,6 +229,7 @@ pub(crate) async fn preview_skillport_state_import_impl(
         github_sources,
         skills,
         summary,
+        warnings,
     })
 }
 
@@ -282,34 +321,52 @@ pub(crate) async fn build_remote_catalog(
     Ok(entries.into_iter().collect())
 }
 
+struct RemoteCatalogIssue {
+    status: SkillPreviewStatus,
+    reason: String,
+    detail: Option<String>,
+    source_path: Option<String>,
+    repo_url: Option<String>,
+    is_warning: bool,
+}
+
 fn remote_catalog_issue(
     remote_catalog: Option<&HashMap<RepoKey, RemoteCatalogEntry>>,
     source: &PortableCentralSkillSource,
     source_path: &str,
-) -> Option<(SkillPreviewStatus, String, Option<String>)> {
+) -> Option<RemoteCatalogIssue> {
     let catalog = remote_catalog?;
     let entry = catalog.get(&repo_key(source))?;
     if let Some(error) = &entry.repo_error {
-        return Some((
-            SkillPreviewStatus::Unrestorable,
-            "repo_unavailable".to_string(),
-            Some(error.clone()),
-        ));
+        return Some(RemoteCatalogIssue {
+            status: SkillPreviewStatus::Ready,
+            reason: "repo_unavailable".to_string(),
+            detail: Some(error.clone()),
+            source_path: None,
+            repo_url: Some(repo_url_for_source(source)),
+            is_warning: true,
+        });
     }
     if let Some(invalid) = entry.invalid_candidates.get(source_path) {
-        return Some((
-            SkillPreviewStatus::Unrestorable,
-            invalid.reason.clone(),
-            Some(invalid.detail.clone()),
-        ));
+        return Some(RemoteCatalogIssue {
+            status: SkillPreviewStatus::Unrestorable,
+            reason: invalid.reason.clone(),
+            detail: Some(invalid.detail.clone()),
+            source_path: None,
+            repo_url: None,
+            is_warning: false,
+        });
     }
     if entry.valid_source_paths.contains(source_path) {
         return None;
     }
 
-    Some((
-        SkillPreviewStatus::Missing,
-        "source_missing".to_string(),
-        None,
-    ))
+    Some(RemoteCatalogIssue {
+        status: SkillPreviewStatus::Missing,
+        reason: "source_missing".to_string(),
+        detail: None,
+        source_path: None,
+        repo_url: None,
+        is_warning: false,
+    })
 }

@@ -587,6 +587,42 @@ export function CentralStatePortabilityDialog({
                       value={preview.summary.sourcesDuplicate ?? 0}
                     />
                   </div>
+                  {preview.warnings.length > 0 && (
+                    <div className="space-y-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">
+                      <div className="flex items-center gap-2 font-medium text-warning-foreground">
+                        <AlertTriangle className="size-4" />
+                        {t("central.portabilityPreviewWarningsTitle", {
+                          count: preview.warnings.length,
+                        })}
+                      </div>
+                      <div className="space-y-2">
+                        {preview.warnings.map((warning, index) => (
+                          <div
+                            key={`${warning.reason}-${warning.repoUrl ?? warning.sourcePath ?? index}`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            <span>
+                              {t(`central.portabilityReason.${warning.reason}`, {
+                                defaultValue: warning.reason,
+                              })}
+                            </span>
+                            {warning.repoUrl ? (
+                              <span>{` · ${warning.repoUrl}`}</span>
+                            ) : null}
+                            {warning.sourcePath ? (
+                              <span>{` · ${warning.sourcePath}`}</span>
+                            ) : null}
+                            {warning.detail ? (
+                              <span>{`: ${warning.detail}`}</span>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {t("central.portabilityRepoWarningHint")}
+                      </div>
+                    </div>
+                  )}
                   <div className="max-h-72 overflow-auto rounded-md border border-border">
                     {preview.skills.map((skill, index) => {
                       const key = conflictKey(skill);

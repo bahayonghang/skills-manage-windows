@@ -1394,6 +1394,7 @@ describe("centralSkillsStore", () => {
         missing: 0,
         unrestorable: 0,
       },
+      warnings: [],
     };
     vi.mocked(invoke).mockResolvedValueOnce(preview);
 

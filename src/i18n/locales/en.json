@@ -1118,6 +1118,8 @@
     "portabilityExportSuccess": "State export saved",
     "portabilityExportError": "Export failed: {{error}}",
     "portabilityPreviewError": "Preview failed: {{error}}",
+    "portabilityPreviewWarningsTitle": "{{count}} preview warning(s)",
+    "portabilityRepoWarningHint": "The source repository could not be inspected yet. Import will still try it and report per-skill failures.",
     "portabilityImportSuccess": "Imported {{imported}}, skipped {{skipped}}, failed {{failed}}",
     "portabilityImportFailuresTitle": "{{count}} skill(s) failed to import",
     "portabilityImportError": "Import failed: {{error}}",

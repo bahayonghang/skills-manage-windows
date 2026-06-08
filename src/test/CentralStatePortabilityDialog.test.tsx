@@ -70,6 +70,7 @@ const preview: SkillportStateImportPreview = {
     unrestorable: 1,
     duplicateSkipped: 0,
   },
+  warnings: [],
 };
 
 const idlePortabilityJob: SkillportStatePortabilityJob = {
@@ -246,6 +247,51 @@ describe("CentralStatePortabilityDialog", () => {
     expect(await screen.findByText("JSON 内重复")).toBeInTheDocument();
     expect(screen.getByText("源重复")).toBeInTheDocument();
     expect(screen.getByText("重复已跳过")).toBeInTheDocument();
+  });
+
+  it("renders repo inspection warnings without blocking ready skills", async () => {
+    const warningPreview: SkillportStateImportPreview = {
+      ...preview,
+      skills: [
+        {
+          id: "repo-warning-skill",
+          name: "repo-warning-skill",
+          sourcePath: "skills/repo-warning-skill/SKILL.md",
+          status: "ready",
+        },
+      ],
+      summary: {
+        ...preview.summary,
+        ready: 1,
+        conflicts: 0,
+        unrestorable: 0,
+      },
+      warnings: [
+        {
+          reason: "repo_unavailable",
+          detail: "GitHub rate limit was exceeded",
+          repoUrl: "https://github.com/other/skills/tree/main",
+        },
+      ],
+    };
+    const previewImport = vi.fn().mockResolvedValue(warningPreview);
+
+    renderDialog({ previewImport });
+
+    fireEvent.click(screen.getByTestId("central-portability-import-tab"));
+    fireEvent.change(screen.getByTestId("central-portability-json-input"), {
+      target: { value: manifestJson },
+    });
+    fireEvent.click(screen.getByTestId("central-portability-preview"));
+
+    expect(await screen.findByText("1 条预览警告")).toBeInTheDocument();
+    expect(screen.getByText(/无法检查源仓库/)).toBeInTheDocument();
+    expect(screen.getByText(/https:\/\/github.com\/other\/skills\/tree\/main/)).toBeInTheDocument();
+    expect(screen.getByText(/源仓库暂时无法检查/)).toBeInTheDocument();
+    expect(screen.getByTestId("central-portability-run-import")).toHaveTextContent(
+      "导入 1 个技能"
+    );
+    expect(screen.getByTestId("central-portability-run-import")).not.toBeDisabled();
   });
 
   it("submits ready and conflict resolutions", async () => {

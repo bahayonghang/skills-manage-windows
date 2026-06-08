@@ -1118,6 +1118,8 @@
     "portabilityExportSuccess": "状态导出已保存",
     "portabilityExportError": "导出失败: {{error}}",
     "portabilityPreviewError": "预览失败: {{error}}",
+    "portabilityPreviewWarningsTitle": "{{count}} 条预览警告",
+    "portabilityRepoWarningHint": "源仓库暂时无法检查，导入时仍会继续尝试并逐项报告失败。",
     "portabilityImportSuccess": "已导入 {{imported}} 个，跳过 {{skipped}} 个，失败 {{failed}} 个",
     "portabilityImportFailuresTitle": "{{count}} 个技能导入失败",
     "portabilityImportError": "导入失败: {{error}}",

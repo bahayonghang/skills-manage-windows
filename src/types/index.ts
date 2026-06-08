@@ -689,6 +689,7 @@ export interface SkillportStateImportPreview {
   githubSources: SkillportStateSourcePreview[];
   skills: SkillportStateSkillPreview[];
   summary: SkillportStateImportPreviewSummary;
+  warnings: Array<{ reason: string; detail: string; sourcePath?: string | null; repoUrl?: string | null }>;
 }
 
 export interface SkillportStateImportResolution {

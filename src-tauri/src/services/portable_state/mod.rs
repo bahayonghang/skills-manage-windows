@@ -32,8 +32,8 @@ pub use types::{
     ExportedFrom, PortableCentralSkill, PortableCentralSkillSource, PortableGithubSource,
     PortableSkillTag, PortableUnrestorableSkill, SkillPreviewStatus, SkillportStateExportOptions,
     SkillportStateImportFailure, SkillportStateImportPreview, SkillportStateImportPreviewSummary,
-    SkillportStateImportResolution, SkillportStateImportResult, SkillportStateImportedSkill,
-    SkillportStateManifest, SkillportStatePortabilityPhase,
+    SkillportStateImportPreviewWarning, SkillportStateImportResolution, SkillportStateImportResult,
+    SkillportStateImportedSkill, SkillportStateManifest, SkillportStatePortabilityPhase,
     SkillportStatePortabilityProgressPayload, SkillportStatePortabilityStatus,
     SkillportStateSkillPreview, SkillportStateSourcePreview, SourcePreviewStatus,
 };

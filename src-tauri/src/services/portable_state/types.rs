@@ -86,6 +86,16 @@ pub struct SkillportStateImportPreview {
     pub github_sources: Vec<SkillportStateSourcePreview>,
     pub skills: Vec<SkillportStateSkillPreview>,
     pub summary: SkillportStateImportPreviewSummary,
+    pub warnings: Vec<SkillportStateImportPreviewWarning>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillportStateImportPreviewWarning {
+    pub reason: String,
+    pub detail: String,
+    pub source_path: Option<String>,
+    pub repo_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
