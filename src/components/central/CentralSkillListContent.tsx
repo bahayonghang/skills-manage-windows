@@ -11,6 +11,12 @@ import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
 import { statusAccentOf } from "@/lib/centralSkillCardStatus";
+import {
+  CENTRAL_SKILL_CARD_GRID_GAP,
+  CENTRAL_SKILL_CARD_MAX_COLUMNS,
+  CENTRAL_SKILL_CARD_MIN_WIDTH,
+  centralSkillCardGridTemplateColumns,
+} from "@/lib/centralSkillGrid";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type { ViewDensity, ViewMode } from "@/lib/centralViewState";
 import { getRepoDotColor } from "@/lib/tagColor";
@@ -286,11 +292,11 @@ export function CentralSkillListContent({
         <VirtualizedGrid
           items={sortedSkills}
           itemHeight={gridItemHeight(cardDensity)}
-          rowGap={16}
-          columnGap={16}
+          rowGap={CENTRAL_SKILL_CARD_GRID_GAP}
+          columnGap={CENTRAL_SKILL_CARD_GRID_GAP}
           overscanRows={3}
-          minColumnWidth={240}
-          maxColumns={4}
+          minColumnWidth={CENTRAL_SKILL_CARD_MIN_WIDTH}
+          maxColumns={CENTRAL_SKILL_CARD_MAX_COLUMNS}
           scrollContainerRef={contentRef}
           itemKey={(skill) => skill.id}
           renderItem={(skill) => renderGridCard(skill)}
@@ -299,8 +305,7 @@ export function CentralSkillListContent({
         <div
           className="grid gap-4"
           style={{
-            gridTemplateColumns:
-              "repeat(auto-fill, minmax(min(100%, 240px), 1fr))",
+            gridTemplateColumns: centralSkillCardGridTemplateColumns(),
           }}
         >
           {sortedSkills.map((skill) => renderGridCard(skill))}

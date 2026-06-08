@@ -5,6 +5,7 @@ import {
   renderCentralSkillsView,
   resetCentralSkillsViewTestState,
 } from "./centralSkillsViewTestSupport";
+import { centralSkillCardGridTemplateColumns } from "@/lib/centralSkillGrid";
 
 describe("CentralSkillsView shell（V2 markup）", () => {
   beforeEach(() => {
@@ -128,6 +129,22 @@ describe("CentralSkillsView shell（V2 markup）", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("central-toolbar-view-installed-any")).toBeInTheDocument();
     expect(screen.getByTestId("central-toolbar-view-uncategorized")).toBeInTheDocument();
+  });
+
+  it("分组卡片网格复用 Central 自适应列策略而不是硬限制两列", async () => {
+    renderCentralSkillsView();
+    fireEvent.click(screen.getByTestId("central-toolbar-view"));
+    fireEvent.click(
+      await screen.findByTestId("central-toolbar-view-group-repository"),
+    );
+
+    const groupBody = await screen.findByTestId(
+      "group-body-repo:github-openai-skills-main",
+    );
+    expect(groupBody).not.toHaveClass("lg:grid-cols-2");
+    expect(groupBody.style.gridTemplateColumns).toBe(
+      centralSkillCardGridTemplateColumns(),
+    );
   });
 
   // ─── Sidebar rail vs pinned ───────────────────────────────────────

@@ -7,6 +7,7 @@ import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
 import { statusAccentOf } from "@/lib/centralSkillCardStatus";
+import { centralSkillCardGridTemplateColumns } from "@/lib/centralSkillGrid";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type { SkillGroup } from "@/lib/centralGrouping";
 import { getRepoDotColor } from "@/lib/tagColor";
@@ -125,8 +126,11 @@ export function CentralGroupedSkillList({
               </button>
               {!isCollapsed && (
                 <div
-                  className="grid grid-cols-1 gap-4 lg:grid-cols-2"
+                  className="grid gap-4"
                   data-testid={`group-body-${group.key}`}
+                  style={{
+                    gridTemplateColumns: centralSkillCardGridTemplateColumns(),
+                  }}
                 >
                   {group.skills.map((skill) => {
                     const skillTags = (skill.tags ?? []).map((tag) => ({
