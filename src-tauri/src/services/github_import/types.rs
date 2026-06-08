@@ -155,6 +155,10 @@ pub(super) const SKIP_DISCOVERY_DIRS: &[&str] = &[
     "build",
     "target",
     "outputs",
+    "test",
+    "tests",
+    "fixture",
+    "fixtures",
     "__pycache__",
 ];
 pub(super) const PRIORITY_SKILL_ROOTS: &[&str] = &[

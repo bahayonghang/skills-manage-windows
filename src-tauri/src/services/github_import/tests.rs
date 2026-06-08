@@ -154,6 +154,52 @@ metadata:
         ])
     }
 
+    fn compound_plugin_like_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "plugins/compound-engineering/skills/ce-work/SKILL.md",
+                sample_frontmatter("ce-work", "Real plugin skill"),
+            ),
+            (
+                "tests/fixtures/custom-paths/custom-skills/custom-skill/SKILL.md",
+                sample_frontmatter("custom-skill", "Fixture custom skill"),
+            ),
+            (
+                "tests/fixtures/custom-paths/skills/default-skill/SKILL.md",
+                sample_frontmatter("default-skill", "Fixture default skill"),
+            ),
+            (
+                "tests/fixtures/sample-plugin/skills/disabled-skill/SKILL.md",
+                sample_frontmatter("disabled-skill", "Fixture disabled skill"),
+            ),
+            (
+                "tests/fixtures/sample-plugin/skills/skill-one/SKILL.md",
+                sample_frontmatter("skill-one", "Fixture sample skill"),
+            ),
+        ])
+    }
+
+    fn sample_and_example_skill_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "sample/skill-one/SKILL.md",
+                sample_frontmatter("sample-skill", "Published sample skill"),
+            ),
+            (
+                "samples/skill-two/SKILL.md",
+                sample_frontmatter("samples-skill", "Published samples skill"),
+            ),
+            (
+                "example/skill-three/SKILL.md",
+                sample_frontmatter("example-skill", "Published example skill"),
+            ),
+            (
+                "examples/skill-four/SKILL.md",
+                sample_frontmatter("examples-skill", "Published examples skill"),
+            ),
+        ])
+    }
+
     fn duplicate_name_snapshot() -> GitHubRepoSnapshot {
         repo_snapshot(&[
             (
@@ -1237,6 +1283,57 @@ metadata:
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].source_path, "packages/example/skill");
         assert_eq!(candidates[0].skill_id, "skill");
+    }
+
+    #[test]
+    fn recursive_fallback_skips_test_fixture_skill_directories() {
+        let repo = GitHubRepoRef {
+            owner: "everyinc".to_string(),
+            repo: "compound-engineering-plugin".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/everyinc/compound-engineering-plugin".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &compound_plugin_like_snapshot())
+                .expect("candidates");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].source_path,
+            "plugins/compound-engineering/skills/ce-work"
+        );
+        assert_eq!(candidates[0].skill_id, "ce-work");
+        assert!(candidates.iter().all(|candidate| {
+            !matches!(
+                candidate.skill_id.as_str(),
+                "custom-skill" | "default-skill" | "disabled-skill" | "skill-one"
+            )
+        }));
+    }
+
+    #[test]
+    fn recursive_fallback_keeps_sample_and_example_skill_directories() {
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "published-examples".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/published-examples".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &sample_and_example_skill_snapshot())
+                .expect("candidates");
+        let source_paths = candidates
+            .iter()
+            .map(|candidate| candidate.source_path.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(source_paths.len(), 4);
+        assert!(source_paths.contains(&"sample/skill-one"));
+        assert!(source_paths.contains(&"samples/skill-two"));
+        assert!(source_paths.contains(&"example/skill-three"));
+        assert!(source_paths.contains(&"examples/skill-four"));
     }
 
     #[test]
