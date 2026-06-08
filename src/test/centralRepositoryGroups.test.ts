@@ -96,6 +96,36 @@ describe("groupRepositoriesForSidebar", () => {
     expect(sections[0].groups[0].repositories[0].name).toBe("本地 / 未来源");
   });
 
+  it("omits the system unknown repository when it has no skills", () => {
+    const sections = groupRepositoriesForSidebar([
+      repo("local-unknown", {
+        source_type: "local",
+        name: "本地 / 未知来源",
+        is_unknown: true,
+        skill_count: 0,
+        unknown_skill_count: 0,
+      }),
+    ]);
+
+    expect(sections).toEqual([]);
+  });
+
+  it("keeps the system unknown repository when unassigned skills exist", () => {
+    const sections = groupRepositoriesForSidebar([
+      repo("local-unknown", {
+        source_type: "local",
+        name: "本地 / 未知来源",
+        is_unknown: true,
+        skill_count: 0,
+        unknown_skill_count: 2,
+      }),
+    ]);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].kind).toBe("local");
+    expect(sections[0].groups[0].repositories[0].id).toBe("local-unknown");
+  });
+
   it("github section appears before local section", () => {
     const repos = [
       repo("r1", { source_type: "local", name: "local-1" }),

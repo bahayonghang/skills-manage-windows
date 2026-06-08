@@ -41,6 +41,10 @@ function getEffectiveSkillCount(repo: SkillRepositoryWithStats): number {
   return repo.is_unknown ? repo.unknown_skill_count : repo.skill_count;
 }
 
+function shouldShowRepository(repo: SkillRepositoryWithStats): boolean {
+  return !repo.is_unknown || getEffectiveSkillCount(repo) > 0;
+}
+
 /**
  * 按 owner 折叠 GitHub 仓库；本地 / 无 owner 的仓库放进 flat 组。
  *
@@ -57,6 +61,8 @@ export function groupRepositoriesForSidebar(
   const local: SkillRepositoryWithStats[] = [];
 
   for (const repo of repositories) {
+    if (!shouldShowRepository(repo)) continue;
+
     if (isGithubRepo(repo)) {
       const owner = (repo.owner ?? "").trim();
       if (owner.length === 0) {
