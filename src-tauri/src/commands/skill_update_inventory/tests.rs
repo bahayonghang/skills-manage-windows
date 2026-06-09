@@ -1046,6 +1046,178 @@ async fn refresh_does_not_persist_skipped_remote_added_as_pending() {
 }
 
 #[tokio::test]
+async fn refresh_auto_resolves_unique_same_id_source_path_move_without_update() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("teach");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    let content = b"---\nname: Teach\n---\n\nstable";
+    std::fs::write(skill_dir.join("SKILL.md"), content).unwrap();
+    db::upsert_skill(&pool, &make_central_skill("teach", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "teach", "skills/in-progress/teach").await;
+    let assignment = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap();
+    let repository_id = assignment.repository.id.clone();
+
+    let snapshot = GitHubRepoSnapshot {
+        files: HashMap::from([(
+            "skills/productivity/teach/SKILL.md".to_string(),
+            content.to_vec(),
+        )]),
+    };
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        scope_repos(vec![&repository_id]),
+    )
+    .await
+    .unwrap();
+
+    assert!(inventory.updatable.is_empty());
+    assert!(inventory.remote_added.is_empty());
+    assert!(inventory.remote_missing.is_empty());
+    assert!(inventory.failed_repositories.is_empty());
+    assert!(db::list_pending_additions(&pool).await.unwrap().is_empty());
+
+    let assignment = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap();
+    assert_eq!(
+        assignment.source_path.as_deref(),
+        Some("skills/productivity/teach")
+    );
+    let states = db::get_skill_update_states_for_skills(&pool, &["teach".to_string()])
+        .await
+        .unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].status, SkillUpdateStatus::UpToDate.to_string());
+    assert_eq!(
+        states[0].source_path.as_deref(),
+        Some("skills/productivity/teach")
+    );
+}
+
+#[tokio::test]
+async fn refresh_relocated_same_id_skill_becomes_updatable_when_content_changed() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("teach");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Teach\n---\n\nold").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("teach", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "teach", "skills/in-progress/teach").await;
+    let assignment = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap();
+    let repository_id = assignment.repository.id.clone();
+
+    let snapshot = GitHubRepoSnapshot {
+        files: HashMap::from([(
+            "skills/productivity/teach/SKILL.md".to_string(),
+            b"---\nname: Teach\n---\n\nnew".to_vec(),
+        )]),
+    };
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        scope_repos(vec![&repository_id]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(inventory.updatable.len(), 1);
+    assert_eq!(inventory.updatable[0].state.skill_id, "teach");
+    assert_eq!(
+        inventory.updatable[0].state.source_path.as_deref(),
+        Some("skills/productivity/teach")
+    );
+    assert!(inventory.remote_added.is_empty());
+    assert!(inventory.remote_missing.is_empty());
+    assert!(db::list_pending_additions(&pool).await.unwrap().is_empty());
+
+    let assignment = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap();
+    assert_eq!(
+        assignment.source_path.as_deref(),
+        Some("skills/productivity/teach")
+    );
+}
+
+#[tokio::test]
+async fn refresh_keeps_ambiguous_same_id_source_moves_manual() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("teach");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Teach\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("teach", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "teach", "skills/in-progress/teach").await;
+    let assignment = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap();
+    let repository_id = assignment.repository.id.clone();
+
+    let snapshot = GitHubRepoSnapshot {
+        files: HashMap::from([
+            (
+                "skills/productivity/teach/SKILL.md".to_string(),
+                b"---\nname: Teach A\n---".to_vec(),
+            ),
+            (
+                "skills/released/teach/SKILL.md".to_string(),
+                b"---\nname: Teach B\n---".to_vec(),
+            ),
+        ]),
+    };
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        scope_repos(vec![&repository_id]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(inventory.remote_missing.len(), 1);
+    assert_eq!(inventory.remote_missing[0].state.skill_id, "teach");
+    assert_eq!(inventory.remote_added.len(), 2);
+    assert_eq!(db::list_pending_additions(&pool).await.unwrap().len(), 2);
+
+    let assignment = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap();
+    assert_eq!(
+        assignment.source_path.as_deref(),
+        Some("skills/in-progress/teach")
+    );
+}
+
+#[tokio::test]
 async fn get_inventory_returns_persisted_state_without_remote_fetch() {
     let pool = setup_test_db().await;
     let temp = TempDir::new().unwrap();

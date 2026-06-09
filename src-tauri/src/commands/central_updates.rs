@@ -886,6 +886,23 @@ pub(crate) fn state_from_remote(
     }
 }
 
+pub(crate) fn state_from_relocated_source(
+    prepared: &PreparedSkillUpdate,
+    repo: &GitHubRepoRef,
+    source_path: &str,
+    snapshots: &HashMap<String, GitHubRepoSnapshot>,
+) -> Result<SkillUpdateState, RemoteSkillLoadError> {
+    let mut relocated = prepared.clone();
+    relocated.source = Some(GitHubUpdateSource {
+        repo: repo.clone(),
+        source_path: source_path.to_string(),
+    });
+    relocated.assignment.source_path = Some(source_path.to_string());
+    let remote = load_remote_skill_content(&relocated, snapshots)?
+        .ok_or_else(|| RemoteSkillLoadError::other("Relocated GitHub source is unavailable."))?;
+    Ok(state_from_remote(&relocated.skill, &remote, false))
+}
+
 pub(crate) fn unsupported_state_from_assignment(
     skill: &Skill,
     assignment: &SkillRepositoryAssignment,

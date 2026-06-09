@@ -32,12 +32,14 @@ use crate::targets::ActiveTarget;
 use crate::AppState;
 
 mod apply_steps;
+mod relocation;
 mod repositories;
 mod scan;
 mod scope;
 mod types;
 
 pub(crate) use apply_steps::*;
+pub(crate) use relocation::*;
 pub(crate) use repositories::*;
 pub(crate) use scan::*;
 pub(crate) use scope::*;
@@ -178,10 +180,15 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         .iter()
         .map(|(repository, _)| (repository.id.clone(), repository.clone()))
         .collect::<HashMap<_, _>>();
+    let repo_ref_by_id = valid_repositories
+        .iter()
+        .map(|(repository, repo)| (repository.id.clone(), repo.clone()))
+        .collect::<HashMap<_, _>>();
 
     let mut updatable = Vec::new();
     let mut remote_missing_states = Vec::new();
     let mut failed_repositories = Vec::new();
+    let mut prepared_by_skill_id = HashMap::new();
 
     for prepared_skill in prepared {
         let skill = &prepared_skill.skill;
@@ -225,6 +232,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                 // up_to_date / unsupported / error / cancelled 不进入 inventory
             }
         }
+        prepared_by_skill_id.insert(skill.id.clone(), prepared_skill);
     }
 
     /*
@@ -248,8 +256,22 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         )
         .await?;
 
+        let mut remote_added_items = collection.remote_added;
+        let mut relocation_ctx = RelocationContext {
+            pool,
+            prepared_by_skill_id: &prepared_by_skill_id,
+            snapshots: &snapshots,
+            repo_by_id: &repo_by_id,
+            repo_ref_by_id: &repo_ref_by_id,
+            remote_missing_states: &mut remote_missing_states,
+            remote_added_items: &mut remote_added_items,
+            updatable: &mut updatable,
+            failed_repositories: &mut failed_repositories,
+        };
+        reconcile_relocated_remote_skills(&mut relocation_ctx).await?;
+
         let now = Utc::now().to_rfc3339();
-        for item in &collection.remote_added {
+        for item in &remote_added_items {
             let source_path = normalize_repo_path(&item.preview.source_path)?;
             let addition = SkillRepositoryPendingAddition {
                 repository_id: item.repository_id.clone(),
@@ -269,7 +291,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
             let source_path = normalize_repo_path(&item.preview.source_path)?;
             db::delete_pending_addition(pool, &item.repository_id, &source_path).await?;
         }
-        for item in collection.remote_added {
+        for item in remote_added_items {
             remote_added.push(remote_added_from_item(item));
         }
         for failure in failed_collector {
