@@ -5,12 +5,12 @@ import {
   CentralSkillEmptyState,
   CentralSkillFirstVisitEmptyState,
 } from "@/components/central/CentralSkillEmptyStates";
+import { buildCentralSkillCardProps } from "@/components/central/centralSkillCardProps";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
-import { statusAccentOf } from "@/lib/centralSkillCardStatus";
 import {
   CENTRAL_SKILL_CARD_GRID_GAP,
   CENTRAL_SKILL_CARD_MAX_COLUMNS,
@@ -115,116 +115,37 @@ export function CentralSkillListContent({
   const effectiveView: ViewMode = isSearchActive ? "list" : viewMode;
   const cardDensity = viewDensity;
 
-  function renderListCard(skill: SkillWithLinks) {
-    const skillTags = (skill.tags ?? []).map((tag) => ({
-      id: tag.id,
-      name: tag.name,
-      color: tag.color,
-    }));
-    const allTags = (tags ?? []).map((tag) => ({
-      id: tag.id,
-      name: tag.name,
-      color: tag.color,
-    }));
-    const status = updateStatuses[skill.id]?.status;
-    const statusAccent = statusAccentOf(status);
-    const statusChipLabel =
-      statusAccent && status ? t(`central.updateStatus.${status}`) : undefined;
+  function buildCardProps(skill: SkillWithLinks) {
+    return buildCentralSkillCardProps(skill, {
+      aiSummaries,
+      usageCounts,
+      selectedSkillIdSet,
+      updateStatuses,
+      updatingSkillIds,
+      tags,
+      t,
+      density: cardDensity,
+      setDetailButtonRef,
+      onToggleSelection,
+      onDetail,
+      onInstallTo,
+      onUpdateCentral,
+      onDelete,
+      onAddSkillTag,
+      onCreateSkillTag,
+      onRemoveSkillTag,
+    });
+  }
 
-    return (
-      <UnifiedSkillCard
-        key={skill.id}
-        name={skill.name}
-        description={skill.description}
-        aiSummary={aiSummaries[skill.id]}
-        usageBadge={usageCounts?.[skill.name]}
-        statusAccent={statusAccent}
-        statusChipLabel={statusChipLabel}
-        checkbox={{
-          checked: selectedSkillIdSet.has(skill.id),
-          onChange: () => onToggleSelection(skill.id),
-        }}
-        tags={(skill.tags ?? []).map((tag) => ({
-          key: tag.id,
-          label: tag.name,
-        }))}
-        publisher={skill.repository?.name}
-        updateStatus={
-          updateStatuses[skill.id]
-            ? {
-                ...updateStatuses[skill.id],
-                isUpdating: updatingSkillIds.includes(skill.id),
-              }
-            : undefined
-        }
-        onDetail={() => onDetail(skill.id)}
-        onInstallTo={() => onInstallTo(skill)}
-        onUpdateCentral={() => onUpdateCentral([skill.id])}
-        onDeleteFromCentral={() => onDelete(skill)}
-        detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
-        editableTags={
-          onAddSkillTag && onCreateSkillTag && onRemoveSkillTag
-            ? {
-                tags: skillTags,
-                allTags,
-                onAdd: (tagId) => onAddSkillTag(skill.id, tagId),
-                onCreate: (name) => onCreateSkillTag(skill.id, name),
-                onRemove: (tagId) => onRemoveSkillTag(skill.id, tagId),
-              }
-            : undefined
-        }
-        density={cardDensity}
-      />
-    );
+  function renderListCard(skill: SkillWithLinks) {
+    return <UnifiedSkillCard key={skill.id} {...buildCardProps(skill)} />;
   }
 
   function renderGridCard(skill: SkillWithLinks) {
-    const skillTags = (skill.tags ?? []).map((tag) => ({
-      id: tag.id,
-      name: tag.name,
-      color: tag.color,
-    }));
-    const allTags = (tags ?? []).map((tag) => ({
-      id: tag.id,
-      name: tag.name,
-      color: tag.color,
-    }));
-    const status = updateStatuses[skill.id]?.status;
-    const statusAccent = statusAccentOf(status);
-    const statusChipLabel =
-      statusAccent && status ? t(`central.updateStatus.${status}`) : undefined;
-
     return (
       <UnifiedSkillCard
         key={skill.id}
-        name={skill.name}
-        description={skill.description}
-        aiSummary={aiSummaries[skill.id]}
-        usageBadge={usageCounts?.[skill.name]}
-        statusAccent={statusAccent}
-        statusChipLabel={statusChipLabel}
-        checkbox={{
-          checked: selectedSkillIdSet.has(skill.id),
-          onChange: () => onToggleSelection(skill.id),
-        }}
-        tags={(skill.tags ?? []).map((tag) => ({
-          key: tag.id,
-          label: tag.name,
-        }))}
-        publisher={skill.repository?.name}
-        updateStatus={
-          updateStatuses[skill.id]
-            ? {
-                ...updateStatuses[skill.id],
-                isUpdating: updatingSkillIds.includes(skill.id),
-              }
-            : undefined
-        }
-        onDetail={() => onDetail(skill.id)}
-        onInstallTo={() => onInstallTo(skill)}
-        onUpdateCentral={() => onUpdateCentral([skill.id])}
-        onDeleteFromCentral={() => onDelete(skill)}
-        detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
+        {...buildCardProps(skill)}
         platformIcons={{
           agents: availableInstallAgents,
           linkedAgents: skill.linked_agents,
@@ -233,24 +154,12 @@ export function CentralSkillListContent({
           onToggle: onTogglePlatform,
           togglingAgentId,
         }}
-        editableTags={
-          onAddSkillTag && onCreateSkillTag && onRemoveSkillTag
-            ? {
-                tags: skillTags,
-                allTags,
-                onAdd: (tagId) => onAddSkillTag(skill.id, tagId),
-                onCreate: (name) => onCreateSkillTag(skill.id, name),
-                onRemove: (tagId) => onRemoveSkillTag(skill.id, tagId),
-              }
-            : undefined
-        }
         footer={{
           repoName: skill.repository?.name,
           repoColor: skill.repository?.name
             ? getRepoDotColor(skill.repository.name)
             : undefined,
         }}
-        density={cardDensity}
       />
     );
   }

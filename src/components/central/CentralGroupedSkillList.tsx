@@ -3,10 +3,10 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 
+import { buildCentralSkillCardProps } from "@/components/central/centralSkillCardProps";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
-import { statusAccentOf } from "@/lib/centralSkillCardStatus";
 import { centralSkillCardGridTemplateColumns } from "@/lib/centralSkillGrid";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type { SkillGroup } from "@/lib/centralGrouping";
@@ -133,56 +133,28 @@ export function CentralGroupedSkillList({
                   }}
                 >
                   {group.skills.map((skill) => {
-                    const skillTags = (skill.tags ?? []).map((tag) => ({
-                      id: tag.id,
-                      name: tag.name,
-                      color: tag.color,
-                    }));
-                    const allTags = (tags ?? []).map((tag) => ({
-                      id: tag.id,
-                      name: tag.name,
-                      color: tag.color,
-                    }));
-                    const status = updateStatuses[skill.id]?.status;
-                    const statusAccent = statusAccentOf(status);
-                    const statusChipLabel =
-                      statusAccent && status
-                        ? t(`central.updateStatus.${status}`)
-                        : undefined;
-
                     return (
                       <UnifiedSkillCard
                         key={skill.id}
-                        name={skill.name}
-                        description={skill.description}
-                        aiSummary={aiSummaries[skill.id]}
-                        usageBadge={usageCounts?.[skill.name]}
-                        statusAccent={statusAccent}
-                        statusChipLabel={statusChipLabel}
-                        checkbox={{
-                          checked: selectedSkillIdSet.has(skill.id),
-                          onChange: () => onToggleSelection(skill.id),
-                        }}
-                        tags={(skill.tags ?? []).map((tag) => ({
-                          key: tag.id,
-                          label: tag.name,
-                        }))}
-                        publisher={skill.repository?.name}
-                        updateStatus={
-                          updateStatuses[skill.id]
-                            ? {
-                                ...updateStatuses[skill.id],
-                                isUpdating: updatingSkillIds.includes(skill.id),
-                              }
-                            : undefined
-                        }
-                        onDetail={() => onDetail(skill.id)}
-                        onInstallTo={() => onInstallTo(skill)}
-                        onUpdateCentral={() => onUpdateCentral([skill.id])}
-                        onDeleteFromCentral={() => onDelete(skill)}
-                        detailButtonRef={(node) =>
-                          setDetailButtonRef(skill.id, node)
-                        }
+                        {...buildCentralSkillCardProps(skill, {
+                          aiSummaries,
+                          usageCounts,
+                          selectedSkillIdSet,
+                          updateStatuses,
+                          updatingSkillIds,
+                          tags,
+                          t,
+                          density: "compact",
+                          setDetailButtonRef,
+                          onToggleSelection,
+                          onDetail,
+                          onInstallTo,
+                          onUpdateCentral,
+                          onDelete,
+                          onAddSkillTag,
+                          onCreateSkillTag,
+                          onRemoveSkillTag,
+                        })}
                         platformIcons={{
                           agents: availableInstallAgents,
                           linkedAgents: skill.linked_agents,
@@ -191,27 +163,12 @@ export function CentralGroupedSkillList({
                           onToggle: onTogglePlatform,
                           togglingAgentId,
                         }}
-                        editableTags={
-                          onAddSkillTag && onCreateSkillTag && onRemoveSkillTag
-                            ? {
-                                tags: skillTags,
-                                allTags,
-                                onAdd: (tagId) =>
-                                  onAddSkillTag(skill.id, tagId),
-                                onCreate: (name) =>
-                                  onCreateSkillTag(skill.id, name),
-                                onRemove: (tagId) =>
-                                  onRemoveSkillTag(skill.id, tagId),
-                              }
-                            : undefined
-                        }
                         footer={{
                           repoName: skill.repository?.name,
                           repoColor: skill.repository?.name
                             ? getRepoDotColor(skill.repository.name)
                             : undefined,
                         }}
-                        density="compact"
                       />
                     );
                   })}
