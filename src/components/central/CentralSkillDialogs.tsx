@@ -3,6 +3,7 @@ import type { TFunction } from "i18next";
 
 import { BatchDeleteCentralSkillsDialog } from "@/components/central/BatchDeleteCentralSkillsDialog";
 import { BatchInstallCentralSkillsDialog } from "@/components/central/BatchInstallCentralSkillsDialog";
+import { BatchUninstallCentralSkillsDialog } from "@/components/central/BatchUninstallCentralSkillsDialog";
 import { DeleteCentralSkillDialog } from "@/components/central/DeleteCentralSkillDialog";
 import { InstallDialog, type InstallMethod } from "@/components/central/InstallDialog";
 import { CentralRepositorySyncDialog } from "@/components/central/CentralRepositorySyncDialog";
@@ -11,6 +12,10 @@ import { CentralUpdateConfirmDialog } from "@/components/central/CentralUpdateCo
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import type { GitHubRepoImportWizardProps } from "@/components/marketplace/githubImportWizardUtils";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
+import type {
+  CentralBatchUninstallApplyResult,
+  CentralBatchUninstallPreview,
+} from "@/lib/centralBatchUninstall";
 import type {
   AgentWithStatus,
   BatchInstallResult,
@@ -108,6 +113,7 @@ export function CentralSkillDialogs({
   remoteMissingError,
   remoteMissingPreview,
   remoteMissingStates,
+  batchUninstall,
   repositorySyncError,
   repositorySyncPreview,
   repositorySyncDeletePreview,
@@ -196,6 +202,15 @@ export function CentralSkillDialogs({
   remoteMissingError: string | null;
   remoteMissingPreview: BatchDeleteCentralSkillPreviewResult | null;
   remoteMissingStates: CentralSkillUpdateState[];
+  batchUninstall: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    preview: CentralBatchUninstallPreview;
+    isUninstalling: boolean;
+    onConfirm: (
+      preview: CentralBatchUninstallPreview
+    ) => Promise<CentralBatchUninstallApplyResult>;
+  };
   repositorySyncError: string | null;
   repositorySyncPreview: CentralRepositorySyncPreview | null;
   repositorySyncDeletePreview: BatchDeleteCentralSkillPreviewResult | null;
@@ -284,6 +299,15 @@ export function CentralSkillDialogs({
         isInstalling={isInstalling}
         onManagePlatforms={() => setIsPlatformManageOpen(true)}
         onInstall={onBatchInstallCentralSkills}
+      />
+
+      <BatchUninstallCentralSkillsDialog
+        open={batchUninstall.open}
+        onOpenChange={batchUninstall.onOpenChange}
+        preview={batchUninstall.preview}
+        agents={agents}
+        isUninstalling={batchUninstall.isUninstalling}
+        onConfirm={batchUninstall.onConfirm}
       />
 
       <DeleteCentralSkillDialog

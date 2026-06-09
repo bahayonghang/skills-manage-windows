@@ -12,6 +12,7 @@ const {
   mockSkills,
   mockRepositories,
   mockBatchInstallSkills,
+  mockBatchUninstallSkillsFromAgent,
   mockLoadBatchDeletePreview,
   mockDeleteCentralSkills,
   mockCheckSkillUpdates,
@@ -197,6 +198,176 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
         "D:\\work\\demo"
       );
     });
+  });
+
+  it("batch uninstalls selected central skills from installed removable platforms only", async () => {
+    mockBatchUninstallSkillsFromAgent
+      .mockResolvedValueOnce({
+        succeeded: [
+          { skill_id: "code-reviewer" },
+          { skill_id: "frontend-design" },
+        ],
+        failed: [],
+      })
+      .mockResolvedValueOnce({
+        succeeded: [{ skill_id: "frontend-design" }],
+        failed: [],
+      });
+    renderCentralSkillsView();
+
+    screen.getAllByLabelText("选择技能").forEach((checkbox) => {
+      fireEvent.click(checkbox);
+    });
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-uninstall"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText("此操作只取消平台安装，不会删除中央技能库中的技能、仓库、标签或技能文件。"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(dialog).getByTestId("confirm-batch-uninstall-central-skills"),
+    );
+
+    await waitFor(() => {
+      expect(mockBatchUninstallSkillsFromAgent).toHaveBeenCalledTimes(2);
+    });
+    expect(mockBatchUninstallSkillsFromAgent).toHaveBeenCalledWith("codex", [
+      { skill_id: "code-reviewer" },
+      { skill_id: "frontend-design" },
+    ]);
+    expect(mockBatchUninstallSkillsFromAgent).toHaveBeenCalledWith(
+      "claude-code",
+      [{ skill_id: "frontend-design" }],
+    );
+    expect(mockRescan).toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith("已卸载 3 个平台安装，跳过 0 个技能");
+    await waitFor(() => {
+      expect(screen.queryByTestId("central-bulk-action-bar")).not.toBeInTheDocument();
+    });
+  });
+
+  it("excludes shared-root platform links from central batch uninstall requests", async () => {
+    const skills: SkillWithLinks[] = [
+      {
+        ...mockSkills[0]!,
+        id: "shared-and-codex",
+        name: "shared-and-codex",
+        linked_agents: ["central", "cursor", "codex"],
+        shared_root_agents: ["cursor"],
+      },
+      {
+        ...mockSkills[1]!,
+        id: "shared-only",
+        name: "shared-only",
+        linked_agents: ["cursor"],
+        shared_root_agents: ["cursor"],
+      },
+    ];
+    mockBatchUninstallSkillsFromAgent.mockResolvedValueOnce({
+      succeeded: [{ skill_id: "shared-and-codex" }],
+      failed: [],
+    });
+    renderCentralSkillsView({ centralOverrides: { skills } });
+
+    screen.getAllByLabelText("选择技能").forEach((checkbox) => {
+      fireEvent.click(checkbox);
+    });
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-uninstall"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText("共享中央目录平台不会独立卸载"),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("只存在共享中央目录平台: 1"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      within(dialog).getByTestId("confirm-batch-uninstall-central-skills"),
+    );
+
+    await waitFor(() => {
+      expect(mockBatchUninstallSkillsFromAgent).toHaveBeenCalledTimes(1);
+    });
+    expect(mockBatchUninstallSkillsFromAgent).toHaveBeenCalledWith("codex", [
+      { skill_id: "shared-and-codex" },
+    ]);
+    expect(mockBatchUninstallSkillsFromAgent).not.toHaveBeenCalledWith(
+      "cursor",
+      expect.anything(),
+    );
+  });
+
+  it("does not call backend uninstall when selected central skills have no removable installs", async () => {
+    const skills: SkillWithLinks[] = [
+      {
+        ...mockSkills[0]!,
+        id: "local-only",
+        name: "local-only",
+        linked_agents: [],
+        shared_root_agents: [],
+      },
+      {
+        ...mockSkills[1]!,
+        id: "shared-only",
+        name: "shared-only",
+        linked_agents: ["cursor"],
+        shared_root_agents: ["cursor"],
+      },
+    ];
+    renderCentralSkillsView({ centralOverrides: { skills } });
+
+    screen.getAllByLabelText("选择技能").forEach((checkbox) => {
+      fireEvent.click(checkbox);
+    });
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-uninstall"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByTestId("central-batch-uninstall-noop"),
+    ).toHaveTextContent("已选技能没有可独立卸载的平台安装。");
+    expect(
+      within(dialog).getByTestId("confirm-batch-uninstall-central-skills"),
+    ).toBeDisabled();
+    expect(mockBatchUninstallSkillsFromAgent).not.toHaveBeenCalled();
+  });
+
+  it("keeps failed central batch uninstall skills selected after partial failure", async () => {
+    mockBatchUninstallSkillsFromAgent
+      .mockResolvedValueOnce({
+        succeeded: [{ skill_id: "code-reviewer" }],
+        failed: [
+          {
+            skill_id: "frontend-design",
+            error: "permission denied",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        succeeded: [{ skill_id: "frontend-design" }],
+        failed: [],
+      });
+    renderCentralSkillsView();
+
+    screen.getAllByLabelText("选择技能").forEach((checkbox) => {
+      fireEvent.click(checkbox);
+    });
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-uninstall"));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByTestId("confirm-batch-uninstall-central-skills"),
+    );
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "已卸载 2 个，1 个失败；失败项已保留选中，可重试。",
+      );
+    });
+    expect(within(dialog).getByText(/frontend-design \/ codex/)).toBeInTheDocument();
+    expect(screen.getByTestId("central-selection-summary")).toHaveTextContent(
+      "已选 1",
+    );
   });
 
 

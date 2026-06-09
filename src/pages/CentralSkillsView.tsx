@@ -42,6 +42,7 @@ import {
 } from "@/pages/centralStoreLocationView";
 import { useCentralUpdateCheckModeController } from "@/pages/centralUpdateCheckModeController";
 import { useCentralAiTagDashboardView } from "@/pages/centralAiTagDashboardView";
+import { useCentralBatchUninstallView } from "@/pages/centralBatchUninstallView";
 
 export function CentralSkillsView() {
   const { t } = useTranslation();
@@ -92,24 +93,15 @@ export function CentralSkillsView() {
   const [deletePreview, setDeletePreview] = useState<SkillDetail | null>(null);
   const [batchDeletePreview, setBatchDeletePreview] = useState<BatchDeleteCentralSkillPreviewResult | null>(null);
   const [pendingUpdateStates, setPendingUpdateStates] = useState<CentralSkillUpdateState[]>([]);
-  const [queuedRemoteMissingStates, setQueuedRemoteMissingStates] = useState<
-    CentralSkillUpdateState[]
-  >([]);
-  const [remoteMissingStates, setRemoteMissingStates] = useState<
-    CentralSkillUpdateState[]
-  >([]);
+  const [queuedRemoteMissingStates, setQueuedRemoteMissingStates] = useState<CentralSkillUpdateState[]>([]);
+  const [remoteMissingStates, setRemoteMissingStates] = useState<CentralSkillUpdateState[]>([]);
   const [remoteMissingPreview, setRemoteMissingPreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
-  const [repositorySyncPreview, setRepositorySyncPreview] =
-    useState<CentralRepositorySyncPreview | null>(null);
-  const [queuedRepositorySyncPreview, setQueuedRepositorySyncPreview] =
-    useState<CentralRepositorySyncPreview | null>(null);
-  const [repositorySyncDeletePreview, setRepositorySyncDeletePreview] =
-    useState<BatchDeleteCentralSkillPreviewResult | null>(null);
-  const [repositoryDeleteTarget, setRepositoryDeleteTarget] =
-    useState<SkillRepositoryWithStats | null>(null);
-  const [repositoryDeletePreview, setRepositoryDeletePreview] =
-    useState<DeleteSkillRepositoryPreview | null>(null);
+  const [repositorySyncPreview, setRepositorySyncPreview] = useState<CentralRepositorySyncPreview | null>(null);
+  const [queuedRepositorySyncPreview, setQueuedRepositorySyncPreview] = useState<CentralRepositorySyncPreview | null>(null);
+  const [repositorySyncDeletePreview, setRepositorySyncDeletePreview] = useState<BatchDeleteCentralSkillPreviewResult | null>(null);
+  const [repositoryDeleteTarget, setRepositoryDeleteTarget] = useState<SkillRepositoryWithStats | null>(null);
+  const [repositoryDeletePreview, setRepositoryDeletePreview] = useState<DeleteSkillRepositoryPreview | null>(null);
   const {
     filterSidebarWidth,
     handleFilterSidebarResizeKeyDown,
@@ -401,6 +393,7 @@ export function CentralSkillsView() {
     handleBatchDeleteClick,
     handleBatchDeleteDialogOpenChange,
     handleBatchInstallCentralSkills,
+    handleBatchUninstallCentralSkills,
     handleBulkSuggestTags,
     handleCancelAiTagJob,
     handleCancelCentralUpdates,
@@ -506,6 +499,12 @@ export function CentralSkillsView() {
     [handleToggleSelection],
   );
 
+  const batchUninstall = useCentralBatchUninstallView({
+    selectedSkillIds,
+    skills,
+    onConfirm: handleBatchUninstallCentralSkills,
+  });
+
   // ─── 共享 props ────────────────────────────────────────────────
   const dialogsProps = {
     agents,
@@ -550,6 +549,7 @@ export function CentralSkillsView() {
     remoteMissingError,
     remoteMissingPreview,
     remoteMissingStates,
+    batchUninstall: batchUninstall.dialog,
     repositorySyncError,
     repositorySyncPreview,
     repositorySyncDeletePreview,
@@ -747,6 +747,7 @@ export function CentralSkillsView() {
   const bulkBarProps = {
     selectedCount: selectedSkillIds.length,
     isInstalling,
+    ...batchUninstall.bulkBar,
     isDeleting,
     isAiBusy: isSuggestingTags || aiTagJob.status === "running",
     aiTaggingAvailable,

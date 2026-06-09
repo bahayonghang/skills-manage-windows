@@ -489,6 +489,7 @@ export const mockSubscribeAiTagProgress = vi.fn();
 export const mockSubscribeUpdateProgress = vi.fn();
 export const mockRescan = vi.fn();
 export const mockGetSkillsByAgent = vi.fn();
+export const mockBatchUninstallSkillsFromAgent = vi.fn();
 export const mockPreviewGitHubRepoImport = vi.fn();
 export const mockImportGitHubRepoSkills = vi.fn();
 export const mockResetGitHubImport = vi.fn();
@@ -610,8 +611,10 @@ export function buildSkillStoreState(overrides = {}) {
     platformPaths: {},
     skillsByAgent: {},
     loadingByAgent: {},
+    pendingSkillActionKeys: {},
     error: null,
     getSkillsByAgent: mockGetSkillsByAgent,
+    batchUninstallSkillsFromAgent: mockBatchUninstallSkillsFromAgent,
     ...overrides,
   };
 }
@@ -730,6 +733,7 @@ export function resetCentralSkillsViewTestState() {
   });
   mockUpdateSkills.mockResolvedValue({ succeeded: [], failed: [], skipped: [], states: [] });
   mockKeepRemoteMissingSkills.mockResolvedValue([]);
+  mockBatchUninstallSkillsFromAgent.mockResolvedValue({ succeeded: [], failed: [] });
   mockRefreshUpdateInventory.mockResolvedValue(mockEmptyUpdateInventory);
   mockOpenUpdateCenterDialog.mockClear();
   mockPreviewCentralStoreLocationChange.mockResolvedValue({

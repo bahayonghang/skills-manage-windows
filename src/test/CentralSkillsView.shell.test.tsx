@@ -254,7 +254,7 @@ describe("CentralSkillsView shell（V2 markup）", () => {
     expect(screen.queryByTestId("central-bulk-action-bar")).not.toBeInTheDocument();
   });
 
-  it("选中一张卡片后浮出底部批量条，含批装 / 打标签 / AI 建议 / 批删 / 取消选择", async () => {
+  it("选中一张卡片后浮出底部批量条，含批装 / 批量卸载 / 打标签 / AI 建议 / 批删 / 取消选择", async () => {
     renderCentralSkillsView();
     const [firstCheckbox] = screen.getAllByLabelText("选择技能");
     fireEvent.click(firstCheckbox);
@@ -262,6 +262,9 @@ describe("CentralSkillsView shell（V2 markup）", () => {
       await screen.findByTestId("central-bulk-action-bar")
     ).toBeInTheDocument();
     expect(screen.getByTestId("bulk-bar-batch-install")).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-bar-batch-uninstall")).toHaveTextContent(
+      "批量卸载",
+    );
     expect(screen.getByTestId("bulk-bar-open-categorize")).toBeInTheDocument();
     expect(screen.getByTestId("bulk-bar-open-ai-suggest")).toBeInTheDocument();
     expect(screen.getByTestId("bulk-bar-batch-delete")).toBeInTheDocument();

@@ -1,4 +1,4 @@
-import { Bot, Download, Tags, Trash2, X } from "lucide-react";
+import { Bot, Download, Tags, Trash2, Unlink, X } from "lucide-react";
 import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
@@ -13,11 +13,13 @@ import { cn } from "@/lib/utils";
 export interface BulkActionBarProps {
   selectedCount: number;
   isInstalling: boolean;
+  isUninstalling: boolean;
   isDeleting: boolean;
   isAiBusy: boolean;
   aiTaggingAvailable: boolean;
   t: TFunction;
   onBatchInstall: () => void;
+  onBatchUninstall: () => void;
   onBatchDelete: () => void;
   onOpenCategorize: () => void;
   onOpenAiSuggest: () => void;
@@ -27,11 +29,13 @@ export interface BulkActionBarProps {
 export function BulkActionBar({
   selectedCount,
   isInstalling,
+  isUninstalling,
   isDeleting,
   isAiBusy,
   aiTaggingAvailable,
   t,
   onBatchInstall,
+  onBatchUninstall,
   onBatchDelete,
   onOpenCategorize,
   onOpenAiSuggest,
@@ -76,6 +80,17 @@ export function BulkActionBar({
         >
           <Download className="size-3.5" />
           {t("central.bulkBarBatchInstall", { count: selectedCount })}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={onBatchUninstall}
+          disabled={isUninstalling}
+          data-testid="bulk-bar-batch-uninstall"
+        >
+          <Unlink className="size-3.5" />
+          {t("central.bulkBarBatchUninstall")}
         </Button>
         <Button
           type="button"

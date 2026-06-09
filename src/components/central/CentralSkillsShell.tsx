@@ -112,10 +112,12 @@ export interface CentralSkillsShellProps {
   bulkBar: {
     selectedCount: number;
     isInstalling: boolean;
+    isUninstalling: boolean;
     isDeleting: boolean;
     isAiBusy: boolean;
     aiTaggingAvailable: boolean;
     onBatchInstall: () => void;
+    onBatchUninstall: () => void;
     onBatchDelete: () => void;
     onClearSelection: () => void;
   };
@@ -565,11 +567,13 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       <BulkActionBar
         selectedCount={bulkBar.selectedCount}
         isInstalling={bulkBar.isInstalling}
+        isUninstalling={bulkBar.isUninstalling}
         isDeleting={bulkBar.isDeleting}
         isAiBusy={bulkBar.isAiBusy}
         aiTaggingAvailable={bulkBar.aiTaggingAvailable}
         t={t}
         onBatchInstall={bulkBar.onBatchInstall}
+        onBatchUninstall={bulkBar.onBatchUninstall}
         onBatchDelete={bulkBar.onBatchDelete}
         onOpenCategorize={categorizeDrawer.onOpenManual}
         onOpenAiSuggest={categorizeDrawer.onOpenAiSuggest}

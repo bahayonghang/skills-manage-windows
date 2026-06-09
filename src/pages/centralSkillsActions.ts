@@ -9,6 +9,11 @@ import { useCentralSkillsUpdateWorkflow } from "@/pages/centralSkillsUpdateWorkf
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
+import { useSkillStore } from "@/stores/skillStore";
+import type {
+  CentralBatchUninstallApplyResult,
+  CentralBatchUninstallPreview,
+} from "@/lib/centralBatchUninstall";
 import type {
   BatchDeleteCentralSkillPreviewResult,
   BatchInstallResult,
@@ -127,6 +132,9 @@ export function useCentralSkillsActions({
   const currentDetail = useSkillDetailStore((store) => store.detail);
   const refreshDetailInstallations = useSkillDetailStore(
     (store) => store.refreshInstallations,
+  );
+  const batchUninstallSkillsFromAgent = useSkillStore(
+    (store) => store.batchUninstallSkillsFromAgent,
   );
   const refreshCounts = usePlatformStore((store) => store.refreshCounts);
 
@@ -369,6 +377,84 @@ export function useCentralSkillsActions({
     }
   }
 
+  async function handleBatchUninstallCentralSkills(
+    preview: CentralBatchUninstallPreview,
+  ): Promise<CentralBatchUninstallApplyResult> {
+    if (preview.groups.length === 0) {
+      toast.info(t("central.batchUninstallNothingToDo"));
+      return {
+        succeeded: [],
+        failed: [],
+        skipped: preview.skippedSkills,
+        sharedRootLinks: preview.sharedRootLinks,
+      };
+    }
+
+    const succeeded: CentralBatchUninstallApplyResult["succeeded"] = [];
+    const failed: CentralBatchUninstallApplyResult["failed"] = [];
+
+    try {
+      for (const group of preview.groups) {
+        const result = await batchUninstallSkillsFromAgent(
+          group.agentId,
+          group.requests,
+        );
+        succeeded.push(
+          ...result.succeeded.map((item) => ({
+            skill_id: item.skill_id,
+            agent_id: group.agentId,
+          })),
+        );
+        failed.push(
+          ...result.failed.map((item) => ({
+            skill_id: item.skill_id,
+            agent_id: group.agentId,
+            error: item.error,
+          })),
+        );
+      }
+
+      await refreshCounts();
+      await loadCentralSkills();
+      if (
+        currentDetail?.id &&
+        preview.selectedSkillIds.includes(currentDetail.id)
+      ) {
+        await refreshDetailInstallations(currentDetail.id);
+      }
+
+      if (failed.length === 0) {
+        toast.success(
+          t("central.batchUninstallSuccess", {
+            succeeded: succeeded.length,
+            skipped: preview.skippedSkills.length,
+          }),
+        );
+        setSelectedSkillIds([]);
+      } else {
+        setSelectedSkillIds(
+          Array.from(new Set(failed.map((item) => item.skill_id))),
+        );
+        toast.error(
+          t("central.batchUninstallPartial", {
+            succeeded: succeeded.length,
+            failed: failed.length,
+          }),
+        );
+      }
+
+      return {
+        succeeded,
+        failed,
+        skipped: preview.skippedSkills,
+        sharedRootLinks: preview.sharedRootLinks,
+      };
+    } catch (err) {
+      toast.error(t("central.batchUninstallError", { error: String(err) }));
+      throw err;
+    }
+  }
+
   function handleToggleSelection(skillId: string) {
     setSelectedSkillIds((current) =>
       current.includes(skillId)
@@ -568,6 +654,7 @@ export function useCentralSkillsActions({
     handleCreateSkillTag,
     handleRemoveSkillTag,
     handleBatchInstallCentralSkills,
+    handleBatchUninstallCentralSkills,
     handleBulkSuggestTags,
     handleCancelAiTagJob,
     handleCreateManualTag,
