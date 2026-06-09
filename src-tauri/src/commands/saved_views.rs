@@ -9,6 +9,8 @@ use tauri::State;
 use crate::db::{self, DbPool, SavedView};
 use crate::AppState;
 
+use super::serde_helpers::deserialize_optional_optional_string;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSavedViewInput {
@@ -27,23 +29,9 @@ pub struct UpdateSavedViewInput {
     pub query: Option<String>,
     /// `Some(None)` 表示清空 icon；`None` 表示不变。前端发 `null` 字面量时 serde
     /// 会反序列化成 `Some(None)`，而省略字段反序列化为 `None`。
-    #[serde(default, deserialize_with = "deserialize_optional_optional")]
+    #[serde(default, deserialize_with = "deserialize_optional_optional_string")]
     pub icon: Option<Option<String>>,
     pub pinned: Option<bool>,
-}
-
-/// 双重 Option 反序列化：区分「字段缺失」与「字段为 null」。
-fn deserialize_optional_optional<'de, D>(
-    deserializer: D,
-) -> Result<Option<Option<String>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::Deserialize;
-    Option::<Option<String>>::deserialize(deserializer).or_else(|_| {
-        // 兜底：失败时按缺失处理
-        Ok(None)
-    })
 }
 
 // ─── impl layer (pool-driven, used by tests and command wrappers) ────────────

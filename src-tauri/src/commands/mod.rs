@@ -16,6 +16,7 @@ pub mod portable_state;
 pub mod projects;
 pub mod saved_views;
 pub mod scanner;
+pub(crate) mod serde_helpers;
 pub mod settings;
 pub mod skill_update_inventory;
 pub mod skills;

@@ -8,6 +8,8 @@ use tauri::State;
 use crate::db::{self, DbPool, TagGroup};
 use crate::AppState;
 
+use super::serde_helpers::deserialize_optional_optional_string;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateTagGroupInput {
@@ -21,18 +23,8 @@ pub struct CreateTagGroupInput {
 pub struct UpdateTagGroupInput {
     pub name: Option<String>,
     /// `Some(None)` 清空 color；`None` 不变。
-    #[serde(default, deserialize_with = "deserialize_optional_optional")]
+    #[serde(default, deserialize_with = "deserialize_optional_optional_string")]
     pub color: Option<Option<String>>,
-}
-
-fn deserialize_optional_optional<'de, D>(
-    deserializer: D,
-) -> Result<Option<Option<String>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::Deserialize;
-    Option::<Option<String>>::deserialize(deserializer).or_else(|_| Ok(None))
 }
 
 // ─── impl layer ──────────────────────────────────────────────────────────────
