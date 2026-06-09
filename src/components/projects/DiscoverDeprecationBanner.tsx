@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Info, X } from "lucide-react";
 
-import { invoke, isTauriRuntime } from "@/lib/tauri";
-
-const SETTING_KEY = "discover_deprecation_dismissed";
+import {
+  loadDiscoverDeprecationDismissed,
+  saveDiscoverDeprecationDismissed,
+} from "@/lib/discoverDeprecationPreference";
 
 export function DiscoverDeprecationBanner() {
   const { t } = useTranslation();
@@ -12,17 +13,11 @@ export function DiscoverDeprecationBanner() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!isTauriRuntime()) {
-      setHidden(true);
-      return;
-    }
     void (async () => {
       try {
-        const value = await invoke<string | null>("get_setting", {
-          key: SETTING_KEY,
-        });
+        const dismissed = await loadDiscoverDeprecationDismissed();
         if (cancelled) return;
-        setHidden(value === "true");
+        setHidden(dismissed);
       } catch {
         if (!cancelled) setHidden(false);
       }
@@ -36,9 +31,8 @@ export function DiscoverDeprecationBanner() {
 
   const dismiss = async () => {
     setHidden(true);
-    if (!isTauriRuntime()) return;
     try {
-      await invoke("set_setting", { key: SETTING_KEY, value: "true" });
+      await saveDiscoverDeprecationDismissed();
     } catch {
       // best-effort; the in-memory hide already happened
     }
