@@ -2,8 +2,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-use crate::commands::linker::copy_dir_all;
 use crate::db::{self, DbPool};
+use crate::services::installation::copy_dir_all;
 
 pub const CENTRAL_STORE_MIGRATION_SETTING_KEY: &str = "central_private_store_migration_v1";
 

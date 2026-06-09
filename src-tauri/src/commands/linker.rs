@@ -8,8 +8,8 @@
 //! 1. Translates `State<AppState>` + arguments into service calls.
 //! 2. Wraps every call with an `OperationLogEvent` recorder.
 //!
-//! Down-stream callers (commands/collections.rs, commands/discover.rs,
-//! commands/central_updates.rs, central_migration.rs) still see the same
+//! Down-stream callers (commands/collections.rs, commands/central_updates.rs)
+//! still see the same
 //! types and helpers under `commands::linker::*` because of the `pub use`
 //! bridge near the top of this file.
 
@@ -27,8 +27,8 @@ use crate::targets::{connect_remote_target, ActiveTarget};
 use crate::AppState;
 
 // Re-export the public surface so existing call-sites under `super::linker::*`
-// or `crate::commands::linker::*` (collections / discover / central_migration
-// / central_updates) keep compiling without changes.
+// or `crate::commands::linker::*` (collections / central_updates)
+// keep compiling without changes.
 pub use crate::services::installation::{
     batch_install_central_skills_impl, batch_uninstall_skills_from_agent_impl, copy_dir_all,
     create_symlink, install_skill_to_agent_auto_impl, install_skill_to_agent_copy_impl,
