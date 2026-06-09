@@ -113,9 +113,12 @@ describe("runtimeLogger", () => {
     enableTauriRuntime();
     installRuntimeLogger();
 
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
     console.error("console noise should stay local");
     await Promise.resolve();
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith("console noise should stay local");
     expect(invokeRaw).not.toHaveBeenCalled();
   });
 });
