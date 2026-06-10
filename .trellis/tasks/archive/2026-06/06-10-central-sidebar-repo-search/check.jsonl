@@ -1,0 +1,3 @@
+{"file":".trellis/spec/guides/index.md","reason":"Quality-check routing for code reuse and cross-layer thinking guides."}
+{"file":"PRODUCT.md","reason":"Verify the repository search keeps the product UI dense and task-focused."}
+{"file":"DESIGN.md","reason":"Verify the sidebar control follows SkillPort visual-system constraints."}
