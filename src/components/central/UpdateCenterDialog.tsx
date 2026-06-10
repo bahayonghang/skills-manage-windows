@@ -43,7 +43,7 @@ import {
   isRefreshScopeEnabled,
 } from "@/lib/updateCenterRefreshScope";
 import {
-  buildRepositoryDisplayNameMap,
+  buildRepositorySourceDisplayMap,
   buildSkillConflictSourceMap,
 } from "@/lib/centralConflictSource";
 
@@ -83,8 +83,8 @@ export function UpdateCenterDialog() {
     () => buildSkillConflictSourceMap(skills),
     [skills],
   );
-  const repositoryLabels = useMemo(
-    () => buildRepositoryDisplayNameMap(repositories),
+  const repositorySources = useMemo(
+    () => buildRepositorySourceDisplayMap(repositories),
     [repositories],
   );
 
@@ -322,7 +322,7 @@ export function UpdateCenterDialog() {
               decisions={decisions}
               handlers={handlers}
               existingSkillSources={existingSkillSources}
-              repositoryLabels={repositoryLabels}
+              repositorySources={repositorySources}
             />
           </div>
         </DialogBody>

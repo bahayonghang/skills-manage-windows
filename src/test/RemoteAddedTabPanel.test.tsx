@@ -34,7 +34,13 @@ describe("RemoteAddedTabPanel", () => {
         items={remoteAdded}
         state={{}}
         existingSkillSources={existingSkillSources}
-        repositoryLabels={new Map([["github-openai-skills-main", "openai/skills"]])}
+        repositorySources={new Map([[
+          "github-openai-skills-main",
+          {
+            label: "openai/skills",
+            url: "https://github.com/openai/skills",
+          },
+        ]])}
         onChange={vi.fn()}
       />
     );
@@ -45,5 +51,8 @@ describe("RemoteAddedTabPanel", () => {
         "冲突：远端 openai/skills/skills/conflicting ↔ 已有 Local Conflicting Skill（anthropic/skills/skills/conflicting）"
       )
     ).toBeInTheDocument();
+    expect(within(row).getByText("openai/skills")).toBeInTheDocument();
+    expect(within(row).getByText("skills/conflicting")).toBeInTheDocument();
+    expect(within(row).getByText("https://github.com/openai/skills")).toBeInTheDocument();
   });
 });

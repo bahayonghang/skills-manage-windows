@@ -4,8 +4,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { DuplicateResolution } from "@/types";
 import type { RemoteAddedSkill } from "@/types/skillUpdateInventory";
 import { remoteAddedKey } from "@/components/central/updateCenter/keys";
+import { SourceMeta } from "@/components/central/updateCenter/SourceMeta";
 import {
   formatConflictSourceLabel,
+  type RepositorySourceDisplayInfo,
   type SkillConflictSourceInfo,
 } from "@/lib/centralConflictSource";
 
@@ -19,7 +21,7 @@ interface RemoteAddedTabPanelProps {
   items: RemoteAddedSkill[];
   state: Record<string, RemoteAddedRowState>;
   existingSkillSources: ReadonlyMap<string, SkillConflictSourceInfo>;
-  repositoryLabels: ReadonlyMap<string, string>;
+  repositorySources: ReadonlyMap<string, RepositorySourceDisplayInfo>;
   onChange: (key: string, patch: Partial<RemoteAddedRowState>) => void;
 }
 
@@ -33,7 +35,7 @@ export function RemoteAddedTabPanel({
   items,
   state,
   existingSkillSources,
-  repositoryLabels,
+  repositorySources,
   onChange,
 }: RemoteAddedTabPanelProps) {
   const { t } = useTranslation();
@@ -47,8 +49,10 @@ export function RemoteAddedTabPanel({
         const existingConflict = item.conflictExistingSkillId
           ? existingSkillSources.get(item.conflictExistingSkillId)
           : null;
+        const source = repositorySources.get(item.repositoryId);
+        const repositoryLabel = source?.label ?? item.repositoryId;
         const remoteSource = formatConflictSourceLabel(
-          repositoryLabels.get(item.repositoryId) ?? item.repositoryId,
+          repositoryLabel,
           item.sourcePath,
           unassignedSourceLabel,
         );
@@ -65,9 +69,9 @@ export function RemoteAddedTabPanel({
         return (
           <article
             key={key}
-            className="rounded-xl border border-border bg-background p-3"
+            className="rounded-xl bg-background/80 p-3 ring-1 ring-border/80"
           >
-            <div className="flex items-start gap-3">
+            <div className="flex flex-wrap items-start gap-3">
               <Checkbox
                 checked={decision.selected}
                 onCheckedChange={(value) =>
@@ -79,9 +83,11 @@ export function RemoteAddedTabPanel({
                 <div className="text-sm font-medium text-foreground">
                   {item.skillName}
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {item.repositoryId} · {item.sourcePath}
-                </div>
+                <SourceMeta
+                  repositoryLabel={repositoryLabel}
+                  sourcePath={item.sourcePath}
+                  sourceUrl={source?.url}
+                />
                 {hasConflict && (
                   <div className="mt-1 text-xs text-warning-foreground">
                     {t("central.repositorySyncConflict", {
@@ -94,7 +100,7 @@ export function RemoteAddedTabPanel({
                   </div>
                 )}
               </div>
-              <div className="flex flex-wrap gap-1 text-xs">
+              <div className="flex w-full flex-wrap justify-end gap-1 text-xs sm:w-auto">
                 {RESOLUTIONS.map((resolution) => (
                   <button
                     key={resolution}

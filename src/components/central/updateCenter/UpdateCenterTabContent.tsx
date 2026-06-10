@@ -28,7 +28,10 @@ import {
 
 import type { UpdateCenterTab } from "@/stores/updateCenterStore";
 import type { SkillUpdateInventory } from "@/types/skillUpdateInventory";
-import type { SkillConflictSourceInfo } from "@/lib/centralConflictSource";
+import type {
+  RepositorySourceDisplayInfo,
+  SkillConflictSourceInfo,
+} from "@/lib/centralConflictSource";
 
 export interface UpdateCenterTabHandlers {
   updateUpdatable: (skillId: string, patch: Partial<UpdatableRowState>) => void;
@@ -51,7 +54,7 @@ interface UpdateCenterTabContentProps {
   decisions: DecisionState;
   handlers: UpdateCenterTabHandlers;
   existingSkillSources: ReadonlyMap<string, SkillConflictSourceInfo>;
-  repositoryLabels: ReadonlyMap<string, string>;
+  repositorySources: ReadonlyMap<string, RepositorySourceDisplayInfo>;
 }
 
 export function UpdateCenterTabContent({
@@ -60,7 +63,7 @@ export function UpdateCenterTabContent({
   decisions,
   handlers,
   existingSkillSources,
-  repositoryLabels,
+  repositorySources,
 }: UpdateCenterTabContentProps) {
   const { t } = useTranslation();
 
@@ -77,7 +80,7 @@ export function UpdateCenterTabContent({
   }
 
   if (tab === "failed") {
-    return <FailedRepositoriesPanel inventory={inventory} repositoryLabels={repositoryLabels} />;
+    return <FailedRepositoriesPanel inventory={inventory} repositorySources={repositorySources} />;
   }
 
   const counts = countsFromInventory(inventory);
@@ -95,6 +98,7 @@ export function UpdateCenterTabContent({
         <UpdatableTabPanel
           items={inventory.updatable}
           state={decisions.updatable}
+          repositorySources={repositorySources}
           onChange={handlers.updateUpdatable}
           onToggleAll={handlers.toggleAllUpdatable}
         />
@@ -105,7 +109,7 @@ export function UpdateCenterTabContent({
           items={inventory.remoteAdded}
           state={decisions.added}
           existingSkillSources={existingSkillSources}
-          repositoryLabels={repositoryLabels}
+          repositorySources={repositorySources}
           onChange={handlers.updateAdded}
         />
       );
@@ -114,6 +118,7 @@ export function UpdateCenterTabContent({
         <RemoteMissingTabPanel
           items={inventory.remoteMissing}
           state={decisions.missing}
+          repositorySources={repositorySources}
           onChange={handlers.updateMissing}
         />
       );
@@ -140,10 +145,10 @@ export function UpdateCenterTabContent({
 
 function FailedRepositoriesPanel({
   inventory,
-  repositoryLabels,
+  repositorySources,
 }: {
   inventory: SkillUpdateInventory;
-  repositoryLabels: ReadonlyMap<string, string>;
+  repositorySources: ReadonlyMap<string, RepositorySourceDisplayInfo>;
 }) {
   const { t } = useTranslation();
   if (inventory.failedRepositories.length === 0) {
@@ -161,7 +166,7 @@ function FailedRepositoriesPanel({
           className="rounded-lg border border-destructive/30 bg-destructive/5 p-3"
         >
           <div className="text-sm font-medium">
-            {repositoryLabels.get(item.repositoryId) ?? item.repositoryId}
+            {repositorySources.get(item.repositoryId)?.label ?? item.repositoryId}
           </div>
           <p className="mt-1 text-xs text-destructive">{item.error}</p>
         </div>

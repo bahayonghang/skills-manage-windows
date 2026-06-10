@@ -56,6 +56,28 @@ const repositories: SkillRepositoryWithStats[] = [
   },
 ];
 
+const searchableRepositories: SkillRepositoryWithStats[] = [
+  repositories[0],
+  {
+    ...repositories[0],
+    id: "github-openai-agents-main",
+    name: "openai/agents",
+    repo: "agents",
+    url: "https://github.com/openai/agents",
+    skill_count: 2,
+  },
+  {
+    ...repositories[0],
+    id: "github-anthropic-tools-main",
+    name: "anthropic/tools",
+    owner: "anthropic",
+    repo: "tools",
+    url: "https://github.com/anthropic/tools",
+    skill_count: 3,
+  },
+  repositories[1],
+];
+
 const facetCounts: FacetCounts = {
   repositories: {
     all: 2,
@@ -219,6 +241,82 @@ describe("CentralSidebar", () => {
 
     fireEvent.click(button);
     expect(onSyncNewSource).toHaveBeenCalled();
+  });
+
+  it("renders a localized repository search input in the repositories section", () => {
+    const { sidebar } = renderSidebar();
+
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+    expect(input).toHaveAccessibleName("搜索仓库");
+    expect(input).toHaveAttribute("placeholder", "搜索仓库...");
+  });
+
+  it("filters repositories by owner while keeping all matching owner rows", () => {
+    const { sidebar } = renderSidebar({ repositories: searchableRepositories });
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+
+    fireEvent.change(input, { target: { value: "openai" } });
+
+    expect(within(sidebar).getByTestId("owner-openai")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("repo-github-openai-skills-main")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("repo-github-openai-agents-main")).toBeInTheDocument();
+    expect(within(sidebar).queryByTestId("owner-anthropic")).not.toBeInTheDocument();
+    expect(within(sidebar).queryByTestId("repo-github-anthropic-tools-main")).not.toBeInTheDocument();
+  });
+
+  it("filters repositories by repo name and clears back to the full tree", () => {
+    const { sidebar } = renderSidebar({ repositories: searchableRepositories });
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+
+    fireEvent.change(input, { target: { value: "agents" } });
+
+    expect(input).toHaveValue("agents");
+    expect(within(sidebar).getByTestId("owner-openai")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("repo-github-openai-agents-main")).toBeInTheDocument();
+    expect(within(sidebar).queryByTestId("repo-github-openai-skills-main")).not.toBeInTheDocument();
+    expect(within(sidebar).queryByTestId("repo-github-anthropic-tools-main")).not.toBeInTheDocument();
+
+    fireEvent.click(within(sidebar).getByTestId("sidebar-repository-search-clear"));
+
+    expect(input).toHaveValue("");
+    expect(within(sidebar).getByTestId("repo-github-openai-skills-main")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("repo-github-openai-agents-main")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("repo-github-anthropic-tools-main")).toBeInTheDocument();
+  });
+
+  it("shows a localized empty state when repository search has no matches", () => {
+    const { sidebar } = renderSidebar({ repositories: searchableRepositories });
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+
+    fireEvent.change(input, { target: { value: "missing-repo" } });
+
+    expect(within(sidebar).getByText("没有匹配的仓库")).toBeInTheDocument();
+    expect(within(sidebar).queryByTestId("repo-github-openai-skills-main")).not.toBeInTheDocument();
+  });
+
+  it("selects a repository through the existing handler after filtering", () => {
+    const { sidebar, handlers } = renderSidebar({ repositories: searchableRepositories });
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+
+    fireEvent.change(input, { target: { value: "agents" } });
+    fireEvent.click(within(sidebar).getByTestId("repo-github-openai-agents-main"));
+
+    expect(handlers.onToggleRepo).toHaveBeenCalledWith("github-openai-agents-main");
+  });
+
+  it("keeps saved views, tag groups, and selection footer visible during repo search", () => {
+    const { sidebar } = renderSidebar({
+      repositories: searchableRepositories,
+      selectedRepos: ["github-openai-skills-main"],
+    });
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+
+    fireEvent.change(input, { target: { value: "missing-repo" } });
+
+    expect(within(sidebar).getByTestId("saved-view-fixture")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("tag-group-fixture")).toBeInTheDocument();
+    expect(within(sidebar).getByText("清空筛选")).toBeInTheDocument();
+    expect(within(sidebar).getByText("已应用 1 个筛选")).toBeInTheDocument();
   });
 });
 

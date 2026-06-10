@@ -9,7 +9,9 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  Search,
   Sparkles,
+  X,
 } from "lucide-react";
 import type { TFunction } from "i18next";
 
@@ -17,7 +19,10 @@ import { FacetItem } from "@/components/central/FacetItem";
 import { FacetSection } from "@/components/central/FacetSection";
 import { SidebarExpansionProvider } from "@/components/central/SidebarExpansionProvider";
 import type { SidebarExpansionSignal } from "@/components/central/sidebarExpansionContext";
-import { groupRepositoriesForSidebar } from "@/lib/centralRepositoryGroups";
+import {
+  filterRepositorySectionsForSearch,
+  groupRepositoriesForSidebar,
+} from "@/lib/centralRepositoryGroups";
 import { cn } from "@/lib/utils";
 import type { FacetCounts } from "@/lib/centralFacetCounts";
 import type { SkillRepositoryWithStats } from "@/types";
@@ -113,6 +118,7 @@ export function CentralSidebar({
   const [bulkExpansionSignal, setBulkExpansionSignal] =
     useState<SidebarExpansionSignal | null>(null);
   const [bulkExpanded, setBulkExpanded] = useState(true);
+  const [repositorySearchQuery, setRepositorySearchQuery] = useState("");
 
   const repoSelectionSet = new Set(selectedRepos);
   const tagSelectionSet = new Set(selectedTags);
@@ -208,6 +214,8 @@ export function CentralSidebar({
             onToggleTag={onToggleTag}
             tagSelectionSet={tagSelectionSet}
             repositorySections={repositorySections}
+            repositorySearchQuery={repositorySearchQuery}
+            onRepositorySearchQueryChange={setRepositorySearchQuery}
             repoSelectionSet={repoSelectionSet}
             repoUpdateCounts={repoUpdateCounts}
             onToggleRepo={onToggleRepo}
@@ -268,6 +276,8 @@ interface ExpandedSidebarContentProps {
   onToggleTag: (tagId: string) => void;
   tagSelectionSet: Set<string>;
   repositorySections: ReturnType<typeof groupRepositoriesForSidebar>;
+  repositorySearchQuery: string;
+  onRepositorySearchQueryChange: (query: string) => void;
   repoSelectionSet: Set<string>;
   repoUpdateCounts?: Record<string, number>;
   onToggleRepo: (id: string) => void;
@@ -295,6 +305,8 @@ function ExpandedSidebarContent({
   onToggleTag,
   tagSelectionSet,
   repositorySections,
+  repositorySearchQuery,
+  onRepositorySearchQueryChange,
   repoSelectionSet,
   repoUpdateCounts,
   onToggleRepo,
@@ -304,6 +316,12 @@ function ExpandedSidebarContent({
   selectedReposCount,
   selectedTagsCount,
 }: ExpandedSidebarContentProps) {
+  const filteredRepositorySections = filterRepositorySectionsForSearch(
+    repositorySections,
+    repositorySearchQuery
+  );
+  const isRepositorySearchActive = repositorySearchQuery.trim().length > 0;
+
   return (
     <>
       <div className="scrollbar-subtle min-h-0 flex-1 overflow-y-auto px-3 pb-6 pr-2">
@@ -422,12 +440,49 @@ function ExpandedSidebarContent({
               icon={<FolderGit2 className="size-3.5" />}
               testId="sidebar-section-repos"
             >
-              {repositorySections.length === 0 ? (
+              <div className="px-1 pb-1">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/70" />
+                  <input
+                    type="search"
+                    data-testid="sidebar-repository-search"
+                    value={repositorySearchQuery}
+                    onChange={(event) =>
+                      onRepositorySearchQueryChange(event.currentTarget.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape" && repositorySearchQuery) {
+                        event.preventDefault();
+                        onRepositorySearchQueryChange("");
+                      }
+                    }}
+                    aria-label={t("central.v2.repositorySearchLabel")}
+                    placeholder={t("central.v2.repositorySearchPlaceholder")}
+                    className="h-8 w-full rounded-md border border-border/70 bg-background py-1 pl-7 pr-7 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 hover:border-border focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
+                  />
+                  {isRepositorySearchActive && (
+                    <button
+                      type="button"
+                      data-testid="sidebar-repository-search-clear"
+                      aria-label={t("central.v2.repositorySearchClear")}
+                      onClick={() => onRepositorySearchQueryChange("")}
+                      className="absolute right-1 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {filteredRepositorySections.length === 0 ? (
                 <p className="px-2 text-[11px] text-muted-foreground">
-                  {t("central.v2.facetEmpty")}
+                  {t(
+                    isRepositorySearchActive
+                      ? "central.v2.repositorySearchEmpty"
+                      : "central.v2.facetEmpty"
+                  )}
                 </p>
               ) : (
-                repositorySections.map((section) => (
+                filteredRepositorySections.map((section) => (
                   <RepositorySectionBlock
                     key={section.kind}
                     section={section}
