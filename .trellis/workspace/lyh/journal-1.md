@@ -40,6 +40,48 @@ Implemented readable primary-text tokens for light themes, tuned Dashboard light
 - None - task complete
 
 
+## Session 11: Central sidebar repository search
+
+**Date**: 2026-06-10
+**Task**: `.trellis/tasks/archive/2026-06/06-10-central-sidebar-repo-search`
+**Branch**: `dev`
+
+### Summary
+
+Implemented the MVP repository search for the expanded Central sidebar. The search is local UI state only and filters the repository tree without changing global search, URL state, saved views, or backend data flow. The committed Central UI batch also includes source metadata rendering for update-center repository context.
+
+### Main Changes
+
+- Added grouped repository filtering in `src/lib/centralRepositoryGroups.ts`.
+- Added the expanded-sidebar repository search input and localized empty state in `src/components/central/CentralSidebar.tsx`.
+- Added English and Chinese `central.v2` repository-search strings.
+- Added unit and component tests for owner search, repo search, local/id matching, empty state, clearing, and selection after filtering.
+- Added update-center source metadata display coverage in the same Central UI batch.
+- Split the independent CollectionView export test stability fix into its own test commit.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d32e8dc` | `feat(中央技能库): [AI] ✨ 添加仓库搜索与来源元信息` |
+| `8360e0a` | `test(技能集): [AI] ✅ 稳定导出下载断言` |
+
+### Testing
+
+- [OK] `pnpm exec vitest run src/test/centralRepositoryGroups.test.ts src/test/CentralSidebar.test.tsx`
+- [OK] `pnpm typecheck`
+- [OK] `pnpm lint`
+- [OK] `just ci`
+
+### Status
+
+[OK] **Implemented, verified, and archived**
+
+### Next Steps
+
+- None - task archived.
+
+
 ## Session 2: AI Provider API Key Links
 
 **Date**: 2026-06-06
