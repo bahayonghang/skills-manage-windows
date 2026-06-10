@@ -255,18 +255,26 @@ describe("CollectionView", () => {
     // Mock URL.createObjectURL and anchor click
     const createObjectURL = vi.fn().mockReturnValue("blob:mock");
     const revokeObjectURL = vi.fn();
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
     Object.defineProperty(window, "URL", {
       value: { createObjectURL, revokeObjectURL },
       writable: true,
     });
 
-    renderCollectionView();
-    const exportButton = screen.getByRole("button", { name: /导出技能集/i });
-    fireEvent.click(exportButton);
+    try {
+      renderCollectionView();
+      const exportButton = screen.getByRole("button", { name: /导出技能集/i });
+      fireEvent.click(exportButton);
 
-    await waitFor(() => {
-      expect(mockExportCollection).toHaveBeenCalledWith("col-1");
-    });
+      await waitFor(() => {
+        expect(mockExportCollection).toHaveBeenCalledWith("col-1");
+      });
+      expect(anchorClick).toHaveBeenCalledOnce();
+    } finally {
+      anchorClick.mockRestore();
+    }
   });
 
   // ── Error State ───────────────────────────────────────────────────────────
