@@ -1,0 +1,349 @@
+# Journal - lyh (Part 1)
+
+> AI development session journal
+> Started: 2026-06-04
+
+---
+
+
+
+## Session 1: Claude Light color system audit
+
+**Date**: 2026-06-06
+**Task**: Claude Light color system audit
+**Branch**: `dev`
+
+### Summary
+
+Implemented readable primary-text tokens for light themes, tuned Dashboard light-theme material/glow treatment, adjusted Dashboard and Settings accent text usage, and added contrast regression tests. Verification passed earlier with typecheck, lint, targeted Vitest, just ci, and diff check.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1fda217` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 2: AI Provider API Key Links
+
+**Date**: 2026-06-06
+**Task**: AI Provider API Key Links
+**Branch**: `dev`
+
+### Summary
+
+Added official API key acquisition links in AI Provider settings, switched credential/runtime panels to a vertical flow, and verified with SettingsView tests, typecheck, lint, browser check, and just ci.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fb16a49` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 3: Add Grok agent target
+
+**Date**: 2026-06-06
+**Task**: Add Grok agent target
+**Branch**: `dev`
+
+### Summary
+
+Added Grok as an upstream-compatible independent built-in target with .grok/skills global/project paths, UI icon/visibility coverage, docs updates, and green just ci validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8dcff5d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 4: Optimize skill detail metadata panel
+
+**Date**: 2026-06-08
+**Task**: Optimize skill detail metadata panel
+**Branch**: `dev`
+
+### Summary
+
+Optimized the skill detail metadata sidebar by keeping primary local and GitHub source fields visible, moving raw technical paths into a collapsed details section, styling the folder action, adding i18n copy, and validating with focused tests plus just ci.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `abb4c86` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 5: Optimize Central Skills card grid
+
+**Date**: 2026-06-08
+**Task**: Optimize Central Skills card grid
+**Branch**: `dev`
+
+### Summary
+
+Optimized Central grouped and flat skill card grids to share an adaptive max-four-column contract, added regression coverage, and verified local gates plus browser layout.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `62bd517` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 6: Filter GitHub import test fixture skills
+
+**Date**: 2026-06-08
+**Task**: Filter GitHub import test fixture skills
+**Branch**: `dev`
+
+### Summary
+
+Implemented discovery-layer filtering for test/fixture path segments, added regression tests for compound-engineering-plugin-like snapshots, verified cargo test github_import and just ci before committing.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8fd4b87` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 7: Full Sweep frontend and backend optimization
+
+**Date**: 2026-06-09
+**Task**: Full Sweep frontend and backend optimization
+**Branch**: `dev`
+
+### Summary
+
+Completed a Brooks full sweep across src/ and src-tauri/, landed five work commits, archived the task, and recorded the verification history.
+
+### Main Changes
+
+Completed Brooks full sweep on src/ and src-tauri/.
+
+Committed five work batches:
+- refactor(中央技能库): [AI] ♻️ 抽取共享卡片 props 构造
+- refactor(前端设置): [AI] ♻️ 抽离 discover 偏好持久化 helper
+- test(运行时): [AI] ✅ 收敛 runtimeLogger 测试噪声
+- refactor(后端命令): [AI] ♻️ 提炼共享 serde 解析辅助
+- refactor(后端迁移): [AI] ♻️ 让 central_migration 复用 installation 的 copy_dir_all
+
+Verification remained green before and during commit work.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `30cff7f` | (see git log) |
+| `3e2d7a6` | (see git log) |
+| `4678643` | (see git log) |
+| `b704c88` | (see git log) |
+| `78c5646` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 8: Auto-resolve repo skill relocation
+
+**Date**: 2026-06-09
+**Task**: Auto-resolve repo skill relocation
+**Branch**: `dev`
+
+### Summary
+
+Implemented backend refresh-time relocation reconciliation for same-repo same-skill-id moves, added regression tests, and verified with targeted tests, clippy, and just ci.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a2cbb24` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 9: Central Skills batch platform uninstall
+
+**Date**: 2026-06-09
+**Task**: Central Skills batch platform uninstall
+**Branch**: `dev`
+
+### Summary
+
+Added Central Skills bulk uninstall from platforms, preserving Central records/files while skipping non-removable shared-root or not-installed selections; verified targeted tests and just ci.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0be016f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 10: Bootstrap Trellis project specs
+
+**Date**: 2026-06-09
+**Task**: Bootstrap Trellis project specs
+**Branch**: `dev`
+
+### Summary
+
+Filled backend and frontend Trellis spec docs for ref/skillshare with source-backed project conventions, examples, indexes, and bootstrap checklist completion; validated task context and just ci.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check applied refactors against project reuse guidance."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check cross-layer safety after frontend/backend edits."}
+{"file": ".trellis/spec/ref/skillshare/frontend/component-guidelines.md", "reason": "Verify frontend edits respect shared Central Skills grid sizing rules."}
+{"file": ".trellis/spec/ref/skillshare/backend/quality-guidelines.md", "reason": "Verify backend edits preserve GitHub import skip-segment rules."}

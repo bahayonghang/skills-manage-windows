@@ -13,9 +13,6 @@ src-tauri/target/
 .codex/
 .opencode/
 .cursor/
-.trellis/
-
-
 
 .vscode/
 *.db
