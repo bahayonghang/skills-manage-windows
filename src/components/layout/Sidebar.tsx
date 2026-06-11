@@ -16,9 +16,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { usePlatformStore } from "@/stores/platformStore";
-import {
-  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-} from "@/lib/platformVisibility";
+import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import {
   getPlatformTargetGroups,
   isUniversalPlatformTarget,
@@ -58,10 +56,13 @@ function NavItem({
         aria-current={isActive ? "page" : undefined}
         className={cn(
           "flex items-center w-full rounded-md transition-colors active:scale-[0.98] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
-          !isActive && "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+          !isActive &&
+            "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
           isActive &&
             "bg-sidebar-primary font-semibold text-sidebar-primary-foreground ring-1 ring-sidebar-primary/40 shadow-[inset_0_1px_0_color-mix(in_oklch,white_22%,transparent),0_10px_28px_color-mix(in_oklch,var(--sidebar-primary)_22%,transparent)] bg-[linear-gradient(145deg,color-mix(in_oklch,var(--sidebar-primary)_94%,white_12%),color-mix(in_oklch,var(--sidebar-primary)_82%,black_14%))]",
-          expanded ? "gap-2.5 px-2.5 py-1.5 text-sm" : "justify-center py-2 px-1.5"
+          expanded
+            ? "gap-2.5 px-2.5 py-1.5 text-sm"
+            : "justify-center py-2 px-1.5",
         )}
       >
         <span className="shrink-0">{icon}</span>
@@ -69,12 +70,14 @@ function NavItem({
           <>
             <span className="truncate flex-1 text-left">{label}</span>
             {count !== undefined && count > 0 && (
-              <span className={cn(
-                "text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded-full shrink-0",
-                isActive
-                  ? "bg-sidebar-primary-foreground/25 text-sidebar-primary-foreground ring-1 ring-sidebar-primary-foreground/25"
-                  : "bg-muted/60 text-muted-foreground"
-              )}>
+              <span
+                className={cn(
+                  "text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded-full shrink-0",
+                  isActive
+                    ? "bg-sidebar-primary-foreground/25 text-sidebar-primary-foreground ring-1 ring-sidebar-primary-foreground/25"
+                    : "bg-muted/60 text-muted-foreground",
+                )}
+              >
                 {count}
               </span>
             )}
@@ -97,18 +100,18 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { t } = useTranslation();
-  const {
-    agents,
-    skillsByAgent,
-    collectionCount,
-    isLoading,
-    isRefreshing,
-    scanState,
-  } = usePlatformStore();
-  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+  const agents = usePlatformStore((s) => s.agents);
+  const skillsByAgent = usePlatformStore((s) => s.skillsByAgent);
+  const collectionCount = usePlatformStore((s) => s.collectionCount);
+  const isLoading = usePlatformStore((s) => s.isLoading);
+  const isRefreshing = usePlatformStore((s) => s.isRefreshing);
+  const scanState = usePlatformStore((s) => s.scanState);
+  const categoryVisibility =
+    usePlatformStore((s) => s.categoryVisibility) ??
+    DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
 
   const [expanded, setExpanded] = useState(() =>
-    typeof window === "undefined" ? true : window.innerWidth >= 768
+    typeof window === "undefined" ? true : window.innerWidth >= 768,
   );
   const {
     width: sidebarWidth,
@@ -119,7 +122,9 @@ export function Sidebar() {
     minWidth: MIN_SIDEBAR_WIDTH,
     maxWidth: MAX_SIDEBAR_WIDTH,
   });
-  const resolvedSidebarWidth = expanded ? sidebarWidth : COLLAPSED_SIDEBAR_WIDTH;
+  const resolvedSidebarWidth = expanded
+    ? sidebarWidth
+    : COLLAPSED_SIDEBAR_WIDTH;
 
   useEffect(() => {
     if (!isLoading && agents.length > 0) {
@@ -164,7 +169,7 @@ export function Sidebar() {
   return (
     <nav
       className={cn(
-        "relative flex flex-col shrink-0 h-full border-r border-border bg-sidebar text-sidebar-foreground"
+        "relative flex flex-col shrink-0 h-full border-r border-border bg-sidebar text-sidebar-foreground",
       )}
       style={{ width: resolvedSidebarWidth }}
       aria-label={t("sidebar.mainNav")}
@@ -173,7 +178,7 @@ export function Sidebar() {
       <div
         className={cn(
           "flex items-center border-b border-border",
-          expanded ? "justify-between px-3 py-2" : "justify-center py-2"
+          expanded ? "justify-between px-3 py-2" : "justify-center py-2",
         )}
       >
         {expanded && (
@@ -185,10 +190,14 @@ export function Sidebar() {
           onClick={() => setExpanded((e) => !e)}
           className={cn(
             "p-1 rounded-md transition-colors cursor-pointer",
-            "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            "text-muted-foreground hover:text-foreground hover:bg-muted/60",
           )}
-          aria-label={expanded ? t("sidebar.collapseSidebar") : t("sidebar.expandSidebar")}
-          title={expanded ? t("sidebar.collapseSidebar") : t("sidebar.expandSidebar")}
+          aria-label={
+            expanded ? t("sidebar.collapseSidebar") : t("sidebar.expandSidebar")
+          }
+          title={
+            expanded ? t("sidebar.collapseSidebar") : t("sidebar.expandSidebar")
+          }
         >
           {expanded ? (
             <ChevronLeft className="size-4" />
@@ -219,24 +228,24 @@ export function Sidebar() {
           count={skillsByAgent["central"]}
         />
 
-          {/* Projects (project-level skill management) */}
-          <NavItem
-            label={t("sidebar.projects")}
-            isActive={pathname.startsWith("/projects")}
-            onClick={() => navigate("/projects")}
-            icon={<FolderOpen className="size-4" />}
-            expanded={expanded}
-          />
+        {/* Projects (project-level skill management) */}
+        <NavItem
+          label={t("sidebar.projects")}
+          isActive={pathname.startsWith("/projects")}
+          onClick={() => navigate("/projects")}
+          icon={<FolderOpen className="size-4" />}
+          expanded={expanded}
+        />
 
-          <NavItem
-            label={t("sidebar.obsidian")}
-            isActive={pathname.startsWith("/obsidian")}
-            onClick={() => navigate("/obsidian")}
-            icon={<Blocks className="size-4" />}
-            expanded={expanded}
-          />
+        <NavItem
+          label={t("sidebar.obsidian")}
+          isActive={pathname.startsWith("/obsidian")}
+          onClick={() => navigate("/obsidian")}
+          icon={<Blocks className="size-4" />}
+          expanded={expanded}
+        />
 
-          {/* Marketplace */}
+        {/* Marketplace */}
         <NavItem
           label={t("marketplace.title")}
           isActive={pathname === "/marketplace"}
@@ -278,10 +287,12 @@ export function Sidebar() {
 
         {/* Platform icons */}
         {isLoading ? (
-          <div className={cn(
-            "flex items-center py-2 text-muted-foreground text-sm",
-            expanded ? "gap-2 px-2.5" : "justify-center"
-          )}>
+          <div
+            className={cn(
+              "flex items-center py-2 text-muted-foreground text-sm",
+              expanded ? "gap-2 px-2.5" : "justify-center",
+            )}
+          >
             <Loader2 className="size-4 animate-spin shrink-0" />
             {expanded && <span>{t("sidebar.scanning")}</span>}
           </div>
@@ -307,7 +318,9 @@ export function Sidebar() {
                     }
                     isActive={pathname === platformRoute(agent)}
                     onClick={() => navigate(platformRoute(agent))}
-                    icon={<PlatformIcon agentId={agent.id} className="size-4" />}
+                    icon={
+                      <PlatformIcon agentId={agent.id} className="size-4" />
+                    }
                     expanded={expanded}
                     count={platformCount(agent)}
                   />
@@ -335,7 +348,9 @@ export function Sidebar() {
                     }
                     isActive={pathname === platformRoute(agent)}
                     onClick={() => navigate(platformRoute(agent))}
-                    icon={<PlatformIcon agentId={agent.id} className="size-4" />}
+                    icon={
+                      <PlatformIcon agentId={agent.id} className="size-4" />
+                    }
                     expanded={expanded}
                     count={platformCount(agent)}
                   />
@@ -346,10 +361,12 @@ export function Sidebar() {
         )}
 
         {!isLoading && (isRefreshing || scanState === "refreshing") && (
-          <div className={cn(
-            "flex items-center py-2 text-muted-foreground text-sm",
-            expanded ? "gap-2 px-2.5" : "justify-center"
-          )}>
+          <div
+            className={cn(
+              "flex items-center py-2 text-muted-foreground text-sm",
+              expanded ? "gap-2 px-2.5" : "justify-center",
+            )}
+          >
             <Loader2 className="size-4 animate-spin shrink-0" />
             {expanded && <span>{t("sidebar.scanning")}</span>}
           </div>

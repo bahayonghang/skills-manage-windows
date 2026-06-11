@@ -7,7 +7,6 @@ import { ProjectInstallDialog } from "@/components/projects/ProjectInstallDialog
 import { ProjectRemoveDialog } from "@/components/projects/ProjectRemoveDialog";
 import { ProjectRenameDialog } from "@/components/projects/ProjectRenameDialog";
 import { ProjectsShell } from "@/components/projects/ProjectsShell";
-import { DiscoverDeprecationBanner } from "@/components/projects/DiscoverDeprecationBanner";
 import { getProjectPlatformTargetGroups } from "@/lib/platformTargetGroups";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { usePlatformStore } from "@/stores/platformStore";
@@ -29,10 +28,10 @@ export function ProjectsView() {
   const rescanProject = useProjectsStore((s) => s.rescanProject);
   const getProjectSkills = useProjectsStore((s) => s.getProjectSkills);
   const installSkillToProject = useProjectsStore(
-    (s) => s.installSkillToProject
+    (s) => s.installSkillToProject,
   );
   const uninstallSkillFromProject = useProjectsStore(
-    (s) => s.uninstallSkillFromProject
+    (s) => s.uninstallSkillFromProject,
   );
   const setPinned = useProjectsStore((s) => s.setPinned);
   const renameProjectAction = useProjectsStore((s) => s.renameProject);
@@ -52,7 +51,7 @@ export function ProjectsView() {
   const [centralSkills, setCentralSkills] = useState<SkillWithLinks[]>([]);
   const [isInstalling, setIsInstalling] = useState(false);
   const [uninstallingKeys, setUninstallingKeys] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [removeTarget, setRemoveTarget] = useState<Project | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
@@ -76,25 +75,25 @@ export function ProjectsView() {
   }, [currentProjectId, getProjectSkills, scanningProjectIds]);
 
   const currentSkills = useMemo(
-    () => (currentProjectId ? skillsByProject[currentProjectId] ?? [] : []),
-    [currentProjectId, skillsByProject]
+    () => (currentProjectId ? (skillsByProject[currentProjectId] ?? []) : []),
+    [currentProjectId, skillsByProject],
   );
 
   const currentProject = useMemo(
     () => projects.find((p) => p.id === currentProjectId) ?? null,
-    [projects, currentProjectId]
+    [projects, currentProjectId],
   );
 
   const projectPlatformTargets = useMemo(
     () => getProjectPlatformTargetGroups(agents, categoryVisibility),
-    [agents, categoryVisibility]
+    [agents, categoryVisibility],
   );
 
   const handleSelectProject = useCallback(
     (id: string) => {
       navigate(`/projects/${encodeURIComponent(id)}`);
     },
-    [navigate]
+    [navigate],
   );
 
   const handleAddProject = useCallback(async () => {
@@ -124,7 +123,7 @@ export function ProjectsView() {
         toast.error(t("projects.rescanError", { error: String(err) }));
       }
     },
-    [rescanProject, getProjectSkills, t]
+    [rescanProject, getProjectSkills, t],
   );
 
   const handleOpenInstallDialog = useCallback(async () => {
@@ -139,11 +138,7 @@ export function ProjectsView() {
   }, [currentProject, fetchCentralSkillsList, t]);
 
   const handleConfirmInstall = useCallback(
-    async (
-      skillId: string,
-      agentIds: string[],
-      method: "symlink" | "copy"
-    ) => {
+    async (skillId: string, agentIds: string[], method: "symlink" | "copy") => {
       if (!currentProject) return;
       setIsInstalling(true);
       try {
@@ -154,7 +149,7 @@ export function ProjectsView() {
               currentProject.id,
               skillId,
               agentId,
-              method
+              method,
             );
           } catch (err) {
             failures.push(`${agentId}: ${String(err)}`);
@@ -165,20 +160,20 @@ export function ProjectsView() {
             t("projectInstall.installedSummary", {
               skill: skillId,
               count: agentIds.length,
-            })
+            }),
           );
         } else {
           toast.error(
             t("projectInstall.installedPartial", {
               failed: failures.join("; "),
-            })
+            }),
           );
         }
       } finally {
         setIsInstalling(false);
       }
     },
-    [currentProject, installSkillToProject, t]
+    [currentProject, installSkillToProject, t],
   );
 
   const handleUninstallSkill = useCallback(
@@ -190,20 +185,20 @@ export function ProjectsView() {
         await uninstallSkillFromProject(
           currentProject.id,
           skill.skillId,
-          skill.agentId
+          skill.agentId,
         );
         toast.success(
           t("projects.uninstallSuccess", {
             skill: skill.name,
             agent: skill.agentDisplayName,
-          })
+          }),
         );
       } catch (err) {
         toast.error(
           t("projects.uninstallError", {
             skill: skill.name,
             error: String(err),
-          })
+          }),
         );
       } finally {
         setUninstallingKeys((prev) => {
@@ -213,7 +208,7 @@ export function ProjectsView() {
         });
       }
     },
-    [currentProject, uninstallSkillFromProject, t]
+    [currentProject, uninstallSkillFromProject, t],
   );
 
   const handleTogglePin = useCallback(
@@ -224,7 +219,7 @@ export function ProjectsView() {
         toast.error(String(err));
       }
     },
-    [setPinned]
+    [setPinned],
   );
 
   const handleRequestRename = useCallback((project: Project) => {
@@ -245,7 +240,7 @@ export function ProjectsView() {
         setIsRenaming(false);
       }
     },
-    [renameTarget, renameProjectAction, t]
+    [renameTarget, renameProjectAction, t],
   );
 
   const handleRequestRemove = useCallback((project: Project) => {
@@ -270,12 +265,11 @@ export function ProjectsView() {
         setIsRemoving(false);
       }
     },
-    [removeTarget, removeProjectAction, currentProjectId, navigate, t]
+    [removeTarget, removeProjectAction, currentProjectId, navigate, t],
   );
 
   return (
     <div className="flex h-full flex-col min-h-0">
-      <DiscoverDeprecationBanner />
       <div className="flex-1 min-h-0 overflow-hidden">
         <ProjectsShell
           projects={projects}

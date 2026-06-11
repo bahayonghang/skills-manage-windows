@@ -2067,9 +2067,6 @@
     "renameSave": "保存",
     "renameError": "重命名失败：{{error}}",
     "renameSuccess": "已更新项目名称",
-    "discoverDeprecatedTitle": "Discover 已合并到「项目」",
-    "discoverDeprecatedBody": "全盘扫描已下线。手动添加项目后单点扫描即可。",
-    "discoverDeprecatedDismiss": "知道了",
     "sourceOrigin": {
       "central": "中央库安装",
       "project": "项目原有"

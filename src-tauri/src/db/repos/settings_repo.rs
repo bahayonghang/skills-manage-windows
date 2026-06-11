@@ -62,6 +62,15 @@ pub async fn set_setting(pool: &DbPool, key: &str, value: &str) -> Result<(), St
         .map_err(|e| e.to_string())
 }
 
+/// Set (upsert) a setting value on a best-effort basis: failures are logged
+/// via `tracing` instead of propagating, for bookkeeping writes (e.g. scan
+/// state markers) that must not abort the surrounding operation.
+pub async fn set_setting_best_effort(pool: &DbPool, key: &str, value: &str) {
+    if let Err(error) = set_setting(pool, key, value).await {
+        tracing::warn!(key, error = %error, "Failed to persist setting (best-effort)");
+    }
+}
+
 /// Delete a setting value by key.
 pub async fn delete_setting(pool: &DbPool, key: &str) -> Result<(), String> {
     sqlx::query("DELETE FROM settings WHERE key = ?")

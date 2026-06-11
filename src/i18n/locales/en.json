@@ -2067,9 +2067,6 @@
     "renameSave": "Save",
     "renameError": "Failed to rename: {{error}}",
     "renameSuccess": "Project name updated",
-    "discoverDeprecatedTitle": "Discover has moved into Projects",
-    "discoverDeprecatedBody": "Full-disk scanning is retired. Add a project manually and SkillPort will scan it on the spot.",
-    "discoverDeprecatedDismiss": "Got it",
     "sourceOrigin": {
       "central": "Central library install",
       "project": "Project original"

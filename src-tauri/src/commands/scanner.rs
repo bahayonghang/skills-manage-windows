@@ -46,7 +46,7 @@ pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, S
     let active_target = state.active_target().await?;
     let target_context = target_context_from_active_target(&active_target);
     let pool = state.active_db().await?;
-    let _ = db::set_setting(&pool, "scan_state", "refreshing").await;
+    db::set_setting_best_effort(&pool, "scan_state", "refreshing").await;
     let started_at = Instant::now();
 
     let scan_result = match active_target {
@@ -63,8 +63,8 @@ pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, S
     match scan_result {
         Ok(result) => {
             let completed_at = Utc::now().to_rfc3339();
-            let _ = db::set_setting(&pool, "scan_last_completed_at", &completed_at).await;
-            let _ = db::set_setting(&pool, "scan_state", "idle").await;
+            db::set_setting_best_effort(&pool, "scan_last_completed_at", &completed_at).await;
+            db::set_setting_best_effort(&pool, "scan_state", "idle").await;
             record_operation_log_best_effort(
                 &state.db,
                 target_context,
@@ -89,7 +89,7 @@ pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, S
             Ok(result)
         }
         Err(error) => {
-            let _ = db::set_setting(&pool, "scan_state", "error").await;
+            db::set_setting_best_effort(&pool, "scan_state", "error").await;
             record_operation_log_best_effort(
                 &state.db,
                 target_context,

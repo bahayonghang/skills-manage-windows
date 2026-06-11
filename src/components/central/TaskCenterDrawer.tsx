@@ -72,7 +72,7 @@ export function TaskCenterDrawer({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal keepMounted={false}>
-        <DialogOverlay className="bg-black/20" />
+        <DialogOverlay className="bg-overlay" />
         <DialogPrimitive.Popup
           data-testid="central-task-center-drawer"
           role="dialog"

@@ -8,7 +8,10 @@ module.exports = [
   {
     ignores: [
       "dist",
-      ".eslintrc.cjs",
+      "node_modules/**",
+      "src-tauri/target/**",
+      "tmp/**",
+      "outputs/**",
       "ref/**",
       "docs/.vitepress/cache/**",
       "docs/.vitepress/dist/**",
