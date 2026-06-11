@@ -423,3 +423,38 @@ Filled backend and frontend Trellis spec docs for ref/skillshare with source-bac
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: 优化更新机制重构
+
+**Date**: 2026-06-11
+**Task**: 优化更新机制重构
+**Branch**: `dev`
+
+### Summary
+
+重构 Update Center 刷新、inventory 与 baseline 语义，新增强制更新和仓库强制镜像同步，拆分任务记录并通过 just ci 验证。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0b9edba` | (see git log) |
+| `aacf783` | (see git log) |
+| `e2357cd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

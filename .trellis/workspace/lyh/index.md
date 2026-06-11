@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-06-11
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~425 | Active |
+| `journal-1.md` | ~460 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-06-11 | 优化更新机制重构 | `0b9edba`, `aacf783`, `e2357cd` | `dev` |
 | 11 | 2026-06-11 | 优化中央技能标签机制 | `b7fb4a4`, `1a22060` | `dev` |
 | 10 | 2026-06-09 | Bootstrap Trellis project specs | - | `dev` |
 | 9 | 2026-06-09 | Central Skills batch platform uninstall | `0be016f` | `dev` |
