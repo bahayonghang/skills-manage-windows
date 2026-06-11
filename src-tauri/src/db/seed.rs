@@ -227,6 +227,47 @@ async fn seed_builtin_skill_metadata(pool: &DbPool) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     }
 
+    prune_obsolete_builtin_skill_tags(pool).await?;
+
+    Ok(())
+}
+
+async fn prune_obsolete_builtin_skill_tags(pool: &DbPool) -> Result<(), String> {
+    let current_ids: std::collections::HashSet<&str> = builtin_skill_tags()
+        .into_iter()
+        .map(|(id, _, _, _)| id)
+        .collect();
+    let obsolete_ids: Vec<(String,)> =
+        sqlx::query_as::<_, (String,)>("SELECT id FROM skill_tags WHERE is_builtin = 1")
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .filter(|(id,)| !current_ids.contains(id.as_str()))
+            .collect();
+    if obsolete_ids.is_empty() {
+        return Ok(());
+    }
+
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    for (id,) in obsolete_ids {
+        sqlx::query("DELETE FROM skill_tag_links WHERE tag_id = ?")
+            .bind(&id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        sqlx::query("DELETE FROM skill_ai_tag_reviews WHERE tag_id = ?")
+            .bind(&id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        sqlx::query("DELETE FROM skill_tags WHERE id = ? AND is_builtin = 1")
+            .bind(&id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    tx.commit().await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -234,53 +275,13 @@ pub(crate) fn builtin_skill_tags() -> Vec<(&'static str, &'static str, &'static 
 {
     vec![
         (
-            "programming-agent-engineering",
-            "编程与 Agent 工程",
-            "Coding agents, developer tools, automation, and agent engineering skills.",
-            "#7c3aed",
-        ),
-        (
-            "frontend-visual-design",
-            "前端与视觉设计",
-            "Frontend, UI, UX, visual generation, and interaction design skills.",
-            "#2563eb",
-        ),
-        (
-            "academic-research-writing",
+            ACADEMIC_RESEARCH_WRITING_TAG_ID,
             "学术研究与写作",
             "Paper search, academic writing, slides, and research workflows.",
             "#0891b2",
         ),
-        (
-            "data-analysis-finance",
-            "数据分析与金融",
-            "Data analysis, quantitative finance, markets, and reporting skills.",
-            "#059669",
-        ),
-        (
-            "biomed-research-databases",
-            "生物医药与科研数据库",
-            "Biomedical, chemistry, omics, and scientific database skills.",
-            "#16a34a",
-        ),
-        (
-            "docs-office-knowledge",
-            "文档办公与知识管理",
-            "Documents, office workflows, notes, and knowledge management skills.",
-            "#f59e0b",
-        ),
-        (
-            "business-bid-policy",
-            "业务/投标/政策",
-            "Business writing, bids, policy briefs, and enterprise workflows.",
-            "#dc2626",
-        ),
-        (
-            "ops-security-release",
-            "运行维护/安全/发布",
-            "Ops, security, release, CI, and production maintenance skills.",
-            "#475569",
-        ),
+        // System fallback retained for smart views and AI fallback, not a
+        // visible ordinary category.
         (
             UNCATEGORIZED_TAG_ID,
             "未分类",

@@ -20,15 +20,24 @@ const tags: SkillTag[] = [
     created_at: "",
     updated_at: "",
   },
+  {
+    id: "uncategorized",
+    name: "未分类",
+    is_builtin: true,
+    created_at: "",
+    updated_at: "",
+  },
 ];
 
 const facetCounts: FacetCounts = {
   repositories: { all: 1 },
-  tags: { t1: 3 },
+  tags: { t1: 3, uncategorized: 1 },
   smartViews: { all: 1, uncategorized: 0, updates: 0, aiReview: 0 },
 };
 
-function renderFilters(overrides: Partial<Parameters<typeof CentralTopFilters>[0]> = {}) {
+function renderFilters(
+  overrides: Partial<Parameters<typeof CentralTopFilters>[0]> = {},
+) {
   const props = {
     t,
     tags,
@@ -50,6 +59,13 @@ describe("CentralTopFilters", () => {
     renderFilters({ onToggleTag });
     await userEvent.click(screen.getByTestId("top-filter-tag-t1"));
     expect(onToggleTag).toHaveBeenCalledWith("t1");
+  });
+
+  it("不把 uncategorized 当作普通标签 pill 渲染", () => {
+    renderFilters();
+    expect(
+      screen.queryByTestId("top-filter-tag-uncategorized"),
+    ).not.toBeInTheDocument();
   });
 
   it("点击来源 pill 切换来源", async () => {

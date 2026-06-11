@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { useMemo } from "react";
 import { groupSkillsByMode } from "@/lib/centralGrouping";
 import type { FacetCounts } from "@/lib/centralFacetCounts";
+import { sanitizeSelectedTagIds } from "@/lib/centralTags";
 import type { CentralViewState, GroupByMode } from "@/lib/centralViewState";
 import { CentralGroupedSkillList } from "./CentralGroupedSkillList";
 import type {
@@ -215,6 +216,11 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   } = props;
 
   const openUpdateCenter = useUpdateCenterStore((s) => s.openDialog);
+  const selectedTagIds = useMemo(
+    () =>
+      tags.length > 0 ? sanitizeSelectedTagIds(viewState.tags, tags) : viewState.tags,
+    [tags, viewState.tags],
+  );
   const updateCenterRefreshContext = useMemo(() => {
     const selectedRepoId =
       viewState.repos.length === 1 ? viewState.repos[0] : null;
@@ -237,7 +243,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   };
 
   const handleToggleTag = (tagId: string) => {
-    const next = toggleId(viewState.tags, tagId);
+    const next = toggleId(selectedTagIds, tagId);
     setViewState({ ...viewState, tags: next });
   };
 
@@ -291,7 +297,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   const handleRemoveTag = (tagId: string) => {
     setViewState({
       ...viewState,
-      tags: viewState.tags.filter((id) => id !== tagId),
+      tags: selectedTagIds.filter((id) => id !== tagId),
     });
   };
 
@@ -426,7 +432,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
               onClear={handleQueryClear}
               onOpenPalette={onOpenPalette}
               selectedRepoIds={viewState.repos}
-              selectedTagIds={viewState.tags}
+              selectedTagIds={selectedTagIds}
               repositories={repositories}
               tags={tags}
               onRemoveRepoFilter={handleRemoveRepo}
@@ -515,7 +521,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       <CentralTopFilters
         t={t}
         tags={tags}
-        selectedTagIds={viewState.tags}
+        selectedTagIds={selectedTagIds}
         onToggleTag={handleToggleTag}
         facetCounts={facetCounts}
         activeSource={activeSource}
@@ -537,7 +543,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           onToggleRepositoryPin={onToggleRepositoryPin}
           onSyncNewSource={() => setIsGitHubImportOpen(true)}
           selectedRepos={viewState.repos}
-          selectedTags={viewState.tags}
+          selectedTags={selectedTagIds}
           onToggleRepo={handleToggleRepo}
           onToggleTag={handleToggleTag}
           onClearAll={handleClearAll}

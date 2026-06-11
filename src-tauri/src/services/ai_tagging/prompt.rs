@@ -2,7 +2,7 @@ use reqwest::Client;
 use serde_json::Value;
 
 use crate::{
-    db::{Skill, SkillTag, UNCATEGORIZED_TAG_ID},
+    db::{Skill, SkillTag, ACADEMIC_RESEARCH_WRITING_TAG_ID, UNCATEGORIZED_TAG_ID},
     services::ai_provider,
 };
 
@@ -38,7 +38,7 @@ pub(crate) async fn suggest_skill_tags_for_skill(
     map_ai_suggestions(&skill.id, &context.tags, parsed)
 }
 
-fn build_tagging_prompt(
+pub(crate) fn build_tagging_prompt(
     name: &str,
     description: Option<&str>,
     content: &str,
@@ -46,16 +46,27 @@ fn build_tagging_prompt(
 ) -> String {
     let candidates = tags
         .iter()
-        .map(|tag| format!("- {} ({})", tag.name, tag.id))
+        .filter(|tag| !tag.is_builtin || tag.id == ACADEMIC_RESEARCH_WRITING_TAG_ID)
+        .map(|tag| {
+            let kind = if tag.is_builtin { "built-in" } else { "custom" };
+            let description = tag.description.as_deref().unwrap_or("无");
+            format!(
+                "- id: {} | name: {} | kind: {} | description: {}",
+                tag.id, tag.name, kind, description
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n");
     let summary = content.chars().take(4_000).collect::<String>();
 
     format!(
-        "你是 SkillPort 的本地分类器。请只从候选大类中选择 1 到 3 个标签。\n\
+        "你是 SkillPort 的本地分类器。请只从候选标签中选择 0 到 3 个标签。\n\
+         只能输出候选列表中的 tag id，不要输出名称、翻译、同义词或新标签。\n\
+         优先复用最具体的已有 custom 标签；只有强匹配时 confidence 才能 >= 0.7。\n\
+         没有明确匹配时返回 {{\"tags\":[]}}，不要为了凑数选择宽泛默认标签。\n\
          输出必须是 JSON，不要解释额外文本。\n\
-         JSON 格式：{{\"tags\":[{{\"tag\":\"标签名或ID\",\"confidence\":0.0,\"reason\":\"不超过20字\"}}]}}\n\n\
-         候选大类：\n{candidates}\n\n\
+         JSON 格式：{{\"tags\":[{{\"tag\":\"候选标签ID\",\"confidence\":0.0,\"reason\":\"不超过20字\"}}]}}\n\n\
+         候选标签：\n{candidates}\n\n\
          Skill 名称：{name}\n\
          Description：{}\n\
          SKILL.md 摘要：\n{}",
@@ -186,6 +197,9 @@ pub(crate) fn map_ai_suggestions(
     let mut suggestions = Vec::new();
     for item in raw {
         let key = item.tag.trim();
+        if key == UNCATEGORIZED_TAG_ID {
+            continue;
+        }
         let Some(tag) = tags
             .iter()
             .find(|tag| tag.id == key || tag.name == key)

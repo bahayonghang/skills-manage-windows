@@ -2,6 +2,7 @@ import type { TFunction } from "i18next";
 
 import type { UnifiedSkillCardProps } from "@/components/skill/UnifiedSkillCard";
 import { statusAccentOf } from "@/lib/centralSkillCardStatus";
+import { getVisibleSkillTags } from "@/lib/centralTags";
 import type { CentralSkillUpdateState, SkillWithLinks } from "@/types";
 
 interface CentralSkillCardTag {
@@ -34,12 +35,12 @@ export function buildCentralSkillCardProps(
   skill: SkillWithLinks,
   context: CentralSkillCardPropsContext,
 ): UnifiedSkillCardProps {
-  const skillTags = (skill.tags ?? []).map((tag) => ({
+  const skillTags = getVisibleSkillTags(skill.tags ?? []).map((tag) => ({
     id: tag.id,
     name: tag.name,
     color: tag.color,
   }));
-  const allTags = (context.tags ?? []).map((tag) => ({
+  const allTags = getVisibleSkillTags(context.tags ?? []).map((tag) => ({
     id: tag.id,
     name: tag.name,
     color: tag.color,
@@ -62,7 +63,7 @@ export function buildCentralSkillCardProps(
       checked: context.selectedSkillIdSet.has(skill.id),
       onChange: () => context.onToggleSelection(skill.id),
     },
-    tags: (skill.tags ?? []).map((tag) => ({
+    tags: skillTags.map((tag) => ({
       key: tag.id,
       label: tag.name,
     })),

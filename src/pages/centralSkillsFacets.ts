@@ -26,6 +26,7 @@ import {
   type CentralQueryContext,
 } from "@/lib/centralSearchQuery";
 import { getSkillInstalledPlatformCount } from "@/lib/centralInstalledFilters";
+import { sanitizeSelectedTagIds } from "@/lib/centralTags";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 import type { CentralViewState } from "@/lib/centralViewState";
 import type {
@@ -129,6 +130,10 @@ export function useCentralSkillsFacets(
     () => normalizeSearchQuery(queryAst.freeText),
     [queryAst.freeText]
   );
+  const selectedTagIds = useMemo(
+    () => (tags.length > 0 ? sanitizeSelectedTagIds(state.tags, tags) : state.tags),
+    [state.tags, tags]
+  );
 
   const isSearchActive = normalizedFreeText.length > 0 || queryAst.filters.length > 0;
 
@@ -156,7 +161,7 @@ export function useCentralSkillsFacets(
       .map(({ skill }) => skill)
       .filter((skill) => matchesRepositoryFilter(skill, state.repos))
       .filter((skill) =>
-        matchesTagFilter(skill, state.tags, {
+        matchesTagFilter(skill, selectedTagIds, {
           updateStatuses,
           aiReviewSkillIds,
         })
@@ -168,7 +173,7 @@ export function useCentralSkillsFacets(
     queryContext,
     searchableSkills,
     state.repos,
-    state.tags,
+    selectedTagIds,
     updateStatuses,
   ]);
 
@@ -179,8 +184,8 @@ export function useCentralSkillsFacets(
   }, [filteredSkills, state.sortField, state.sortDir]);
 
   const selections: FacetSelections = useMemo(
-    () => ({ repositories: state.repos, tags: state.tags }),
-    [state.repos, state.tags]
+    () => ({ repositories: state.repos, tags: selectedTagIds }),
+    [state.repos, selectedTagIds]
   );
 
   const facetCounts = useMemo(

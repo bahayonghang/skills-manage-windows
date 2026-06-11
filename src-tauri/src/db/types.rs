@@ -70,6 +70,9 @@ pub const LOCAL_UNKNOWN_REPOSITORY_ID: &str = "local-unknown";
 /// 占位标签 ID：`uncategorized` 表示尚未归类的技能。
 pub const UNCATEGORIZED_TAG_ID: &str = "uncategorized";
 
+/// 唯一保留的普通内置标签 ID。
+pub const ACADEMIC_RESEARCH_WRITING_TAG_ID: &str = "academic-research-writing";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LinkType {

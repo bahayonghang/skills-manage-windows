@@ -25,7 +25,7 @@ use crate::{
 
 use prompt::suggest_skill_tags_for_skill;
 #[cfg(test)]
-pub(crate) use prompt::{map_ai_suggestions, parse_ai_tag_suggestions};
+pub(crate) use prompt::{build_tagging_prompt, map_ai_suggestions, parse_ai_tag_suggestions};
 use rate_limit::{get_ai_tag_rate_settings, is_ai_rate_limit_error};
 pub(crate) use types::AI_TAG_PROGRESS_EVENT;
 use types::{

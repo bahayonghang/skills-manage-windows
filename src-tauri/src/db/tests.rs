@@ -1270,6 +1270,81 @@ async fn test_builtin_skill_metadata_seeded_and_idempotent() {
         tags.iter().filter(|tag| tag.is_builtin).count(),
         builtin_skill_tags().len()
     );
+    assert!(tags
+        .iter()
+        .any(|tag| tag.id == ACADEMIC_RESEARCH_WRITING_TAG_ID));
+    assert!(!tags
+        .iter()
+        .any(|tag| tag.id == "programming-agent-engineering"));
+}
+
+#[tokio::test]
+async fn test_init_prunes_obsolete_builtin_skill_tags_only() {
+    let pool = setup_test_db().await;
+    let now = Utc::now().to_rfc3339();
+    let skill = make_skill("obsolete-tag-skill", "Obsolete Tag Skill", true);
+    upsert_skill(&pool, &skill).await.unwrap();
+    let custom = create_skill_tag(&pool, "用户自定义", None, None)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "INSERT INTO skill_tags
+         (id, name, description, color, is_builtin, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, ?, ?)",
+    )
+    .bind("programming-agent-engineering")
+    .bind("编程与 Agent 工程")
+    .bind("Retired default tag")
+    .bind("#7c3aed")
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assign_skill_tags(
+        &pool,
+        &[skill.id.clone()],
+        &[
+            "programming-agent-engineering".to_string(),
+            custom.id.clone(),
+        ],
+        "manual",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    replace_pending_ai_tag_reviews(
+        &pool,
+        &skill.id,
+        &[
+            (
+                "programming-agent-engineering".to_string(),
+                0.8,
+                "旧默认分类".to_string(),
+            ),
+            (custom.id.clone(), 0.8, "自定义分类".to_string()),
+        ],
+    )
+    .await
+    .unwrap();
+
+    init_database(&pool).await.unwrap();
+
+    let tags = get_skill_tags(&pool).await.unwrap();
+    assert!(!tags
+        .iter()
+        .any(|tag| tag.id == "programming-agent-engineering"));
+    assert!(tags.iter().any(|tag| tag.id == custom.id));
+    let linked_tags = get_skill_tags_for_skill(&pool, &skill.id).await.unwrap();
+    assert_eq!(linked_tags.len(), 1);
+    assert_eq!(linked_tags[0].id, custom.id);
+    let reviews = get_pending_ai_tag_reviews(&pool).await.unwrap();
+    assert!(reviews
+        .iter()
+        .all(|review| review.tag.id != "programming-agent-engineering"));
+    assert!(reviews.iter().any(|review| review.tag.id == custom.id));
 }
 
 #[tokio::test]
