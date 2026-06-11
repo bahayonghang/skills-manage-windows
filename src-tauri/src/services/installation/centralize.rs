@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool};
 
+use super::error::InstallationError;
 use super::fs_util::{
     copy_dir_all_blocking, path_exists_blocking, remove_symlink_path, run_blocking_fs,
 };
@@ -21,26 +22,26 @@ pub(crate) async fn ensure_centralized(
     pool: &DbPool,
     skill_id: &str,
     canonical_dir: &Path,
-) -> Result<(), String> {
+) -> Result<(), InstallationError> {
     if path_exists_blocking(&canonical_dir.join("SKILL.md")).await? {
         return Ok(());
     }
 
     // Look up the skill's actual file location from the database.
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await?
-        .ok_or_else(|| format!("Skill '{}' not found in database", skill_id))?;
+        .await
+        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .ok_or_else(|| InstallationError::SkillNotFound(skill_id.to_string()))?;
 
     // Derive the source directory (parent of file_path).
     let source_file = PathBuf::from(&skill.file_path);
     let source_dir = source_file
         .parent()
-        .ok_or_else(|| format!("Invalid file_path for skill '{}'", skill_id))?;
+        .ok_or_else(|| InstallationError::InvalidSkillFilePath(skill_id.to_string()))?;
 
     if !path_exists_blocking(&source_file).await? {
-        return Err(format!(
-            "Skill source not found at '{}'",
-            source_file.display()
+        return Err(InstallationError::SkillSourceMissing(
+            source_file.display().to_string(),
         ));
     }
 
@@ -55,7 +56,9 @@ pub(crate) async fn ensure_centralized(
         .join("SKILL.md")
         .to_string_lossy()
         .into_owned();
-    db::upsert_skill(pool, &updated).await?;
+    db::upsert_skill(pool, &updated)
+        .await
+        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
 
     Ok(())
 }
@@ -74,22 +77,25 @@ pub(crate) fn agents_share_skills_dir(agent: &db::Agent, central: &db::Agent) ->
 /// - Symlink at the path: removed.
 /// - Real directory or file: refused.
 /// - Path missing: ok.
-pub(crate) fn ensure_replaceable_target_sync(target_path: &Path) -> Result<(), String> {
+pub(crate) fn ensure_replaceable_target_sync(target_path: &Path) -> Result<(), InstallationError> {
     match std::fs::symlink_metadata(target_path) {
-        Ok(meta) if meta.file_type().is_symlink() => remove_symlink_path(target_path),
-        Ok(meta) if meta.is_dir() => Err(format!(
-            "A real directory already exists at '{}'. Refusing to overwrite.",
-            target_path.display()
-        )),
-        Ok(_) => Err(format!(
-            "A file already exists at '{}'. Refusing to overwrite.",
-            target_path.display()
-        )),
+        Ok(meta) if meta.file_type().is_symlink() => remove_symlink_path(target_path)
+            .map_err(|e| InstallationError::io("Failed to remove existing symlink", e)),
+        Ok(meta) if meta.is_dir() => Err(InstallationError::TargetOccupied {
+            entry_kind: "real directory",
+            path: target_path.display().to_string(),
+        }),
+        Ok(_) => Err(InstallationError::TargetOccupied {
+            entry_kind: "file",
+            path: target_path.display().to_string(),
+        }),
         Err(_) => Ok(()),
     }
 }
 
-pub(crate) async fn ensure_replaceable_target(target_path: &Path) -> Result<(), String> {
+pub(crate) async fn ensure_replaceable_target(
+    target_path: &Path,
+) -> Result<(), InstallationError> {
     let target_path = target_path.to_path_buf();
     run_blocking_fs("install target inspection", move || {
         ensure_replaceable_target_sync(&target_path)

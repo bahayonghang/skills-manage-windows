@@ -8,8 +8,9 @@ use chrono::Utc;
 use sha2::{Digest, Sha256};
 
 use crate::db::{self, DbPool, Project, ProjectSkillInstallation};
+use crate::fs_util::run_blocking_fs;
 use crate::services::installation::centralize::ensure_replaceable_target;
-use crate::services::installation::fs_util::{copy_dir_all_blocking, run_blocking_fs};
+use crate::services::installation::fs_util::copy_dir_all_blocking;
 use crate::services::installation::project::project_relative_skills_dir;
 use crate::services::installation::{create_symlink, symlink_target_path};
 
@@ -364,7 +365,7 @@ pub async fn install_skill_to_project_impl(
         ));
     }
 
-    let relative_skills_dir = project_relative_skills_dir(&agent)?;
+    let relative_skills_dir = project_relative_skills_dir(&agent).map_err(|e| e.to_string())?;
     let project_skills_dir = project_root.join(&relative_skills_dir);
     let target_path = project_skills_dir.join(skill_id);
 
@@ -380,18 +381,22 @@ pub async fn install_skill_to_project_impl(
     })
     .await?;
 
-    ensure_replaceable_target(&target_path).await?;
+    ensure_replaceable_target(&target_path)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let resolved_method = if method == "copy" { "copy" } else { "symlink" };
     let (link_type, symlink_target_str) = if resolved_method == "copy" {
-        copy_dir_all_blocking(&canonical_dir, &target_path).await?;
+        copy_dir_all_blocking(&canonical_dir, &target_path)
+            .await
+            .map_err(|e| e.to_string())?;
         ("copy".to_string(), None)
     } else {
         let relative_target = symlink_target_path(&project_skills_dir, &canonical_dir);
         let target_for_create = target_path.clone();
         let target_value = relative_target.clone();
         run_blocking_fs("project skill symlink creation", move || {
-            create_symlink(&target_value, &target_for_create)
+            create_symlink(&target_value, &target_for_create).map_err(|e| e.to_string())
         })
         .await?;
         (

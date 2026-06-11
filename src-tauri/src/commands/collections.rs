@@ -151,7 +151,7 @@ pub async fn batch_install_collection_impl(
                 Ok(_) => succeeded.push(format!("{}:{}", skill.id, agent_id)),
                 Err(e) => failed.push(FailedInstall {
                     agent_id: format!("{}:{}", skill.id, agent_id),
-                    error: e,
+                    error: e.to_string(),
                 }),
             }
         }
@@ -315,7 +315,7 @@ pub async fn batch_install_collection(
                     Ok(_) => succeeded.push(format!("{}:{}", skill.id, agent_id)),
                     Err(error) => failed.push(FailedInstall {
                         agent_id: format!("{}:{}", skill.id, agent_id),
-                        error,
+                        error: error.to_string(),
                     }),
                 }
             }

@@ -204,7 +204,7 @@ pub(crate) async fn apply_remove_platform_duplicates_step(
                 Err(error) => result.failures.push(SkillUpdateApplyFailure {
                     step: "remove_platform_duplicate".to_string(),
                     identifier: format!("{}::{}::{}", removal.agent_id, removal.skill_id, path),
-                    error,
+                    error: error.to_string(),
                 }),
             }
         }
@@ -312,7 +312,8 @@ async fn remove_deleted_platform_copy_local(
                 &removal.agent_id,
                 Some(&obs.row_id),
             )
-            .await?;
+            .await
+            .map_err(|e| e.to_string())?;
             return Ok(());
         }
     }
@@ -325,7 +326,9 @@ async fn remove_deleted_platform_copy_local(
         ));
     }
 
-    uninstall_skill_from_agent_with_row_impl(pool, &removal.skill_id, &removal.agent_id, None).await
+    uninstall_skill_from_agent_with_row_impl(pool, &removal.skill_id, &removal.agent_id, None)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 async fn remove_deleted_platform_copy_remote(

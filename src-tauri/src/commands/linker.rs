@@ -81,6 +81,7 @@ pub async fn install_skill_to_agent(
             .await
         }
     };
+    let result = result.map_err(|e| e.to_string());
     let status = if result.is_ok() {
         "succeeded"
     } else {
@@ -143,6 +144,7 @@ pub async fn uninstall_skill_from_agent(
             .await
         }
     };
+    let result = result.map_err(|e| e.to_string());
     let status = if result.is_ok() {
         "succeeded"
     } else {
@@ -206,7 +208,7 @@ pub async fn batch_uninstall_skills_from_agent(
                     Err(error) => failed.push(BatchUninstallSkillFailure {
                         skill_id: request.skill_id,
                         row_id: request.row_id,
-                        error,
+                        error: error.to_string(),
                     }),
                 }
             }
@@ -346,7 +348,7 @@ pub async fn batch_install_to_agents(
                     Ok(installation::InstallOutcome::Skipped(item)) => skipped.push(item),
                     Err(e) => failed.push(FailedInstall {
                         agent_id: agent_id.clone(),
-                        error: e,
+                        error: e.to_string(),
                     }),
                 }
             }
@@ -371,7 +373,7 @@ pub async fn batch_install_to_agents(
                     Ok(_) => succeeded.push(agent_id.clone()),
                     Err(e) => failed.push(FailedInstall {
                         agent_id: agent_id.clone(),
-                        error: e,
+                        error: e.to_string(),
                     }),
                 }
             }
@@ -544,7 +546,7 @@ pub async fn batch_install_central_skills(
                     Err(error) => failed.push(CentralBatchInstallFailure {
                         skill_id: skill_id.clone(),
                         agent_id: agent_id.clone(),
-                        error,
+                        error: error.to_string(),
                     }),
                 }
             }

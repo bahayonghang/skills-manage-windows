@@ -3,10 +3,9 @@ use std::path::{Path, PathBuf};
 use chrono::Utc;
 
 use crate::db::{self, DbPool};
+use crate::fs_util::run_blocking_fs;
 use crate::paths;
-use crate::services::installation::{
-    copy_dir_all_blocking, create_symlink, run_blocking_fs, symlink_target_path,
-};
+use crate::services::installation::{copy_dir_all_blocking, create_symlink, symlink_target_path};
 use crate::services::scanner::parse_skill_md;
 
 use super::types::ObsidianImportResult;
@@ -76,7 +75,9 @@ pub async fn import_obsidian_skill_to_central_impl(
         ));
     }
 
-    copy_dir_all_blocking(&source_dir, &target_dir).await?;
+    copy_dir_all_blocking(&source_dir, &target_dir)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let skill_md_path = target_dir.join("SKILL.md");
     let info = parse_skill_md(&skill_md_path);
@@ -146,11 +147,14 @@ pub async fn import_obsidian_skill_to_platform_impl(
             let target_path_for_symlink = target_path.clone();
             run_blocking_fs("platform import symlink creation", move || {
                 create_symlink(&relative_target, &target_path_for_symlink)
+                    .map_err(|e| e.to_string())
             })
             .await?;
         }
         ObsidianInstallMethod::Copy => {
-            copy_dir_all_blocking(&source_dir, &target_path).await?;
+            copy_dir_all_blocking(&source_dir, &target_path)
+                .await
+                .map_err(|e| e.to_string())?;
         }
     }
 

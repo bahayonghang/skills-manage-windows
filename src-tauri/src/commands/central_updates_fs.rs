@@ -362,7 +362,7 @@ fn refresh_copy_install_local(
     if std::fs::symlink_metadata(&target_path).is_ok() {
         remove_path(&target_path)?;
     }
-    linker::copy_dir_all(source_dir, &target_path)
+    linker::copy_dir_all(source_dir, &target_path).map_err(|e| e.to_string())
 }
 
 async fn refresh_copy_install_remote(

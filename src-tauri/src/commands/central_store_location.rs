@@ -168,7 +168,8 @@ pub async fn apply_central_store_location_change_impl(
                 if existed {
                     remove_existing_path(&target_skill_dir)?;
                 }
-                copy_dir_all(&source_skill_dir, &target_skill_dir)?;
+                copy_dir_all(&source_skill_dir, &target_skill_dir)
+                    .map_err(|e| e.to_string())?;
                 if existed {
                     overwritten += 1;
                 } else {
@@ -183,7 +184,7 @@ pub async fn apply_central_store_location_change_impl(
     update_central_root(pool, &source_root, &target_root).await?;
     let symlink_failures =
         rebuild_symlinks_pointing_to_old_root(pool, &source_root, &target_root).await?;
-    scan_all_skills_impl(pool).await?;
+    scan_all_skills_impl(pool).await.map_err(|e| e.to_string())?;
 
     Ok(CentralStoreLocationChangeResult {
         source_path: preview.source_path,
@@ -440,7 +441,7 @@ fn replace_symlink(link_path: &Path, target: &Path) -> Result<(), String> {
         return Err(format!("'{}' is not a symlink", link_path.display()));
     }
     remove_existing_path(link_path)?;
-    create_symlink(target, link_path)
+    create_symlink(target, link_path).map_err(|e| e.to_string())
 }
 
 fn remove_existing_path(path: &Path) -> Result<(), String> {

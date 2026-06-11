@@ -16,8 +16,11 @@ use crate::skill_time::filesystem_timestamps_from_metadata;
 use crate::targets::{connect_remote_target, ActiveTarget};
 
 mod claude_plugin;
+mod error;
 mod persistence;
 mod ssh_batch;
+
+pub use error::ScannerError;
 
 use claude_plugin::{
     agent_tracks_observations, observation_row_id, scan_roots_for_agent, AgentScanRoot, SourceKind,
@@ -267,21 +270,24 @@ pub fn scan_directory(dir: &Path, is_central: bool) -> Vec<ScannedSkill> {
 async fn scan_directory_blocking(
     dir: PathBuf,
     is_central: bool,
-) -> Result<Vec<ScannedSkill>, String> {
-    tauri::async_runtime::spawn_blocking(move || scan_directory(&dir, is_central))
-        .await
-        .map_err(|e| format!("Failed to join directory scan task: {}", e))
+) -> Result<Vec<ScannedSkill>, ScannerError> {
+    crate::fs_util::run_blocking_fs_with(
+        "directory scan",
+        move || Ok(scan_directory(&dir, is_central)),
+        ScannerError::task_join,
+    )
+    .await
 }
 
 async fn scan_directory_with_limit(
     dir: PathBuf,
     is_central: bool,
     semaphore: Arc<Semaphore>,
-) -> Result<Vec<ScannedSkill>, String> {
+) -> Result<Vec<ScannedSkill>, ScannerError> {
     let permit = semaphore
         .acquire_owned()
         .await
-        .map_err(|_| "Directory scan semaphore was closed.".to_string())?;
+        .map_err(|_| ScannerError::SemaphoreClosed)?;
     let result = scan_directory_blocking(dir, is_central).await;
     drop(permit);
     result
@@ -291,9 +297,13 @@ async fn scan_directory_with_limit(
 
 /// Core scanning logic, separated from the Tauri command layer so it can be
 /// unit-tested without a running Tauri runtime.
-pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
-    let agents = db::get_all_agents(pool).await?;
-    let custom_dirs = db::get_scan_directories(pool).await?;
+pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, ScannerError> {
+    // TODO(C3): db/repos still return String; switch to typed passthrough once
+    // the repos layer is migrated.
+    let agents = db::get_all_agents(pool).await.map_err(ScannerError::Other)?;
+    let custom_dirs = db::get_scan_directories(pool)
+        .await
+        .map_err(ScannerError::Other)?; // TODO(C3)
     let scan_started_at = Utc::now().to_rfc3339();
     let central_root = agents
         .iter()
@@ -510,10 +520,14 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
 pub async fn scan_remote_skills_impl(
     pool: &DbPool,
     active_target: &ActiveTarget,
-) -> Result<ScanResult, String> {
-    let agents = db::get_all_agents(pool).await?;
+) -> Result<ScanResult, ScannerError> {
+    // TODO(C3): db/repos still return String; switch to typed passthrough once
+    // the repos layer is migrated.
+    let agents = db::get_all_agents(pool).await.map_err(ScannerError::Other)?;
     let scan_started_at = Utc::now().to_rfc3339();
-    let connection = connect_remote_target(active_target).await?;
+    let connection = connect_remote_target(active_target)
+        .await
+        .map_err(ScannerError::Remote)?;
     let central_root = agents
         .iter()
         .find(|agent| agent.id == "central")
@@ -548,7 +562,8 @@ pub async fn scan_remote_skills_impl(
 
     let probe_output = connection
         .run_script(&build_probe_script(&unique_roots), &[])
-        .await?;
+        .await
+        .map_err(ScannerError::Remote)?;
     let probe_items = parse_probe_output(&probe_output);
     let mut root_exists = HashSet::new();
     let mut root_parent_exists = HashSet::new();
@@ -577,7 +592,8 @@ pub async fn scan_remote_skills_impl(
     } else {
         let read_output = connection
             .run_script(&build_batch_read_script(&unique_skill_paths), &[])
-            .await?;
+            .await
+            .map_err(ScannerError::Remote)?;
         parse_batch_read_output(&read_output)
     };
 

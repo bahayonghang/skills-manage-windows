@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool, SkillInstallation};
 
+use super::error::InstallationError;
 use super::fs_util::{dirs_have_same_contents, run_blocking_fs, symlink_points_to};
 use super::types::SkippedInstall;
 
@@ -24,7 +25,7 @@ pub(crate) async fn record_installation(
     installed_path: &Path,
     link_type: &str,
     symlink_target: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), InstallationError> {
     let installation = SkillInstallation {
         skill_id: skill_id.to_string(),
         agent_id: agent_id.to_string(),
@@ -33,7 +34,9 @@ pub(crate) async fn record_installation(
         symlink_target,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
-    db::upsert_skill_installation(pool, &installation).await
+    db::upsert_skill_installation(pool, &installation)
+        .await
+        .map_err(InstallationError::Other) // TODO(C3): typed repos passthrough
 }
 
 pub(crate) async fn detect_existing_agent_install(
@@ -42,8 +45,10 @@ pub(crate) async fn detect_existing_agent_install(
     agent_id: &str,
     target_path: &Path,
     canonical_dir: &Path,
-) -> Result<Option<SkippedInstall>, String> {
-    let installations = db::get_skill_installations(pool, skill_id).await?;
+) -> Result<Option<SkippedInstall>, InstallationError> {
+    let installations = db::get_skill_installations(pool, skill_id)
+        .await
+        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
 
     if let Some(record) = installations
         .iter()
@@ -115,7 +120,7 @@ pub(crate) async fn detect_existing_project_install(
     agent_id: &str,
     target_path: &Path,
     canonical_dir: &Path,
-) -> Result<Option<SkippedInstall>, String> {
+) -> Result<Option<SkippedInstall>, InstallationError> {
     if target_is_symlink_to(target_path, canonical_dir).await? {
         return Ok(Some(skipped(
             agent_id,
@@ -144,7 +149,7 @@ fn skipped(agent_id: &str, target_path: &Path, reason: &str) -> SkippedInstall {
     }
 }
 
-async fn target_exists(path: &Path) -> Result<bool, String> {
+async fn target_exists(path: &Path) -> Result<bool, InstallationError> {
     let path = path.to_path_buf();
     run_blocking_fs("install target existence inspection", move || {
         Ok(std::fs::symlink_metadata(&path).is_ok())
@@ -152,7 +157,7 @@ async fn target_exists(path: &Path) -> Result<bool, String> {
     .await
 }
 
-async fn target_is_symlink_to(path: &Path, canonical_dir: &Path) -> Result<bool, String> {
+async fn target_is_symlink_to(path: &Path, canonical_dir: &Path) -> Result<bool, InstallationError> {
     let path = path.to_path_buf();
     let canonical_dir = canonical_dir.to_path_buf();
     run_blocking_fs("install target symlink inspection", move || {
@@ -161,7 +166,10 @@ async fn target_is_symlink_to(path: &Path, canonical_dir: &Path) -> Result<bool,
     .await
 }
 
-async fn target_is_matching_copy(path: &Path, canonical_dir: &Path) -> Result<bool, String> {
+async fn target_is_matching_copy(
+    path: &Path,
+    canonical_dir: &Path,
+) -> Result<bool, InstallationError> {
     let path = path.to_path_buf();
     let canonical_dir = canonical_dir.to_path_buf();
     run_blocking_fs("install target copy comparison", move || {
@@ -173,7 +181,7 @@ async fn target_is_matching_copy(path: &Path, canonical_dir: &Path) -> Result<bo
 async fn infer_existing_target_link_type(
     target_path: &Path,
     canonical_dir: &Path,
-) -> Result<String, String> {
+) -> Result<String, InstallationError> {
     if target_is_symlink_to(target_path, canonical_dir).await? {
         return Ok("symlink".to_string());
     }

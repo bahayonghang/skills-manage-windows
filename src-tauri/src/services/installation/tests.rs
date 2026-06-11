@@ -336,7 +336,11 @@ fn test_remote_project_path_requires_absolute_posix_path() {
     let error =
         remote_project_install_paths("/home/alice", "relative/repo", &agent, "demo").unwrap_err();
 
-    assert!(error.contains("absolute POSIX path"));
+    assert!(matches!(
+        error,
+        super::error::InstallationError::RemoteProjectPathNotAbsolute(_)
+    ));
+    assert!(error.to_string().contains("absolute POSIX path"));
 }
 
 #[test]
@@ -381,7 +385,13 @@ fn test_remote_project_install_rejects_existing_real_directory() {
 fn test_remote_project_method_rejects_disabled_symlink() {
     assert_eq!(remote_project_method("copy", false).unwrap(), "copy");
     let error = remote_project_method("symlink", false).unwrap_err();
-    assert!(error.contains("Remote symlink install is disabled"));
+    assert!(matches!(
+        error,
+        super::error::InstallationError::RemoteSymlinkDisabled
+    ));
+    assert!(error
+        .to_string()
+        .contains("Remote symlink install is disabled"));
     assert_eq!(remote_project_method("symlink", true).unwrap(), "symlink");
 }
 
@@ -756,7 +766,9 @@ async fn test_uninstall_same_root_agent_is_rejected_without_deleting_central_dir
     assert!(
         result
             .as_ref()
-            .is_err_and(|error| error.contains("cannot be uninstalled independently")),
+            .is_err_and(|error| error
+                .to_string()
+                .contains("cannot be uninstalled independently")),
         "same-root uninstall should be rejected: {:?}",
         result
     );
@@ -868,7 +880,7 @@ async fn test_uninstall_claude_plugin_row_is_rejected_without_deleting_path() {
     assert!(
         result
             .as_ref()
-            .is_err_and(|error| error.contains("read-only")),
+            .is_err_and(|error| error.to_string().contains("read-only")),
         "plugin source rows should be rejected: {:?}",
         result
     );
@@ -905,7 +917,7 @@ async fn test_uninstall_claude_row_rejects_skill_id_mismatch() {
     assert!(
         result
             .as_ref()
-            .is_err_and(|error| error.contains("belongs to skill")),
+            .is_err_and(|error| error.to_string().contains("belongs to skill")),
         "mismatched row/skill should be rejected: {:?}",
         result
     );
@@ -1590,7 +1602,7 @@ async fn test_project_install_refuses_existing_real_dir() {
     assert!(
         result
             .as_ref()
-            .is_err_and(|error| error.contains("Refusing to overwrite")),
+            .is_err_and(|error| error.to_string().contains("Refusing to overwrite")),
         "project install should refuse existing real dir: {:?}",
         result
     );
@@ -1770,7 +1782,7 @@ async fn batch_install_impl(
             Ok(InstallOutcome::Skipped(item)) => skipped.push(item),
             Err(e) => failed.push(FailedInstall {
                 agent_id: agent_id.clone(),
-                error: e,
+                error: e.to_string(),
             }),
         }
     }
@@ -2068,7 +2080,7 @@ async fn test_batch_install_uses_copy_method() {
             Ok(_) => succeeded.push(agent_id.clone()),
             Err(e) => failed.push(FailedInstall {
                 agent_id: agent_id.clone(),
-                error: e,
+                error: e.to_string(),
             }),
         }
     }

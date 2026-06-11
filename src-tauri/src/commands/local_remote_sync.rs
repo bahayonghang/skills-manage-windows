@@ -124,7 +124,7 @@ async fn refresh_synced_target_cache(
     match pool {
         Ok(pool) => {
             if let Err(error) = scan_remote_skills_impl(&pool, active_target).await {
-                push_refresh_failure(active_target, result, error);
+                push_refresh_failure(active_target, result, error.to_string());
             }
         }
         Err(error) => push_refresh_failure(active_target, result, error),

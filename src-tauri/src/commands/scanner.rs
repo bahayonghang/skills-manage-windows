@@ -14,7 +14,7 @@ use crate::db;
 use crate::operation_log::{
     record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
 };
-use crate::services::scanner::{scan_all_skills_impl, scan_remote_skills_impl};
+use crate::services::scanner::{scan_all_skills_impl, scan_remote_skills_impl, ScannerError};
 use crate::targets::ActiveTarget;
 use crate::AppState;
 
@@ -26,16 +26,16 @@ pub use crate::services::scanner::{
     ScannedSkill, SkillInfo,
 };
 
-async fn run_remote_scan_with_timeout<F>(future: F, timeout: Duration) -> Result<ScanResult, String>
+async fn run_remote_scan_with_timeout<F>(
+    future: F,
+    timeout: Duration,
+) -> Result<ScanResult, ScannerError>
 where
-    F: Future<Output = Result<ScanResult, String>>,
+    F: Future<Output = Result<ScanResult, ScannerError>>,
 {
     match tokio::time::timeout(timeout, future).await {
         Ok(result) => result,
-        Err(_) => Err(format!(
-            "Remote skill scan timed out after {}s.",
-            timeout.as_secs()
-        )),
+        Err(_) => Err(ScannerError::Timeout(timeout.as_secs())),
     }
 }
 
@@ -90,6 +90,8 @@ pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, S
         }
         Err(error) => {
             db::set_setting_best_effort(&pool, "scan_state", "error").await;
+            let is_timeout = matches!(error, ScannerError::Timeout(_));
+            let error = error.to_string();
             record_operation_log_best_effort(
                 &state.db,
                 target_context,
@@ -97,7 +99,7 @@ pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, S
                     .subject("scan_root", "all", "All scan directories")
                     .error(&error)
                     .details(json!({
-                        "reason": if error.contains("timed out") { "timeout" } else { "error" },
+                        "reason": if is_timeout { "timeout" } else { "error" },
                     }))
                     .duration_ms(started_at.elapsed().as_millis() as i64),
             )
@@ -112,7 +114,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn remote_scan_timeout_returns_timeout_error() {
+    async fn remote_scan_timeout_returns_timeout_variant() {
         let result = run_remote_scan_with_timeout(
             async {
                 tokio::time::sleep(Duration::from_millis(50)).await;
@@ -126,7 +128,39 @@ mod tests {
         )
         .await;
 
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("timed out"));
+        let error = result.unwrap_err();
+        assert!(matches!(error, ScannerError::Timeout(_)));
+        // User-visible text stays equivalent to the pre-thiserror message.
+        assert_eq!(error.to_string(), "Remote skill scan timed out after 0s.");
+    }
+
+    #[tokio::test]
+    async fn remote_scan_within_timeout_passes_result_through() {
+        let result = run_remote_scan_with_timeout(
+            async {
+                Ok(ScanResult {
+                    total_skills: 3,
+                    agents_scanned: 1,
+                    skills_by_agent: Default::default(),
+                })
+            },
+            Duration::from_secs(5),
+        )
+        .await;
+
+        assert_eq!(result.unwrap().total_skills, 3);
+    }
+
+    #[tokio::test]
+    async fn remote_scan_inner_error_is_not_reported_as_timeout() {
+        let result = run_remote_scan_with_timeout(
+            async { Err(ScannerError::Remote("connection refused".to_string())) },
+            Duration::from_secs(5),
+        )
+        .await;
+
+        let error = result.unwrap_err();
+        assert!(!matches!(error, ScannerError::Timeout(_)));
+        assert_eq!(error.to_string(), "connection refused");
     }
 }
