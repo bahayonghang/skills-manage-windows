@@ -389,3 +389,37 @@ Filled backend and frontend Trellis spec docs for ref/skillshare with source-bac
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: 优化中央技能标签机制
+
+**Date**: 2026-06-11
+**Task**: 优化中央技能标签机制
+**Branch**: `dev`
+
+### Summary
+
+精简 Central Skills 默认标签为学术研究与写作加 uncategorized 系统占位，清理旧 built-in 标签，强化 AI 复用既有标签的 prompt，并补充前端筛选兼容与 Trellis 标签契约规范。验证通过 just ci。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b7fb4a4` | (see git log) |
+| `1a22060` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
