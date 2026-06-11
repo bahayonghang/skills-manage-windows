@@ -12,19 +12,17 @@ pub(crate) enum PendingAdditionScope {
 }
 
 pub(crate) struct InventoryScopeFilter {
-    pub(crate) skill_ids: Option<HashSet<String>>,
     pub(crate) agent_ids: Option<Vec<String>>,
     pub(crate) pending: PendingAdditionScope,
 }
 
 impl InventoryScopeFilter {
     pub(crate) async fn from_scope(
-        pool: &DbPool,
+        _pool: &DbPool,
         scope: Option<SkillRefreshScope>,
     ) -> Result<Self, String> {
         let Some(scope) = scope else {
             return Ok(Self {
-                skill_ids: None,
                 agent_ids: None,
                 pending: PendingAdditionScope::All,
             });
@@ -32,7 +30,6 @@ impl InventoryScopeFilter {
 
         match scope.kind {
             SkillRefreshScopeKind::All => Ok(Self {
-                skill_ids: None,
                 agent_ids: None,
                 pending: PendingAdditionScope::All,
             }),
@@ -46,19 +43,12 @@ impl InventoryScopeFilter {
                     PendingAdditionScope::SkillIds(skill_ids.clone())
                 };
                 Ok(Self {
-                    skill_ids: Some(skill_ids),
                     agent_ids: None,
                     pending,
                 })
             }
             SkillRefreshScopeKind::Repositories => {
                 let repository_ids = normalize_ids(scope.repository_ids.unwrap_or_default());
-                let mut skill_ids = Vec::new();
-                for repository_id in &repository_ids {
-                    skill_ids.extend(
-                        db::get_central_skill_ids_by_repository(pool, repository_id).await?,
-                    );
-                }
                 let repository_ids = repository_ids.into_iter().collect::<HashSet<_>>();
                 let pending = if repository_ids.is_empty() {
                     PendingAdditionScope::None
@@ -66,30 +56,18 @@ impl InventoryScopeFilter {
                     PendingAdditionScope::Repositories(repository_ids)
                 };
                 Ok(Self {
-                    skill_ids: Some(normalize_ids(skill_ids).into_iter().collect()),
                     agent_ids: None,
                     pending,
                 })
             }
             SkillRefreshScopeKind::Platform => {
                 let agent_ids = normalize_ids(scope.agent_ids.unwrap_or_default());
-                let skill_ids = central_skill_ids_for_agents(pool, &agent_ids)
-                    .await?
-                    .into_iter()
-                    .collect::<HashSet<_>>();
                 Ok(Self {
-                    skill_ids: Some(skill_ids),
                     agent_ids: Some(agent_ids),
                     pending: PendingAdditionScope::None,
                 })
             }
         }
-    }
-
-    pub(crate) fn includes_skill(&self, skill_id: &str) -> bool {
-        self.skill_ids
-            .as_ref()
-            .is_none_or(|ids| ids.contains(skill_id))
     }
 }
 

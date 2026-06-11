@@ -138,3 +138,27 @@ pub async fn clear_pending_additions_for_repos(
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
+
+pub async fn clear_pending_additions_for_skill_ids(
+    pool: &DbPool,
+    skill_ids: &[String],
+) -> Result<(), String> {
+    if skill_ids.is_empty() {
+        return Ok(());
+    }
+
+    let placeholders = skill_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "DELETE FROM skill_repository_pending_additions WHERE skill_id IN ({})",
+        placeholders
+    );
+    let mut query = sqlx::query(&sql);
+    for skill_id in skill_ids {
+        query = query.bind(skill_id);
+    }
+    query
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}

@@ -7,8 +7,8 @@
 //! 分组：
 //! - A: refresh / get / clear 行为
 //! - B: apply 顺序与 partial success
-//! - C: scan_platform_duplicate_skills
-//! - D: 取消信号（暂留位）
+//! - C: force update / force mirror rescue mode
+//! - D: scan_platform_duplicate_skills
 
 use super::*;
 use crate::commands::central_updates::repo_cache_key;
@@ -125,10 +125,31 @@ fn http_client() -> reqwest::Client {
     reqwest::Client::builder().no_proxy().build().unwrap()
 }
 
+fn skill_snapshot(items: Vec<(&str, &[u8])>) -> GitHubRepoSnapshot {
+    GitHubRepoSnapshot {
+        files: items
+            .into_iter()
+            .map(|(path, content)| (path.to_string(), content.to_vec()))
+            .collect(),
+    }
+}
+
+fn copy_installation(skill_id: &str, agent_id: &str, dir: &Path) -> SkillInstallation {
+    SkillInstallation {
+        skill_id: skill_id.to_string(),
+        agent_id: agent_id.to_string(),
+        installed_path: dir.to_string_lossy().into_owned(),
+        link_type: "copy".to_string(),
+        symlink_target: None,
+        created_at: Utc::now().to_rfc3339(),
+    }
+}
+
 fn scope_all() -> SkillRefreshScope {
     SkillRefreshScope {
         kind: SkillRefreshScopeKind::All,
         mode: None,
+        cache_policy: Some(SkillRefreshCachePolicy::UseFresh),
         skill_ids: None,
         repository_ids: None,
         agent_ids: None,
@@ -139,6 +160,7 @@ fn scope_skills(ids: Vec<&str>) -> SkillRefreshScope {
     SkillRefreshScope {
         kind: SkillRefreshScopeKind::Skills,
         mode: None,
+        cache_policy: Some(SkillRefreshCachePolicy::UseFresh),
         skill_ids: Some(ids.into_iter().map(String::from).collect()),
         repository_ids: None,
         agent_ids: None,
@@ -149,6 +171,7 @@ fn scope_repos(ids: Vec<&str>) -> SkillRefreshScope {
     SkillRefreshScope {
         kind: SkillRefreshScopeKind::Repositories,
         mode: None,
+        cache_policy: Some(SkillRefreshCachePolicy::UseFresh),
         skill_ids: None,
         repository_ids: Some(ids.into_iter().map(String::from).collect()),
         agent_ids: None,
@@ -159,6 +182,7 @@ fn scope_platform(ids: Vec<&str>) -> SkillRefreshScope {
     SkillRefreshScope {
         kind: SkillRefreshScopeKind::Platform,
         mode: None,
+        cache_policy: Some(SkillRefreshCachePolicy::UseFresh),
         skill_ids: None,
         repository_ids: None,
         agent_ids: Some(ids.into_iter().map(String::from).collect()),
@@ -565,15 +589,20 @@ async fn refresh_regular_mode_returns_only_content_update_buckets() {
     assert!(refreshed_repo.last_synced_at.is_none());
 
     let states = db::get_skill_update_states(&pool).await.unwrap();
-    let missing = states
-        .iter()
-        .find(|state| state.skill_id == "missing-local")
-        .expect("missing skill state");
-    assert_eq!(missing.status, SkillUpdateStatus::Error.to_string());
+    assert!(
+        states.iter().all(|state| state.skill_id != "missing-local"),
+        "regular refresh must not write transient error states to baseline"
+    );
 
-    let reloaded = get_skill_update_inventory_impl_scoped(&pool, None)
-        .await
-        .unwrap();
+    let reloaded = get_skill_update_inventory_impl_scoped(
+        &pool,
+        Some(with_mode(
+            scope_repos(vec![&repository_id]),
+            SkillRefreshMode::Regular,
+        )),
+    )
+    .await
+    .unwrap();
     assert!(reloaded.remote_missing.is_empty());
 }
 
@@ -898,9 +927,10 @@ async fn refresh_persists_actionable_states_for_get_inventory_reload() {
     assert_eq!(refreshed.updatable.len(), 1);
     assert_eq!(refreshed.remote_missing.len(), 1);
 
-    let reloaded = get_skill_update_inventory_impl_scoped(&pool, None)
-        .await
-        .unwrap();
+    let reloaded =
+        get_skill_update_inventory_impl_scoped(&pool, Some(scope_repos(vec![&repository_id])))
+            .await
+            .unwrap();
     assert_eq!(reloaded.updatable.len(), 1);
     assert_eq!(reloaded.updatable[0].state.skill_id, "with-update");
     assert_eq!(reloaded.remote_missing.len(), 1);
@@ -908,7 +938,7 @@ async fn refresh_persists_actionable_states_for_get_inventory_reload() {
 }
 
 #[tokio::test]
-async fn refresh_persists_non_actionable_state_to_clear_stale_update() {
+async fn refresh_clears_stale_update_inventory_without_touching_baseline() {
     let pool = setup_test_db().await;
     let temp = TempDir::new().unwrap();
     let skill_dir = temp.path().join("already-fresh");
@@ -969,7 +999,10 @@ async fn refresh_persists_non_actionable_state_to_clear_stale_update() {
         .await
         .unwrap();
     assert_eq!(states.len(), 1);
-    assert_eq!(states[0].status, SkillUpdateStatus::UpToDate.to_string());
+    assert_eq!(
+        states[0].status,
+        SkillUpdateStatus::UpdateAvailable.to_string()
+    );
 }
 
 #[tokio::test]
@@ -1098,12 +1131,7 @@ async fn refresh_auto_resolves_unique_same_id_source_path_move_without_update() 
     let states = db::get_skill_update_states_for_skills(&pool, &["teach".to_string()])
         .await
         .unwrap();
-    assert_eq!(states.len(), 1);
-    assert_eq!(states[0].status, SkillUpdateStatus::UpToDate.to_string());
-    assert_eq!(
-        states[0].source_path.as_deref(),
-        Some("skills/productivity/teach")
-    );
+    assert!(states.is_empty());
 }
 
 #[tokio::test]
@@ -1228,21 +1256,20 @@ async fn get_inventory_returns_persisted_state_without_remote_fetch() {
         .await
         .unwrap();
     assign_test_repo(&pool, "with-update", "skills/with-update").await;
-    db::upsert_skill_update_state(
+    let snapshot = GitHubRepoSnapshot {
+        files: HashMap::from([(
+            "skills/with-update/SKILL.md".to_string(),
+            b"---\nname: With Update\n---\n\nnew".to_vec(),
+        )]),
+    };
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    refresh_skill_update_inventory_impl(
         &pool,
-        &SkillUpdateState {
-            skill_id: "with-update".to_string(),
-            source_type: "github".to_string(),
-            source_url: Some("https://github.com/owner/repo".to_string()),
-            ref_name: Some("main".to_string()),
-            source_path: Some("skills/with-update".to_string()),
-            last_remote_hash: Some("fnv1a64:old".to_string()),
-            latest_remote_hash: Some("fnv1a64:new".to_string()),
-            last_checked_at: Some(Utc::now().to_rfc3339()),
-            last_updated_at: None,
-            status: SkillUpdateStatus::UpdateAvailable.to_string(),
-            error: None,
-        },
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        scope_all(),
     )
     .await
     .unwrap();
@@ -1338,26 +1365,6 @@ async fn get_inventory_scope_platform_filters_state_additions_and_platform_bucke
         .unwrap();
     assign_test_repo(&pool, "codex-skill", "skills/codex-skill").await;
     assign_test_repo(&pool, "claude-skill", "skills/claude-skill").await;
-    for skill_id in ["codex-skill", "claude-skill"] {
-        db::upsert_skill_update_state(
-            &pool,
-            &SkillUpdateState {
-                skill_id: skill_id.to_string(),
-                source_type: "github".to_string(),
-                source_url: Some("https://github.com/owner/repo".to_string()),
-                ref_name: Some("main".to_string()),
-                source_path: Some(format!("skills/{skill_id}")),
-                last_remote_hash: Some("fnv1a64:old".to_string()),
-                latest_remote_hash: Some("fnv1a64:new".to_string()),
-                last_checked_at: Some(Utc::now().to_rfc3339()),
-                last_updated_at: None,
-                status: SkillUpdateStatus::UpdateAvailable.to_string(),
-                error: None,
-            },
-        )
-        .await
-        .unwrap();
-    }
     db::upsert_pending_addition(
         &pool,
         &db::SkillRepositoryPendingAddition {
@@ -1411,6 +1418,24 @@ async fn get_inventory_scope_platform_filters_state_additions_and_platform_bucke
         .await
         .unwrap();
     }
+
+    let snapshot = GitHubRepoSnapshot {
+        files: HashMap::from([(
+            "skills/codex-skill/SKILL.md".to_string(),
+            b"---\nname: Codex Skill\n---\n\nnew".to_vec(),
+        )]),
+    };
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        scope_platform(vec!["codex"]),
+    )
+    .await
+    .unwrap();
 
     let inventory =
         get_skill_update_inventory_impl_scoped(&pool, Some(scope_platform(vec!["codex"])))
@@ -2158,7 +2183,219 @@ async fn apply_rejects_deleted_platform_copy_outside_allowed_agents() {
 
 /*
  * ========================================================================
- * C. scan_platform_duplicate_skills
+ * C. force update / force mirror rescue mode
+ * ========================================================================
+ */
+
+#[tokio::test]
+async fn force_update_overwrites_when_hashes_match_and_refreshes_copy() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().to_path_buf();
+    let pool = setup_test_db_with_home(&home).await;
+    let central_dir = home.join(".skillsmanage/skills/force-skill");
+    let copy_dir = home.join(".cursor/skills/force-skill");
+    std::fs::create_dir_all(&central_dir).unwrap();
+    std::fs::create_dir_all(&copy_dir).unwrap();
+    let content = b"---\nname: Force Skill\n---\n\nsame";
+    std::fs::write(central_dir.join("SKILL.md"), content).unwrap();
+    std::fs::write(copy_dir.join("SKILL.md"), b"---\nname: Stale Copy\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("force-skill", &central_dir))
+        .await
+        .unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &copy_installation("force-skill", "cursor", &copy_dir),
+    )
+    .await
+    .unwrap();
+    assign_test_repo(&pool, "force-skill", "skills/force-skill").await;
+
+    let snapshot = skill_snapshot(vec![("skills/force-skill/SKILL.md", content)]);
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let result = force_update_central_skills_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        SnapshotCachePolicy::UseFresh,
+        ForceSkillUpdateRequest {
+            skill_ids: vec!["force-skill".to_string()],
+            refresh_copy_installations: true,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.overwritten.len(), 1);
+    assert!(!result.overwritten[0].bytes_changed);
+    assert!(result.overwritten[0].copy_installations_refreshed);
+    assert_eq!(std::fs::read(copy_dir.join("SKILL.md")).unwrap(), content);
+    let states = db::get_skill_update_states_for_skills(&pool, &["force-skill".to_string()])
+        .await
+        .unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].status, SkillUpdateStatus::UpToDate.to_string());
+    assert_eq!(states[0].last_remote_hash, states[0].latest_remote_hash);
+}
+
+#[tokio::test]
+async fn force_update_respects_disabled_copy_refresh() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().to_path_buf();
+    let pool = setup_test_db_with_home(&home).await;
+    let central_dir = home.join(".skillsmanage/skills/no-copy-refresh");
+    let copy_dir = home.join(".cursor/skills/no-copy-refresh");
+    std::fs::create_dir_all(&central_dir).unwrap();
+    std::fs::create_dir_all(&copy_dir).unwrap();
+    std::fs::write(central_dir.join("SKILL.md"), b"---\nname: Old\n---").unwrap();
+    std::fs::write(copy_dir.join("SKILL.md"), b"---\nname: Stale Copy\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("no-copy-refresh", &central_dir))
+        .await
+        .unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &copy_installation("no-copy-refresh", "cursor", &copy_dir),
+    )
+    .await
+    .unwrap();
+    assign_test_repo(&pool, "no-copy-refresh", "skills/no-copy-refresh").await;
+
+    let remote = b"---\nname: New\n---";
+    let snapshot = skill_snapshot(vec![("skills/no-copy-refresh/SKILL.md", remote)]);
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let result = force_update_central_skills_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        SnapshotCachePolicy::UseFresh,
+        ForceSkillUpdateRequest {
+            skill_ids: vec!["no-copy-refresh".to_string()],
+            refresh_copy_installations: false,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.overwritten.len(), 1);
+    assert!(!result.overwritten[0].copy_installations_refreshed);
+    assert_eq!(std::fs::read(central_dir.join("SKILL.md")).unwrap(), remote);
+    assert_eq!(
+        std::fs::read(copy_dir.join("SKILL.md")).unwrap(),
+        b"---\nname: Stale Copy\n---"
+    );
+}
+
+#[tokio::test]
+async fn force_mirror_overwrites_imports_and_deletes_missing_with_copies() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().to_path_buf();
+    let pool = setup_test_db_with_home(&home).await;
+    let central_root = home.join(".skillsmanage/skills");
+    let tracked_dir = central_root.join("tracked");
+    let missing_dir = central_root.join("missing");
+    let other_dir = central_root.join("other");
+    let missing_copy_dir = home.join(".cursor/skills/missing");
+    for dir in [&tracked_dir, &missing_dir, &other_dir, &missing_copy_dir] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    std::fs::write(tracked_dir.join("SKILL.md"), b"---\nname: Tracked Old\n---").unwrap();
+    std::fs::write(missing_dir.join("SKILL.md"), b"---\nname: Missing\n---").unwrap();
+    std::fs::write(other_dir.join("SKILL.md"), b"---\nname: Other\n---").unwrap();
+    std::fs::write(
+        missing_copy_dir.join("SKILL.md"),
+        b"---\nname: Missing Copy\n---",
+    )
+    .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("tracked", &tracked_dir))
+        .await
+        .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("missing", &missing_dir))
+        .await
+        .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("other", &other_dir))
+        .await
+        .unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &copy_installation("missing", "cursor", &missing_copy_dir),
+    )
+    .await
+    .unwrap();
+    assign_test_repo(&pool, "tracked", "skills/tracked").await;
+    assign_test_repo(&pool, "missing", "skills/missing").await;
+    assign_alt_repo(&pool, "other", "skills/other").await;
+    let repository_id = db::get_skill_repository_assignment(&pool, "tracked")
+        .await
+        .unwrap()
+        .repository
+        .id;
+
+    let tracked_remote = b"---\nname: Tracked New\n---";
+    let added_remote = b"---\nname: New Skill\n---";
+    let snapshot = skill_snapshot(vec![
+        ("skills/tracked/SKILL.md", tracked_remote),
+        ("skills/new-skill/SKILL.md", added_remote),
+    ]);
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let result = force_mirror_central_repositories_impl(
+        None,
+        &pool,
+        &ActiveTarget::Local,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        SnapshotCachePolicy::UseFresh,
+        ForceRepositoryMirrorRequest {
+            repository_ids: vec![repository_id],
+            delete_missing: true,
+            import_added: true,
+            overwrite_tracked: true,
+            remove_copy_installations_for_deleted: true,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.overwritten.len(), 1);
+    assert_eq!(result.overwritten[0].skill_id, "tracked");
+    assert_eq!(result.imported.len(), 1);
+    assert_eq!(result.imported[0].imported_skill_id, "new-skill");
+    assert_eq!(result.deleted.succeeded.len(), 1);
+    assert_eq!(result.deleted.succeeded[0].skill_id, "missing");
+    assert_eq!(
+        result.deleted.succeeded[0].removed_agent_ids,
+        vec!["cursor".to_string()]
+    );
+    assert!(result.skipped.is_empty());
+    assert!(result.failed_items.is_empty());
+    assert_eq!(
+        std::fs::read(tracked_dir.join("SKILL.md")).unwrap(),
+        tracked_remote
+    );
+    assert!(central_root.join("new-skill/SKILL.md").exists());
+    assert!(!missing_dir.exists());
+    assert!(!missing_copy_dir.exists());
+    assert!(other_dir.exists());
+    assert!(db::get_skill_by_id(&pool, "missing")
+        .await
+        .unwrap()
+        .is_none());
+    assert!(db::get_skill_by_id(&pool, "other").await.unwrap().is_some());
+}
+
+/*
+ * ========================================================================
+ * D. scan_platform_duplicate_skills
  * ========================================================================
  */
 

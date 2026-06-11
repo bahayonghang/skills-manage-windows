@@ -258,6 +258,44 @@ pub struct SkillRepositoryPendingAddition {
     pub discovered_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SkillUpdateInventoryRun {
+    pub inventory_id: String,
+    pub scope_kind: String,
+    pub mode: String,
+    pub skill_ids_json: Option<String>,
+    pub repository_ids_json: Option<String>,
+    pub agent_ids_json: Option<String>,
+    pub cache_policy: String,
+    pub generated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SkillUpdateInventoryEntry {
+    pub inventory_id: String,
+    pub bucket: String,
+    pub entity_key: String,
+    pub skill_id: Option<String>,
+    pub skill_name: Option<String>,
+    pub repository_id: Option<String>,
+    pub source_type: Option<String>,
+    pub source_url: Option<String>,
+    pub ref_name: Option<String>,
+    pub source_path: Option<String>,
+    pub agent_id: Option<String>,
+    pub local_hash: Option<String>,
+    pub baseline_hash: Option<String>,
+    pub remote_hash: Option<String>,
+    pub local_version: Option<String>,
+    pub remote_version: Option<String>,
+    pub cache_policy: String,
+    pub cache_hit: bool,
+    pub snapshot_fetched_at: Option<String>,
+    pub generated_at: String,
+    pub payload_json: String,
+    pub error: Option<String>,
+}
+
 // ─── Update State ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

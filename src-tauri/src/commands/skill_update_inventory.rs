@@ -3,13 +3,15 @@
 //! 在旧的 `check_central_skill_updates` / `check_central_repository_sync` 之上
 //! 提供面向"更新中心"统一面板的命令集合：
 //!
-//! - `refresh_skill_update_inventory`：拉远端 + 写 pending_additions / repo
-//!   last_synced_at，返回一份完整 inventory。是新接口与旧 check 的关键差别。
+//! - `refresh_skill_update_inventory`：拉远端并写入 update-inventory 表与
+//!   remote-addition bucket，返回一份完整 inventory；不更新安装 baseline。
 //! - `get_skill_update_inventory`：纯读视图，不触网。
-//! - `clear_skill_update_inventory`：清 pending_additions（不动 update_states，
-//!   避免误删 update_available 标记）。
+//! - `clear_skill_update_inventory`：清空所选 scope 的 inventory bucket，
+//!   不删除技能、不改 `skill_update_states` baseline。
 //! - `apply_skill_update_decisions`：把用户在面板里勾的决策一次性应用，
 //!   每步独立 partial success，复用 keep/delete/import/update/uninstall 既有 impl。
+//! - `force_update_central_skills` / `force_mirror_central_repositories`：
+//!   显式救援动作，绕过检测结果从远端覆盖/镜像同步。
 //! - `scan_platform_duplicate_skills`：观察各 agent 是否同 skill_id 同时有
 //!   writable 与 plugin readonly 两份，给前端去重弹窗用。
 //!
@@ -22,8 +24,9 @@ use tauri::{AppHandle, State};
 
 use crate::commands::central_updates::{
     self, error_state_from_assignment, load_remote_skill_content, prepare_skill_updates,
-    prepare_snapshots_for_repo_refs, remote_missing_state_from_assignment, state_from_remote,
-    unsupported_state_from_assignment, RemoteSkillLoadError, SkillUpdateStatus,
+    prepare_snapshots_for_repo_refs_with_policy, remote_missing_state_from_assignment,
+    state_from_remote, unsupported_state_from_assignment, RemoteSkillLoadError, SkillUpdateStatus,
+    SnapshotCachePolicy,
 };
 use crate::commands::central_updates_fs::{normalize_repo_path, CentralFs};
 use crate::commands::github_import;
@@ -32,6 +35,8 @@ use crate::targets::ActiveTarget;
 use crate::AppState;
 
 mod apply_steps;
+mod force;
+mod persistence;
 mod relocation;
 mod repositories;
 mod scan;
@@ -39,6 +44,8 @@ mod scope;
 mod types;
 
 pub(crate) use apply_steps::*;
+pub(crate) use force::*;
+use persistence::*;
 pub(crate) use relocation::*;
 pub(crate) use repositories::*;
 pub(crate) use scan::*;
@@ -97,6 +104,9 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
      * 4) Platform：从当前平台 agent_ids 已安装/已观测到的 central skills 推导
      */
     let mode = scope.mode.unwrap_or(SkillRefreshMode::Sync);
+    let cache_policy = scope
+        .cache_policy
+        .unwrap_or(SkillRefreshCachePolicy::Bypass);
     let include_sync_buckets = mode == SkillRefreshMode::Sync;
 
     // 1.1 决定 repo_ids 与 skill_ids
@@ -165,9 +175,14 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         .collect::<Vec<_>>();
     snapshot_repos.extend(valid_repositories.iter().map(|(_, repo)| repo.clone()));
 
-    let snapshots =
-        prepare_snapshots_for_repo_refs(client, auth_token, &snapshot_repos, snapshots_cache)
-            .await?;
+    let snapshots = prepare_snapshots_for_repo_refs_with_policy(
+        client,
+        auth_token,
+        &snapshot_repos,
+        snapshots_cache,
+        snapshot_cache_policy(cache_policy),
+    )
+    .await?;
 
     /*
      * ========================================================================
@@ -206,6 +221,11 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                             "{} Switch to incremental and removal mode to decide whether to keep or delete '{}'.",
                             reason, skill.id
                         ),
+                        diagnostics: Some(diagnostic_from_state(
+                            &error_state_from_assignment(skill, &prepared_skill.assignment, &reason),
+                            cache_policy,
+                            false,
+                        )),
                     });
                     error_state_from_assignment(skill, &prepared_skill.assignment, &reason)
                 }
@@ -215,14 +235,14 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
             }
         };
 
-        db::upsert_skill_update_state(pool, &state_result).await?;
-
         match state_result.status.parse::<SkillUpdateStatus>().ok() {
             Some(SkillUpdateStatus::UpdateAvailable) => {
                 let repository_id = repository_id_for_state(&repo_by_id, &state_result);
+                let diagnostics = Some(diagnostic_from_state(&state_result, cache_policy, false));
                 updatable.push(UpdatableSkill {
                     state: state_result,
                     repository_id,
+                    diagnostics,
                 });
             }
             Some(SkillUpdateStatus::RemoteMissing) => {
@@ -298,6 +318,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
             failed_repositories.push(FailedRepository {
                 repository_id: failure.repository_id,
                 error: failure.error,
+                diagnostics: None,
             });
         }
     }
@@ -311,6 +332,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         central_updates::build_remote_missing_skills(&repo_by_id, remote_missing_states)
             .into_iter()
             .map(|item| RemoteMissingSkill {
+                diagnostics: Some(diagnostic_from_state(&item.state, cache_policy, false)),
                 repository_id: item.repository_id,
                 state: item.state,
             })
@@ -337,7 +359,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         }
     }
 
-    Ok(SkillUpdateInventory {
+    let inventory = SkillUpdateInventory {
         updatable,
         remote_added,
         remote_missing,
@@ -346,7 +368,9 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         orphans: Vec::new(),
         failed_repositories,
         generated_at: now,
-    })
+    };
+    persist_refresh_inventory(pool, &scope, mode, cache_policy, &inventory).await?;
+    Ok(inventory)
 }
 
 #[tauri::command]
@@ -369,40 +393,13 @@ pub(crate) async fn get_skill_update_inventory_impl_scoped(
      * 这是不触网的"读视图"，仅汇总 DB 既有状态。
      */
 
-    let scope_filter = InventoryScopeFilter::from_scope(pool, scope).await?;
+    let scope_filter = InventoryScopeFilter::from_scope(pool, scope.clone()).await?;
     db::prune_orphaned_pending_additions(pool).await?;
-    let states = db::get_skill_update_states(pool).await?;
-    let repo_with_stats = db::get_skill_repositories_with_stats(pool).await?;
-    let repo_by_id = repo_with_stats
-        .iter()
-        .map(|r| (r.repository.id.clone(), r.repository.clone()))
-        .collect::<HashMap<_, _>>();
-
-    let mut updatable = Vec::new();
-    let mut remote_missing = Vec::new();
-    for state_row in states {
-        if !scope_filter.includes_skill(&state_row.skill_id) {
-            continue;
-        }
-        let parsed = state_row.status.parse::<SkillUpdateStatus>().ok();
-        match parsed {
-            Some(SkillUpdateStatus::UpdateAvailable) => {
-                let repository_id = repository_id_for_state(&repo_by_id, &state_row);
-                updatable.push(UpdatableSkill {
-                    state: state_row,
-                    repository_id,
-                });
-            }
-            Some(SkillUpdateStatus::RemoteMissing) => {
-                let repository_id = repository_id_for_state(&repo_by_id, &state_row);
-                remote_missing.push(RemoteMissingSkill {
-                    state: state_row,
-                    repository_id,
-                });
-            }
-            _ => {}
-        }
-    }
+    let entries =
+        db::list_skill_update_inventory_entries(pool, &inventory_id_for_scope(scope.as_ref()))
+            .await?;
+    let (updatable, remote_missing, failed_repositories, inventory_generated_at) =
+        inventory_from_entries(entries)?;
 
     /*
      * ========================================================================
@@ -450,8 +447,8 @@ pub(crate) async fn get_skill_update_inventory_impl_scoped(
         platform_duplicates,
         deleted_platform_copies,
         orphans: Vec::new(),
-        failed_repositories: Vec::new(),
-        generated_at: Utc::now().to_rfc3339(),
+        failed_repositories,
+        generated_at: inventory_generated_at.unwrap_or_else(|| Utc::now().to_rfc3339()),
     })
 }
 
@@ -479,23 +476,29 @@ pub(crate) async fn clear_skill_update_inventory_impl(
      */
     match scope {
         None => {
+            db::clear_all_skill_update_inventory(pool).await?;
             db::clear_pending_additions(pool).await?;
         }
         Some(scope) => match scope.kind {
             SkillRefreshScopeKind::All => {
+                db::clear_all_skill_update_inventory(pool).await?;
                 db::clear_pending_additions(pool).await?;
             }
             SkillRefreshScopeKind::Skills => {
-                // pending_additions 不挂在 skill_id 上，noop。
+                let ids = normalize_ids(scope.skill_ids.unwrap_or_default());
+                db::delete_skill_update_inventory_entries_for_skills(pool, &ids).await?;
+                db::clear_pending_additions_for_skill_ids(pool, &ids).await?;
             }
             SkillRefreshScopeKind::Repositories => {
-                let ids = scope.repository_ids.unwrap_or_default();
+                let ids = normalize_ids(scope.repository_ids.unwrap_or_default());
                 if !ids.is_empty() {
+                    db::delete_skill_update_inventory_entries_for_repositories(pool, &ids).await?;
                     db::clear_pending_additions_for_repos(pool, &ids).await?;
                 }
             }
             SkillRefreshScopeKind::Platform => {
-                // Platform scope does not own remote additions.
+                db::clear_skill_update_inventory_run(pool, &inventory_id_for_scope(Some(&scope)))
+                    .await?;
             }
         },
     }
@@ -682,7 +685,59 @@ pub async fn apply_skill_update_decisions(
     )
     .await;
 
+    prune_applied_inventory_entries(&pool, &result).await;
+
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn force_update_central_skills(
+    state: State<'_, AppState>,
+    request: ForceSkillUpdateRequest,
+) -> Result<ForceSkillUpdateResult, String> {
+    let pool = state.active_db().await?;
+    let fs = CentralFs::from_active_target(state.active_target().await?).await?;
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await?;
+    let client = github_import::github_client()?;
+    force_update_central_skills_impl(
+        &pool,
+        &fs,
+        auth.as_deref(),
+        &client,
+        &state.central_update_snapshots,
+        SnapshotCachePolicy::Bypass,
+        request,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn force_mirror_central_repositories(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: ForceRepositoryMirrorRequest,
+) -> Result<ForceRepositoryMirrorResult, String> {
+    let pool = state.active_db().await?;
+    let active_target = state.active_target().await?;
+    let fs = CentralFs::from_active_target(active_target.clone()).await?;
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await?;
+    let client = github_import::github_client()?;
+    force_mirror_central_repositories_impl(
+        Some(&app),
+        &pool,
+        &active_target,
+        &fs,
+        auth.as_deref(),
+        &client,
+        &state.central_update_snapshots,
+        SnapshotCachePolicy::Bypass,
+        request,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -719,6 +774,13 @@ async fn load_repository_for_import_addition(
             db::clear_pending_additions_for_repos(pool, &[repository_id.to_string()]).await?;
             Ok(None)
         }
+    }
+}
+
+fn snapshot_cache_policy(policy: SkillRefreshCachePolicy) -> SnapshotCachePolicy {
+    match policy {
+        SkillRefreshCachePolicy::UseFresh => SnapshotCachePolicy::UseFresh,
+        SkillRefreshCachePolicy::Bypass => SnapshotCachePolicy::Bypass,
     }
 }
 

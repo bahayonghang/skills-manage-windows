@@ -87,6 +87,7 @@ export function UpdatableTabPanel({
                   repositoryLabel={repositoryLabel}
                   sourcePath={item.state.source_path}
                   sourceUrl={item.state.source_url ?? source?.url}
+                  diagnostics={item.diagnostics}
                 />
               </span>
             </label>

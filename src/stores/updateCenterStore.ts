@@ -3,6 +3,10 @@ import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import type {
   DeletedPlatformCopyGroup,
+  ForceRepositoryMirrorRequest,
+  ForceRepositoryMirrorResult,
+  ForceSkillUpdateRequest,
+  ForceSkillUpdateResult,
   PlatformDuplicateGroup,
   SkillRefreshScope,
   SkillRefreshMode,
@@ -48,6 +52,7 @@ interface UpdateCenterState {
   inventory: SkillUpdateInventory | null;
   isRefreshing: boolean;
   isApplying: boolean;
+  isForcing: boolean;
   lastRefreshedAt: string | null;
   isDialogOpen: boolean;
   activeTab: UpdateCenterTab;
@@ -63,6 +68,14 @@ interface UpdateCenterState {
   loadInventory(scope?: SkillRefreshScope): Promise<void>;
   scanDuplicates(agentIds?: string[]): Promise<void>;
   scanDeletedPlatformCopies(agentIds?: string[]): Promise<void>;
+  forceUpdateSkills(
+    request: ForceSkillUpdateRequest,
+    scope?: SkillRefreshScope,
+  ): Promise<ForceSkillUpdateResult>;
+  forceMirrorRepositories(
+    request: ForceRepositoryMirrorRequest,
+    scope?: SkillRefreshScope,
+  ): Promise<ForceRepositoryMirrorResult>;
   openDialog(
     tab?: UpdateCenterTab,
     context?: Partial<SkillRefreshContext> & { mode?: SkillRefreshMode },
@@ -103,6 +116,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   inventory: null,
   isRefreshing: false,
   isApplying: false,
+  isForcing: false,
   lastRefreshedAt: null,
   isDialogOpen: false,
   activeTab: "updatable",
@@ -124,7 +138,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
       }
       const inventory = await invoke<SkillUpdateInventory>(
         "refresh_skill_update_inventory",
-        { scope },
+        { scope: { ...scope, cachePolicy: scope.cachePolicy ?? "bypass" } },
       );
       set({
         inventory,
@@ -198,6 +212,48 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
         ? { ...state.inventory, deletedPlatformCopies }
         : { ...emptyInventory(), deletedPlatformCopies },
     }));
+  },
+
+  async forceUpdateSkills(request, scope) {
+    set({ isForcing: true, error: null });
+    try {
+      const result = isTauriRuntime()
+        ? await invoke<ForceSkillUpdateResult>("force_update_central_skills", {
+            request,
+          })
+        : { overwritten: [], skipped: [], failed: [] };
+      await get().loadInventory(scope);
+      set({ isForcing: false });
+      return result;
+    } catch (err) {
+      set({ error: String(err), isForcing: false });
+      throw err;
+    }
+  },
+
+  async forceMirrorRepositories(request, scope) {
+    set({ isForcing: true, error: null });
+    try {
+      const result = isTauriRuntime()
+        ? await invoke<ForceRepositoryMirrorResult>(
+            "force_mirror_central_repositories",
+            { request },
+          )
+        : {
+            overwritten: [],
+            imported: [],
+            deleted: { succeeded: [], failed: [] },
+            skipped: [],
+            failedRepositories: [],
+            failedItems: [],
+          };
+      await get().loadInventory(scope);
+      set({ isForcing: false });
+      return result;
+    } catch (err) {
+      set({ error: String(err), isForcing: false });
+      throw err;
+    }
   },
 
   openDialog(tab, context) {

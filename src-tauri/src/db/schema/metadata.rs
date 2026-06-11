@@ -2,7 +2,8 @@
 //!
 //! 表分组：
 //! - `skill_repositories` / `skill_repository_members`：技能按源仓库分组
-//! - `skill_update_states`：远端版本号、抓取状态、错误
+//! - `skill_update_states`：成功应用后的远端基线和兼容更新状态
+//! - `skill_update_inventory_*`：更新中心 refresh 生成的待处理检查结果
 //! - `skill_tags` / `skill_tag_links`：本地分类标签（含手动 / AI 双 source）
 //! - `skill_ai_tag_reviews`：待审核的 AI 标签建议
 
@@ -267,6 +268,69 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_repository_pending_additions_repo
          ON skill_repository_pending_additions(repository_id, discovered_at DESC)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_update_inventory_runs (
+            inventory_id        TEXT PRIMARY KEY,
+            scope_kind          TEXT NOT NULL,
+            mode                TEXT NOT NULL,
+            skill_ids_json      TEXT,
+            repository_ids_json TEXT,
+            agent_ids_json      TEXT,
+            cache_policy        TEXT NOT NULL,
+            generated_at        TEXT NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_update_inventory_entries (
+            inventory_id        TEXT NOT NULL,
+            bucket              TEXT NOT NULL,
+            entity_key          TEXT NOT NULL,
+            skill_id            TEXT,
+            skill_name          TEXT,
+            repository_id       TEXT,
+            source_type         TEXT,
+            source_url          TEXT,
+            ref_name            TEXT,
+            source_path         TEXT,
+            agent_id            TEXT,
+            local_hash          TEXT,
+            baseline_hash       TEXT,
+            remote_hash         TEXT,
+            local_version       TEXT,
+            remote_version      TEXT,
+            cache_policy        TEXT NOT NULL,
+            cache_hit           INTEGER NOT NULL DEFAULT 0,
+            snapshot_fetched_at TEXT,
+            generated_at        TEXT NOT NULL,
+            payload_json        TEXT NOT NULL,
+            error               TEXT,
+            PRIMARY KEY (inventory_id, bucket, entity_key)
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_update_inventory_entries_skill
+         ON skill_update_inventory_entries(skill_id, bucket)",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_update_inventory_entries_repo
+         ON skill_update_inventory_entries(repository_id, bucket)",
     )
     .execute(pool)
     .await

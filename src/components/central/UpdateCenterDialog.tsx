@@ -63,6 +63,7 @@ export function UpdateCenterDialog() {
   const isDialogOpen = useUpdateCenterStore((state) => state.isDialogOpen);
   const isRefreshing = useUpdateCenterStore((state) => state.isRefreshing);
   const isApplying = useUpdateCenterStore((state) => state.isApplying);
+  const isForcing = useUpdateCenterStore((state) => state.isForcing);
   const activeTab = useUpdateCenterStore((state) => state.activeTab);
   const refreshContext = useUpdateCenterStore((state) => state.refreshContext);
   const refreshMode = useUpdateCenterStore((state) => state.refreshMode);
@@ -72,6 +73,10 @@ export function UpdateCenterDialog() {
   const refresh = useUpdateCenterStore((state) => state.refresh);
   const apply = useUpdateCenterStore((state) => state.apply);
   const clear = useUpdateCenterStore((state) => state.clear);
+  const forceUpdateSkills = useUpdateCenterStore((state) => state.forceUpdateSkills);
+  const forceMirrorRepositories = useUpdateCenterStore(
+    (state) => state.forceMirrorRepositories,
+  );
   const setActiveTab = useUpdateCenterStore((state) => state.setActiveTab);
   const setRefreshMode = useUpdateCenterStore((state) => state.setRefreshMode);
   const skills = useCentralSkillsStore((state) => state.skills ?? []);
@@ -121,6 +126,12 @@ export function UpdateCenterDialog() {
     () => summarizeDecisionSelections(decisions, inventory),
     [decisions, inventory],
   );
+  const selectedUpdateIds = useMemo(() => {
+    if (!inventory) return [];
+    return inventory.updatable
+      .map((item) => item.state.skill_id)
+      .filter((skillId) => decisions.updatable[skillId]?.selected);
+  }, [decisions.updatable, inventory]);
 
   useEffect(() => {
     if (!isDialogOpen) return;
@@ -198,6 +209,76 @@ export function UpdateCenterDialog() {
     } catch (err) {
       toast.error(
         t("central.updateCenter.applyError", { error: String(err) }),
+      );
+    }
+  }
+
+  async function handleForceUpdateSelected() {
+    if (selectedUpdateIds.length === 0) return;
+    const confirmed = window.confirm(
+      t("central.updateCenter.forceUpdateConfirm", {
+        count: selectedUpdateIds.length,
+      }),
+    );
+    if (!confirmed) return;
+    const scope = currentRefreshScope();
+    try {
+      const result = await forceUpdateSkills(
+        { skillIds: selectedUpdateIds, refreshCopyInstallations: true },
+        scope,
+      );
+      toast.success(
+        t("central.updateCenter.forceUpdateSuccess", {
+          count: result.overwritten.length,
+        }),
+      );
+      for (const failure of result.failed.slice(0, 3)) {
+        toast.error(`${failure.skillId}: ${failure.error}`);
+      }
+    } catch (err) {
+      toast.error(
+        t("central.updateCenter.forceUpdateError", { error: String(err) }),
+      );
+    }
+  }
+
+  async function handleForceMirrorRepositories() {
+    const repositoryIds = refreshContext.repositoryIds;
+    if (scopeKind !== "repositories" || repositoryIds.length === 0) return;
+    const confirmed = window.confirm(
+      t("central.updateCenter.forceMirrorConfirm", {
+        repositories: repositoryIds.length,
+        updates: inventory?.updatable.length ?? 0,
+        additions: inventory?.remoteAdded.length ?? 0,
+        deletes: inventory?.remoteMissing.length ?? 0,
+      }),
+    );
+    if (!confirmed) return;
+    const scope = currentRefreshScope();
+    try {
+      const result = await forceMirrorRepositories(
+        {
+          repositoryIds,
+          overwriteTracked: true,
+          importAdded: true,
+          deleteMissing: true,
+          removeCopyInstallationsForDeleted: true,
+        },
+        scope,
+      );
+      toast.success(
+        t("central.updateCenter.forceMirrorSuccess", {
+          overwritten: result.overwritten.length,
+          imported: result.imported.length,
+          deleted: result.deleted.succeeded.length,
+        }),
+      );
+      for (const failure of result.failedItems.slice(0, 3)) {
+        toast.error(`${failure.skillId}: ${failure.error}`);
+      }
+    } catch (err) {
+      toast.error(
+        t("central.updateCenter.forceMirrorError", { error: String(err) }),
       );
     }
   }
@@ -332,27 +413,60 @@ export function UpdateCenterDialog() {
             variant="outline"
             size="sm"
             onClick={handleClear}
-            disabled={isApplying || isRefreshing}
+            disabled={isApplying || isRefreshing || isForcing}
           >
             {t("central.updateCenter.clearInventory")}
           </Button>
           <Button
             variant="outline"
             size="sm"
+            onClick={handleForceUpdateSelected}
+            disabled={
+              isApplying
+              || isRefreshing
+              || isForcing
+              || selectedUpdateIds.length === 0
+            }
+          >
+            {t("central.updateCenter.forceUpdateSelected", {
+              count: selectedUpdateIds.length,
+            })}
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleForceMirrorRepositories}
+            disabled={
+              isApplying
+              || isRefreshing
+              || isForcing
+              || scopeKind !== "repositories"
+              || refreshContext.repositoryIds.length === 0
+            }
+          >
+            {t("central.updateCenter.forceMirrorRepositories")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={closeDialog}
-            disabled={isApplying}
+            disabled={isApplying || isForcing}
           >
             {t("common.cancel")}
           </Button>
           <Button
             size="sm"
             onClick={handleApplySelected}
-            disabled={isApplying || totalSelected === 0 || !inventory}
+            disabled={isApplying || isForcing || totalSelected === 0 || !inventory}
           >
-            {isApplying ? (
+            {isApplying || isForcing ? (
               <>
                 <Loader2 className="size-3.5 animate-spin" />
-                {t("central.updateCenter.applyingChanges")}
+                {t(
+                  isForcing
+                    ? "central.updateCenter.forcingChanges"
+                    : "central.updateCenter.applyingChanges",
+                )}
               </>
             ) : (
               t("central.updateCenter.applySelected", { count: totalSelected })

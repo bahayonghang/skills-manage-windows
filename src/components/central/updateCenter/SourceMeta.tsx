@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
+import type { SkillUpdateDiagnostic } from "@/types/skillUpdateInventory";
 
 interface SourceMetaProps {
   repositoryLabel?: string | null;
   sourcePath?: string | null;
   sourceUrl?: string | null;
+  diagnostics?: SkillUpdateDiagnostic | null;
 }
 
 type SourceMetaRow = {
@@ -21,6 +23,7 @@ export function SourceMeta({
   repositoryLabel,
   sourcePath,
   sourceUrl,
+  diagnostics,
 }: SourceMetaProps) {
   const { t } = useTranslation();
   const path = clean(sourcePath);
@@ -50,6 +53,20 @@ export function SourceMeta({
       label: t("central.updateCenter.sourceUrlLabel"),
       value: url,
     });
+  }
+  if (diagnostics) {
+    rows.push({
+      key: "cache",
+      label: t("central.updateCenter.cacheLabel"),
+      value: t(`central.updateCenter.cachePolicies.${diagnostics.cachePolicy}`),
+    });
+    if (diagnostics.localHash || diagnostics.remoteHash) {
+      rows.push({
+        key: "hash",
+        label: t("central.updateCenter.hashLabel"),
+        value: `${diagnostics.localHash ?? "-"} -> ${diagnostics.remoteHash ?? "-"}`,
+      });
+    }
   }
 
   if (rows.length === 0) return null;

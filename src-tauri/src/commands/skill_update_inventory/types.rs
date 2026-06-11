@@ -2,7 +2,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::commands::central_updates;
 use crate::db::SkillUpdateState;
-use crate::services::central_skills::BatchDeleteCentralSkillRequest;
+use crate::services::central_skills::{
+    BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult,
+};
+use crate::services::github_import::ImportedGitHubSkillSummary;
 
 /*
  * ========================================================================
@@ -16,6 +19,8 @@ pub struct SkillRefreshScope {
     pub kind: SkillRefreshScopeKind,
     #[serde(default)]
     pub mode: Option<SkillRefreshMode>,
+    #[serde(default)]
+    pub cache_policy: Option<SkillRefreshCachePolicy>,
     #[serde(default)]
     pub skill_ids: Option<Vec<String>>,
     #[serde(default)]
@@ -40,6 +45,22 @@ pub enum SkillRefreshMode {
     Sync,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillRefreshCachePolicy {
+    UseFresh,
+    Bypass,
+}
+
+impl SkillRefreshCachePolicy {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::UseFresh => "use_fresh",
+            Self::Bypass => "bypass",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillUpdateInventory {
@@ -60,6 +81,8 @@ pub struct SkillUpdateInventory {
 pub struct UpdatableSkill {
     pub state: SkillUpdateState,
     pub repository_id: Option<String>,
+    #[serde(default)]
+    pub diagnostics: Option<SkillUpdateDiagnostic>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +100,8 @@ pub struct RemoteAddedSkill {
 pub struct RemoteMissingSkill {
     pub state: SkillUpdateState,
     pub repository_id: Option<String>,
+    #[serde(default)]
+    pub diagnostics: Option<SkillUpdateDiagnostic>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,6 +135,25 @@ pub struct OrphanSkillEntry {
 pub struct FailedRepository {
     pub repository_id: String,
     pub error: String,
+    #[serde(default)]
+    pub diagnostics: Option<SkillUpdateDiagnostic>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillUpdateDiagnostic {
+    pub source_url: Option<String>,
+    #[serde(rename = "ref")]
+    pub ref_name: Option<String>,
+    pub source_path: Option<String>,
+    pub local_hash: Option<String>,
+    pub baseline_hash: Option<String>,
+    pub remote_hash: Option<String>,
+    pub local_version: Option<String>,
+    pub remote_version: Option<String>,
+    pub cache_policy: SkillRefreshCachePolicy,
+    pub cache_hit: bool,
+    pub snapshot_fetched_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -171,4 +215,77 @@ pub struct SkillUpdateApplyFailure {
     pub step: String,
     pub identifier: String,
     pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForceSkillUpdateRequest {
+    pub skill_ids: Vec<String>,
+    #[serde(default = "default_true")]
+    pub refresh_copy_installations: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ForceSkillUpdateResult {
+    pub overwritten: Vec<ForceSkillUpdateSuccess>,
+    pub skipped: Vec<ForceSkillUpdateSkip>,
+    pub failed: Vec<ForceSkillUpdateFailure>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForceSkillUpdateSuccess {
+    pub skill_id: String,
+    pub repository_id: Option<String>,
+    pub source_path: Option<String>,
+    pub local_hash: Option<String>,
+    pub remote_hash: Option<String>,
+    pub bytes_changed: bool,
+    pub copy_installations_refreshed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForceSkillUpdateSkip {
+    pub skill_id: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForceSkillUpdateFailure {
+    pub skill_id: String,
+    pub repository_id: Option<String>,
+    pub source_path: Option<String>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForceRepositoryMirrorRequest {
+    pub repository_ids: Vec<String>,
+    #[serde(default)]
+    pub delete_missing: bool,
+    #[serde(default)]
+    pub import_added: bool,
+    #[serde(default)]
+    pub overwrite_tracked: bool,
+    #[serde(default = "default_true")]
+    pub remove_copy_installations_for_deleted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForceRepositoryMirrorResult {
+    pub overwritten: Vec<ForceSkillUpdateSuccess>,
+    pub imported: Vec<ImportedGitHubSkillSummary>,
+    pub deleted: BatchDeleteCentralSkillResult,
+    pub skipped: Vec<ForceSkillUpdateSkip>,
+    pub failed_repositories: Vec<FailedRepository>,
+    pub failed_items: Vec<ForceSkillUpdateFailure>,
+}
+
+fn default_true() -> bool {
+    true
 }

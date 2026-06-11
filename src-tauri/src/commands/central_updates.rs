@@ -72,6 +72,12 @@ fn snapshot_cache_ttl() -> ChronoDuration {
 const SNAPSHOT_DOWNLOAD_CONCURRENCY: usize = 4;
 const COPY_INSTALL_REFRESH_CONCURRENCY: usize = 4;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SnapshotCachePolicy {
+    UseFresh,
+    Bypass,
+}
+
 pub mod repository_sync;
 #[allow(deprecated)]
 pub use repository_sync::{
@@ -671,6 +677,23 @@ pub(crate) async fn prepare_snapshots_for_repo_refs(
     repos: &[GitHubRepoRef],
     cache: &crate::CentralUpdateSnapshotCache,
 ) -> Result<HashMap<String, GitHubRepoSnapshot>, String> {
+    prepare_snapshots_for_repo_refs_with_policy(
+        client,
+        auth_token,
+        repos,
+        cache,
+        SnapshotCachePolicy::UseFresh,
+    )
+    .await
+}
+
+pub(crate) async fn prepare_snapshots_for_repo_refs_with_policy(
+    client: &reqwest::Client,
+    auth_token: Option<&str>,
+    repos: &[GitHubRepoRef],
+    cache: &crate::CentralUpdateSnapshotCache,
+    cache_policy: SnapshotCachePolicy,
+) -> Result<HashMap<String, GitHubRepoSnapshot>, String> {
     let mut repos_by_key = HashMap::<String, GitHubRepoRef>::new();
     for repo in repos {
         repos_by_key
@@ -680,8 +703,12 @@ pub(crate) async fn prepare_snapshots_for_repo_refs(
     let mut snapshots = HashMap::new();
     let mut missing = Vec::new();
     for (key, repo) in repos_by_key {
-        if let Some(snapshot) = cache.get_fresh(&key, snapshot_cache_ttl()) {
-            snapshots.insert(key, snapshot);
+        if cache_policy == SnapshotCachePolicy::UseFresh {
+            if let Some(snapshot) = cache.get_fresh(&key, snapshot_cache_ttl()) {
+                snapshots.insert(key, snapshot);
+            } else {
+                missing.push(repo);
+            }
         } else {
             missing.push(repo);
         }
@@ -1010,11 +1037,21 @@ fn unsupported_reason(assignment: &SkillRepositoryAssignment) -> String {
     "Automatic update is not supported for this source.".to_string()
 }
 
-async fn update_one_skill(
+pub(crate) async fn update_one_skill(
     pool: &DbPool,
     fs: &CentralFs,
     skill: &Skill,
     remote: RemoteSkillContent,
+) -> Result<SkillUpdateState, String> {
+    update_one_skill_with_options(pool, fs, skill, remote, true).await
+}
+
+pub(crate) async fn update_one_skill_with_options(
+    pool: &DbPool,
+    fs: &CentralFs,
+    skill: &Skill,
+    remote: RemoteSkillContent,
+    refresh_copies: bool,
 ) -> Result<SkillUpdateState, String> {
     fs.write_skill_dir_atomic(&skill.id, &remote.target_dir, &remote.files)
         .await?;
@@ -1047,7 +1084,9 @@ async fn update_one_skill(
         &remote.source.source_path,
     )
     .await?;
-    refresh_copy_installations(pool, fs, &skill.id, &remote.target_dir).await?;
+    if refresh_copies {
+        refresh_copy_installations(pool, fs, &skill.id, &remote.target_dir).await?;
+    }
 
     Ok(state_from_remote(skill, &remote, true))
 }

@@ -10,10 +10,12 @@ import type {
 
 export type SkillRefreshScopeKind = "all" | "skills" | "repositories" | "platform";
 export type SkillRefreshMode = "regular" | "sync";
+export type SkillRefreshCachePolicy = "use_fresh" | "bypass";
 
 export interface SkillRefreshScope {
   kind: SkillRefreshScopeKind;
   mode?: SkillRefreshMode;
+  cachePolicy?: SkillRefreshCachePolicy;
   skillIds?: string[] | null;
   repositoryIds?: string[] | null;
   agentIds?: string[] | null;
@@ -31,6 +33,7 @@ export interface SkillRefreshContext {
 export interface UpdatableSkill {
   state: CentralSkillUpdateState;
   repositoryId?: string | null;
+  diagnostics?: SkillUpdateDiagnostic | null;
 }
 
 export interface RemoteAddedSkill {
@@ -44,6 +47,7 @@ export interface RemoteAddedSkill {
 export interface RemoteMissingSkill {
   state: CentralSkillUpdateState;
   repositoryId?: string | null;
+  diagnostics?: SkillUpdateDiagnostic | null;
 }
 
 export interface PlatformDuplicateGroup {
@@ -69,6 +73,21 @@ export interface OrphanSkillEntry {
 export interface FailedRepository {
   repositoryId: string;
   error: string;
+  diagnostics?: SkillUpdateDiagnostic | null;
+}
+
+export interface SkillUpdateDiagnostic {
+  sourceUrl?: string | null;
+  ref?: string | null;
+  sourcePath?: string | null;
+  localHash?: string | null;
+  baselineHash?: string | null;
+  remoteHash?: string | null;
+  localVersion?: string | null;
+  remoteVersion?: string | null;
+  cachePolicy: SkillRefreshCachePolicy;
+  cacheHit: boolean;
+  snapshotFetchedAt?: string | null;
 }
 
 export interface SkillUpdateInventory {
@@ -123,4 +142,73 @@ export interface SkillUpdateApplyResult {
   removedPlatformDuplicatePaths: string[];
   removedDeletedPlatformCopyPaths: string[];
   failures: SkillUpdateApplyFailure[];
+}
+
+export interface ForceSkillUpdateRequest {
+  skillIds: string[];
+  refreshCopyInstallations?: boolean;
+}
+
+export interface ForceSkillUpdateSuccess {
+  skillId: string;
+  repositoryId?: string | null;
+  sourcePath?: string | null;
+  localHash?: string | null;
+  remoteHash?: string | null;
+  bytesChanged: boolean;
+  copyInstallationsRefreshed: boolean;
+}
+
+export interface ForceSkillUpdateSkip {
+  skillId: string;
+  reason: string;
+}
+
+export interface ForceSkillUpdateFailure {
+  skillId: string;
+  repositoryId?: string | null;
+  sourcePath?: string | null;
+  error: string;
+}
+
+export interface ForceSkillUpdateResult {
+  overwritten: ForceSkillUpdateSuccess[];
+  skipped: ForceSkillUpdateSkip[];
+  failed: ForceSkillUpdateFailure[];
+}
+
+export interface ForceRepositoryMirrorRequest {
+  repositoryIds: string[];
+  deleteMissing: boolean;
+  importAdded: boolean;
+  overwriteTracked: boolean;
+  removeCopyInstallationsForDeleted: boolean;
+}
+
+export interface ForceRepositoryMirrorResult {
+  overwritten: ForceSkillUpdateSuccess[];
+  imported: Array<{
+    sourcePath: string;
+    originalSkillId: string;
+    importedSkillId: string;
+    skillName: string;
+    targetDirectory: string;
+    resolution: "overwrite" | "skip" | "rename";
+  }>;
+  deleted: {
+    succeeded: Array<{
+      skill_id?: string;
+      skillId?: string;
+      removed_central_path?: string;
+      removedCentralPath?: string;
+      removed_agent_ids?: string[];
+      removedAgentIds?: string[];
+      retained_agent_ids?: string[];
+      retainedAgentIds?: string[];
+    }>;
+    failed: Array<{ skill_id?: string; skillId?: string; error: string }>;
+  };
+  skipped: ForceSkillUpdateSkip[];
+  failedRepositories: FailedRepository[];
+  failedItems: ForceSkillUpdateFailure[];
 }

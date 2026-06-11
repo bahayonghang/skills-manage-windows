@@ -374,6 +374,8 @@ pub fn run() {
             commands::skill_update_inventory::get_skill_update_inventory,
             commands::skill_update_inventory::clear_skill_update_inventory,
             commands::skill_update_inventory::apply_skill_update_decisions,
+            commands::skill_update_inventory::force_update_central_skills,
+            commands::skill_update_inventory::force_mirror_central_repositories,
             commands::skill_update_inventory::scan_platform_duplicate_skills,
             commands::skill_update_inventory::scan_deleted_platform_copies,
             // Collections

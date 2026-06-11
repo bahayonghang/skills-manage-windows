@@ -48,6 +48,7 @@ export function RemoteMissingTabPanel({
                   repositoryLabel={repositoryLabel}
                   sourcePath={item.state.source_path}
                   sourceUrl={item.state.source_url ?? source?.url}
+                  diagnostics={item.diagnostics}
                 />
               </div>
               <div className="grid w-full grid-cols-2 rounded-xl border border-border/70 bg-muted/20 p-1 text-xs sm:w-auto">

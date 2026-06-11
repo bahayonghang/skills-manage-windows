@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use chrono::Utc;
 use crate::commands::central_updates::{
     self, state_from_relocated_source, RemoteSkillLoadError, SkillUpdateStatus,
 };
 use crate::commands::central_updates_fs::normalize_repo_path;
 use crate::commands::github_import;
 use crate::db::{DbPool, SkillRepository, SkillUpdateState};
+use chrono::Utc;
 
 use super::{repository_id_for_state, FailedRepository, UpdatableSkill};
 
@@ -94,21 +94,21 @@ pub(crate) async fn reconcile_relocated_remote_skills(
         };
 
         let relocated_state =
-            match state_from_relocated_source(prepared, repo, new_path, ctx.snapshots)
-        {
-            Ok(state) => state,
-            Err(error) => {
-                ctx.failed_repositories.push(FailedRepository {
-                    repository_id: item.repository_id.clone(),
-                    error: format!(
-                        "Failed to auto-resolve moved skill '{}': {}",
-                        state.skill_id,
-                        remote_load_error_message(error)
-                    ),
-                });
-                continue;
-            }
-        };
+            match state_from_relocated_source(prepared, repo, new_path, ctx.snapshots) {
+                Ok(state) => state,
+                Err(error) => {
+                    ctx.failed_repositories.push(FailedRepository {
+                        repository_id: item.repository_id.clone(),
+                        error: format!(
+                            "Failed to auto-resolve moved skill '{}': {}",
+                            state.skill_id,
+                            remote_load_error_message(error)
+                        ),
+                        diagnostics: None,
+                    });
+                    continue;
+                }
+            };
 
         persist_relocated_skill(
             ctx.pool,
@@ -123,6 +123,7 @@ pub(crate) async fn reconcile_relocated_remote_skills(
             ctx.updatable.push(UpdatableSkill {
                 state: relocated_state,
                 repository_id: Some(item.repository_id.clone()),
+                diagnostics: None,
             });
         }
         resolved_missing.insert(missing_index);
@@ -161,7 +162,7 @@ async fn persist_relocated_skill(
     repository_id: &str,
     skill_id: &str,
     source_path: &str,
-    state: &SkillUpdateState,
+    _state: &SkillUpdateState,
 ) -> Result<(), String> {
     let now = Utc::now().to_rfc3339();
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
@@ -180,38 +181,6 @@ async fn persist_relocated_skill(
     .bind(source_path)
     .bind(&now)
     .bind(&now)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
-
-    sqlx::query(
-        "INSERT INTO skill_update_states
-         (skill_id, source_type, source_url, ref_name, source_path, last_remote_hash,
-          latest_remote_hash, last_checked_at, last_updated_at, status, error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(skill_id) DO UPDATE SET
-           source_type        = excluded.source_type,
-           source_url         = excluded.source_url,
-           ref_name           = excluded.ref_name,
-           source_path        = excluded.source_path,
-           last_remote_hash   = COALESCE(excluded.last_remote_hash, skill_update_states.last_remote_hash),
-           latest_remote_hash = excluded.latest_remote_hash,
-           last_checked_at    = excluded.last_checked_at,
-           last_updated_at    = COALESCE(excluded.last_updated_at, skill_update_states.last_updated_at),
-           status             = excluded.status,
-           error              = excluded.error",
-    )
-    .bind(&state.skill_id)
-    .bind(&state.source_type)
-    .bind(&state.source_url)
-    .bind(&state.ref_name)
-    .bind(&state.source_path)
-    .bind(&state.last_remote_hash)
-    .bind(&state.latest_remote_hash)
-    .bind(&state.last_checked_at)
-    .bind(&state.last_updated_at)
-    .bind(&state.status)
-    .bind(&state.error)
     .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?;

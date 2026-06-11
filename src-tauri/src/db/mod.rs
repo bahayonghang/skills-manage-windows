@@ -35,6 +35,7 @@ pub use repos::settings_repo::*;
 pub use repos::skills_repo::*;
 pub use repos::tag_groups_repo::*;
 pub use repos::tags_repo::*;
+pub use repos::update_inventory_repo::*;
 pub use repos::update_states_repo::*;
 pub use repos::usage_repo::*;
 pub use seed::*;

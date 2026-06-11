@@ -17,11 +17,13 @@ PlatformView's **Scan duplicates** button now also routes here, opening directly
 
 ## Refresh and apply are separate steps
 
-Refresh is read-only. It fetches the latest GitHub snapshot for each repository in scope, compares against your local central library and platform installs, and writes the diff into an inventory table. Nothing on disk changes during a refresh. You can refresh as often as you want without side effects.
+Refresh is read-only. A manual refresh bypasses the in-memory GitHub snapshot cache, fetches the latest remote tree for each repository in scope, compares content hashes against your local central library and platform installs, and writes the diff into inventory tables. Nothing on disk changes during a refresh. You can refresh as often as you want without side effects.
 
 Apply runs the actual mutations against the central library and platform symlinks or copies. Selections from all five tabs are aggregated into one submit, then executed in a stable order so add / remove / update / duplicate cleanup never collide on the same skill id.
 
-This split is intentional. Browsing the inventory should never trigger a write, and a write should never be hidden behind what looks like a "refresh" button.
+This split is intentional. Browsing the inventory should never trigger a write, and a write should never be hidden behind what looks like a "refresh" button. `skill_update_states` is treated as the installed baseline after successful apply/update; refresh results live in the separate update inventory.
+
+Update detection is content-hash based. A `version` field in `SKILL.md` is displayed only as diagnostic metadata when available; it is not required and does not override equal content hashes.
 
 ## Scope
 
@@ -76,10 +78,19 @@ Refresh results are persisted in the local SkillPort database, so closing the di
 
 The **Clear inventory** footer button drops the persisted refresh results. Use it after a major reorganization to avoid stale entries. Clearing does not delete any skills or platform copies; it only resets the pending checklist.
 
+## Force recovery actions
+
+Update Center also exposes explicit recovery actions for cases where normal detection is suspected to be wrong.
+
+- **Force update** overwrites selected tracked GitHub Central skills from their assigned remote source paths. It bypasses the snapshot cache and overwrites even when the local and remote content hashes are equal. Copy installations linked to those Central skills are refreshed.
+- **Force mirror repository** is available for repository-scoped checks. It bypasses the snapshot cache, overwrites tracked skills, imports remote-added skills, deletes local tracked skills that are missing from the remote repository, and removes copy installations for those deleted skills.
+
+Force mirror is destructive and never runs from startup, passive refresh, or normal apply. The dialog asks for confirmation before applying it.
+
 ## What's behind the scenes
 
-- New Tauri commands: `refresh_skill_update_inventory`, `apply_skill_update_decisions`, `clear_skill_update_inventory`, `get_skill_update_inventory`, `scan_platform_duplicate_skills`.
-- New DB table: `skill_repository_pending_additions`. New column: `skill_repositories.last_synced_at`.
+- Tauri commands: `refresh_skill_update_inventory`, `apply_skill_update_decisions`, `clear_skill_update_inventory`, `get_skill_update_inventory`, `force_update_central_skills`, `force_mirror_central_repositories`, `scan_platform_duplicate_skills`.
+- DB tables: `skill_update_inventory_runs`, `skill_update_inventory_entries`, and compatibility table `skill_repository_pending_additions`. New column: `skill_repositories.last_synced_at`.
 - New backend enum `SkillUpdateStatus` replaces the previous status string constants.
 - The legacy `check_central_skill_updates`, `check_central_repository_sync`, and `apply_central_repository_sync` commands still exist for backward compatibility and will be removed after a minor release.
 
@@ -95,4 +106,4 @@ Both entries remain functional. Keep using the legacy button if you depend on it
 
 ---
 
-Last reviewed: 2026-05-22
+Last reviewed: 2026-06-11

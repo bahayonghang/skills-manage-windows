@@ -21,6 +21,12 @@ const repositorySources = new Map<string, RepositorySourceDisplayInfo>([
 
 const updatable: UpdatableSkill = {
   repositoryId: "github-openai-skills-main",
+  diagnostics: {
+    cachePolicy: "bypass",
+    cacheHit: false,
+    localHash: "fnv1a64:local",
+    remoteHash: "fnv1a64:remote",
+  },
   state: {
     skill_id: "planning-with-files-zh",
     source_type: "github",
@@ -59,6 +65,10 @@ describe("Update Center source metadata", () => {
     expect(within(row).getByText("openai/skills")).toBeInTheDocument();
     expect(within(row).getByText("skills/planning-with-files-zh")).toBeInTheDocument();
     expect(within(row).getByText("https://github.com/openai/skills")).toBeInTheDocument();
+    expect(within(row).getByText(/Bypass cache|绕过缓存/)).toBeInTheDocument();
+    expect(
+      within(row).getByText("fnv1a64:local -> fnv1a64:remote"),
+    ).toBeInTheDocument();
   });
 
   it("uses repository labels for removed remote skills", () => {
