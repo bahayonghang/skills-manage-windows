@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool, SkillRepository, SkillRepositoryWithStats};
+use crate::fs_util::run_blocking_fs;
 use crate::targets::{
     connect_remote_target, ActiveTarget, ConnectedRemoteTarget, RemoteTargetConfig,
 };
@@ -581,29 +582,35 @@ pub async fn delete_central_skill_impl(
         }
     }
 
-    let mut removed_agent_ids = Vec::new();
-    let mut retained_agent_ids = Vec::new();
-    for installation in &installations {
-        match installation.link_type.as_str() {
-            "copy" if remove_agent_set.contains(&installation.agent_id) => {
-                remove_installation_path(installation)?;
-                removed_agent_ids.push(installation.agent_id.clone());
+    let central_skill_dir_for_remove = central_skill_dir.clone();
+    let (removed_agent_ids, retained_agent_ids) =
+        run_blocking_fs("central skill deletion", move || {
+            let mut removed_agent_ids = Vec::new();
+            let mut retained_agent_ids = Vec::new();
+            for installation in &installations {
+                match installation.link_type.as_str() {
+                    "copy" if remove_agent_set.contains(&installation.agent_id) => {
+                        remove_installation_path(installation)?;
+                        removed_agent_ids.push(installation.agent_id.clone());
+                    }
+                    "copy" => retained_agent_ids.push(installation.agent_id.clone()),
+                    "symlink" => {
+                        remove_installation_path(installation)?;
+                        removed_agent_ids.push(installation.agent_id.clone());
+                    }
+                    "native" => {
+                        removed_agent_ids.push(installation.agent_id.clone());
+                    }
+                    _ => {
+                        retained_agent_ids.push(installation.agent_id.clone());
+                    }
+                }
             }
-            "copy" => retained_agent_ids.push(installation.agent_id.clone()),
-            "symlink" => {
-                remove_installation_path(installation)?;
-                removed_agent_ids.push(installation.agent_id.clone());
-            }
-            "native" => {
-                removed_agent_ids.push(installation.agent_id.clone());
-            }
-            _ => {
-                retained_agent_ids.push(installation.agent_id.clone());
-            }
-        }
-    }
 
-    remove_skill_dir(&central_skill_dir)?;
+            remove_skill_dir(&central_skill_dir_for_remove)?;
+            Ok((removed_agent_ids, retained_agent_ids))
+        })
+        .await?;
     db::delete_skill(pool, skill_id).await?;
 
     Ok(DeleteCentralSkillResult {

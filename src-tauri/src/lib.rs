@@ -1,6 +1,7 @@
 pub mod central_migration;
 pub mod commands;
 pub mod db;
+pub mod fs_util;
 pub mod logging;
 pub mod operation_log;
 pub mod paths;

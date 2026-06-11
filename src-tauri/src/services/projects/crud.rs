@@ -198,31 +198,36 @@ pub async fn remove_project_impl(
 
     if uninstall_skills {
         let psi_rows = db::list_project_skill_installations(pool, &project.id).await?;
-        for psi in psi_rows {
-            // 删盘上文件失败不要让整个 remove 中断：路径可能已被外部清理，
-            // 表里的 psi 行还是要清掉。失败原因吞掉，只 log。
-            let target = PathBuf::from(&psi.installed_path);
-            let result = if psi.link_type == "symlink" {
-                #[cfg(windows)]
-                {
-                    std::fs::remove_dir(&target).or_else(|_| std::fs::remove_file(&target))
+        let project_id_for_log = project.id.clone();
+        run_blocking_fs("project skills removal", move || {
+            for psi in psi_rows {
+                // 删盘上文件失败不要让整个 remove 中断：路径可能已被外部清理，
+                // 表里的 psi 行还是要清掉。失败原因吞掉，只 log。
+                let target = PathBuf::from(&psi.installed_path);
+                let result = if psi.link_type == "symlink" {
+                    #[cfg(windows)]
+                    {
+                        std::fs::remove_dir(&target).or_else(|_| std::fs::remove_file(&target))
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        std::fs::remove_file(&target)
+                    }
+                } else {
+                    std::fs::remove_dir_all(&target)
+                };
+                if let Err(e) = result {
+                    tracing::warn!(
+                        project_id = %project_id_for_log,
+                        path = %target.display(),
+                        error = %e,
+                        "Failed to remove project skill on project removal; ignoring"
+                    );
                 }
-                #[cfg(not(windows))]
-                {
-                    std::fs::remove_file(&target)
-                }
-            } else {
-                std::fs::remove_dir_all(&target)
-            };
-            if let Err(e) = result {
-                tracing::warn!(
-                    project_id = %project.id,
-                    path = %target.display(),
-                    error = %e,
-                    "Failed to remove project skill on project removal; ignoring"
-                );
             }
-        }
+            Ok(())
+        })
+        .await?;
     }
 
     db::delete_project(pool, &project.id).await

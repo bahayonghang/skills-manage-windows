@@ -6,15 +6,9 @@ use std::path::{Path, PathBuf};
 
 use crate::services::resource_budget::ResourceBudget;
 
-pub(crate) async fn run_blocking_fs<T, F>(label: &'static str, task: F) -> Result<T, String>
-where
-    T: Send + 'static,
-    F: FnOnce() -> Result<T, String> + Send + 'static,
-{
-    tauri::async_runtime::spawn_blocking(task)
-        .await
-        .map_err(|e| format!("Failed to join {} task: {}", label, e))?
-}
+// Canonical spawn_blocking wrapper now lives in `crate::fs_util`; this
+// re-export keeps the historical installation-local import path working.
+pub(crate) use crate::fs_util::run_blocking_fs;
 
 pub(crate) async fn path_exists_blocking(path: &Path) -> Result<bool, String> {
     let path = path.to_path_buf();

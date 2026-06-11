@@ -3,7 +3,7 @@
   "name": "spawn-blocking-io",
   "title": "重 IO 路径 spawn_blocking 改造",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

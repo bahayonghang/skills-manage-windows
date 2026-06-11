@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool};
+use crate::fs_util::run_blocking_fs;
 use crate::services::resource_budget::ResourceBudget;
 use crate::targets::{
     connect_remote_target, remote_file_type_is_dir, ActiveTarget, ConnectedRemoteTarget,
@@ -53,7 +54,13 @@ pub async fn read_skill_content_for_target_impl(
         .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
 
     match active_target {
-        ActiveTarget::Local => read_skill_file_content(&skill.file_path),
+        ActiveTarget::Local => {
+            let file_path = skill.file_path.clone();
+            run_blocking_fs("skill content read", move || {
+                read_skill_file_content(&file_path)
+            })
+            .await
+        }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let connection = connect_remote_target(&active_target).await?;
             let bytes = connection.read_file(&skill.file_path).await?;
@@ -79,7 +86,13 @@ pub async fn read_file_by_path_for_target_impl(
 ) -> Result<String, String> {
     let access_root = resolve_skill_access_root(pool, access).await?;
     match active_target {
-        ActiveTarget::Local => read_file_by_path_impl(path, &access_root),
+        ActiveTarget::Local => {
+            let path = path.to_string();
+            run_blocking_fs("skill file read", move || {
+                read_file_by_path_impl(&path, &access_root)
+            })
+            .await
+        }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let connection = connect_remote_target(&active_target).await?;
             read_remote_file_by_path_impl(&connection, path, &access_root).await
@@ -108,7 +121,13 @@ pub async fn list_directory_tree_for_target_impl(
 ) -> Result<Vec<DirectoryTreeEntry>, String> {
     let access_root = resolve_skill_access_root(pool, access).await?;
     match active_target {
-        ActiveTarget::Local => list_directory_tree_impl(path, &access_root),
+        ActiveTarget::Local => {
+            let path = path.to_string();
+            run_blocking_fs("skill directory tree listing", move || {
+                list_directory_tree_impl(&path, &access_root)
+            })
+            .await
+        }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let connection = connect_remote_target(&active_target).await?;
             list_remote_directory_tree_impl(&connection, path, &access_root).await

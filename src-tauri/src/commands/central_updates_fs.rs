@@ -11,6 +11,7 @@ use std::path::{Component, Path, PathBuf};
 
 use uuid::Uuid;
 
+use crate::fs_util::run_blocking_fs;
 use crate::targets::{
     connect_remote_target, remote_parent, shell_quote, ActiveTarget, ConnectedRemoteTarget,
 };
@@ -62,11 +63,15 @@ impl CentralFs {
     ) -> Result<HashMap<PathBuf, String>, String> {
         match self {
             Self::Local => {
-                let mut hashes = HashMap::with_capacity(roots.len());
-                for root in roots {
-                    hashes.insert(root.clone(), hash_local_directory(root)?);
-                }
-                Ok(hashes)
+                let roots = roots.to_vec();
+                run_blocking_fs("central skill hashing", move || {
+                    let mut hashes = HashMap::with_capacity(roots.len());
+                    for root in &roots {
+                        hashes.insert(root.clone(), hash_local_directory(root)?);
+                    }
+                    Ok(hashes)
+                })
+                .await
             }
             Self::Remote(conn) => hash_remote_directories(conn, roots).await,
         }
@@ -84,7 +89,15 @@ impl CentralFs {
         files: &[RemoteSkillFile],
     ) -> Result<(), String> {
         match self {
-            Self::Local => write_skill_dir_atomic_local(skill_id, target_dir, files),
+            Self::Local => {
+                let skill_id = skill_id.to_string();
+                let target_dir = target_dir.to_path_buf();
+                let files = files.to_vec();
+                run_blocking_fs("central skill atomic write", move || {
+                    write_skill_dir_atomic_local(&skill_id, &target_dir, &files)
+                })
+                .await
+            }
             Self::Remote(conn) => {
                 write_skill_dir_atomic_remote(conn, skill_id, &posix_path(target_dir), files).await
             }
@@ -103,7 +116,15 @@ impl CentralFs {
         target: &str,
     ) -> Result<(), String> {
         match self {
-            Self::Local => refresh_copy_install_local(skill_id, source_dir, target),
+            Self::Local => {
+                let skill_id = skill_id.to_string();
+                let source_dir = source_dir.to_path_buf();
+                let target = target.to_string();
+                run_blocking_fs("copy install refresh", move || {
+                    refresh_copy_install_local(&skill_id, &source_dir, &target)
+                })
+                .await
+            }
             Self::Remote(conn) => {
                 refresh_copy_install_remote(conn, skill_id, &posix_path(source_dir), target).await
             }

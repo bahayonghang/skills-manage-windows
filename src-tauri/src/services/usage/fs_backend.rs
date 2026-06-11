@@ -94,54 +94,70 @@ impl FsBackend for LocalFsBackend {
     }
 
     async fn read_to_string(&self, path: &str) -> Result<String, String> {
-        std::fs::read_to_string(path).map_err(|e| format!("local read {}: {}", path, e))
+        let path = path.to_string();
+        crate::fs_util::run_blocking_fs("usage file read", move || {
+            std::fs::read_to_string(&path).map_err(|e| format!("local read {}: {}", path, e))
+        })
+        .await
     }
 
     async fn read_many_to_strings(
         &self,
         paths: &[String],
     ) -> Result<HashMap<String, String>, String> {
-        let mut content_by_path = HashMap::new();
-        for path in paths {
-            if let Ok(content) = std::fs::read_to_string(path) {
-                content_by_path.insert(path.clone(), content);
+        let paths = paths.to_vec();
+        crate::fs_util::run_blocking_fs("usage batch file read", move || {
+            let mut content_by_path = HashMap::new();
+            for path in paths {
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    content_by_path.insert(path, content);
+                }
             }
-        }
-        Ok(content_by_path)
+            Ok(content_by_path)
+        })
+        .await
     }
 
     async fn walk_jsonl(&self, root: &str) -> Result<Vec<String>, String> {
-        let root_path = PathBuf::from(root);
-        if !root_path.is_dir() {
-            return Ok(vec![]);
-        }
-        let mut out = Vec::new();
-        for entry in walkdir::WalkDir::new(&root_path)
-            .into_iter()
-            .filter_map(Result::ok)
-        {
-            let p = entry.path();
-            if p.extension().and_then(|e| e.to_str()) == Some("jsonl") && p.is_file() {
-                if let Some(s) = p.to_str() {
-                    out.push(s.to_string());
+        let root = root.to_string();
+        crate::fs_util::run_blocking_fs("usage jsonl walk", move || {
+            let root_path = PathBuf::from(&root);
+            if !root_path.is_dir() {
+                return Ok(vec![]);
+            }
+            let mut out = Vec::new();
+            for entry in walkdir::WalkDir::new(&root_path)
+                .into_iter()
+                .filter_map(Result::ok)
+            {
+                let p = entry.path();
+                if p.extension().and_then(|e| e.to_str()) == Some("jsonl") && p.is_file() {
+                    if let Some(s) = p.to_str() {
+                        out.push(s.to_string());
+                    }
                 }
             }
-        }
-        Ok(out)
+            Ok(out)
+        })
+        .await
     }
 
     async fn list_entries(&self, path: &str) -> Result<Vec<FsEntry>, String> {
-        let entries = match std::fs::read_dir(path) {
-            Ok(e) => e,
-            Err(_) => return Ok(vec![]),
-        };
-        let mut out = Vec::new();
-        for ent in entries.flatten() {
-            let name = ent.file_name().to_string_lossy().into_owned();
-            let is_dir = ent.file_type().map(|t| t.is_dir()).unwrap_or(false);
-            out.push(FsEntry { name, is_dir });
-        }
-        Ok(out)
+        let path = path.to_string();
+        crate::fs_util::run_blocking_fs("usage directory listing", move || {
+            let entries = match std::fs::read_dir(&path) {
+                Ok(e) => e,
+                Err(_) => return Ok(vec![]),
+            };
+            let mut out = Vec::new();
+            for ent in entries.flatten() {
+                let name = ent.file_name().to_string_lossy().into_owned();
+                let is_dir = ent.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                out.push(FsEntry { name, is_dir });
+            }
+            Ok(out)
+        })
+        .await
     }
 
     async fn fetch_to_local(&self, path: &str) -> Result<BackendFetched, String> {
@@ -227,7 +243,11 @@ impl FsBackend for RemoteFsBackend {
             .and_then(|n| n.to_str())
             .unwrap_or("remote.bin");
         let local_path = dir.path().join(basename);
-        std::fs::write(&local_path, &bytes).map_err(|e| format!("write tmp: {}", e))?;
+        let local_path_for_write = local_path.clone();
+        crate::fs_util::run_blocking_fs("remote file staging", move || {
+            std::fs::write(&local_path_for_write, &bytes).map_err(|e| format!("write tmp: {}", e))
+        })
+        .await?;
         Ok(BackendFetched {
             local_path,
             _keepalive: Some(dir),

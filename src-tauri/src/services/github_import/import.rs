@@ -441,23 +441,31 @@ pub(super) async fn import_single_staged_skill(
         &op.candidate.source_path,
         progress_state,
         app,
-    ) {
-        let _ = std::fs::remove_dir_all(&staging_path);
+    )
+    .await
+    {
+        discard_staging_dir(&staging_path).await;
         return Err(error);
     }
 
     let skill_md_path = staging_path.join("SKILL.md");
-    let raw = std::fs::read_to_string(&skill_md_path).map_err(|e| {
-        let _ = std::fs::remove_dir_all(&staging_path);
-        format!("Failed to read imported SKILL.md: {}", e)
-    })?;
-    let frontmatter = parse_frontmatter(&raw).ok_or_else(|| {
-        let _ = std::fs::remove_dir_all(&staging_path);
-        format!(
-            "Imported skill '{}' is missing valid frontmatter.",
-            op.candidate.source_path
-        )
-    })?;
+    let raw = match std::fs::read_to_string(&skill_md_path) {
+        Ok(raw) => raw,
+        Err(e) => {
+            discard_staging_dir(&staging_path).await;
+            return Err(format!("Failed to read imported SKILL.md: {}", e));
+        }
+    };
+    let frontmatter = match parse_frontmatter(&raw) {
+        Some(frontmatter) => frontmatter,
+        None => {
+            discard_staging_dir(&staging_path).await;
+            return Err(format!(
+                "Imported skill '{}' is missing valid frontmatter.",
+                op.candidate.source_path
+            ));
+        }
+    };
 
     let mut existing_backup = None;
     if target_dir.exists() {
@@ -465,12 +473,12 @@ pub(super) async fn import_single_staged_skill(
             existing_backup = Some(match backup_existing_skill_dir(central_root, &target_dir) {
                 Ok(backup) => backup,
                 Err(error) => {
-                    let _ = std::fs::remove_dir_all(&staging_path);
+                    discard_staging_dir(&staging_path).await;
                     return Err(error);
                 }
             });
         } else {
-            let _ = std::fs::remove_dir_all(&staging_path);
+            discard_staging_dir(&staging_path).await;
             return Err(format!(
                 "Target directory '{}' already exists.",
                 target_dir.display()
@@ -479,8 +487,8 @@ pub(super) async fn import_single_staged_skill(
     }
 
     if let Err(error) = std::fs::rename(&staging_path, &target_dir) {
-        let _ = std::fs::remove_dir_all(&staging_path);
-        restore_or_cleanup_target_dir(&target_dir, existing_backup);
+        discard_staging_dir(&staging_path).await;
+        restore_or_cleanup_target_dir(&target_dir, existing_backup).await;
         return Err(format!(
             "Failed to finalize import target directory '{}': {}",
             target_dir.display(),
@@ -512,11 +520,11 @@ pub(super) async fn import_single_staged_skill(
     )
     .await
     {
-        restore_or_cleanup_target_dir(&target_dir, existing_backup);
+        restore_or_cleanup_target_dir(&target_dir, existing_backup).await;
         return Err(error);
     }
 
-    drop_existing_backup(existing_backup);
+    drop_existing_backup(existing_backup).await;
 
     Ok(ImportedGitHubSkillSummary {
         source_path: op.candidate.source_path.clone(),
@@ -543,22 +551,43 @@ pub(super) fn backup_existing_skill_dir(
     Ok(ExistingSkillBackup { path: backup_path })
 }
 
-pub(super) fn restore_or_cleanup_target_dir(
+/// Best-effort recursive removal of an import staging directory, executed on
+/// the blocking-thread pool. Failures are ignored, matching the historical
+/// `let _ = std::fs::remove_dir_all(...)` cleanup behaviour.
+async fn discard_staging_dir(staging_path: &Path) {
+    let staging_path = staging_path.to_path_buf();
+    let _ = crate::fs_util::run_blocking_fs("import staging cleanup", move || {
+        let _ = std::fs::remove_dir_all(&staging_path);
+        Ok(())
+    })
+    .await;
+}
+
+pub(super) async fn restore_or_cleanup_target_dir(
     target_dir: &Path,
     backup: Option<ExistingSkillBackup>,
 ) {
-    if target_dir.exists() {
-        let _ = std::fs::remove_dir_all(target_dir);
-    }
-    if let Some(backup) = backup {
-        let _ = std::fs::rename(&backup.path, target_dir);
-    }
+    let target_dir = target_dir.to_path_buf();
+    let _ = crate::fs_util::run_blocking_fs("import target restore", move || {
+        if target_dir.exists() {
+            let _ = std::fs::remove_dir_all(&target_dir);
+        }
+        if let Some(backup) = backup {
+            let _ = std::fs::rename(&backup.path, &target_dir);
+        }
+        Ok(())
+    })
+    .await;
 }
 
-pub(super) fn drop_existing_backup(backup: Option<ExistingSkillBackup>) {
-    if let Some(backup) = backup {
-        let _ = std::fs::remove_dir_all(&backup.path);
-    }
+pub(super) async fn drop_existing_backup(backup: Option<ExistingSkillBackup>) {
+    let _ = crate::fs_util::run_blocking_fs("import backup cleanup", move || {
+        if let Some(backup) = backup {
+            let _ = std::fs::remove_dir_all(&backup.path);
+        }
+        Ok(())
+    })
+    .await;
 }
 
 pub(super) fn create_unique_work_dir(parent: &Path, prefix: &str) -> Result<PathBuf, String> {

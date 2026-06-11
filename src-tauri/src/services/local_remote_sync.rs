@@ -211,9 +211,17 @@ async fn build_sync_plan(
     repo_path: Option<String>,
 ) -> Result<LocalRemoteSyncPlan, String> {
     let repo_root = resolve_repo_root(repo_path.as_deref())?;
-    let repo_snapshot = collect_repo_snapshot(&repo_root)?;
+    let repo_root_for_snapshot = repo_root.clone();
+    let repo_snapshot = crate::fs_util::run_blocking_fs("local repository snapshot", move || {
+        collect_repo_snapshot(&repo_root_for_snapshot)
+    })
+    .await?;
     let skills_root = paths::central_skills_dir();
-    let skill_snapshots = collect_skill_snapshots(&skills_root)?;
+    let skills_root_for_snapshot = skills_root.clone();
+    let skill_snapshots = crate::fs_util::run_blocking_fs("local skill snapshots", move || {
+        collect_skill_snapshots(&skills_root_for_snapshot)
+    })
+    .await?;
     let connection = connect_remote_target(&active_target).await?;
     let remote_home = connection.remote_home().trim_end_matches('/').to_string();
     let repo_remote_root = remote_join(

@@ -57,7 +57,7 @@ pub(super) fn collect_snapshot_source_files(
     Ok(files)
 }
 
-pub(super) fn write_snapshot_source_to_target(
+pub(super) async fn write_snapshot_source_to_target(
     snapshot: &GitHubRepoSnapshot,
     files: &[SnapshotSourceFile],
     target_dir: &Path,
@@ -65,8 +65,19 @@ pub(super) fn write_snapshot_source_to_target(
     progress_state: &mut GitHubImportProgressState,
     app: Option<&AppHandle>,
 ) -> Result<(), String> {
-    std::fs::create_dir_all(target_dir)
-        .map_err(|e| format!("Failed to create import target directory: {}", e))?;
+    // Same ordering as the original synchronous version: create the target
+    // directory first, then validate-and-write one file at a time. Each
+    // blocking write owns a transient clone of just that file's bytes. The
+    // `AppHandle` deliberately stays on the async side (by reference): moving
+    // it into a blocking closure links Tauri's dialog/menu drop-glue into test
+    // binaries, which then fail to load on Windows (comctl32 v6
+    // `TaskDialogIndirect` needs an app manifest).
+    let target_dir_for_create = target_dir.to_path_buf();
+    crate::fs_util::run_blocking_fs("import target directory creation", move || {
+        std::fs::create_dir_all(&target_dir_for_create)
+            .map_err(|e| format!("Failed to create import target directory: {}", e))
+    })
+    .await?;
 
     for file in files {
         if !is_safe_repo_relative_path(&file.relative_path) {
@@ -76,26 +87,33 @@ pub(super) fn write_snapshot_source_to_target(
             ));
         }
 
-        let bytes = snapshot.files.get(&file.repo_path).ok_or_else(|| {
-            format!(
-                "Repository file '{}' is no longer available in the archive.",
-                file.repo_path
-            )
-        })?;
+        let bytes = snapshot
+            .files
+            .get(&file.repo_path)
+            .ok_or_else(|| {
+                format!(
+                    "Repository file '{}' is no longer available in the archive.",
+                    file.repo_path
+                )
+            })?
+            .clone();
 
         let destination = target_dir.join(&file.relative_path);
-        let parent = destination
-            .parent()
-            .ok_or_else(|| "Failed to determine imported file parent directory.".to_string())?;
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create imported file parent directory: {}", e))?;
-        std::fs::write(&destination, bytes).map_err(|e| {
-            format!(
-                "Failed to write imported file '{}': {}",
-                destination.display(),
-                e
-            )
-        })?;
+        crate::fs_util::run_blocking_fs("import file write", move || {
+            let parent = destination.parent().ok_or_else(|| {
+                "Failed to determine imported file parent directory.".to_string()
+            })?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create imported file parent directory: {}", e))?;
+            std::fs::write(&destination, &bytes).map_err(|e| {
+                format!(
+                    "Failed to write imported file '{}': {}",
+                    destination.display(),
+                    e
+                )
+            })
+        })
+        .await?;
 
         progress_state.completed_files += 1;
         progress_state.completed_bytes += file.byte_len as u64;
