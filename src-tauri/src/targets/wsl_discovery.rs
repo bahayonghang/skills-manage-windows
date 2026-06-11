@@ -22,7 +22,9 @@ pub async fn list_wsl_distributions_impl() -> Result<Vec<WslDistributionSummary>
             });
         }
 
-        Ok(parse_wsl_distribution_list(&normalize_wsl_list_output(&output.stdout)))
+        Ok(parse_wsl_distribution_list(&normalize_wsl_list_output(
+            &output.stdout,
+        )))
     }
 }
 
