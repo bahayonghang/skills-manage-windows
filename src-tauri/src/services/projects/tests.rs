@@ -559,7 +559,7 @@ async fn rescan_preserves_central_origin_for_symlinked_central_install() {
     )
     .await;
     if let Err(err) = install_result {
-        if err.to_lowercase().contains("symlink") {
+        if err.to_string().to_lowercase().contains("symlink") {
             return;
         }
         panic!("unexpected install error: {err}");
@@ -594,7 +594,7 @@ async fn install_skill_symlink_writes_psi_and_creates_link() {
     // CI 上 Linux/macOS 应当能直接拿到 Ok。
     let psi = match result {
         Ok(p) => p,
-        Err(err) if err.to_lowercase().contains("symlink") => return,
+        Err(err) if err.to_string().to_lowercase().contains("symlink") => return,
         Err(err) => panic!("unexpected install error: {err}"),
     };
 
@@ -640,7 +640,7 @@ async fn install_skill_rejects_non_central_skill() {
     let result =
         install_skill_to_project_impl(&pool, &project.id, "ghost", "claude-code", "copy").await;
     assert!(result.is_err());
-    let err = result.unwrap_err();
+    let err = result.unwrap_err().to_string();
     assert!(
         err.contains("not centralized") || err.contains("canonical_path"),
         "expected centralization error, got: {err}"

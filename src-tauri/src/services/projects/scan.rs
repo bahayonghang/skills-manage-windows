@@ -14,6 +14,8 @@ use crate::db::{self, DbPool, ProjectSkillInstallation};
 use crate::services::installation::project::project_relative_skills_dir;
 use crate::services::scanner::scan_directory;
 
+use super::error::ProjectsError;
+
 const UNIVERSAL_LEGACY_PROJECT_SKILLS_DIRS: [&str; 2] = [".codex/skills", ".opencode/skills"];
 
 #[derive(Clone)]
@@ -174,12 +176,15 @@ fn scan_project_blocking(
 }
 
 /// 扫描指定项目并落 psi。
-pub async fn rescan_project(pool: &DbPool, project_id: &str) -> Result<usize, String> {
+pub async fn rescan_project(pool: &DbPool, project_id: &str) -> Result<usize, ProjectsError> {
     let project = db::get_project_by_id(pool, project_id)
-        .await?
-        .ok_or_else(|| format!("Project '{}' not found", project_id))?;
+        .await
+        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
+        .ok_or_else(|| ProjectsError::ProjectNotFound(project_id.to_string()))?;
 
-    let agents = db::get_all_agents(pool).await?;
+    let agents = db::get_all_agents(pool)
+        .await
+        .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
     let enabled: Vec<db::Agent> = agents
         .into_iter()
         .filter(|a| a.is_enabled && a.id != "central")
@@ -188,20 +193,32 @@ pub async fn rescan_project(pool: &DbPool, project_id: &str) -> Result<usize, St
     let project_root = PathBuf::from(&project.path);
     if !project_root.exists() {
         // 项目根盘已不存在：清空 psi 并仍然刷 last_scanned_at，让前端能感知。
-        db::delete_stale_project_skill_installations(pool, project_id, &[]).await?;
+        db::delete_stale_project_skill_installations(pool, project_id, &[])
+            .await
+            .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
         let now = Utc::now().to_rfc3339();
-        db::update_project_last_scanned(pool, project_id, &now).await?;
+        db::update_project_last_scanned(pool, project_id, &now)
+            .await
+            .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
         return Ok(0);
     }
 
     let now = Utc::now().to_rfc3339();
     let project_id_owned = project_id.to_string();
     let now_clone = now.clone();
-    let found = tauri::async_runtime::spawn_blocking(move || {
-        scan_project_blocking(project_id_owned, project_root, enabled, now_clone)
-    })
-    .await
-    .map_err(|e| format!("Failed to join project scan task: {}", e))?;
+    let found = crate::fs_util::run_blocking_fs_with(
+        "project scan",
+        move || {
+            Ok(scan_project_blocking(
+                project_id_owned,
+                project_root,
+                enabled,
+                now_clone,
+            ))
+        },
+        ProjectsError::task_join,
+    )
+    .await?;
 
     let central_skills = central_skill_map_for_project_scan(pool, &found).await?;
     let rows = found
@@ -215,7 +232,9 @@ pub async fn rescan_project(pool: &DbPool, project_id: &str) -> Result<usize, St
         })
         .collect::<Vec<_>>();
 
-    db::persist_project_skill_scan(pool, project_id, &rows, &now).await?;
+    db::persist_project_skill_scan(pool, project_id, &rows, &now)
+        .await
+        .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
 
     Ok(found.len())
 }
@@ -223,7 +242,7 @@ pub async fn rescan_project(pool: &DbPool, project_id: &str) -> Result<usize, St
 async fn central_skill_map_for_project_scan(
     pool: &DbPool,
     rows: &[ProjectSkillInstallation],
-) -> Result<HashMap<String, db::Skill>, String> {
+) -> Result<HashMap<String, db::Skill>, ProjectsError> {
     let skill_ids = rows
         .iter()
         .filter(|psi| psi.link_type == "symlink")
@@ -238,7 +257,8 @@ async fn central_skill_map_for_project_scan(
         .collect::<Vec<_>>();
 
     Ok(db::get_skills_by_ids(pool, &skill_ids)
-        .await?
+        .await
+        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
         .into_iter()
         .filter(|(_, skill)| skill.is_central)
         .collect())
