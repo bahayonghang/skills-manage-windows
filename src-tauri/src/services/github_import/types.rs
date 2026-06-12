@@ -204,7 +204,8 @@ pub(super) const PRIORITY_SKILL_ROOTS: &[&str] = &[
 pub(super) static GITHUB_PREVIEW_WORKSPACES: OnceLock<
     Mutex<HashMap<String, GitHubPreviewWorkspace>>,
 > = OnceLock::new();
-pub(super) static GITHUB_SHARED_CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
+pub(super) static GITHUB_SHARED_CLIENT: OnceLock<Result<reqwest::Client, reqwest::Error>> =
+    OnceLock::new();
 pub(super) static GITHUB_HOST_RATE_LIMITERS: OnceLock<
     tokio::sync::Mutex<HashMap<String, tokio::time::Instant>>,
 > = OnceLock::new();

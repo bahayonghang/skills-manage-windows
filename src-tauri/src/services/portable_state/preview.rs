@@ -254,7 +254,9 @@ pub(crate) async fn build_remote_catalog(
     cancel: Option<&CancelFlag>,
 ) -> Result<HashMap<RepoKey, RemoteCatalogEntry>, String> {
     check_cancel(cancel)?;
-    let auth = github_import::github_direct_auth_from_secret_store(pool, secrets).await?;
+    let auth = github_import::github_direct_auth_from_secret_store(pool, secrets)
+        .await
+        .map_err(|e| e.to_string())?;
     let mut repo_urls = HashMap::<RepoKey, String>::new();
     for source in manifest.central_skills.iter().map(|skill| &skill.source) {
         if source.source_type != "github" {
@@ -307,7 +309,7 @@ pub(crate) async fn build_remote_catalog(
                 Err(error) => RemoteCatalogEntry {
                     valid_source_paths: HashSet::new(),
                     invalid_candidates: HashMap::new(),
-                    repo_error: Some(error),
+                    repo_error: Some(error.to_string()),
                 },
             };
             (key, entry)

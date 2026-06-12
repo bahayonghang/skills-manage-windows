@@ -67,8 +67,9 @@ pub async fn refresh_skill_update_inventory(
     let fs = CentralFs::from_active_target(state.active_target().await?).await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
-    let client = github_import::github_client()?;
+            .await
+            .map_err(|e| e.to_string())?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
     refresh_skill_update_inventory_impl(
         &pool,
         &fs,
@@ -523,7 +524,8 @@ pub async fn apply_skill_update_decisions(
     let active_target = state.active_target().await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
+            .await
+            .map_err(|e| e.to_string())?;
 
     let mut result = SkillUpdateApplyResult::default();
     let allowed_agent_ids = normalize_optional_id_set(decisions.allowed_agent_ids.as_deref());
@@ -630,7 +632,7 @@ pub async fn apply_skill_update_decisions(
             Err(error) => result.failures.push(SkillUpdateApplyFailure {
                 step: "import_addition".to_string(),
                 identifier: repository.id,
-                error,
+                error: error.to_string(),
             }),
         }
     }
@@ -699,8 +701,9 @@ pub async fn force_update_central_skills(
     let fs = CentralFs::from_active_target(state.active_target().await?).await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
-    let client = github_import::github_client()?;
+            .await
+            .map_err(|e| e.to_string())?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
     force_update_central_skills_impl(
         &pool,
         &fs,
@@ -724,8 +727,9 @@ pub async fn force_mirror_central_repositories(
     let fs = CentralFs::from_active_target(active_target.clone()).await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
-    let client = github_import::github_client()?;
+            .await
+            .map_err(|e| e.to_string())?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
     force_mirror_central_repositories_impl(
         Some(&app),
         &pool,

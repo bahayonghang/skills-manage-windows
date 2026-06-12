@@ -359,8 +359,11 @@ async fn force_import_remote_added(
                 let inspected =
                     github_import_service::inspect_repo_skill_candidates_from_snapshot_at_path(
                         repo_ref, snapshot, None,
-                    )?;
-                let central_root = github_import_service::central_skills_root(pool).await?;
+                    )
+                    .map_err(|e| e.to_string())?;
+                let central_root = github_import_service::central_skills_root(pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 std::fs::create_dir_all(&central_root).map_err(|error| {
                     format!(
                         "Failed to create central skills directory '{}': {}",
@@ -378,7 +381,8 @@ async fn force_import_remote_added(
                         &central_root,
                         app,
                     )
-                    .await?;
+                    .await
+                    .map_err(|e| e.to_string())?;
                 failed_items.extend(partial.failed_skills.into_iter().map(|failure| {
                     ForceSkillUpdateFailure {
                         skill_id: failure.source_path.clone(),
@@ -403,7 +407,8 @@ async fn force_import_remote_added(
                     app,
                     auth_token,
                 )
-                .await?
+                .await
+                .map_err(|e| e.to_string())?
             }
         };
         imported.extend(result.imported_skills);
@@ -423,7 +428,9 @@ async fn force_delete_remote_missing(
             failed: Vec::new(),
         });
     }
-    let preview = central_skills::preview_delete_central_skills_impl(pool, skill_ids).await?;
+    let preview = central_skills::preview_delete_central_skills_impl(pool, skill_ids)
+        .await
+        .map_err(|e| e.to_string())?;
     let requests = preview
         .previews
         .into_iter()
@@ -446,4 +453,5 @@ async fn force_delete_remote_missing(
             central_skills::delete_central_skills_remote_impl(pool, active_target, &requests).await
         }
     }
+    .map_err(|e| e.to_string())
 }

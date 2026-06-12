@@ -212,8 +212,9 @@ pub async fn check_central_skill_updates(
     let skills = load_selected_central_skills(&pool, skill_ids.as_deref()).await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
-    let client = github_import::github_client()?;
+            .await
+            .map_err(|e| e.to_string())?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
     let total = skills.len();
     let mut counters = UpdateCounters::default();
     let mut states = Vec::with_capacity(total);
@@ -303,8 +304,9 @@ pub async fn update_central_skills(
     let skills = load_selected_central_skills(&pool, Some(&skill_ids)).await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
-    let client = github_import::github_client()?;
+            .await
+            .map_err(|e| e.to_string())?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
     let total = skills.len();
     let mut counters = UpdateCounters::default();
     let mut succeeded = Vec::new();
@@ -726,7 +728,9 @@ pub(crate) async fn prepare_snapshots_for_repo_refs_with_policy(
                 .await
                 .map_err(|_| "Central update snapshot downloader closed.".to_string())?;
             let snapshot =
-                github_import::download_repo_snapshot(&client, &repo, auth.as_deref()).await?;
+                github_import::download_repo_snapshot(&client, &repo, auth.as_deref())
+                    .await
+                    .map_err(|e| e.to_string())?;
             Ok::<_, String>((repo_cache_key(&repo), snapshot))
         }
     });
@@ -796,7 +800,7 @@ fn find_remote_skill_candidate(
         snapshot,
         Some(&source.source_path),
     )
-    .map_err(RemoteSkillLoadError::other)?;
+    .map_err(|e| RemoteSkillLoadError::other(e.to_string()))?;
 
     candidates
         .into_iter()
@@ -858,7 +862,8 @@ async fn resolve_github_update_source_from_assignment(
             )
         })?;
         github_import::resolve_repo_source(&url, auth_token)
-            .await?
+            .await
+            .map_err(|e| e.to_string())?
             .repo
     };
 

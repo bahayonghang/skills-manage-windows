@@ -33,11 +33,13 @@ pub async fn preview_github_repo_import(
     let pool = state.active_db().await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
+            .await
+            .map_err(|e| e.to_string())?;
     match &active_target {
         ActiveTarget::Local => {
             github_import::preview_github_repo_import_with_auth(&pool, &repo_url, auth.as_deref())
                 .await
+                .map_err(|e| e.to_string())
         }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             github_import::preview_github_repo_import_remote_with_auth(
@@ -47,6 +49,7 @@ pub async fn preview_github_repo_import(
                 auth.as_deref(),
             )
             .await
+            .map_err(|e| e.to_string())
         }
     }
 }
@@ -63,7 +66,8 @@ pub async fn import_github_repo_skills(
     let pool = state.active_db().await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
+            .await
+            .map_err(|e| e.to_string())?;
     match &active_target {
         ActiveTarget::Local => {
             github_import::import_github_repo_skills_with_auth(
@@ -74,6 +78,7 @@ pub async fn import_github_repo_skills(
                 auth.as_deref(),
             )
             .await
+            .map_err(|e| e.to_string())
         }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             github_import::import_github_repo_skills_remote_with_auth(
@@ -86,6 +91,7 @@ pub async fn import_github_repo_skills(
                 auth.as_deref(),
             )
             .await
+            .map_err(|e| e.to_string())
         }
     }
 }
@@ -103,14 +109,18 @@ pub async fn fetch_github_skill_markdown(
             workspace_id,
             source_path.as_deref(),
         )
-        .await;
+        .await
+        .map_err(|e| e.to_string());
     }
 
-    let client = github_import::github_client()?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
-    github_import::fetch_raw_text(&client, &download_url, auth.as_deref()).await
+            .await
+            .map_err(|e| e.to_string())?;
+    github_import::fetch_raw_text(&client, &download_url, auth.as_deref())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -124,12 +134,16 @@ pub async fn discard_github_repo_preview_workspace(
 
 #[tauri::command]
 pub async fn get_github_pat(state: State<'_, AppState>) -> Result<GitHubPatState, String> {
-    github_import::get_github_pat_state_impl(&state.db, state.secrets.as_ref()).await
+    github_import::get_github_pat_state_impl(&state.db, state.secrets.as_ref())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn reveal_github_pat(state: State<'_, AppState>) -> Result<Option<String>, String> {
-    github_import::reveal_github_pat_impl(&state.db, state.secrets.as_ref()).await
+    github_import::reveal_github_pat_impl(&state.db, state.secrets.as_ref())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -137,7 +151,9 @@ pub async fn set_github_pat(
     state: State<'_, AppState>,
     value: String,
 ) -> Result<GitHubPatState, String> {
-    let result = github_import::set_github_pat_impl(&state.db, state.secrets.as_ref(), value).await;
+    let result = github_import::set_github_pat_impl(&state.db, state.secrets.as_ref(), value)
+        .await
+        .map_err(|e| e.to_string());
     if result.is_ok() {
         state.central_update_snapshots.clear();
     }
@@ -146,7 +162,9 @@ pub async fn set_github_pat(
 
 #[tauri::command]
 pub async fn clear_github_pat(state: State<'_, AppState>) -> Result<GitHubPatState, String> {
-    let result = github_import::clear_github_pat_impl(&state.db, state.secrets.as_ref()).await;
+    let result = github_import::clear_github_pat_impl(&state.db, state.secrets.as_ref())
+        .await
+        .map_err(|e| e.to_string());
     if result.is_ok() {
         state.central_update_snapshots.clear();
     }
@@ -155,5 +173,7 @@ pub async fn clear_github_pat(state: State<'_, AppState>) -> Result<GitHubPatSta
 
 #[tauri::command]
 pub async fn test_github_pat(state: State<'_, AppState>) -> Result<GitHubPatTestResult, String> {
-    github_import::test_github_pat_impl(&state.db, state.secrets.as_ref()).await
+    github_import::test_github_pat_impl(&state.db, state.secrets.as_ref())
+        .await
+        .map_err(|e| e.to_string())
 }

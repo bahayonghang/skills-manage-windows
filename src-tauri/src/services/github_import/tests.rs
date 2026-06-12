@@ -278,13 +278,13 @@ metadata:
     #[test]
     fn parse_github_source_rejects_non_github_hosts() {
         let error = parse_github_source("https://gitlab.com/example/repo").unwrap_err();
-        assert!(error.contains("github.com"));
+        assert!(error.to_string().contains("github.com"));
     }
 
     #[test]
     fn parse_github_source_rejects_unsafe_subpaths() {
         let error = parse_github_source("owner/repo/../escape").unwrap_err();
-        assert!(error.contains("not supported"));
+        assert!(error.to_string().contains("not supported"));
     }
 
     #[test]
@@ -448,7 +448,7 @@ metadata:
 
         let err = snapshot_from_repository_archive_with_budget(&archive, budget).unwrap_err();
 
-        assert!(err.contains("resource budget"));
+        assert!(err.to_string().contains("resource budget"));
     }
 
     #[test]
@@ -483,6 +483,7 @@ metadata:
 
         let err = snapshot_from_repository_archive_with_budget(&archive, budget).unwrap_err();
 
+        let err = err.to_string();
         assert!(err.contains("expanded archive contents"));
         assert!(err.contains("12 bytes > 10 bytes"));
     }
@@ -958,6 +959,7 @@ metadata:
         .await;
 
         let error = result.expect_err("import should fail on DB assignment");
+        let error = error.to_string();
         assert!(
             error.contains("skill_repository_members"),
             "error should identify the failed assignment table: {error}"
@@ -1073,7 +1075,7 @@ metadata:
 
         let error = result.expect_err("denied import should fail");
         assert!(
-            !error.trim().is_empty(),
+            !error.to_string().trim().is_empty(),
             "failure should return an error message"
         );
 

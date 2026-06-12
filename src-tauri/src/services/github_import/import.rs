@@ -6,7 +6,7 @@ pub(crate) async fn import_github_repo_skills_impl(
     repo_url: &str,
     selections: Vec<GitHubSkillImportSelection>,
     app: Option<&AppHandle>,
-) -> Result<GitHubRepoImportResult, String> {
+) -> Result<GitHubRepoImportResult, GithubImportError> {
     let auth = github_direct_auth_from_secret_store(pool, secrets).await?;
     import_github_repo_skills_with_auth(pool, repo_url, selections, app, auth.as_deref()).await
 }
@@ -16,7 +16,7 @@ pub(crate) async fn import_github_repo_skills_with_auth(
     selections: Vec<GitHubSkillImportSelection>,
     app: Option<&AppHandle>,
     auth: Option<&str>,
-) -> Result<GitHubRepoImportResult, String> {
+) -> Result<GitHubRepoImportResult, GithubImportError> {
     emit_github_import_progress(
         app,
         GitHubImportProgressPayload {
@@ -38,11 +38,11 @@ pub(crate) async fn import_github_repo_skills_with_auth(
         resolved.source_path.as_deref(),
     )?;
     if candidates.is_empty() {
-        return Err(NO_IMPORTABLE_SKILLS_ERROR.to_string());
+        return Err(GithubImportError::NoImportableSkills);
     }
     let central_root = central_skills_root(pool).await?;
     std::fs::create_dir_all(&central_root)
-        .map_err(|e| format!("Failed to create central skills directory: {}", e))?;
+        .map_err(|e| GithubImportError::io("Failed to create central skills directory", e))?;
 
     import_github_repo_skills_from_snapshot(
         pool,
@@ -64,7 +64,7 @@ pub(super) async fn import_github_repo_skills_from_snapshot(
     selections: Vec<GitHubSkillImportSelection>,
     central_root: &Path,
     app: Option<&AppHandle>,
-) -> Result<GitHubRepoImportResult, String> {
+) -> Result<GitHubRepoImportResult, GithubImportError> {
     let (mut staging_ops, skipped_skills) =
         plan_import_staging(pool, candidates, selections).await?;
 
@@ -143,7 +143,7 @@ pub(crate) async fn import_github_repo_skills_partially_with_auth(
     selections: Vec<GitHubSkillImportSelection>,
     app: Option<&AppHandle>,
     auth: Option<&str>,
-) -> Result<PartialGitHubRepoImportResult, String> {
+) -> Result<PartialGitHubRepoImportResult, GithubImportError> {
     emit_github_import_progress(
         app,
         GitHubImportProgressPayload {
@@ -168,7 +168,7 @@ pub(crate) async fn import_github_repo_skills_partially_with_auth(
 
     let central_root = central_skills_root(pool).await?;
     std::fs::create_dir_all(&central_root)
-        .map_err(|e| format!("Failed to create central skills directory: {}", e))?;
+        .map_err(|e| GithubImportError::io("Failed to create central skills directory", e))?;
 
     import_github_repo_skills_from_snapshot_partially(
         pool,
@@ -198,9 +198,9 @@ pub(super) async fn plan_import_staging(
     pool: &DbPool,
     candidates: &[RemoteSkillCandidate],
     selections: Vec<GitHubSkillImportSelection>,
-) -> Result<(Vec<StagedImport>, Vec<String>), String> {
+) -> Result<(Vec<StagedImport>, Vec<String>), GithubImportError> {
     if selections.is_empty() {
-        return Err("Select at least one skill to import.".to_string());
+        return Err(GithubImportError::NoSelections);
     }
 
     let mut selected_paths = HashSet::new();
@@ -213,16 +213,12 @@ pub(super) async fn plan_import_staging(
             .iter()
             .find(|candidate| candidate.source_path == selection.source_path)
             .ok_or_else(|| {
-                format!(
-                    "Selected skill '{}' is no longer available in the preview.",
-                    selection.source_path
-                )
+                GithubImportError::SelectionUnavailable(selection.source_path.clone())
             })?;
 
         if !selected_paths.insert(candidate.source_path.clone()) {
-            return Err(format!(
-                "Skill '{}' was selected more than once.",
-                candidate.source_path
+            return Err(GithubImportError::DuplicateSelection(
+                candidate.source_path.clone(),
             ));
         }
 
@@ -242,16 +238,10 @@ pub(super) async fn plan_import_staging(
             DuplicateResolution::Rename => {
                 let requested_id =
                     sanitize_skill_id(selection.renamed_skill_id.as_deref().ok_or_else(|| {
-                        format!(
-                            "Skill '{}' requires a renamed skill id for rename resolution.",
-                            candidate.source_path
-                        )
+                        GithubImportError::RenameIdRequired(candidate.source_path.clone())
                     })?)?;
                 if occupied_ids.contains(&requested_id) {
-                    return Err(format!(
-                        "Renamed skill id '{}' is already in use.",
-                        requested_id
-                    ));
+                    return Err(GithubImportError::RenameIdInUse(requested_id));
                 }
                 occupied_ids.insert(requested_id.clone());
                 staging_ops.push(StagedImport {
@@ -265,7 +255,7 @@ pub(super) async fn plan_import_staging(
     }
 
     if staging_ops.is_empty() && skipped_skills.is_empty() {
-        return Err("No valid import operations were requested.".to_string());
+        return Err(GithubImportError::NoValidOperations);
     }
 
     Ok((staging_ops, skipped_skills))
@@ -279,7 +269,7 @@ pub(crate) async fn import_github_repo_skills_from_snapshot_partially(
     selections: Vec<GitHubSkillImportSelection>,
     central_root: &Path,
     app: Option<&AppHandle>,
-) -> Result<PartialGitHubRepoImportResult, String> {
+) -> Result<PartialGitHubRepoImportResult, GithubImportError> {
     let invalid_by_path = inspected
         .invalid_candidates
         .into_iter()
@@ -346,7 +336,7 @@ pub(crate) async fn import_github_repo_skills_from_snapshot_partially(
             }
             Err(error) => failed_skills.push(PartialGitHubRepoImportFailure {
                 source_path: op.candidate.source_path.clone(),
-                error,
+                error: error.to_string(),
             }),
         }
     }
@@ -396,7 +386,7 @@ pub(crate) async fn import_github_repo_skills_from_snapshot_partially(
             Ok(summary) => imported_skills.push(summary),
             Err(error) => failed_skills.push(PartialGitHubRepoImportFailure {
                 source_path: op.candidate.source_path.clone(),
-                error,
+                error: error.to_string(),
             }),
         }
     }
@@ -430,7 +420,7 @@ pub(super) async fn import_single_staged_skill(
     op: &StagedImport,
     progress_state: &mut GitHubImportProgressState,
     app: Option<&AppHandle>,
-) -> Result<ImportedGitHubSkillSummary, String> {
+) -> Result<ImportedGitHubSkillSummary, GithubImportError> {
     let target_dir = central_root.join(&op.final_skill_id);
     let staging_path = create_unique_work_dir(central_root, ".skillport-import-")?;
 
@@ -453,16 +443,15 @@ pub(super) async fn import_single_staged_skill(
         Ok(raw) => raw,
         Err(e) => {
             discard_staging_dir(&staging_path).await;
-            return Err(format!("Failed to read imported SKILL.md: {}", e));
+            return Err(GithubImportError::io("Failed to read imported SKILL.md", e));
         }
     };
     let frontmatter = match parse_frontmatter(&raw) {
         Some(frontmatter) => frontmatter,
         None => {
             discard_staging_dir(&staging_path).await;
-            return Err(format!(
-                "Imported skill '{}' is missing valid frontmatter.",
-                op.candidate.source_path
+            return Err(GithubImportError::ImportedSkillMissingFrontmatter(
+                op.candidate.source_path.clone(),
             ));
         }
     };
@@ -479,9 +468,8 @@ pub(super) async fn import_single_staged_skill(
             });
         } else {
             discard_staging_dir(&staging_path).await;
-            return Err(format!(
-                "Target directory '{}' already exists.",
-                target_dir.display()
+            return Err(GithubImportError::TargetDirExists(
+                target_dir.display().to_string(),
             ));
         }
     }
@@ -489,10 +477,12 @@ pub(super) async fn import_single_staged_skill(
     if let Err(error) = std::fs::rename(&staging_path, &target_dir) {
         discard_staging_dir(&staging_path).await;
         restore_or_cleanup_target_dir(&target_dir, existing_backup).await;
-        return Err(format!(
-            "Failed to finalize import target directory '{}': {}",
-            target_dir.display(),
-            error
+        return Err(GithubImportError::io(
+            format!(
+                "Failed to finalize import target directory '{}'",
+                target_dir.display()
+            ),
+            error,
         ));
     }
 
@@ -521,7 +511,7 @@ pub(super) async fn import_single_staged_skill(
     .await
     {
         restore_or_cleanup_target_dir(&target_dir, existing_backup).await;
-        return Err(error);
+        return Err(GithubImportError::Other(error)); // TODO(C3): typed repos passthrough
     }
 
     drop_existing_backup(existing_backup).await;
@@ -539,13 +529,15 @@ pub(super) async fn import_single_staged_skill(
 pub(super) fn backup_existing_skill_dir(
     central_root: &Path,
     target_dir: &Path,
-) -> Result<ExistingSkillBackup, String> {
+) -> Result<ExistingSkillBackup, GithubImportError> {
     let backup_path = central_root.join(format!(".skillport-backup-{}", Uuid::new_v4()));
     std::fs::rename(target_dir, &backup_path).map_err(|e| {
-        format!(
-            "Failed to back up existing canonical skill '{}': {}",
-            target_dir.display(),
-            e
+        GithubImportError::io(
+            format!(
+                "Failed to back up existing canonical skill '{}'",
+                target_dir.display()
+            ),
+            e,
         )
     })?;
     Ok(ExistingSkillBackup { path: backup_path })
@@ -590,30 +582,34 @@ pub(super) async fn drop_existing_backup(backup: Option<ExistingSkillBackup>) {
     .await;
 }
 
-pub(super) fn create_unique_work_dir(parent: &Path, prefix: &str) -> Result<PathBuf, String> {
+pub(super) fn create_unique_work_dir(
+    parent: &Path,
+    prefix: &str,
+) -> Result<PathBuf, GithubImportError> {
     let path = parent.join(format!("{prefix}{}", Uuid::new_v4()));
     std::fs::create_dir_all(&path).map_err(|e| {
-        format!(
-            "Failed to create staging directory '{}': {}",
-            path.display(),
-            e
+        GithubImportError::io(
+            format!("Failed to create staging directory '{}'", path.display()),
+            e,
         )
     })?;
     Ok(path)
 }
 
-pub(crate) async fn central_skills_root(pool: &DbPool) -> Result<PathBuf, String> {
+pub(crate) async fn central_skills_root(pool: &DbPool) -> Result<PathBuf, GithubImportError> {
     let central = db::get_agent_by_id(pool, "central")
-        .await?
-        .ok_or_else(|| "Central agent not found in database".to_string())?;
+        .await
+        .map_err(GithubImportError::Other)? // TODO(C3): typed repos passthrough
+        .ok_or(GithubImportError::CentralAgentMissing)?;
     Ok(PathBuf::from(central.global_skills_dir))
 }
 
-pub(super) async fn current_central_skill_ids(pool: &DbPool) -> Result<HashSet<String>, String> {
+pub(super) async fn current_central_skill_ids(
+    pool: &DbPool,
+) -> Result<HashSet<String>, GithubImportError> {
     let rows = sqlx::query("SELECT id FROM skills WHERE is_central = 1")
         .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     Ok(rows
         .iter()
         .map(|row| row.get::<String, _>("id"))
@@ -623,12 +619,14 @@ pub(super) async fn current_central_skill_ids(pool: &DbPool) -> Result<HashSet<S
 pub(crate) async fn build_preview_skills(
     pool: &DbPool,
     candidates: &[RemoteSkillCandidate],
-) -> Result<Vec<GitHubSkillPreview>, String> {
+) -> Result<Vec<GitHubSkillPreview>, GithubImportError> {
     let skill_ids = candidates
         .iter()
         .map(|candidate| candidate.skill_id.clone())
         .collect::<Vec<_>>();
-    let existing_by_id = db::get_skills_by_ids(pool, &skill_ids).await?;
+    let existing_by_id = db::get_skills_by_ids(pool, &skill_ids)
+        .await
+        .map_err(GithubImportError::Other)?; // TODO(C3): typed repos passthrough
     let mut skills = Vec::with_capacity(candidates.len());
     for candidate in candidates {
         let conflict = existing_by_id

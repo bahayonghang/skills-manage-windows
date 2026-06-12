@@ -35,7 +35,9 @@ pub(crate) async fn import_skillport_state_impl(
     if check_cancel(cancel).is_err() {
         return Ok(cancelled_import_result(manifest, 0, 0));
     }
-    let auth = github_import::github_direct_auth_from_secret_store(pool, secrets).await?;
+    let auth = github_import::github_direct_auth_from_secret_store(pool, secrets)
+        .await
+        .map_err(|e| e.to_string())?;
     if check_cancel(cancel).is_err() {
         return Ok(cancelled_import_result(manifest, 0, 0));
     }
@@ -139,6 +141,7 @@ pub(crate) async fn import_skillport_state_impl(
                 }
             }
             Err(error) => {
+                let error = error.to_string();
                 for source_path in &selected_paths {
                     let skill = skill_by_source_path.get(source_path);
                     result.failed_skills.push(SkillportStateImportFailure {

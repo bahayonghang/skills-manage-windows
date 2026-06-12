@@ -24,6 +24,7 @@ use crate::{
 };
 
 mod archive;
+mod error;
 mod import;
 mod pat;
 mod preview;
@@ -45,6 +46,8 @@ use raw_http::*;
 use remote::*;
 use source::*;
 use types::*;
+
+pub use error::GithubImportError;
 
 pub(crate) use archive::download_repo_snapshot;
 #[cfg(test)]
@@ -90,12 +93,15 @@ fn github_host_rate_limiters() -> &'static tokio::sync::Mutex<HashMap<String, In
     types::GITHUB_HOST_RATE_LIMITERS.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()))
 }
 
-async fn wait_for_github_host_slot(url: &str) -> Result<(), String> {
-    let parsed =
-        reqwest::Url::parse(url).map_err(|e| format!("Invalid GitHub URL '{}': {}", url, e))?;
+async fn wait_for_github_host_slot(url: &str) -> Result<(), GithubImportError> {
+    let parsed = reqwest::Url::parse(url).map_err(|e| {
+        GithubImportError::InvalidUrl(format!("Invalid GitHub URL '{}': {}", url, e))
+    })?;
     let host = parsed
         .host_str()
-        .ok_or_else(|| format!("GitHub URL '{}' has no host.", url))?
+        .ok_or_else(|| {
+            GithubImportError::InvalidUrl(format!("GitHub URL '{}' has no host.", url))
+        })?
         .to_string();
     let interval = TokioDuration::from_secs_f64(1.0 / types::DEFAULT_GITHUB_HOST_QPS);
 

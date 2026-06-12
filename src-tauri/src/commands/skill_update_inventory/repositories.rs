@@ -106,7 +106,8 @@ pub(crate) async fn load_syncable_github_repositories(
                 continue;
             };
             github_import::resolve_repo_source(&url, auth_token)
-                .await?
+                .await
+                .map_err(|e| e.to_string())?
                 .repo
         };
         repositories.push((repository, repo_ref));

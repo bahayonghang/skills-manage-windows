@@ -5,7 +5,7 @@ pub(crate) async fn fetch_raw_text(
     client: &reqwest::Client,
     url: &str,
     auth_token: Option<&str>,
-) -> Result<String, String> {
+) -> Result<String, GithubImportError> {
     let response = send_github_request_with_fallback(
         client,
         GitHubFetchSurface::Raw,
@@ -25,22 +25,28 @@ pub(crate) async fn fetch_raw_text(
         return Err(
             classify_github_denial_response(response, "downloading skill metadata")
                 .await
-                .unwrap_or_else(|| "Failed to download skill metadata.".to_string()),
+                .unwrap_or_else(|| {
+                    GithubImportError::Http("Failed to download skill metadata.".to_string())
+                }),
         );
     }
 
     let budget = ResourceBudget::default_skill();
     if let Some(content_length) = response.content_length() {
-        budget.reject_file_read_size(url, content_length)?;
+        budget
+            .reject_file_read_size(url, content_length)
+            .map_err(GithubImportError::Budget)?;
     }
 
     let bytes = response
         .bytes()
         .await
-        .map_err(|e| format!("Failed to read skill metadata: {}", e))?;
-    budget.reject_file_read_size(url, bytes.len() as u64)?;
+        .map_err(|e| GithubImportError::Http(format!("Failed to read skill metadata: {}", e)))?;
+    budget
+        .reject_file_read_size(url, bytes.len() as u64)
+        .map_err(GithubImportError::Budget)?;
     String::from_utf8(bytes.to_vec())
-        .map_err(|e| format!("Skill metadata is not valid UTF-8: {}", e))
+        .map_err(|e| GithubImportError::Parse(format!("Skill metadata is not valid UTF-8: {}", e)))
 }
 
 #[derive(Debug, Clone)]
@@ -109,7 +115,7 @@ pub(super) async fn send_github_request_with_fallback<F>(
     build_url: F,
     failure_prefix: &str,
     auth_token: Option<&str>,
-) -> Result<reqwest::Response, String>
+) -> Result<reqwest::Response, GithubImportError>
 where
     F: Fn(&GitHubMirrorEndpoint) -> String,
 {
@@ -162,9 +168,9 @@ where
                         continue;
                     }
 
-                    return Err(denial
-                        .map(|denial| denial.to_string())
-                        .unwrap_or_else(|| format!("{}: HTTP {}", failure_prefix, status)));
+                    return Err(denial.map(GithubImportError::from_denial).unwrap_or_else(
+                        || GithubImportError::Http(format!("{}: HTTP {}", failure_prefix, status)),
+                    ));
                 }
 
                 if status.is_success() {
@@ -199,7 +205,10 @@ where
                     continue;
                 }
 
-                return Err(format!("{}: HTTP {}", failure_prefix, status));
+                return Err(GithubImportError::Http(format!(
+                    "{}: HTTP {}",
+                    failure_prefix, status
+                )));
             }
             Err(error) => {
                 if is_retryable_github_transport_error(&error) {
@@ -215,20 +224,23 @@ where
                     continue;
                 }
 
-                return Err(format!("{}: {}", failure_prefix, error));
+                return Err(GithubImportError::Http(format!(
+                    "{}: {}",
+                    failure_prefix, error
+                )));
             }
         }
     }
 
     if let Some(denial) = last_retryable_denial {
-        return Err(denial.to_string());
+        return Err(GithubImportError::from_denial(denial));
     }
 
-    Err(format!(
+    Err(GithubImportError::Http(format!(
         "{}. Direct GitHub access and built-in mirrors were unreachable. Retry later or try a different network path. Last errors: {}",
         failure_prefix,
         summarize_mirror_attempts(&attempts)
-    ))
+    )))
 }
 
 pub(super) fn should_retry_via_mirror_status(
@@ -267,10 +279,10 @@ pub(super) fn surface_label(surface: GitHubFetchSurface) -> &'static str {
 pub(super) async fn classify_github_denial_response(
     response: reqwest::Response,
     operation: &'static str,
-) -> Option<String> {
+) -> Option<GithubImportError> {
     parse_github_denial_response(response, operation, false)
         .await
-        .map(|denial| denial.to_string())
+        .map(GithubImportError::from_denial)
 }
 
 pub(super) async fn parse_github_denial_response(
