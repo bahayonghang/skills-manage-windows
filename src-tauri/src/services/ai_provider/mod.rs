@@ -31,7 +31,7 @@ pub(crate) use error::{
     AI_INVALID_API_KEY, AI_MISSING_API_KEY, AI_RATE_LIMIT, AI_REQUEST_FAILED, AI_RESPONSE_ERROR,
     AI_RESPONSE_PARSE_FAILED, AI_RESPONSE_READ_FAILED,
 };
-pub use error::{ExplanationErrorInfo, ExplanationErrorKind};
+pub use error::{AiProviderError, ExplanationErrorInfo, ExplanationErrorKind};
 pub use prompt::ExplanationApiProtocol;
 pub use secret::{
     clear_ai_api_key_impl, get_ai_api_key_state_impl, migrate_ai_api_key_on_startup,
@@ -56,7 +56,7 @@ pub(crate) async fn get_ai_api_key_for_provider(
     pool: &crate::db::DbPool,
     secrets: &dyn crate::secrets::SecretStore,
     provider: &str,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, AiProviderError> {
     secret::ai_api_key_from_secret_store(pool, secrets, Some(provider)).await
 }
 
@@ -65,7 +65,7 @@ pub async fn explain_skill_impl(
     pool: &crate::db::DbPool,
     secrets: &dyn crate::secrets::SecretStore,
     content: String,
-) -> Result<String, String> {
+) -> Result<String, AiProviderError> {
     claude::explain_skill(pool, secrets, content).await
 }
 
@@ -73,7 +73,7 @@ pub async fn explain_skill_impl(
 pub async fn test_ai_connection_impl(
     pool: &crate::db::DbPool,
     secrets: &dyn crate::secrets::SecretStore,
-) -> Result<claude::AiConnectionTestResult, String> {
+) -> Result<claude::AiConnectionTestResult, AiProviderError> {
     claude::test_ai_connection(pool, secrets).await
 }
 
@@ -82,7 +82,7 @@ pub async fn get_skill_explanation_impl(
     pool: &crate::db::DbPool,
     skill_id: String,
     lang: String,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, AiProviderError> {
     cache::load_cached_skill_explanation(pool, &skill_id, &lang).await
 }
 
@@ -91,7 +91,7 @@ pub async fn get_skill_explanation_summaries_impl(
     pool: &crate::db::DbPool,
     skill_ids: Vec<String>,
     lang: String,
-) -> Result<HashMap<String, String>, String> {
+) -> Result<HashMap<String, String>, AiProviderError> {
     cache::load_cached_skill_explanation_summaries(pool, &skill_ids, &lang).await
 }
 
@@ -104,7 +104,7 @@ pub async fn explain_skill_stream_impl(
     skill_id: String,
     content: String,
     lang: String,
-) -> Result<(), String> {
+) -> Result<(), AiProviderError> {
     if let Some(explanation) = cache::load_cached_skill_explanation(pool, &skill_id, &lang).await? {
         let _ = app.emit(
             "skill:explanation:chunk",
@@ -134,7 +134,7 @@ pub async fn refresh_skill_explanation_impl(
     skill_id: String,
     content: String,
     lang: String,
-) -> Result<(), String> {
+) -> Result<(), AiProviderError> {
     cache::delete_cached_skill_explanation(pool, &skill_id, &lang).await?;
     stream::do_explain_skill_stream(pool, secrets, app, &skill_id, &content, &lang).await
 }

@@ -1,8 +1,86 @@
-//! AI explanation error classification: maps `reqwest::Error` chains into a
-//! structured `ExplanationErrorInfo` with actionable hints, and renders a flat
-//! summary string for the non-streaming explanation path.
+//! AI provider domain errors and explanation error classification.
+//!
+//! `AiProviderError` is the typed error for the explanation / key-management
+//! flows; Display texts intentionally preserve the historical string-error
+//! wording (including the `ai.*:` coded prefixes the frontend parses) because
+//! the IPC boundary stringifies these errors verbatim. The rest of this module
+//! maps `reqwest::Error` chains into a structured `ExplanationErrorInfo` with
+//! actionable hints, and renders a flat summary string for the non-streaming
+//! explanation path.
 
 use serde::{Deserialize, Serialize};
+
+use crate::secrets::SecretStorageState;
+
+/// Failure categories for AI provider explanation and API-key management.
+#[derive(Debug, thiserror::Error)]
+pub enum AiProviderError {
+    /// skill_explanations cache reads/deletes and settings-repo calls flow
+    /// through transparently.
+    #[error(transparent)]
+    Db(#[from] sqlx::Error),
+
+    /// Upsert into the `skill_explanations` cache failed.
+    #[error("Failed to cache AI explanation: {0}")]
+    CacheWrite(#[source] sqlx::Error),
+
+    /// Secret-store interaction failure (read / save / verify / clear /
+    /// migrate). Message preformatted at the call site ("Failed to {action}
+    /// AI API key: ..."); the secrets module still returns string-ish errors.
+    #[error("{0}")]
+    Secret(String),
+
+    /// No API key configured. Coded "ai.missing_api_key:..." message
+    /// preformatted at the call site.
+    #[error("{0}")]
+    MissingApiKey(String),
+
+    /// HTTP transport/protocol failure: client build, request send, non-2xx
+    /// response, body/stream read. Coded message preformatted at the call site.
+    #[error("{0}")]
+    Http(String),
+
+    /// 429 from the provider. Coded "ai.rate_limit:..." message preformatted
+    /// at the call site.
+    #[error("{0}")]
+    RateLimited(String),
+
+    /// 401/403 from the provider. Coded "ai.invalid_api_key:..." message
+    /// preformatted at the call site.
+    #[error("{0}")]
+    AccessDenied(String),
+
+    /// Response parse failure. Coded "ai.response_parse_failed:..." message
+    /// preformatted at the call site.
+    #[error("{0}")]
+    Parse(String),
+
+    #[error("AI API key cannot be empty; clear the key instead.")]
+    EmptyApiKey,
+
+    #[error("Failed to save AI API key: unavailable storage state {0:?}")]
+    UnavailableKeyStorage(SecretStorageState),
+
+    #[error("Failed to verify saved AI API key.")]
+    SavedKeyVerificationFailed,
+
+    #[error("AI explanation returned no content.")]
+    EmptyExplanation,
+}
+
+impl AiProviderError {
+    /// Classify a non-2xx provider response by status code, preserving the
+    /// preformatted coded message (mirrors `error_code_for_status`).
+    pub(crate) fn from_status(status_code: u16, message: String) -> Self {
+        if status_code == 401 || status_code == 403 {
+            Self::AccessDenied(message)
+        } else if status_code == 429 {
+            Self::RateLimited(message)
+        } else {
+            Self::Http(message)
+        }
+    }
+}
 
 /// Error kind for AI explanation network failures, used by the frontend
 /// to render targeted UI (friendly summary + expandable details).

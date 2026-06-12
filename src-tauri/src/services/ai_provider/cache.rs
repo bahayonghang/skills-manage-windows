@@ -7,6 +7,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use super::error::AiProviderError;
+
 pub(crate) fn explanation_has_content(explanation: &str) -> bool {
     !explanation.trim().is_empty()
 }
@@ -15,13 +17,12 @@ pub(crate) async fn delete_cached_skill_explanation(
     pool: &crate::db::DbPool,
     skill_id: &str,
     lang: &str,
-) -> Result<(), String> {
+) -> Result<(), AiProviderError> {
     sqlx::query("DELETE FROM skill_explanations WHERE skill_id = ? AND lang = ?")
         .bind(skill_id)
         .bind(lang)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     Ok(())
 }
 
@@ -29,7 +30,7 @@ pub(crate) async fn load_cached_skill_explanation(
     pool: &crate::db::DbPool,
     skill_id: &str,
     lang: &str,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, AiProviderError> {
     use sqlx::Row;
 
     let row =
@@ -37,8 +38,7 @@ pub(crate) async fn load_cached_skill_explanation(
             .bind(skill_id)
             .bind(lang)
             .fetch_optional(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
     match row {
         Some(row) => {
@@ -60,7 +60,7 @@ pub(crate) async fn load_cached_skill_explanation_summaries(
     pool: &crate::db::DbPool,
     skill_ids: &[String],
     lang: &str,
-) -> Result<HashMap<String, String>, String> {
+) -> Result<HashMap<String, String>, AiProviderError> {
     use sqlx::{QueryBuilder, Row, Sqlite};
 
     if lang.trim().is_empty() {
@@ -95,11 +95,7 @@ pub(crate) async fn load_cached_skill_explanation_summaries(
         }
         separated.push_unseparated(")");
 
-        let rows = query_builder
-            .build()
-            .fetch_all(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+        let rows = query_builder.build().fetch_all(pool).await?;
 
         for row in rows {
             let skill_id: String = row.get("skill_id");
@@ -120,9 +116,9 @@ pub(crate) async fn cache_skill_explanation(
     lang: &str,
     model: &str,
     explanation: &str,
-) -> Result<(), String> {
+) -> Result<(), AiProviderError> {
     if !explanation_has_content(explanation) {
-        return Err("AI explanation returned no content.".to_string());
+        return Err(AiProviderError::EmptyExplanation);
     }
 
     let now = chrono::Utc::now().to_rfc3339();
@@ -142,7 +138,7 @@ pub(crate) async fn cache_skill_explanation(
     .bind(&now)
     .execute(pool)
     .await
-    .map_err(|e| format!("Failed to cache AI explanation: {}", e))?;
+    .map_err(AiProviderError::CacheWrite)?;
 
     Ok(())
 }

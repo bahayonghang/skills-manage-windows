@@ -189,14 +189,18 @@ pub async fn install_from_skills_sh(
 
 #[tauri::command]
 pub async fn explain_skill(state: State<'_, AppState>, content: String) -> Result<String, String> {
-    ai_provider::explain_skill_impl(&state.db, state.secrets.as_ref(), content).await
+    ai_provider::explain_skill_impl(&state.db, state.secrets.as_ref(), content)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn test_ai_connection(
     state: State<'_, AppState>,
 ) -> Result<AiConnectionTestResult, String> {
-    ai_provider::test_ai_connection_impl(&state.db, state.secrets.as_ref()).await
+    ai_provider::test_ai_connection_impl(&state.db, state.secrets.as_ref())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -205,7 +209,9 @@ pub async fn get_skill_explanation(
     skill_id: String,
     lang: String,
 ) -> Result<Option<String>, String> {
-    ai_provider::get_skill_explanation_impl(&state.db, skill_id, lang).await
+    ai_provider::get_skill_explanation_impl(&state.db, skill_id, lang)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -214,7 +220,9 @@ pub async fn get_skill_explanation_summaries(
     skill_ids: Vec<String>,
     lang: String,
 ) -> Result<HashMap<String, String>, String> {
-    ai_provider::get_skill_explanation_summaries_impl(&state.db, skill_ids, lang).await
+    ai_provider::get_skill_explanation_summaries_impl(&state.db, skill_ids, lang)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -234,6 +242,7 @@ pub async fn explain_skill_stream(
         lang,
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -253,4 +262,5 @@ pub async fn refresh_skill_explanation(
         lang,
     )
     .await
+    .map_err(|e| e.to_string())
 }

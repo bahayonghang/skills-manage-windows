@@ -320,6 +320,7 @@ pub async fn get_ai_api_key_state(
         provider.as_deref(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -333,6 +334,7 @@ pub async fn reveal_ai_api_key(
         provider.as_deref(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -348,6 +350,7 @@ pub async fn set_ai_api_key(
         provider.as_deref(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -361,6 +364,7 @@ pub async fn clear_ai_api_key(
         provider.as_deref(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 /// Tauri command: set (upsert) a settings value.

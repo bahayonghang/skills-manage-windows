@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use super::error::format_reqwest_error;
+use super::error::{format_reqwest_error, AiProviderError};
 use super::prompt::{build_explanation_prompt, truncate_content, ExplanationApiProtocol};
 
 #[derive(Serialize)]
@@ -116,15 +116,15 @@ pub(crate) async fn explain_skill(
     pool: &crate::db::DbPool,
     secrets: &dyn crate::secrets::SecretStore,
     content: String,
-) -> Result<String, String> {
+) -> Result<String, AiProviderError> {
     let config = super::resolve_ai_provider_config(pool).await;
     let api_key = super::get_ai_api_key_for_provider(pool, secrets, &config.provider)
         .await?
         .ok_or_else(|| {
-            super::coded_error(
+            AiProviderError::MissingApiKey(super::coded_error(
                 super::AI_MISSING_API_KEY,
                 "Configure an AI API key in Settings before requesting an AI explanation.",
-            )
+            ))
         })?;
 
     let client = {
@@ -135,11 +135,11 @@ pub(crate) async fn explain_skill(
         #[cfg(test)]
         let builder = builder.no_proxy();
         builder.build().map_err(|e| {
-            super::coded_error_with_details(
+            AiProviderError::Http(super::coded_error_with_details(
                 super::AI_CLIENT_BUILD_FAILED,
                 "Failed to initialize the AI HTTP client.",
                 e.to_string(),
-            )
+            ))
         })?
     };
 
@@ -159,47 +159,50 @@ pub(crate) async fn explain_skill(
         .send()
         .await
         .map_err(|e| {
-            super::coded_error_with_details(
+            AiProviderError::Http(super::coded_error_with_details(
                 super::AI_REQUEST_FAILED,
                 "AI request failed.",
                 format_reqwest_error(&e),
-            )
+            ))
         })?;
 
     if !resp.status().is_success() {
         let status = resp.status();
         let status_code = status.as_u16();
         let body = resp.text().await.unwrap_or_default();
-        return Err(super::coded_error_with_details(
-            error_code_for_status(status_code),
-            message_for_status(status),
-            format!("HTTP {status}: {body}"),
+        return Err(AiProviderError::from_status(
+            status_code,
+            super::coded_error_with_details(
+                error_code_for_status(status_code),
+                message_for_status(status),
+                format!("HTTP {status}: {body}"),
+            ),
         ));
     }
 
     let body = resp.text().await.map_err(|e| {
-        super::coded_error_with_details(
+        AiProviderError::Http(super::coded_error_with_details(
             super::AI_RESPONSE_READ_FAILED,
             "Failed to read the AI response.",
             e.to_string(),
-        )
+        ))
     })?;
 
     if let Some(text) = parse_response_text(&body) {
         return Ok(text);
     }
 
-    Err(super::coded_error_with_details(
+    Err(AiProviderError::Parse(super::coded_error_with_details(
         super::AI_RESPONSE_PARSE_FAILED,
         "Unable to parse the AI response.",
         &body[..body.len().min(500)],
-    ))
+    )))
 }
 
 pub(crate) async fn test_ai_connection(
     pool: &crate::db::DbPool,
     secrets: &dyn crate::secrets::SecretStore,
-) -> Result<AiConnectionTestResult, String> {
+) -> Result<AiConnectionTestResult, AiProviderError> {
     let config = super::resolve_ai_provider_config(pool).await;
     if config.api_url.trim().is_empty() {
         return Ok(AiConnectionTestResult {
@@ -239,11 +242,11 @@ pub(crate) async fn test_ai_connection(
         #[cfg(test)]
         let builder = builder.no_proxy();
         builder.build().map_err(|e| {
-            super::coded_error_with_details(
+            AiProviderError::Http(super::coded_error_with_details(
                 super::AI_CLIENT_BUILD_FAILED,
                 "Failed to initialize the AI HTTP client.",
                 e.to_string(),
-            )
+            ))
         })?
     };
 
