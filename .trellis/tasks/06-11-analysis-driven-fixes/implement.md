@@ -23,7 +23,17 @@
 
 ## 整合复核（全部子任务归档后）
 
-- [ ] 对照 `docs/reports/skills-manage-windows-deep-analysis-2026-06-11.md` 行动清单 #1–#8 逐项确认关闭（#8 圆角部分按裁定保持开放）。
-- [ ] 全量门禁：`just ci` 绿。
-- [ ] 报告附录数字复核：生产 unwrap 数量未上升、整 store 订阅为 0、`eslint .` 全仓 0 错误。
-- [ ] 父任务归档。
+复核日期：2026-06-12，全部 6 个子任务已归档。
+
+- [x] 对照 `docs/reports/skills-manage-windows-deep-analysis-2026-06-11.md` 行动清单 #1–#8 逐项确认关闭（#8 圆角部分按裁定保持开放）：
+  - #1 spawn_blocking：全仓唯一包装 `src-tauri/src/fs_util.rs`，抽查 projects/crud.rs 经 `run_blocking_fs_with` 包装 ✓
+  - #2 CLAUDE.md 重写：旧漂移描述 grep 0 残留（40+ 命令/9 模块表/3 主题/db.rs/27 内置/我的源）✓
+  - #3 thiserror：12 个 services 域全部有 error.rs；services 层 `Result<_, String>` 仅剩 tests 内 1 处（口径排除）✓
+  - #4 ESLint：`.eslintrc.cjs` 已删除，根目录 `eslint .` 输出 "No issues found" ✓
+  - #5 Sidebar：`usePlatformStore((s) => s.agents)` selector 模式 ✓
+  - #6 data.json：仓库根目录已不存在 ✓
+  - #7 set_setting：`let _ = db::set_setting` 裸忽略 grep 0 命中 ✓
+  - #8 discoverDeprecationPreference.ts 已删除、`bg-black/20` 0 命中；圆角清扫按裁定保持开放 ✓
+- [x] 全量门禁：`just ci` 绿（2026-06-12，Rust 699 passed + e2e 5 passed，"All checks passed"）。
+- [x] 报告附录数字复核：生产 unwrap/expect 11 处（= 报告基线，未上升）、整 store 订阅 0（`use*Store()` 空参调用 0 命中）、`eslint .` 全仓 0 错误。
+- [x] 父任务归档。
