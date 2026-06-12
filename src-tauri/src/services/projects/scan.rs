@@ -178,13 +178,10 @@ fn scan_project_blocking(
 /// 扫描指定项目并落 psi。
 pub async fn rescan_project(pool: &DbPool, project_id: &str) -> Result<usize, ProjectsError> {
     let project = db::get_project_by_id(pool, project_id)
-        .await
-        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| ProjectsError::ProjectNotFound(project_id.to_string()))?;
 
-    let agents = db::get_all_agents(pool)
-        .await
-        .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+    let agents = db::get_all_agents(pool).await?;
     let enabled: Vec<db::Agent> = agents
         .into_iter()
         .filter(|a| a.is_enabled && a.id != "central")
@@ -193,13 +190,9 @@ pub async fn rescan_project(pool: &DbPool, project_id: &str) -> Result<usize, Pr
     let project_root = PathBuf::from(&project.path);
     if !project_root.exists() {
         // 项目根盘已不存在：清空 psi 并仍然刷 last_scanned_at，让前端能感知。
-        db::delete_stale_project_skill_installations(pool, project_id, &[])
-            .await
-            .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+        db::delete_stale_project_skill_installations(pool, project_id, &[]).await?;
         let now = Utc::now().to_rfc3339();
-        db::update_project_last_scanned(pool, project_id, &now)
-            .await
-            .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+        db::update_project_last_scanned(pool, project_id, &now).await?;
         return Ok(0);
     }
 
@@ -232,9 +225,7 @@ pub async fn rescan_project(pool: &DbPool, project_id: &str) -> Result<usize, Pr
         })
         .collect::<Vec<_>>();
 
-    db::persist_project_skill_scan(pool, project_id, &rows, &now)
-        .await
-        .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+    db::persist_project_skill_scan(pool, project_id, &rows, &now).await?;
 
     Ok(found.len())
 }
@@ -257,8 +248,7 @@ async fn central_skill_map_for_project_scan(
         .collect::<Vec<_>>();
 
     Ok(db::get_skills_by_ids(pool, &skill_ids)
-        .await
-        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .into_iter()
         .filter(|(_, skill)| skill.is_central)
         .collect())

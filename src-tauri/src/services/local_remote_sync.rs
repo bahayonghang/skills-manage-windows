@@ -417,10 +417,7 @@ pub fn collect_skill_snapshots(root: &Path) -> Result<Vec<LocalSnapshot>, LocalR
     let mut dirs = std::fs::read_dir(root)
         .map_err(|error| {
             LocalRemoteSyncError::io(
-                format!(
-                    "Failed to read local skills directory '{}'",
-                    root.display()
-                ),
+                format!("Failed to read local skills directory '{}'", root.display()),
                 error,
             )
         })?
@@ -445,9 +442,7 @@ pub fn collect_skill_snapshots(root: &Path) -> Result<Vec<LocalSnapshot>, LocalR
         let id = path
             .file_name()
             .and_then(|value| value.to_str())
-            .ok_or_else(|| {
-                LocalRemoteSyncError::SkillDirNameNotUtf8(path.display().to_string())
-            })?
+            .ok_or_else(|| LocalRemoteSyncError::SkillDirNameNotUtf8(path.display().to_string()))?
             .to_string();
         if !is_safe_relative_archive_path(&id) {
             return Err(LocalRemoteSyncError::UnsafeSkillId(id));

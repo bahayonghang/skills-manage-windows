@@ -38,9 +38,7 @@ pub(crate) async fn record_native_installation(
         symlink_target: None,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
-    db::upsert_skill_installation(pool, &installation)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
+    db::upsert_skill_installation(pool, &installation).await?;
 
     Ok(InstallResult {
         symlink_path: installed_path,
@@ -79,14 +77,12 @@ pub(crate) async fn install_skill_to_agent_outcome_impl(
 
     // 1. Look up the target agent.
     let agent = db::get_agent_by_id(pool, agent_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
 
     // 2. Look up the central agent to determine the canonical root.
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
 
     let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
@@ -141,9 +137,7 @@ pub(crate) async fn install_skill_to_agent_outcome_impl(
         symlink_target: Some(canonical_dir.to_string_lossy().into_owned()),
         created_at: chrono::Utc::now().to_rfc3339(),
     };
-    db::upsert_skill_installation(pool, &installation)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
+    db::upsert_skill_installation(pool, &installation).await?;
 
     Ok(InstallOutcome::Installed(InstallResult {
         symlink_path: symlink_path.to_string_lossy().into_owned(),
@@ -213,14 +207,12 @@ pub(crate) async fn install_skill_to_agent_copy_outcome_impl(
 
     // 1. Look up the target agent.
     let agent = db::get_agent_by_id(pool, agent_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
 
     // 2. Look up the central agent to determine the canonical root.
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
 
     let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
@@ -268,9 +260,7 @@ pub(crate) async fn install_skill_to_agent_copy_outcome_impl(
         symlink_target: None,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
-    db::upsert_skill_installation(pool, &installation)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
+    db::upsert_skill_installation(pool, &installation).await?;
 
     Ok(InstallOutcome::Installed(InstallResult {
         symlink_path: target_path.to_string_lossy().into_owned(),
@@ -305,7 +295,10 @@ fn remove_install_path(
             if link_type == "copy" || (allow_native_dir && link_type == "native") {
                 std::fs::remove_dir_all(path).map_err(|e| {
                     InstallationError::io(
-                        format!("Failed to remove copied skill directory '{}'", path.display()),
+                        format!(
+                            "Failed to remove copied skill directory '{}'",
+                            path.display()
+                        ),
                         e,
                     )
                 })?;
@@ -390,12 +383,10 @@ async fn uninstall_claude_observation_from_agent_impl(
     }
 
     let agent = db::get_agent_by_id(pool, agent_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
     let observation = db::get_agent_skill_observation_by_row_id(pool, row_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::ClaudeRowNotFound(row_id.to_string()))?;
     ensure_claude_user_observation(&observation, skill_id, agent_id)?;
 
@@ -409,12 +400,8 @@ async fn uninstall_claude_observation_from_agent_impl(
         remove_install_path(&install_path_for_remove, &link_type, true)
     })
     .await?;
-    db::delete_agent_skill_observation(pool, row_id)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
-    db::delete_skill_installation(pool, skill_id, agent_id)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
+    db::delete_agent_skill_observation(pool, row_id).await?;
+    db::delete_skill_installation(pool, skill_id, agent_id).await?;
 
     Ok(())
 }
@@ -448,13 +435,11 @@ pub async fn uninstall_skill_from_agent_impl(
 ) -> Result<(), InstallationError> {
     // 1. Look up the agent.
     let agent = db::get_agent_by_id(pool, agent_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
 
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
 
     if agent_id == "central" || agents_share_skills_dir(&agent, &central) {
@@ -467,9 +452,7 @@ pub async fn uninstall_skill_from_agent_impl(
     let install_path = PathBuf::from(&agent.global_skills_dir).join(skill_id);
 
     // 3. Look up the installation record to determine how it was installed.
-    let installations = db::get_skill_installations(pool, skill_id)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
+    let installations = db::get_skill_installations(pool, skill_id).await?;
     let record = installations.iter().find(|r| r.agent_id == agent_id);
     let link_type = record.map(|r| r.link_type.as_str()).unwrap_or("symlink");
 
@@ -482,9 +465,7 @@ pub async fn uninstall_skill_from_agent_impl(
     .await?;
 
     // 5. Remove the installation record from the database.
-    db::delete_skill_installation(pool, skill_id, agent_id)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
+    db::delete_skill_installation(pool, skill_id, agent_id).await?;
 
     Ok(())
 }

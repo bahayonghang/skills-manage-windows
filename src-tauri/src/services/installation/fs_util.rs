@@ -87,8 +87,9 @@ pub(crate) fn dirs_have_same_contents(
     }
 
     if left_metadata.is_file() {
-        let left_bytes = std::fs::read(left)
-            .map_err(|e| InstallationError::io(format!("Failed to read '{}'", left.display()), e))?;
+        let left_bytes = std::fs::read(left).map_err(|e| {
+            InstallationError::io(format!("Failed to read '{}'", left.display()), e)
+        })?;
         let right_bytes = std::fs::read(right).map_err(|e| {
             InstallationError::io(format!("Failed to read '{}'", right.display()), e)
         })?;

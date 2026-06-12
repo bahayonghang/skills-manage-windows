@@ -236,7 +236,10 @@ async fn refresh_with_providers(
 
     // 1) 缓存判定
     if !force {
-        if let Some(last) = db::get_last_scan_ms(pool, &target_id).await? {
+        if let Some(last) = db::get_last_scan_ms(pool, &target_id)
+            .await
+            .map_err(|e| e.to_string())?
+        {
             if now_ms - last < CACHE_TTL_MS {
                 return Ok(RefreshSummary {
                     cached: true,
@@ -304,7 +307,8 @@ async fn refresh_with_providers(
         &provider_outcomes,
         scan_completed_ms,
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(RefreshSummary {
         cached: false,
@@ -322,11 +326,19 @@ pub async fn build_overview(
     source: Option<&str>,
     top_skills_limit: usize,
 ) -> Result<aggregate::UsageOverview, String> {
-    let kpis_row = db::get_usage_kpis(pool, target_id, source).await?;
-    let top_skill_rows = db::list_top_skills(pool, target_id, source, top_skills_limit).await?;
+    let kpis_row = db::get_usage_kpis(pool, target_id, source)
+        .await
+        .map_err(|e| e.to_string())?;
+    let top_skill_rows = db::list_top_skills(pool, target_id, source, top_skills_limit)
+        .await
+        .map_err(|e| e.to_string())?;
     let cutoff_ms = Utc::now().timestamp_millis() - (16 * 7 * 86_400_000);
-    let day_rows = db::list_daily_counts_since(pool, target_id, source, cutoff_ms).await?;
-    let last_scan_ms = db::get_last_scan_ms(pool, target_id).await?;
+    let day_rows = db::list_daily_counts_since(pool, target_id, source, cutoff_ms)
+        .await
+        .map_err(|e| e.to_string())?;
+    let last_scan_ms = db::get_last_scan_ms(pool, target_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(aggregate::UsageOverview {
         kpis: aggregate::UsageKpis {
@@ -400,7 +412,9 @@ pub async fn list_provider_health(
     pool: &DbPool,
     target_id: &str,
 ) -> Result<Vec<ProviderHealth>, String> {
-    let rows = db::list_provider_rows(pool, target_id).await?;
+    let rows = db::list_provider_rows(pool, target_id)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(rows.into_iter().map(ProviderHealth::from).collect())
 }
 

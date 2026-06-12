@@ -199,28 +199,22 @@ async fn preview_delete_central_skill_ssh_impl(
     skill_id: &str,
 ) -> Result<DeleteCentralSkillPreview, CentralSkillsError> {
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
     if !skill.is_central {
         return Err(CentralSkillsError::NotCentralSkill(skill_id.to_string()));
     }
 
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(CentralSkillsError::CentralAgentMissing)?;
     let central_skill_dir = remote_skill_delete_dir(&skill)?;
     let central_path =
         ensure_remote_child_path(&central.global_skills_dir, &central_skill_dir, skill_id)?;
 
-    let agents = db::get_all_agents(pool)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let agents = db::get_all_agents(pool).await?;
     let shared_root_agents = remote_shared_root_agent_ids(&agents, &central.global_skills_dir);
-    let installations = db::get_skill_installations(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let installations = db::get_skill_installations(pool, skill_id).await?;
     let copy_installations = installation_details(
         installations
             .iter()
@@ -297,25 +291,21 @@ pub async fn delete_central_skill_remote_impl(
     remove_agent_ids: &[String],
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
     if !skill.is_central {
         return Err(CentralSkillsError::NotCentralSkill(skill_id.to_string()));
     }
 
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(CentralSkillsError::CentralAgentMissing)?;
     let central_skill_dir = remote_skill_delete_dir(&skill)?;
     let central_path =
         ensure_remote_child_path(&central.global_skills_dir, &central_skill_dir, skill_id)?;
 
     let remove_agent_set: HashSet<String> = remove_agent_ids.iter().cloned().collect();
-    let installations = db::get_skill_installations(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let installations = db::get_skill_installations(pool, skill_id).await?;
     for agent_id in &remove_agent_set {
         let installation = installations
             .iter()
@@ -331,9 +321,7 @@ pub async fn delete_central_skill_remote_impl(
         }
     }
 
-    let agents = db::get_all_agents(pool)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let agents = db::get_all_agents(pool).await?;
     let agents_by_id: HashMap<String, db::Agent> = agents
         .into_iter()
         .map(|agent| (agent.id.clone(), agent))
@@ -368,9 +356,7 @@ pub async fn delete_central_skill_remote_impl(
         .remove_tree(&central_path)
         .await
         .map_err(CentralSkillsError::Remote)?;
-    db::delete_skill(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    db::delete_skill(pool, skill_id).await?;
 
     Ok(DeleteCentralSkillResult {
         removed_central_path: central_path,
@@ -454,28 +440,22 @@ pub async fn preview_delete_central_skill_impl(
     skill_id: &str,
 ) -> Result<DeleteCentralSkillPreview, CentralSkillsError> {
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
     if !skill.is_central {
         return Err(CentralSkillsError::NotCentralSkill(skill_id.to_string()));
     }
 
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(CentralSkillsError::CentralAgentMissing)?;
     let central_root = PathBuf::from(&central.global_skills_dir);
     let central_skill_dir = skill_delete_dir(&skill)?;
     ensure_child_path(&central_root, &central_skill_dir, skill_id)?;
 
-    let agents = db::get_all_agents(pool)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let agents = db::get_all_agents(pool).await?;
     let shared_root_agents = shared_root_agent_ids(&agents);
-    let installations = db::get_skill_installations(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let installations = db::get_skill_installations(pool, skill_id).await?;
     let copy_installations = installation_details(
         installations
             .iter()
@@ -532,25 +512,21 @@ pub async fn delete_central_skill_impl(
     remove_agent_ids: &[String],
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
     if !skill.is_central {
         return Err(CentralSkillsError::NotCentralSkill(skill_id.to_string()));
     }
 
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(CentralSkillsError::CentralAgentMissing)?;
     let central_root = PathBuf::from(&central.global_skills_dir);
     let central_skill_dir = skill_delete_dir(&skill)?;
     ensure_child_path(&central_root, &central_skill_dir, skill_id)?;
 
     let remove_agent_set: HashSet<String> = remove_agent_ids.iter().cloned().collect();
-    let installations = db::get_skill_installations(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let installations = db::get_skill_installations(pool, skill_id).await?;
     for agent_id in &remove_agent_set {
         let installation = installations
             .iter()
@@ -595,9 +571,7 @@ pub async fn delete_central_skill_impl(
             Ok((removed_agent_ids, retained_agent_ids))
         })
         .await?;
-    db::delete_skill(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    db::delete_skill(pool, skill_id).await?;
 
     Ok(DeleteCentralSkillResult {
         removed_central_path: central_skill_dir.to_string_lossy().into_owned(),
@@ -648,4 +622,3 @@ pub async fn delete_central_skills_impl(
 
     Ok(BatchDeleteCentralSkillResult { succeeded, failed })
 }
-

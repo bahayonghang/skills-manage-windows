@@ -81,7 +81,10 @@ pub(crate) async fn load_syncable_github_repositories(
 ) -> Result<Vec<(SkillRepository, GitHubRepoRef)>, String> {
     let mut repositories = Vec::new();
     for repository_id in repository_ids {
-        let Some(repository) = db::get_skill_repository_by_id(pool, repository_id).await? else {
+        let Some(repository) = db::get_skill_repository_by_id(pool, repository_id)
+            .await
+            .map_err(|e| e.to_string())?
+        else {
             continue;
         };
         if repository.is_unknown || repository.source_type != "github" {

@@ -21,16 +21,13 @@ async fn get_deletable_repository_with_skill_ids(
     repository_id: &str,
 ) -> Result<(SkillRepository, Vec<String>), CentralSkillsError> {
     let repository = db::get_skill_repository_by_id(pool, repository_id)
-        .await
-        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| CentralSkillsError::RepositoryNotFound(repository_id.to_string()))?;
     if repository.id == db::LOCAL_UNKNOWN_REPOSITORY_ID || repository.is_unknown {
         return Err(CentralSkillsError::UnknownRepositoryUndeletable);
     }
 
-    let skill_ids = db::get_central_skill_ids_by_repository(pool, &repository.id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let skill_ids = db::get_central_skill_ids_by_repository(pool, &repository.id).await?;
     Ok((repository, skill_ids))
 }
 
@@ -122,16 +119,11 @@ pub async fn delete_skill_repository_impl(
     let delete_result = delete_central_skills_impl(pool, &delete_requests).await?;
     let deleted_repository = if delete_result.failed.is_empty() {
         if skill_ids.is_empty() {
-            db::delete_empty_skill_repository(pool, &repository.id)
-                .await
-                .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+            db::delete_empty_skill_repository(pool, &repository.id).await?
         } else {
-            db::prune_empty_skill_repositories(pool)
-                .await
-                .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+            db::prune_empty_skill_repositories(pool).await?;
             db::get_skill_repository_by_id(pool, &repository.id)
-                .await
-                .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+                .await?
                 .is_none()
         }
     } else {
@@ -158,16 +150,11 @@ pub async fn delete_skill_repository_remote_impl(
         delete_central_skills_remote_impl(pool, active_target, &delete_requests).await?;
     let deleted_repository = if delete_result.failed.is_empty() {
         if skill_ids.is_empty() {
-            db::delete_empty_skill_repository(pool, &repository.id)
-                .await
-                .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+            db::delete_empty_skill_repository(pool, &repository.id).await?
         } else {
-            db::prune_empty_skill_repositories(pool)
-                .await
-                .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+            db::prune_empty_skill_repositories(pool).await?;
             db::get_skill_repository_by_id(pool, &repository.id)
-                .await
-                .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+                .await?
                 .is_none()
         }
     } else {

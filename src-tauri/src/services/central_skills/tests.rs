@@ -1121,7 +1121,8 @@ async fn get_skill_detail_impl(
 
 async fn read_skill_content_impl(pool: &SqlitePool, skill_id: &str) -> Result<String, String> {
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
     std::fs::read_to_string(&skill.file_path)
         .map_err(|e| format!("Failed to read '{}': {}", skill.file_path, e))

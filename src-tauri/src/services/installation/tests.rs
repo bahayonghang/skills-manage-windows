@@ -764,11 +764,9 @@ async fn test_uninstall_same_root_agent_is_rejected_without_deleting_central_dir
     let result =
         uninstall_skill_from_agent_impl(&pool, "shared-root-uninstall-skill", "codex").await;
     assert!(
-        result
-            .as_ref()
-            .is_err_and(|error| error
-                .to_string()
-                .contains("cannot be uninstalled independently")),
+        result.as_ref().is_err_and(|error| error
+            .to_string()
+            .contains("cannot be uninstalled independently")),
         "same-root uninstall should be rejected: {:?}",
         result
     );

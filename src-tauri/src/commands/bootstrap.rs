@@ -119,12 +119,17 @@ fn parse_scan_state(raw: Option<String>) -> ScanState {
 }
 
 async fn recover_stale_scan_state_if_needed(pool: &DbPool) -> Result<(), String> {
-    let raw_scan_state = db::get_setting(pool, "scan_state").await?;
+    let raw_scan_state = db::get_setting(pool, "scan_state")
+        .await
+        .map_err(|e| e.to_string())?;
     if raw_scan_state.as_deref() != Some("refreshing") {
         return Ok(());
     }
 
-    let Some(last_scan_at) = db::get_setting(pool, "scan_last_completed_at").await? else {
+    let Some(last_scan_at) = db::get_setting(pool, "scan_last_completed_at")
+        .await
+        .map_err(|e| e.to_string())?
+    else {
         return Ok(());
     };
     let Ok(last_scan_at) = chrono::DateTime::parse_from_rfc3339(&last_scan_at) else {
@@ -135,7 +140,9 @@ async fn recover_stale_scan_state_if_needed(pool: &DbPool) -> Result<(), String>
         return Ok(());
     }
 
-    db::set_setting(pool, "scan_state", "idle").await?;
+    db::set_setting(pool, "scan_state", "idle")
+        .await
+        .map_err(|e| e.to_string())?;
     record_operation_log_best_effort(
         pool,
         local_target_context(),
@@ -157,8 +164,14 @@ async fn recover_stale_scan_state_if_needed(pool: &DbPool) -> Result<(), String>
 
 async fn load_scan_state(pool: &DbPool) -> Result<(Option<String>, ScanState), String> {
     recover_stale_scan_state_if_needed(pool).await?;
-    let last_scan_at = db::get_setting(pool, "scan_last_completed_at").await?;
-    let scan_state = parse_scan_state(db::get_setting(pool, "scan_state").await?);
+    let last_scan_at = db::get_setting(pool, "scan_last_completed_at")
+        .await
+        .map_err(|e| e.to_string())?;
+    let scan_state = parse_scan_state(
+        db::get_setting(pool, "scan_state")
+            .await
+            .map_err(|e| e.to_string())?,
+    );
     Ok((last_scan_at, scan_state))
 }
 
@@ -177,7 +190,9 @@ fn to_cached_agent(agent: db::Agent) -> AgentWithStatus {
 }
 
 async fn get_skill_counts_summary_impl(pool: &DbPool) -> Result<SkillCountsSummary, String> {
-    let cached_skill_counts = db::get_skill_counts_by_agent(pool).await?;
+    let cached_skill_counts = db::get_skill_counts_by_agent(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let (last_scan_at, scan_state) = load_scan_state(pool).await?;
 
     Ok(SkillCountsSummary {
@@ -204,10 +219,12 @@ pub async fn get_bootstrap_snapshot(
 }
 
 async fn get_bootstrap_snapshot_impl(pool: &DbPool) -> Result<BootstrapSnapshot, String> {
-    let agents = db::get_all_agents(pool).await?;
+    let agents = db::get_all_agents(pool).await.map_err(|e| e.to_string())?;
     let skill_counts = get_skill_counts_summary_impl(pool).await?;
     let dashboard_central_summary = get_dashboard_central_summary_impl(pool).await?;
-    let collection_count = db::get_collection_count(pool).await?;
+    let collection_count = db::get_collection_count(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(BootstrapSnapshot {
         agents: agents.into_iter().map(to_cached_agent).collect(),
@@ -258,8 +275,12 @@ async fn get_dashboard_central_summary_impl(
     let ai_review_count = read_count("ai_review_count")?;
     let uncategorized_count = read_count("uncategorized_count")?;
     let unassigned_source_count = read_count("unassigned_source_count")?;
-    let source_repositories = db::get_skill_repositories_with_stats(pool).await?;
-    let readiness_counts = db::count_central_readiness_inputs(pool).await?;
+    let source_repositories = db::get_skill_repositories_with_stats(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    let readiness_counts = db::count_central_readiness_inputs(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let readiness = DashboardReadiness::from_counts(readiness_counts);
 
     Ok(DashboardCentralSummary {

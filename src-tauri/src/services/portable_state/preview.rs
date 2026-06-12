@@ -61,7 +61,8 @@ pub(crate) async fn preview_skillport_state_import_impl(
             .map(|skill| skill.id.clone())
             .collect::<Vec<_>>(),
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
     let mut summary = SkillportStateImportPreviewSummary::default();
     let mut seen_source_identities = HashSet::new();
     let mut github_sources = Vec::new();

@@ -73,9 +73,8 @@ pub(super) async fn write_snapshot_source_to_target(
     crate::fs_util::run_blocking_fs_with(
         "import target directory creation",
         move || {
-            std::fs::create_dir_all(&target_dir_for_create).map_err(|e| {
-                GithubImportError::io("Failed to create import target directory", e)
-            })
+            std::fs::create_dir_all(&target_dir_for_create)
+                .map_err(|e| GithubImportError::io("Failed to create import target directory", e))
         },
         GithubImportError::task_join,
     )

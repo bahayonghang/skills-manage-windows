@@ -80,14 +80,18 @@ pub(crate) async fn central_skill_ids_for_agents(
     }
 
     let central_skill_ids = db::get_central_skills(pool)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .into_iter()
         .map(|skill| skill.id)
         .collect::<HashSet<_>>();
     let mut ids = HashSet::new();
 
     for agent_id in agent_ids {
-        for observation in db::get_agent_skill_observations(pool, agent_id).await? {
+        for observation in db::get_agent_skill_observations(pool, agent_id)
+            .await
+            .map_err(|e| e.to_string())?
+        {
             if central_skill_ids.contains(&observation.skill_id) {
                 ids.insert(observation.skill_id);
             }

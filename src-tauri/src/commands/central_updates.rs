@@ -195,7 +195,9 @@ pub async fn get_central_skill_update_states(
     state: State<'_, AppState>,
 ) -> Result<Vec<SkillUpdateState>, String> {
     let pool = state.active_db().await?;
-    db::get_skill_update_states(&pool).await
+    db::get_skill_update_states(&pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -267,7 +269,9 @@ pub async fn check_central_skill_updates(
             }
         };
 
-        db::upsert_skill_update_state(&pool, &state_result).await?;
+        db::upsert_skill_update_state(&pool, &state_result)
+            .await
+            .map_err(|e| e.to_string())?;
         update_counters_for_state(&mut counters, &state_result);
         emit_update_progress(
             &app,
@@ -359,7 +363,9 @@ pub async fn update_central_skills(
         match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) if remote.remote_hash == remote.local_hash => {
                 let state_result = state_from_remote(skill, &remote, false);
-                db::upsert_skill_update_state(&pool, &state_result).await?;
+                db::upsert_skill_update_state(&pool, &state_result)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -379,7 +385,9 @@ pub async fn update_central_skills(
             }
             Ok(Some(remote)) => match update_one_skill(&pool, &fs, skill, remote).await {
                 Ok(state_result) => {
-                    db::upsert_skill_update_state(&pool, &state_result).await?;
+                    db::upsert_skill_update_state(&pool, &state_result)
+                        .await
+                        .map_err(|e| e.to_string())?;
                     counters.completed += 1;
                     counters.succeeded += 1;
                     succeeded.push(skill.id.clone());
@@ -397,7 +405,9 @@ pub async fn update_central_skills(
                 Err(error) => {
                     let state_result =
                         error_state_from_assignment(skill, &prepared_skill.assignment, &error);
-                    db::upsert_skill_update_state(&pool, &state_result).await?;
+                    db::upsert_skill_update_state(&pool, &state_result)
+                        .await
+                        .map_err(|e| e.to_string())?;
                     counters.completed += 1;
                     counters.failed += 1;
                     failed.push(CentralSkillUpdateFailure {
@@ -419,7 +429,9 @@ pub async fn update_central_skills(
             Ok(None) => {
                 let state_result =
                     unsupported_state_from_assignment(skill, &prepared_skill.assignment, None);
-                db::upsert_skill_update_state(&pool, &state_result).await?;
+                db::upsert_skill_update_state(&pool, &state_result)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -446,7 +458,9 @@ pub async fn update_central_skills(
                     &prepared_skill.assignment,
                     &reason,
                 );
-                db::upsert_skill_update_state(&pool, &state_result).await?;
+                db::upsert_skill_update_state(&pool, &state_result)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -467,7 +481,9 @@ pub async fn update_central_skills(
             Err(RemoteSkillLoadError::Other(error)) => {
                 let state_result =
                     error_state_from_assignment(skill, &prepared_skill.assignment, &error);
-                db::upsert_skill_update_state(&pool, &state_result).await?;
+                db::upsert_skill_update_state(&pool, &state_result)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 counters.completed += 1;
                 counters.failed += 1;
                 failed.push(CentralSkillUpdateFailure {
@@ -519,7 +535,9 @@ pub async fn keep_remote_missing_central_skills_impl(
         .cloned()
         .collect::<Vec<_>>();
 
-    let states = db::get_skill_update_states_for_skills(pool, &unique_skill_ids).await?;
+    let states = db::get_skill_update_states_for_skills(pool, &unique_skill_ids)
+        .await
+        .map_err(|e| e.to_string())?;
     let states_by_skill_id = states
         .into_iter()
         .map(|state| (state.skill_id.clone(), state))
@@ -527,7 +545,8 @@ pub async fn keep_remote_missing_central_skills_impl(
 
     for skill_id in &unique_skill_ids {
         let skill = db::get_skill_by_id(pool, skill_id)
-            .await?
+            .await
+            .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
         if !skill.is_central {
             return Err(format!("Skill '{}' is not a Central skill", skill_id));
@@ -548,7 +567,9 @@ pub async fn keep_remote_missing_central_skills_impl(
     }
 
     for skill_id in &unique_skill_ids {
-        db::detach_skill_remote_source(pool, skill_id).await?;
+        db::detach_skill_remote_source(pool, skill_id)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(unique_skill_ids)
@@ -571,9 +592,13 @@ async fn load_selected_central_skills(
     skill_ids: Option<&[String]>,
 ) -> Result<Vec<Skill>, String> {
     if let Some(skill_ids) = skill_ids {
-        return db::get_central_skills_by_ids(pool, skill_ids).await;
+        return db::get_central_skills_by_ids(pool, skill_ids)
+            .await
+            .map_err(|e| e.to_string());
     }
-    db::get_central_skills(pool).await
+    db::get_central_skills(pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub(crate) async fn prepare_skill_updates(
@@ -587,10 +612,15 @@ pub(crate) async fn prepare_skill_updates(
         .iter()
         .map(|skill| skill.id.clone())
         .collect::<Vec<_>>();
-    let mut assignments = db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
-    let unknown_repository = db::get_local_unknown_repository(pool).await?;
+    let mut assignments = db::get_skill_repository_assignments_for_skills(pool, &skill_ids)
+        .await
+        .map_err(|e| e.to_string())?;
+    let unknown_repository = db::get_local_unknown_repository(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let previous_states = db::get_skill_update_states_for_skills(pool, &skill_ids)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .into_iter()
         .map(|state| (state.skill_id.clone(), state))
         .collect::<HashMap<_, _>>();
@@ -727,10 +757,9 @@ pub(crate) async fn prepare_snapshots_for_repo_refs_with_policy(
                 .acquire_owned()
                 .await
                 .map_err(|_| "Central update snapshot downloader closed.".to_string())?;
-            let snapshot =
-                github_import::download_repo_snapshot(&client, &repo, auth.as_deref())
-                    .await
-                    .map_err(|e| e.to_string())?;
+            let snapshot = github_import::download_repo_snapshot(&client, &repo, auth.as_deref())
+                .await
+                .map_err(|e| e.to_string())?;
             Ok::<_, String>((repo_cache_key(&repo), snapshot))
         }
     });
@@ -1078,7 +1107,9 @@ pub(crate) async fn update_one_skill_with_options(
         fs_created_at: None,
         fs_updated_at: None,
     };
-    db::upsert_skill(pool, &updated_skill).await?;
+    db::upsert_skill(pool, &updated_skill)
+        .await
+        .map_err(|e| e.to_string())?;
     db::assign_github_repository_to_skill(
         pool,
         &remote.source.repo.owner,
@@ -1088,7 +1119,8 @@ pub(crate) async fn update_one_skill_with_options(
         &skill.id,
         &remote.source.source_path,
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
     if refresh_copies {
         refresh_copy_installations(pool, fs, &skill.id, &remote.target_dir).await?;
     }
@@ -1102,7 +1134,9 @@ async fn refresh_copy_installations(
     skill_id: &str,
     source_dir: &Path,
 ) -> Result<(), String> {
-    let installations = db::get_skill_installations(pool, skill_id).await?;
+    let installations = db::get_skill_installations(pool, skill_id)
+        .await
+        .map_err(|e| e.to_string())?;
     let mut seen_targets = HashSet::new();
     let copy_targets = installations
         .into_iter()

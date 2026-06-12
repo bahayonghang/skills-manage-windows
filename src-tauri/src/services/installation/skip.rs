@@ -34,9 +34,7 @@ pub(crate) async fn record_installation(
         symlink_target,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
-    db::upsert_skill_installation(pool, &installation)
-        .await
-        .map_err(InstallationError::Other) // TODO(C3): typed repos passthrough
+    Ok(db::upsert_skill_installation(pool, &installation).await?)
 }
 
 pub(crate) async fn detect_existing_agent_install(
@@ -46,9 +44,7 @@ pub(crate) async fn detect_existing_agent_install(
     target_path: &Path,
     canonical_dir: &Path,
 ) -> Result<Option<SkippedInstall>, InstallationError> {
-    let installations = db::get_skill_installations(pool, skill_id)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
+    let installations = db::get_skill_installations(pool, skill_id).await?;
 
     if let Some(record) = installations
         .iter()
@@ -157,7 +153,10 @@ async fn target_exists(path: &Path) -> Result<bool, InstallationError> {
     .await
 }
 
-async fn target_is_symlink_to(path: &Path, canonical_dir: &Path) -> Result<bool, InstallationError> {
+async fn target_is_symlink_to(
+    path: &Path,
+    canonical_dir: &Path,
+) -> Result<bool, InstallationError> {
     let path = path.to_path_buf();
     let canonical_dir = canonical_dir.to_path_buf();
     run_blocking_fs("install target symlink inspection", move || {

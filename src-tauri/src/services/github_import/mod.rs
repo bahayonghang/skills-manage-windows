@@ -99,9 +99,7 @@ async fn wait_for_github_host_slot(url: &str) -> Result<(), GithubImportError> {
     })?;
     let host = parsed
         .host_str()
-        .ok_or_else(|| {
-            GithubImportError::InvalidUrl(format!("GitHub URL '{}' has no host.", url))
-        })?
+        .ok_or_else(|| GithubImportError::InvalidUrl(format!("GitHub URL '{}' has no host.", url)))?
         .to_string();
     let interval = TokioDuration::from_secs_f64(1.0 / types::DEFAULT_GITHUB_HOST_QPS);
 

@@ -298,12 +298,8 @@ async fn scan_directory_with_limit(
 /// Core scanning logic, separated from the Tauri command layer so it can be
 /// unit-tested without a running Tauri runtime.
 pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, ScannerError> {
-    // TODO(C3): db/repos still return String; switch to typed passthrough once
-    // the repos layer is migrated.
-    let agents = db::get_all_agents(pool).await.map_err(ScannerError::Other)?;
-    let custom_dirs = db::get_scan_directories(pool)
-        .await
-        .map_err(ScannerError::Other)?; // TODO(C3)
+    let agents = db::get_all_agents(pool).await?;
+    let custom_dirs = db::get_scan_directories(pool).await?;
     let scan_started_at = Utc::now().to_rfc3339();
     let central_root = agents
         .iter()
@@ -521,9 +517,7 @@ pub async fn scan_remote_skills_impl(
     pool: &DbPool,
     active_target: &ActiveTarget,
 ) -> Result<ScanResult, ScannerError> {
-    // TODO(C3): db/repos still return String; switch to typed passthrough once
-    // the repos layer is migrated.
-    let agents = db::get_all_agents(pool).await.map_err(ScannerError::Other)?;
+    let agents = db::get_all_agents(pool).await?;
     let scan_started_at = Utc::now().to_rfc3339();
     let connection = connect_remote_target(active_target)
         .await

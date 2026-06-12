@@ -19,7 +19,9 @@ pub async fn list_operation_logs(
     state: State<'_, AppState>,
     filter: OperationLogFilter,
 ) -> Result<OperationLogPage, String> {
-    db::list_operation_logs(&state.db, filter).await
+    db::list_operation_logs(&state.db, filter)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -27,7 +29,9 @@ pub async fn get_operation_log(
     state: State<'_, AppState>,
     log_id: String,
 ) -> Result<Option<OperationLogEntry>, String> {
-    db::get_operation_log(&state.db, &log_id).await
+    db::get_operation_log(&state.db, &log_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -35,7 +39,9 @@ pub async fn clear_operation_logs(
     state: State<'_, AppState>,
     filter: OperationLogFilter,
 ) -> Result<u64, String> {
-    db::clear_operation_logs(&state.db, filter).await
+    db::clear_operation_logs(&state.db, filter)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -43,7 +49,9 @@ pub async fn export_operation_logs(
     state: State<'_, AppState>,
     filter: OperationLogFilter,
 ) -> Result<String, String> {
-    db::export_operation_logs_json(&state.db, filter).await
+    db::export_operation_logs_json(&state.db, filter)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

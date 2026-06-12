@@ -15,9 +15,7 @@ async fn get_observation_detail(
     agent_id: &str,
     row_id: Option<&str>,
 ) -> Result<Option<SkillDetail>, CentralSkillsError> {
-    let observations = db::get_agent_skill_observations(pool, agent_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let observations = db::get_agent_skill_observations(pool, agent_id).await?;
     if observations.is_empty() {
         return Ok(None);
     }
@@ -51,44 +49,28 @@ async fn get_observation_detail(
         }
     };
 
-    let manageable_skill = db::get_skill_by_id(pool, &observation.skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let manageable_skill = db::get_skill_by_id(pool, &observation.skill_id).await?;
     let installations = if observation.is_read_only {
         Vec::new()
     } else {
-        installation_details(
-            db::get_skill_installations(pool, &observation.skill_id)
-                .await
-                .map_err(CentralSkillsError::Other)?, // TODO(C3): typed repos passthrough
-        )
+        installation_details(db::get_skill_installations(pool, &observation.skill_id).await?)
     };
     let collections = if observation.is_read_only {
         Vec::new()
     } else {
-        db::get_skill_collections(pool, &observation.skill_id)
-            .await
-            .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        db::get_skill_collections(pool, &observation.skill_id).await?
     };
     let repository_assignment = if observation.is_read_only {
         None
     } else {
-        Some(
-            db::get_skill_repository_assignment(pool, &observation.skill_id)
-                .await
-                .map_err(CentralSkillsError::Other)?, // TODO(C3): typed repos passthrough
-        )
+        Some(db::get_skill_repository_assignment(pool, &observation.skill_id).await?)
     };
     let tags = if observation.is_read_only {
         Vec::new()
     } else {
-        db::get_skill_tags_for_skill(pool, &observation.skill_id)
-            .await
-            .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        db::get_skill_tags_for_skill(pool, &observation.skill_id).await?
     };
-    let agent_rows = db::get_skills_for_agent(pool, agent_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let agent_rows = db::get_skills_for_agent(pool, agent_id).await?;
     let mut conflict_counts = std::collections::HashMap::new();
     for row in agent_rows {
         *conflict_counts.entry(row.id).or_insert(0_i64) += 1;
@@ -157,26 +139,15 @@ pub async fn get_skill_detail_with_row_impl(
     }
 
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
 
     let row_id = skill.id.clone();
     let dir_path = skill_dir_path(&skill);
-    let installations = installation_details(
-        db::get_skill_installations(pool, skill_id)
-            .await
-            .map_err(CentralSkillsError::Other)?, // TODO(C3): typed repos passthrough
-    );
-    let collections = db::get_skill_collections(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
-    let repository_assignment = db::get_skill_repository_assignment(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
-    let tags = db::get_skill_tags_for_skill(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let installations = installation_details(db::get_skill_installations(pool, skill_id).await?);
+    let collections = db::get_skill_collections(pool, skill_id).await?;
+    let repository_assignment = db::get_skill_repository_assignment(pool, skill_id).await?;
+    let tags = db::get_skill_tags_for_skill(pool, skill_id).await?;
 
     Ok(SkillDetail {
         row_id,
@@ -212,17 +183,13 @@ pub async fn get_skills_by_agent_impl(
     pool: &DbPool,
     agent_id: &str,
 ) -> Result<Vec<SkillForAgent>, CentralSkillsError> {
-    db::get_skills_for_agent(pool, agent_id)
-        .await
-        .map_err(CentralSkillsError::Other) // TODO(C3): typed repos passthrough
+    Ok(db::get_skills_for_agent(pool, agent_id).await?)
 }
 
 pub async fn get_central_skills_impl(
     pool: &DbPool,
 ) -> Result<Vec<SkillWithLinks>, CentralSkillsError> {
-    let skills = db::get_central_skills(pool)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let skills = db::get_central_skills(pool).await?;
     skills_with_links_from_rows(pool, skills).await
 }
 
@@ -230,27 +197,18 @@ async fn skills_with_links_from_rows(
     pool: &DbPool,
     skills: Vec<db::Skill>,
 ) -> Result<Vec<SkillWithLinks>, CentralSkillsError> {
-    let agents = db::get_all_agents(pool)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let agents = db::get_all_agents(pool).await?;
     let shared_root_agents = shared_root_agent_ids(&agents);
     let skill_ids = skills
         .iter()
         .map(|skill| skill.id.clone())
         .collect::<Vec<_>>();
-    let mut installations_by_skill = db::get_skill_installations_for_skills(pool, &skill_ids)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+    let mut installations_by_skill =
+        db::get_skill_installations_for_skills(pool, &skill_ids).await?;
     let mut repository_assignments =
-        db::get_skill_repository_assignments_for_skills(pool, &skill_ids)
-            .await
-            .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
-    let mut tags_by_skill = db::get_skill_tags_for_skills(pool, &skill_ids)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
-    let unknown_repository = db::get_local_unknown_repository(pool)
-        .await
-        .map_err(CentralSkillsError::Other)?; // TODO(C3): typed repos passthrough
+        db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
+    let mut tags_by_skill = db::get_skill_tags_for_skills(pool, &skill_ids).await?;
+    let unknown_repository = db::get_local_unknown_repository(pool).await?;
     let mut result = Vec::with_capacity(skills.len());
     for skill in skills {
         let installations = installations_by_skill.remove(&skill.id).unwrap_or_default();

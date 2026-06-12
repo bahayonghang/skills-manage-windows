@@ -118,7 +118,8 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
     ) = match scope.kind {
         SkillRefreshScopeKind::All => {
             let repo_ids = db::get_skill_repositories_with_stats(pool)
-                .await?
+                .await
+                .map_err(|e| e.to_string())?
                 .into_iter()
                 .filter(|r| !r.repository.is_unknown && r.repository.source_type == "github")
                 .map(|r| r.repository.id)
@@ -133,7 +134,9 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
             let repo_ids = normalize_ids(scope.repository_ids.clone().unwrap_or_default());
             let mut skill_ids = Vec::new();
             for repository_id in &repo_ids {
-                let ids = db::get_central_skill_ids_by_repository(pool, repository_id).await?;
+                let ids = db::get_central_skill_ids_by_repository(pool, repository_id)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 skill_ids.extend(ids);
             }
             (Some(normalize_ids(skill_ids)), repo_ids, None)
@@ -158,10 +161,14 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         if ids.is_empty() {
             Vec::new()
         } else {
-            db::get_central_skills_by_ids(pool, ids).await?
+            db::get_central_skills_by_ids(pool, ids)
+                .await
+                .map_err(|e| e.to_string())?
         }
     } else {
-        db::get_central_skills(pool).await?
+        db::get_central_skills(pool)
+            .await
+            .map_err(|e| e.to_string())?
     };
 
     let valid_repositories =
@@ -306,11 +313,15 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                     .map(|c| c.existing_skill_id.clone()),
                 discovered_at: now.clone(),
             };
-            db::upsert_pending_addition(pool, &addition).await?;
+            db::upsert_pending_addition(pool, &addition)
+                .await
+                .map_err(|e| e.to_string())?;
         }
         for item in &collection.skipped_remote_added {
             let source_path = normalize_repo_path(&item.preview.source_path)?;
-            db::delete_pending_addition(pool, &item.repository_id, &source_path).await?;
+            db::delete_pending_addition(pool, &item.repository_id, &source_path)
+                .await
+                .map_err(|e| e.to_string())?;
         }
         for item in remote_added_items {
             remote_added.push(remote_added_from_item(item));
@@ -356,7 +367,9 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
     let now = Utc::now().to_rfc3339();
     if include_sync_buckets {
         for repository_id in &repository_ids {
-            db::set_repository_last_synced_at(pool, repository_id, &now).await?;
+            db::set_repository_last_synced_at(pool, repository_id, &now)
+                .await
+                .map_err(|e| e.to_string())?;
         }
     }
 
@@ -395,10 +408,13 @@ pub(crate) async fn get_skill_update_inventory_impl_scoped(
      */
 
     let scope_filter = InventoryScopeFilter::from_scope(pool, scope.clone()).await?;
-    db::prune_orphaned_pending_additions(pool).await?;
+    db::prune_orphaned_pending_additions(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let entries =
         db::list_skill_update_inventory_entries(pool, &inventory_id_for_scope(scope.as_ref()))
-            .await?;
+            .await
+            .map_err(|e| e.to_string())?;
     let (updatable, remote_missing, failed_repositories, inventory_generated_at) =
         inventory_from_entries(entries)?;
 
@@ -408,13 +424,18 @@ pub(crate) async fn get_skill_update_inventory_impl_scoped(
      * ========================================================================
      */
     let pending = match &scope_filter.pending {
-        PendingAdditionScope::All => db::list_pending_additions(pool).await?,
+        PendingAdditionScope::All => db::list_pending_additions(pool)
+            .await
+            .map_err(|e| e.to_string())?,
         PendingAdditionScope::Repositories(repository_ids) => {
             let ids = repository_ids.iter().cloned().collect::<Vec<_>>();
-            db::list_pending_additions_for_repos(pool, &ids).await?
+            db::list_pending_additions_for_repos(pool, &ids)
+                .await
+                .map_err(|e| e.to_string())?
         }
         PendingAdditionScope::SkillIds(skill_ids) => db::list_pending_additions(pool)
-            .await?
+            .await
+            .map_err(|e| e.to_string())?
             .into_iter()
             .filter(|p| skill_ids.contains(&p.skill_id))
             .collect(),
@@ -477,29 +498,46 @@ pub(crate) async fn clear_skill_update_inventory_impl(
      */
     match scope {
         None => {
-            db::clear_all_skill_update_inventory(pool).await?;
-            db::clear_pending_additions(pool).await?;
+            db::clear_all_skill_update_inventory(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+            db::clear_pending_additions(pool)
+                .await
+                .map_err(|e| e.to_string())?;
         }
         Some(scope) => match scope.kind {
             SkillRefreshScopeKind::All => {
-                db::clear_all_skill_update_inventory(pool).await?;
-                db::clear_pending_additions(pool).await?;
+                db::clear_all_skill_update_inventory(pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                db::clear_pending_additions(pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
             }
             SkillRefreshScopeKind::Skills => {
                 let ids = normalize_ids(scope.skill_ids.unwrap_or_default());
-                db::delete_skill_update_inventory_entries_for_skills(pool, &ids).await?;
-                db::clear_pending_additions_for_skill_ids(pool, &ids).await?;
+                db::delete_skill_update_inventory_entries_for_skills(pool, &ids)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                db::clear_pending_additions_for_skill_ids(pool, &ids)
+                    .await
+                    .map_err(|e| e.to_string())?;
             }
             SkillRefreshScopeKind::Repositories => {
                 let ids = normalize_ids(scope.repository_ids.unwrap_or_default());
                 if !ids.is_empty() {
-                    db::delete_skill_update_inventory_entries_for_repositories(pool, &ids).await?;
-                    db::clear_pending_additions_for_repos(pool, &ids).await?;
+                    db::delete_skill_update_inventory_entries_for_repositories(pool, &ids)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    db::clear_pending_additions_for_repos(pool, &ids)
+                        .await
+                        .map_err(|e| e.to_string())?;
                 }
             }
             SkillRefreshScopeKind::Platform => {
                 db::clear_skill_update_inventory_run(pool, &inventory_id_for_scope(Some(&scope)))
-                    .await?;
+                    .await
+                    .map_err(|e| e.to_string())?;
             }
         },
     }
@@ -772,10 +810,15 @@ async fn load_repository_for_import_addition(
     pool: &DbPool,
     repository_id: &str,
 ) -> Result<Option<db::SkillRepository>, String> {
-    match db::get_skill_repository_by_id(pool, repository_id).await? {
+    match db::get_skill_repository_by_id(pool, repository_id)
+        .await
+        .map_err(|e| e.to_string())?
+    {
         Some(repository) => Ok(Some(repository)),
         None => {
-            db::clear_pending_additions_for_repos(pool, &[repository_id.to_string()]).await?;
+            db::clear_pending_additions_for_repos(pool, &[repository_id.to_string()])
+                .await
+                .map_err(|e| e.to_string())?;
             Ok(None)
         }
     }

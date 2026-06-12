@@ -511,7 +511,7 @@ pub(super) async fn import_single_staged_skill(
     .await
     {
         restore_or_cleanup_target_dir(&target_dir, existing_backup).await;
-        return Err(GithubImportError::Other(error)); // TODO(C3): typed repos passthrough
+        return Err(GithubImportError::Db(error));
     }
 
     drop_existing_backup(existing_backup).await;
@@ -598,8 +598,7 @@ pub(super) fn create_unique_work_dir(
 
 pub(crate) async fn central_skills_root(pool: &DbPool) -> Result<PathBuf, GithubImportError> {
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(GithubImportError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(GithubImportError::CentralAgentMissing)?;
     Ok(PathBuf::from(central.global_skills_dir))
 }
@@ -624,9 +623,7 @@ pub(crate) async fn build_preview_skills(
         .iter()
         .map(|candidate| candidate.skill_id.clone())
         .collect::<Vec<_>>();
-    let existing_by_id = db::get_skills_by_ids(pool, &skill_ids)
-        .await
-        .map_err(GithubImportError::Other)?; // TODO(C3): typed repos passthrough
+    let existing_by_id = db::get_skills_by_ids(pool, &skill_ids).await?;
     let mut skills = Vec::with_capacity(candidates.len());
     for candidate in candidates {
         let conflict = existing_by_id

@@ -51,8 +51,7 @@ pub async fn read_skill_content_for_target_impl(
     skill_id: &str,
 ) -> Result<String, CentralSkillsError> {
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await
-        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
 
     match active_target {
@@ -118,16 +117,13 @@ pub(super) fn read_file_by_path_impl(
         CentralSkillsError::io(format!("Failed to inspect '{}'", resolved.display()), e)
     })?;
     if !metadata.is_file() {
-        return Err(CentralSkillsError::NotAFile(
-            resolved.display().to_string(),
-        ));
+        return Err(CentralSkillsError::NotAFile(resolved.display().to_string()));
     }
     budget
         .reject_file_read_size(&resolved.to_string_lossy(), metadata.len())
         .map_err(CentralSkillsError::Budget)?;
-    std::fs::read_to_string(&resolved).map_err(|e| {
-        CentralSkillsError::io(format!("Failed to read '{}'", resolved.display()), e)
-    })
+    std::fs::read_to_string(&resolved)
+        .map_err(|e| CentralSkillsError::io(format!("Failed to read '{}'", resolved.display()), e))
 }
 
 pub async fn list_directory_tree_for_target_impl(
@@ -492,9 +488,7 @@ fn normalize_remote_posix_path(path: &str) -> Result<String, CentralSkillsError>
         return Err(CentralSkillsError::SkillPathContextEmpty);
     }
     if trimmed.contains('\\') {
-        return Err(CentralSkillsError::RemotePathBackslash(
-            trimmed.to_string(),
-        ));
+        return Err(CentralSkillsError::RemotePathBackslash(trimmed.to_string()));
     }
     let is_absolute = trimmed.starts_with('/');
     let mut segments = Vec::new();

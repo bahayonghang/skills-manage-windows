@@ -29,8 +29,7 @@ pub(crate) async fn ensure_centralized(
 
     // Look up the skill's actual file location from the database.
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::SkillNotFound(skill_id.to_string()))?;
 
     // Derive the source directory (parent of file_path).
@@ -56,9 +55,7 @@ pub(crate) async fn ensure_centralized(
         .join("SKILL.md")
         .to_string_lossy()
         .into_owned();
-    db::upsert_skill(pool, &updated)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
+    db::upsert_skill(pool, &updated).await?;
 
     Ok(())
 }
@@ -93,9 +90,7 @@ pub(crate) fn ensure_replaceable_target_sync(target_path: &Path) -> Result<(), I
     }
 }
 
-pub(crate) async fn ensure_replaceable_target(
-    target_path: &Path,
-) -> Result<(), InstallationError> {
+pub(crate) async fn ensure_replaceable_target(target_path: &Path) -> Result<(), InstallationError> {
     let target_path = target_path.to_path_buf();
     run_blocking_fs("install target inspection", move || {
         ensure_replaceable_target_sync(&target_path)

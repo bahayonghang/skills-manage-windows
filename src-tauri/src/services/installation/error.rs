@@ -21,6 +21,11 @@ pub enum InstallationError {
     #[error("Failed to create symlink: {0}")]
     SymlinkCreate(#[source] std::io::Error),
 
+    /// Database failures (db/repos passthrough + direct sqlx calls) flow
+    /// through transparently.
+    #[error(transparent)]
+    Db(#[from] sqlx::Error),
+
     /// Platform without symlink support.
     #[error("Symlink creation is only supported on Unix systems")]
     SymlinkUnsupported,
@@ -155,11 +160,6 @@ pub enum InstallationError {
         label: &'static str,
         message: String,
     },
-
-    // TODO(C3): remove once db/repos return typed errors instead of String.
-    /// Stringly-typed db/repos errors awaiting the C3 repos migration.
-    #[error("{0}")]
-    Other(String),
 }
 
 impl InstallationError {

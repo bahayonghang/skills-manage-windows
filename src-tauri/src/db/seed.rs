@@ -18,18 +18,21 @@ const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 7] = [
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 /// Initialize all database tables (idempotent) and seed built-in agents.
-pub async fn init_database(pool: &DbPool) -> Result<(), String> {
+pub async fn init_database(pool: &DbPool) -> Result<(), sqlx::Error> {
     init_database_with_agents(pool, builtin_agents()).await
 }
 
-pub async fn init_database_for_remote_home(pool: &DbPool, remote_home: &str) -> Result<(), String> {
+pub async fn init_database_for_remote_home(
+    pool: &DbPool,
+    remote_home: &str,
+) -> Result<(), sqlx::Error> {
     init_database_with_agents(pool, builtin_agents_for_posix_home(remote_home)).await
 }
 
 async fn init_database_with_agents(
     pool: &DbPool,
     builtin_agents: Vec<Agent>,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     super::schema::init(pool).await?;
 
     // Seed built-in agents (INSERT OR IGNORE so repeated init is safe)
@@ -48,7 +51,7 @@ async fn init_database_with_agents(
     Ok(())
 }
 
-async fn seed_builtin_agents(pool: &DbPool, agents: &[Agent]) -> Result<(), String> {
+async fn seed_builtin_agents(pool: &DbPool, agents: &[Agent]) -> Result<(), sqlx::Error> {
     let builtin_ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
 
     for agent in agents {
@@ -75,24 +78,21 @@ async fn seed_builtin_agents(pool: &DbPool, agents: &[Agent]) -> Result<(), Stri
         .bind(&agent.icon_name)
         .bind(agent.is_enabled)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     // Remove builtin agents that no longer exist in code
     let all_db_agents: Vec<(String,)> =
         sqlx::query_as("SELECT id FROM agents WHERE is_builtin = 1")
             .fetch_all(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
     for (id,) in &all_db_agents {
         if !builtin_ids.contains(&id.as_str()) {
             sqlx::query("DELETE FROM agents WHERE id = ? AND is_builtin = 1")
                 .bind(id)
                 .execute(pool)
-                .await
-                .map_err(|e| e.to_string())?;
+                .await?;
         }
     }
 
@@ -103,11 +103,10 @@ async fn seed_builtin_agents(pool: &DbPool, agents: &[Agent]) -> Result<(), Stri
 /// `global_skills_dir` path. Rows are marked `is_builtin = 1` and cannot be
 /// removed by the user. Reading from DB rather than the static registry keeps a
 /// user-selected Central store path from being reset by startup seeding.
-async fn seed_builtin_scan_directories(pool: &DbPool) -> Result<(), String> {
+async fn seed_builtin_scan_directories(pool: &DbPool) -> Result<(), sqlx::Error> {
     let agents: Vec<Agent> = sqlx::query_as("SELECT * FROM agents WHERE is_builtin = 1")
         .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     let now = Utc::now().to_rfc3339();
     for agent in &agents {
         sqlx::query(
@@ -119,8 +118,7 @@ async fn seed_builtin_scan_directories(pool: &DbPool) -> Result<(), String> {
         .bind(&agent.display_name)
         .bind(&now)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     // Remove builtin scan directories that no longer exist in code
@@ -129,22 +127,20 @@ async fn seed_builtin_scan_directories(pool: &DbPool) -> Result<(), String> {
     let all_db_dirs: Vec<(String,)> =
         sqlx::query_as("SELECT path FROM scan_directories WHERE is_builtin = 1")
             .fetch_all(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
     for (path,) in &all_db_dirs {
         if !builtin_paths.contains(path) {
             sqlx::query("DELETE FROM scan_directories WHERE path = ? AND is_builtin = 1")
                 .bind(path)
                 .execute(pool)
-                .await
-                .map_err(|e| e.to_string())?;
+                .await?;
         }
     }
 
     Ok(())
 }
 
-async fn seed_builtin_registries(pool: &DbPool) -> Result<(), String> {
+async fn seed_builtin_registries(pool: &DbPool) -> Result<(), sqlx::Error> {
     let now = chrono::Utc::now().to_rfc3339();
     let registries = vec![
         (
@@ -178,13 +174,12 @@ async fn seed_builtin_registries(pool: &DbPool) -> Result<(), String> {
         .bind(url)
         .bind(&now)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
     Ok(())
 }
 
-async fn seed_builtin_skill_metadata(pool: &DbPool) -> Result<(), String> {
+async fn seed_builtin_skill_metadata(pool: &DbPool) -> Result<(), sqlx::Error> {
     let now = Utc::now().to_rfc3339();
     sqlx::query(
         "INSERT INTO skill_repositories
@@ -202,7 +197,7 @@ async fn seed_builtin_skill_metadata(pool: &DbPool) -> Result<(), String> {
     .bind(&now)
     .execute(pool)
     .await
-    .map_err(|e| e.to_string())?;
+    ?;
 
     for (id, name, description, color) in builtin_skill_tags() {
         sqlx::query(
@@ -223,8 +218,7 @@ async fn seed_builtin_skill_metadata(pool: &DbPool) -> Result<(), String> {
         .bind(&now)
         .bind(&now)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     prune_obsolete_builtin_skill_tags(pool).await?;
@@ -232,7 +226,7 @@ async fn seed_builtin_skill_metadata(pool: &DbPool) -> Result<(), String> {
     Ok(())
 }
 
-async fn prune_obsolete_builtin_skill_tags(pool: &DbPool) -> Result<(), String> {
+async fn prune_obsolete_builtin_skill_tags(pool: &DbPool) -> Result<(), sqlx::Error> {
     let current_ids: std::collections::HashSet<&str> = builtin_skill_tags()
         .into_iter()
         .map(|(id, _, _, _)| id)
@@ -240,8 +234,7 @@ async fn prune_obsolete_builtin_skill_tags(pool: &DbPool) -> Result<(), String> 
     let obsolete_ids: Vec<(String,)> =
         sqlx::query_as::<_, (String,)>("SELECT id FROM skill_tags WHERE is_builtin = 1")
             .fetch_all(pool)
-            .await
-            .map_err(|e| e.to_string())?
+            .await?
             .into_iter()
             .filter(|(id,)| !current_ids.contains(id.as_str()))
             .collect();
@@ -249,25 +242,22 @@ async fn prune_obsolete_builtin_skill_tags(pool: &DbPool) -> Result<(), String> 
         return Ok(());
     }
 
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let mut tx = pool.begin().await?;
     for (id,) in obsolete_ids {
         sqlx::query("DELETE FROM skill_tag_links WHERE tag_id = ?")
             .bind(&id)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
         sqlx::query("DELETE FROM skill_ai_tag_reviews WHERE tag_id = ?")
             .bind(&id)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
         sqlx::query("DELETE FROM skill_tags WHERE id = ? AND is_builtin = 1")
             .bind(&id)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
     }
-    tx.commit().await.map_err(|e| e.to_string())?;
+    tx.commit().await?;
     Ok(())
 }
 

@@ -39,7 +39,9 @@ pub(crate) async fn force_update_central_skills_impl(
     if skill_ids.is_empty() {
         return Err("Select at least one Central skill to force update.".to_string());
     }
-    let skills = db::get_central_skills_by_ids(pool, &skill_ids).await?;
+    let skills = db::get_central_skills_by_ids(pool, &skill_ids)
+        .await
+        .map_err(|e| e.to_string())?;
     let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
     let snapshot_repos = prepared
         .iter()
@@ -70,7 +72,9 @@ pub(crate) async fn force_update_central_skills_impl(
                 .await
                 {
                     Ok(state) => {
-                        db::upsert_skill_update_state(pool, &state).await?;
+                        db::upsert_skill_update_state(pool, &state)
+                            .await
+                            .map_err(|e| e.to_string())?;
                         result.overwritten.push(ForceSkillUpdateSuccess {
                             skill_id: skill.id.clone(),
                             repository_id: repository_id_for_state_from_db(pool, &before).await?,
@@ -115,7 +119,9 @@ pub(crate) async fn force_update_central_skills_impl(
         .iter()
         .map(|item| item.skill_id.clone())
         .collect::<Vec<_>>();
-    db::delete_skill_update_inventory_entries_for_skills(pool, &succeeded).await?;
+    db::delete_skill_update_inventory_entries_for_skills(pool, &succeeded)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(result)
 }
 
@@ -161,12 +167,18 @@ pub(crate) async fn force_mirror_central_repositories_impl(
 
     let mut skill_ids = Vec::new();
     for repository_id in &repository_ids {
-        skill_ids.extend(db::get_central_skill_ids_by_repository(pool, repository_id).await?);
+        skill_ids.extend(
+            db::get_central_skill_ids_by_repository(pool, repository_id)
+                .await
+                .map_err(|e| e.to_string())?,
+        );
     }
     let skills = if skill_ids.is_empty() {
         Vec::new()
     } else {
-        db::get_central_skills_by_ids(pool, &normalize_ids(skill_ids)).await?
+        db::get_central_skills_by_ids(pool, &normalize_ids(skill_ids))
+            .await
+            .map_err(|e| e.to_string())?
     };
     let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
     for prepared_skill in prepared {
@@ -176,7 +188,9 @@ pub(crate) async fn force_mirror_central_repositories_impl(
                 let before = state_from_remote(skill, &remote, false);
                 match central_updates::update_one_skill(pool, fs, skill, remote).await {
                     Ok(state) => {
-                        db::upsert_skill_update_state(pool, &state).await?;
+                        db::upsert_skill_update_state(pool, &state)
+                            .await
+                            .map_err(|e| e.to_string())?;
                         overwritten.push(ForceSkillUpdateSuccess {
                             skill_id: skill.id.clone(),
                             repository_id: repository_id_for_state_from_db(pool, &before).await?,
@@ -256,7 +270,9 @@ pub(crate) async fn force_mirror_central_repositories_impl(
         .collect::<Vec<_>>();
     affected.extend(imported.iter().map(|item| item.imported_skill_id.clone()));
     affected.extend(deleted.succeeded.iter().map(|item| item.skill_id.clone()));
-    db::delete_skill_update_inventory_entries_for_skills(pool, &normalize_ids(affected)).await?;
+    db::delete_skill_update_inventory_entries_for_skills(pool, &normalize_ids(affected))
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(ForceRepositoryMirrorResult {
         overwritten,
@@ -272,7 +288,9 @@ async fn repository_id_for_state_from_db(
     pool: &DbPool,
     state: &db::SkillUpdateState,
 ) -> Result<Option<String>, String> {
-    let repo_with_stats = db::get_skill_repositories_with_stats(pool).await?;
+    let repo_with_stats = db::get_skill_repositories_with_stats(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let repo_by_id = repo_with_stats
         .iter()
         .map(|r| (r.repository.id.clone(), r.repository.clone()))
@@ -331,7 +349,10 @@ async fn force_import_remote_added(
         })
         .collect::<Vec<_>>();
     for (repository_id, selections) in by_repository {
-        let Some(repository) = db::get_skill_repository_by_id(pool, &repository_id).await? else {
+        let Some(repository) = db::get_skill_repository_by_id(pool, &repository_id)
+            .await
+            .map_err(|e| e.to_string())?
+        else {
             continue;
         };
         let Some(repo_url) = repository_import_url(&repository) else {

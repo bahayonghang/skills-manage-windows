@@ -15,9 +15,7 @@ use super::remote::ensure_remote_centralized;
 use super::skip::detect_existing_project_install;
 use super::types::{InstallOutcome, InstallResult};
 
-pub(crate) fn project_relative_skills_dir(
-    agent: &db::Agent,
-) -> Result<PathBuf, InstallationError> {
+pub(crate) fn project_relative_skills_dir(agent: &db::Agent) -> Result<PathBuf, InstallationError> {
     if agent.id == "central" {
         return Err(InstallationError::CentralAgentProjectTarget);
     }
@@ -248,12 +246,10 @@ pub(crate) async fn install_central_skill_to_remote_project_outcome_impl(
     method: &str,
 ) -> Result<InstallOutcome, InstallationError> {
     let agent = db::get_agent_by_id(pool, agent_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
     let canonical_dir = remote_join(&central.global_skills_dir, skill_id);
 
@@ -317,12 +313,10 @@ pub(crate) async fn install_central_skill_to_project_outcome_impl(
     ensure_project_dir(project_path).await?;
 
     let agent = db::get_agent_by_id(pool, agent_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
     let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
 

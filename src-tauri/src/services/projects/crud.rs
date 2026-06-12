@@ -70,22 +70,12 @@ pub async fn add_project_impl(pool: &DbPool, raw_path: &str) -> Result<Project, 
         return Err(ProjectsError::ProjectPathInvalid(normalized));
     }
 
-    if let Some(existing) = db::get_project_by_path(pool, &normalized)
-        .await
-        .map_err(ProjectsError::Other)?
-    // TODO(C3): typed repos passthrough
-    {
+    if let Some(existing) = db::get_project_by_path(pool, &normalized).await? {
         return Ok(existing);
     }
     let legacy_extended_path = format!("//?/{}", normalized);
-    if let Some(mut existing) = db::get_project_by_path(pool, &legacy_extended_path)
-        .await
-        .map_err(ProjectsError::Other)?
-    // TODO(C3): typed repos passthrough
-    {
-        db::update_project_path(pool, &existing.id, &normalized)
-            .await
-            .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+    if let Some(mut existing) = db::get_project_by_path(pool, &legacy_extended_path).await? {
+        db::update_project_path(pool, &existing.id, &normalized).await?;
         existing.path = normalized;
         return Ok(existing);
     }
@@ -99,23 +89,17 @@ pub async fn add_project_impl(pool: &DbPool, raw_path: &str) -> Result<Project, 
         last_scanned_at: None,
     };
 
-    db::insert_project(pool, &project)
-        .await
-        .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+    db::insert_project(pool, &project).await?;
     Ok(project)
 }
 
 /// 列出所有项目 + skill 数。
 pub async fn list_projects_impl(pool: &DbPool) -> Result<Vec<ProjectDto>, ProjectsError> {
-    let projects = db::list_projects(pool)
-        .await
-        .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+    let projects = db::list_projects(pool).await?;
 
     let mut dtos = Vec::with_capacity(projects.len());
     for p in projects {
-        let skills = db::list_project_skill_installations(pool, &p.id)
-            .await
-            .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+        let skills = db::list_project_skill_installations(pool, &p.id).await?;
         dtos.push(ProjectDto {
             id: p.id,
             path: p.path,
@@ -134,16 +118,10 @@ pub async fn rename_project_impl(pool: &DbPool, id: &str, name: &str) -> Result<
     if trimmed.is_empty() {
         return Err(ProjectsError::ProjectNameEmpty);
     }
-    if db::get_project_by_id(pool, id)
-        .await
-        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
-        .is_none()
-    {
+    if db::get_project_by_id(pool, id).await?.is_none() {
         return Err(ProjectsError::ProjectNotFound(id.to_string()));
     }
-    db::update_project_name(pool, id, trimmed)
-        .await
-        .map_err(ProjectsError::Other) // TODO(C3): typed repos passthrough
+    Ok(db::update_project_name(pool, id, trimmed).await?)
 }
 
 pub async fn set_project_pinned_impl(
@@ -151,16 +129,10 @@ pub async fn set_project_pinned_impl(
     id: &str,
     pinned: bool,
 ) -> Result<(), ProjectsError> {
-    if db::get_project_by_id(pool, id)
-        .await
-        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
-        .is_none()
-    {
+    if db::get_project_by_id(pool, id).await?.is_none() {
         return Err(ProjectsError::ProjectNotFound(id.to_string()));
     }
-    db::update_project_pinned(pool, id, pinned)
-        .await
-        .map_err(ProjectsError::Other) // TODO(C3): typed repos passthrough
+    Ok(db::update_project_pinned(pool, id, pinned).await?)
 }
 
 /// 扫描项目并刷 psi。返回扫到的 skill 数量。
@@ -173,20 +145,12 @@ pub async fn get_project_skills_impl(
     pool: &DbPool,
     id: &str,
 ) -> Result<Vec<ProjectSkillDto>, ProjectsError> {
-    if db::get_project_by_id(pool, id)
-        .await
-        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
-        .is_none()
-    {
+    if db::get_project_by_id(pool, id).await?.is_none() {
         return Err(ProjectsError::ProjectNotFound(id.to_string()));
     }
 
-    let psi_rows = db::list_project_skill_installations(pool, id)
-        .await
-        .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
-    let agents = db::get_all_agents(pool)
-        .await
-        .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+    let psi_rows = db::list_project_skill_installations(pool, id).await?;
+    let agents = db::get_all_agents(pool).await?;
     let agent_name: HashMap<String, String> = agents
         .iter()
         .map(|a| (a.id.clone(), a.display_name.clone()))
@@ -241,14 +205,11 @@ pub async fn remove_project_impl(
     uninstall_skills: bool,
 ) -> Result<(), ProjectsError> {
     let project = db::get_project_by_id(pool, id)
-        .await
-        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| ProjectsError::ProjectNotFound(id.to_string()))?;
 
     if uninstall_skills {
-        let psi_rows = db::list_project_skill_installations(pool, &project.id)
-            .await
-            .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+        let psi_rows = db::list_project_skill_installations(pool, &project.id).await?;
         let project_id_for_log = project.id.clone();
         run_blocking_fs("project skills removal", move || {
             for psi in psi_rows {
@@ -281,9 +242,7 @@ pub async fn remove_project_impl(
         .await?;
     }
 
-    db::delete_project(pool, &project.id)
-        .await
-        .map_err(ProjectsError::Other) // TODO(C3): typed repos passthrough
+    Ok(db::delete_project(pool, &project.id).await?)
 }
 
 /// 反向查询：一个中央 skill 装在哪些项目下。
@@ -294,9 +253,7 @@ pub async fn list_projects_using_skill_impl(
     pool: &DbPool,
     skill_id: &str,
 ) -> Result<Vec<ProjectUsingSkillDto>, ProjectsError> {
-    let agents = db::get_all_agents(pool)
-        .await
-        .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+    let agents = db::get_all_agents(pool).await?;
     let agent_name: HashMap<String, String> = agents
         .iter()
         .map(|a| (a.id.clone(), a.display_name.clone()))
@@ -369,8 +326,7 @@ pub async fn install_skill_to_project_impl(
     method: &str,
 ) -> Result<ProjectSkillInstallation, ProjectsError> {
     let project = db::get_project_by_id(pool, project_id)
-        .await
-        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| ProjectsError::ProjectNotFound(project_id.to_string()))?;
 
     let project_root = PathBuf::from(&project.path);
@@ -383,16 +339,14 @@ pub async fn install_skill_to_project_impl(
     }
 
     let agent = db::get_agent_by_id(pool, agent_id)
-        .await
-        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| ProjectsError::AgentNotFound(agent_id.to_string()))?;
     if !agent.is_enabled {
         return Err(ProjectsError::AgentDisabled(agent.display_name));
     }
 
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await
-        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| ProjectsError::SkillNotFoundInCentral(skill_id.to_string()))?;
     if !skill.is_central {
         return Err(ProjectsError::SkillNotCentralized(skill_id.to_string()));
@@ -462,9 +416,7 @@ pub async fn install_skill_to_project_impl(
         symlink_target: symlink_target_str,
         created_at: Utc::now().to_rfc3339(),
     };
-    db::upsert_project_skill_installation(pool, &psi)
-        .await
-        .map_err(ProjectsError::Other)?; // TODO(C3): typed repos passthrough
+    db::upsert_project_skill_installation(pool, &psi).await?;
 
     Ok(psi)
 }
@@ -483,8 +435,7 @@ pub async fn uninstall_skill_from_project_impl(
     agent_id: &str,
 ) -> Result<(), ProjectsError> {
     let psi = db::get_project_skill_installation(pool, project_id, skill_id, agent_id)
-        .await
-        .map_err(ProjectsError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| ProjectsError::SkillNotInstalledInProject {
             skill_id: skill_id.to_string(),
             project_id: project_id.to_string(),
@@ -505,10 +456,7 @@ pub async fn uninstall_skill_from_project_impl(
                     .or_else(|_| std::fs::remove_file(&target_for_remove))
                     .map_err(|e| {
                         ProjectsError::io(
-                            format!(
-                                "Failed to remove symlink '{}'",
-                                target_for_remove.display()
-                            ),
+                            format!("Failed to remove symlink '{}'", target_for_remove.display()),
                             e,
                         )
                     })
@@ -517,10 +465,7 @@ pub async fn uninstall_skill_from_project_impl(
             {
                 std::fs::remove_file(&target_for_remove).map_err(|e| {
                     ProjectsError::io(
-                        format!(
-                            "Failed to remove symlink '{}'",
-                            target_for_remove.display()
-                        ),
+                        format!("Failed to remove symlink '{}'", target_for_remove.display()),
                         e,
                     )
                 })
@@ -536,7 +481,5 @@ pub async fn uninstall_skill_from_project_impl(
     })
     .await?;
 
-    db::delete_project_skill_installation(pool, project_id, skill_id, agent_id)
-        .await
-        .map_err(ProjectsError::Other) // TODO(C3): typed repos passthrough
+    Ok(db::delete_project_skill_installation(pool, project_id, skill_id, agent_id).await?)
 }

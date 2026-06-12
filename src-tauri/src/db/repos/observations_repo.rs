@@ -5,8 +5,11 @@ use crate::db::types::{AgentSkillObservation, DbPool, LinkType};
 pub async fn upsert_agent_skill_observation(
     pool: &DbPool,
     observation: &AgentSkillObservation,
-) -> Result<(), String> {
-    observation.link_type.parse::<LinkType>()?;
+) -> Result<(), sqlx::Error> {
+    observation
+        .link_type
+        .parse::<LinkType>()
+        .map_err(sqlx::Error::InvalidArgument)?;
     sqlx::query(
         "INSERT INTO agent_skill_observations
          (row_id, agent_id, skill_id, name, description, file_path, dir_path,
@@ -47,13 +50,12 @@ pub async fn upsert_agent_skill_observation(
     .execute(pool)
     .await
     .map(|_| ())
-    .map_err(|e| e.to_string())
 }
 
 pub async fn get_agent_skill_observations(
     pool: &DbPool,
     agent_id: &str,
-) -> Result<Vec<AgentSkillObservation>, String> {
+) -> Result<Vec<AgentSkillObservation>, sqlx::Error> {
     sqlx::query_as::<_, AgentSkillObservation>(
         "SELECT * FROM agent_skill_observations
          WHERE agent_id = ?
@@ -62,13 +64,12 @@ pub async fn get_agent_skill_observations(
     .bind(agent_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn get_agent_skill_observation_by_row_id(
     pool: &DbPool,
     row_id: &str,
-) -> Result<Option<AgentSkillObservation>, String> {
+) -> Result<Option<AgentSkillObservation>, sqlx::Error> {
     sqlx::query_as::<_, AgentSkillObservation>(
         "SELECT * FROM agent_skill_observations
          WHERE row_id = ?",
@@ -76,30 +77,30 @@ pub async fn get_agent_skill_observation_by_row_id(
     .bind(row_id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
-pub async fn delete_agent_skill_observation(pool: &DbPool, row_id: &str) -> Result<(), String> {
+pub async fn delete_agent_skill_observation(
+    pool: &DbPool,
+    row_id: &str,
+) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM agent_skill_observations WHERE row_id = ?")
         .bind(row_id)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 pub async fn delete_stale_agent_skill_observations(
     pool: &DbPool,
     agent_id: &str,
     found_row_ids: &[String],
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     if found_row_ids.is_empty() {
         return sqlx::query("DELETE FROM agent_skill_observations WHERE agent_id = ?")
             .bind(agent_id)
             .execute(pool)
             .await
-            .map(|_| ())
-            .map_err(|e| e.to_string());
+            .map(|_| ());
     }
 
     let placeholders = found_row_ids
@@ -117,5 +118,5 @@ pub async fn delete_stale_agent_skill_observations(
         q = q.bind(row_id.as_str());
     }
 
-    q.execute(pool).await.map(|_| ()).map_err(|e| e.to_string())
+    q.execute(pool).await.map(|_| ())
 }

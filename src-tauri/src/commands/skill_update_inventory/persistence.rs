@@ -105,7 +105,9 @@ pub(super) async fn persist_refresh_inventory(
         )?);
     }
 
-    db::replace_skill_update_inventory(pool, &run, &entries).await
+    db::replace_skill_update_inventory(pool, &run, &entries)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[allow(clippy::too_many_arguments)]

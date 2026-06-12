@@ -100,23 +100,29 @@ async fn record_ai_api_key_migration_failure(pool: &DbPool, error: &str, reason:
 
 async fn legacy_ai_api_key_from_settings(pool: &DbPool) -> Result<Option<String>, String> {
     Ok(db::get_setting(pool, LEGACY_AI_API_KEY_SETTING_KEY)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .and_then(normalize_ai_api_key))
 }
 
 async fn mark_ai_api_key_migration_complete(pool: &DbPool) -> Result<(), String> {
-    db::set_setting(pool, AI_API_KEY_MIGRATION_SETTING_KEY, "1").await
+    db::set_setting(pool, AI_API_KEY_MIGRATION_SETTING_KEY, "1")
+        .await
+        .map_err(|e| e.to_string())
 }
 
 async fn is_ai_api_key_migration_marked(pool: &DbPool) -> Result<bool, String> {
     Ok(db::get_setting(pool, AI_API_KEY_MIGRATION_SETTING_KEY)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .as_deref()
         == Some("1"))
 }
 
 async fn delete_legacy_ai_api_key_setting(pool: &DbPool) -> Result<(), String> {
-    db::delete_setting(pool, LEGACY_AI_API_KEY_SETTING_KEY).await
+    db::delete_setting(pool, LEGACY_AI_API_KEY_SETTING_KEY)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn log_ai_api_key_migration_warning(message: impl AsRef<str>) {

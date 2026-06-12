@@ -12,7 +12,7 @@
 
 use crate::db::DbPool;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
+pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     // skill_calls：单次 skill 调用记录。timestamp_ms 是 Unix epoch 毫秒，
     // 与 skilled 一致；这样按时间排序、计算 16 周热力图时不需要解析 TEXT。
     sqlx::query(
@@ -27,8 +27,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // skill 名是高频聚合 key，索引必须有；source 用于按 provider 过滤；
     // timestamp_ms 用于 recent / heatmap 范围查询；target_id 让多 target
@@ -38,48 +37,42 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
          ON skill_calls(skill)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_calls_source
          ON skill_calls(source)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_calls_ts
          ON skill_calls(timestamp_ms)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_calls_target
          ON skill_calls(target_id)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_calls_target_ts
          ON skill_calls(target_id, timestamp_ms)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_calls_target_skill_ts
          ON skill_calls(target_id, skill, timestamp_ms)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // skill_call_providers：每个 (target, provider) 的最近健康状态。
     // call_count 冗余存以避免「打开 Skill Usage 页时再 COUNT」抖动。
@@ -95,8 +88,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // skill_call_scan_state：每个 target 上一次完整扫描的时间戳。
     // 5 分钟缓存判定用：now - last_full_scan_ms < 300_000 ⇒ 跳过扫描。
@@ -107,8 +99,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(())
 }

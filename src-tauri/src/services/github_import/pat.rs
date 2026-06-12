@@ -51,25 +51,21 @@ pub(super) async fn legacy_github_pat_from_settings(
     pool: &DbPool,
 ) -> Result<Option<String>, GithubImportError> {
     Ok(db::get_setting(pool, LEGACY_GITHUB_PAT_SETTING_KEY)
-        .await
-        .map_err(GithubImportError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .and_then(normalize_github_pat))
 }
 
 pub(super) async fn mark_github_pat_migration_complete(
     pool: &DbPool,
 ) -> Result<(), GithubImportError> {
-    db::set_setting(pool, GITHUB_PAT_MIGRATION_SETTING_KEY, "1")
-        .await
-        .map_err(GithubImportError::Other) // TODO(C3): typed repos passthrough
+    Ok(db::set_setting(pool, GITHUB_PAT_MIGRATION_SETTING_KEY, "1").await?)
 }
 
 pub(super) async fn is_github_pat_migration_marked(
     pool: &DbPool,
 ) -> Result<bool, GithubImportError> {
     Ok(db::get_setting(pool, GITHUB_PAT_MIGRATION_SETTING_KEY)
-        .await
-        .map_err(GithubImportError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .as_deref()
         == Some("1"))
 }
@@ -77,9 +73,7 @@ pub(super) async fn is_github_pat_migration_marked(
 pub(super) async fn delete_legacy_github_pat_setting(
     pool: &DbPool,
 ) -> Result<(), GithubImportError> {
-    db::delete_setting(pool, LEGACY_GITHUB_PAT_SETTING_KEY)
-        .await
-        .map_err(GithubImportError::Other) // TODO(C3): typed repos passthrough
+    Ok(db::delete_setting(pool, LEGACY_GITHUB_PAT_SETTING_KEY).await?)
 }
 
 pub(super) fn log_github_pat_migration_warning(message: impl AsRef<str>) {

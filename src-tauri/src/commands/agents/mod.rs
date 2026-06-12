@@ -79,7 +79,7 @@ pub async fn list_platform_paths_impl(
     pool: &DbPool,
     remote_home: Option<&str>,
 ) -> Result<std::collections::HashMap<String, ResolvedPlatformPaths>, String> {
-    let agents = db::get_all_agents(pool).await?;
+    let agents = db::get_all_agents(pool).await.map_err(|e| e.to_string())?;
     let specs = agent_path_specs(&agents);
     let mut paths = std::collections::HashMap::with_capacity(agents.len());
 
@@ -157,19 +157,19 @@ fn agent_to_with_status_with_detected(agent: Agent, is_detected: bool) -> AgentW
 
 /// Return all agents from the DB with live detection status.
 pub async fn get_agents_impl(pool: &DbPool) -> Result<Vec<AgentWithStatus>, String> {
-    let agents = db::get_all_agents(pool).await?;
+    let agents = db::get_all_agents(pool).await.map_err(|e| e.to_string())?;
     Ok(agents.into_iter().map(agent_to_with_status).collect())
 }
 
 pub async fn get_agents_cached_impl(pool: &DbPool) -> Result<Vec<AgentWithStatus>, String> {
-    let agents = db::get_all_agents(pool).await?;
+    let agents = db::get_all_agents(pool).await.map_err(|e| e.to_string())?;
     Ok(agents.into_iter().map(agent_to_cached_status).collect())
 }
 
 /// Scan the filesystem to update each agent's `is_detected` flag, then return
 /// all agents with their refreshed status.
 pub async fn detect_agents_impl(pool: &DbPool) -> Result<Vec<AgentWithStatus>, String> {
-    let agents = db::get_all_agents(pool).await?;
+    let agents = db::get_all_agents(pool).await.map_err(|e| e.to_string())?;
     let mut result = Vec::with_capacity(agents.len());
 
     for agent in agents {
@@ -199,7 +199,7 @@ pub async fn detect_remote_agents_impl(
     pool: &DbPool,
     active_target: &ActiveTarget,
 ) -> Result<Vec<AgentWithStatus>, String> {
-    let agents = db::get_all_agents(pool).await?;
+    let agents = db::get_all_agents(pool).await.map_err(|e| e.to_string())?;
     let connection = connect_remote_target(active_target).await?;
     let mut result = Vec::with_capacity(agents.len());
 
@@ -263,10 +263,13 @@ async fn add_custom_agent_impl_for_home(
         is_enabled: true,
     };
 
-    db::insert_custom_agent(pool, &agent).await?;
+    db::insert_custom_agent(pool, &agent)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let persisted = db::get_agent_by_id(pool, &id)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| "Failed to retrieve newly created agent".to_string())?;
 
     Ok(agent_to_with_status(persisted))
@@ -304,7 +307,8 @@ async fn update_custom_agent_impl_for_home(
         &category,
         &global_skills_dir,
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(agent_to_with_status(updated))
 }
@@ -318,7 +322,9 @@ fn expand_agent_skills_dir(path: &str, remote_home: Option<&str>) -> String {
 
 /// Remove a user-defined (non-builtin) agent by ID.
 pub async fn remove_custom_agent_impl(pool: &DbPool, agent_id: &str) -> Result<(), String> {
-    db::delete_custom_agent(pool, agent_id).await
+    db::delete_custom_agent(pool, agent_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Update the enabled state for any agent and return the refreshed representation.
@@ -327,7 +333,9 @@ pub async fn set_agent_enabled_impl(
     agent_id: &str,
     is_enabled: bool,
 ) -> Result<AgentWithStatus, String> {
-    let updated = db::update_agent_enabled(pool, agent_id, is_enabled).await?;
+    let updated = db::update_agent_enabled(pool, agent_id, is_enabled)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(agent_to_with_status(updated))
 }
 

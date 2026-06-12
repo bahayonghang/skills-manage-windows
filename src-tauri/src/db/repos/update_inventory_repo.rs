@@ -9,14 +9,13 @@ pub async fn replace_skill_update_inventory(
     pool: &DbPool,
     run: &SkillUpdateInventoryRun,
     entries: &[SkillUpdateInventoryEntry],
-) -> Result<(), String> {
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
 
     sqlx::query("DELETE FROM skill_update_inventory_entries WHERE inventory_id = ?")
         .bind(&run.inventory_id)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     sqlx::query(
         "INSERT INTO skill_update_inventory_runs
@@ -41,8 +40,7 @@ pub async fn replace_skill_update_inventory(
     .bind(&run.cache_policy)
     .bind(&run.generated_at)
     .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     for entry in entries {
         sqlx::query(
@@ -76,17 +74,16 @@ pub async fn replace_skill_update_inventory(
         .bind(&entry.payload_json)
         .bind(&entry.error)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
-    tx.commit().await.map_err(|e| e.to_string())
+    tx.commit().await
 }
 
 pub async fn list_skill_update_inventory_entries(
     pool: &DbPool,
     inventory_id: &str,
-) -> Result<Vec<SkillUpdateInventoryEntry>, String> {
+) -> Result<Vec<SkillUpdateInventoryEntry>, sqlx::Error> {
     sqlx::query_as::<_, SkillUpdateInventoryEntry>(
         "SELECT *
          FROM skill_update_inventory_entries
@@ -96,44 +93,39 @@ pub async fn list_skill_update_inventory_entries(
     .bind(inventory_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn clear_skill_update_inventory_run(
     pool: &DbPool,
     inventory_id: &str,
-) -> Result<(), String> {
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
     sqlx::query("DELETE FROM skill_update_inventory_entries WHERE inventory_id = ?")
         .bind(inventory_id)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     sqlx::query("DELETE FROM skill_update_inventory_runs WHERE inventory_id = ?")
         .bind(inventory_id)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
-    tx.commit().await.map_err(|e| e.to_string())
+        .await?;
+    tx.commit().await
 }
 
-pub async fn clear_all_skill_update_inventory(pool: &DbPool) -> Result<(), String> {
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+pub async fn clear_all_skill_update_inventory(pool: &DbPool) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
     sqlx::query("DELETE FROM skill_update_inventory_entries")
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     sqlx::query("DELETE FROM skill_update_inventory_runs")
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
-    tx.commit().await.map_err(|e| e.to_string())
+        .await?;
+    tx.commit().await
 }
 
 pub async fn delete_skill_update_inventory_entries_for_skills(
     pool: &DbPool,
     skill_ids: &[String],
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     if skill_ids.is_empty() {
         return Ok(());
     }
@@ -146,17 +138,13 @@ pub async fn delete_skill_update_inventory_entries_for_skills(
     for skill_id in skill_ids {
         query = query.bind(skill_id);
     }
-    query
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    query.execute(pool).await.map(|_| ())
 }
 
 pub async fn delete_skill_update_inventory_entries_for_repositories(
     pool: &DbPool,
     repository_ids: &[String],
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     if repository_ids.is_empty() {
         return Ok(());
     }
@@ -173,9 +161,5 @@ pub async fn delete_skill_update_inventory_entries_for_repositories(
     for repository_id in repository_ids {
         query = query.bind(repository_id);
     }
-    query
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    query.execute(pool).await.map(|_| ())
 }

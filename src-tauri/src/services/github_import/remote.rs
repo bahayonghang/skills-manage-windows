@@ -183,8 +183,7 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
     }
 
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(GithubImportError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(GithubImportError::CentralAgentMissing)?;
     let central_root = central.global_skills_dir;
     let connection = connect_remote_target(active_target)
@@ -322,9 +321,7 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
             fs_created_at: None,
             fs_updated_at: None,
         };
-        db::upsert_skill(pool, &db_skill)
-            .await
-            .map_err(GithubImportError::Other)?; // TODO(C3): typed repos passthrough
+        db::upsert_skill(pool, &db_skill).await?;
         db::assign_github_repository_to_skill(
             pool,
             &resolved.repo.owner,
@@ -334,8 +331,7 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
             &op.final_skill_id,
             &op.candidate.source_path,
         )
-        .await
-        .map_err(GithubImportError::Other)?; // TODO(C3): typed repos passthrough
+        .await?;
 
         imported_skills.push(ImportedGitHubSkillSummary {
             source_path: op.candidate.source_path.clone(),
@@ -468,7 +464,7 @@ pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
     let active_target = state
         .active_target()
         .await
-        .map_err(GithubImportError::Other)?; // TODO(C3): typed repos passthrough
+        .map_err(GithubImportError::Remote)?;
     if active_target.is_remote_like() && active_target.id() != workspace.target_id {
         return Err(GithubImportError::PreviewTargetChanged);
     }
@@ -490,9 +486,8 @@ pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
     ResourceBudget::default_skill()
         .reject_file_read_size(&skill_md_path, bytes.len() as u64)
         .map_err(GithubImportError::Budget)?;
-    String::from_utf8(bytes).map_err(|e| {
-        GithubImportError::Parse(format!("Remote SKILL.md is not valid UTF-8: {}", e))
-    })
+    String::from_utf8(bytes)
+        .map_err(|e| GithubImportError::Parse(format!("Remote SKILL.md is not valid UTF-8: {}", e)))
 }
 
 pub(crate) async fn discard_preview_workspace_for_active_target(

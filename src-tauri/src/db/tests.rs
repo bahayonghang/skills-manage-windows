@@ -901,7 +901,7 @@ async fn test_upsert_skill_installation_rejects_invalid_link_type() {
         .await
         .unwrap_err();
 
-    assert!(err.contains("Unsupported link_type"));
+    assert!(err.to_string().contains("Unsupported link_type"));
 }
 
 #[tokio::test]
@@ -931,7 +931,7 @@ async fn test_upsert_agent_skill_observation_rejects_invalid_link_type() {
     .await
     .unwrap_err();
 
-    assert!(err.contains("Unsupported link_type"));
+    assert!(err.to_string().contains("Unsupported link_type"));
 }
 
 #[tokio::test]
@@ -1518,7 +1518,7 @@ async fn test_set_skill_repository_pinned_rejects_unknown_repository() {
         .await
         .unwrap_err();
 
-    assert!(error.contains("cannot be pinned"));
+    assert!(error.to_string().contains("cannot be pinned"));
 }
 
 #[tokio::test]
@@ -1591,7 +1591,7 @@ async fn test_delete_empty_skill_repository_rejects_unknown_repository() {
         .await
         .unwrap_err();
 
-    assert!(error.contains("cannot be deleted"));
+    assert!(error.to_string().contains("cannot be deleted"));
     assert!(
         get_skill_repository_by_id(&pool, LOCAL_UNKNOWN_REPOSITORY_ID)
             .await

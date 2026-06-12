@@ -222,7 +222,7 @@ async fn prepare_ai_tagging_context(
     let api_url = config.api_url;
     let protocol = config.protocol;
     let model = config.model;
-    let tags = db::get_skill_tags(pool).await?;
+    let tags = db::get_skill_tags(pool).await.map_err(|e| e.to_string())?;
     if tags.is_empty() {
         return Err("No candidate tags are available.".to_string());
     }
@@ -288,7 +288,8 @@ where
     }
 
     let skill = db::get_skill_by_id(&context.pool, skill_id)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
     if let Some(notifier) = running_notifier.as_ref() {
         notifier.emit(&skill.id, &skill.name);
@@ -346,7 +347,9 @@ async fn persist_ai_suggestions(
             )
         })
         .collect::<Vec<_>>();
-    db::replace_skill_ai_tags(pool, skill_id, &rows).await
+    db::replace_skill_ai_tags(pool, skill_id, &rows)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 async fn persist_ai_review_suggestions(
@@ -364,5 +367,7 @@ async fn persist_ai_review_suggestions(
             )
         })
         .collect::<Vec<_>>();
-    db::replace_pending_ai_tag_reviews(pool, skill_id, &rows).await
+    db::replace_pending_ai_tag_reviews(pool, skill_id, &rows)
+        .await
+        .map_err(|e| e.to_string())
 }

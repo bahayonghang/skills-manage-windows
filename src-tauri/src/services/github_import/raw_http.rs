@@ -168,9 +168,11 @@ where
                         continue;
                     }
 
-                    return Err(denial.map(GithubImportError::from_denial).unwrap_or_else(
-                        || GithubImportError::Http(format!("{}: HTTP {}", failure_prefix, status)),
-                    ));
+                    return Err(denial
+                        .map(GithubImportError::from_denial)
+                        .unwrap_or_else(|| {
+                            GithubImportError::Http(format!("{}: HTTP {}", failure_prefix, status))
+                        }));
                 }
 
                 if status.is_success() {

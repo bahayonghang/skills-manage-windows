@@ -47,17 +47,22 @@ pub async fn create_collection_impl(
     if name.trim().is_empty() {
         return Err("Collection name cannot be empty".to_string());
     }
-    db::create_collection(pool, name, description).await
+    db::create_collection(pool, name, description)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Return all collections.
 pub async fn get_collections_impl(pool: &DbPool) -> Result<Vec<Collection>, String> {
-    db::get_all_collections(pool).await
+    db::get_all_collections(pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 async fn get_collection_or_err(pool: &DbPool, collection_id: &str) -> Result<Collection, String> {
     db::get_collection_by_id(pool, collection_id)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Collection '{}' not found", collection_id))
 }
 
@@ -68,7 +73,9 @@ pub async fn get_collection_detail_impl(
 ) -> Result<CollectionDetail, String> {
     let collection = get_collection_or_err(pool, collection_id).await?;
 
-    let skills = db::get_collection_skills(pool, collection_id).await?;
+    let skills = db::get_collection_skills(pool, collection_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(CollectionDetail {
         id: collection.id,
@@ -88,7 +95,9 @@ pub async fn add_skill_to_collection_impl(
 ) -> Result<(), String> {
     get_collection_or_err(pool, collection_id).await?;
 
-    db::add_skill_to_collection(pool, collection_id, skill_id).await
+    db::add_skill_to_collection(pool, collection_id, skill_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Remove a skill from a collection.
@@ -99,14 +108,18 @@ pub async fn remove_skill_from_collection_impl(
 ) -> Result<(), String> {
     get_collection_or_err(pool, collection_id).await?;
 
-    db::remove_skill_from_collection(pool, collection_id, skill_id).await
+    db::remove_skill_from_collection(pool, collection_id, skill_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Delete a collection and all its skill memberships.
 pub async fn delete_collection_impl(pool: &DbPool, collection_id: &str) -> Result<(), String> {
     get_collection_or_err(pool, collection_id).await?;
 
-    db::delete_collection(pool, collection_id).await
+    db::delete_collection(pool, collection_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Update a collection's name and optional description.
@@ -122,10 +135,13 @@ pub async fn update_collection_impl(
 
     get_collection_or_err(pool, collection_id).await?;
 
-    db::update_collection(pool, collection_id, name, description).await?;
+    db::update_collection(pool, collection_id, name, description)
+        .await
+        .map_err(|e| e.to_string())?;
 
     db::get_collection_by_id(pool, collection_id)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Collection '{}' not found after update", collection_id))
 }
 
@@ -140,7 +156,9 @@ pub async fn batch_install_collection_impl(
 ) -> Result<BatchInstallResult, String> {
     get_collection_or_err(pool, collection_id).await?;
 
-    let skills = db::get_collection_skills(pool, collection_id).await?;
+    let skills = db::get_collection_skills(pool, collection_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
@@ -168,7 +186,9 @@ pub async fn batch_install_collection_impl(
 pub async fn export_collection_impl(pool: &DbPool, collection_id: &str) -> Result<String, String> {
     let collection = get_collection_or_err(pool, collection_id).await?;
 
-    let skills = db::get_collection_skills(pool, collection_id).await?;
+    let skills = db::get_collection_skills(pool, collection_id)
+        .await
+        .map_err(|e| e.to_string())?;
     let skill_ids: Vec<String> = skills.into_iter().map(|s| s.id).collect();
 
     let export = CollectionExport {
@@ -199,14 +219,17 @@ pub async fn import_collection_impl(pool: &DbPool, json: &str) -> Result<Collect
     }
 
     // Create the collection.
-    let collection =
-        db::create_collection(pool, &export.name, export.description.as_deref()).await?;
+    let collection = db::create_collection(pool, &export.name, export.description.as_deref())
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Link skills that exist in the local database.
     for skill_id in &export.skills {
         // Only add the skill if it exists in the local DB; silently skip otherwise.
         if let Ok(Some(_)) = db::get_skill_by_id(pool, skill_id).await {
-            db::add_skill_to_collection(pool, &collection.id, skill_id).await?;
+            db::add_skill_to_collection(pool, &collection.id, skill_id)
+                .await
+                .map_err(|e| e.to_string())?;
         }
     }
 
@@ -298,7 +321,9 @@ pub async fn batch_install_collection(
     let pool = state.active_db().await?;
     if active_target.is_remote_like() {
         get_collection_or_err(&pool, &collection_id).await?;
-        let skills = db::get_collection_skills(&pool, &collection_id).await?;
+        let skills = db::get_collection_skills(&pool, &collection_id)
+            .await
+            .map_err(|e| e.to_string())?;
         let mut succeeded = Vec::new();
         let mut failed = Vec::new();
         for skill in &skills {

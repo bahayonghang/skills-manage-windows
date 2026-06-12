@@ -90,9 +90,12 @@ pub async fn search_skills_sh_impl(
         )));
     }
 
-    let payload = response.json::<SkillsShSearchResponse>().await.map_err(|e| {
-        MarketplaceError::Parse(format!("Failed to parse skills.sh search results: {}", e))
-    })?;
+    let payload = response
+        .json::<SkillsShSearchResponse>()
+        .await
+        .map_err(|e| {
+            MarketplaceError::Parse(format!("Failed to parse skills.sh search results: {}", e))
+        })?;
     let mut skills = payload
         .skills
         .into_iter()

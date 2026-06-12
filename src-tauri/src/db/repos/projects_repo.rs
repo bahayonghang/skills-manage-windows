@@ -9,7 +9,7 @@ use crate::db::types::{DbPool, Project, ProjectSkillInstallation};
 // ─── projects ────────────────────────────────────────────────────────────────
 
 /// 插入新项目。调用方需自行规范化 path、计算 id。
-pub async fn insert_project(pool: &DbPool, project: &Project) -> Result<(), String> {
+pub async fn insert_project(pool: &DbPool, project: &Project) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO projects (id, path, name, pinned, added_at, last_scanned_at)
          VALUES (?, ?, ?, ?, ?, ?)",
@@ -23,27 +23,27 @@ pub async fn insert_project(pool: &DbPool, project: &Project) -> Result<(), Stri
     .execute(pool)
     .await
     .map(|_| ())
-    .map_err(|e| e.to_string())
 }
 
-pub async fn get_project_by_id(pool: &DbPool, id: &str) -> Result<Option<Project>, String> {
+pub async fn get_project_by_id(pool: &DbPool, id: &str) -> Result<Option<Project>, sqlx::Error> {
     sqlx::query_as::<_, Project>("SELECT * FROM projects WHERE id = ?")
         .bind(id)
         .fetch_optional(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
-pub async fn get_project_by_path(pool: &DbPool, path: &str) -> Result<Option<Project>, String> {
+pub async fn get_project_by_path(
+    pool: &DbPool,
+    path: &str,
+) -> Result<Option<Project>, sqlx::Error> {
     sqlx::query_as::<_, Project>("SELECT * FROM projects WHERE path = ?")
         .bind(path)
         .fetch_optional(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// pinned 在前；同 pin 状态下 last_scanned_at 倒序，未扫描的排最后。
-pub async fn list_projects(pool: &DbPool) -> Result<Vec<Project>, String> {
+pub async fn list_projects(pool: &DbPool) -> Result<Vec<Project>, sqlx::Error> {
     sqlx::query_as::<_, Project>(
         "SELECT * FROM projects
          ORDER BY pinned DESC,
@@ -53,69 +53,66 @@ pub async fn list_projects(pool: &DbPool) -> Result<Vec<Project>, String> {
     )
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
-pub async fn update_project_name(pool: &DbPool, id: &str, name: &str) -> Result<(), String> {
+pub async fn update_project_name(pool: &DbPool, id: &str, name: &str) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE projects SET name = ? WHERE id = ?")
         .bind(name)
         .bind(id)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
-pub async fn update_project_pinned(pool: &DbPool, id: &str, pinned: bool) -> Result<(), String> {
+pub async fn update_project_pinned(
+    pool: &DbPool,
+    id: &str,
+    pinned: bool,
+) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE projects SET pinned = ? WHERE id = ?")
         .bind(pinned)
         .bind(id)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
-pub async fn update_project_path(pool: &DbPool, id: &str, path: &str) -> Result<(), String> {
+pub async fn update_project_path(pool: &DbPool, id: &str, path: &str) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE projects SET path = ? WHERE id = ?")
         .bind(path)
         .bind(id)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 pub async fn update_project_last_scanned(
     pool: &DbPool,
     id: &str,
     last_scanned_at: &str,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE projects SET last_scanned_at = ? WHERE id = ?")
         .bind(last_scanned_at)
         .bind(id)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 /// 删项目。`project_skill_installations` 通过 `ON DELETE CASCADE` 自动清理。
 /// 注意：SQLite 默认不开启外键，需要执行前 `PRAGMA foreign_keys = ON`，
 /// 或调用方先显式删 psi。这里走显式删除避免依赖 PRAGMA 状态。
-pub async fn delete_project(pool: &DbPool, id: &str) -> Result<(), String> {
+pub async fn delete_project(pool: &DbPool, id: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM project_skill_installations WHERE project_id = ?")
         .bind(id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     sqlx::query("DELETE FROM projects WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 // ─── project_skill_installations ─────────────────────────────────────────────
@@ -125,7 +122,7 @@ pub async fn delete_project(pool: &DbPool, id: &str) -> Result<(), String> {
 pub async fn upsert_project_skill_installation(
     pool: &DbPool,
     psi: &ProjectSkillInstallation,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO project_skill_installations
          (project_id, skill_id, name, description, file_path, source_origin,
@@ -164,7 +161,6 @@ pub async fn upsert_project_skill_installation(
     .execute(pool)
     .await
     .map(|_| ())
-    .map_err(|e| e.to_string())
 }
 
 /// Persist a full project scan in one transaction: upsert all observed rows,
@@ -174,8 +170,8 @@ pub async fn persist_project_skill_scan(
     project_id: &str,
     rows: &[ProjectSkillInstallation],
     last_scanned_at: &str,
-) -> Result<(), String> {
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
 
     sqlx::query(
         "CREATE TEMP TABLE IF NOT EXISTS project_scan_keep (
@@ -186,12 +182,10 @@ pub async fn persist_project_skill_scan(
          )",
     )
     .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
     sqlx::query("DELETE FROM project_scan_keep")
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     for psi in rows {
         sqlx::query(
@@ -231,7 +225,7 @@ pub async fn persist_project_skill_scan(
         .bind(&psi.created_at)
         .execute(&mut *tx)
         .await
-        .map_err(|e| e.to_string())?;
+        ?;
 
         sqlx::query(
             "INSERT OR IGNORE INTO project_scan_keep (project_id, skill_id, agent_id)
@@ -241,8 +235,7 @@ pub async fn persist_project_skill_scan(
         .bind(&psi.skill_id)
         .bind(&psi.agent_id)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     sqlx::query(
@@ -257,30 +250,27 @@ pub async fn persist_project_skill_scan(
     )
     .bind(project_id)
     .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query("UPDATE projects SET last_scanned_at = ? WHERE id = ?")
         .bind(last_scanned_at)
         .bind(project_id)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
-    tx.commit().await.map_err(|e| e.to_string())
+    tx.commit().await
 }
 
 pub async fn list_project_skill_installations(
     pool: &DbPool,
     project_id: &str,
-) -> Result<Vec<ProjectSkillInstallation>, String> {
+) -> Result<Vec<ProjectSkillInstallation>, sqlx::Error> {
     sqlx::query_as::<_, ProjectSkillInstallation>(
         "SELECT * FROM project_skill_installations WHERE project_id = ?",
     )
     .bind(project_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn get_project_skill_installation(
@@ -288,7 +278,7 @@ pub async fn get_project_skill_installation(
     project_id: &str,
     skill_id: &str,
     agent_id: &str,
-) -> Result<Option<ProjectSkillInstallation>, String> {
+) -> Result<Option<ProjectSkillInstallation>, sqlx::Error> {
     sqlx::query_as::<_, ProjectSkillInstallation>(
         "SELECT * FROM project_skill_installations
          WHERE project_id = ? AND skill_id = ? AND agent_id = ?",
@@ -298,7 +288,6 @@ pub async fn get_project_skill_installation(
     .bind(agent_id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn delete_project_skill_installation(
@@ -306,7 +295,7 @@ pub async fn delete_project_skill_installation(
     project_id: &str,
     skill_id: &str,
     agent_id: &str,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         "DELETE FROM project_skill_installations
          WHERE project_id = ? AND skill_id = ? AND agent_id = ?",
@@ -317,7 +306,6 @@ pub async fn delete_project_skill_installation(
     .execute(pool)
     .await
     .map(|_| ())
-    .map_err(|e| e.to_string())
 }
 
 /// 扫描后用：删除 psi 中本项目下、且不在 `kept_keys` 集合里的孤儿行。
@@ -326,14 +314,13 @@ pub async fn delete_stale_project_skill_installations(
     pool: &DbPool,
     project_id: &str,
     kept_pairs: &[(String, String)],
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     if kept_pairs.is_empty() {
         return sqlx::query("DELETE FROM project_skill_installations WHERE project_id = ?")
             .bind(project_id)
             .execute(pool)
             .await
-            .map(|_| ())
-            .map_err(|e| e.to_string());
+            .map(|_| ());
     }
 
     // 拉全量行，应用侧筛掉 kept 的，逐行删除。psi 表预期单项目下行数有限（<几千），
@@ -343,13 +330,12 @@ pub async fn delete_stale_project_skill_installations(
     )
     .bind(project_id)
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     let kept: HashSet<(String, String)> = kept_pairs.iter().cloned().collect();
     for row in rows {
-        let skill_id: String = row.try_get("skill_id").map_err(|e| e.to_string())?;
-        let agent_id: String = row.try_get("agent_id").map_err(|e| e.to_string())?;
+        let skill_id: String = row.try_get("skill_id")?;
+        let agent_id: String = row.try_get("agent_id")?;
         if kept.contains(&(skill_id.clone(), agent_id.clone())) {
             continue;
         }

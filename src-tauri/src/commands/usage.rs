@@ -106,7 +106,9 @@ async fn build_refresh_page(
 ) -> Result<UsageRefreshResult, String> {
     let overview = usage::build_overview(&state.db, target_id, None, 50).await?;
     let recent = usage::rows_to_skill_calls(
-        crate::db::list_recent_calls(&state.db, target_id, None, 20).await?,
+        crate::db::list_recent_calls(&state.db, target_id, None, 20)
+            .await
+            .map_err(|e| e.to_string())?,
     );
     let providers = usage::list_provider_health(&state.db, target_id).await?;
 
@@ -129,8 +131,9 @@ pub async fn usage_refresh(
     let target = active_usage_target(&state).await?;
 
     if target.is_remote && !force {
-        if let Some(last_scan_ms) =
-            crate::db::get_last_scan_ms(&state.db, &target.target_id).await?
+        if let Some(last_scan_ms) = crate::db::get_last_scan_ms(&state.db, &target.target_id)
+            .await
+            .map_err(|e| e.to_string())?
         {
             let now_ms = Utc::now().timestamp_millis();
             if now_ms - last_scan_ms < usage::CACHE_TTL_MS {
@@ -191,8 +194,9 @@ pub async fn usage_refresh(
                         error = %error,
                         "Skill Usage: remote refresh failed; returning cached local usage data"
                     );
-                    let last_scan_ms =
-                        crate::db::get_last_scan_ms(&state.db, &target.target_id).await?;
+                    let last_scan_ms = crate::db::get_last_scan_ms(&state.db, &target.target_id)
+                        .await
+                        .map_err(|e| e.to_string())?;
                     build_refresh_page(
                         &state,
                         &target.target_id,
@@ -227,8 +231,9 @@ pub async fn usage_get_recent(
 ) -> Result<Vec<SkillCall>, String> {
     let n = limit.unwrap_or(20).max(1);
     let target = active_usage_target(&state).await?;
-    let rows =
-        crate::db::list_recent_calls(&state.db, &target.target_id, source.as_deref(), n).await?;
+    let rows = crate::db::list_recent_calls(&state.db, &target.target_id, source.as_deref(), n)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(usage::rows_to_skill_calls(rows))
 }
 
@@ -260,7 +265,8 @@ pub async fn usage_get_skill_detail(
 ) -> Result<SkillUsageDetail, String> {
     let target = active_usage_target(&state).await?;
     let summary = crate::db::get_skill_detail_summary(&state.db, &target.target_id, &skill)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .unwrap_or_default();
 
     if summary.count == 0 {
@@ -268,7 +274,8 @@ pub async fn usage_get_skill_detail(
     }
 
     let by_project = crate::db::list_skill_project_counts(&state.db, &target.target_id, &skill)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .into_iter()
         .map(|row| SkillCount {
             skill: row.skill,
@@ -281,7 +288,8 @@ pub async fn usage_get_skill_detail(
     let cutoff_ms = Utc::now().timestamp_millis() - (16 * 7 * 86_400_000);
     let weekly = usage::aggregate::heatmap_grid_16w_from_daily_counts(
         &crate::db::list_skill_daily_counts_since(&state.db, &target.target_id, &skill, cutoff_ms)
-            .await?
+            .await
+            .map_err(|e| e.to_string())?
             .into_iter()
             .map(|row| DayCount {
                 date: row.date,
@@ -321,7 +329,9 @@ pub async fn usage_get_skill_counts(
         out.insert(s.clone(), 0);
     }
     for (skill, count) in
-        crate::db::list_skill_counts_since(&state.db, &target.target_id, &skills, cutoff).await?
+        crate::db::list_skill_counts_since(&state.db, &target.target_id, &skills, cutoff)
+            .await
+            .map_err(|e| e.to_string())?
     {
         out.insert(skill, count);
     }

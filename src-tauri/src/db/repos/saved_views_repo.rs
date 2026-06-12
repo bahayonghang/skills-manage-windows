@@ -25,7 +25,7 @@ pub struct SavedViewPatch<'a> {
     pub pinned: Option<bool>,
 }
 
-pub async fn list_saved_views(pool: &DbPool) -> Result<Vec<SavedView>, String> {
+pub async fn list_saved_views(pool: &DbPool) -> Result<Vec<SavedView>, sqlx::Error> {
     sqlx::query_as::<_, SavedView>(
         "SELECT id, name, query, sort_order, icon, pinned, created_at, updated_at
          FROM skill_saved_views
@@ -33,10 +33,9 @@ pub async fn list_saved_views(pool: &DbPool) -> Result<Vec<SavedView>, String> {
     )
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
-pub async fn get_saved_view(pool: &DbPool, id: &str) -> Result<Option<SavedView>, String> {
+pub async fn get_saved_view(pool: &DbPool, id: &str) -> Result<Option<SavedView>, sqlx::Error> {
     sqlx::query_as::<_, SavedView>(
         "SELECT id, name, query, sort_order, icon, pinned, created_at, updated_at
          FROM skill_saved_views WHERE id = ?",
@@ -44,13 +43,12 @@ pub async fn get_saved_view(pool: &DbPool, id: &str) -> Result<Option<SavedView>
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn create_saved_view(
     pool: &DbPool,
     input: NewSavedView<'_>,
-) -> Result<SavedView, String> {
+) -> Result<SavedView, sqlx::Error> {
     let id = Uuid::new_v4().to_string();
     let now = now_rfc3339();
 
@@ -71,22 +69,23 @@ pub async fn create_saved_view(
     .bind(&now)
     .bind(&now)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
-    get_saved_view(pool, &id)
-        .await?
-        .ok_or_else(|| "Failed to retrieve newly created saved view".to_string())
+    get_saved_view(pool, &id).await?.ok_or_else(|| {
+        sqlx::Error::InvalidArgument("Failed to retrieve newly created saved view".to_string())
+    })
 }
 
 pub async fn update_saved_view(
     pool: &DbPool,
     id: &str,
     patch: SavedViewPatch<'_>,
-) -> Result<SavedView, String> {
+) -> Result<SavedView, sqlx::Error> {
     // 先确认存在
     if get_saved_view(pool, id).await?.is_none() {
-        return Err(format!("Saved view '{id}' not found"));
+        return Err(sqlx::Error::InvalidArgument(format!(
+            "Saved view '{id}' not found"
+        )));
     }
 
     let now = now_rfc3339();
@@ -97,8 +96,7 @@ pub async fn update_saved_view(
             .bind(&now)
             .bind(id)
             .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
     }
     if let Some(query) = patch.query {
         sqlx::query("UPDATE skill_saved_views SET query = ?, updated_at = ? WHERE id = ?")
@@ -106,8 +104,7 @@ pub async fn update_saved_view(
             .bind(&now)
             .bind(id)
             .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
     }
     if let Some(icon) = patch.icon {
         sqlx::query("UPDATE skill_saved_views SET icon = ?, updated_at = ? WHERE id = ?")
@@ -115,8 +112,7 @@ pub async fn update_saved_view(
             .bind(&now)
             .bind(id)
             .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
     }
     if let Some(pinned) = patch.pinned {
         sqlx::query("UPDATE skill_saved_views SET pinned = ?, updated_at = ? WHERE id = ?")
@@ -124,47 +120,43 @@ pub async fn update_saved_view(
             .bind(&now)
             .bind(id)
             .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
     }
 
-    get_saved_view(pool, id)
-        .await?
-        .ok_or_else(|| "Failed to retrieve updated saved view".to_string())
+    get_saved_view(pool, id).await?.ok_or_else(|| {
+        sqlx::Error::InvalidArgument("Failed to retrieve updated saved view".to_string())
+    })
 }
 
-pub async fn delete_saved_view(pool: &DbPool, id: &str) -> Result<(), String> {
+pub async fn delete_saved_view(pool: &DbPool, id: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM skill_saved_views WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 /// 按 `ids` 数组的顺序把每条记录的 `sort_order` 改为其下标。未列出的记录保持原状。
-pub async fn reorder_saved_views(pool: &DbPool, ids: &[String]) -> Result<(), String> {
+pub async fn reorder_saved_views(pool: &DbPool, ids: &[String]) -> Result<(), sqlx::Error> {
     let now = now_rfc3339();
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let mut tx = pool.begin().await?;
     for (index, id) in ids.iter().enumerate() {
         sqlx::query("UPDATE skill_saved_views SET sort_order = ?, updated_at = ? WHERE id = ?")
             .bind(index as i64)
             .bind(&now)
             .bind(id)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
     }
-    tx.commit().await.map_err(|e| e.to_string())?;
+    tx.commit().await?;
     Ok(())
 }
 
-async fn next_sort_order(pool: &DbPool) -> Result<i64, String> {
+async fn next_sort_order(pool: &DbPool) -> Result<i64, sqlx::Error> {
     let row =
         sqlx::query("SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM skill_saved_views")
             .fetch_one(pool)
-            .await
-            .map_err(|e| e.to_string())?;
-    let next: i64 = row.try_get("next").map_err(|e| e.to_string())?;
+            .await?;
+    let next: i64 = row.try_get("next")?;
     Ok(next)
 }

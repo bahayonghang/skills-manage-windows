@@ -18,6 +18,11 @@ pub enum CentralSkillsError {
         source: std::io::Error,
     },
 
+    /// Database failures (db/repos passthrough + direct sqlx calls) flow
+    /// through transparently.
+    #[error(transparent)]
+    Db(#[from] sqlx::Error),
+
     /// Remote-target transport failures (connect / inspect / read / list /
     /// remove over the SSH or WSL channel; targets module returns String).
     #[error("{0}")]
@@ -165,11 +170,6 @@ pub enum CentralSkillsError {
         label: &'static str,
         message: String,
     },
-
-    // TODO(C3): remove once db/repos return typed errors instead of String.
-    /// Stringly-typed db/repos errors awaiting the C3 repos migration.
-    #[error("{0}")]
-    Other(String),
 }
 
 impl CentralSkillsError {

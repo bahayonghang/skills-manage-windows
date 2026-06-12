@@ -83,23 +83,21 @@ fn bind_upsert_skill<'q>(
 /// platform scan later observes the same skill id in an agent directory.
 /// Once a skill is flagged as central it must never be downgraded to non-central
 /// or have its canonical file path overwritten by a platform copy.
-pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), String> {
+pub async fn upsert_skill(pool: &DbPool, skill: &Skill) -> Result<(), sqlx::Error> {
     bind_upsert_skill(sqlx::query(UPSERT_SKILL_SQL), skill)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 pub(crate) async fn upsert_skill_in_transaction(
     transaction: &mut Transaction<'_, Sqlite>,
     skill: &Skill,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     bind_upsert_skill(sqlx::query(UPSERT_SKILL_SQL), skill)
         .execute(&mut **transaction)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 fn observation_to_skill(observation: AgentSkillObservation) -> Skill {
@@ -119,7 +117,7 @@ fn observation_to_skill(observation: AgentSkillObservation) -> Skill {
 }
 
 /// Retrieve all skills installed for a given agent.
-pub async fn get_skills_by_agent(pool: &DbPool, agent_id: &str) -> Result<Vec<Skill>, String> {
+pub async fn get_skills_by_agent(pool: &DbPool, agent_id: &str) -> Result<Vec<Skill>, sqlx::Error> {
     let observations = get_agent_skill_observations(pool, agent_id).await?;
     if agent_id == "claude-code" && !observations.is_empty() {
         return Ok(observations.into_iter().map(observation_to_skill).collect());
@@ -132,8 +130,7 @@ pub async fn get_skills_by_agent(pool: &DbPool, agent_id: &str) -> Result<Vec<Sk
     )
     .bind(agent_id)
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     skills.extend(observations.into_iter().map(observation_to_skill));
     Ok(skills)
@@ -216,7 +213,7 @@ struct InstalledSkillForAgentRow {
 pub async fn get_skills_for_agent(
     pool: &DbPool,
     agent_id: &str,
-) -> Result<Vec<SkillForAgent>, String> {
+) -> Result<Vec<SkillForAgent>, sqlx::Error> {
     let observations = get_agent_skill_observations(pool, agent_id).await?;
     if agent_id == "claude-code" && !observations.is_empty() {
         let mut skills = observations_to_skills_for_agent(pool, observations).await?;
@@ -259,8 +256,7 @@ pub async fn get_skills_for_agent(
     )
     .bind(agent_id)
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     let mut skills = rows
         .into_iter()
@@ -273,7 +269,7 @@ pub async fn get_skills_for_agent(
 
 fn installed_row_to_skill_for_agent(
     row: InstalledSkillForAgentRow,
-) -> Result<SkillForAgent, String> {
+) -> Result<SkillForAgent, sqlx::Error> {
     let skill = Skill {
         id: row.id.clone(),
         name: row.name.clone(),
@@ -321,35 +317,31 @@ fn installed_row_to_skill_for_agent(
 
 fn repository_from_installed_row(
     row: &InstalledSkillForAgentRow,
-) -> Result<Option<SkillRepository>, String> {
+) -> Result<Option<SkillRepository>, sqlx::Error> {
     let Some(id) = row.repository_id.clone() else {
         return Ok(None);
     };
 
     Ok(Some(SkillRepository {
         id,
-        name: row
-            .repository_name
-            .clone()
-            .ok_or_else(|| "Repository row missing name".to_string())?,
-        source_type: row
-            .repository_source_type
-            .clone()
-            .ok_or_else(|| "Repository row missing source_type".to_string())?,
+        name: row.repository_name.clone().ok_or_else(|| {
+            sqlx::Error::InvalidArgument("Repository row missing name".to_string())
+        })?,
+        source_type: row.repository_source_type.clone().ok_or_else(|| {
+            sqlx::Error::InvalidArgument("Repository row missing source_type".to_string())
+        })?,
         owner: row.repository_owner.clone(),
         repo: row.repository_repo.clone(),
         branch: row.repository_branch.clone(),
         url: row.repository_url.clone(),
         pinned: row.repository_pinned.unwrap_or(false),
         is_unknown: row.repository_is_unknown.unwrap_or(true),
-        created_at: row
-            .repository_created_at
-            .clone()
-            .ok_or_else(|| "Repository row missing created_at".to_string())?,
-        updated_at: row
-            .repository_updated_at
-            .clone()
-            .ok_or_else(|| "Repository row missing updated_at".to_string())?,
+        created_at: row.repository_created_at.clone().ok_or_else(|| {
+            sqlx::Error::InvalidArgument("Repository row missing created_at".to_string())
+        })?,
+        updated_at: row.repository_updated_at.clone().ok_or_else(|| {
+            sqlx::Error::InvalidArgument("Repository row missing updated_at".to_string())
+        })?,
         // 这条派生路径不需要 last_synced_at（仅在 update inventory 展示用），置 None。
         last_synced_at: None,
     }))
@@ -358,7 +350,7 @@ fn repository_from_installed_row(
 async fn observations_to_skills_for_agent(
     pool: &DbPool,
     observations: Vec<AgentSkillObservation>,
-) -> Result<Vec<SkillForAgent>, String> {
+) -> Result<Vec<SkillForAgent>, sqlx::Error> {
     if observations.is_empty() {
         return Ok(Vec::new());
     }
@@ -468,27 +460,25 @@ fn conflict_group(agent_id: &str, skill_id: &str) -> String {
 }
 
 /// Retrieve all Central Skills (`is_central = true`).
-pub async fn get_central_skills(pool: &DbPool) -> Result<Vec<Skill>, String> {
+pub async fn get_central_skills(pool: &DbPool) -> Result<Vec<Skill>, sqlx::Error> {
     sqlx::query_as::<_, Skill>("SELECT * FROM skills WHERE is_central = 1")
         .fetch_all(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// Retrieve a skill by its ID.
-pub async fn get_skill_by_id(pool: &DbPool, skill_id: &str) -> Result<Option<Skill>, String> {
+pub async fn get_skill_by_id(pool: &DbPool, skill_id: &str) -> Result<Option<Skill>, sqlx::Error> {
     sqlx::query_as::<_, Skill>("SELECT * FROM skills WHERE id = ?")
         .bind(skill_id)
         .fetch_optional(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// Retrieve multiple skills by ID in one round-trip.
 pub async fn get_skills_by_ids(
     pool: &DbPool,
     skill_ids: &[String],
-) -> Result<HashMap<String, Skill>, String> {
+) -> Result<HashMap<String, Skill>, sqlx::Error> {
     if skill_ids.is_empty() {
         return Ok(HashMap::new());
     }
@@ -500,7 +490,7 @@ pub async fn get_skills_by_ids(
         query = query.bind(skill_id);
     }
 
-    let skills = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let skills = query.fetch_all(pool).await?;
     Ok(skills
         .into_iter()
         .map(|skill| (skill.id.clone(), skill))
@@ -511,7 +501,7 @@ pub async fn get_skills_by_ids(
 pub async fn get_central_skills_by_ids(
     pool: &DbPool,
     skill_ids: &[String],
-) -> Result<Vec<Skill>, String> {
+) -> Result<Vec<Skill>, sqlx::Error> {
     if skill_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -523,7 +513,7 @@ pub async fn get_central_skills_by_ids(
         query = query.bind(skill_id);
     }
 
-    let skills = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let skills = query.fetch_all(pool).await?;
     let mut by_id = skills
         .into_iter()
         .map(|skill| (skill.id.clone(), skill))
@@ -535,47 +525,39 @@ pub async fn get_central_skills_by_ids(
 }
 
 /// Delete a skill and all its installation records.
-pub async fn delete_skill(pool: &DbPool, skill_id: &str) -> Result<(), String> {
+pub async fn delete_skill(pool: &DbPool, skill_id: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM skill_update_states WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     sqlx::query("DELETE FROM skill_repository_members WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     sqlx::query("DELETE FROM collection_skills WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     sqlx::query("DELETE FROM skill_tag_links WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     sqlx::query("DELETE FROM skill_ai_tag_reviews WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     sqlx::query("DELETE FROM skill_explanations WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     sqlx::query("DELETE FROM skill_installations WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     sqlx::query("DELETE FROM skills WHERE id = ?")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     prune_empty_skill_repositories(pool).await?;
     Ok(())
 }
@@ -591,29 +573,22 @@ pub async fn delete_skill(pool: &DbPool, skill_id: &str) -> Result<(), String> {
 pub async fn delete_skills_not_in_scope(
     pool: &DbPool,
     found_skill_ids: &[String],
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     if found_skill_ids.is_empty() {
         // Nothing found — delete all installation records first, then all skills.
         sqlx::query("DELETE FROM skill_update_states")
             .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
         sqlx::query("DELETE FROM skill_repository_members")
             .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
         sqlx::query("DELETE FROM skill_tag_links")
             .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
         sqlx::query("DELETE FROM skill_installations")
             .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        sqlx::query("DELETE FROM skills")
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
+        sqlx::query("DELETE FROM skills").execute(pool).await?;
         prune_empty_skill_repositories(pool).await?;
         return Ok(());
     }
@@ -633,7 +608,7 @@ pub async fn delete_skills_not_in_scope(
     for id in found_skill_ids {
         repo_q = repo_q.bind(id.as_str());
     }
-    repo_q.execute(pool).await.map_err(|e| e.to_string())?;
+    repo_q.execute(pool).await?;
 
     let update_state_sql = format!(
         "DELETE FROM skill_update_states WHERE skill_id NOT IN ({})",
@@ -643,10 +618,7 @@ pub async fn delete_skills_not_in_scope(
     for id in found_skill_ids {
         update_state_q = update_state_q.bind(id.as_str());
     }
-    update_state_q
-        .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    update_state_q.execute(pool).await?;
 
     let tag_sql = format!(
         "DELETE FROM skill_tag_links WHERE skill_id NOT IN ({})",
@@ -656,7 +628,7 @@ pub async fn delete_skills_not_in_scope(
     for id in found_skill_ids {
         tag_q = tag_q.bind(id.as_str());
     }
-    tag_q.execute(pool).await.map_err(|e| e.to_string())?;
+    tag_q.execute(pool).await?;
 
     let install_sql = format!(
         "DELETE FROM skill_installations WHERE skill_id NOT IN ({})",
@@ -666,7 +638,7 @@ pub async fn delete_skills_not_in_scope(
     for id in found_skill_ids {
         q = q.bind(id.as_str());
     }
-    q.execute(pool).await.map_err(|e| e.to_string())?;
+    q.execute(pool).await?;
 
     // Remove the stale skills themselves.
     let skill_sql = format!("DELETE FROM skills WHERE id NOT IN ({})", placeholders);
@@ -674,7 +646,7 @@ pub async fn delete_skills_not_in_scope(
     for id in found_skill_ids {
         q2 = q2.bind(id.as_str());
     }
-    q2.execute(pool).await.map_err(|e| e.to_string())?;
+    q2.execute(pool).await?;
     prune_empty_skill_repositories(pool).await?;
     Ok(())
 }
@@ -701,7 +673,7 @@ pub struct DashboardReadinessCounts {
 /// 单次聚合，返回 readiness 四个分子 + 一个分母。
 pub async fn count_central_readiness_inputs(
     pool: &DbPool,
-) -> Result<DashboardReadinessCounts, String> {
+) -> Result<DashboardReadinessCounts, sqlx::Error> {
     let row = sqlx::query(
         "SELECT
            (SELECT COUNT(*) FROM skills WHERE is_central = 1) AS total,
@@ -729,11 +701,10 @@ pub async fn count_central_readiness_inputs(
               )) AS installed",
     )
     .fetch_one(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
-    let read = |col: &str| -> Result<u32, String> {
-        let v: i64 = row.try_get(col).map_err(|e| e.to_string())?;
+    let read = |col: &str| -> Result<u32, sqlx::Error> {
+        let v: i64 = row.try_get(col)?;
         Ok(v.max(0) as u32)
     };
 

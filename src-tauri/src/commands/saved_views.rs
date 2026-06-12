@@ -37,7 +37,7 @@ pub struct UpdateSavedViewInput {
 // ─── impl layer (pool-driven, used by tests and command wrappers) ────────────
 
 pub async fn list_saved_views_impl(pool: &DbPool) -> Result<Vec<SavedView>, String> {
-    db::list_saved_views(pool).await
+    db::list_saved_views(pool).await.map_err(|e| e.to_string())
 }
 
 pub async fn create_saved_view_impl(
@@ -61,6 +61,7 @@ pub async fn create_saved_view_impl(
         },
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 pub async fn update_saved_view_impl(
@@ -90,17 +91,26 @@ pub async fn update_saved_view_impl(
         },
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 pub async fn delete_saved_view_impl(pool: &DbPool, id: &str) -> Result<(), String> {
-    if db::get_saved_view(pool, id).await?.is_none() {
+    if db::get_saved_view(pool, id)
+        .await
+        .map_err(|e| e.to_string())?
+        .is_none()
+    {
         return Err(format!("Saved view '{id}' not found"));
     }
-    db::delete_saved_view(pool, id).await
+    db::delete_saved_view(pool, id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub async fn reorder_saved_views_impl(pool: &DbPool, ids: Vec<String>) -> Result<(), String> {
-    db::reorder_saved_views(pool, &ids).await
+    db::reorder_saved_views(pool, &ids)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ─── Tauri commands ──────────────────────────────────────────────────────────

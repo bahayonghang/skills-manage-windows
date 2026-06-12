@@ -277,7 +277,8 @@ pub(crate) async fn build_import_groups(
             .map(|skill| skill.id.clone())
             .collect::<Vec<_>>(),
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
     let mut grouped = HashMap::<RepoKey, ImportGroup>::new();
     let mut result = SkillportStateImportResult::default();
     let mut seen_skill_keys = HashSet::<SkillManifestKey>::new();
@@ -381,7 +382,8 @@ pub(crate) async fn restore_skill_tags(
             tag.description.as_deref(),
             tag.color.as_deref(),
         )
-        .await?;
+        .await
+        .map_err(|e| e.to_string())?;
         tag_ids.push(created.id);
     }
 
@@ -397,6 +399,7 @@ pub(crate) async fn restore_skill_tags(
         None,
         None,
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
     Ok(tag_ids.len())
 }

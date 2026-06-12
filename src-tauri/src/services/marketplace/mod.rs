@@ -354,8 +354,7 @@ pub(crate) async fn sync_registry_impl(
     };
 
     let installed_central_names: HashSet<String> = crate::db::get_central_skills(pool)
-        .await
-        .map_err(MarketplaceError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .into_iter()
         .flat_map(|skill| [skill.id, skill.name])
         .collect();
@@ -534,8 +533,7 @@ pub async fn install_marketplace_skill_impl(
         }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let central = crate::db::get_agent_by_id(pool, "central")
-                .await
-                .map_err(MarketplaceError::Other)? // TODO(C3): typed repos passthrough
+                .await?
                 .ok_or(MarketplaceError::CentralAgentMissing)?;
             let skill_dir = remote_join(&central.global_skills_dir, &skill.name);
             let skill_md_path = remote_join(&skill_dir, "SKILL.md");

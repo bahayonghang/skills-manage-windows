@@ -102,12 +102,12 @@ pub(super) fn snapshot_from_repository_archive_with_budget(
     let mut files = HashMap::new();
     let mut expanded_bytes = 0_u64;
 
-    for entry_result in archive.entries().map_err(|e| {
-        GithubImportError::io("Failed to inspect GitHub repository archive", e)
-    })? {
-        let mut entry = entry_result.map_err(|e| {
-            GithubImportError::io("Failed to inspect GitHub repository archive", e)
-        })?;
+    for entry_result in archive
+        .entries()
+        .map_err(|e| GithubImportError::io("Failed to inspect GitHub repository archive", e))?
+    {
+        let mut entry = entry_result
+            .map_err(|e| GithubImportError::io("Failed to inspect GitHub repository archive", e))?;
 
         if !entry.header().entry_type().is_file() {
             continue;

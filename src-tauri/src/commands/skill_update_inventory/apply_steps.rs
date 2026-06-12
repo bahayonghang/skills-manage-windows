@@ -114,7 +114,7 @@ pub(crate) async fn apply_skip_addition_step(
             Err(error) => result.failures.push(SkillUpdateApplyFailure {
                 step: "skip_addition".to_string(),
                 identifier: format!("{}::{}", request.repository_id, source_path),
-                error,
+                error: error.to_string(),
             }),
         }
     }
@@ -147,7 +147,7 @@ pub(crate) async fn apply_unskip_addition_step(
             Err(error) => result.failures.push(SkillUpdateApplyFailure {
                 step: "unskip_addition".to_string(),
                 identifier: format!("{}::{}", request.repository_id, source_path),
-                error,
+                error: error.to_string(),
             }),
         }
     }
@@ -178,7 +178,7 @@ pub(crate) async fn apply_remove_platform_duplicates_step(
                 result.failures.push(SkillUpdateApplyFailure {
                     step: "remove_platform_duplicate".to_string(),
                     identifier: format!("{}::{}", removal.agent_id, removal.skill_id),
-                    error,
+                    error: error.to_string(),
                 });
                 continue;
             }
@@ -259,7 +259,8 @@ async fn remove_deleted_platform_copy(
 ) -> Result<(), String> {
     ensure_central_still_missing(pool, &removal.skill_id).await?;
     let agent = db::get_agent_by_id(pool, &removal.agent_id)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Agent '{}' not found", removal.agent_id))?;
     if removal.agent_id == "central" {
         return Err("Central agent entries cannot be removed as platform copies.".to_string());
@@ -277,7 +278,8 @@ async fn remove_deleted_platform_copy(
 
 async fn ensure_central_still_missing(pool: &DbPool, skill_id: &str) -> Result<(), String> {
     if db::get_central_skills_by_ids(pool, &[skill_id.to_string()])
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .is_empty()
     {
         Ok(())
@@ -300,7 +302,9 @@ async fn remove_deleted_platform_copy_local(
     ensure_local_child_path(root, target, &removal.agent_id)?;
 
     if removal.agent_id == "claude-code" {
-        let observations = db::get_agent_skill_observations(pool, &removal.agent_id).await?;
+        let observations = db::get_agent_skill_observations(pool, &removal.agent_id)
+            .await
+            .map_err(|e| e.to_string())?;
         if let Some(obs) = observations.iter().find(|obs| {
             obs.skill_id == removal.skill_id && paths_equivalent_str(&obs.dir_path, path)
         }) {
@@ -349,11 +353,15 @@ async fn remove_deleted_platform_copy_remote(
     let connection = connect_remote_target(active_target).await?;
     match connection.remove_tree(&path).await {
         Ok(()) => {
-            db::delete_skill_installation(pool, &removal.skill_id, &removal.agent_id).await?;
+            db::delete_skill_installation(pool, &removal.skill_id, &removal.agent_id)
+                .await
+                .map_err(|e| e.to_string())?;
             Ok(())
         }
         Err(error) if error.to_ascii_lowercase().contains("no such file") => {
-            db::delete_skill_installation(pool, &removal.skill_id, &removal.agent_id).await?;
+            db::delete_skill_installation(pool, &removal.skill_id, &removal.agent_id)
+                .await
+                .map_err(|e| e.to_string())?;
             Ok(())
         }
         Err(error) => Err(error),

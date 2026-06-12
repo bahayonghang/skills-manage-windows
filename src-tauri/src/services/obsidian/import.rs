@@ -97,7 +97,9 @@ pub async fn import_obsidian_skill_to_central_impl(
             fs_created_at: None,
             fs_updated_at: None,
         };
-        db::upsert_skill(pool, &db_skill).await?;
+        db::upsert_skill(pool, &db_skill)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(ObsidianImportResult {
@@ -114,7 +116,8 @@ pub async fn import_obsidian_skill_to_platform_impl(
 ) -> Result<ObsidianImportResult, String> {
     let install_method = ObsidianInstallMethod::parse(method)?;
     let agent = db::get_agent_by_id(pool, agent_id)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
     let agent_dir = PathBuf::from(&agent.global_skills_dir);
     let source_dir = Path::new(dir_path).to_path_buf();
@@ -180,7 +183,9 @@ pub async fn import_obsidian_skill_to_platform_impl(
             fs_created_at: None,
             fs_updated_at: None,
         };
-        db::upsert_skill(pool, &db_skill).await?;
+        db::upsert_skill(pool, &db_skill)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     let installation = db::SkillInstallation {
@@ -194,7 +199,9 @@ pub async fn import_obsidian_skill_to_platform_impl(
         },
         created_at: now,
     };
-    db::upsert_skill_installation(pool, &installation).await?;
+    db::upsert_skill_installation(pool, &installation)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(ObsidianImportResult {
         skill_id: skill_dir_name,

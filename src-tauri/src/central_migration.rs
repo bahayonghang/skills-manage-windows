@@ -45,7 +45,10 @@ pub async fn migrate_legacy_central_skills_to_private_store(
     pool: &DbPool,
 ) -> Result<CentralStoreMigrationSummary, String> {
     // 1.1 跳过已完成的一次性迁移
-    if let Some(raw) = db::get_setting(pool, CENTRAL_STORE_MIGRATION_SETTING_KEY).await? {
+    if let Some(raw) = db::get_setting(pool, CENTRAL_STORE_MIGRATION_SETTING_KEY)
+        .await
+        .map_err(|e| e.to_string())?
+    {
         if let Ok(summary) = serde_json::from_str::<CentralStoreMigrationSummary>(&raw) {
             return Ok(summary);
         }
@@ -58,7 +61,9 @@ pub async fn migrate_legacy_central_skills_to_private_store(
 
     // 1.3 记录迁移摘要，供设置页或诊断读取
     let encoded = serde_json::to_string(&summary).map_err(|e| e.to_string())?;
-    db::set_setting(pool, CENTRAL_STORE_MIGRATION_SETTING_KEY, &encoded).await?;
+    db::set_setting(pool, CENTRAL_STORE_MIGRATION_SETTING_KEY, &encoded)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(summary)
 }
 

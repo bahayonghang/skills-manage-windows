@@ -83,11 +83,6 @@ pub enum MarketplaceError {
 
     #[error("Skill '{0}' was not imported.")]
     SkillNotImported(String),
-
-    // TODO(C3): remove once db/repos return typed errors instead of String.
-    /// Stringly-typed db/repos errors awaiting the C3 repos migration.
-    #[error("{0}")]
-    Other(String),
 }
 
 impl MarketplaceError {

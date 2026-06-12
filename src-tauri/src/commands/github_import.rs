@@ -69,17 +69,15 @@ pub async fn import_github_repo_skills(
             .await
             .map_err(|e| e.to_string())?;
     match &active_target {
-        ActiveTarget::Local => {
-            github_import::import_github_repo_skills_with_auth(
-                &pool,
-                &repo_url,
-                selections,
-                Some(&app),
-                auth.as_deref(),
-            )
-            .await
-            .map_err(|e| e.to_string())
-        }
+        ActiveTarget::Local => github_import::import_github_repo_skills_with_auth(
+            &pool,
+            &repo_url,
+            selections,
+            Some(&app),
+            auth.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string()),
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             github_import::import_github_repo_skills_remote_with_auth(
                 &pool,

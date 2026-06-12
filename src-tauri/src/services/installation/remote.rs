@@ -82,9 +82,7 @@ async fn record_remote_installation(
         symlink_target,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
-    db::upsert_skill_installation(pool, &installation)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
+    db::upsert_skill_installation(pool, &installation).await?;
 
     Ok(InstallResult {
         symlink_path: installed_path.to_string(),
@@ -107,8 +105,7 @@ pub(crate) async fn ensure_remote_centralized(
     }
 
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::SkillNotFound(skill_id.to_string()))?;
     let source_dir = crate::targets::remote_parent(&skill.file_path)
         .ok_or_else(|| InstallationError::InvalidSkillFilePath(skill_id.to_string()))?;
@@ -130,17 +127,12 @@ pub(crate) async fn ensure_remote_centralized(
     updated.canonical_path = Some(canonical_dir.to_string());
     updated.is_central = true;
     updated.file_path = canonical_skill_md;
-    db::upsert_skill(pool, &updated)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
+    db::upsert_skill(pool, &updated).await?;
 
     Ok(())
 }
 
-fn remote_skill_source_dir(
-    skill: &db::Skill,
-    skill_id: &str,
-) -> Result<String, InstallationError> {
+fn remote_skill_source_dir(skill: &db::Skill, skill_id: &str) -> Result<String, InstallationError> {
     crate::targets::remote_parent(&skill.file_path)
         .ok_or_else(|| InstallationError::InvalidSkillFilePath(skill_id.to_string()))
 }
@@ -154,9 +146,7 @@ async fn mark_remote_skill_centralized(
     skill.canonical_path = Some(canonical_dir.to_string());
     skill.is_central = true;
     skill.file_path = canonical_skill_md.to_string();
-    db::upsert_skill(pool, &skill)
-        .await
-        .map_err(InstallationError::Other) // TODO(C3): typed repos passthrough
+    Ok(db::upsert_skill(pool, &skill).await?)
 }
 
 async fn run_remote_central_install_script(
@@ -271,18 +261,15 @@ pub(crate) async fn install_skill_to_agent_ssh_with_connection(
     }
 
     let agent = db::get_agent_by_id(pool, agent_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
     let canonical_dir = remote_join(&central.global_skills_dir, skill_id);
     let canonical_skill_md = remote_join(&canonical_dir, "SKILL.md");
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::SkillNotFound(skill_id.to_string()))?;
     let source_dir = remote_skill_source_dir(&skill, skill_id)?;
 
@@ -309,9 +296,7 @@ pub(crate) async fn install_skill_to_agent_ssh_with_connection(
     if method == "symlink" && !connection.symlink_allowed() {
         return Err(InstallationError::RemoteSymlinkDisabled);
     }
-    let installations = db::get_skill_installations(pool, skill_id)
-        .await
-        .map_err(InstallationError::Other)?; // TODO(C3): typed repos passthrough
+    let installations = db::get_skill_installations(pool, skill_id).await?;
     let installation = installations
         .iter()
         .find(|record| record.agent_id == agent_id);
@@ -362,12 +347,10 @@ pub async fn uninstall_skill_from_agent_remote_impl(
     agent_id: &str,
 ) -> Result<(), InstallationError> {
     let agent = db::get_agent_by_id(pool, agent_id)
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
     let central = db::get_agent_by_id(pool, "central")
-        .await
-        .map_err(InstallationError::Other)? // TODO(C3): typed repos passthrough
+        .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
 
     if agent_id == "central" || agent.global_skills_dir == central.global_skills_dir {
@@ -384,7 +367,5 @@ pub async fn uninstall_skill_from_agent_remote_impl(
         .remove_tree(&install_path)
         .await
         .map_err(InstallationError::Remote)?;
-    db::delete_skill_installation(pool, skill_id, agent_id)
-        .await
-        .map_err(InstallationError::Other) // TODO(C3): typed repos passthrough
+    Ok(db::delete_skill_installation(pool, skill_id, agent_id).await?)
 }

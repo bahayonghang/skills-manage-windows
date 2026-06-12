@@ -374,7 +374,9 @@ pub async fn delete_target_impl(
     save_remote_targets(local_db, &ssh_targets).await?;
     save_wsl_targets(local_db, &wsl_targets).await?;
     if active_target_id(local_db).await? == target_id {
-        db::set_setting(local_db, ACTIVE_TARGET_SETTING_KEY, LOCAL_TARGET_ID).await?;
+        db::set_setting(local_db, ACTIVE_TARGET_SETTING_KEY, LOCAL_TARGET_ID)
+            .await
+            .map_err(|e| e.to_string())?;
     }
     registry.drop_remote_pool(target_id);
     Ok(())
@@ -399,7 +401,9 @@ pub async fn set_active_target_impl(
         }
     }
 
-    db::set_setting(local_db, ACTIVE_TARGET_SETTING_KEY, target_id).await?;
+    db::set_setting(local_db, ACTIVE_TARGET_SETTING_KEY, target_id)
+        .await
+        .map_err(|e| e.to_string())?;
     let targets = registry.list_targets(local_db).await?;
     targets
         .into_iter()
@@ -422,13 +426,17 @@ pub async fn get_active_target_impl(
 
 pub async fn active_target_id(local_db: &DbPool) -> Result<String, String> {
     Ok(db::get_setting(local_db, ACTIVE_TARGET_SETTING_KEY)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| LOCAL_TARGET_ID.to_string()))
 }
 
 pub async fn load_remote_targets(local_db: &DbPool) -> Result<Vec<RemoteTargetConfig>, String> {
-    let Some(raw) = db::get_setting(local_db, TARGETS_SETTING_KEY).await? else {
+    let Some(raw) = db::get_setting(local_db, TARGETS_SETTING_KEY)
+        .await
+        .map_err(|e| e.to_string())?
+    else {
         return Ok(Vec::new());
     };
     if raw.trim().is_empty() {
@@ -442,11 +450,16 @@ pub(super) async fn save_remote_targets(
     targets: &[RemoteTargetConfig],
 ) -> Result<(), String> {
     let raw = serde_json::to_string(targets).map_err(|e| e.to_string())?;
-    db::set_setting(local_db, TARGETS_SETTING_KEY, &raw).await
+    db::set_setting(local_db, TARGETS_SETTING_KEY, &raw)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub async fn load_wsl_targets(local_db: &DbPool) -> Result<Vec<WslTargetConfig>, String> {
-    let Some(raw) = db::get_setting(local_db, WSL_TARGETS_SETTING_KEY).await? else {
+    let Some(raw) = db::get_setting(local_db, WSL_TARGETS_SETTING_KEY)
+        .await
+        .map_err(|e| e.to_string())?
+    else {
         return Ok(Vec::new());
     };
     if raw.trim().is_empty() {
@@ -460,7 +473,9 @@ pub(super) async fn save_wsl_targets(
     targets: &[WslTargetConfig],
 ) -> Result<(), String> {
     let raw = serde_json::to_string(targets).map_err(|e| e.to_string())?;
-    db::set_setting(local_db, WSL_TARGETS_SETTING_KEY, &raw).await
+    db::set_setting(local_db, WSL_TARGETS_SETTING_KEY, &raw)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub(super) fn request_to_config(

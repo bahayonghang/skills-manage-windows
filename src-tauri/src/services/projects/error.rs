@@ -81,11 +81,6 @@ pub enum ProjectsError {
         label: &'static str,
         message: String,
     },
-
-    // TODO(C3): remove once db/repos return typed errors instead of String.
-    /// Stringly-typed db/repos errors awaiting the C3 repos migration.
-    #[error("{0}")]
-    Other(String),
 }
 
 impl ProjectsError {

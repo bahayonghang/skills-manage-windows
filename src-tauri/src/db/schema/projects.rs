@@ -9,7 +9,7 @@
 use super::super::migrations::ensure_column;
 use crate::db::DbPool;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
+pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     // projects：用户手动 add 的项目根目录。
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS projects (
@@ -22,8 +22,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // project_skill_installations：项目下某个 agent 目录下登记的 skill 安装。
     // 复合主键覆盖「同一项目同一 skill 装到不同 agent 目录」的合法场景；
@@ -46,8 +45,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     let alter_specs: &[(&str, &str, &str)] = &[
         (
@@ -82,24 +80,21 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
          ON project_skill_installations(project_id)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query("DELETE FROM settings WHERE key = 'discover_scan_roots_config'")
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     Ok(())
 }
 
-async fn repair_extended_project_paths(pool: &DbPool) -> Result<(), String> {
+async fn repair_extended_project_paths(pool: &DbPool) -> Result<(), sqlx::Error> {
     let rows = sqlx::query_as::<_, (String, String)>(
         "SELECT id, path FROM projects WHERE path LIKE '//?/%'",
     )
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     for (id, path) in rows {
         let cleaned = crate::paths::normalize_stored_path(&path);
@@ -108,8 +103,7 @@ async fn repair_extended_project_paths(pool: &DbPool) -> Result<(), String> {
                 .bind(cleaned)
                 .bind(id)
                 .execute(pool)
-                .await
-                .map_err(|e| e.to_string())?;
+                .await?;
         }
     }
 

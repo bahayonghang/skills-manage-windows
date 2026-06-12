@@ -7,12 +7,11 @@ use sqlx::Row;
 use crate::db::types::DbPool;
 
 /// Get a setting value by key.
-pub async fn get_setting(pool: &DbPool, key: &str) -> Result<Option<String>, String> {
+pub async fn get_setting(pool: &DbPool, key: &str) -> Result<Option<String>, sqlx::Error> {
     let row = sqlx::query("SELECT value FROM settings WHERE key = ?")
         .bind(key)
         .fetch_optional(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     Ok(row.map(|r| r.get::<String, _>("value")))
 }
@@ -21,7 +20,7 @@ pub async fn get_setting(pool: &DbPool, key: &str) -> Result<Option<String>, Str
 pub async fn get_settings(
     pool: &DbPool,
     keys: &[String],
-) -> Result<HashMap<String, Option<String>>, String> {
+) -> Result<HashMap<String, Option<String>>, sqlx::Error> {
     let mut result = keys
         .iter()
         .map(|key| (key.clone(), None))
@@ -41,10 +40,10 @@ pub async fn get_settings(
         query = query.bind(key);
     }
 
-    let rows = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let rows = query.fetch_all(pool).await?;
     for row in rows {
-        let key: String = row.try_get("key").map_err(|e| e.to_string())?;
-        let value: String = row.try_get("value").map_err(|e| e.to_string())?;
+        let key: String = row.try_get("key")?;
+        let value: String = row.try_get("value")?;
         result.insert(key, Some(value));
     }
 
@@ -52,14 +51,13 @@ pub async fn get_settings(
 }
 
 /// Set (upsert) a setting value.
-pub async fn set_setting(pool: &DbPool, key: &str, value: &str) -> Result<(), String> {
+pub async fn set_setting(pool: &DbPool, key: &str, value: &str) -> Result<(), sqlx::Error> {
     sqlx::query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)")
         .bind(key)
         .bind(value)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 /// Set (upsert) a setting value on a best-effort basis: failures are logged
@@ -72,27 +70,28 @@ pub async fn set_setting_best_effort(pool: &DbPool, key: &str, value: &str) {
 }
 
 /// Delete a setting value by key.
-pub async fn delete_setting(pool: &DbPool, key: &str) -> Result<(), String> {
+pub async fn delete_setting(pool: &DbPool, key: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM settings WHERE key = ?")
         .bind(key)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 /// Set (upsert) a batch of settings in a single transaction.
-pub async fn set_settings(pool: &DbPool, values: &HashMap<String, String>) -> Result<(), String> {
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+pub async fn set_settings(
+    pool: &DbPool,
+    values: &HashMap<String, String>,
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
 
     for (key, value) in values {
         sqlx::query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)")
             .bind(key)
             .bind(value)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
     }
 
-    tx.commit().await.map_err(|e| e.to_string())
+    tx.commit().await
 }

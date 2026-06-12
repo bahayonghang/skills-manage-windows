@@ -168,8 +168,7 @@ pub async fn apply_central_store_location_change_impl(
                 if existed {
                     remove_existing_path(&target_skill_dir)?;
                 }
-                copy_dir_all(&source_skill_dir, &target_skill_dir)
-                    .map_err(|e| e.to_string())?;
+                copy_dir_all(&source_skill_dir, &target_skill_dir).map_err(|e| e.to_string())?;
                 if existed {
                     overwritten += 1;
                 } else {
@@ -184,7 +183,9 @@ pub async fn apply_central_store_location_change_impl(
     update_central_root(pool, &source_root, &target_root).await?;
     let symlink_failures =
         rebuild_symlinks_pointing_to_old_root(pool, &source_root, &target_root).await?;
-    scan_all_skills_impl(pool).await.map_err(|e| e.to_string())?;
+    scan_all_skills_impl(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(CentralStoreLocationChangeResult {
         source_path: preview.source_path,
@@ -205,7 +206,8 @@ async fn validated_roots(pool: &DbPool, target_path: &str) -> Result<(PathBuf, P
     }
 
     let central = crate::db::get_agent_by_id(pool, CENTRAL_AGENT_ID)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| "Central agent not found".to_string())?;
     let source_root = normalize_local_root(Path::new(&central.global_skills_dir))?;
     let target_root = normalize_local_root(&crate::paths::expand_home_path(target_path))?;

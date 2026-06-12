@@ -106,14 +106,13 @@ pub async fn replace_calls_for_target(
     calls: &[NewSkillCall],
     providers: &[ProviderScanOutcome],
     scan_completed_at_ms: i64,
-) -> Result<(), String> {
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
 
     sqlx::query("DELETE FROM skill_calls WHERE target_id = ?")
         .bind(target_id)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     for call in calls {
         sqlx::query(
@@ -127,8 +126,7 @@ pub async fn replace_calls_for_target(
         .bind(&call.session_id)
         .bind(&call.source)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     // provider 表用 INSERT OR REPLACE，幂等更新一次扫描周期内每个 provider
@@ -147,8 +145,7 @@ pub async fn replace_calls_for_target(
         .bind(outcome.call_count)
         .bind(scan_completed_at_ms)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     sqlx::query(
@@ -158,21 +155,19 @@ pub async fn replace_calls_for_target(
     .bind(target_id)
     .bind(scan_completed_at_ms)
     .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
-    tx.commit().await.map_err(|e| e.to_string())
+    tx.commit().await
 }
 
 /// 读取指定 target 的最近一次扫描时间戳，给 5 分钟缓存判定用。
 /// 没扫过返回 None。
-pub async fn get_last_scan_ms(pool: &DbPool, target_id: &str) -> Result<Option<i64>, String> {
+pub async fn get_last_scan_ms(pool: &DbPool, target_id: &str) -> Result<Option<i64>, sqlx::Error> {
     let row: Option<(i64,)> =
         sqlx::query_as("SELECT last_full_scan_ms FROM skill_call_scan_state WHERE target_id = ?")
             .bind(target_id)
             .fetch_optional(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
     Ok(row.map(|(ms,)| ms))
 }
 
@@ -180,7 +175,7 @@ pub async fn get_last_scan_ms(pool: &DbPool, target_id: &str) -> Result<Option<i
 pub async fn list_provider_rows(
     pool: &DbPool,
     target_id: &str,
-) -> Result<Vec<SkillCallProviderRow>, String> {
+) -> Result<Vec<SkillCallProviderRow>, sqlx::Error> {
     sqlx::query_as::<_, SkillCallProviderRow>(
         "SELECT target_id, provider_id, display_name, available, call_count, scanned_at
          FROM skill_call_providers
@@ -190,14 +185,13 @@ pub async fn list_provider_rows(
     .bind(target_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 /// 列出指定 target 的所有调用记录，按时间升序。聚合层接到内存里再排序。
 pub async fn list_calls_for_target(
     pool: &DbPool,
     target_id: &str,
-) -> Result<Vec<SkillCallRow>, String> {
+) -> Result<Vec<SkillCallRow>, sqlx::Error> {
     sqlx::query_as::<_, SkillCallRow>(
         "SELECT id, target_id, skill, timestamp_ms, project, session_id, source
          FROM skill_calls
@@ -207,7 +201,6 @@ pub async fn list_calls_for_target(
     .bind(target_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 /// 列出最近 N 条调用，按时间倒序。给 RecentCallsFeed 直接用。
@@ -216,7 +209,7 @@ pub async fn list_recent_calls(
     target_id: &str,
     source: Option<&str>,
     limit: i64,
-) -> Result<Vec<SkillCallRow>, String> {
+) -> Result<Vec<SkillCallRow>, sqlx::Error> {
     sqlx::query_as::<_, SkillCallRow>(
         "SELECT id, target_id, skill, timestamp_ms, project, session_id, source
          FROM skill_calls
@@ -231,14 +224,13 @@ pub async fn list_recent_calls(
     .bind(limit)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn get_usage_kpis(
     pool: &DbPool,
     target_id: &str,
     source: Option<&str>,
-) -> Result<UsageKpisRow, String> {
+) -> Result<UsageKpisRow, sqlx::Error> {
     sqlx::query_as::<_, UsageKpisRow>(
         "SELECT
             COUNT(*) AS total_calls,
@@ -255,7 +247,6 @@ pub async fn get_usage_kpis(
     .bind(source)
     .fetch_one(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn list_top_skills(
@@ -263,7 +254,7 @@ pub async fn list_top_skills(
     target_id: &str,
     source: Option<&str>,
     limit: usize,
-) -> Result<Vec<SkillCountRow>, String> {
+) -> Result<Vec<SkillCountRow>, sqlx::Error> {
     let limit = if limit == 0 { i64::MAX } else { limit as i64 };
     sqlx::query_as::<_, SkillCountRow>(
         "SELECT
@@ -285,7 +276,6 @@ pub async fn list_top_skills(
     .bind(limit)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn list_daily_counts_since(
@@ -293,7 +283,7 @@ pub async fn list_daily_counts_since(
     target_id: &str,
     source: Option<&str>,
     cutoff_ms: i64,
-) -> Result<Vec<DayCountRow>, String> {
+) -> Result<Vec<DayCountRow>, sqlx::Error> {
     sqlx::query_as::<_, DayCountRow>(
         "SELECT
             strftime('%Y-%m-%d', timestamp_ms / 1000, 'unixepoch') AS date,
@@ -311,14 +301,13 @@ pub async fn list_daily_counts_since(
     .bind(cutoff_ms)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn get_skill_detail_summary(
     pool: &DbPool,
     target_id: &str,
     skill: &str,
-) -> Result<Option<SkillDetailSummaryRow>, String> {
+) -> Result<Option<SkillDetailSummaryRow>, sqlx::Error> {
     sqlx::query_as::<_, SkillDetailSummaryRow>(
         "SELECT
             COUNT(*) AS count,
@@ -333,14 +322,13 @@ pub async fn get_skill_detail_summary(
     .bind(skill)
     .fetch_optional(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn list_skill_project_counts(
     pool: &DbPool,
     target_id: &str,
     skill: &str,
-) -> Result<Vec<SkillCountRow>, String> {
+) -> Result<Vec<SkillCountRow>, sqlx::Error> {
     sqlx::query_as::<_, SkillCountRow>(
         "SELECT
             project AS skill,
@@ -358,7 +346,6 @@ pub async fn list_skill_project_counts(
     .bind(skill)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn list_skill_daily_counts_since(
@@ -366,7 +353,7 @@ pub async fn list_skill_daily_counts_since(
     target_id: &str,
     skill: &str,
     cutoff_ms: i64,
-) -> Result<Vec<DayCountRow>, String> {
+) -> Result<Vec<DayCountRow>, sqlx::Error> {
     sqlx::query_as::<_, DayCountRow>(
         "SELECT
             strftime('%Y-%m-%d', timestamp_ms / 1000, 'unixepoch') AS date,
@@ -383,7 +370,6 @@ pub async fn list_skill_daily_counts_since(
     .bind(cutoff_ms)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn list_skill_counts_since(
@@ -391,7 +377,7 @@ pub async fn list_skill_counts_since(
     target_id: &str,
     skills: &[String],
     cutoff_ms: i64,
-) -> Result<Vec<(String, i64)>, String> {
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
     if skills.is_empty() {
         return Ok(vec![]);
     }
@@ -422,7 +408,6 @@ pub async fn list_skill_counts_since(
     let rows = builder
         .build_query_as::<(String, i64)>()
         .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     Ok(rows)
 }
