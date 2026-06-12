@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
-- **Last Active**: 2026-06-11
+- **Total Sessions**: 13
+- **Last Active**: 2026-06-12
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~460 | Active |
+| `journal-1.md` | ~498 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-06-12 | thiserror 批次2：中批五域错误枚举迁移 | `b3633cb`, `b3ebf3c`, `75cf0d3`, `76fd327`, `4b37031`, `fd0e7d0` | `dev` |
 | 12 | 2026-06-11 | 优化更新机制重构 | `0b9edba`, `aacf783`, `e2357cd` | `dev` |
 | 11 | 2026-06-11 | 优化中央技能标签机制 | `b7fb4a4`, `1a22060` | `dev` |
 | 10 | 2026-06-09 | Bootstrap Trellis project specs | - | `dev` |

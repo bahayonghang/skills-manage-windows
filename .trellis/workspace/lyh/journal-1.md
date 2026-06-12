@@ -458,3 +458,41 @@ Filled backend and frontend Trellis spec docs for ref/skillshare with source-bac
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: thiserror 批次2：中批五域错误枚举迁移
+
+**Date**: 2026-06-12
+**Task**: thiserror 批次2：中批五域错误枚举迁移
+**Branch**: `dev`
+
+### Summary
+
+完成 thiserror 批次2五域迁移（local_remote_sync/github_import/marketplace/projects/central_skills），新增五个域错误枚举并按父 design 模板落地 Http 变体约定；commands 边界统一 .map_err(|e| e.to_string())，IPC 契约不变；测试 0 删减（704 Rust + e2e 全绿），五域 services 层 Result<_,String> 0 命中；sizecheck 超限拆出 summaries.rs 与 delete/repository.rs 子模块；just ci 通过；沉淀 spec/backend/domain-error-enums.md。手动冒烟（marketplace 同步/GitHub 导入/项目扫描）待人工在桌面应用执行。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b3633cb` | (see git log) |
+| `b3ebf3c` | (see git log) |
+| `75cf0d3` | (see git log) |
+| `76fd327` | (see git log) |
+| `4b37031` | (see git log) |
+| `fd0e7d0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
