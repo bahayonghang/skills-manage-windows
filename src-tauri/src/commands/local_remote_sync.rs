@@ -101,7 +101,11 @@ async fn selected_remote_target(
         return Err("Select an SSH or WSL target before syncing.".to_string());
     }
 
-    let target = state.targets.target_by_id(&state.db, target_id).await?;
+    let target = state
+        .targets
+        .target_by_id(&state.db, target_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
     match target {
         ActiveTarget::Local => Err("Select an SSH or WSL target before syncing.".to_string()),
@@ -131,7 +135,7 @@ async fn refresh_synced_target_cache(
                 push_refresh_failure(active_target, result, error.to_string());
             }
         }
-        Err(error) => push_refresh_failure(active_target, result, error),
+        Err(error) => push_refresh_failure(active_target, result, error.to_string()),
     }
 }
 

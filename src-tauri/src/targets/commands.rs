@@ -3,15 +3,12 @@ pub async fn create_ssh_target_impl(
     registry: &TargetRegistry,
     local_db: &DbPool,
     request: CreateSshTargetRequest,
-) -> Result<TargetSummary, String> {
+) -> Result<TargetSummary, TargetsError> {
     let target_id = format!("ssh-{}", Uuid::new_v4());
     let base = request_to_config(request, target_id)?;
     let probe = probe_ssh_target(&base).await?;
     if !is_supported_remote_os(&probe.remote_os) {
-        return Err(format!(
-            "Remote OS '{}' is not supported in this version. Linux and macOS are supported.",
-            probe.remote_os
-        ));
+        return Err(TargetsError::UnsupportedRemoteOs(probe.remote_os));
     }
 
     let mut targets = load_remote_targets(local_db).await?;
@@ -50,12 +47,12 @@ pub async fn update_ssh_target_impl(
     registry: &TargetRegistry,
     local_db: &DbPool,
     request: UpdateSshTargetRequest,
-) -> Result<TargetSummary, String> {
+) -> Result<TargetSummary, TargetsError> {
     let mut targets = load_remote_targets(local_db).await?;
     let index = targets
         .iter()
         .position(|target| target.id == request.id)
-        .ok_or_else(|| format!("Target '{}' not found", request.id))?;
+        .ok_or_else(|| TargetsError::TargetNotFound(request.id.clone()))?;
     let previous_target = targets[index].clone();
     let mut updated_target = update_request_to_config(request, &previous_target)?;
     let supplied_password = updated_target.auth_method == SshAuthMethod::Password
@@ -70,10 +67,7 @@ pub async fn update_ssh_target_impl(
 
     let probe = probe_ssh_target(&updated_target).await?;
     if !is_supported_remote_os(&probe.remote_os) {
-        return Err(format!(
-            "Remote OS '{}' is not supported in this version. Linux and macOS are supported.",
-            probe.remote_os
-        ));
+        return Err(TargetsError::UnsupportedRemoteOs(probe.remote_os));
     }
 
     updated_target.remote_home = probe.remote_home;
@@ -116,7 +110,7 @@ pub async fn test_ssh_target_impl(
     registry: &TargetRegistry,
     local_db: &DbPool,
     request: TestSshTargetRequest,
-) -> Result<SshTargetTestResult, String> {
+) -> Result<SshTargetTestResult, TargetsError> {
     let supplied_password = request.password.clone();
     let has_existing_target_id = request
         .id
@@ -128,7 +122,7 @@ pub async fn test_ssh_target_impl(
             .await?
             .into_iter()
             .find(|target| target.id == id)
-            .ok_or_else(|| format!("Target '{}' not found", id))?,
+            .ok_or_else(|| TargetsError::TargetNotFound(id.to_string()))?,
         _ => test_request_to_config(request)?,
     };
     if has_existing_target_id
@@ -181,7 +175,7 @@ pub async fn test_ssh_target_impl(
             remote_os: None,
             credential_status: None,
             credential_error: None,
-            message: error,
+            message: error.to_string(),
         }),
     }
 }
@@ -191,15 +185,15 @@ pub async fn update_ssh_target_password_impl(
     local_db: &DbPool,
     target_id: &str,
     password: &str,
-) -> Result<SshTargetTestResult, String> {
+) -> Result<SshTargetTestResult, TargetsError> {
     let mut targets = load_remote_targets(local_db).await?;
     let target = targets
         .iter_mut()
         .find(|target| target.id == target_id)
-        .ok_or_else(|| format!("Target '{}' not found", target_id))?;
+        .ok_or_else(|| TargetsError::TargetNotFound(target_id.to_string()))?;
 
     if target.auth_method != SshAuthMethod::Password {
-        return Err("This SSH target does not use password authentication.".to_string());
+        return Err(TargetsError::NotPasswordAuth);
     }
     apply_supplied_password_to_existing_target(target, Some(password))?;
 
@@ -241,7 +235,7 @@ pub async fn update_ssh_target_password_impl(
             remote_os: None,
             credential_status: None,
             credential_error: None,
-            message: error,
+            message: error.to_string(),
         }),
     }
 }
@@ -250,15 +244,12 @@ pub async fn create_wsl_target_impl(
     registry: &TargetRegistry,
     local_db: &DbPool,
     request: CreateWslTargetRequest,
-) -> Result<TargetSummary, String> {
+) -> Result<TargetSummary, TargetsError> {
     let target_id = format!("wsl-{}", Uuid::new_v4());
     let mut target = request_to_wsl_config(request, target_id)?;
     let probe = probe_wsl_target(&target).await?;
     if !is_supported_remote_os(&probe.remote_os) {
-        return Err(format!(
-            "WSL OS '{}' is not supported in this version. Linux is expected for WSL targets.",
-            probe.remote_os
-        ));
+        return Err(TargetsError::UnsupportedWslOs(probe.remote_os));
     }
 
     target.remote_home = probe.remote_home;
@@ -278,20 +269,17 @@ pub async fn update_wsl_target_impl(
     registry: &TargetRegistry,
     local_db: &DbPool,
     request: UpdateWslTargetRequest,
-) -> Result<TargetSummary, String> {
+) -> Result<TargetSummary, TargetsError> {
     let mut targets = load_wsl_targets(local_db).await?;
     let index = targets
         .iter()
         .position(|target| target.id == request.id)
-        .ok_or_else(|| format!("Target '{}' not found", request.id))?;
+        .ok_or_else(|| TargetsError::TargetNotFound(request.id.clone()))?;
     let mut updated_target = update_wsl_request_to_config(request, &targets[index])?;
 
     let probe = probe_wsl_target(&updated_target).await?;
     if !is_supported_remote_os(&probe.remote_os) {
-        return Err(format!(
-            "WSL OS '{}' is not supported in this version. Linux is expected for WSL targets.",
-            probe.remote_os
-        ));
+        return Err(TargetsError::UnsupportedWslOs(probe.remote_os));
     }
     updated_target.remote_home = probe.remote_home;
     updated_target.remote_os = probe.remote_os;
@@ -310,13 +298,13 @@ pub async fn update_wsl_target_impl(
 pub async fn test_wsl_target_impl(
     local_db: &DbPool,
     request: TestWslTargetRequest,
-) -> Result<WslTargetTestResult, String> {
+) -> Result<WslTargetTestResult, TargetsError> {
     let target = match request.id.as_deref() {
         Some(id) if !id.trim().is_empty() => load_wsl_targets(local_db)
             .await?
             .into_iter()
             .find(|target| target.id == id)
-            .ok_or_else(|| format!("Target '{}' not found", id))?,
+            .ok_or_else(|| TargetsError::TargetNotFound(id.to_string()))?,
         _ => test_wsl_request_to_config(request)?,
     };
 
@@ -340,7 +328,7 @@ pub async fn test_wsl_target_impl(
             ok: false,
             remote_home: None,
             remote_os: None,
-            message: error,
+            message: error.to_string(),
         }),
     }
 }
@@ -349,9 +337,9 @@ pub async fn delete_target_impl(
     registry: &TargetRegistry,
     local_db: &DbPool,
     target_id: &str,
-) -> Result<(), String> {
+) -> Result<(), TargetsError> {
     if target_id == LOCAL_TARGET_ID {
-        return Err("Local target cannot be deleted.".to_string());
+        return Err(TargetsError::LocalTargetUndeletable);
     }
 
     let mut ssh_targets = load_remote_targets(local_db).await?;
@@ -365,7 +353,7 @@ pub async fn delete_target_impl(
         .position(|target| target.id == target_id)
         .map(|index| wsl_targets.remove(index));
     if removed_ssh.is_none() && removed_wsl.is_none() {
-        return Err(format!("Target '{}' not found", target_id));
+        return Err(TargetsError::TargetNotFound(target_id.to_string()));
     }
     if let Some(mut removed) = removed_ssh {
         registry.delete_target_password(&mut removed)?;
@@ -374,9 +362,7 @@ pub async fn delete_target_impl(
     save_remote_targets(local_db, &ssh_targets).await?;
     save_wsl_targets(local_db, &wsl_targets).await?;
     if active_target_id(local_db).await? == target_id {
-        db::set_setting(local_db, ACTIVE_TARGET_SETTING_KEY, LOCAL_TARGET_ID)
-            .await
-            .map_err(|e| e.to_string())?;
+        db::set_setting(local_db, ACTIVE_TARGET_SETTING_KEY, LOCAL_TARGET_ID).await?;
     }
     registry.drop_remote_pool(target_id);
     Ok(())
@@ -386,7 +372,7 @@ pub async fn set_active_target_impl(
     registry: &TargetRegistry,
     local_db: &DbPool,
     target_id: &str,
-) -> Result<TargetSummary, String> {
+) -> Result<TargetSummary, TargetsError> {
     if target_id != LOCAL_TARGET_ID {
         let ssh_exists = load_remote_targets(local_db)
             .await?
@@ -397,91 +383,78 @@ pub async fn set_active_target_impl(
             .iter()
             .any(|target| target.id == target_id);
         if !ssh_exists && !wsl_exists {
-            return Err(format!("Target '{}' not found", target_id));
+            return Err(TargetsError::TargetNotFound(target_id.to_string()));
         }
     }
 
-    db::set_setting(local_db, ACTIVE_TARGET_SETTING_KEY, target_id)
-        .await
-        .map_err(|e| e.to_string())?;
+    db::set_setting(local_db, ACTIVE_TARGET_SETTING_KEY, target_id).await?;
     let targets = registry.list_targets(local_db).await?;
     targets
         .into_iter()
         .find(|target| target.id == target_id)
-        .ok_or_else(|| format!("Target '{}' not found", target_id))
+        .ok_or_else(|| TargetsError::TargetNotFound(target_id.to_string()))
 }
 
 pub async fn get_active_target_impl(
     registry: &TargetRegistry,
     local_db: &DbPool,
-) -> Result<TargetSummary, String> {
+) -> Result<TargetSummary, TargetsError> {
     let active_id = active_target_id(local_db).await?;
     registry
         .list_targets(local_db)
         .await?
         .into_iter()
         .find(|target| target.id == active_id)
-        .ok_or_else(|| format!("Target '{}' not found", active_id))
+        .ok_or_else(|| TargetsError::TargetNotFound(active_id))
 }
 
-pub async fn active_target_id(local_db: &DbPool) -> Result<String, String> {
+pub async fn active_target_id(local_db: &DbPool) -> Result<String, TargetsError> {
     Ok(db::get_setting(local_db, ACTIVE_TARGET_SETTING_KEY)
-        .await
-        .map_err(|e| e.to_string())?
+        .await?
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| LOCAL_TARGET_ID.to_string()))
 }
 
-pub async fn load_remote_targets(local_db: &DbPool) -> Result<Vec<RemoteTargetConfig>, String> {
-    let Some(raw) = db::get_setting(local_db, TARGETS_SETTING_KEY)
-        .await
-        .map_err(|e| e.to_string())?
-    else {
+pub async fn load_remote_targets(local_db: &DbPool) -> Result<Vec<RemoteTargetConfig>, TargetsError> {
+    let Some(raw) = db::get_setting(local_db, TARGETS_SETTING_KEY).await? else {
         return Ok(Vec::new());
     };
     if raw.trim().is_empty() {
         return Ok(Vec::new());
     }
-    serde_json::from_str(&raw).map_err(|e| format!("Failed to parse remote targets: {}", e))
+    serde_json::from_str(&raw).map_err(TargetsError::ParseRemoteTargets)
 }
 
 pub(super) async fn save_remote_targets(
     local_db: &DbPool,
     targets: &[RemoteTargetConfig],
-) -> Result<(), String> {
-    let raw = serde_json::to_string(targets).map_err(|e| e.to_string())?;
-    db::set_setting(local_db, TARGETS_SETTING_KEY, &raw)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<(), TargetsError> {
+    let raw = serde_json::to_string(targets)?;
+    Ok(db::set_setting(local_db, TARGETS_SETTING_KEY, &raw).await?)
 }
 
-pub async fn load_wsl_targets(local_db: &DbPool) -> Result<Vec<WslTargetConfig>, String> {
-    let Some(raw) = db::get_setting(local_db, WSL_TARGETS_SETTING_KEY)
-        .await
-        .map_err(|e| e.to_string())?
-    else {
+pub async fn load_wsl_targets(local_db: &DbPool) -> Result<Vec<WslTargetConfig>, TargetsError> {
+    let Some(raw) = db::get_setting(local_db, WSL_TARGETS_SETTING_KEY).await? else {
         return Ok(Vec::new());
     };
     if raw.trim().is_empty() {
         return Ok(Vec::new());
     }
-    serde_json::from_str(&raw).map_err(|e| format!("Failed to parse WSL targets: {}", e))
+    serde_json::from_str(&raw).map_err(TargetsError::ParseWslTargets)
 }
 
 pub(super) async fn save_wsl_targets(
     local_db: &DbPool,
     targets: &[WslTargetConfig],
-) -> Result<(), String> {
-    let raw = serde_json::to_string(targets).map_err(|e| e.to_string())?;
-    db::set_setting(local_db, WSL_TARGETS_SETTING_KEY, &raw)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<(), TargetsError> {
+    let raw = serde_json::to_string(targets)?;
+    Ok(db::set_setting(local_db, WSL_TARGETS_SETTING_KEY, &raw).await?)
 }
 
 pub(super) fn request_to_config(
     request: CreateSshTargetRequest,
     target_id: String,
-) -> Result<RemoteTargetConfig, String> {
+) -> Result<RemoteTargetConfig, TargetsError> {
     let auth_method = request.auth_method.unwrap_or_default();
     if auth_method == SshAuthMethod::Key
         && request
@@ -489,10 +462,7 @@ pub(super) fn request_to_config(
             .as_deref()
             .is_some_and(|value| !value.is_empty())
     {
-        return Err(
-            "Passphrase-protected keys are not supported yet. Use ssh-agent or an unencrypted key."
-                .to_string(),
-        );
+        return Err(TargetsError::PassphraseUnsupported);
     }
 
     let key_path = match auth_method {
@@ -531,10 +501,10 @@ pub(super) fn request_to_config(
 pub(super) fn update_request_to_config(
     request: UpdateSshTargetRequest,
     existing: &RemoteTargetConfig,
-) -> Result<RemoteTargetConfig, String> {
+) -> Result<RemoteTargetConfig, TargetsError> {
     let requested_id = required_field("id", &request.id)?;
     if requested_id != existing.id {
-        return Err("Target id cannot be changed.".to_string());
+        return Err(TargetsError::TargetIdImmutable);
     }
 
     let auth_method = request.auth_method.unwrap_or(existing.auth_method);
@@ -544,10 +514,7 @@ pub(super) fn update_request_to_config(
             .as_deref()
             .is_some_and(|value| !value.is_empty())
     {
-        return Err(
-            "Passphrase-protected keys are not supported yet. Use ssh-agent or an unencrypted key."
-                .to_string(),
-        );
+        return Err(TargetsError::PassphraseUnsupported);
     }
 
     let key_path = match auth_method {
@@ -601,7 +568,7 @@ pub(super) fn update_request_to_config(
 
 pub(super) fn test_request_to_config(
     request: TestSshTargetRequest,
-) -> Result<RemoteTargetConfig, String> {
+) -> Result<RemoteTargetConfig, TargetsError> {
     let auth_method = request.auth_method.unwrap_or_default();
     if auth_method == SshAuthMethod::Key
         && request
@@ -609,10 +576,7 @@ pub(super) fn test_request_to_config(
             .as_deref()
             .is_some_and(|value| !value.is_empty())
     {
-        return Err(
-            "Passphrase-protected keys are not supported yet. Use ssh-agent or an unencrypted key."
-                .to_string(),
-        );
+        return Err(TargetsError::PassphraseUnsupported);
     }
 
     let id = request.id.unwrap_or_else(|| "test".to_string());
@@ -652,7 +616,7 @@ pub(super) fn test_request_to_config(
 pub(super) fn request_to_wsl_config(
     request: CreateWslTargetRequest,
     target_id: String,
-) -> Result<WslTargetConfig, String> {
+) -> Result<WslTargetConfig, TargetsError> {
     Ok(WslTargetConfig {
         id: target_id,
         label: required_field("label", &request.label)?,
@@ -666,10 +630,10 @@ pub(super) fn request_to_wsl_config(
 pub(super) fn update_wsl_request_to_config(
     request: UpdateWslTargetRequest,
     existing: &WslTargetConfig,
-) -> Result<WslTargetConfig, String> {
+) -> Result<WslTargetConfig, TargetsError> {
     let requested_id = required_field("id", &request.id)?;
     if requested_id != existing.id {
-        return Err("Target id cannot be changed.".to_string());
+        return Err(TargetsError::TargetIdImmutable);
     }
 
     Ok(WslTargetConfig {
@@ -684,7 +648,7 @@ pub(super) fn update_wsl_request_to_config(
 
 pub(super) fn test_wsl_request_to_config(
     request: TestWslTargetRequest,
-) -> Result<WslTargetConfig, String> {
+) -> Result<WslTargetConfig, TargetsError> {
     let id = request.id.unwrap_or_else(|| "wsl-test".to_string());
     Ok(WslTargetConfig {
         id,
@@ -699,10 +663,10 @@ pub(super) fn test_wsl_request_to_config(
     })
 }
 
-pub(super) fn required_field(name: &str, value: &str) -> Result<String, String> {
+pub(super) fn required_field(name: &str, value: &str) -> Result<String, TargetsError> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
-        Err(format!("{} is required.", name))
+        Err(TargetsError::RequiredField(name.to_string()))
     } else {
         Ok(trimmed.to_string())
     }
@@ -711,7 +675,7 @@ pub(super) fn required_field(name: &str, value: &str) -> Result<String, String> 
 pub(super) fn apply_supplied_password_to_existing_target(
     target: &mut RemoteTargetConfig,
     password: Option<&str>,
-) -> Result<bool, String> {
+) -> Result<bool, TargetsError> {
     if target.auth_method != SshAuthMethod::Password {
         return Ok(false);
     }
@@ -726,7 +690,7 @@ pub(super) fn apply_supplied_password_to_existing_target(
     Ok(true)
 }
 
-pub fn remote_cache_db_path(target_id: &str) -> Result<PathBuf, String> {
+pub fn remote_cache_db_path(target_id: &str) -> Result<PathBuf, TargetsError> {
     let target_id = sanitize_target_id(target_id)?;
     Ok(crate::paths::app_data_dir()
         .join("targets")
@@ -734,14 +698,14 @@ pub fn remote_cache_db_path(target_id: &str) -> Result<PathBuf, String> {
         .join("db.sqlite"))
 }
 
-pub(super) fn sanitize_target_id(target_id: &str) -> Result<String, String> {
+pub(super) fn sanitize_target_id(target_id: &str) -> Result<String, TargetsError> {
     let trimmed = target_id.trim();
     if trimmed.is_empty()
         || !trimmed
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
     {
-        return Err("Invalid target id.".to_string());
+        return Err(TargetsError::InvalidTargetId);
     }
     Ok(trimmed.to_string())
 }
@@ -774,21 +738,18 @@ pub(super) fn ssh_success_message(
     }
 }
 
-pub(super) fn load_target_password(target: &RemoteTargetConfig) -> Result<String, String> {
+pub(super) fn load_target_password(target: &RemoteTargetConfig) -> Result<String, TargetsError> {
     if let Some(password) = target.password.as_deref().filter(|value| !value.is_empty()) {
         return Ok(password.to_string());
     }
     let Some(credential_key) = credential_key_for_password_target(target) else {
-        return Err("Password target is missing its credential key.".to_string());
+        return Err(TargetsError::MissingCredentialKey);
     };
     match SystemCredentialBackend.get_password(&credential_key) {
         Ok(password) => Ok(password),
-        Err(CredentialStoreError::NoEntry) => protected_password_for_target(target)?.ok_or_else(|| {
-            format!(
-                "SSH password for target '{}' is not available. Open Settings, enter the password for this target, save it, and retry.",
-                target.label
-            )
-        }),
-        Err(error) => protected_password_for_target(target)?.ok_or_else(|| error.message()),
+        Err(CredentialStoreError::NoEntry) => protected_password_for_target(target)?
+            .ok_or_else(|| TargetsError::PasswordUnavailable(target.label.clone())),
+        Err(error) => protected_password_for_target(target)?
+            .ok_or_else(|| TargetsError::CredentialStore(error.message())),
     }
 }

@@ -65,11 +65,17 @@ pub struct AppState {
 
 impl AppState {
     pub async fn active_db(&self) -> Result<DbPool, String> {
-        self.targets.active_db(&self.db).await
+        self.targets
+            .active_db(&self.db)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     pub async fn active_target(&self) -> Result<targets::ActiveTarget, String> {
-        self.targets.active_target(&self.db).await
+        self.targets
+            .active_target(&self.db)
+            .await
+            .map_err(|e| e.to_string())
     }
 }
 

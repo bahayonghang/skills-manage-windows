@@ -43,7 +43,7 @@ pub(crate) async fn preview_github_repo_import_remote_with_auth(
     let resolved = resolve_repo_source(repo_url, auth).await?;
     let connection = connect_remote_target(active_target)
         .await
-        .map_err(GithubImportError::Remote)?;
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
     cleanup_expired_preview_workspaces_for_connection(&connection).await;
 
     let workspace = create_remote_preview_workspace(&connection, &resolved, auth).await?;

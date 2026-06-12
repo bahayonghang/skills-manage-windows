@@ -38,9 +38,9 @@ pub(super) fn hex_encode(bytes: &[u8]) -> String {
 }
 
 #[cfg(windows)]
-pub(super) fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
+pub(super) fn hex_decode(value: &str) -> Result<Vec<u8>, TargetsError> {
     if !value.len().is_multiple_of(2) {
-        return Err("Protected password payload is not valid hex.".to_string());
+        return Err(TargetsError::ProtectedPayloadNotHex);
     }
     value
         .as_bytes()
@@ -48,10 +48,10 @@ pub(super) fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
         .map(|chunk| {
             let high = (chunk[0] as char)
                 .to_digit(16)
-                .ok_or_else(|| "Protected password payload is not valid hex.".to_string())?;
+                .ok_or(TargetsError::ProtectedPayloadNotHex)?;
             let low = (chunk[1] as char)
                 .to_digit(16)
-                .ok_or_else(|| "Protected password payload is not valid hex.".to_string())?;
+                .ok_or(TargetsError::ProtectedPayloadNotHex)?;
             Ok(((high << 4) | low) as u8)
         })
         .collect()
@@ -59,6 +59,7 @@ pub(super) fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
 
 #[cfg(windows)]
 pub(super) mod protected_credentials {
+    use super::TargetsError;
     use std::ffi::c_void;
     use std::io;
     use std::ptr::{null, null_mut};
@@ -101,21 +102,20 @@ pub(super) mod protected_credentials {
         fn LocalFree(hmem: *mut c_void) -> *mut c_void;
     }
 
-    fn last_error(action: &str) -> String {
-        format!(
-            "Failed to {} SSH password with Windows DPAPI: {}",
+    fn last_error(action: &'static str) -> TargetsError {
+        TargetsError::Dpapi {
             action,
-            io::Error::last_os_error()
-        )
+            source: io::Error::last_os_error(),
+        }
     }
 
-    pub fn protect(password: &str) -> Result<String, String> {
+    pub fn protect(password: &str) -> Result<String, TargetsError> {
         let mut input = password.as_bytes().to_vec();
         let mut input_blob = DataBlob {
             cbData: input
                 .len()
                 .try_into()
-                .map_err(|_| "SSH password is too large to protect.".to_string())?,
+                .map_err(|_| TargetsError::PasswordTooLarge)?,
             pbData: input.as_mut_ptr(),
         };
         let mut output_blob = DataBlob {
@@ -147,13 +147,13 @@ pub(super) mod protected_credentials {
         Ok(super::hex_encode(&protected))
     }
 
-    pub fn unprotect(protected: &str) -> Result<String, String> {
+    pub fn unprotect(protected: &str) -> Result<String, TargetsError> {
         let mut input = super::hex_decode(protected)?;
         let mut input_blob = DataBlob {
             cbData: input
                 .len()
                 .try_into()
-                .map_err(|_| "Protected SSH password payload is too large.".to_string())?,
+                .map_err(|_| TargetsError::ProtectedPayloadTooLarge)?,
             pbData: input.as_mut_ptr(),
         };
         let mut output_blob = DataBlob {
@@ -182,19 +182,20 @@ pub(super) mod protected_credentials {
         unsafe {
             LocalFree(output_blob.pbData.cast::<c_void>());
         }
-        String::from_utf8(plaintext)
-            .map_err(|e| format!("Protected SSH password is not valid UTF-8: {}", e))
+        String::from_utf8(plaintext).map_err(TargetsError::ProtectedPasswordNotUtf8)
     }
 }
 
 #[cfg(not(windows))]
 pub(super) mod protected_credentials {
-    pub fn protect(_password: &str) -> Result<String, String> {
-        Err("App-local protected SSH password fallback is only available on Windows.".to_string())
+    use super::TargetsError;
+
+    pub fn protect(_password: &str) -> Result<String, TargetsError> {
+        Err(TargetsError::ProtectedFallbackWindowsOnly)
     }
 
-    pub fn unprotect(_protected: &str) -> Result<String, String> {
-        Err("App-local protected SSH password fallback is only available on Windows.".to_string())
+    pub fn unprotect(_protected: &str) -> Result<String, TargetsError> {
+        Err(TargetsError::ProtectedFallbackWindowsOnly)
     }
 }
 
@@ -246,7 +247,7 @@ impl CredentialBackend for SystemCredentialBackend {
 
 pub(super) fn protected_password_for_target(
     target: &RemoteTargetConfig,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, TargetsError> {
     target
         .protected_password
         .as_deref()

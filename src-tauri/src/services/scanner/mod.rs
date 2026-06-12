@@ -521,7 +521,7 @@ pub async fn scan_remote_skills_impl(
     let scan_started_at = Utc::now().to_rfc3339();
     let connection = connect_remote_target(active_target)
         .await
-        .map_err(ScannerError::Remote)?;
+        .map_err(|e| ScannerError::Remote(e.to_string()))?;
     let central_root = agents
         .iter()
         .find(|agent| agent.id == "central")
@@ -557,7 +557,7 @@ pub async fn scan_remote_skills_impl(
     let probe_output = connection
         .run_script(&build_probe_script(&unique_roots), &[])
         .await
-        .map_err(ScannerError::Remote)?;
+        .map_err(|e| ScannerError::Remote(e.to_string()))?;
     let probe_items = parse_probe_output(&probe_output);
     let mut root_exists = HashSet::new();
     let mut root_parent_exists = HashSet::new();
@@ -587,7 +587,7 @@ pub async fn scan_remote_skills_impl(
         let read_output = connection
             .run_script(&build_batch_read_script(&unique_skill_paths), &[])
             .await
-            .map_err(ScannerError::Remote)?;
+            .map_err(|e| ScannerError::Remote(e.to_string()))?;
         parse_batch_read_output(&read_output)
     };
 

@@ -99,7 +99,7 @@ pub(crate) async fn ensure_remote_centralized(
     if connection
         .exists(&canonical_skill_md)
         .await
-        .map_err(InstallationError::Remote)?
+        .map_err(|e| InstallationError::Remote(e.to_string()))?
     {
         return Ok(());
     }
@@ -113,7 +113,7 @@ pub(crate) async fn ensure_remote_centralized(
     if !connection
         .exists(&source_skill_md)
         .await
-        .map_err(InstallationError::Remote)?
+        .map_err(|e| InstallationError::Remote(e.to_string()))?
     {
         return Err(InstallationError::SkillSourceMissing(source_skill_md));
     }
@@ -121,7 +121,7 @@ pub(crate) async fn ensure_remote_centralized(
     connection
         .copy_dir(&source_dir, canonical_dir)
         .await
-        .map_err(InstallationError::Remote)?;
+        .map_err(|e| InstallationError::Remote(e.to_string()))?;
 
     let mut updated = skill;
     updated.canonical_path = Some(canonical_dir.to_string());
@@ -172,7 +172,7 @@ async fn run_remote_central_install_script(
             ],
         )
         .await
-        .map_err(InstallationError::Remote)
+        .map_err(|e| InstallationError::Remote(e.to_string()))
         .map(|_| ())
 }
 
@@ -231,7 +231,7 @@ pub async fn install_skill_to_agent_ssh_impl(
     let connection = ConnectedRemoteTarget::Ssh(
         connect_ssh_target(target)
             .await
-            .map_err(InstallationError::Remote)?,
+            .map_err(|e| InstallationError::Remote(e.to_string()))?,
     );
     install_skill_to_agent_ssh_with_connection(pool, &connection, skill_id, agent_id, method).await
 }
@@ -245,7 +245,7 @@ pub async fn install_skill_to_agent_remote_impl(
 ) -> Result<InstallResult, InstallationError> {
     let connection = connect_remote_target(active_target)
         .await
-        .map_err(InstallationError::Remote)?;
+        .map_err(|e| InstallationError::Remote(e.to_string()))?;
     install_skill_to_agent_ssh_with_connection(pool, &connection, skill_id, agent_id, method).await
 }
 
@@ -362,10 +362,10 @@ pub async fn uninstall_skill_from_agent_remote_impl(
     let install_path = remote_join(&agent.global_skills_dir, skill_id);
     let connection = connect_remote_target(active_target)
         .await
-        .map_err(InstallationError::Remote)?;
+        .map_err(|e| InstallationError::Remote(e.to_string()))?;
     connection
         .remove_tree(&install_path)
         .await
-        .map_err(InstallationError::Remote)?;
+        .map_err(|e| InstallationError::Remote(e.to_string()))?;
     Ok(db::delete_skill_installation(pool, skill_id, agent_id).await?)
 }

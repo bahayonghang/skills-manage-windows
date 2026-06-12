@@ -507,7 +507,7 @@ pub(super) mod tests {
             "ssh-test".to_string(),
         );
 
-        assert!(result.unwrap_err().contains("keyPath"));
+        assert!(result.unwrap_err().to_string().contains("keyPath"));
     }
 
     #[test]

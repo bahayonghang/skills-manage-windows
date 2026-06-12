@@ -38,7 +38,11 @@ struct ActiveUsageTarget {
 }
 
 async fn active_usage_target(state: &State<'_, AppState>) -> Result<ActiveUsageTarget, String> {
-    let active = state.targets.active_target(&state.db).await?;
+    let active = state
+        .targets
+        .active_target(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(ActiveUsageTarget {
         target_id: active.id().to_string(),
         label: active.label().to_string(),

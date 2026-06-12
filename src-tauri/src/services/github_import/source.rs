@@ -294,7 +294,7 @@ pub(super) async fn build_remote_repo_skill_candidates_from_workspace(
         let raw = connection
             .read_file(&skill_md_remote_path)
             .await
-            .map_err(GithubImportError::Remote)?;
+            .map_err(|e| GithubImportError::Remote(e.to_string()))?;
         ResourceBudget::default_skill()
             .reject_file_read_size(&skill_md_remote_path, raw.len() as u64)
             .map_err(GithubImportError::Budget)?;
@@ -410,7 +410,7 @@ find . -type f -iname 'SKILL.md' -print | sed 's#^\./##'
             &[remote_repo_dir],
         )
         .await
-        .map_err(GithubImportError::Remote)?;
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
 
     output
         .lines()

@@ -211,7 +211,7 @@ impl FsBackend for RemoteFsBackend {
             .target
             .read_file(path)
             .await
-            .map_err(UsageError::Remote)?;
+            .map_err(|e| UsageError::Remote(e.to_string()))?;
         String::from_utf8(bytes)
             .map_err(|e| UsageError::Parse(format!("remote utf8 {}: {}", path, e)))
     }
@@ -231,7 +231,7 @@ impl FsBackend for RemoteFsBackend {
                 .target
                 .run_command(&script)
                 .await
-                .map_err(UsageError::Remote)?;
+                .map_err(|e| UsageError::Remote(e.to_string()))?;
             content_by_path.extend(parse_batch_read_output(&stdout));
         }
         Ok(content_by_path)
@@ -267,7 +267,7 @@ impl FsBackend for RemoteFsBackend {
             .target
             .read_file(path)
             .await
-            .map_err(UsageError::Remote)?;
+            .map_err(|e| UsageError::Remote(e.to_string()))?;
         let dir = tempfile::TempDir::new().map_err(|e| UsageError::io("tempdir", e))?;
         let basename = Path::new(path)
             .file_name()

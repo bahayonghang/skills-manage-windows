@@ -17,7 +17,9 @@ pub(super) const ASKPASS_HELPER_FILE_PREFIX: &str = "skillport-ssh-askpass-";
 #[cfg(not(windows))]
 pub(super) const ASKPASS_HELPER_MAX_AGE_SECS: u64 = 60 * 60;
 
-pub async fn connect_ssh_target(target: &RemoteTargetConfig) -> Result<ConnectedSshTarget, String> {
+pub async fn connect_ssh_target(
+    target: &RemoteTargetConfig,
+) -> Result<ConnectedSshTarget, TargetsError> {
     let password = match target.auth_method {
         SshAuthMethod::Key => None,
         SshAuthMethod::Password => Some(load_target_password(target)?),
@@ -38,9 +40,9 @@ pub async fn connect_ssh_target(target: &RemoteTargetConfig) -> Result<Connected
 }
 
 #[cfg(windows)]
-pub(super) fn create_askpass_helper() -> Result<AskpassHelper, String> {
+pub(super) fn create_askpass_helper() -> Result<AskpassHelper, TargetsError> {
     let path = env::current_exe()
-        .map_err(|e| format!("Failed to resolve SkillPort SSH askpass helper path: {}", e))?;
+        .map_err(|e| TargetsError::io("Failed to resolve SkillPort SSH askpass helper path", e))?;
     Ok(AskpassHelper {
         path,
         remove_on_drop: false,
@@ -49,7 +51,7 @@ pub(super) fn create_askpass_helper() -> Result<AskpassHelper, String> {
 }
 
 #[cfg(not(windows))]
-pub(super) fn create_askpass_helper() -> Result<AskpassHelper, String> {
+pub(super) fn create_askpass_helper() -> Result<AskpassHelper, TargetsError> {
     sweep_stale_askpass_helpers()?;
     let extension = "sh";
     let pid = std::process::id();
@@ -64,10 +66,9 @@ pub(super) fn create_askpass_helper() -> Result<AskpassHelper, String> {
     ));
     let content = format!("#!/bin/sh\nprintf '%s' \"${}\"\n", SSH_PASSWORD_ENV);
     fs::write(&path, content).map_err(|e| {
-        format!(
-            "Failed to create SSH askpass helper '{}': {}",
-            path.display(),
-            e
+        TargetsError::io(
+            format!("Failed to create SSH askpass helper '{}'", path.display()),
+            e,
         )
     })?;
     set_askpass_permissions(&path)?;
@@ -87,7 +88,7 @@ pub(super) fn current_unix_timestamp_secs() -> u64 {
 }
 
 #[cfg(not(windows))]
-pub(super) fn sweep_stale_askpass_helpers() -> Result<(), String> {
+pub(super) fn sweep_stale_askpass_helpers() -> Result<(), TargetsError> {
     sweep_stale_askpass_helpers_in(&env::temp_dir(), std::time::SystemTime::now())
 }
 
@@ -95,15 +96,17 @@ pub(super) fn sweep_stale_askpass_helpers() -> Result<(), String> {
 pub(super) fn sweep_stale_askpass_helpers_in(
     temp_dir: &PathBuf,
     now: std::time::SystemTime,
-) -> Result<(), String> {
+) -> Result<(), TargetsError> {
     let entries = match fs::read_dir(temp_dir) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => {
-            return Err(format!(
-                "Failed to inspect SSH askpass temp directory '{}': {}",
-                temp_dir.display(),
-                error
+            return Err(TargetsError::io(
+                format!(
+                    "Failed to inspect SSH askpass temp directory '{}'",
+                    temp_dir.display()
+                ),
+                error,
             ))
         }
     };
@@ -144,23 +147,24 @@ pub(super) fn should_remove_stale_askpass_helper(
 }
 
 #[cfg(unix)]
-pub(super) fn set_askpass_permissions(path: &PathBuf) -> Result<(), String> {
+pub(super) fn set_askpass_permissions(path: &PathBuf) -> Result<(), TargetsError> {
     use std::os::unix::fs::PermissionsExt;
     let mut permissions = fs::metadata(path)
         .map_err(|e| {
-            format!(
-                "Failed to inspect askpass helper '{}': {}",
-                path.display(),
-                e
+            TargetsError::io(
+                format!("Failed to inspect askpass helper '{}'", path.display()),
+                e,
             )
         })?
         .permissions();
     permissions.set_mode(0o700);
     fs::set_permissions(path, permissions).map_err(|e| {
-        format!(
-            "Failed to set askpass helper permissions '{}': {}",
-            path.display(),
-            e
+        TargetsError::io(
+            format!(
+                "Failed to set askpass helper permissions '{}'",
+                path.display()
+            ),
+            e,
         )
     })
 }

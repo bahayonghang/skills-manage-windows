@@ -23,12 +23,16 @@ fn target_kind_string(kind: TargetKind) -> &'static str {
 
 #[tauri::command]
 pub async fn list_targets(state: State<'_, AppState>) -> Result<Vec<TargetSummary>, String> {
-    state.targets.list_targets(&state.db).await
+    state
+        .targets
+        .list_targets(&state.db)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn list_wsl_distributions() -> Result<Vec<WslDistributionSummary>, String> {
-    list_wsl_distributions_impl().await
+    list_wsl_distributions_impl().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -37,7 +41,9 @@ pub async fn create_ssh_target(
     request: CreateSshTargetRequest,
 ) -> Result<TargetSummary, String> {
     let log_request = request.clone();
-    let result = create_ssh_target_impl(&state.targets, &state.db, request).await;
+    let result = create_ssh_target_impl(&state.targets, &state.db, request)
+        .await
+        .map_err(|e| e.to_string());
     match &result {
         Ok(target) => {
             record_operation_log_best_effort(
@@ -87,7 +93,9 @@ pub async fn update_ssh_target(
     request: UpdateSshTargetRequest,
 ) -> Result<TargetSummary, String> {
     let log_request = request.clone();
-    let result = update_ssh_target_impl(&state.targets, &state.db, request).await;
+    let result = update_ssh_target_impl(&state.targets, &state.db, request)
+        .await
+        .map_err(|e| e.to_string());
     match &result {
         Ok(target) => {
             record_operation_log_best_effort(
@@ -137,7 +145,9 @@ pub async fn test_ssh_target(
         .label
         .filter(|label| !label.trim().is_empty())
         .unwrap_or_else(|| target_id.clone());
-    let result = test_ssh_target_impl(&state.targets, &state.db, request).await;
+    let result = test_ssh_target_impl(&state.targets, &state.db, request)
+        .await
+        .map_err(|e| e.to_string());
     match &result {
         Ok(test_result) => {
             let status = if test_result.ok {
@@ -179,7 +189,9 @@ pub async fn update_ssh_target_password(
     password: String,
 ) -> Result<SshTargetTestResult, String> {
     let result =
-        update_ssh_target_password_impl(&state.targets, &state.db, &target_id, &password).await;
+        update_ssh_target_password_impl(&state.targets, &state.db, &target_id, &password)
+            .await
+            .map_err(|e| e.to_string());
     match &result {
         Ok(test_result) => {
             let status = if test_result.ok {
@@ -225,7 +237,9 @@ pub async fn create_wsl_target(
     request: CreateWslTargetRequest,
 ) -> Result<TargetSummary, String> {
     let log_request = request.clone();
-    let result = create_wsl_target_impl(&state.targets, &state.db, request).await;
+    let result = create_wsl_target_impl(&state.targets, &state.db, request)
+        .await
+        .map_err(|e| e.to_string());
     match &result {
         Ok(target) => {
             record_operation_log_best_effort(
@@ -271,7 +285,9 @@ pub async fn update_wsl_target(
     request: UpdateWslTargetRequest,
 ) -> Result<TargetSummary, String> {
     let log_request = request.clone();
-    let result = update_wsl_target_impl(&state.targets, &state.db, request).await;
+    let result = update_wsl_target_impl(&state.targets, &state.db, request)
+        .await
+        .map_err(|e| e.to_string());
     match &result {
         Ok(target) => {
             record_operation_log_best_effort(
@@ -317,7 +333,9 @@ pub async fn test_wsl_target(
         .label
         .filter(|label| !label.trim().is_empty())
         .unwrap_or_else(|| target_id.clone());
-    let result = test_wsl_target_impl(&state.db, request).await;
+    let result = test_wsl_target_impl(&state.db, request)
+        .await
+        .map_err(|e| e.to_string());
     match &result {
         Ok(test_result) => {
             let status = if test_result.ok {
@@ -354,7 +372,9 @@ pub async fn test_wsl_target(
 
 #[tauri::command]
 pub async fn delete_target(state: State<'_, AppState>, target_id: String) -> Result<(), String> {
-    let result = delete_target_impl(&state.targets, &state.db, &target_id).await;
+    let result = delete_target_impl(&state.targets, &state.db, &target_id)
+        .await
+        .map_err(|e| e.to_string());
     let status = if result.is_ok() {
         "succeeded"
     } else {
@@ -391,7 +411,9 @@ pub async fn set_active_target(
 ) -> Result<TargetSummary, String> {
     use tauri::Emitter;
 
-    let result = set_active_target_impl(&state.targets, &state.db, &target_id).await;
+    let result = set_active_target_impl(&state.targets, &state.db, &target_id)
+        .await
+        .map_err(|e| e.to_string());
     match &result {
         Ok(target) => {
             record_operation_log_best_effort(
@@ -435,5 +457,7 @@ pub async fn set_active_target(
 
 #[tauri::command]
 pub async fn get_active_target(state: State<'_, AppState>) -> Result<TargetSummary, String> {
-    get_active_target_impl(&state.targets, &state.db).await
+    get_active_target_impl(&state.targets, &state.db)
+        .await
+        .map_err(|e| e.to_string())
 }

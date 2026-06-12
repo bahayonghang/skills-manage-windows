@@ -184,7 +184,7 @@ pub async fn detect_agents_impl(pool: &DbPool) -> Result<Vec<AgentWithStatus>, S
 async fn is_remote_agent_detected(
     connection: &ConnectedRemoteTarget,
     global_skills_dir: &str,
-) -> Result<bool, String> {
+) -> Result<bool, crate::targets::TargetsError> {
     if connection.exists(global_skills_dir).await? {
         return Ok(true);
     }
@@ -200,11 +200,15 @@ pub async fn detect_remote_agents_impl(
     active_target: &ActiveTarget,
 ) -> Result<Vec<AgentWithStatus>, String> {
     let agents = db::get_all_agents(pool).await.map_err(|e| e.to_string())?;
-    let connection = connect_remote_target(active_target).await?;
+    let connection = connect_remote_target(active_target)
+        .await
+        .map_err(|e| e.to_string())?;
     let mut result = Vec::with_capacity(agents.len());
 
     for agent in agents {
-        let is_detected = is_remote_agent_detected(&connection, &agent.global_skills_dir).await?;
+        let is_detected = is_remote_agent_detected(&connection, &agent.global_skills_dir)
+            .await
+            .map_err(|e| e.to_string())?;
         let _ = db::update_agent_detected(pool, &agent.id, is_detected).await;
         result.push(agent_to_with_status_with_detected(agent, is_detected));
     }

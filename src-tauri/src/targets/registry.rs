@@ -39,10 +39,10 @@ impl TargetRegistry {
         &self,
         credential_key: &str,
         password: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), TargetsError> {
         self.session_passwords
             .lock()
-            .map_err(|_| "Failed to update SSH password session cache.".to_string())?
+            .map_err(|_| TargetsError::SessionCacheUnavailable)?
             .insert(credential_key.to_string(), password.to_string());
         Ok(())
     }
@@ -105,7 +105,7 @@ impl TargetRegistry {
                         if self.get_session_password(&credential_key).is_none() {
                             return Some(TargetCredentialState {
                                 status: TargetCredentialStatus::Unreadable,
-                                error: Some(error),
+                                error: Some(error.to_string()),
                             });
                         }
                     }
@@ -187,14 +187,14 @@ impl TargetRegistry {
     pub(super) fn save_target_password(
         &self,
         target: &mut RemoteTargetConfig,
-    ) -> Result<TargetCredentialState, String> {
+    ) -> Result<TargetCredentialState, TargetsError> {
         let credential_key = credential_key_for_password_target(target)
-            .ok_or_else(|| "Password target is missing its credential key.".to_string())?;
+            .ok_or(TargetsError::MissingCredentialKey)?;
         let password = target
             .password
             .as_deref()
             .filter(|value| !value.is_empty())
-            .ok_or_else(|| "Password is required for password authentication.".to_string())?
+            .ok_or(TargetsError::PasswordRequired)?
             .to_string();
 
         let fallback_to_protected =
@@ -248,7 +248,7 @@ impl TargetRegistry {
     pub(super) fn delete_target_password(
         &self,
         target: &mut RemoteTargetConfig,
-    ) -> Result<(), String> {
+    ) -> Result<(), TargetsError> {
         let Some(credential_key) = credential_key_for_password_target(target) else {
             return Ok(());
         };
@@ -256,7 +256,7 @@ impl TargetRegistry {
         target.protected_password = None;
         self.credential_backend
             .delete_credential(&credential_key)
-            .map_err(|error| error.message())
+            .map_err(|error| TargetsError::CredentialStore(error.message()))
     }
 
     pub(super) fn target_summary(
@@ -321,7 +321,7 @@ impl TargetRegistry {
         }
     }
 
-    pub async fn list_targets(&self, local_db: &DbPool) -> Result<Vec<TargetSummary>, String> {
+    pub async fn list_targets(&self, local_db: &DbPool) -> Result<Vec<TargetSummary>, TargetsError> {
         let active_id = active_target_id(local_db).await?;
         let mut targets = vec![TargetSummary {
             id: LOCAL_TARGET_ID.to_string(),
@@ -353,7 +353,7 @@ impl TargetRegistry {
         Ok(targets)
     }
 
-    pub async fn active_target(&self, local_db: &DbPool) -> Result<ActiveTarget, String> {
+    pub async fn active_target(&self, local_db: &DbPool) -> Result<ActiveTarget, TargetsError> {
         let active_id = active_target_id(local_db).await?;
         self.target_by_id(local_db, &active_id)
             .await
@@ -361,10 +361,7 @@ impl TargetRegistry {
                 if active_id == LOCAL_TARGET_ID {
                     error
                 } else {
-                    format!(
-                        "Active target '{}' no longer exists. Switch back to Local.",
-                        active_id
-                    )
+                    TargetsError::ActiveTargetMissing(active_id.clone())
                 }
             })
     }
@@ -373,7 +370,7 @@ impl TargetRegistry {
         &self,
         local_db: &DbPool,
         target_id: &str,
-    ) -> Result<ActiveTarget, String> {
+    ) -> Result<ActiveTarget, TargetsError> {
         let target_id = target_id.trim();
         if target_id == LOCAL_TARGET_ID {
             return Ok(ActiveTarget::Local);
@@ -399,10 +396,10 @@ impl TargetRegistry {
             return Ok(ActiveTarget::Wsl(Box::new(target)));
         }
 
-        Err(format!("Target '{}' not found", target_id))
+        Err(TargetsError::TargetNotFound(target_id.to_string()))
     }
 
-    pub async fn active_db(&self, local_db: &DbPool) -> Result<DbPool, String> {
+    pub async fn active_db(&self, local_db: &DbPool) -> Result<DbPool, TargetsError> {
         match self.active_target(local_db).await? {
             ActiveTarget::Local => Ok(local_db.clone()),
             ActiveTarget::Ssh(target) => self.remote_db(&target).await,
@@ -410,7 +407,7 @@ impl TargetRegistry {
         }
     }
 
-    pub async fn remote_db(&self, target: &RemoteTargetConfig) -> Result<DbPool, String> {
+    pub async fn remote_db(&self, target: &RemoteTargetConfig) -> Result<DbPool, TargetsError> {
         self.remote_db_for(&target.id, &target.remote_home).await
     }
 
@@ -418,7 +415,7 @@ impl TargetRegistry {
         &self,
         target_id: &str,
         remote_home: &str,
-    ) -> Result<DbPool, String> {
+    ) -> Result<DbPool, TargetsError> {
         match self.pools.lock() {
             Ok(pools) => {
                 if let Some(pool) = pools.get(target_id) {
@@ -433,19 +430,19 @@ impl TargetRegistry {
         let db_path = remote_cache_db_path(target_id)?;
         if let Some(parent) = db_path.parent() {
             fs::create_dir_all(parent).map_err(|e| {
-                format!(
-                    "Failed to create target cache directory '{}': {}",
-                    parent.display(),
-                    e
+                TargetsError::io(
+                    format!(
+                        "Failed to create target cache directory '{}'",
+                        parent.display()
+                    ),
+                    e,
                 )
             })?;
         }
 
         let db_path = db_path.to_string_lossy().into_owned();
-        let pool = db::create_pool(&db_path).await.map_err(|e| e.to_string())?;
-        db::init_database_for_remote_home(&pool, remote_home)
-            .await
-            .map_err(|e| e.to_string())?;
+        let pool = db::create_pool(&db_path).await?;
+        db::init_database_for_remote_home(&pool, remote_home).await?;
 
         match self.pools.lock() {
             Ok(mut pools) => {

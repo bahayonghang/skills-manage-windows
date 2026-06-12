@@ -297,6 +297,7 @@ pub async fn batch_install_to_agents(
             match connect_remote_target(&active_target).await {
                 Ok(connection) => Some(connection),
                 Err(error) => {
+                    let error = error.to_string();
                     failed.extend(agent_ids.iter().map(|agent_id| FailedInstall {
                         agent_id: agent_id.clone(),
                         error: error.clone(),
@@ -475,6 +476,7 @@ pub async fn batch_install_central_skills(
         let connection = match connect_remote_target(&active_target).await {
             Ok(connection) => connection,
             Err(error) => {
+                let error = error.to_string();
                 for skill_id in &skill_ids {
                     for agent_id in &agent_ids {
                         failed.push(CentralBatchInstallFailure {

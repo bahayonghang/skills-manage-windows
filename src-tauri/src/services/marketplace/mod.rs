@@ -539,15 +539,15 @@ pub async fn install_marketplace_skill_impl(
             let skill_md_path = remote_join(&skill_dir, "SKILL.md");
             let connection = connect_remote_target(&active_target)
                 .await
-                .map_err(MarketplaceError::Remote)?;
+                .map_err(|e| MarketplaceError::Remote(e.to_string()))?;
             connection
                 .mkdir_p(&skill_dir)
                 .await
-                .map_err(MarketplaceError::Remote)?;
+                .map_err(|e| MarketplaceError::Remote(e.to_string()))?;
             connection
                 .write_file(&skill_md_path, content.as_bytes())
                 .await
-                .map_err(MarketplaceError::Remote)?;
+                .map_err(|e| MarketplaceError::Remote(e.to_string()))?;
         }
     }
 

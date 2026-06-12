@@ -49,7 +49,9 @@ impl CentralFs {
         match target {
             ActiveTarget::Local => Ok(Self::Local),
             ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-                let conn = connect_remote_target(&target).await?;
+                let conn = connect_remote_target(&target)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 Ok(Self::Remote(Box::new(conn)))
             }
         }
@@ -381,6 +383,7 @@ async fn refresh_copy_install_remote(
     conn.run_script(REMOTE_REFRESH_COPY_SCRIPT, &[source_dir, target, skill_id])
         .await
         .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -458,7 +461,7 @@ fn hash_local_directory(root: &Path) -> Result<String, String> {
 /// [`hash_local_directory`]. Symlinks and special entries are skipped, only
 /// regular files contribute to the hash.
 async fn hash_remote_directory(conn: &ConnectedRemoteTarget, root: &str) -> Result<String, String> {
-    if !conn.exists(root).await? {
+    if !conn.exists(root).await.map_err(|e| e.to_string())? {
         // Treat a missing canonical directory as an empty hash so the upper
         // layer can still mark this skill as `update_available`.
         return Ok(hash_entries(Vec::new()));
@@ -469,7 +472,10 @@ async fn hash_remote_directory(conn: &ConnectedRemoteTarget, root: &str) -> Resu
     queue.push_back(root.to_string());
 
     while let Some(current) = queue.pop_front() {
-        let dir_entries = conn.list_dir(&current).await?;
+        let dir_entries = conn
+            .list_dir(&current)
+            .await
+            .map_err(|e| e.to_string())?;
         for entry in dir_entries {
             let child_path = format!("{}/{}", current.trim_end_matches('/'), entry.name);
             match entry.file_type.as_str() {
@@ -482,7 +488,10 @@ async fn hash_remote_directory(conn: &ConnectedRemoteTarget, root: &str) -> Resu
                             child_path
                         ));
                     }
-                    let bytes = conn.read_file(&child_path).await?;
+                    let bytes = conn
+                        .read_file(&child_path)
+                        .await
+                        .map_err(|e| e.to_string())?;
                     let digest = Sha256::digest(&bytes);
                     entries.push((relative, hex_digest(&digest)));
                 }
@@ -526,7 +535,7 @@ async fn hash_remote_directories(
                     hashes.insert(root.clone(), hash);
                 }
             }
-            Err(error) if error.contains(REMOTE_HASH_UNSUPPORTED_EXIT_CODE) => {
+            Err(error) if error.to_string().contains(REMOTE_HASH_UNSUPPORTED_EXIT_CODE) => {
                 tracing::warn!(
                     error = %error,
                     "Remote target has no sha256 tool; falling back to per-file SSH hashing"
@@ -538,7 +547,7 @@ async fn hash_remote_directories(
                     );
                 }
             }
-            Err(error) => return Err(error),
+            Err(error) => return Err(error.to_string()),
         }
     }
     Ok(hashes)

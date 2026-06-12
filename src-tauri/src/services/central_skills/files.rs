@@ -65,11 +65,11 @@ pub async fn read_skill_content_for_target_impl(
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let connection = connect_remote_target(&active_target)
                 .await
-                .map_err(CentralSkillsError::Remote)?;
+                .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
             let bytes = connection
                 .read_file(&skill.file_path)
                 .await
-                .map_err(CentralSkillsError::Remote)?;
+                .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
             String::from_utf8(bytes).map_err(|e| CentralSkillsError::RemoteFileNotUtf8 {
                 path: skill.file_path.clone(),
                 source: e,
@@ -101,7 +101,7 @@ pub async fn read_file_by_path_for_target_impl(
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let connection = connect_remote_target(&active_target)
                 .await
-                .map_err(CentralSkillsError::Remote)?;
+                .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
             read_remote_file_by_path_impl(&connection, path, &access_root).await
         }
     }
@@ -144,7 +144,7 @@ pub async fn list_directory_tree_for_target_impl(
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let connection = connect_remote_target(&active_target)
                 .await
-                .map_err(CentralSkillsError::Remote)?;
+                .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
             list_remote_directory_tree_impl(&connection, path, &access_root).await
         }
     }
@@ -237,7 +237,7 @@ async fn list_remote_directory_tree_impl(
     let info = connection
         .inspect_path(&allowed_path)
         .await
-        .map_err(CentralSkillsError::Remote)?
+        .map_err(|e| CentralSkillsError::Remote(e.to_string()))?
         .ok_or_else(|| CentralSkillsError::RemotePathMissing(allowed_path.clone()))?;
     if info.file_type == "symlink" {
         return Err(CentralSkillsError::RemoteSymlinkTraversalRefused(
@@ -286,7 +286,7 @@ async fn fetch_remote_directory_entries(
     let entries = connection
         .list_dir(path)
         .await
-        .map_err(CentralSkillsError::Remote)?;
+        .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
     if entries.len() > budget.remaining_entries {
         return Err(CentralSkillsError::TreeEntriesExceeded {
             path: path.to_string(),
@@ -390,7 +390,7 @@ async fn read_remote_file_by_path_impl(
     let info = connection
         .inspect_path(&allowed_path)
         .await
-        .map_err(CentralSkillsError::Remote)?
+        .map_err(|e| CentralSkillsError::Remote(e.to_string()))?
         .ok_or_else(|| CentralSkillsError::RemotePathMissing(allowed_path.clone()))?;
     if info.file_type == "symlink" {
         return Err(CentralSkillsError::RemoteSymlinkReadRefused(allowed_path));
@@ -401,7 +401,7 @@ async fn read_remote_file_by_path_impl(
     let bytes = connection
         .read_file(&allowed_path)
         .await
-        .map_err(CentralSkillsError::Remote)?;
+        .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
     budget
         .reject_file_read_size(&allowed_path, bytes.len() as u64)
         .map_err(CentralSkillsError::Budget)?;

@@ -26,7 +26,7 @@ pub(super) async fn create_remote_preview_workspace(
             &[archive_url.as_str(), crate::commands::APP_USER_AGENT],
         )
         .await
-        .map_err(GithubImportError::Remote)?;
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
     let remote_workspace_dir = output
         .lines()
         .last()
@@ -188,11 +188,11 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
     let central_root = central.global_skills_dir;
     let connection = connect_remote_target(active_target)
         .await
-        .map_err(GithubImportError::Remote)?;
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
     connection
         .mkdir_p(&central_root)
         .await
-        .map_err(GithubImportError::Remote)?;
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
 
     let resolved = resolve_repo_source(repo_url, auth).await?;
     let workspace =
@@ -248,7 +248,7 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
         if connection
             .exists(&target_dir)
             .await
-            .map_err(GithubImportError::Remote)?
+            .map_err(|e| GithubImportError::Remote(e.to_string()))?
             && op.resolution != DuplicateResolution::Overwrite
         {
             for path in created_paths.iter().rev() {
@@ -279,7 +279,7 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
             for path in created_paths.iter().rev() {
                 let _ = connection.remove_tree(path).await;
             }
-            return Err(GithubImportError::Remote(error));
+            return Err(GithubImportError::Remote(error.to_string()));
         }
         created_stages.pop();
 
@@ -478,11 +478,11 @@ pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
     };
     let connection = connect_remote_target(&active_target)
         .await
-        .map_err(GithubImportError::Remote)?;
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
     let bytes = connection
         .read_file(&remote_join(&workspace.remote_repo_dir, &skill_md_path))
         .await
-        .map_err(GithubImportError::Remote)?;
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
     ResourceBudget::default_skill()
         .reject_file_read_size(&skill_md_path, bytes.len() as u64)
         .map_err(GithubImportError::Budget)?;

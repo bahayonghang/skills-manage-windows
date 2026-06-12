@@ -164,7 +164,7 @@ async fn ensure_remote_project_dir(
     match connection
         .inspect_path(project_path)
         .await
-        .map_err(InstallationError::Remote)?
+        .map_err(|e| InstallationError::Remote(e.to_string()))?
     {
         Some(info) if info.file_type == "dir" => Ok(()),
         Some(_) => Err(InstallationError::RemoteProjectPathNotDirectory(
@@ -184,7 +184,7 @@ async fn ensure_remote_project_target_replaceable(
     let info = connection
         .inspect_path(target_path)
         .await
-        .map_err(InstallationError::Remote)?;
+        .map_err(|e| InstallationError::Remote(e.to_string()))?;
     match classify_remote_project_existing_target(target_path, method, info.as_ref()) {
         RemoteProjectExistingTargetAction::UseEmptyPath
         | RemoteProjectExistingTargetAction::ReplaceSymlink => Ok(()),
@@ -273,7 +273,7 @@ pub(crate) async fn install_central_skill_to_remote_project_outcome_impl(
             ],
         )
         .await
-        .map_err(InstallationError::Remote)
+        .map_err(|e| InstallationError::Remote(e.to_string()))
         .map(|_| {
             InstallOutcome::Installed(InstallResult {
                 symlink_path: paths.target_path,

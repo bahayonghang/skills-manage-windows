@@ -281,7 +281,7 @@ async fn remove_remote_installation_path(
     connection
         .remove_tree(&path)
         .await
-        .map_err(CentralSkillsError::Remote)
+        .map_err(|e| CentralSkillsError::Remote(e.to_string()))
 }
 
 pub async fn delete_central_skill_remote_impl(
@@ -328,7 +328,7 @@ pub async fn delete_central_skill_remote_impl(
         .collect();
     let connection = connect_remote_target(active_target)
         .await
-        .map_err(CentralSkillsError::Remote)?;
+        .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
 
     let mut removed_agent_ids = Vec::new();
     let mut retained_agent_ids = Vec::new();
@@ -355,7 +355,7 @@ pub async fn delete_central_skill_remote_impl(
     connection
         .remove_tree(&central_path)
         .await
-        .map_err(CentralSkillsError::Remote)?;
+        .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
     db::delete_skill(pool, skill_id).await?;
 
     Ok(DeleteCentralSkillResult {

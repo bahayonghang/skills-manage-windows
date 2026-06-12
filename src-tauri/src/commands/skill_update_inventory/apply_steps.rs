@@ -350,7 +350,9 @@ async fn remove_deleted_platform_copy_remote(
         ));
     }
     let path = ensure_remote_child_path(&agent.global_skills_dir, path, &removal.agent_id)?;
-    let connection = connect_remote_target(active_target).await?;
+    let connection = connect_remote_target(active_target)
+        .await
+        .map_err(|e| e.to_string())?;
     match connection.remove_tree(&path).await {
         Ok(()) => {
             db::delete_skill_installation(pool, &removal.skill_id, &removal.agent_id)
@@ -358,13 +360,13 @@ async fn remove_deleted_platform_copy_remote(
                 .map_err(|e| e.to_string())?;
             Ok(())
         }
-        Err(error) if error.to_ascii_lowercase().contains("no such file") => {
+        Err(error) if error.to_string().to_ascii_lowercase().contains("no such file") => {
             db::delete_skill_installation(pool, &removal.skill_id, &removal.agent_id)
                 .await
                 .map_err(|e| e.to_string())?;
             Ok(())
         }
-        Err(error) => Err(error),
+        Err(error) => Err(error.to_string()),
     }
 }
 

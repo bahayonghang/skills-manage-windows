@@ -1,24 +1,23 @@
 use super::*;
 
-pub async fn list_wsl_distributions_impl() -> Result<Vec<WslDistributionSummary>, String> {
+pub async fn list_wsl_distributions_impl() -> Result<Vec<WslDistributionSummary>, TargetsError> {
     #[cfg(not(windows))]
     {
-        Err("WSL distributions can only be discovered on Windows.".to_string())
+        Err(TargetsError::WslDiscoveryWindowsOnly)
     }
 
     #[cfg(windows)]
     {
         let output = wsl_distribution_list_command()
             .output()
-            .map_err(|e| format!("Failed to start wsl.exe: {}", e))?;
+            .map_err(|e| TargetsError::io("Failed to start wsl.exe", e))?;
         if !output.status.success() {
             let detail = normalize_wsl_list_output(&output.stderr);
             let detail = detail.trim();
             return Err(if detail.is_empty() {
-                "Failed to list WSL distributions. Verify WSL is installed with `wsl.exe -l -v`."
-                    .to_string()
+                TargetsError::WslListFailed
             } else {
-                format!("Failed to list WSL distributions: {}", detail)
+                TargetsError::WslListFailedDetail(detail.to_string())
             });
         }
 

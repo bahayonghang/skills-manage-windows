@@ -134,7 +134,7 @@ pub async fn apply_local_remote_sync_impl(
     let plan = build_sync_plan(active_target.clone(), repo_path).await?;
     let connection = connect_remote_target(&active_target)
         .await
-        .map_err(LocalRemoteSyncError::Remote)?;
+        .map_err(|e| LocalRemoteSyncError::Remote(e.to_string()))?;
     let mut result = LocalRemoteSyncApplyResult {
         target_id: plan.preview.target_id.clone(),
         target_label: plan.preview.target_label.clone(),
@@ -232,7 +232,7 @@ async fn build_sync_plan(
     .await?;
     let connection = connect_remote_target(&active_target)
         .await
-        .map_err(LocalRemoteSyncError::Remote)?;
+        .map_err(|e| LocalRemoteSyncError::Remote(e.to_string()))?;
     let remote_home = connection.remote_home().trim_end_matches('/').to_string();
     let repo_remote_root = remote_join(
         &remote_join(&remote_home, ".skillsmanage/repos"),
@@ -652,7 +652,7 @@ fn remote_snapshot_hash(
         .join("\n");
     let output = connection
         .run_command_with_stdin_bytes(&remote_hash_command(remote_root), manifest.as_bytes())
-        .map_err(LocalRemoteSyncError::Remote)?;
+        .map_err(|e| LocalRemoteSyncError::Remote(e.to_string()))?;
     let output = String::from_utf8_lossy(&output);
     parse_remote_hash_output(&output)
 }
@@ -731,7 +731,7 @@ fn apply_snapshot(
         .map(|_| ())
         .map_err(|error| LocalRemoteSyncError::RemoteApply {
             path: remote_path.to_string(),
-            message: error,
+            message: error.to_string(),
         })
 }
 
