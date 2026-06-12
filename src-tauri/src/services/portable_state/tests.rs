@@ -236,11 +236,15 @@ async fn export_counts_distinct_github_repositories_backing_central_skills() {
 #[test]
 fn parse_manifest_rejects_invalid_kind_and_version() {
     let invalid_kind = r#"{"kind":"other","version":1,"exportedAt":"","exportedFrom":{"app":"SkillPort"},"githubSources":[],"centralSkills":[],"unrestorableSkills":[]}"#;
-    assert!(parse_manifest(invalid_kind).unwrap_err().contains("kind"));
+    assert!(parse_manifest(invalid_kind)
+        .unwrap_err()
+        .to_string()
+        .contains("kind"));
 
     let invalid_version = r#"{"kind":"skillport/state-export","version":2,"exportedAt":"","exportedFrom":{"app":"SkillPort"},"githubSources":[],"centralSkills":[],"unrestorableSkills":[]}"#;
     assert!(parse_manifest(invalid_version)
         .unwrap_err()
+        .to_string()
         .contains("version"));
 }
 

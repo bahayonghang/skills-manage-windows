@@ -12,6 +12,7 @@ use crate::{
     },
 };
 
+use super::error::PortableStateError;
 use super::progress::{check_cancel, emit_portability_step};
 use super::types::{
     CancelFlag, ImportGroup, PortableCentralSkill, PortableGithubSource, PortableSkillTag, RepoKey,
@@ -31,13 +32,11 @@ pub(crate) async fn import_skillport_state_impl(
     resolutions: Vec<SkillportStateImportResolution>,
     app: Option<&AppHandle>,
     cancel: Option<&CancelFlag>,
-) -> Result<SkillportStateImportResult, String> {
+) -> Result<SkillportStateImportResult, PortableStateError> {
     if check_cancel(cancel).is_err() {
         return Ok(cancelled_import_result(manifest, 0, 0));
     }
-    let auth = github_import::github_direct_auth_from_secret_store(pool, secrets)
-        .await
-        .map_err(|e| e.to_string())?;
+    let auth = github_import::github_direct_auth_from_secret_store(pool, secrets).await?;
     if check_cancel(cancel).is_err() {
         return Ok(cancelled_import_result(manifest, 0, 0));
     }
@@ -215,7 +214,7 @@ fn mark_group_cancelled(
 pub(crate) async fn ensure_github_sources(
     pool: &DbPool,
     sources: &[PortableGithubSource],
-) -> Result<(usize, usize), String> {
+) -> Result<(usize, usize), PortableStateError> {
     let mut existing = existing_registry_identities(pool).await?;
     let mut seen_import_identities = HashSet::new();
     let mut added = 0;
@@ -245,8 +244,7 @@ pub(crate) async fn ensure_github_sources(
         .bind(source.is_enabled)
         .bind(&now)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
         existing.insert(identity);
         added += 1;
     }
@@ -258,7 +256,7 @@ pub(crate) async fn build_import_groups(
     pool: &DbPool,
     manifest: &SkillportStateManifest,
     resolutions: Vec<SkillportStateImportResolution>,
-) -> Result<(Vec<ImportGroup>, SkillportStateImportResult), String> {
+) -> Result<(Vec<ImportGroup>, SkillportStateImportResult), PortableStateError> {
     let resolution_map = resolutions
         .into_iter()
         .map(|resolution| {
@@ -277,8 +275,7 @@ pub(crate) async fn build_import_groups(
             .map(|skill| skill.id.clone())
             .collect::<Vec<_>>(),
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
     let mut grouped = HashMap::<RepoKey, ImportGroup>::new();
     let mut result = SkillportStateImportResult::default();
     let mut seen_skill_keys = HashSet::<SkillManifestKey>::new();
@@ -373,7 +370,7 @@ pub(crate) async fn restore_skill_tags(
     pool: &DbPool,
     skill_id: &str,
     tags: &[PortableSkillTag],
-) -> Result<usize, String> {
+) -> Result<usize, PortableStateError> {
     let mut tag_ids = Vec::new();
     for tag in tags {
         let created = db::create_skill_tag(
@@ -382,8 +379,7 @@ pub(crate) async fn restore_skill_tags(
             tag.description.as_deref(),
             tag.color.as_deref(),
         )
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
         tag_ids.push(created.id);
     }
 
@@ -399,7 +395,6 @@ pub(crate) async fn restore_skill_tags(
         None,
         None,
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
     Ok(tag_ids.len())
 }

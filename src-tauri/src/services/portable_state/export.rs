@@ -5,6 +5,7 @@ use tauri::AppHandle;
 
 use crate::db::{self, DbPool};
 
+use super::error::PortableStateError;
 use super::progress::{check_cancel, emit_portability_step};
 use super::types::{
     CancelFlag, ExportedFrom, PortableCentralSkill, PortableCentralSkillSource,
@@ -17,7 +18,7 @@ pub(crate) async fn export_skillport_state_impl(
     pool: &DbPool,
     app: Option<&AppHandle>,
     cancel: Option<&CancelFlag>,
-) -> Result<String, String> {
+) -> Result<String, PortableStateError> {
     check_cancel(cancel)?;
     let github_sources = export_github_sources(pool).await?;
     emit_portability_step(
@@ -29,23 +30,16 @@ pub(crate) async fn export_skillport_state_impl(
         None,
     );
     check_cancel(cancel)?;
-    let skills = db::get_central_skills(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let skills = db::get_central_skills(pool).await?;
     let skill_ids = skills
         .iter()
         .map(|skill| skill.id.clone())
         .collect::<Vec<_>>();
     let total_export_steps = skill_ids.len() + 3;
-    let mut assignments = db::get_skill_repository_assignments_for_skills(pool, &skill_ids)
-        .await
-        .map_err(|e| e.to_string())?;
-    let mut tags_by_skill = db::get_skill_tags_for_skills(pool, &skill_ids)
-        .await
-        .map_err(|e| e.to_string())?;
-    let unknown_repository = db::get_local_unknown_repository(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut assignments =
+        db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
+    let mut tags_by_skill = db::get_skill_tags_for_skills(pool, &skill_ids).await?;
+    let unknown_repository = db::get_local_unknown_repository(pool).await?;
     let mut central_skills = Vec::new();
     let mut unrestorable_skills = Vec::new();
     emit_portability_step(
@@ -122,18 +116,19 @@ pub(crate) async fn export_skillport_state_impl(
         Some("Serializing SkillPort state JSON"),
         None,
     );
-    serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())
+    serde_json::to_string_pretty(&manifest).map_err(PortableStateError::Json)
 }
 
-async fn export_github_sources(pool: &DbPool) -> Result<Vec<PortableGithubSource>, String> {
+async fn export_github_sources(
+    pool: &DbPool,
+) -> Result<Vec<PortableGithubSource>, PortableStateError> {
     let registry_rows = sqlx::query(
         "SELECT url, is_enabled
          FROM skill_registries
          WHERE source_type = 'github'",
     )
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
     let registry_enabled_by_identity = registry_rows
         .iter()
         .map(|row| {
@@ -157,8 +152,7 @@ async fn export_github_sources(pool: &DbPool) -> Result<Vec<PortableGithubSource
          ORDER BY lower(r.name)",
     )
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     let mut seen = HashSet::new();
     let mut sources = Vec::with_capacity(rows.len());

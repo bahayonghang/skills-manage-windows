@@ -8,6 +8,7 @@ use crate::{
     services::github_import,
 };
 
+use super::error::PortableStateError;
 use super::progress::{check_cancel, emit_portability_step};
 use super::types::{
     CancelFlag, PortableCentralSkillSource, RemoteCatalogEntry, RemoteCatalogInvalidCandidate,
@@ -21,16 +22,15 @@ use super::{
     repo_url_for_source,
 };
 
-pub(crate) fn parse_manifest(json: &str) -> Result<SkillportStateManifest, String> {
+pub(crate) fn parse_manifest(json: &str) -> Result<SkillportStateManifest, PortableStateError> {
     let manifest: SkillportStateManifest =
-        serde_json::from_str(json).map_err(|e| format!("Invalid SkillPort state JSON: {e}"))?;
+        serde_json::from_str(json).map_err(PortableStateError::InvalidManifestJson)?;
     if manifest.kind != EXPORT_KIND {
-        return Err("Unsupported SkillPort state export kind".to_string());
+        return Err(PortableStateError::UnsupportedExportKind);
     }
     if manifest.version != EXPORT_VERSION {
-        return Err(format!(
-            "Unsupported SkillPort state export version: {}",
-            manifest.version
+        return Err(PortableStateError::UnsupportedExportVersion(
+            manifest.version,
         ));
     }
     Ok(manifest)
@@ -42,7 +42,7 @@ pub(crate) async fn preview_skillport_state_import_impl(
     remote_catalog: Option<&HashMap<RepoKey, RemoteCatalogEntry>>,
     app: Option<&AppHandle>,
     cancel: Option<&CancelFlag>,
-) -> Result<SkillportStateImportPreview, String> {
+) -> Result<SkillportStateImportPreview, PortableStateError> {
     check_cancel(cancel)?;
     emit_portability_step(
         app,
@@ -61,8 +61,7 @@ pub(crate) async fn preview_skillport_state_import_impl(
             .map(|skill| skill.id.clone())
             .collect::<Vec<_>>(),
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
     let mut summary = SkillportStateImportPreviewSummary::default();
     let mut seen_source_identities = HashSet::new();
     let mut github_sources = Vec::new();
@@ -253,11 +252,9 @@ pub(crate) async fn build_remote_catalog(
     manifest: &SkillportStateManifest,
     app: Option<&AppHandle>,
     cancel: Option<&CancelFlag>,
-) -> Result<HashMap<RepoKey, RemoteCatalogEntry>, String> {
+) -> Result<HashMap<RepoKey, RemoteCatalogEntry>, PortableStateError> {
     check_cancel(cancel)?;
-    let auth = github_import::github_direct_auth_from_secret_store(pool, secrets)
-        .await
-        .map_err(|e| e.to_string())?;
+    let auth = github_import::github_direct_auth_from_secret_store(pool, secrets).await?;
     let mut repo_urls = HashMap::<RepoKey, String>::new();
     for source in manifest.central_skills.iter().map(|skill| &skill.source) {
         if source.source_type != "github" {

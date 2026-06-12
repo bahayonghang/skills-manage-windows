@@ -14,8 +14,8 @@ use crate::operation_log::{
 };
 use crate::services::portable_state::{
     build_remote_catalog, emit_portability_progress, export_skillport_state_impl,
-    import_skillport_state_impl, is_cancelled_error, parse_manifest,
-    preview_skillport_state_import_impl, PortabilityProgressUpdate,
+    import_skillport_state_impl, parse_manifest, preview_skillport_state_import_impl,
+    PortabilityProgressUpdate, PortableStateError,
 };
 use crate::AppState;
 
@@ -86,7 +86,8 @@ pub async fn export_skillport_state(
             .await;
         }
         Err(error) => {
-            let status = if is_cancelled_error(error) {
+            let error_text = error.to_string();
+            let status = if matches!(error, PortableStateError::Cancelled) {
                 SkillportStatePortabilityStatus::Cancelled
             } else {
                 SkillportStatePortabilityStatus::Failed
@@ -100,7 +101,7 @@ pub async fn export_skillport_state(
                     completed: 0,
                     message: None,
                     current_item: None,
-                    error: Some(error),
+                    error: Some(&error_text),
                 },
             );
             record_operation_log_best_effort(
@@ -113,13 +114,13 @@ pub async fn export_skillport_state(
                     "Failed to export portable SkillPort state",
                 )
                 .subject("state", "skillport", "SkillPort state")
-                .error(error)
+                .error(&error_text)
                 .duration_ms(started_at.elapsed().as_millis() as i64),
             )
             .await;
         }
     }
-    result
+    result.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -203,7 +204,8 @@ pub async fn preview_skillport_state_import(
             .await;
         }
         Err(error) => {
-            let status = if is_cancelled_error(error) {
+            let error_text = error.to_string();
+            let status = if matches!(error, PortableStateError::Cancelled) {
                 SkillportStatePortabilityStatus::Cancelled
             } else {
                 SkillportStatePortabilityStatus::Failed
@@ -217,7 +219,7 @@ pub async fn preview_skillport_state_import(
                     completed: 0,
                     message: None,
                     current_item: None,
-                    error: Some(error),
+                    error: Some(&error_text),
                 },
             );
             record_operation_log_best_effort(
@@ -230,13 +232,13 @@ pub async fn preview_skillport_state_import(
                     "Failed to preview portable SkillPort state import",
                 )
                 .subject("state", "skillport", "SkillPort state")
-                .error(error)
+                .error(&error_text)
                 .duration_ms(started_at.elapsed().as_millis() as i64),
             )
             .await;
         }
     }
-    result
+    result.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -339,7 +341,8 @@ pub async fn import_skillport_state(
             .await;
         }
         Err(error) => {
-            let status = if is_cancelled_error(error) {
+            let error_text = error.to_string();
+            let status = if matches!(error, PortableStateError::Cancelled) {
                 SkillportStatePortabilityStatus::Cancelled
             } else {
                 SkillportStatePortabilityStatus::Failed
@@ -353,7 +356,7 @@ pub async fn import_skillport_state(
                     completed: 0,
                     message: None,
                     current_item: None,
-                    error: Some(error),
+                    error: Some(&error_text),
                 },
             );
             record_operation_log_best_effort(
@@ -366,13 +369,13 @@ pub async fn import_skillport_state(
                     "Failed to import portable SkillPort state",
                 )
                 .subject("state", "skillport", "SkillPort state")
-                .error(error)
+                .error(&error_text)
                 .duration_ms(started_at.elapsed().as_millis() as i64),
             )
             .await;
         }
     }
-    result
+    result.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
