@@ -53,7 +53,8 @@ pub(crate) async fn apply_delete_missing_step(
             central_skills::delete_central_skills_remote_impl(pool, active_target, delete_missing)
                 .await
         }
-    };
+    }
+    .map_err(|e| e.to_string());
     match delete_outcome {
         Ok(batch) => {
             for ok in batch.succeeded {

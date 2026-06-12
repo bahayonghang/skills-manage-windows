@@ -516,7 +516,7 @@ async fn test_delete_central_skill_rejects_non_central_skill() {
         .await
         .unwrap_err();
 
-    assert!(error.contains("is not a Central skill"));
+    assert!(error.to_string().contains("is not a Central skill"));
 }
 
 #[tokio::test]
@@ -536,7 +536,7 @@ async fn test_delete_central_skill_rejects_path_outside_central_root() {
         .await
         .unwrap_err();
 
-    assert!(error.contains("outside Central Skills root"));
+    assert!(error.to_string().contains("outside Central Skills root"));
     assert!(outside_dir.exists());
     assert!(db::get_skill_by_id(&pool, "outside-skill")
         .await
@@ -907,7 +907,7 @@ async fn test_delete_skill_repository_rejects_unknown_repository() {
         .await
         .unwrap_err();
 
-    assert!(error.contains("cannot be deleted"));
+    assert!(error.to_string().contains("cannot be deleted"));
     assert!(
         db::get_skill_repository_by_id(&pool, db::LOCAL_UNKNOWN_REPOSITORY_ID)
             .await
@@ -1106,11 +1106,16 @@ async fn test_read_skill_content_file_not_found() {
 
 // ── Testable core implementations (without Tauri State) ───────────────────
 
-async fn get_central_skills_impl(pool: &SqlitePool) -> Result<Vec<SkillWithLinks>, String> {
+async fn get_central_skills_impl(
+    pool: &SqlitePool,
+) -> Result<Vec<SkillWithLinks>, CentralSkillsError> {
     super::get_central_skills_impl(pool).await
 }
 
-async fn get_skill_detail_impl(pool: &SqlitePool, skill_id: &str) -> Result<SkillDetail, String> {
+async fn get_skill_detail_impl(
+    pool: &SqlitePool,
+    skill_id: &str,
+) -> Result<SkillDetail, CentralSkillsError> {
     super::get_skill_detail_with_row_impl(pool, skill_id, None, None).await
 }
 

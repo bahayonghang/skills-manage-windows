@@ -2,12 +2,13 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool};
-use crate::fs_util::run_blocking_fs;
 use crate::services::resource_budget::ResourceBudget;
 use crate::targets::{
     connect_remote_target, remote_file_type_is_dir, ActiveTarget, ConnectedRemoteTarget,
 };
 
+use super::common::run_blocking_fs;
+use super::error::CentralSkillsError;
 use super::query::get_skill_detail_with_row_impl;
 use super::types::DirectoryTreeEntry;
 
@@ -32,12 +33,12 @@ impl DirectoryTreeBudget {
         }
     }
 
-    fn consume_entry(&mut self, path: &str) -> Result<(), String> {
+    fn consume_entry(&mut self, path: &str) -> Result<(), CentralSkillsError> {
         if self.remaining_entries == 0 {
-            return Err(format!(
-                "Refusing to traverse '{}': directory tree exceeds {} entries.",
-                path, self.limits.tree_entries
-            ));
+            return Err(CentralSkillsError::TreeEntriesExceeded {
+                path: path.to_string(),
+                limit: self.limits.tree_entries,
+            });
         }
         self.remaining_entries -= 1;
         Ok(())
@@ -48,10 +49,11 @@ pub async fn read_skill_content_for_target_impl(
     pool: &DbPool,
     active_target: ActiveTarget,
     skill_id: &str,
-) -> Result<String, String> {
+) -> Result<String, CentralSkillsError> {
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await?
-        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+        .await
+        .map_err(CentralSkillsError::Other)? // TODO(C3): typed repos passthrough
+        .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
 
     match active_target {
         ActiveTarget::Local => {
@@ -62,20 +64,24 @@ pub async fn read_skill_content_for_target_impl(
             .await
         }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-            let connection = connect_remote_target(&active_target).await?;
-            let bytes = connection.read_file(&skill.file_path).await?;
-            String::from_utf8(bytes).map_err(|e| {
-                format!(
-                    "Remote file '{}' is not valid UTF-8: {}",
-                    skill.file_path, e
-                )
+            let connection = connect_remote_target(&active_target)
+                .await
+                .map_err(CentralSkillsError::Remote)?;
+            let bytes = connection
+                .read_file(&skill.file_path)
+                .await
+                .map_err(CentralSkillsError::Remote)?;
+            String::from_utf8(bytes).map_err(|e| CentralSkillsError::RemoteFileNotUtf8 {
+                path: skill.file_path.clone(),
+                source: e,
             })
         }
     }
 }
 
-fn read_skill_file_content(path: &str) -> Result<String, String> {
-    std::fs::read_to_string(path).map_err(|e| format!("Failed to read '{}': {}", path, e))
+fn read_skill_file_content(path: &str) -> Result<String, CentralSkillsError> {
+    std::fs::read_to_string(path)
+        .map_err(|e| CentralSkillsError::io(format!("Failed to read '{}'", path), e))
 }
 
 pub async fn read_file_by_path_for_target_impl(
@@ -83,7 +89,7 @@ pub async fn read_file_by_path_for_target_impl(
     active_target: ActiveTarget,
     path: &str,
     access: &SkillPathAccessContext,
-) -> Result<String, String> {
+) -> Result<String, CentralSkillsError> {
     let access_root = resolve_skill_access_root(pool, access).await?;
     match active_target {
         ActiveTarget::Local => {
@@ -94,23 +100,34 @@ pub async fn read_file_by_path_for_target_impl(
             .await
         }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-            let connection = connect_remote_target(&active_target).await?;
+            let connection = connect_remote_target(&active_target)
+                .await
+                .map_err(CentralSkillsError::Remote)?;
             read_remote_file_by_path_impl(&connection, path, &access_root).await
         }
     }
 }
 
-pub(super) fn read_file_by_path_impl(path: &str, access_root: &str) -> Result<String, String> {
+pub(super) fn read_file_by_path_impl(
+    path: &str,
+    access_root: &str,
+) -> Result<String, CentralSkillsError> {
     let budget = ResourceBudget::default_skill();
     let resolved = resolve_local_allowed_path(access_root, path)?;
-    let metadata = std::fs::metadata(&resolved)
-        .map_err(|e| format!("Failed to inspect '{}': {}", resolved.display(), e))?;
+    let metadata = std::fs::metadata(&resolved).map_err(|e| {
+        CentralSkillsError::io(format!("Failed to inspect '{}'", resolved.display()), e)
+    })?;
     if !metadata.is_file() {
-        return Err(format!("Path is not a file: {}", resolved.display()));
+        return Err(CentralSkillsError::NotAFile(
+            resolved.display().to_string(),
+        ));
     }
-    budget.reject_file_read_size(&resolved.to_string_lossy(), metadata.len())?;
-    std::fs::read_to_string(&resolved)
-        .map_err(|e| format!("Failed to read '{}': {}", resolved.display(), e))
+    budget
+        .reject_file_read_size(&resolved.to_string_lossy(), metadata.len())
+        .map_err(CentralSkillsError::Budget)?;
+    std::fs::read_to_string(&resolved).map_err(|e| {
+        CentralSkillsError::io(format!("Failed to read '{}'", resolved.display()), e)
+    })
 }
 
 pub async fn list_directory_tree_for_target_impl(
@@ -118,7 +135,7 @@ pub async fn list_directory_tree_for_target_impl(
     active_target: ActiveTarget,
     path: &str,
     access: &SkillPathAccessContext,
-) -> Result<Vec<DirectoryTreeEntry>, String> {
+) -> Result<Vec<DirectoryTreeEntry>, CentralSkillsError> {
     let access_root = resolve_skill_access_root(pool, access).await?;
     match active_target {
         ActiveTarget::Local => {
@@ -129,7 +146,9 @@ pub async fn list_directory_tree_for_target_impl(
             .await
         }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-            let connection = connect_remote_target(&active_target).await?;
+            let connection = connect_remote_target(&active_target)
+                .await
+                .map_err(CentralSkillsError::Remote)?;
             list_remote_directory_tree_impl(&connection, path, &access_root).await
         }
     }
@@ -138,11 +157,13 @@ pub async fn list_directory_tree_for_target_impl(
 pub(super) fn list_directory_tree_impl(
     path: &str,
     access_root: &str,
-) -> Result<Vec<DirectoryTreeEntry>, String> {
+) -> Result<Vec<DirectoryTreeEntry>, CentralSkillsError> {
     let limits = ResourceBudget::default_skill();
     let directory = resolve_local_allowed_path(access_root, path)?;
     if !directory.is_dir() {
-        return Err(format!("Path is not a directory: {}", directory.display()));
+        return Err(CentralSkillsError::NotADirectory(
+            directory.display().to_string(),
+        ));
     }
     let mut budget = DirectoryTreeBudget::new(limits);
     list_directory_tree_impl_with_budget(&directory, 0, &mut budget)
@@ -152,24 +173,31 @@ fn list_directory_tree_impl_with_budget(
     directory: &Path,
     depth: usize,
     budget: &mut DirectoryTreeBudget,
-) -> Result<Vec<DirectoryTreeEntry>, String> {
+) -> Result<Vec<DirectoryTreeEntry>, CentralSkillsError> {
     if depth >= budget.limits.tree_depth {
-        return Err(format!(
-            "Refusing to traverse '{}': directory depth exceeds {}.",
-            directory.display(),
-            budget.limits.tree_depth
-        ));
+        return Err(CentralSkillsError::TreeDepthExceeded {
+            path: directory.display().to_string(),
+            limit: budget.limits.tree_depth,
+        });
     }
     let mut entries = Vec::new();
-    for entry in std::fs::read_dir(directory)
-        .map_err(|e| format!("Failed to list directory '{}': {}", directory.display(), e))?
-    {
-        let entry = entry
-            .map_err(|e| format!("Failed to read directory '{}': {}", directory.display(), e))?;
+    for entry in std::fs::read_dir(directory).map_err(|e| {
+        CentralSkillsError::io(
+            format!("Failed to list directory '{}'", directory.display()),
+            e,
+        )
+    })? {
+        let entry = entry.map_err(|e| {
+            CentralSkillsError::io(
+                format!("Failed to read directory '{}'", directory.display()),
+                e,
+            )
+        })?;
         let entry_path = entry.path();
         budget.consume_entry(&entry_path.to_string_lossy())?;
-        let metadata = std::fs::symlink_metadata(&entry_path)
-            .map_err(|e| format!("Failed to inspect '{}': {}", entry_path.display(), e))?;
+        let metadata = std::fs::symlink_metadata(&entry_path).map_err(|e| {
+            CentralSkillsError::io(format!("Failed to inspect '{}'", entry_path.display()), e)
+        })?;
         let file_type = if metadata.file_type().is_symlink() {
             "symlink".to_string()
         } else if metadata.is_dir() {
@@ -208,23 +236,20 @@ async fn list_remote_directory_tree_impl(
     connection: &ConnectedRemoteTarget,
     path: &str,
     access_root: &str,
-) -> Result<Vec<DirectoryTreeEntry>, String> {
+) -> Result<Vec<DirectoryTreeEntry>, CentralSkillsError> {
     let allowed_path = normalize_remote_allowed_path(access_root, path)?;
     let info = connection
         .inspect_path(&allowed_path)
-        .await?
-        .ok_or_else(|| format!("Remote path '{}' does not exist.", allowed_path))?;
+        .await
+        .map_err(CentralSkillsError::Remote)?
+        .ok_or_else(|| CentralSkillsError::RemotePathMissing(allowed_path.clone()))?;
     if info.file_type == "symlink" {
-        return Err(format!(
-            "Refusing to traverse remote symlink path '{}'.",
-            allowed_path
+        return Err(CentralSkillsError::RemoteSymlinkTraversalRefused(
+            allowed_path,
         ));
     }
     if !remote_file_type_is_dir(&info.file_type) {
-        return Err(format!(
-            "Remote path '{}' is not a directory.",
-            allowed_path
-        ));
+        return Err(CentralSkillsError::RemotePathNotDirectory(allowed_path));
     }
 
     let mut budget = DirectoryTreeBudget::new(ResourceBudget::default_skill());
@@ -236,10 +261,10 @@ async fn list_remote_directory_tree_impl(
         root_entries.iter_mut().map(|entry| (1, entry)).collect();
     while let Some((depth, entry)) = queue.pop_front() {
         if depth >= budget.limits.tree_depth {
-            return Err(format!(
-                "Refusing to traverse '{}': directory depth exceeds {}.",
-                entry.path, budget.limits.tree_depth
-            ));
+            return Err(CentralSkillsError::TreeDepthExceeded {
+                path: entry.path.clone(),
+                limit: budget.limits.tree_depth,
+            });
         }
         if entry.file_type == "dir" {
             let mut children =
@@ -261,13 +286,16 @@ async fn fetch_remote_directory_entries(
     connection: &ConnectedRemoteTarget,
     path: &str,
     budget: &mut DirectoryTreeBudget,
-) -> Result<Vec<DirectoryTreeEntry>, String> {
-    let entries = connection.list_dir(path).await?;
+) -> Result<Vec<DirectoryTreeEntry>, CentralSkillsError> {
+    let entries = connection
+        .list_dir(path)
+        .await
+        .map_err(CentralSkillsError::Remote)?;
     if entries.len() > budget.remaining_entries {
-        return Err(format!(
-            "Refusing to traverse '{}': directory tree exceeds {} entries.",
-            path, budget.limits.tree_entries
-        ));
+        return Err(CentralSkillsError::TreeEntriesExceeded {
+            path: path.to_string(),
+            limit: budget.limits.tree_entries,
+        });
     }
     budget.remaining_entries -= entries.len();
     let mut results = Vec::with_capacity(entries.len());
@@ -307,9 +335,9 @@ pub async fn open_in_file_manager_for_target_impl(
     active_target: ActiveTarget,
     path: &str,
     access: &SkillPathAccessContext,
-) -> Result<(), String> {
+) -> Result<(), CentralSkillsError> {
     if active_target.is_remote_like() {
-        return Err("Remote paths cannot be opened in the local file manager. Copy the remote path instead.".to_string());
+        return Err(CentralSkillsError::RemoteOpenInFileManagerUnsupported);
     }
     let access_root = resolve_skill_access_root(pool, access).await?;
     open_in_file_manager_checked_impl(path, &access_root)
@@ -318,21 +346,23 @@ pub async fn open_in_file_manager_for_target_impl(
 pub(super) fn open_in_file_manager_checked_impl(
     path: &str,
     access_root: &str,
-) -> Result<(), String> {
+) -> Result<(), CentralSkillsError> {
     let resolved = resolve_local_allowed_path(access_root, path)?;
     if !resolved.exists() {
-        return Err(format!("Path does not exist: {}", resolved.display()));
+        return Err(CentralSkillsError::PathMissing(
+            resolved.display().to_string(),
+        ));
     }
     open_in_file_manager_impl(&resolved.to_string_lossy())
 }
 
-fn open_in_file_manager_impl(path: &str) -> Result<(), String> {
+fn open_in_file_manager_impl(path: &str) -> Result<(), CentralSkillsError> {
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
             .arg(path)
             .spawn()
-            .map_err(|e| format!("Failed to open: {}", e))?;
+            .map_err(|e| CentralSkillsError::io("Failed to open", e))?;
     }
 
     #[cfg(target_os = "windows")]
@@ -340,7 +370,7 @@ fn open_in_file_manager_impl(path: &str) -> Result<(), String> {
         std::process::Command::new("explorer")
             .arg(path)
             .spawn()
-            .map_err(|e| format!("Failed to open: {}", e))?;
+            .map_err(|e| CentralSkillsError::io("Failed to open", e))?;
     }
 
     #[cfg(target_os = "linux")]
@@ -348,7 +378,7 @@ fn open_in_file_manager_impl(path: &str) -> Result<(), String> {
         std::process::Command::new("xdg-open")
             .arg(path)
             .spawn()
-            .map_err(|e| format!("Failed to open: {}", e))?;
+            .map_err(|e| CentralSkillsError::io("Failed to open", e))?;
     }
 
     Ok(())
@@ -358,32 +388,37 @@ async fn read_remote_file_by_path_impl(
     connection: &ConnectedRemoteTarget,
     path: &str,
     access_root: &str,
-) -> Result<String, String> {
+) -> Result<String, CentralSkillsError> {
     let budget = ResourceBudget::default_skill();
     let allowed_path = normalize_remote_allowed_path(access_root, path)?;
     let info = connection
         .inspect_path(&allowed_path)
-        .await?
-        .ok_or_else(|| format!("Remote path '{}' does not exist.", allowed_path))?;
+        .await
+        .map_err(CentralSkillsError::Remote)?
+        .ok_or_else(|| CentralSkillsError::RemotePathMissing(allowed_path.clone()))?;
     if info.file_type == "symlink" {
-        return Err(format!(
-            "Refusing to read remote symlink path '{}'.",
-            allowed_path
-        ));
+        return Err(CentralSkillsError::RemoteSymlinkReadRefused(allowed_path));
     }
     if info.file_type != "file" {
-        return Err(format!("Remote path '{}' is not a file.", allowed_path));
+        return Err(CentralSkillsError::RemotePathNotFile(allowed_path));
     }
-    let bytes = connection.read_file(&allowed_path).await?;
-    budget.reject_file_read_size(&allowed_path, bytes.len() as u64)?;
-    String::from_utf8(bytes)
-        .map_err(|e| format!("Remote file '{}' is not valid UTF-8: {}", allowed_path, e))
+    let bytes = connection
+        .read_file(&allowed_path)
+        .await
+        .map_err(CentralSkillsError::Remote)?;
+    budget
+        .reject_file_read_size(&allowed_path, bytes.len() as u64)
+        .map_err(CentralSkillsError::Budget)?;
+    String::from_utf8(bytes).map_err(|e| CentralSkillsError::RemoteFileNotUtf8 {
+        path: allowed_path,
+        source: e,
+    })
 }
 
 async fn resolve_skill_access_root(
     pool: &DbPool,
     access: &SkillPathAccessContext,
-) -> Result<String, String> {
+) -> Result<String, CentralSkillsError> {
     let detail = get_skill_detail_with_row_impl(
         pool,
         &access.skill_id,
@@ -394,18 +429,20 @@ async fn resolve_skill_access_root(
     Ok(detail.dir_path)
 }
 
-fn resolve_local_allowed_path(access_root: &str, requested_path: &str) -> Result<PathBuf, String> {
+fn resolve_local_allowed_path(
+    access_root: &str,
+    requested_path: &str,
+) -> Result<PathBuf, CentralSkillsError> {
     let root = Path::new(access_root);
     let root_canonical = root.canonicalize().map_err(|e| {
-        format!(
-            "Failed to resolve allowed skill root '{}': {}",
-            access_root, e
+        CentralSkillsError::io(
+            format!("Failed to resolve allowed skill root '{}'", access_root),
+            e,
         )
     })?;
     if !root_canonical.is_dir() {
-        return Err(format!(
-            "Allowed skill root '{}' is not a directory.",
-            root_canonical.display()
+        return Err(CentralSkillsError::SkillRootNotDirectory(
+            root_canonical.display().to_string(),
         ));
     }
 
@@ -415,15 +452,14 @@ fn resolve_local_allowed_path(access_root: &str, requested_path: &str) -> Result
     } else {
         root_canonical.join(requested)
     };
-    let candidate_canonical = candidate
-        .canonicalize()
-        .map_err(|e| format!("Failed to resolve '{}': {}", candidate.display(), e))?;
+    let candidate_canonical = candidate.canonicalize().map_err(|e| {
+        CentralSkillsError::io(format!("Failed to resolve '{}'", candidate.display()), e)
+    })?;
     if candidate_canonical != root_canonical && !candidate_canonical.starts_with(&root_canonical) {
-        return Err(format!(
-            "Refusing to access '{}': path escapes skill root '{}'.",
-            candidate_canonical.display(),
-            root_canonical.display()
-        ));
+        return Err(CentralSkillsError::PathEscapesSkillRoot {
+            path: candidate_canonical.display().to_string(),
+            root: root_canonical.display().to_string(),
+        });
     }
     Ok(candidate_canonical)
 }
@@ -431,7 +467,7 @@ fn resolve_local_allowed_path(access_root: &str, requested_path: &str) -> Result
 fn normalize_remote_allowed_path(
     access_root: &str,
     requested_path: &str,
-) -> Result<String, String> {
+) -> Result<String, CentralSkillsError> {
     let root = normalize_remote_posix_path(access_root)?;
     let requested = requested_path.trim();
     let candidate = if requested.is_empty() {
@@ -442,23 +478,22 @@ fn normalize_remote_allowed_path(
         normalize_remote_posix_path(&format!("{}/{}", root.trim_end_matches('/'), requested))?
     };
     if !remote_path_is_within(&root, &candidate) {
-        return Err(format!(
-            "Refusing to access '{}': path escapes skill root '{}'.",
-            candidate, root
-        ));
+        return Err(CentralSkillsError::PathEscapesSkillRoot {
+            path: candidate,
+            root,
+        });
     }
     Ok(candidate)
 }
 
-fn normalize_remote_posix_path(path: &str) -> Result<String, String> {
+fn normalize_remote_posix_path(path: &str) -> Result<String, CentralSkillsError> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
-        return Err("Skill path context is empty.".to_string());
+        return Err(CentralSkillsError::SkillPathContextEmpty);
     }
     if trimmed.contains('\\') {
-        return Err(format!(
-            "Refusing to access '{}': backslashes are not allowed in remote paths.",
-            trimmed
+        return Err(CentralSkillsError::RemotePathBackslash(
+            trimmed.to_string(),
         ));
     }
     let is_absolute = trimmed.starts_with('/');
@@ -468,9 +503,8 @@ fn normalize_remote_posix_path(path: &str) -> Result<String, String> {
             continue;
         }
         if segment == ".." {
-            return Err(format!(
-                "Refusing to access '{}': parent traversal is not allowed.",
-                trimmed
+            return Err(CentralSkillsError::RemoteParentTraversal(
+                trimmed.to_string(),
             ));
         }
         segments.push(segment);
@@ -525,7 +559,7 @@ mod path_guard_tests {
         )
         .unwrap_err();
 
-        assert!(error.contains("escapes skill root"));
+        assert!(error.to_string().contains("escapes skill root"));
     }
 
     #[cfg(unix)]
@@ -544,7 +578,7 @@ mod path_guard_tests {
         let error = read_file_by_path_impl(&link.to_string_lossy(), &skill_dir.to_string_lossy())
             .unwrap_err();
 
-        assert!(error.contains("escapes skill root"));
+        assert!(error.to_string().contains("escapes skill root"));
     }
 
     #[test]
@@ -555,7 +589,7 @@ mod path_guard_tests {
         )
         .unwrap_err();
 
-        assert!(error.contains("parent traversal"));
+        assert!(error.to_string().contains("parent traversal"));
     }
 
     #[test]

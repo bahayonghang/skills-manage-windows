@@ -43,14 +43,18 @@ pub async fn get_skills_by_agent(
     agent_id: String,
 ) -> Result<Vec<SkillForAgent>, String> {
     let pool = state.active_db().await?;
-    central_skills::get_skills_by_agent_impl(&pool, &agent_id).await
+    central_skills::get_skills_by_agent_impl(&pool, &agent_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Tauri command: return all Central Skills with per-platform link status.
 #[tauri::command]
 pub async fn get_central_skills(state: State<'_, AppState>) -> Result<Vec<SkillWithLinks>, String> {
     let pool = state.active_db().await?;
-    central_skills::get_central_skills_impl(&pool).await
+    central_skills::get_central_skills_impl(&pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -59,7 +63,9 @@ pub async fn get_central_skills_page(
     request: CentralSkillsPageRequest,
 ) -> Result<CentralSkillsPage, String> {
     let pool = state.active_db().await?;
-    central_skills::get_central_skills_page_impl(&pool, request).await
+    central_skills::get_central_skills_page_impl(&pool, request)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -76,6 +82,7 @@ pub async fn preview_delete_central_skills(
             central_skills::preview_delete_central_skills_ssh_impl(&pool, &skill_ids).await
         }
     }
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -101,7 +108,8 @@ pub async fn delete_central_skill(
             )
             .await
         }
-    };
+    }
+    .map_err(|e| e.to_string());
     let status = if result.is_ok() {
         "succeeded"
     } else {
@@ -147,7 +155,8 @@ pub async fn delete_central_skills(
             central_skills::delete_central_skills_remote_impl(&pool, &active_target, &requests)
                 .await
         }
-    };
+    }
+    .map_err(|e| e.to_string());
     match &result {
         Ok(batch_result) => {
             let status = match (batch_result.succeeded.len(), batch_result.failed.len()) {
@@ -215,6 +224,7 @@ pub async fn preview_delete_skill_repository(
             central_skills::preview_delete_skill_repository_ssh_impl(&pool, &repository_id).await
         }
     }
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -240,7 +250,8 @@ pub async fn delete_skill_repository(
             )
             .await
         }
-    };
+    }
+    .map_err(|e| e.to_string());
     match &result {
         Ok(delete_result) => {
             let batch_result = &delete_result.delete_result;
@@ -321,6 +332,7 @@ pub async fn get_skill_detail(
         row_id.as_deref(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 /// Tauri command: read and return the raw content of a skill's `SKILL.md` file.
@@ -331,7 +343,9 @@ pub async fn read_skill_content(
 ) -> Result<String, String> {
     let pool = state.active_db().await?;
     let active_target = state.active_target().await?;
-    central_skills::read_skill_content_for_target_impl(&pool, active_target, &skill_id).await
+    central_skills::read_skill_content_for_target_impl(&pool, active_target, &skill_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -345,7 +359,9 @@ pub async fn read_file_by_path(
     let pool = state.active_db().await?;
     let active_target = state.active_target().await?;
     let access = path_access_context(skill_id, agent_id, row_id)?;
-    central_skills::read_file_by_path_for_target_impl(&pool, active_target, &path, &access).await
+    central_skills::read_file_by_path_for_target_impl(&pool, active_target, &path, &access)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -359,7 +375,9 @@ pub async fn open_in_file_manager(
     let pool = state.active_db().await?;
     let active_target = state.active_target().await?;
     let access = path_access_context(skill_id, agent_id, row_id)?;
-    central_skills::open_in_file_manager_for_target_impl(&pool, active_target, &path, &access).await
+    central_skills::open_in_file_manager_for_target_impl(&pool, active_target, &path, &access)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -373,7 +391,9 @@ pub async fn list_directory_tree(
     let pool = state.active_db().await?;
     let active_target = state.active_target().await?;
     let access = path_access_context(skill_id, agent_id, row_id)?;
-    central_skills::list_directory_tree_for_target_impl(&pool, active_target, &path, &access).await
+    central_skills::list_directory_tree_for_target_impl(&pool, active_target, &path, &access)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn path_access_context(

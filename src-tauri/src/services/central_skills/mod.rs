@@ -6,12 +6,15 @@
 
 mod common;
 mod delete;
+mod error;
 mod files;
 mod query;
 mod types;
 
 #[cfg(test)]
 mod tests;
+
+pub use error::CentralSkillsError;
 
 pub use delete::{
     delete_central_skill_impl, delete_central_skill_remote_impl, delete_central_skill_ssh_impl,
