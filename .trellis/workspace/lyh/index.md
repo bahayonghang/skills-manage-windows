@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 14
 - **Last Active**: 2026-06-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~498 | Active |
+| `journal-1.md` | ~541 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-06-12 | thiserror 批次3：尾批五域+db/repos 透传+全局收尾 | `7cd0fe8`, `ac0d618`, `4bdcf09`, `997a494`, `f1229d1`, `5353479`, `d62b8a5`, `ea6631f`, `83a802d`, `53d152b`, `50023a1` | `dev` |
 | 13 | 2026-06-12 | thiserror 批次2：中批五域错误枚举迁移 | `b3633cb`, `b3ebf3c`, `75cf0d3`, `76fd327`, `4b37031`, `fd0e7d0` | `dev` |
 | 12 | 2026-06-11 | 优化更新机制重构 | `0b9edba`, `aacf783`, `e2357cd` | `dev` |
 | 11 | 2026-06-11 | 优化中央技能标签机制 | `b7fb4a4`, `1a22060` | `dev` |

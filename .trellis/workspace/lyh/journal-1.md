@@ -496,3 +496,46 @@ Filled backend and frontend Trellis spec docs for ref/skillshare with source-bac
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: thiserror 批次3：尾批五域+db/repos 透传+全局收尾
+
+**Date**: 2026-06-12
+**Task**: thiserror 批次3：尾批五域+db/repos 透传+全局收尾
+**Branch**: `dev`
+
+### Summary
+
+完成 thiserror 批次3（C3 终批）：db/repos 30 文件统一 sqlx::Error 透传（业务守卫以 InvalidArgument 承载文案零漂移），清除 C1/C2 全部 130 处 TODO(C3) 并删除六域 Other(String) 兜底；尾批五域（usage/obsidian/ai_provider/ai_tagging/portable_state）+ targets 传输层（41 变体）+ 散点（logging/resource_budget/paths/central_migration/fs_util）全部类型化。全局扫尾达标：Result<_,String> 仅存 commands 边界 + lib.rs 双助手。修复 7cd0fe8 引入的两处行数预算超限（拆 export_import.rs/view.rs）。just ci 绿、704 用例 0 失败、测试属性 711→711 零删减、clippy 零警告。spec 文档对齐落地契约，父任务 design.md 记录条目 #2 关闭证据。遗留 follow-up：clippy 1.95 --all-targets 在旧测试代码上新触发 11 个预存 lint，建议另立轻量任务。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7cd0fe8` | (see git log) |
+| `ac0d618` | (see git log) |
+| `4bdcf09` | (see git log) |
+| `997a494` | (see git log) |
+| `f1229d1` | (see git log) |
+| `5353479` | (see git log) |
+| `d62b8a5` | (see git log) |
+| `ea6631f` | (see git log) |
+| `83a802d` | (see git log) |
+| `53d152b` | (see git log) |
+| `50023a1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
