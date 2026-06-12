@@ -36,8 +36,7 @@ pub(crate) async fn export_skillport_state_impl(
         .map(|skill| skill.id.clone())
         .collect::<Vec<_>>();
     let total_export_steps = skill_ids.len() + 3;
-    let mut assignments =
-        db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
+    let mut assignments = db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
     let mut tags_by_skill = db::get_skill_tags_for_skills(pool, &skill_ids).await?;
     let unknown_repository = db::get_local_unknown_repository(pool).await?;
     let mut central_skills = Vec::new();
