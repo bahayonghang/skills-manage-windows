@@ -13,7 +13,9 @@ pub async fn get_obsidian_vaults(state: State<'_, AppState>) -> Result<Vec<Obsid
     if state.active_target().await?.is_remote_like() {
         return Ok(Vec::new());
     }
-    obsidian::get_obsidian_vaults_impl(&state.db).await
+    obsidian::get_obsidian_vaults_impl(&state.db)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -24,7 +26,9 @@ pub async fn get_obsidian_vault_skills(
     if state.active_target().await?.is_remote_like() {
         return Ok(Vec::new());
     }
-    obsidian::get_obsidian_vault_skills_impl(&state.db, &vault_id).await
+    obsidian::get_obsidian_vault_skills_impl(&state.db, &vault_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -36,7 +40,9 @@ pub async fn open_obsidian_path(state: State<'_, AppState>, path: String) -> Res
     }
 
     let candidate = canonicalize_existing_path(&path)?;
-    let vaults = obsidian::get_obsidian_vaults_impl(&state.db).await?;
+    let vaults = obsidian::get_obsidian_vaults_impl(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
     let allowed = vaults
         .iter()
         .filter_map(|vault| PathBuf::from(&vault.path).canonicalize().ok())
@@ -60,7 +66,9 @@ pub async fn import_obsidian_skill_to_central(
     if state.active_target().await?.is_remote_like() {
         return Err("Remote Obsidian import is not supported in this version.".to_string());
     }
-    obsidian::import_obsidian_skill_to_central_impl(&state.db, &dir_path).await
+    obsidian::import_obsidian_skill_to_central_impl(&state.db, &dir_path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -80,6 +88,7 @@ pub async fn import_obsidian_skill_to_platform(
         method.as_deref(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 fn canonicalize_existing_path(path: &str) -> Result<PathBuf, String> {

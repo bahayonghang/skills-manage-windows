@@ -5,6 +5,7 @@ use crate::db::DbPool;
 use crate::paths;
 use crate::services::scanner::scan_directory;
 
+use super::error::ObsidianError;
 use super::types::{ObsidianSkill, ObsidianVault, OBSIDIAN_PLATFORM_ID, OBSIDIAN_PLATFORM_NAME};
 
 #[derive(Debug, Default, serde::Deserialize)]
@@ -218,31 +219,35 @@ fn scan_obsidian_vault(vault_dir: &Path, central_dir: &Path) -> Vec<ObsidianSkil
     selected_by_skill_id.into_values().collect()
 }
 
-pub async fn get_obsidian_vaults_impl(_pool: &DbPool) -> Result<Vec<ObsidianVault>, String> {
+pub async fn get_obsidian_vaults_impl(_pool: &DbPool) -> Result<Vec<ObsidianVault>, ObsidianError> {
     let central_dir = paths::central_skills_dir();
-    let mut vaults = crate::fs_util::run_blocking_fs("Obsidian vault scan", move || {
-        Ok(obsidian_source_vault_paths()
-            .into_iter()
-            .filter_map(|path| {
-                let normalized_path = normalize_obsidian_pathbuf(&path);
-                let skills = scan_obsidian_vault(&path, &central_dir);
-                if skills.is_empty() {
-                    return None;
-                }
-                let name = path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-                Some(ObsidianVault {
-                    id: obsidian_vault_id(&normalized_path),
-                    name,
-                    path: normalized_path,
-                    skill_count: skills.len(),
+    let mut vaults = crate::fs_util::run_blocking_fs_with(
+        "Obsidian vault scan",
+        move || {
+            Ok(obsidian_source_vault_paths()
+                .into_iter()
+                .filter_map(|path| {
+                    let normalized_path = normalize_obsidian_pathbuf(&path);
+                    let skills = scan_obsidian_vault(&path, &central_dir);
+                    if skills.is_empty() {
+                        return None;
+                    }
+                    let name = path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    Some(ObsidianVault {
+                        id: obsidian_vault_id(&normalized_path),
+                        name,
+                        path: normalized_path,
+                        skill_count: skills.len(),
+                    })
                 })
-            })
-            .collect::<Vec<_>>())
-    })
+                .collect::<Vec<_>>())
+        },
+        ObsidianError::task_join,
+    )
     .await?;
 
     vaults.sort_by(|left, right| {
@@ -257,21 +262,25 @@ pub async fn get_obsidian_vaults_impl(_pool: &DbPool) -> Result<Vec<ObsidianVaul
 pub async fn get_obsidian_vault_skills_impl(
     _pool: &DbPool,
     vault_id: &str,
-) -> Result<Vec<ObsidianSkill>, String> {
+) -> Result<Vec<ObsidianSkill>, ObsidianError> {
     let vault_id = vault_id.to_string();
-    crate::fs_util::run_blocking_fs("Obsidian vault skill scan", move || {
-        let vault_path = obsidian_source_vault_paths()
-            .into_iter()
-            .find(|path| {
-                let normalized = normalize_obsidian_pathbuf(path);
-                obsidian_vault_id(&normalized) == vault_id || normalized == vault_id
-            })
-            .ok_or_else(|| format!("Obsidian vault '{}' not found", vault_id))?;
+    crate::fs_util::run_blocking_fs_with(
+        "Obsidian vault skill scan",
+        move || {
+            let vault_path = obsidian_source_vault_paths()
+                .into_iter()
+                .find(|path| {
+                    let normalized = normalize_obsidian_pathbuf(path);
+                    obsidian_vault_id(&normalized) == vault_id || normalized == vault_id
+                })
+                .ok_or_else(|| ObsidianError::VaultNotFound(vault_id.clone()))?;
 
-        Ok(scan_obsidian_vault(
-            &vault_path,
-            &paths::central_skills_dir(),
-        ))
-    })
+            Ok(scan_obsidian_vault(
+                &vault_path,
+                &paths::central_skills_dir(),
+            ))
+        },
+        ObsidianError::task_join,
+    )
     .await
 }
