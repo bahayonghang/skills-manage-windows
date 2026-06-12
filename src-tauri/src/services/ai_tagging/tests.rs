@@ -314,6 +314,7 @@ async fn bulk_ai_tagging_requires_configuration_before_writing() {
 
     assert!(result
         .expect_err("missing setting")
+        .to_string()
         .starts_with("ai.missing_api_key:"));
     let tags = db::get_skill_tags_for_skill(&pool, "skill-a")
         .await

@@ -4,6 +4,7 @@ use tokio::time::{sleep, Duration, Instant};
 
 use crate::db::DbPool;
 
+use super::error::AiTaggingError;
 use super::types::{
     AiTagRateSettings, AiTagRunControl, DEFAULT_AI_TAGGING_CONCURRENCY_LIMIT,
     DEFAULT_AI_TAGGING_INTERVAL_MS, DEFAULT_AI_TAG_STOP_ON_RATE_LIMIT,
@@ -18,9 +19,9 @@ impl AiTagRunControl {
         self.cancel_flag.store(true, Ordering::SeqCst);
     }
 
-    pub(crate) async fn wait_for_rate_limit(&self) -> Result<(), String> {
+    pub(crate) async fn wait_for_rate_limit(&self) -> Result<(), AiTaggingError> {
         if self.is_cancelled() {
-            return Err("AI tagging canceled".to_string());
+            return Err(AiTaggingError::Cancelled);
         }
 
         let mut next_request_at = self.rate_limiter.next_request_at.lock().await;
@@ -38,11 +39,11 @@ impl AiTagRunControl {
 async fn sleep_cancelable(
     duration: Duration,
     cancel_flag: &std::sync::atomic::AtomicBool,
-) -> Result<(), String> {
+) -> Result<(), AiTaggingError> {
     let deadline = Instant::now() + duration;
     loop {
         if cancel_flag.load(Ordering::SeqCst) {
-            return Err("AI tagging canceled".to_string());
+            return Err(AiTaggingError::Cancelled);
         }
 
         let now = Instant::now();
@@ -96,8 +97,13 @@ fn parse_bool_setting(value: &str, fallback: bool) -> bool {
     }
 }
 
-pub(crate) fn is_ai_rate_limit_error(error: &str) -> bool {
-    let normalized = error.to_ascii_lowercase();
+pub(crate) fn is_ai_rate_limit_error(error: &AiTaggingError) -> bool {
+    if matches!(error, AiTaggingError::RateLimited(_)) {
+        return true;
+    }
+    // Preserve the historical text heuristic: upstream bodies / transport
+    // errors may carry rate-limit wording without a 429 status.
+    let normalized = error.to_string().to_ascii_lowercase();
     normalized.contains("429")
         || normalized.contains("too many requests")
         || normalized.contains("rate limit")

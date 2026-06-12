@@ -4,6 +4,7 @@
 //! owns AI provider calls, rate limiting, progress aggregation, and persistence
 //! of suggested / pending-review skill tags.
 
+mod error;
 mod prompt;
 mod rate_limit;
 mod types;
@@ -23,6 +24,7 @@ use crate::{
     services::ai_provider,
 };
 
+pub use error::AiTaggingError;
 use prompt::suggest_skill_tags_for_skill;
 #[cfg(test)]
 pub(crate) use prompt::{build_tagging_prompt, map_ai_suggestions, parse_ai_tag_suggestions};
@@ -40,22 +42,16 @@ pub async fn suggest_skill_tags_for_skill_id(
     pool: &DbPool,
     secrets: &dyn SecretStore,
     skill_id: String,
-) -> Result<Vec<SkillTagSuggestion>, String> {
-    let context = Arc::new(prepare_ai_tagging_context(pool, secrets).await?);
-    let result = process_skill_for_ai_tags(
-        context,
-        skill_id,
+) -> Result<Vec<SkillTagSuggestion>, AiTaggingError> {
+    let context = prepare_ai_tagging_context(pool, secrets).await?;
+    let result = try_process_skill_for_ai_tags(
+        &context,
+        &skill_id,
         None::<AiTagRunningNotifier<fn(AiTagProgressPayload)>>,
         None,
     )
-    .await;
-    if result.succeeded {
-        Ok(result.suggestions)
-    } else {
-        Err(result
-            .error
-            .unwrap_or_else(|| "AI tagging failed".to_string()))
-    }
+    .await?;
+    Ok(result.suggestions)
 }
 
 pub async fn bulk_suggest_skill_tags_impl<F>(
@@ -65,7 +61,7 @@ pub async fn bulk_suggest_skill_tags_impl<F>(
     job_id: String,
     cancel_flag: Arc<AtomicBool>,
     emit_progress: F,
-) -> Result<Vec<SkillTagSuggestionResult>, String>
+) -> Result<Vec<SkillTagSuggestionResult>, AiTaggingError>
 where
     F: Fn(AiTagProgressPayload) + Send + Sync + 'static,
 {
@@ -209,33 +205,33 @@ fn update_counters(
 async fn prepare_ai_tagging_context(
     pool: &DbPool,
     secrets: &dyn SecretStore,
-) -> Result<AiTaggingContext, String> {
+) -> Result<AiTaggingContext, AiTaggingError> {
     let config = ai_provider::resolve_ai_provider_config(pool).await;
     let api_key = ai_provider::get_ai_api_key_for_provider(pool, secrets, &config.provider)
         .await?
         .ok_or_else(|| {
-            ai_provider::coded_error(
+            ai_provider::AiProviderError::MissingApiKey(ai_provider::coded_error(
                 ai_provider::AI_MISSING_API_KEY,
                 "Configure an AI API key in Settings before running AI tagging.",
-            )
+            ))
         })?;
     let api_url = config.api_url;
     let protocol = config.protocol;
     let model = config.model;
-    let tags = db::get_skill_tags(pool).await.map_err(|e| e.to_string())?;
+    let tags = db::get_skill_tags(pool).await?;
     if tags.is_empty() {
-        return Err("No candidate tags are available.".to_string());
+        return Err(AiTaggingError::NoCandidateTags);
     }
     let client = {
         let builder = Client::builder().user_agent(crate::commands::APP_USER_AGENT);
         #[cfg(test)]
         let builder = builder.no_proxy();
         builder.build().map_err(|e| {
-            ai_provider::coded_error_with_details(
+            ai_provider::AiProviderError::Http(ai_provider::coded_error_with_details(
                 ai_provider::AI_CLIENT_BUILD_FAILED,
                 "Failed to initialize the AI HTTP client.",
                 e.to_string(),
-            )
+            ))
         })?
     };
 
@@ -266,7 +262,7 @@ where
             skill_name: None,
             suggestions: Vec::new(),
             succeeded: false,
-            error: Some(error),
+            error: Some(error.to_string()),
             low_confidence_count: 0,
         },
     }
@@ -277,20 +273,19 @@ async fn try_process_skill_for_ai_tags<F>(
     skill_id: &str,
     running_notifier: Option<AiTagRunningNotifier<F>>,
     run_control: Option<AiTagRunControl>,
-) -> Result<SkillTagSuggestionResult, String>
+) -> Result<SkillTagSuggestionResult, AiTaggingError>
 where
     F: Fn(AiTagProgressPayload) + Send + Sync + 'static,
 {
     if let Some(control) = run_control.as_ref() {
         if control.is_cancelled() {
-            return Err("AI tagging canceled".to_string());
+            return Err(AiTaggingError::Cancelled);
         }
     }
 
     let skill = db::get_skill_by_id(&context.pool, skill_id)
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+        .await?
+        .ok_or_else(|| AiTaggingError::SkillNotFound(skill_id.to_string()))?;
     if let Some(notifier) = running_notifier.as_ref() {
         notifier.emit(&skill.id, &skill.name);
     }
@@ -336,7 +331,7 @@ async fn persist_ai_suggestions(
     pool: &DbPool,
     skill_id: &str,
     suggestions: &[SkillTagSuggestion],
-) -> Result<(), String> {
+) -> Result<(), AiTaggingError> {
     let rows = suggestions
         .iter()
         .map(|suggestion| {
@@ -347,16 +342,15 @@ async fn persist_ai_suggestions(
             )
         })
         .collect::<Vec<_>>();
-    db::replace_skill_ai_tags(pool, skill_id, &rows)
-        .await
-        .map_err(|e| e.to_string())
+    db::replace_skill_ai_tags(pool, skill_id, &rows).await?;
+    Ok(())
 }
 
 async fn persist_ai_review_suggestions(
     pool: &DbPool,
     skill_id: &str,
     suggestions: &[SkillTagSuggestion],
-) -> Result<(), String> {
+) -> Result<(), AiTaggingError> {
     let rows = suggestions
         .iter()
         .map(|suggestion| {
@@ -367,7 +361,6 @@ async fn persist_ai_review_suggestions(
             )
         })
         .collect::<Vec<_>>();
-    db::replace_pending_ai_tag_reviews(pool, skill_id, &rows)
-        .await
-        .map_err(|e| e.to_string())
+    db::replace_pending_ai_tag_reviews(pool, skill_id, &rows).await?;
+    Ok(())
 }

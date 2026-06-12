@@ -164,7 +164,9 @@ pub async fn suggest_skill_tags(
     skill_id: String,
 ) -> Result<Vec<SkillTagSuggestion>, String> {
     let pool = state.active_db().await?;
-    ai_tagging::suggest_skill_tags_for_skill_id(&pool, state.secrets.as_ref(), skill_id).await
+    ai_tagging::suggest_skill_tags_for_skill_id(&pool, state.secrets.as_ref(), skill_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -189,7 +191,7 @@ pub async fn bulk_suggest_skill_tags(
     )
     .await;
     state.ai_tag_jobs.finish(&job_id);
-    result
+    result.map_err(|e| e.to_string())
 }
 
 #[tauri::command]

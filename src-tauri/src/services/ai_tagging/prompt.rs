@@ -6,6 +6,7 @@ use crate::{
     services::ai_provider,
 };
 
+use super::error::AiTaggingError;
 use super::types::{
     AiTaggingContext, RawAiTagSuggestion, RawAiTagSuggestionEnvelope, SkillTagSuggestion,
 };
@@ -13,7 +14,7 @@ use super::types::{
 pub(crate) async fn suggest_skill_tags_for_skill(
     context: &AiTaggingContext,
     skill: &Skill,
-) -> Result<Vec<SkillTagSuggestion>, String> {
+) -> Result<Vec<SkillTagSuggestion>, AiTaggingError> {
     let content = skill
         .content
         .clone()
@@ -82,7 +83,7 @@ async fn call_ai_for_tagging(
     model: &str,
     protocol: ai_provider::ExplanationApiProtocol,
     prompt: &str,
-) -> Result<String, String> {
+) -> Result<String, AiTaggingError> {
     let is_openai = !protocol.is_anthropic_compatible();
     let body = if is_openai {
         serde_json::json!({
@@ -108,43 +109,50 @@ async fn call_ai_for_tagging(
     };
 
     let response = request.send().await.map_err(|e| {
-        ai_provider::coded_error_with_details(
+        AiTaggingError::Http(ai_provider::coded_error_with_details(
             ai_provider::AI_REQUEST_FAILED,
             "AI tagging request failed.",
             e.to_string(),
-        )
+        ))
     })?;
     let status = response.status();
     let text = response
         .text()
         .await
-        .map_err(|e| format!("Failed to read AI tagging response: {}", e))?;
+        .map_err(|e| AiTaggingError::Http(format!("Failed to read AI tagging response: {}", e)))?;
     if !status.is_success() {
         if status.as_u16() == 429 {
-            return Err(ai_provider::coded_error_with_details(
+            return Err(AiTaggingError::RateLimited(ai_provider::coded_error_with_details(
                 ai_provider::AI_RATE_LIMIT,
                 "AI tagging was rate limited. Reduce AI Tag concurrency or increase the request interval in Settings.",
                 format!("HTTP {status}: {text}"),
-            ));
+            )));
         }
-        return Err(ai_provider::coded_error_with_details(
+        return Err(AiTaggingError::Http(ai_provider::coded_error_with_details(
             ai_provider::AI_RESPONSE_ERROR,
             format!("AI tagging returned HTTP {status}."),
             text,
-        ));
+        )));
     }
 
     extract_ai_response_text(&text, is_openai)
 }
 
-fn extract_ai_response_text(response_text: &str, is_openai: bool) -> Result<String, String> {
+fn extract_ai_response_text(
+    response_text: &str,
+    is_openai: bool,
+) -> Result<String, AiTaggingError> {
     let value: Value = serde_json::from_str(response_text)
-        .map_err(|e| format!("AI tagging response is not JSON: {}", e))?;
+        .map_err(|e| AiTaggingError::Parse(format!("AI tagging response is not JSON: {}", e)))?;
     if is_openai {
         return value["choices"][0]["message"]["content"]
             .as_str()
             .map(ToString::to_string)
-            .ok_or_else(|| "AI tagging response did not include message content.".to_string());
+            .ok_or_else(|| {
+                AiTaggingError::Parse(
+                    "AI tagging response did not include message content.".to_string(),
+                )
+            });
     }
 
     value["content"]
@@ -156,10 +164,14 @@ fn extract_ai_response_text(response_text: &str, is_openai: bool) -> Result<Stri
                     .map(ToString::to_string)
             })
         })
-        .ok_or_else(|| "AI tagging response did not include text content.".to_string())
+        .ok_or_else(|| {
+            AiTaggingError::Parse("AI tagging response did not include text content.".to_string())
+        })
 }
 
-pub(crate) fn parse_ai_tag_suggestions(raw: &str) -> Result<Vec<RawAiTagSuggestion>, String> {
+pub(crate) fn parse_ai_tag_suggestions(
+    raw: &str,
+) -> Result<Vec<RawAiTagSuggestion>, AiTaggingError> {
     let cleaned = raw
         .trim()
         .trim_start_matches("```json")
@@ -177,23 +189,27 @@ pub(crate) fn parse_ai_tag_suggestions(raw: &str) -> Result<Vec<RawAiTagSuggesti
     let start = cleaned
         .find('{')
         .or_else(|| cleaned.find('['))
-        .ok_or_else(|| "AI tagging response did not include JSON.".to_string())?;
+        .ok_or_else(|| {
+            AiTaggingError::Parse("AI tagging response did not include JSON.".to_string())
+        })?;
     let end = cleaned
         .rfind('}')
         .or_else(|| cleaned.rfind(']'))
-        .ok_or_else(|| "AI tagging response did not include complete JSON.".to_string())?;
+        .ok_or_else(|| {
+            AiTaggingError::Parse("AI tagging response did not include complete JSON.".to_string())
+        })?;
     let json_slice = &cleaned[start..=end];
     serde_json::from_str::<RawAiTagSuggestionEnvelope>(json_slice)
         .map(|envelope| envelope.tags)
         .or_else(|_| serde_json::from_str::<Vec<RawAiTagSuggestion>>(json_slice))
-        .map_err(|e| format!("Failed to parse AI tagging JSON: {}", e))
+        .map_err(|e| AiTaggingError::Parse(format!("Failed to parse AI tagging JSON: {}", e)))
 }
 
 pub(crate) fn map_ai_suggestions(
     skill_id: &str,
     tags: &[SkillTag],
     raw: Vec<RawAiTagSuggestion>,
-) -> Result<Vec<SkillTagSuggestion>, String> {
+) -> Result<Vec<SkillTagSuggestion>, AiTaggingError> {
     let mut suggestions = Vec::new();
     for item in raw {
         let key = item.tag.trim();
@@ -221,7 +237,7 @@ pub(crate) fn map_ai_suggestions(
             .iter()
             .find(|tag| tag.id == UNCATEGORIZED_TAG_ID)
             .cloned()
-            .ok_or_else(|| "AI tagging returned no usable candidate tags.".to_string())?;
+            .ok_or(AiTaggingError::NoUsableCandidateTags)?;
         suggestions.push(SkillTagSuggestion {
             skill_id: skill_id.to_string(),
             tag: fallback,
