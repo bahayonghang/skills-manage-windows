@@ -49,6 +49,32 @@ pub enum ScannerError {
 - db/repos 仍返回 String：调用点统一 `.map_err(XxxError::Other)` 并在行尾标 `// TODO(C3): typed repos passthrough`，C3 扫尾按此标记定位。`Other(String)` 不得用于 repos 适配之外的新分支。
 - IPC 载荷结构体里的 `error: String` 字段（如 `FailedInstall`、`CentralBatchInstallFailure`）保持 String，构造处 `error: e.to_string()`。
 
+#### Http 变体约定（C2 增补，适用于含 reqwest 的域：github_import、marketplace 等）
+
+reqwest 失败按类别拆为四个变体，`reqwest::Error` 不做 `#[from]` 透传（缺操作上下文），统一在调用点 map：
+
+```rust
+/// HTTP 传输/协议失败（连接、超时、非 2xx 状态、镜像回退汇总）。
+/// 消息在调用点预格式化，逐字保留原 format! 文案。
+#[error("{0}")]
+Http(String),
+
+/// GitHub 限流拒绝（429 / x-ratelimit 分类命中）。消息为 denial 分类器的
+/// Display 输出；语义化变体，调用方可 matches! 区分限流走重试/镜像分支。
+#[error("{0}")]
+RateLimited(String),
+
+/// 认证/权限拒绝（401/403 非限流分类）。消息同样取 denial Display 输出。
+#[error("{0}")]
+AccessDenied(String),
+
+/// 响应体/归档解析失败（JSON 解码、UTF-8 校验等），不复用 Http。
+#[error("{0}")]
+Parse(String),
+```
+
+资源预算（`resource_budget` 模块仍返回 String）违规用 `#[error("{0}")] Budget(String)` 在调用点 `.map_err(XxxError::Budget)` 包装，C3 改造 resource_budget 时一并收紧。
+
 ### 1.3 IPC 边界转换
 
 commands 壳层统一：
