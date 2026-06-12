@@ -28,9 +28,10 @@ pub enum CentralSkillsError {
     #[error("{0}")]
     Remote(String),
 
-    /// Resource-budget violation (resource_budget module returns String).
+    /// Resource-budget violation (typed `BudgetExceeded` from the
+    /// resource_budget module; Display is the budget message verbatim).
     #[error("{0}")]
-    Budget(String),
+    Budget(crate::services::resource_budget::BudgetExceeded),
 
     // ── Skill detail hydration ───────────────────────────────────────────────
     #[error("Source row '{row_id}' not found for skill '{skill_id}'")]

@@ -48,9 +48,10 @@ pub enum GithubImportError {
     #[error("{0}")]
     Parse(String),
 
-    /// Resource-budget violation (resource_budget module returns String).
+    /// Resource-budget violation (typed `BudgetExceeded` from the
+    /// resource_budget module; Display is the budget message verbatim).
     #[error("{0}")]
-    Budget(String),
+    Budget(crate::services::resource_budget::BudgetExceeded),
 
     /// Remote-target transport failures (connect / script / read / mkdir
     /// over the SSH or WSL channel; targets module returns String).

@@ -548,10 +548,14 @@ pub(super) fn backup_existing_skill_dir(
 /// `let _ = std::fs::remove_dir_all(...)` cleanup behaviour.
 async fn discard_staging_dir(staging_path: &Path) {
     let staging_path = staging_path.to_path_buf();
-    let _ = crate::fs_util::run_blocking_fs("import staging cleanup", move || {
-        let _ = std::fs::remove_dir_all(&staging_path);
-        Ok(())
-    })
+    let _ = crate::fs_util::run_blocking_fs_with(
+        "import staging cleanup",
+        move || {
+            let _ = std::fs::remove_dir_all(&staging_path);
+            Ok(())
+        },
+        GithubImportError::task_join,
+    )
     .await;
 }
 
@@ -560,25 +564,33 @@ pub(super) async fn restore_or_cleanup_target_dir(
     backup: Option<ExistingSkillBackup>,
 ) {
     let target_dir = target_dir.to_path_buf();
-    let _ = crate::fs_util::run_blocking_fs("import target restore", move || {
-        if target_dir.exists() {
-            let _ = std::fs::remove_dir_all(&target_dir);
-        }
-        if let Some(backup) = backup {
-            let _ = std::fs::rename(&backup.path, &target_dir);
-        }
-        Ok(())
-    })
+    let _ = crate::fs_util::run_blocking_fs_with(
+        "import target restore",
+        move || {
+            if target_dir.exists() {
+                let _ = std::fs::remove_dir_all(&target_dir);
+            }
+            if let Some(backup) = backup {
+                let _ = std::fs::rename(&backup.path, &target_dir);
+            }
+            Ok(())
+        },
+        GithubImportError::task_join,
+    )
     .await;
 }
 
 pub(super) async fn drop_existing_backup(backup: Option<ExistingSkillBackup>) {
-    let _ = crate::fs_util::run_blocking_fs("import backup cleanup", move || {
-        if let Some(backup) = backup {
-            let _ = std::fs::remove_dir_all(&backup.path);
-        }
-        Ok(())
-    })
+    let _ = crate::fs_util::run_blocking_fs_with(
+        "import backup cleanup",
+        move || {
+            if let Some(backup) = backup {
+                let _ = std::fs::remove_dir_all(&backup.path);
+            }
+            Ok(())
+        },
+        GithubImportError::task_join,
+    )
     .await;
 }
 

@@ -131,10 +131,17 @@ pub struct PlatformPathSpec<'a> {
     pub project_skills_dir: Option<&'a str>,
 }
 
+/// A platform path lookup referenced an agent id with no registered
+/// [`PlatformPathSpec`]. Display text preserves the historical string-error
+/// wording verbatim.
+#[derive(Debug, thiserror::Error)]
+#[error("Agent '{0}' not found")]
+pub struct AgentPathSpecNotFound(pub String);
+
 pub fn platform_global_skills_dir(
     agent_id: &str,
     specs: &[PlatformPathSpec<'_>],
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, AgentPathSpecNotFound> {
     let spec = find_platform_path_spec(agent_id, specs)?;
     Ok(expand_home_path(spec.global_skills_dir))
 }
@@ -142,7 +149,7 @@ pub fn platform_global_skills_dir(
 pub fn platform_project_skills_dir(
     agent_id: &str,
     specs: &[PlatformPathSpec<'_>],
-) -> Result<Option<PathBuf>, String> {
+) -> Result<Option<PathBuf>, AgentPathSpecNotFound> {
     let spec = find_platform_path_spec(agent_id, specs)?;
     Ok(spec
         .project_skills_dir
@@ -154,7 +161,7 @@ pub fn platform_global_skills_dir_for_remote(
     agent_id: &str,
     specs: &[PlatformPathSpec<'_>],
     remote_home: &str,
-) -> Result<String, String> {
+) -> Result<String, AgentPathSpecNotFound> {
     let spec = find_platform_path_spec(agent_id, specs)?;
     Ok(expand_remote_home_path(spec.global_skills_dir, remote_home))
 }
@@ -163,7 +170,7 @@ pub fn platform_project_skills_dir_for_remote(
     agent_id: &str,
     specs: &[PlatformPathSpec<'_>],
     remote_home: &str,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, AgentPathSpecNotFound> {
     let spec = find_platform_path_spec(agent_id, specs)?;
     Ok(spec
         .project_skills_dir
@@ -174,11 +181,11 @@ pub fn platform_project_skills_dir_for_remote(
 fn find_platform_path_spec<'a>(
     agent_id: &str,
     specs: &'a [PlatformPathSpec<'a>],
-) -> Result<&'a PlatformPathSpec<'a>, String> {
+) -> Result<&'a PlatformPathSpec<'a>, AgentPathSpecNotFound> {
     specs
         .iter()
         .find(|spec| spec.agent_id == agent_id)
-        .ok_or_else(|| format!("Agent '{}' not found", agent_id))
+        .ok_or_else(|| AgentPathSpecNotFound(agent_id.to_string()))
 }
 
 fn non_empty_str(value: &str) -> Option<&str> {
@@ -665,7 +672,7 @@ mod tests {
         }];
 
         let error = platform_global_skills_dir("missing", &specs).unwrap_err();
-        assert!(error.contains("missing"));
+        assert!(error.to_string().contains("missing"));
     }
 
     #[test]

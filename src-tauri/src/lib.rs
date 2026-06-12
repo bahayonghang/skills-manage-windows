@@ -284,7 +284,7 @@ pub fn run() {
                         let _ = migration_handle.emit(
                             MIGRATION_PROGRESS_EVENT,
                             MigrationProgress::Failed {
-                                error: error.clone(),
+                                error: error.to_string(),
                             },
                         );
                     }

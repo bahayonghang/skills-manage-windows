@@ -11,7 +11,7 @@ use std::path::{Component, Path, PathBuf};
 
 use uuid::Uuid;
 
-use crate::fs_util::run_blocking_fs;
+use crate::fs_util::run_blocking_fs_with;
 use crate::targets::{
     connect_remote_target, remote_parent, shell_quote, ActiveTarget, ConnectedRemoteTarget,
 };
@@ -25,6 +25,21 @@ use remote_scripts::{
     REMOTE_CENTRAL_UPDATE_SCRIPT, REMOTE_HASH_SCRIPT, REMOTE_HASH_UNSUPPORTED_EXIT_CODE,
     REMOTE_REFRESH_COPY_SCRIPT,
 };
+
+/// Run a synchronous filesystem task on the blocking-thread pool with string
+/// errors. Commands-layer (IPC boundary) counterpart of
+/// [`crate::fs_util::run_blocking_fs_with`]; typed service domains use that
+/// wrapper with their own join-error constructor instead.
+pub(crate) async fn run_blocking_fs<T, F>(label: &'static str, task: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    run_blocking_fs_with(label, task, |label, message| {
+        format!("Failed to join {} task: {}", label, message)
+    })
+    .await
+}
 
 #[derive(Debug, Clone)]
 pub(super) struct RemoteSkillFile {

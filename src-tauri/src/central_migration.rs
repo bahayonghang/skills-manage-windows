@@ -7,6 +7,28 @@ use crate::services::installation::copy_dir_all;
 
 pub const CENTRAL_STORE_MIGRATION_SETTING_KEY: &str = "central_private_store_migration_v1";
 
+/// Failure categories for the one-shot legacy Central store migration.
+/// Display texts preserve the historical string-error wording verbatim.
+#[derive(Debug, thiserror::Error)]
+pub enum CentralMigrationError {
+    /// Migration marker read/write via db settings.
+    #[error(transparent)]
+    Db(#[from] sqlx::Error),
+
+    /// Migration summary JSON encoding.
+    #[error(transparent)]
+    Serde(#[from] serde_json::Error),
+
+    #[error("Failed to create private Central store: {0}")]
+    CreateStore(#[source] std::io::Error),
+
+    #[error("Failed to read legacy Central store: {0}")]
+    ReadStore(#[source] std::io::Error),
+
+    #[error("Failed to read legacy skill entry: {0}")]
+    ReadEntry(#[source] std::io::Error),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralStoreMigrationSummary {
@@ -43,12 +65,9 @@ impl CentralStoreMigrationSummary {
  */
 pub async fn migrate_legacy_central_skills_to_private_store(
     pool: &DbPool,
-) -> Result<CentralStoreMigrationSummary, String> {
+) -> Result<CentralStoreMigrationSummary, CentralMigrationError> {
     // 1.1 跳过已完成的一次性迁移
-    if let Some(raw) = db::get_setting(pool, CENTRAL_STORE_MIGRATION_SETTING_KEY)
-        .await
-        .map_err(|e| e.to_string())?
-    {
+    if let Some(raw) = db::get_setting(pool, CENTRAL_STORE_MIGRATION_SETTING_KEY).await? {
         if let Ok(summary) = serde_json::from_str::<CentralStoreMigrationSummary>(&raw) {
             return Ok(summary);
         }
@@ -60,17 +79,15 @@ pub async fn migrate_legacy_central_skills_to_private_store(
     let summary = migrate_legacy_central_skills_between(&source_dir, &target_dir).await?;
 
     // 1.3 记录迁移摘要，供设置页或诊断读取
-    let encoded = serde_json::to_string(&summary).map_err(|e| e.to_string())?;
-    db::set_setting(pool, CENTRAL_STORE_MIGRATION_SETTING_KEY, &encoded)
-        .await
-        .map_err(|e| e.to_string())?;
+    let encoded = serde_json::to_string(&summary)?;
+    db::set_setting(pool, CENTRAL_STORE_MIGRATION_SETTING_KEY, &encoded).await?;
     Ok(summary)
 }
 
 async fn migrate_legacy_central_skills_between(
     source_dir: &Path,
     target_dir: &Path,
-) -> Result<CentralStoreMigrationSummary, String> {
+) -> Result<CentralStoreMigrationSummary, CentralMigrationError> {
     let mut summary = CentralStoreMigrationSummary::new(source_dir, target_dir);
 
     // 1.4 相同路径不迁移，只写入空摘要
@@ -79,19 +96,17 @@ async fn migrate_legacy_central_skills_between(
     }
 
     // 1.5 确保私有 Central 仓库存在
-    std::fs::create_dir_all(target_dir)
-        .map_err(|e| format!("Failed to create private Central store: {}", e))?;
+    std::fs::create_dir_all(target_dir).map_err(CentralMigrationError::CreateStore)?;
 
     // 1.6 旧目录不存在时结束，不创建任何平台侧副作用
     if !source_dir.exists() {
         return Ok(summary);
     }
 
-    let entries = std::fs::read_dir(source_dir)
-        .map_err(|e| format!("Failed to read legacy Central store: {}", e))?;
+    let entries = std::fs::read_dir(source_dir).map_err(CentralMigrationError::ReadStore)?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read legacy skill entry: {}", e))?;
+        let entry = entry.map_err(CentralMigrationError::ReadEntry)?;
         let source_skill_dir = entry.path();
         if !source_skill_dir.join("SKILL.md").exists() {
             continue;

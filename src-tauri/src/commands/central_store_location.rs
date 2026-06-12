@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
+use crate::commands::central_updates_fs::run_blocking_fs;
 use crate::db::DbPool;
-use crate::fs_util::run_blocking_fs;
 use crate::services::installation::{copy_dir_all, create_symlink, symlink_target_path};
 use crate::services::scanner::scan_all_skills_impl;
 use crate::targets::ActiveTarget;

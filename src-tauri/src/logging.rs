@@ -123,11 +123,56 @@ struct SanitizedFrontendRuntimeLog {
     details: String,
 }
 
+/// Failure categories for runtime log initialization and file management.
+/// Display texts preserve the historical string-error wording verbatim; the
+/// IPC boundary (`commands/logs.rs`) stringifies these errors for the UI.
+#[derive(Debug, thiserror::Error)]
+pub enum LoggingError {
+    /// IO failure with an operation-context prefix (e.g. "Failed to read
+    /// runtime log file 'x': <io error>").
+    #[error("{context}: {source}")]
+    Io {
+        context: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Directory entry / metadata read failure surfaced without extra
+    /// context (historical `error.to_string()` sites).
+    #[error(transparent)]
+    DirEntry(#[from] std::io::Error),
+
+    #[error("Failed to install tracing subscriber: {0}")]
+    InstallSubscriber(tracing::subscriber::SetGlobalDefaultError),
+
+    #[error("Failed to retain tracing worker guard.")]
+    RetainWorkerGuard,
+
+    #[error("Failed to install stderr tracing subscriber: {0}")]
+    InstallStderrSubscriber(Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("Runtime log clear request must include fileName, all, or olderThanDays.")]
+    ClearRequestMissingSelector,
+
+    #[error("Invalid runtime log file name '{0}'. Expected skillport-YYYY-MM-DD.log.")]
+    InvalidLogFileName(String),
+}
+
+impl LoggingError {
+    /// Build a [`LoggingError::Io`] with an operation-context prefix.
+    fn io(context: impl Into<String>, source: std::io::Error) -> Self {
+        Self::Io {
+            context: context.into(),
+            source,
+        }
+    }
+}
+
 pub fn logs_dir() -> PathBuf {
     paths::app_data_dir().join("logs")
 }
 
-pub fn init_file_logging() -> Result<(), String> {
+pub fn init_file_logging() -> Result<(), LoggingError> {
     match init_file_logging_with_dir(&logs_dir()) {
         Ok(()) => {
             tracing::info!(
@@ -149,15 +194,15 @@ pub fn init_file_logging() -> Result<(), String> {
     }
 }
 
-pub fn init_file_logging_with_dir(log_dir: &Path) -> Result<(), String> {
+pub fn init_file_logging_with_dir(log_dir: &Path) -> Result<(), LoggingError> {
     if LOG_GUARD.get().is_some() {
         return Ok(());
     }
 
     fs::create_dir_all(log_dir).map_err(|error| {
-        format!(
-            "Failed to create log directory '{}': {error}",
-            log_dir.display()
+        LoggingError::io(
+            format!("Failed to create log directory '{}'", log_dir.display()),
+            error,
         )
     })?;
 
@@ -173,7 +218,7 @@ fn daily_log_path(log_dir: &Path) -> PathBuf {
     log_dir.join(format!("skillport-{}.log", Local::now().format("%Y-%m-%d")))
 }
 
-fn init_file_logging_with_appender(appender: DailyLogWriter) -> Result<(), String> {
+fn init_file_logging_with_appender(appender: DailyLogWriter) -> Result<(), LoggingError> {
     let (writer, guard) = tracing_appender::non_blocking(appender);
     let subscriber = tracing_subscriber::fmt()
         .with_env_filter(default_env_filter())
@@ -183,48 +228,48 @@ fn init_file_logging_with_appender(appender: DailyLogWriter) -> Result<(), Strin
         .finish();
 
     tracing::subscriber::set_global_default(subscriber)
-        .map_err(|error| format!("Failed to install tracing subscriber: {error}"))?;
+        .map_err(LoggingError::InstallSubscriber)?;
     LOG_GUARD
         .set(guard)
-        .map_err(|_| "Failed to retain tracing worker guard.".to_string())
+        .map_err(|_| LoggingError::RetainWorkerGuard)
 }
 
-fn init_stderr_logging() -> Result<(), String> {
+fn init_stderr_logging() -> Result<(), LoggingError> {
     tracing_subscriber::fmt()
         .with_env_filter(default_env_filter())
         .with_writer(std::io::stderr)
         .with_ansi(false)
         .compact()
         .try_init()
-        .map_err(|error| format!("Failed to install stderr tracing subscriber: {error}"))
+        .map_err(LoggingError::InstallStderrSubscriber)
 }
 
 fn default_env_filter() -> EnvFilter {
     EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
 }
 
-pub fn list_runtime_log_files() -> Result<Vec<RuntimeLogFile>, String> {
+pub fn list_runtime_log_files() -> Result<Vec<RuntimeLogFile>, LoggingError> {
     list_runtime_log_files_in_dir(&logs_dir())
 }
 
-fn list_runtime_log_files_in_dir(log_dir: &Path) -> Result<Vec<RuntimeLogFile>, String> {
+fn list_runtime_log_files_in_dir(log_dir: &Path) -> Result<Vec<RuntimeLogFile>, LoggingError> {
     if !log_dir.exists() {
         return Ok(Vec::new());
     }
 
     let mut files = Vec::new();
     for entry in fs::read_dir(log_dir).map_err(|error| {
-        format!(
-            "Failed to read runtime log directory '{}': {error}",
-            log_dir.display()
+        LoggingError::io(
+            format!("Failed to read runtime log directory '{}'", log_dir.display()),
+            error,
         )
     })? {
-        let entry = entry.map_err(|error| error.to_string())?;
+        let entry = entry?;
         let file_name = entry.file_name().to_string_lossy().into_owned();
         let Some(date) = runtime_log_file_date(&file_name) else {
             continue;
         };
-        let metadata = entry.metadata().map_err(|error| error.to_string())?;
+        let metadata = entry.metadata()?;
         if !metadata.is_file() {
             continue;
         }
@@ -245,19 +290,19 @@ fn list_runtime_log_files_in_dir(log_dir: &Path) -> Result<Vec<RuntimeLogFile>, 
 
 pub fn read_runtime_log_file(
     request: RuntimeLogReadRequest,
-) -> Result<RuntimeLogReadResult, String> {
+) -> Result<RuntimeLogReadResult, LoggingError> {
     read_runtime_log_file_from_dir(&logs_dir(), request)
 }
 
 fn read_runtime_log_file_from_dir(
     log_dir: &Path,
     request: RuntimeLogReadRequest,
-) -> Result<RuntimeLogReadResult, String> {
+) -> Result<RuntimeLogReadResult, LoggingError> {
     let path = runtime_log_path(log_dir, &request.file_name)?;
     let content = fs::read_to_string(&path).map_err(|error| {
-        format!(
-            "Failed to read runtime log file '{}': {error}",
-            request.file_name
+        LoggingError::io(
+            format!("Failed to read runtime log file '{}'", request.file_name),
+            error,
         )
     })?;
 
@@ -294,14 +339,21 @@ fn read_runtime_log_file_from_dir(
     })
 }
 
-pub fn export_runtime_log_file(file_name: String) -> Result<String, String> {
+pub fn export_runtime_log_file(file_name: String) -> Result<String, LoggingError> {
     export_runtime_log_file_from_dir(&logs_dir(), &file_name)
 }
 
-fn export_runtime_log_file_from_dir(log_dir: &Path, file_name: &str) -> Result<String, String> {
+fn export_runtime_log_file_from_dir(
+    log_dir: &Path,
+    file_name: &str,
+) -> Result<String, LoggingError> {
     let path = runtime_log_path(log_dir, file_name)?;
-    let content = fs::read_to_string(&path)
-        .map_err(|error| format!("Failed to export runtime log file '{file_name}': {error}"))?;
+    let content = fs::read_to_string(&path).map_err(|error| {
+        LoggingError::io(
+            format!("Failed to export runtime log file '{file_name}'"),
+            error,
+        )
+    })?;
     Ok(content
         .lines()
         .map(redact_sensitive_line)
@@ -309,14 +361,14 @@ fn export_runtime_log_file_from_dir(log_dir: &Path, file_name: &str) -> Result<S
         .join("\n"))
 }
 
-pub fn clear_runtime_logs(request: RuntimeLogClearRequest) -> Result<u64, String> {
+pub fn clear_runtime_logs(request: RuntimeLogClearRequest) -> Result<u64, LoggingError> {
     clear_runtime_logs_in_dir(&logs_dir(), request)
 }
 
 fn clear_runtime_logs_in_dir(
     log_dir: &Path,
     request: RuntimeLogClearRequest,
-) -> Result<u64, String> {
+) -> Result<u64, LoggingError> {
     if !log_dir.exists() {
         return Ok(0);
     }
@@ -325,7 +377,10 @@ fn clear_runtime_logs_in_dir(
         let path = runtime_log_path(log_dir, &file_name)?;
         if path.exists() {
             fs::remove_file(&path).map_err(|error| {
-                format!("Failed to delete runtime log file '{file_name}': {error}")
+                LoggingError::io(
+                    format!("Failed to delete runtime log file '{file_name}'"),
+                    error,
+                )
             })?;
             return Ok(1);
         }
@@ -338,9 +393,7 @@ fn clear_runtime_logs_in_dir(
         let days = days.max(0);
         Some((Local::now() - Duration::days(days)).date_naive())
     } else {
-        return Err(
-            "Runtime log clear request must include fileName, all, or olderThanDays.".to_string(),
-        );
+        return Err(LoggingError::ClearRequestMissingSelector);
     };
 
     let mut deleted = 0;
@@ -353,9 +406,9 @@ fn clear_runtime_logs_in_dir(
         }
         let path = runtime_log_path(log_dir, &file.file_name)?;
         fs::remove_file(&path).map_err(|error| {
-            format!(
-                "Failed to delete runtime log file '{}': {error}",
-                file.file_name
+            LoggingError::io(
+                format!("Failed to delete runtime log file '{}'", file.file_name),
+                error,
             )
         })?;
         deleted += 1;
@@ -364,11 +417,14 @@ fn clear_runtime_logs_in_dir(
     Ok(deleted)
 }
 
-pub fn cleanup_expired_runtime_logs() -> Result<u64, String> {
+pub fn cleanup_expired_runtime_logs() -> Result<u64, LoggingError> {
     cleanup_expired_runtime_logs_in_dir(&logs_dir(), RUNTIME_LOG_RETENTION_DAYS)
 }
 
-fn cleanup_expired_runtime_logs_in_dir(log_dir: &Path, retention_days: i64) -> Result<u64, String> {
+fn cleanup_expired_runtime_logs_in_dir(
+    log_dir: &Path,
+    retention_days: i64,
+) -> Result<u64, LoggingError> {
     clear_runtime_logs_in_dir(
         log_dir,
         RuntimeLogClearRequest {
@@ -538,18 +594,16 @@ fn extract_log_field(raw: &str, key: &str) -> Option<String> {
     }
 }
 
-fn runtime_log_path(log_dir: &Path, file_name: &str) -> Result<PathBuf, String> {
+fn runtime_log_path(log_dir: &Path, file_name: &str) -> Result<PathBuf, LoggingError> {
     validate_runtime_log_file_name(file_name)?;
     Ok(log_dir.join(file_name))
 }
 
-fn validate_runtime_log_file_name(file_name: &str) -> Result<(), String> {
+fn validate_runtime_log_file_name(file_name: &str) -> Result<(), LoggingError> {
     if runtime_log_file_date(file_name).is_some() {
         Ok(())
     } else {
-        Err(format!(
-            "Invalid runtime log file name '{file_name}'. Expected skillport-YYYY-MM-DD.log."
-        ))
+        Err(LoggingError::InvalidLogFileName(file_name.to_string()))
     }
 }
 

@@ -56,24 +56,24 @@ pub async fn export_operation_logs(
 
 #[tauri::command]
 pub fn list_runtime_log_files() -> Result<Vec<RuntimeLogFile>, String> {
-    logging::list_runtime_log_files()
+    logging::list_runtime_log_files().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn read_runtime_log_file(
     request: RuntimeLogReadRequest,
 ) -> Result<RuntimeLogReadResult, String> {
-    logging::read_runtime_log_file(request)
+    logging::read_runtime_log_file(request).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn export_runtime_log_file(file_name: String) -> Result<String, String> {
-    logging::export_runtime_log_file(file_name)
+    logging::export_runtime_log_file(file_name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn clear_runtime_logs(request: RuntimeLogClearRequest) -> Result<u64, String> {
-    logging::clear_runtime_logs(request)
+    logging::clear_runtime_logs(request).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

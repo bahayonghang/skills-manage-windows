@@ -60,12 +60,18 @@ fn resolved_paths_for_agent(
 ) -> Result<ResolvedPlatformPaths, String> {
     let (global_skills_dir, project_skills_dir) = match remote_home {
         Some(home) => (
-            platform_global_skills_dir_for_remote(&agent.id, specs, home)?,
-            platform_project_skills_dir_for_remote(&agent.id, specs, home)?,
+            platform_global_skills_dir_for_remote(&agent.id, specs, home)
+                .map_err(|e| e.to_string())?,
+            platform_project_skills_dir_for_remote(&agent.id, specs, home)
+                .map_err(|e| e.to_string())?,
         ),
         None => (
-            path_to_string(&platform_global_skills_dir(&agent.id, specs)?),
-            platform_project_skills_dir(&agent.id, specs)?.map(|path| path_to_string(&path)),
+            path_to_string(
+                &platform_global_skills_dir(&agent.id, specs).map_err(|e| e.to_string())?,
+            ),
+            platform_project_skills_dir(&agent.id, specs)
+                .map_err(|e| e.to_string())?
+                .map(|path| path_to_string(&path)),
         ),
     };
 
