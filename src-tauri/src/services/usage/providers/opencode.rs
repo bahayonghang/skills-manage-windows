@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
-use crate::services::usage::{Scope, SkillCall, UsageProvider};
+use crate::services::usage::{Scope, SkillCall, UsageError, UsageProvider};
 
 const SOURCE: &str = "OpenCode";
 
@@ -45,7 +45,7 @@ impl UsageProvider for OpenCodeProvider {
         backend.exists(&Self::db_path(scope)).await
     }
 
-    async fn collect(&self, scope: &Scope) -> Result<Vec<SkillCall>, String> {
+    async fn collect(&self, scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
         let backend = scope.fs_backend();
         let db_path = Self::db_path(scope);
         if !backend.exists(&db_path).await {
@@ -57,13 +57,13 @@ impl UsageProvider for OpenCodeProvider {
             "sqlite://{}?mode=ro",
             fetched.local_path.to_string_lossy().replace('\\', "/")
         );
-        let opts = SqliteConnectOptions::from_str(&url).map_err(|e| e.to_string())?;
+        let opts = SqliteConnectOptions::from_str(&url)?;
         // 关闭 wal 之类的写文件副作用 —— 我们只读。
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect_with(opts.read_only(true))
             .await
-            .map_err(|e| format!("opencode db open: {e}"))?;
+            .map_err(UsageError::OpenCodeDbOpen)?;
 
         let rows: Vec<(String, String, String)> = sqlx::query_as(
             "SELECT p.data, s.directory, p.session_id
@@ -74,7 +74,7 @@ impl UsageProvider for OpenCodeProvider {
         )
         .fetch_all(&pool)
         .await
-        .map_err(|e| format!("opencode query: {e}"))?;
+        .map_err(UsageError::OpenCodeQuery)?;
 
         pool.close().await;
 

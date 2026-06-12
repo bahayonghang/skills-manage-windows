@@ -12,8 +12,11 @@
 //! [`Scope::Remote`] 时会走 `fs_backend::FsBackend` trait 替换底层 IO。
 
 pub mod aggregate;
+mod error;
 pub mod fs_backend;
 pub mod providers;
+
+pub use error::UsageError;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -195,7 +198,7 @@ pub trait UsageProvider: Send + Sync {
     /// 解析日志、返回归一化调用列表。失败时返回 Err 让编排器记录到
     /// 健康表的 `available=false` 但不影响其他 provider；空目录返回
     /// `Ok(vec![])` 而非 Err。
-    async fn collect(&self, scope: &Scope) -> Result<Vec<SkillCall>, String>;
+    async fn collect(&self, scope: &Scope) -> Result<Vec<SkillCall>, UsageError>;
 }
 
 // ─── Cache & Refresh ─────────────────────────────────────────────────────────
@@ -221,7 +224,11 @@ pub struct RefreshSummary {
 ///
 /// `force=true` 跳过缓存。失败的 provider 不会让整个 refresh 出错，只会
 /// 在 `skill_call_providers` 里被标 available=false。
-pub async fn refresh(pool: &DbPool, scope: &Scope, force: bool) -> Result<RefreshSummary, String> {
+pub async fn refresh(
+    pool: &DbPool,
+    scope: &Scope,
+    force: bool,
+) -> Result<RefreshSummary, UsageError> {
     refresh_with_providers(pool, scope, force, providers::all_providers()).await
 }
 
@@ -230,16 +237,13 @@ async fn refresh_with_providers(
     scope: &Scope,
     force: bool,
     providers: Vec<Box<dyn UsageProvider>>,
-) -> Result<RefreshSummary, String> {
+) -> Result<RefreshSummary, UsageError> {
     let target_id = scope.target_id();
     let now_ms = Utc::now().timestamp_millis();
 
     // 1) 缓存判定
     if !force {
-        if let Some(last) = db::get_last_scan_ms(pool, &target_id)
-            .await
-            .map_err(|e| e.to_string())?
-        {
+        if let Some(last) = db::get_last_scan_ms(pool, &target_id).await? {
             if now_ms - last < CACHE_TTL_MS {
                 return Ok(RefreshSummary {
                     cached: true,
@@ -307,8 +311,7 @@ async fn refresh_with_providers(
         &provider_outcomes,
         scan_completed_ms,
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(RefreshSummary {
         cached: false,
@@ -325,20 +328,12 @@ pub async fn build_overview(
     target_id: &str,
     source: Option<&str>,
     top_skills_limit: usize,
-) -> Result<aggregate::UsageOverview, String> {
-    let kpis_row = db::get_usage_kpis(pool, target_id, source)
-        .await
-        .map_err(|e| e.to_string())?;
-    let top_skill_rows = db::list_top_skills(pool, target_id, source, top_skills_limit)
-        .await
-        .map_err(|e| e.to_string())?;
+) -> Result<aggregate::UsageOverview, UsageError> {
+    let kpis_row = db::get_usage_kpis(pool, target_id, source).await?;
+    let top_skill_rows = db::list_top_skills(pool, target_id, source, top_skills_limit).await?;
     let cutoff_ms = Utc::now().timestamp_millis() - (16 * 7 * 86_400_000);
-    let day_rows = db::list_daily_counts_since(pool, target_id, source, cutoff_ms)
-        .await
-        .map_err(|e| e.to_string())?;
-    let last_scan_ms = db::get_last_scan_ms(pool, target_id)
-        .await
-        .map_err(|e| e.to_string())?;
+    let day_rows = db::list_daily_counts_since(pool, target_id, source, cutoff_ms).await?;
+    let last_scan_ms = db::get_last_scan_ms(pool, target_id).await?;
 
     Ok(aggregate::UsageOverview {
         kpis: aggregate::UsageKpis {
@@ -411,10 +406,8 @@ impl From<SkillCallProviderRow> for ProviderHealth {
 pub async fn list_provider_health(
     pool: &DbPool,
     target_id: &str,
-) -> Result<Vec<ProviderHealth>, String> {
-    let rows = db::list_provider_rows(pool, target_id)
-        .await
-        .map_err(|e| e.to_string())?;
+) -> Result<Vec<ProviderHealth>, UsageError> {
+    let rows = db::list_provider_rows(pool, target_id).await?;
     Ok(rows.into_iter().map(ProviderHealth::from).collect())
 }
 
@@ -486,8 +479,8 @@ mod refresh_tests {
             true
         }
 
-        async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, String> {
-            Err("fixture failure".to_string())
+        async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
+            Err(UsageError::Remote("fixture failure".to_string()))
         }
     }
 

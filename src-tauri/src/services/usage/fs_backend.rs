@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use super::UsageError;
 use crate::targets::{shell_quote, ConnectedRemoteTarget};
 
 const PATH_MARKER: &str = "\u{001e}PATH\t";
@@ -40,14 +41,14 @@ pub trait FsBackend: Send + Sync {
     async fn exists(&self, path: &str) -> bool;
 
     /// 整个文件读成 UTF-8 字符串。读取失败或编码错误返回 Err。
-    async fn read_to_string(&self, path: &str) -> Result<String, String>;
+    async fn read_to_string(&self, path: &str) -> Result<String, UsageError>;
 
     /// 批量读多个 UTF-8 文本文件。默认逐文件读取；Remote backend 会覆盖成
     /// 单次/分批 SSH 脚本，减少 round trips。
     async fn read_many_to_strings(
         &self,
         paths: &[String],
-    ) -> Result<HashMap<String, String>, String> {
+    ) -> Result<HashMap<String, String>, UsageError> {
         let mut content_by_path = HashMap::new();
         for path in paths {
             if let Ok(content) = self.read_to_string(path).await {
@@ -59,11 +60,11 @@ pub trait FsBackend: Send + Sync {
 
     /// 递归列出 root 目录下所有 .jsonl 文件的绝对路径。Local 用 walkdir，
     /// Remote 用 `find -name '*.jsonl' -type f`。
-    async fn walk_jsonl(&self, root: &str) -> Result<Vec<String>, String>;
+    async fn walk_jsonl(&self, root: &str) -> Result<Vec<String>, UsageError>;
 
     /// 列出某层目录的直接条目（只一层）。给 Grok 这种按
     /// 目录名前缀过滤的 provider 用。
-    async fn list_entries(&self, path: &str) -> Result<Vec<FsEntry>, String>;
+    async fn list_entries(&self, path: &str) -> Result<Vec<FsEntry>, UsageError>;
 
     /// 把（可能远程）文件拉到本地真实 PathBuf，便于 SQLite 等需要文件
     /// 句柄的 API。Local backend 直接返回原路径；Remote backend 拉到
@@ -71,7 +72,7 @@ pub trait FsBackend: Send + Sync {
     ///
     /// 调用方持有返回的 PathBuf 时必须连带保留 `_keepalive` 引用——
     /// `BackendFetched` 的析构会清理临时目录。
-    async fn fetch_to_local(&self, path: &str) -> Result<BackendFetched, String>;
+    async fn fetch_to_local(&self, path: &str) -> Result<BackendFetched, UsageError>;
 }
 
 /// `fetch_to_local` 返回值：本地路径 + 一个生命周期句柄。
@@ -93,74 +94,91 @@ impl FsBackend for LocalFsBackend {
         Path::new(path).exists()
     }
 
-    async fn read_to_string(&self, path: &str) -> Result<String, String> {
+    async fn read_to_string(&self, path: &str) -> Result<String, UsageError> {
         let path = path.to_string();
-        crate::fs_util::run_blocking_fs("usage file read", move || {
-            std::fs::read_to_string(&path).map_err(|e| format!("local read {}: {}", path, e))
-        })
+        crate::fs_util::run_blocking_fs_with(
+            "usage file read",
+            move || {
+                std::fs::read_to_string(&path)
+                    .map_err(|e| UsageError::io(format!("local read {}", path), e))
+            },
+            UsageError::task_join,
+        )
         .await
     }
 
     async fn read_many_to_strings(
         &self,
         paths: &[String],
-    ) -> Result<HashMap<String, String>, String> {
+    ) -> Result<HashMap<String, String>, UsageError> {
         let paths = paths.to_vec();
-        crate::fs_util::run_blocking_fs("usage batch file read", move || {
-            let mut content_by_path = HashMap::new();
-            for path in paths {
-                if let Ok(content) = std::fs::read_to_string(&path) {
-                    content_by_path.insert(path, content);
-                }
-            }
-            Ok(content_by_path)
-        })
-        .await
-    }
-
-    async fn walk_jsonl(&self, root: &str) -> Result<Vec<String>, String> {
-        let root = root.to_string();
-        crate::fs_util::run_blocking_fs("usage jsonl walk", move || {
-            let root_path = PathBuf::from(&root);
-            if !root_path.is_dir() {
-                return Ok(vec![]);
-            }
-            let mut out = Vec::new();
-            for entry in walkdir::WalkDir::new(&root_path)
-                .into_iter()
-                .filter_map(Result::ok)
-            {
-                let p = entry.path();
-                if p.extension().and_then(|e| e.to_str()) == Some("jsonl") && p.is_file() {
-                    if let Some(s) = p.to_str() {
-                        out.push(s.to_string());
+        crate::fs_util::run_blocking_fs_with(
+            "usage batch file read",
+            move || {
+                let mut content_by_path = HashMap::new();
+                for path in paths {
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        content_by_path.insert(path, content);
                     }
                 }
-            }
-            Ok(out)
-        })
+                Ok(content_by_path)
+            },
+            UsageError::task_join,
+        )
         .await
     }
 
-    async fn list_entries(&self, path: &str) -> Result<Vec<FsEntry>, String> {
+    async fn walk_jsonl(&self, root: &str) -> Result<Vec<String>, UsageError> {
+        let root = root.to_string();
+        crate::fs_util::run_blocking_fs_with(
+            "usage jsonl walk",
+            move || {
+                let root_path = PathBuf::from(&root);
+                if !root_path.is_dir() {
+                    return Ok(vec![]);
+                }
+                let mut out = Vec::new();
+                for entry in walkdir::WalkDir::new(&root_path)
+                    .into_iter()
+                    .filter_map(Result::ok)
+                {
+                    let p = entry.path();
+                    if p.extension().and_then(|e| e.to_str()) == Some("jsonl") && p.is_file() {
+                        if let Some(s) = p.to_str() {
+                            out.push(s.to_string());
+                        }
+                    }
+                }
+                Ok(out)
+            },
+            UsageError::task_join,
+        )
+        .await
+    }
+
+    async fn list_entries(&self, path: &str) -> Result<Vec<FsEntry>, UsageError> {
         let path = path.to_string();
-        crate::fs_util::run_blocking_fs("usage directory listing", move || {
-            let entries = match std::fs::read_dir(&path) {
-                Ok(e) => e,
-                Err(_) => return Ok(vec![]),
-            };
-            let mut out = Vec::new();
-            for ent in entries.flatten() {
-                let name = ent.file_name().to_string_lossy().into_owned();
-                let is_dir = ent.file_type().map(|t| t.is_dir()).unwrap_or(false);
-                out.push(FsEntry { name, is_dir });
-            }
-            Ok(out)
-        })
+        crate::fs_util::run_blocking_fs_with(
+            "usage directory listing",
+            move || {
+                let entries = match std::fs::read_dir(&path) {
+                    Ok(e) => e,
+                    Err(_) => return Ok(vec![]),
+                };
+                let mut out = Vec::new();
+                for ent in entries.flatten() {
+                    let name = ent.file_name().to_string_lossy().into_owned();
+                    let is_dir = ent.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                    out.push(FsEntry { name, is_dir });
+                }
+                Ok(out)
+            },
+            UsageError::task_join,
+        )
         .await
     }
 
-    async fn fetch_to_local(&self, path: &str) -> Result<BackendFetched, String> {
+    async fn fetch_to_local(&self, path: &str) -> Result<BackendFetched, UsageError> {
         Ok(BackendFetched {
             local_path: PathBuf::from(path),
             _keepalive: None,
@@ -188,15 +206,20 @@ impl FsBackend for RemoteFsBackend {
         self.target.exists(path).await.unwrap_or(false)
     }
 
-    async fn read_to_string(&self, path: &str) -> Result<String, String> {
-        let bytes = self.target.read_file(path).await?;
-        String::from_utf8(bytes).map_err(|e| format!("remote utf8 {}: {}", path, e))
+    async fn read_to_string(&self, path: &str) -> Result<String, UsageError> {
+        let bytes = self
+            .target
+            .read_file(path)
+            .await
+            .map_err(UsageError::Remote)?;
+        String::from_utf8(bytes)
+            .map_err(|e| UsageError::Parse(format!("remote utf8 {}: {}", path, e)))
     }
 
     async fn read_many_to_strings(
         &self,
         paths: &[String],
-    ) -> Result<HashMap<String, String>, String> {
+    ) -> Result<HashMap<String, String>, UsageError> {
         if paths.is_empty() {
             return Ok(HashMap::new());
         }
@@ -204,13 +227,17 @@ impl FsBackend for RemoteFsBackend {
         let mut content_by_path = HashMap::new();
         for chunk in paths.chunks(REMOTE_READ_CHUNK_SIZE) {
             let script = build_batch_read_script(chunk);
-            let stdout = self.target.run_command(&script).await?;
+            let stdout = self
+                .target
+                .run_command(&script)
+                .await
+                .map_err(UsageError::Remote)?;
             content_by_path.extend(parse_batch_read_output(&stdout));
         }
         Ok(content_by_path)
     }
 
-    async fn walk_jsonl(&self, root: &str) -> Result<Vec<String>, String> {
+    async fn walk_jsonl(&self, root: &str) -> Result<Vec<String>, UsageError> {
         // `find` 在大多数 *nix 都有；返回每行一个绝对路径
         let cmd = format!(
             "find {} -type f -name '*.jsonl' 2>/dev/null",
@@ -224,7 +251,7 @@ impl FsBackend for RemoteFsBackend {
             .collect())
     }
 
-    async fn list_entries(&self, path: &str) -> Result<Vec<FsEntry>, String> {
+    async fn list_entries(&self, path: &str) -> Result<Vec<FsEntry>, UsageError> {
         let entries = self.target.list_dir(path).await.unwrap_or_default();
         Ok(entries
             .into_iter()
@@ -235,18 +262,27 @@ impl FsBackend for RemoteFsBackend {
             .collect())
     }
 
-    async fn fetch_to_local(&self, path: &str) -> Result<BackendFetched, String> {
-        let bytes = self.target.read_file(path).await?;
-        let dir = tempfile::TempDir::new().map_err(|e| format!("tempdir: {}", e))?;
+    async fn fetch_to_local(&self, path: &str) -> Result<BackendFetched, UsageError> {
+        let bytes = self
+            .target
+            .read_file(path)
+            .await
+            .map_err(UsageError::Remote)?;
+        let dir = tempfile::TempDir::new().map_err(|e| UsageError::io("tempdir", e))?;
         let basename = Path::new(path)
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("remote.bin");
         let local_path = dir.path().join(basename);
         let local_path_for_write = local_path.clone();
-        crate::fs_util::run_blocking_fs("remote file staging", move || {
-            std::fs::write(&local_path_for_write, &bytes).map_err(|e| format!("write tmp: {}", e))
-        })
+        crate::fs_util::run_blocking_fs_with(
+            "remote file staging",
+            move || {
+                std::fs::write(&local_path_for_write, &bytes)
+                    .map_err(|e| UsageError::io("write tmp", e))
+            },
+            UsageError::task_join,
+        )
         .await?;
         Ok(BackendFetched {
             local_path,

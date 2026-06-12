@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use regex::Regex;
 use serde_json::Value;
 
-use crate::services::usage::{Scope, SkillCall, UsageProvider};
+use crate::services::usage::{Scope, SkillCall, UsageError, UsageProvider};
 
 const SOURCE: &str = "Grok CLI";
 
@@ -79,7 +79,7 @@ impl UsageProvider for GrokProvider {
         backend.exists(&Self::sessions_dir(scope)).await
     }
 
-    async fn collect(&self, scope: &Scope) -> Result<Vec<SkillCall>, String> {
+    async fn collect(&self, scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
         let backend = scope.fs_backend();
         let sessions_dir = Self::sessions_dir(scope);
         if !backend.exists(&sessions_dir).await {

@@ -25,7 +25,7 @@ use regex::Regex;
 use serde_json::Value;
 
 use crate::services::usage::fs_backend::FsBackend;
-use crate::services::usage::{Scope, SkillCall, UsageProvider};
+use crate::services::usage::{Scope, SkillCall, UsageError, UsageProvider};
 
 const SOURCE: &str = "Claude Code";
 
@@ -97,7 +97,7 @@ impl UsageProvider for ClaudeCodeProvider {
             .await
     }
 
-    async fn collect(&self, scope: &Scope) -> Result<Vec<SkillCall>, String> {
+    async fn collect(&self, scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
         let backend = scope.fs_backend();
         let claude_home = Self::claude_home(scope);
         let history_path = scope.join_path(&claude_home, &["history.jsonl"]);
@@ -179,7 +179,7 @@ async fn collect_from_projects(
     builtins: &HashSet<&str>,
     seen: &mut HashSet<String>,
     calls: &mut Vec<SkillCall>,
-) -> Result<(), String> {
+) -> Result<(), UsageError> {
     // 顶层是按 cwd 编码的目录，一次扫一层进各项目，但内部 jsonl 可能嵌
     // 在 subagents/ 子目录里——所以通过 FsBackend 递归列出 jsonl。
     let paths = backend.walk_jsonl(projects_dir).await?;

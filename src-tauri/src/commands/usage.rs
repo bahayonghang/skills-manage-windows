@@ -104,13 +104,17 @@ async fn build_refresh_page(
     used_cached_data: bool,
     refresh_error: Option<String>,
 ) -> Result<UsageRefreshResult, String> {
-    let overview = usage::build_overview(&state.db, target_id, None, 50).await?;
+    let overview = usage::build_overview(&state.db, target_id, None, 50)
+        .await
+        .map_err(|e| e.to_string())?;
     let recent = usage::rows_to_skill_calls(
         crate::db::list_recent_calls(&state.db, target_id, None, 20)
             .await
             .map_err(|e| e.to_string())?,
     );
-    let providers = usage::list_provider_health(&state.db, target_id).await?;
+    let providers = usage::list_provider_health(&state.db, target_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(UsageRefreshResult {
         summary,
@@ -157,7 +161,9 @@ pub async fn usage_refresh(
 
     match &target.active {
         ActiveTarget::Local => {
-            let summary = usage::refresh(&state.db, &Scope::Local, force).await?;
+            let summary = usage::refresh(&state.db, &Scope::Local, force)
+                .await
+                .map_err(|e| e.to_string())?;
             build_refresh_page(
                 &state,
                 &target.target_id,
@@ -177,7 +183,9 @@ pub async fn usage_refresh(
                         remote_home,
                         connection: Arc::new(connection),
                     };
-                    let summary = usage::refresh(&state.db, &scope, force).await?;
+                    let summary = usage::refresh(&state.db, &scope, force)
+                        .await
+                        .map_err(|e| e.to_string())?;
                     build_refresh_page(
                         &state,
                         &target.target_id,
@@ -220,7 +228,9 @@ pub async fn usage_get_overview(
 ) -> Result<UsageOverview, String> {
     let target = active_usage_target(&state).await?;
     let limit = top_skills_limit.unwrap_or(50);
-    usage::build_overview(&state.db, &target.target_id, source.as_deref(), limit).await
+    usage::build_overview(&state.db, &target.target_id, source.as_deref(), limit)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -242,7 +252,9 @@ pub async fn usage_get_providers(
     state: State<'_, AppState>,
 ) -> Result<Vec<ProviderHealth>, String> {
     let target = active_usage_target(&state).await?;
-    usage::list_provider_health(&state.db, &target.target_id).await
+    usage::list_provider_health(&state.db, &target.target_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 单 skill 详情 —— 当 SkillBarChart 没有匹配到中央库 skill_id 时的内嵌备选视图。
