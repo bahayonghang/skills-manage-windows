@@ -26,7 +26,7 @@ pub enum AiProviderError {
 
     /// Secret-store interaction failure (read / save / verify / clear /
     /// migrate). Message preformatted at the call site ("Failed to {action}
-    /// AI API key: ..."); the secrets module still returns string-ish errors.
+    /// AI API key: ..." wrapping the typed `SecretError` Display).
     #[error("{0}")]
     Secret(String),
 

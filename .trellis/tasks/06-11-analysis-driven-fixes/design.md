@@ -117,6 +117,8 @@ C2、C3 开始前必须确认上一批已归档且 `just ci` 绿。
 
 C1 核对记录：design 预期的 `ScannerError::Io/Parse` 变体未落地——scanner 对单文件解析/IO 失败的策略是静默跳过（`Option`/空列表），不存在对应错误路径；`InstallationError` 实际按真实失败路径展开为 30+ 语义变体（守卫类、占位冲突类、Claude 行级卸载类等），均保留原文案。
 
+C3 核对记录（分析报告条目 #2 关闭证据）：db/repos 直接透传 `sqlx::Error` 落地，repos 内业务守卫以 `sqlx::Error::InvalidArgument(原消息)` 承载（文案逐字保留，调用方零改动）；130 处 TODO(C3) 全部清除，六域 `Other(String)` 兜底变体删除；targets 以 `TargetsError`（41 变体）类型化，各域 `Remote(String)` 变体保持、调用点 `.to_string()` 映射（Display 逐字一致）；resource_budget 收紧为 `BudgetExceeded` 结构体；预期的 `operation_log`/`secrets`/`bootstrap` 散点核对结果为 secrets 已全程 `SecretError` 类型化无需改动、operation_log 经 repos 透传覆盖、bootstrap 属 commands 边界保留。全局扫尾：`Result<_, String>`（排除 tests）仅存 commands/ 边界签名 + `lib.rs` `active_db`/`active_target` 双助手（约 60 个命令位点的单一字符串化点，文档化保留）。验收：`just ci` 绿、704 用例 0 失败、测试属性 711→711 零删减。遗留 follow-up：clippy 1.95 `--all-targets` 在旧测试代码上新触发 11 个 lint（useless_vec×4、slice::from_ref×3、module_inception×2 等，全部早于本批存在），项目门禁用 plain clippy 不受影响，建议另立轻量任务清理。
+
 ## 2. spawn_blocking 架构（A）
 
 - 将 `services/installation/fs_util.rs` 的 `spawn_blocking` 包装提升为跨域共享（建议位置：`src-tauri/src/fs_util.rs`，installation 原路径 re-export 保持兼容）。
