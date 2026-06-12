@@ -22,7 +22,9 @@ pub async fn preview_local_remote_sync(
     request: LocalRemoteSyncPreviewRequest,
 ) -> Result<LocalRemoteSyncPreview, String> {
     let active_target = selected_remote_target(&state, &request.target_id).await?;
-    preview_local_remote_sync_impl(active_target, request.repo_path).await
+    preview_local_remote_sync_impl(active_target, request.repo_path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -32,7 +34,9 @@ pub async fn apply_local_remote_sync(
 ) -> Result<LocalRemoteSyncApplyResult, String> {
     let active_target = selected_remote_target(&state, &request.target_id).await?;
     let target_context = target_context_from_active_target(&active_target);
-    let mut result = apply_local_remote_sync_impl(active_target.clone(), request.repo_path).await;
+    let mut result = apply_local_remote_sync_impl(active_target.clone(), request.repo_path)
+        .await
+        .map_err(|e| e.to_string());
     if let Ok(value) = &mut result {
         refresh_synced_target_cache(&state, &active_target, value).await;
     }
