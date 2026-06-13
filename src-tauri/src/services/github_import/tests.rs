@@ -816,6 +816,60 @@ metadata:
     }
 
     #[tokio::test]
+    async fn partial_import_rejects_crafted_selection_for_filtered_generic_skill() {
+        let pool = setup_test_db().await;
+        let central_root = tempdir().expect("central");
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+            .bind(central_root.path().to_string_lossy().into_owned())
+            .execute(&pool)
+            .await
+            .expect("update central");
+
+        let repo = GitHubRepoRef {
+            owner: "panniantong".to_string(),
+            repo: "agent-reach".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/panniantong/agent-reach".to_string(),
+        };
+        let snapshot = repo_snapshot(&[(
+            "agent_reach/skill/SKILL.md",
+            sample_frontmatter("Agent Reach", "Generic container"),
+        )]);
+        let inspected = inspect_repo_skill_candidates_from_snapshot_at_path(&repo, &snapshot, None)
+            .expect("inspect");
+
+        assert!(inspected.valid_candidates.is_empty());
+
+        let result = import_github_repo_skills_from_snapshot_partially(
+            &pool,
+            &repo,
+            &snapshot,
+            inspected,
+            vec![GitHubSkillImportSelection {
+                source_path: "agent_reach/skill".to_string(),
+                resolution: DuplicateResolution::Overwrite,
+                renamed_skill_id: None,
+            }],
+            central_root.path(),
+            None,
+        )
+        .await
+        .expect("partial import");
+
+        assert!(result.imported_skills.is_empty());
+        assert_eq!(result.failed_skills.len(), 1);
+        assert_eq!(result.failed_skills[0].source_path, "agent_reach/skill");
+        assert!(result.failed_skills[0]
+            .error
+            .contains("no longer available"));
+        assert!(db::get_skill_by_id(&pool, "skill")
+            .await
+            .expect("db")
+            .is_none());
+        assert!(!central_root.path().join("skill").exists());
+    }
+
+    #[tokio::test]
     async fn partial_import_cleans_staging_dirs_after_per_skill_failure() {
         let pool = setup_test_db().await;
         let central_root = tempdir().expect("central");
@@ -1270,7 +1324,7 @@ metadata:
     }
 
     #[test]
-    fn recursive_fallback_skips_large_generated_directories() {
+    fn recursive_fallback_skips_large_generated_and_generic_skill_directories() {
         let repo = GitHubRepoRef {
             owner: "example".to_string(),
             repo: "fallback".to_string(),
@@ -1282,9 +1336,37 @@ metadata:
             build_repo_skill_candidates_from_snapshot(&repo, &recursive_fallback_snapshot())
                 .expect("candidates");
 
+        assert!(candidates.is_empty());
+    }
+
+    #[test]
+    fn recursive_fallback_filters_generic_skill_id_without_hiding_real_candidates() {
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "mixed".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/mixed".to_string(),
+        };
+        let snapshot = repo_snapshot(&[
+            (
+                "agent_reach/skill/SKILL.md",
+                sample_frontmatter("fallback-skill", "Generic container"),
+            ),
+            (
+                "plugins/compound-engineering/skills/ce-work/SKILL.md",
+                sample_frontmatter("ce-work", "Real plugin skill"),
+            ),
+        ]);
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &snapshot).expect("candidates");
+
         assert_eq!(candidates.len(), 1);
-        assert_eq!(candidates[0].source_path, "packages/example/skill");
-        assert_eq!(candidates[0].skill_id, "skill");
+        assert_eq!(
+            candidates[0].source_path,
+            "plugins/compound-engineering/skills/ce-work"
+        );
+        assert_eq!(candidates[0].skill_id, "ce-work");
     }
 
     #[test]

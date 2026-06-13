@@ -376,6 +376,57 @@ async fn refresh_writes_pending_additions_for_remote_added() {
 }
 
 #[tokio::test]
+async fn refresh_filters_generic_skill_remote_additions_without_persisting_pending_rows() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let existing_dir = temp.path().join("existing");
+    std::fs::create_dir_all(&existing_dir).unwrap();
+    std::fs::write(existing_dir.join("SKILL.md"), b"---\nname: Existing\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("existing", &existing_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "existing", "skills/existing").await;
+    let assignment = db::get_skill_repository_assignment(&pool, "existing")
+        .await
+        .unwrap();
+    let repository_id = assignment.repository.id.clone();
+
+    let snapshot = GitHubRepoSnapshot {
+        files: HashMap::from([
+            (
+                "skills/existing/SKILL.md".to_string(),
+                b"---\nname: Existing\n---".to_vec(),
+            ),
+            (
+                "agent_reach/skill/SKILL.md".to_string(),
+                b"---\nname: Agent Reach\n---".to_vec(),
+            ),
+            (
+                "packages/example/skill/SKILL.md".to_string(),
+                b"---\nname: Fallback Skill\n---".to_vec(),
+            ),
+        ]),
+    };
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        scope_repos(vec![&repository_id]),
+    )
+    .await
+    .unwrap();
+
+    assert!(inventory.remote_added.is_empty());
+    assert!(inventory.failed_repositories.is_empty());
+    assert!(db::list_pending_additions(&pool).await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn refresh_keeps_existing_pending_additions_idempotent() {
     let pool = setup_test_db().await;
     let temp = TempDir::new().unwrap();
@@ -2391,6 +2442,58 @@ async fn force_mirror_overwrites_imports_and_deletes_missing_with_copies() {
         .unwrap()
         .is_none());
     assert!(db::get_skill_by_id(&pool, "other").await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn force_mirror_does_not_import_generic_skill_candidates() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().to_path_buf();
+    let pool = setup_test_db_with_home(&home).await;
+    let central_root = home.join(".skillsmanage/skills");
+    let tracked_dir = central_root.join("tracked");
+    std::fs::create_dir_all(&tracked_dir).unwrap();
+    std::fs::write(tracked_dir.join("SKILL.md"), b"---\nname: Tracked\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("tracked", &tracked_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "tracked", "skills/tracked").await;
+    let repository_id = db::get_skill_repository_assignment(&pool, "tracked")
+        .await
+        .unwrap()
+        .repository
+        .id;
+
+    let snapshot = skill_snapshot(vec![
+        ("skills/tracked/SKILL.md", b"---\nname: Tracked\n---"),
+        ("agent_reach/skill/SKILL.md", b"---\nname: Agent Reach\n---"),
+    ]);
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let result = force_mirror_central_repositories_impl(
+        None,
+        &pool,
+        &ActiveTarget::Local,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        SnapshotCachePolicy::UseFresh,
+        ForceRepositoryMirrorRequest {
+            repository_ids: vec![repository_id],
+            delete_missing: false,
+            import_added: true,
+            overwrite_tracked: false,
+            remove_copy_installations_for_deleted: true,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(result.imported.is_empty());
+    assert!(result.failed_items.is_empty());
+    assert!(!central_root.join("skill").exists());
+    assert!(db::get_skill_by_id(&pool, "skill").await.unwrap().is_none());
 }
 
 /*

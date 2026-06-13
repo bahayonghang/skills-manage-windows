@@ -71,6 +71,34 @@ describe("Update Center source metadata", () => {
     ).toBeInTheDocument();
   });
 
+  it("uses distinct visual treatments for source metadata kinds", () => {
+    render(
+      <UpdatableTabPanel
+        items={[updatable]}
+        state={{ "planning-with-files-zh": { selected: true } }}
+        repositorySources={repositorySources}
+        onChange={vi.fn()}
+        onToggleAll={vi.fn()}
+      />,
+    );
+
+    const row = screen.getByText("planning-with-files-zh").closest("label")!;
+    const metaChip = (key: string) =>
+      row.querySelector<HTMLElement>(`[data-source-meta-key="${key}"]`)!;
+
+    expect(metaChip("repository")).toHaveClass("bg-sky-500/10", "ring-sky-500/30");
+    expect(metaChip("path")).toHaveClass(
+      "bg-emerald-500/10",
+      "ring-emerald-500/30",
+    );
+    expect(metaChip("url")).toHaveClass("bg-cyan-500/10", "ring-cyan-500/30");
+    expect(metaChip("cache")).toHaveClass("bg-muted/35", "ring-border/60");
+    expect(metaChip("hash")).toHaveClass(
+      "bg-violet-500/10",
+      "ring-violet-500/30",
+    );
+  });
+
   it("uses repository labels for removed remote skills", () => {
     render(
       <RemoteMissingTabPanel
