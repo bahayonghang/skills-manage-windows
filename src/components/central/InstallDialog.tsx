@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link2, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -42,7 +42,7 @@ interface InstallDialogProps {
     skillId: string,
     agentIds: string[],
     method: InstallMethod,
-    projectPath?: string | null
+    projectPath?: string | null,
   ) => Promise<BatchInstallResult>;
 }
 
@@ -63,27 +63,40 @@ export function InstallDialog({
   // Only show non-central agents in the install dialog.
   const targetAgents = useMemo(
     () => agents.filter((agent) => agent.id !== "central"),
-    [agents]
+    [agents],
   );
-  const sharedRootAgentIds = new Set(skill?.shared_root_agents ?? []);
+  const sharedRootAgentIds = useMemo(
+    () => new Set(skill?.shared_root_agents ?? []),
+    [skill?.shared_root_agents],
+  );
 
-  const isSharedRootTarget = (agent: AgentWithStatus) =>
-    getPlatformTargetMemberIds(agent).some((agentId) => sharedRootAgentIds.has(agentId));
+  const isSharedRootTarget = useCallback(
+    (agent: AgentWithStatus) =>
+      getPlatformTargetMemberIds(agent).some((agentId) =>
+        sharedRootAgentIds.has(agentId),
+      ),
+    [sharedRootAgentIds],
+  );
 
   const selectedInstallAgentIds = () =>
     Array.from(
       new Set(
         targetAgents
           .filter((agent) => selectedAgentIds.has(agent.id))
-          .filter((agent) => targetMode !== "platform" || !isSharedRootTarget(agent))
-          .filter((agent) => targetMode !== "project" || hasProjectSkillPattern(agent))
-          .flatMap((agent) => getPlatformTargetInstallAgentIds(agent))
-      )
+          .filter(
+            (agent) => targetMode !== "platform" || !isSharedRootTarget(agent),
+          )
+          .filter(
+            (agent) =>
+              targetMode !== "project" || hasProjectSkillPattern(agent),
+          )
+          .flatMap((agent) => getPlatformTargetInstallAgentIds(agent)),
+      ),
     );
 
   // Track which agents are selected for installation.
   const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [targetMode, setTargetMode] = useState<TargetMode>("platform");
   const [installMethod, setInstallMethod] = useState<InstallMethod>("symlink");
@@ -105,13 +118,22 @@ export function InstallDialog({
       // Default: check all enabled and visible platform targets.
       const initialSelection = new Set<string>(
         targetAgents
-          .filter((agent) => effectiveTargetMode !== "platform" || !isSharedRootTarget(agent))
-          .filter((agent) => effectiveTargetMode !== "project" || hasProjectSkillPattern(agent))
-          .map((agent) => agent.id)
+          .filter(
+            (agent) =>
+              effectiveTargetMode !== "platform" || !isSharedRootTarget(agent),
+          )
+          .filter(
+            (agent) =>
+              effectiveTargetMode !== "project" ||
+              hasProjectSkillPattern(agent),
+          )
+          .map((agent) => agent.id),
       );
       setSelectedAgentIds(initialSelection);
       setInstallMethod(
-        effectiveTargetMode === "project" || !canUseSymlink ? "copy" : "symlink"
+        effectiveTargetMode === "project" || !canUseSymlink
+          ? "copy"
+          : "symlink",
       );
       if (effectiveTargetMode === "platform") {
         setProjectPath("");
@@ -119,9 +141,15 @@ export function InstallDialog({
       setError(null);
       setResult(null);
     }
-    // reason: dialog open/skill changes reset defaults; helper dependencies would reselect while the user edits.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, skill?.id, targetMode, targetAgents, canInstallToProject, canUseSymlink]);
+  }, [
+    canInstallToProject,
+    canUseSymlink,
+    isSharedRootTarget,
+    open,
+    skill,
+    targetAgents,
+    targetMode,
+  ]);
 
   const isProjectTargetDisabled = (agent: AgentWithStatus) =>
     targetMode === "project" && !hasProjectSkillPattern(agent);
@@ -182,7 +210,7 @@ export function InstallDialog({
         skill.id,
         agentIds,
         installMethod,
-        targetMode === "project" ? trimmedProjectPath : null
+        targetMode === "project" ? trimmedProjectPath : null,
       );
       setResult(installResult);
       if (installResult.failed.length === 0) {
@@ -202,7 +230,9 @@ export function InstallDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{t("installDialog.title", { name: skill.name })}</DialogTitle>
+          <DialogTitle>
+            {t("installDialog.title", { name: skill.name })}
+          </DialogTitle>
           <DialogClose />
         </DialogHeader>
 
@@ -224,11 +254,15 @@ export function InstallDialog({
               >
                 <label className="flex items-center gap-2.5 cursor-pointer">
                   <RadioItem value="platform" />
-                  <span className="text-sm">{t("central.batchInstallTargetPlatforms")}</span>
+                  <span className="text-sm">
+                    {t("central.batchInstallTargetPlatforms")}
+                  </span>
                 </label>
                 <label className="flex items-center gap-2.5 cursor-pointer">
                   <RadioItem value="project" />
-                  <span className="text-sm">{t("central.batchInstallTargetProject")}</span>
+                  <span className="text-sm">
+                    {t("central.batchInstallTargetProject")}
+                  </span>
                 </label>
               </RadioGroup>
             </div>
@@ -260,7 +294,11 @@ export function InstallDialog({
           )}
 
           {/* Platform checkboxes */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2" role="group" aria-label={t("installDialog.selectPlatforms")}>
+          <div
+            className="grid grid-cols-2 gap-x-4 gap-y-2"
+            role="group"
+            aria-label={t("installDialog.selectPlatforms")}
+          >
             {targetAgents.length === 0 ? (
               <p className="col-span-2 text-sm text-muted-foreground">
                 {t("installDialog.noPlatforms")}
@@ -268,26 +306,27 @@ export function InstallDialog({
             ) : (
               targetAgents.map((agent) => {
                 const memberIds = getPlatformTargetMemberIds(agent);
-                const memberNames = getPlatformTargetMemberNames(agent).join(", ");
+                const memberNames =
+                  getPlatformTargetMemberNames(agent).join(", ");
                 const isUniversal = isUniversalPlatformTarget(agent);
                 const displayName = isUniversal
                   ? t("platformTargets.universalLabel")
                   : agent.display_name;
                 const isLinked =
                   targetMode === "platform" &&
-                  memberIds.some((agentId) => skill.linked_agents.includes(agentId));
+                  memberIds.some((agentId) =>
+                    skill.linked_agents.includes(agentId),
+                  );
                 const isSharedRoot =
                   targetMode === "platform" && isSharedRootTarget(agent);
                 const isProjectDisabled = isProjectTargetDisabled(agent);
                 const isDisabled = isSharedRoot || isProjectDisabled;
                 const isChecked =
-                  (isSharedRoot || selectedAgentIds.has(agent.id)) && !isProjectDisabled;
+                  (isSharedRoot || selectedAgentIds.has(agent.id)) &&
+                  !isProjectDisabled;
 
                 return (
-                  <div
-                    key={agent.id}
-                    className="flex items-center gap-2"
-                  >
+                  <div key={agent.id} className="flex items-center gap-2">
                     <Checkbox
                       checked={isChecked}
                       disabled={isDisabled}
@@ -302,9 +341,12 @@ export function InstallDialog({
                           ? "text-muted-foreground cursor-default"
                           : "text-foreground cursor-pointer"
                       }`}
-                      title={isUniversal ? memberNames : agent.global_skills_dir}
+                      title={
+                        isUniversal ? memberNames : agent.global_skills_dir
+                      }
                       onClick={() =>
-                        !isDisabled && handleCheckboxChange(agent.id, !isChecked)
+                        !isDisabled &&
+                        handleCheckboxChange(agent.id, !isChecked)
                       }
                     >
                       <div className="truncate text-sm">{displayName}</div>
@@ -376,9 +418,11 @@ export function InstallDialog({
 
           {result && result.failed.length > 0 && (
             <div className="space-y-2" role="alert">
-              <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+              <p className="text-xs font-medium text-warning-foreground">
                 {t("central.installPartialFail", {
-                  platforms: result.failed.map((failure) => failure.agent_id).join(", "),
+                  platforms: result.failed
+                    .map((failure) => failure.agent_id)
+                    .join(", "),
                   succeededCount: result.succeeded.length,
                   skippedCount: skipped.length,
                   failedCount: result.failed.length,
@@ -431,7 +475,9 @@ export function InstallDialog({
                 {t("installDialog.installing")}
               </>
             ) : (
-              t("installDialog.confirmInstall", { count: selectedInstallableCount })
+              t("installDialog.confirmInstall", {
+                count: selectedInstallableCount,
+              })
             )}
           </Button>
         </DialogFooter>

@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockShow = vi.fn();
+const mockShow = vi.hoisted(() => vi.fn());
+const mockTauriInvoke = vi.hoisted(() => vi.fn());
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: mockTauriInvoke,
+}));
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
@@ -10,13 +15,18 @@ vi.mock("@tauri-apps/api/window", () => ({
 
 import {
   __resetMainWindowReadyForTest,
+  invoke,
   isTauriRuntime,
+  registerIpcFailureRecorder,
   showMainWindowWhenReady,
 } from "@/lib/tauri";
+import { invokeCommand } from "@/lib/ipc";
 
 describe("tauri helpers", () => {
   beforeEach(() => {
     mockShow.mockReset();
+    mockTauriInvoke.mockReset();
+    registerIpcFailureRecorder(null);
     __resetMainWindowReadyForTest();
     Reflect.deleteProperty(window, "__TAURI__");
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
@@ -41,5 +51,50 @@ describe("tauri helpers", () => {
     await showMainWindowWhenReady();
 
     expect(mockShow).toHaveBeenCalledTimes(1);
+  });
+
+  it("records IPC failures through the registered diagnostic hook", async () => {
+    const recorder = vi.fn();
+    const error = new Error("backend failed");
+    registerIpcFailureRecorder(recorder);
+    mockTauriInvoke.mockRejectedValueOnce(error);
+
+    await expect(invoke("dangerous_command", { token: "secret" })).rejects.toThrow(
+      "backend failed"
+    );
+
+    expect(recorder).toHaveBeenCalledWith(
+      "dangerous_command",
+      { token: "secret" },
+      error
+    );
+  });
+
+  it("does not recursively record runtime-log IPC failures", async () => {
+    const recorder = vi.fn();
+    registerIpcFailureRecorder(recorder);
+    mockTauriInvoke.mockRejectedValueOnce(new Error("logger failed"));
+
+    await expect(
+      invoke("record_frontend_runtime_log", { payload: { message: "boom" } })
+    ).rejects.toThrow("logger failed");
+
+    expect(recorder).not.toHaveBeenCalled();
+  });
+
+  it("invokes typed IPC commands through the shared bridge", async () => {
+    mockTauriInvoke.mockResolvedValueOnce("skill-content");
+
+    await expect(
+      invokeCommand("read_file_by_path", {
+        path: "/tmp/skill/SKILL.md",
+        skillId: "skill-1",
+      })
+    ).resolves.toBe("skill-content");
+
+    expect(mockTauriInvoke).toHaveBeenCalledWith("read_file_by_path", {
+      path: "/tmp/skill/SKILL.md",
+      skillId: "skill-1",
+    });
   });
 });

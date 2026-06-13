@@ -11,6 +11,7 @@
 
 pub mod batch;
 pub mod centralize;
+pub mod error;
 pub mod fs_util;
 pub mod native;
 pub mod project;
@@ -23,8 +24,9 @@ mod tests;
 
 pub use batch::{batch_install_central_skills_impl, batch_uninstall_skills_from_agent_impl};
 pub(crate) use batch::{batch_operation_status, dedupe_ordered};
+pub use error::InstallationError;
+pub(crate) use fs_util::copy_dir_all_blocking;
 pub use fs_util::{copy_dir_all, create_symlink, make_relative_path, symlink_target_path};
-pub(crate) use fs_util::{copy_dir_all_blocking, run_blocking_fs};
 pub(crate) use native::install_central_skill_to_agent_outcome_by_method;
 pub use native::{
     install_skill_to_agent_auto_impl, install_skill_to_agent_copy_impl,

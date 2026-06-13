@@ -24,7 +24,9 @@ pub async fn get_skill_repositories(
     state: State<'_, AppState>,
 ) -> Result<Vec<SkillRepositoryWithStats>, String> {
     let pool = state.active_db().await?;
-    db::get_skill_repositories_with_stats(&pool).await
+    db::get_skill_repositories_with_stats(&pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -53,6 +55,7 @@ pub async fn create_or_update_skill_repository(
         is_unknown.unwrap_or(false),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -62,7 +65,9 @@ pub async fn assign_skills_to_repository(
     skill_ids: Vec<String>,
 ) -> Result<(), String> {
     let pool = state.active_db().await?;
-    db::assign_skills_to_repository(&pool, &repository_id, &skill_ids, None).await
+    db::assign_skills_to_repository(&pool, &repository_id, &skill_ids, None)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -72,13 +77,15 @@ pub async fn set_skill_repository_pinned(
     pinned: bool,
 ) -> Result<SkillRepository, String> {
     let pool = state.active_db().await?;
-    db::set_skill_repository_pinned(&pool, &repository_id, pinned).await
+    db::set_skill_repository_pinned(&pool, &repository_id, pinned)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn get_skill_tags(state: State<'_, AppState>) -> Result<Vec<SkillTag>, String> {
     let pool = state.active_db().await?;
-    db::get_skill_tags(&pool).await
+    db::get_skill_tags(&pool).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -89,7 +96,9 @@ pub async fn create_skill_tag(
     color: Option<String>,
 ) -> Result<SkillTag, String> {
     let pool = state.active_db().await?;
-    db::create_skill_tag(&pool, &name, description.as_deref(), color.as_deref()).await
+    db::create_skill_tag(&pool, &name, description.as_deref(), color.as_deref())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -99,7 +108,21 @@ pub async fn assign_skill_tags(
     tag_ids: Vec<String>,
 ) -> Result<(), String> {
     let pool = state.active_db().await?;
-    db::assign_skill_tags(&pool, &skill_ids, &tag_ids, "manual", None, None).await
+    db::assign_skill_tags(&pool, &skill_ids, &tag_ids, "manual", None, None)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn unassign_skill_tags(
+    state: State<'_, AppState>,
+    skill_id: String,
+    tag_ids: Vec<String>,
+) -> Result<(), String> {
+    let pool = state.active_db().await?;
+    db::unassign_skill_tags(&pool, &skill_id, &tag_ids)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -107,7 +130,9 @@ pub async fn get_pending_ai_tag_reviews(
     state: State<'_, AppState>,
 ) -> Result<Vec<SkillAiTagReview>, String> {
     let pool = state.active_db().await?;
-    db::get_pending_ai_tag_reviews(&pool).await
+    db::get_pending_ai_tag_reviews(&pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -117,7 +142,9 @@ pub async fn accept_ai_tag_review(
     tag_ids: Vec<String>,
 ) -> Result<(), String> {
     let pool = state.active_db().await?;
-    db::accept_ai_tag_reviews(&pool, &skill_id, &tag_ids).await
+    db::accept_ai_tag_reviews(&pool, &skill_id, &tag_ids)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -126,7 +153,9 @@ pub async fn skip_ai_tag_review(
     skill_id: String,
 ) -> Result<(), String> {
     let pool = state.active_db().await?;
-    db::skip_ai_tag_reviews(&pool, &skill_id).await
+    db::skip_ai_tag_reviews(&pool, &skill_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -135,7 +164,9 @@ pub async fn suggest_skill_tags(
     skill_id: String,
 ) -> Result<Vec<SkillTagSuggestion>, String> {
     let pool = state.active_db().await?;
-    ai_tagging::suggest_skill_tags_for_skill_id(&pool, state.secrets.as_ref(), skill_id).await
+    ai_tagging::suggest_skill_tags_for_skill_id(&pool, state.secrets.as_ref(), skill_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -160,7 +191,7 @@ pub async fn bulk_suggest_skill_tags(
     )
     .await;
     state.ai_tag_jobs.finish(&job_id);
-    result
+    result.map_err(|e| e.to_string())
 }
 
 #[tauri::command]

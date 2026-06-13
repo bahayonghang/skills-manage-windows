@@ -6,7 +6,16 @@ const reactRefresh = reactRefreshPlugin.default || reactRefreshPlugin;
 
 module.exports = [
   {
-    ignores: ["dist", ".eslintrc.cjs"],
+    ignores: [
+      "dist",
+      "node_modules/**",
+      "src-tauri/target/**",
+      "tmp/**",
+      "outputs/**",
+      "ref/**",
+      "docs/.vitepress/cache/**",
+      "docs/.vitepress/dist/**",
+    ],
   },
   {
     files: ["src/**/*.{ts,tsx}"],

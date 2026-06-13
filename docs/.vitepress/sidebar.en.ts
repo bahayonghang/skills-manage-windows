@@ -61,6 +61,7 @@ export const sidebarEn: DefaultTheme.SidebarMulti = {
         { text: 'Installation Engine', link: '/architecture/installation-engine' },
         { text: 'Marketplace Pipeline', link: '/architecture/marketplace-pipeline' },
         { text: 'SSH Mode', link: '/architecture/ssh-mode' },
+        { text: 'Runtime Observability', link: '/architecture/runtime-observability' },
       ],
     },
   ],

@@ -28,13 +28,18 @@ export interface CategorizeDrawerProps {
   panelProps: Omit<CentralSkillCategorizePanelProps, "t">;
 }
 
-export function CategorizeDrawer({ open, onOpenChange, t, panelProps }: CategorizeDrawerProps) {
+export function CategorizeDrawer({
+  open,
+  onOpenChange,
+  t,
+  panelProps,
+}: CategorizeDrawerProps) {
   const titleId = "central-categorize-drawer-title";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal keepMounted={false}>
-        <DialogOverlay className="bg-black/20" />
+        <DialogOverlay className="bg-overlay" />
         <DialogPrimitive.Popup
           data-testid="central-categorize-drawer"
           role="dialog"
@@ -44,7 +49,9 @@ export function CategorizeDrawer({ open, onOpenChange, t, panelProps }: Categori
         >
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4">
             <div className="min-w-0 space-y-1">
-              <DialogTitle id={titleId}>{t("central.categorizePanelTitle")}</DialogTitle>
+              <DialogTitle id={titleId}>
+                {t("central.categorizePanelTitle")}
+              </DialogTitle>
               <p className="text-sm text-muted-foreground">
                 {t("central.categorizePanelDesc")}
               </p>

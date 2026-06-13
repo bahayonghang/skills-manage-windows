@@ -464,8 +464,19 @@ pub(super) mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn windows_ssh_hidden_window_flag_matches_create_no_window() {
+    fn windows_hidden_window_flag_matches_create_no_window() {
         assert_eq!(CREATE_NO_WINDOW, 0x08000000);
+        assert_eq!(hidden_child_creation_flags(), CREATE_NO_WINDOW);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn wsl_discovery_command_uses_hidden_window_flag() {
+        let command = wsl_distribution_list_command();
+        let args = command_arg_strings(command);
+
+        assert_eq!(args, vec!["-l", "-v"]);
+        assert_eq!(hidden_child_creation_flags(), CREATE_NO_WINDOW);
     }
 
     #[cfg(windows)]
@@ -496,7 +507,7 @@ pub(super) mod tests {
             "ssh-test".to_string(),
         );
 
-        assert!(result.unwrap_err().contains("keyPath"));
+        assert!(result.unwrap_err().to_string().contains("keyPath"));
     }
 
     #[test]

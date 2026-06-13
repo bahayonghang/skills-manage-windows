@@ -11,23 +11,6 @@ if (process.platform !== "win32") {
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const outputDir = join(repoRoot, "outputs");
 
-function run(command, args) {
-  const result = spawnSync(command, args, {
-    cwd: repoRoot,
-    stdio: "inherit",
-  });
-
-  if (result.error) {
-    throw result.error;
-  }
-
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
-  }
-}
-
-run(process.execPath, [join(repoRoot, "scripts", "build.mjs")]);
-
 if (!existsSync(outputDir)) {
   throw new Error(`Output directory was not found: ${outputDir}`);
 }

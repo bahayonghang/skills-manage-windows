@@ -1,5 +1,11 @@
 import { useTranslation } from "react-i18next";
-import { ArrowRightLeft, Eraser, PackagePlus, Sparkles, Trash2 } from "lucide-react";
+import {
+  ArrowRightLeft,
+  Eraser,
+  PackagePlus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -23,20 +29,20 @@ export function PlatformTransferRail({
   return (
     <div
       data-testid="platform-transfer-rail"
-      className="border-b border-slate-800 bg-[radial-gradient(circle_at_12%_0%,rgba(14,165,233,0.18),transparent_28%),linear-gradient(135deg,#020617_0%,#0f172a_52%,#111827_100%)] px-6 py-3 text-slate-100 shadow-inner"
+      className="border-b border-border bg-muted/40 px-6 py-3"
     >
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex min-w-[220px] flex-1 items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-cyan-400/25 bg-cyan-400/10 text-cyan-200 shadow-[0_0_28px_rgba(34,211,238,0.16)]">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-primary/10 text-primary">
             <ArrowRightLeft className="size-4" aria-hidden />
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-200/80">
+            <p className="text-xs font-medium text-muted-foreground">
               {t("platform.batchRailKicker")}
             </p>
             <p
               data-testid="platform-transfer-summary"
-              className="text-sm font-semibold text-slate-50"
+              className="text-sm font-semibold text-foreground"
             >
               {t("platform.batchSelectionSummary", {
                 selectedCount,
@@ -49,9 +55,8 @@ export function PlatformTransferRail({
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="h-8 border border-slate-700/80 bg-slate-900/80 px-2.5 text-xs text-slate-100 hover:bg-cyan-400/15 hover:text-cyan-100"
             disabled={!hasSelectableSkills}
             onClick={onSelectCurrentResults}
             data-testid="platform-select-current-results"
@@ -61,9 +66,8 @@ export function PlatformTransferRail({
           {canSelectMostUniversal && (
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="h-8 border border-cyan-400/35 bg-cyan-400/10 px-2.5 text-xs text-cyan-100 hover:bg-cyan-400/20 hover:text-white"
               disabled={!hasSelectableSkills}
               onClick={onSelectMostUniversal}
               data-testid="platform-select-most-universal"
@@ -76,7 +80,6 @@ export function PlatformTransferRail({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 px-2.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-50"
             disabled={selectedCount === 0}
             onClick={onClearSelection}
             data-testid="platform-clear-selection"
@@ -113,12 +116,12 @@ export function PlatformTransferActionBar({
   return (
     <div
       data-testid="platform-batch-action-bar"
-      className="sticky bottom-0 z-20 border-t border-cyan-500/30 bg-slate-950/95 px-6 py-3 text-slate-100 shadow-[0_-16px_40px_rgba(2,6,23,0.45)] backdrop-blur"
+      className="sticky bottom-0 z-20 border-t border-border bg-card/95 px-6 py-3 backdrop-blur"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="inline-flex size-2 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(103,232,249,0.85)]" />
-          <span className="text-sm font-semibold">
+          <span className="inline-flex size-2 rounded-full bg-primary" />
+          <span className="text-sm font-semibold text-foreground">
             {t("platform.batchActionSummary", { count: selectedCount })}
           </span>
         </div>
@@ -126,7 +129,7 @@ export function PlatformTransferActionBar({
           <Button
             type="button"
             variant="ghost"
-            className="h-9 px-3 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-50"
+            className="h-9 px-3 text-xs"
             onClick={onClearSelection}
           >
             {t("platform.transferClear")}
@@ -134,7 +137,7 @@ export function PlatformTransferActionBar({
           {showInstall && (
             <Button
               type="button"
-              className="h-9 bg-cyan-300 px-3 text-xs font-semibold text-slate-950 hover:bg-cyan-200"
+              className="h-9 px-3 text-xs font-semibold"
               disabled={isInstalling || isDeleting}
               onClick={onInstall}
               data-testid="platform-batch-install"

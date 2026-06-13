@@ -35,38 +35,45 @@ pub(super) async fn record_github_pat_migration_failure(pool: &DbPool, error: &s
     .await;
 }
 
-pub(crate) fn github_client() -> Result<reqwest::Client, String> {
-    GITHUB_SHARED_CLIENT
-        .get_or_init(|| {
-            reqwest::Client::builder()
-                .user_agent(crate::commands::APP_USER_AGENT)
-                .build()
-                .map_err(|e| e.to_string())
-        })
-        .clone()
+pub(crate) fn github_client() -> Result<reqwest::Client, GithubImportError> {
+    match GITHUB_SHARED_CLIENT.get_or_init(|| {
+        let builder = reqwest::Client::builder().user_agent(crate::commands::APP_USER_AGENT);
+        #[cfg(test)]
+        let builder = builder.no_proxy();
+        builder.build()
+    }) {
+        Ok(client) => Ok(client.clone()),
+        Err(error) => Err(GithubImportError::Http(error.to_string())),
+    }
 }
 
 pub(super) async fn legacy_github_pat_from_settings(
     pool: &DbPool,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, GithubImportError> {
     Ok(db::get_setting(pool, LEGACY_GITHUB_PAT_SETTING_KEY)
         .await?
         .and_then(normalize_github_pat))
 }
 
-pub(super) async fn mark_github_pat_migration_complete(pool: &DbPool) -> Result<(), String> {
-    db::set_setting(pool, GITHUB_PAT_MIGRATION_SETTING_KEY, "1").await
+pub(super) async fn mark_github_pat_migration_complete(
+    pool: &DbPool,
+) -> Result<(), GithubImportError> {
+    Ok(db::set_setting(pool, GITHUB_PAT_MIGRATION_SETTING_KEY, "1").await?)
 }
 
-pub(super) async fn is_github_pat_migration_marked(pool: &DbPool) -> Result<bool, String> {
+pub(super) async fn is_github_pat_migration_marked(
+    pool: &DbPool,
+) -> Result<bool, GithubImportError> {
     Ok(db::get_setting(pool, GITHUB_PAT_MIGRATION_SETTING_KEY)
         .await?
         .as_deref()
         == Some("1"))
 }
 
-pub(super) async fn delete_legacy_github_pat_setting(pool: &DbPool) -> Result<(), String> {
-    db::delete_setting(pool, LEGACY_GITHUB_PAT_SETTING_KEY).await
+pub(super) async fn delete_legacy_github_pat_setting(
+    pool: &DbPool,
+) -> Result<(), GithubImportError> {
+    Ok(db::delete_setting(pool, LEGACY_GITHUB_PAT_SETTING_KEY).await?)
 }
 
 pub(super) fn log_github_pat_migration_warning(message: impl AsRef<str>) {
@@ -76,7 +83,7 @@ pub(super) fn log_github_pat_migration_warning(message: impl AsRef<str>) {
 pub(super) async fn migrate_github_pat_to_secret_store(
     pool: &DbPool,
     secrets: &dyn SecretStore,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, GithubImportError> {
     if is_github_pat_migration_marked(pool).await? {
         return Ok(None);
     }
@@ -140,7 +147,7 @@ pub(super) async fn migrate_github_pat_to_secret_store(
 pub async fn migrate_github_pat_on_startup(
     pool: &DbPool,
     secrets: &dyn SecretStore,
-) -> Result<(), String> {
+) -> Result<(), GithubImportError> {
     let _ = migrate_github_pat_to_secret_store(pool, secrets).await?;
     Ok(())
 }
@@ -148,7 +155,7 @@ pub async fn migrate_github_pat_on_startup(
 pub(crate) async fn github_direct_auth_from_secret_store(
     pool: &DbPool,
     secrets: &dyn SecretStore,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, GithubImportError> {
     let mut secret_error = None;
     match secrets.get(GITHUB_PAT_SECRET_KEY) {
         Ok(secret) => {
@@ -179,7 +186,7 @@ pub(crate) async fn github_direct_auth_from_secret_store(
     }
 
     if let Some(error) = migration_error.or(secret_error) {
-        return Err(error);
+        return Err(GithubImportError::Secret(error));
     }
 
     Ok(None)
@@ -188,7 +195,7 @@ pub(crate) async fn github_direct_auth_from_secret_store(
 pub(crate) async fn get_github_pat_state_impl(
     pool: &DbPool,
     secrets: &dyn SecretStore,
-) -> Result<GitHubPatState, String> {
+) -> Result<GitHubPatState, GithubImportError> {
     let migration_error = migrate_github_pat_to_secret_store(pool, secrets).await?;
 
     match secrets.state(GITHUB_PAT_SECRET_KEY) {
@@ -227,7 +234,7 @@ pub(crate) async fn get_github_pat_state_impl(
 pub(crate) async fn reveal_github_pat_impl(
     pool: &DbPool,
     secrets: &dyn SecretStore,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, GithubImportError> {
     github_direct_auth_from_secret_store(pool, secrets).await
 }
 
@@ -235,25 +242,26 @@ pub(crate) async fn set_github_pat_impl(
     pool: &DbPool,
     secrets: &dyn SecretStore,
     value: String,
-) -> Result<GitHubPatState, String> {
-    let token = normalize_github_pat(&value)
-        .ok_or_else(|| "GitHub token cannot be empty; clear the token instead.".to_string())?;
+) -> Result<GitHubPatState, GithubImportError> {
+    let token = normalize_github_pat(&value).ok_or(GithubImportError::PatTokenEmpty)?;
     let storage_state = secrets
         .set(GITHUB_PAT_SECRET_KEY, &token)
-        .map_err(|error| map_secret_error("save", error))?;
+        .map_err(|error| GithubImportError::Secret(map_secret_error("save", error)))?;
     if !storage_state.is_available() {
-        return Err(format!(
+        return Err(GithubImportError::Secret(format!(
             "Failed to save GitHub token: unavailable storage state {:?}",
             storage_state
-        ));
+        )));
     }
 
     let saved = secrets
         .get(GITHUB_PAT_SECRET_KEY)
-        .map_err(|error| map_secret_error("verify", error))?
+        .map_err(|error| GithubImportError::Secret(map_secret_error("verify", error)))?
         .and_then(normalize_github_pat);
     if saved.as_deref() != Some(token.as_str()) {
-        return Err("Failed to verify saved GitHub token.".to_string());
+        return Err(GithubImportError::Secret(
+            "Failed to verify saved GitHub token.".to_string(),
+        ));
     }
 
     delete_legacy_github_pat_setting(pool).await?;
@@ -268,10 +276,10 @@ pub(crate) async fn set_github_pat_impl(
 pub(crate) async fn clear_github_pat_impl(
     pool: &DbPool,
     secrets: &dyn SecretStore,
-) -> Result<GitHubPatState, String> {
+) -> Result<GitHubPatState, GithubImportError> {
     secrets
         .delete(GITHUB_PAT_SECRET_KEY)
-        .map_err(|error| map_secret_error("clear", error))?;
+        .map_err(|error| GithubImportError::Secret(map_secret_error("clear", error)))?;
     delete_legacy_github_pat_setting(pool).await?;
     mark_github_pat_migration_complete(pool).await?;
     Ok(GitHubPatState {
@@ -284,7 +292,7 @@ pub(crate) async fn clear_github_pat_impl(
 pub(crate) async fn test_github_pat_impl(
     pool: &DbPool,
     secrets: &dyn SecretStore,
-) -> Result<GitHubPatTestResult, String> {
+) -> Result<GitHubPatTestResult, GithubImportError> {
     let Some(token) = github_direct_auth_from_secret_store(pool, secrets).await? else {
         return Ok(GitHubPatTestResult {
             configured: false,
@@ -301,7 +309,7 @@ pub(crate) async fn test_github_pat_impl(
         .bearer_auth(&token)
         .send()
         .await
-        .map_err(|e| format!("Failed to test GitHub token: {}", e))?;
+        .map_err(|e| GithubImportError::Http(format!("Failed to test GitHub token: {}", e)))?;
     let status = response.status();
     if status.is_success() {
         return Ok(GitHubPatTestResult {

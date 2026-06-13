@@ -2,7 +2,12 @@ import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 import type { ScannedSkill } from "@/types";
 
 export type PlatformSourceFilter = "all" | "user" | "plugin";
-export type PlatformSortField = "repository" | "name" | "installedAt" | "updatedAt";
+export type PlatformSortField =
+  | "repository"
+  | "name"
+  | "installedAt"
+  | "updatedAt"
+  | "callCount";
 export type PlatformSortDirection = "asc" | "desc";
 export type PlatformGroupBy = "none" | "repository";
 
@@ -32,6 +37,7 @@ export interface DerivePlatformSkillRowsInput {
   sort: PlatformSortState;
   groupBy: PlatformGroupBy;
   labels: PlatformSkillGroupLabels;
+  usageCounts?: Record<string, number>;
 }
 
 export interface DerivePlatformSkillRowsOutput {
@@ -68,6 +74,14 @@ function getInstalledSortTimestamp(skill: ScannedSkill): number {
 
 function getUpdatedSortTimestamp(skill: ScannedSkill): number {
   return parseSortableTimestamp(skill.updated_at ?? skill.scanned_at);
+}
+
+function getSkillCallCount(
+  skill: ScannedSkill,
+  usageCounts?: Record<string, number>
+): number {
+  const count = usageCounts?.[skill.name] ?? 0;
+  return Number.isFinite(count) ? count : 0;
 }
 
 function compareTimestamps(
@@ -159,7 +173,8 @@ export function comparePlatformSkills(
   a: ScannedSkill,
   b: ScannedSkill,
   sort: PlatformSortState,
-  labels: PlatformSkillGroupLabels
+  labels: PlatformSkillGroupLabels,
+  usageCounts?: Record<string, number>
 ): number {
   const dir = sort.direction === "asc" ? 1 : -1;
 
@@ -173,6 +188,13 @@ export function comparePlatformSkills(
 
   if (sort.field === "updatedAt") {
     return compareTimestamps(a, b, sort.direction, getUpdatedSortTimestamp);
+  }
+
+  if (sort.field === "callCount") {
+    const countComparison =
+      getSkillCallCount(a, usageCounts) - getSkillCallCount(b, usageCounts);
+    if (countComparison !== 0) return countComparison * dir;
+    return compareSkillNames(a, b);
   }
 
   const aGroup = getPlatformRepositoryGroupInfo(a, labels);
@@ -251,7 +273,7 @@ export function derivePlatformSkillRows(
     matchesSearch(skill, query)
   );
   const sortedSkills = [...filteredSkills].sort((a, b) =>
-    comparePlatformSkills(a, b, input.sort, input.labels)
+    comparePlatformSkills(a, b, input.sort, input.labels, input.usageCounts)
   );
   const groups = groupPlatformSkills(sortedSkills, input.groupBy, input.labels);
 

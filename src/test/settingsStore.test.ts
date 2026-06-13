@@ -59,8 +59,34 @@ describe("settingsStore", () => {
   it("has correct initial state", () => {
     const state = useSettingsStore.getState();
     expect(state.scanDirectories).toEqual([]);
+    expect(state.centralUpdateCheckMode).toBe("regular");
+    expect(state.centralUpdateCheckModeLoaded).toBe(false);
     expect(state.isLoadingScanDirs).toBe(false);
     expect(state.error).toBeNull();
+  });
+
+  it("loadCentralUpdateCheckMode reads and normalizes persisted mode", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce("sync");
+
+    await useSettingsStore.getState().loadCentralUpdateCheckMode();
+
+    expect(invoke).toHaveBeenCalledWith("get_setting", {
+      key: "central_update_check_mode_v1",
+    });
+    expect(useSettingsStore.getState().centralUpdateCheckMode).toBe("sync");
+    expect(useSettingsStore.getState().centralUpdateCheckModeLoaded).toBe(true);
+  });
+
+  it("setCentralUpdateCheckMode persists the selected mode", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(null);
+
+    await useSettingsStore.getState().setCentralUpdateCheckMode("sync");
+
+    expect(invoke).toHaveBeenCalledWith("set_setting", {
+      key: "central_update_check_mode_v1",
+      value: "sync",
+    });
+    expect(useSettingsStore.getState().centralUpdateCheckMode).toBe("sync");
   });
 
   // ── loadScanDirectories ───────────────────────────────────────────────────

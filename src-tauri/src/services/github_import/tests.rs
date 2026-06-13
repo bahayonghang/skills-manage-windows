@@ -5,6 +5,7 @@ pub(super) mod tests {
     use crate::secrets::{
         MockSecretStore, SecretError, SecretStorageState, SecretStore, GITHUB_PAT_SECRET_KEY,
     };
+    use crate::services::resource_budget::ResourceBudget;
     use flate2::{write::GzEncoder, Compression};
     use serde_json::Value;
     use std::collections::HashMap;
@@ -153,6 +154,52 @@ metadata:
         ])
     }
 
+    fn compound_plugin_like_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "plugins/compound-engineering/skills/ce-work/SKILL.md",
+                sample_frontmatter("ce-work", "Real plugin skill"),
+            ),
+            (
+                "tests/fixtures/custom-paths/custom-skills/custom-skill/SKILL.md",
+                sample_frontmatter("custom-skill", "Fixture custom skill"),
+            ),
+            (
+                "tests/fixtures/custom-paths/skills/default-skill/SKILL.md",
+                sample_frontmatter("default-skill", "Fixture default skill"),
+            ),
+            (
+                "tests/fixtures/sample-plugin/skills/disabled-skill/SKILL.md",
+                sample_frontmatter("disabled-skill", "Fixture disabled skill"),
+            ),
+            (
+                "tests/fixtures/sample-plugin/skills/skill-one/SKILL.md",
+                sample_frontmatter("skill-one", "Fixture sample skill"),
+            ),
+        ])
+    }
+
+    fn sample_and_example_skill_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "sample/skill-one/SKILL.md",
+                sample_frontmatter("sample-skill", "Published sample skill"),
+            ),
+            (
+                "samples/skill-two/SKILL.md",
+                sample_frontmatter("samples-skill", "Published samples skill"),
+            ),
+            (
+                "example/skill-three/SKILL.md",
+                sample_frontmatter("example-skill", "Published example skill"),
+            ),
+            (
+                "examples/skill-four/SKILL.md",
+                sample_frontmatter("examples-skill", "Published examples skill"),
+            ),
+        ])
+    }
+
     fn duplicate_name_snapshot() -> GitHubRepoSnapshot {
         repo_snapshot(&[
             (
@@ -231,13 +278,13 @@ metadata:
     #[test]
     fn parse_github_source_rejects_non_github_hosts() {
         let error = parse_github_source("https://gitlab.com/example/repo").unwrap_err();
-        assert!(error.contains("github.com"));
+        assert!(error.to_string().contains("github.com"));
     }
 
     #[test]
     fn parse_github_source_rejects_unsafe_subpaths() {
         let error = parse_github_source("owner/repo/../escape").unwrap_err();
-        assert!(error.contains("not supported"));
+        assert!(error.to_string().contains("not supported"));
     }
 
     #[test]
@@ -388,6 +435,57 @@ metadata:
 
         assert!(snapshot.files.contains_key("skills/demo/SKILL.md"));
         assert!(snapshot.files.contains_key("README.md"));
+    }
+
+    #[test]
+    fn snapshot_from_repository_archive_rejects_entry_over_budget() {
+        let oversized = vec![b'a'; 9];
+        let archive = repository_archive(&[("skills/demo/SKILL.md", oversized.as_slice())]);
+        let budget = ResourceBudget {
+            archive_entry_bytes: 8,
+            ..ResourceBudget::default()
+        };
+
+        let err = snapshot_from_repository_archive_with_budget(&archive, budget).unwrap_err();
+
+        assert!(err.to_string().contains("resource budget"));
+    }
+
+    #[test]
+    fn snapshot_from_repository_archive_accepts_default_32mb_entry_budget() {
+        let large_font = vec![0_u8; 18_948_244];
+        let archive = repository_archive(&[("skills/demo/assets/font.ttf", large_font.as_slice())]);
+
+        let snapshot = snapshot_from_repository_archive(&archive).expect("snapshot");
+
+        assert_eq!(
+            snapshot
+                .files
+                .get("skills/demo/assets/font.ttf")
+                .map(Vec::len),
+            Some(18_948_244)
+        );
+    }
+
+    #[test]
+    fn snapshot_from_repository_archive_rejects_expanded_contents_over_budget() {
+        let first = vec![b'a'; 6];
+        let second = vec![b'b'; 6];
+        let archive = repository_archive(&[
+            ("skills/demo/one.txt", first.as_slice()),
+            ("skills/demo/two.txt", second.as_slice()),
+        ]);
+        let budget = ResourceBudget {
+            archive_expanded_bytes: 10,
+            archive_entry_bytes: 8,
+            ..ResourceBudget::default()
+        };
+
+        let err = snapshot_from_repository_archive_with_budget(&archive, budget).unwrap_err();
+
+        let err = err.to_string();
+        assert!(err.contains("expanded archive contents"));
+        assert!(err.contains("12 bytes > 10 bytes"));
     }
 
     #[tokio::test]
@@ -789,6 +887,131 @@ metadata:
     }
 
     #[tokio::test]
+    async fn full_import_restores_overwrite_target_when_db_assignment_fails() {
+        let pool = setup_test_db().await;
+        let central_root = tempdir().expect("central");
+        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
+            .bind(central_root.path().to_string_lossy().into_owned())
+            .execute(&pool)
+            .await
+            .expect("update central");
+
+        let repo = GitHubRepoRef {
+            owner: "anthropics".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/anthropics/skills".to_string(),
+        };
+        let snapshot = multi_skill_snapshot();
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &snapshot).expect("candidates");
+        let source_path = "skills/code-review";
+        let candidate = candidates
+            .iter()
+            .find(|candidate| candidate.source_path == source_path)
+            .expect("code review candidate");
+
+        let existing_dir = central_root.path().join(&candidate.skill_id);
+        std::fs::create_dir_all(&existing_dir).expect("mkdir existing");
+        std::fs::write(
+            existing_dir.join("SKILL.md"),
+            sample_frontmatter("Code Review", "existing description"),
+        )
+        .expect("write existing skill");
+        std::fs::write(existing_dir.join("old-only.txt"), "keep").expect("write sentinel");
+        db::upsert_skill(
+            &pool,
+            &Skill {
+                id: candidate.skill_id.clone(),
+                name: "Code Review".to_string(),
+                description: Some("existing description".to_string()),
+                file_path: existing_dir.join("SKILL.md").to_string_lossy().into_owned(),
+                canonical_path: Some(existing_dir.to_string_lossy().into_owned()),
+                is_central: true,
+                source: Some("local".to_string()),
+                content: None,
+                scanned_at: Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
+            },
+        )
+        .await
+        .expect("seed existing skill");
+
+        sqlx::query("DROP TABLE skill_repository_members")
+            .execute(&pool)
+            .await
+            .expect("simulate repository assignment failure");
+
+        let result = import_github_repo_skills_from_snapshot(
+            &pool,
+            &repo,
+            &snapshot,
+            &candidates,
+            vec![GitHubSkillImportSelection {
+                source_path: source_path.to_string(),
+                resolution: DuplicateResolution::Overwrite,
+                renamed_skill_id: None,
+            }],
+            central_root.path(),
+            None,
+        )
+        .await;
+
+        let error = result.expect_err("import should fail on DB assignment");
+        let error = error.to_string();
+        assert!(
+            error.contains("skill_repository_members"),
+            "error should identify the failed assignment table: {error}"
+        );
+        assert!(
+            existing_dir.join("old-only.txt").exists(),
+            "overwrite backup should be restored when DB assignment fails"
+        );
+        let restored =
+            std::fs::read_to_string(existing_dir.join("SKILL.md")).expect("read restored SKILL.md");
+        assert!(
+            restored.contains("existing description"),
+            "restored target should keep the original skill content"
+        );
+
+        let db_skill = db::get_skill_by_id(&pool, &candidate.skill_id)
+            .await
+            .expect("read skill")
+            .expect("existing skill remains");
+        assert_eq!(
+            db_skill.description.as_deref(),
+            Some("existing description")
+        );
+        assert_eq!(db_skill.source.as_deref(), Some("local"));
+
+        let repository_id = db::github_repository_id(&repo.owner, &repo.repo, &repo.branch);
+        let imported_repo_rows: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM skill_repositories WHERE id = ?")
+                .bind(repository_id)
+                .fetch_one(&pool)
+                .await
+                .expect("count repository rows");
+        assert_eq!(
+            imported_repo_rows, 0,
+            "repository upsert should roll back with the failed assignment"
+        );
+
+        let leaked_staging = std::fs::read_dir(central_root.path())
+            .expect("read central")
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| {
+                name.starts_with(".skillport-import-") || name.starts_with(".skillport-backup-")
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            leaked_staging.is_empty(),
+            "temporary staging directories should be cleaned up: {leaked_staging:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn import_invalid_repo_leaves_central_storage_unchanged() {
         let pool = setup_test_db().await;
         let central_root = tempdir().expect("central");
@@ -852,7 +1075,7 @@ metadata:
 
         let error = result.expect_err("denied import should fail");
         assert!(
-            !error.trim().is_empty(),
+            !error.to_string().trim().is_empty(),
             "failure should return an error message"
         );
 
@@ -1065,6 +1288,57 @@ metadata:
     }
 
     #[test]
+    fn recursive_fallback_skips_test_fixture_skill_directories() {
+        let repo = GitHubRepoRef {
+            owner: "everyinc".to_string(),
+            repo: "compound-engineering-plugin".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/everyinc/compound-engineering-plugin".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &compound_plugin_like_snapshot())
+                .expect("candidates");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].source_path,
+            "plugins/compound-engineering/skills/ce-work"
+        );
+        assert_eq!(candidates[0].skill_id, "ce-work");
+        assert!(candidates.iter().all(|candidate| {
+            !matches!(
+                candidate.skill_id.as_str(),
+                "custom-skill" | "default-skill" | "disabled-skill" | "skill-one"
+            )
+        }));
+    }
+
+    #[test]
+    fn recursive_fallback_keeps_sample_and_example_skill_directories() {
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "published-examples".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/published-examples".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &sample_and_example_skill_snapshot())
+                .expect("candidates");
+        let source_paths = candidates
+            .iter()
+            .map(|candidate| candidate.source_path.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(source_paths.len(), 4);
+        assert!(source_paths.contains(&"sample/skill-one"));
+        assert!(source_paths.contains(&"samples/skill-two"));
+        assert!(source_paths.contains(&"example/skill-three"));
+        assert!(source_paths.contains(&"examples/skill-four"));
+    }
+
+    #[test]
     fn duplicate_skill_names_keep_priority_manifest() {
         let repo = GitHubRepoRef {
             owner: "example".to_string(),
@@ -1176,6 +1450,19 @@ metadata:
             !command.contains(token),
             "ssh command string must not contain the GitHub token"
         );
+    }
+
+    #[test]
+    fn remote_workspace_download_script_enforces_archive_budgets() {
+        let script = remote_workspace_download_script(None).expect("script");
+
+        assert!(script.contains("archive_limit=134217728"));
+        assert!(script.contains("archive_files_limit=20000"));
+        assert!(script.contains("archive_expanded_limit=268435456"));
+        assert!(script.contains("archive_entry_limit=33554432"));
+        assert!(script.contains("wc -c < \"$archive_file\""));
+        assert!(script.contains("find \"$repo_dir\" -type f -print"));
+        assert!(script.contains("GitHub repository archive entry"));
     }
 
     #[test]

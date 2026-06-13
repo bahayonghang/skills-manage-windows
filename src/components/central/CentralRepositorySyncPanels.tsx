@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { AlertTriangle, Download, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -9,10 +8,7 @@ import {
   repositoryDisplayName,
   type SkillConflictSourceInfo,
 } from "@/lib/centralConflictSource";
-import type {
-  DeleteCentralSkillPreview,
-  DuplicateResolution,
-} from "@/types";
+import type { DeleteCentralSkillPreview, DuplicateResolution } from "@/types";
 import type {
   CentralRemoteAddedSkill,
   CentralRemoteMissingSkill,
@@ -30,8 +26,20 @@ import {
   type RepositorySyncTab,
   type SkippedDecision,
 } from "@/components/central/repositorySyncUtils";
+import {
+  ActionButton,
+  ActionGroup,
+  DeleteOldSkillAction,
+  EmptyTab,
+  MissingChoice,
+  RenameField,
+} from "@/components/central/repositorySyncPanelControls";
 
-const ADDED_RESOLUTIONS: readonly DuplicateResolution[] = ["overwrite", "rename", "skip"];
+const ADDED_RESOLUTIONS: readonly DuplicateResolution[] = [
+  "overwrite",
+  "rename",
+  "skip",
+];
 const SKIPPED_ACTIONS: readonly SkippedDecision["action"][] = [
   "keep",
   "import",
@@ -61,27 +69,35 @@ export function RepositorySyncSummary({
   const cards = [
     {
       key: "pending",
-      label: t("central.repositorySyncPendingChip", { count: remoteAddedCount }),
+      label: t("central.repositorySyncPendingChip", {
+        count: remoteAddedCount,
+      }),
       value: remoteAddedCount,
       className: "border-primary/25 bg-primary/10 text-primary",
     },
     {
       key: "skipped",
-      label: t("central.repositorySyncSkippedChip", { count: skippedRemoteAddedCount }),
+      label: t("central.repositorySyncSkippedChip", {
+        count: skippedRemoteAddedCount,
+      }),
       value: skippedRemoteAddedCount,
       className: "border-muted-foreground/20 bg-muted/40 text-muted-foreground",
     },
     {
       key: "missing",
-      label: t("central.repositorySyncMissingChip", { count: remoteMissingCount }),
+      label: t("central.repositorySyncMissingChip", {
+        count: remoteMissingCount,
+      }),
       value: remoteMissingCount,
       className: "border-destructive/20 bg-destructive/10 text-destructive",
     },
     {
       key: "failed",
-      label: t("central.repositorySyncFailedChip", { count: failedRepositoryCount }),
+      label: t("central.repositorySyncFailedChip", {
+        count: failedRepositoryCount,
+      }),
       value: failedRepositoryCount,
-      className: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      className: "border-warning/25 bg-warning/10 text-warning-foreground",
     },
   ];
 
@@ -96,8 +112,13 @@ export function RepositorySyncSummary({
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card) => (
-          <div key={card.key} className={`rounded-xl border px-3 py-2 ${card.className}`}>
-            <div className="text-lg font-semibold leading-none">{card.value}</div>
+          <div
+            key={card.key}
+            className={`rounded-xl border px-3 py-2 ${card.className}`}
+          >
+            <div className="text-lg font-semibold leading-none">
+              {card.value}
+            </div>
             <div className="mt-1 text-xs font-medium">{card.label}</div>
           </div>
         ))}
@@ -118,7 +139,11 @@ interface TabsProps {
   onTabChange: (tab: RepositorySyncTab) => void;
 }
 
-export function RepositorySyncTabs({ activeTab, counts, onTabChange }: TabsProps) {
+export function RepositorySyncTabs({
+  activeTab,
+  counts,
+  onTabChange,
+}: TabsProps) {
   const { t } = useTranslation();
   return (
     <div role="tablist" className="flex flex-wrap gap-1 border-b border-border">
@@ -160,7 +185,7 @@ export function DeletePreviewBlock({
   const { t } = useTranslation();
   if (error) {
     return (
-      <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+      <div className="mt-2 rounded-lg border border-warning/30 bg-warning/10 p-2 text-xs text-warning-foreground">
         {t("central.remoteMissingPreviewFailed", { error })}
       </div>
     );
@@ -197,7 +222,9 @@ export function DeletePreviewBlock({
             {t("central.remoteMissingCopyInstalls")}
           </div>
           {item.copy_installations.map((installation) => {
-            const checked = selectedCopyKeys.has(copyKey(item.skill_id, installation.agent_id));
+            const checked = selectedCopyKeys.has(
+              copyKey(item.skill_id, installation.agent_id),
+            );
             return (
               <label
                 key={`${item.skill_id}:${installation.agent_id}`}
@@ -209,13 +236,16 @@ export function DeletePreviewBlock({
                     onToggleCopy(item.skill_id, installation.agent_id, !!value)
                   }
                   aria-label={t("central.remoteMissingCopyLabel", {
-                    platform: agentNameById.get(installation.agent_id) ?? installation.agent_id,
+                    platform:
+                      agentNameById.get(installation.agent_id) ??
+                      installation.agent_id,
                     skill: item.skill_name,
                   })}
                 />
                 <span className="min-w-0">
                   <span className="block font-medium text-foreground">
-                    {agentNameById.get(installation.agent_id) ?? installation.agent_id}
+                    {agentNameById.get(installation.agent_id) ??
+                      installation.agent_id}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
                     {installation.installed_path}
@@ -269,46 +299,62 @@ export function PendingAdditionsPanel({
         {items.map((item) => {
           const key = addedKey(item.repositoryId, item.preview.sourcePath);
           const conflictId = conflictSkillId(item);
-          const deletePreview = conflictId ? deletePreviewBySkillId.get(conflictId) ?? null : null;
-          const deleteError = conflictId ? failedDeletePreviewBySkillId.get(conflictId) ?? null : null;
+          const deletePreview = conflictId
+            ? (deletePreviewBySkillId.get(conflictId) ?? null)
+            : null;
+          const deleteError = conflictId
+            ? (failedDeletePreviewBySkillId.get(conflictId) ?? null)
+            : null;
           const decision = decisions[key] ?? {
             selected: true,
             resolution: item.preview.conflict ? "skip" : "overwrite",
             renamedSkillId: item.preview.skillId,
             deleteExisting: false,
           };
-          const existingConflict = conflictId ? existingSkillSources.get(conflictId) : null;
+          const existingConflict = conflictId
+            ? existingSkillSources.get(conflictId)
+            : null;
           const remoteSource = formatConflictSourceLabel(
             repositoryDisplayName(item.repo),
             item.preview.sourcePath,
-            unassignedSourceLabel
+            unassignedSourceLabel,
           );
           const existingSource = formatConflictSourceLabel(
             existingConflict?.repositoryLabel,
             existingConflict?.sourcePath,
-            unassignedSourceLabel
+            unassignedSourceLabel,
           );
           return (
-            <article key={key} className="rounded-xl border border-border bg-background p-3">
+            <article
+              key={key}
+              className="rounded-xl border border-border bg-background p-3"
+            >
               <div className="flex items-start gap-3">
                 <Checkbox
                   checked={decision.selected}
                   disabled={decision.deleteExisting}
-                  onCheckedChange={(checked) => onChange(key, { selected: !!checked })}
+                  onCheckedChange={(checked) =>
+                    onChange(key, { selected: !!checked })
+                  }
                   aria-label={t("central.repositorySyncSelectAdded", {
                     skill: item.preview.skillName,
                   })}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-foreground">{item.preview.skillName}</div>
+                  <div className="font-medium text-foreground">
+                    {item.preview.skillName}
+                  </div>
                   <div className="text-xs text-muted-foreground">
-                    {item.repo.owner}/{item.repo.repo} · {item.preview.sourcePath}
+                    {item.repo.owner}/{item.repo.repo} ·{" "}
+                    {item.preview.sourcePath}
                   </div>
                   {item.preview.conflict && (
-                    <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                    <div className="mt-1 text-xs text-warning-foreground">
                       {t("central.repositorySyncConflict", {
                         remoteSource,
-                        skill: existingConflict?.skillName ?? item.preview.conflict.existingName,
+                        skill:
+                          existingConflict?.skillName ??
+                          item.preview.conflict.existingName,
                         existingSource,
                       })}
                     </div>
@@ -338,7 +384,12 @@ export function PendingAdditionsPanel({
                 <DeleteOldSkillAction
                   selected={decision.deleteExisting}
                   disabled={!deletePreview}
-                  reason={deleteError ?? (!deletePreview ? t("central.repositorySyncDeleteUnavailable") : null)}
+                  reason={
+                    deleteError ??
+                    (!deletePreview
+                      ? t("central.repositorySyncDeleteUnavailable")
+                      : null)
+                  }
                   onClick={() =>
                     onChange(key, {
                       deleteExisting: !decision.deleteExisting,
@@ -408,33 +459,50 @@ export function SkippedAdditionsPanel(props: SkippedAdditionsPanelProps) {
         {items.map((item) => {
           const key = addedKey(item.repositoryId, item.preview.sourcePath);
           const conflictId = conflictSkillId(item);
-          const deletePreview = conflictId ? deletePreviewBySkillId.get(conflictId) ?? null : null;
-          const deleteError = conflictId ? failedDeletePreviewBySkillId.get(conflictId) ?? null : null;
-          const decision = decisions[key] ?? { action: "keep", renamedSkillId: item.preview.skillId };
-          const existingConflict = conflictId ? existingSkillSources.get(conflictId) : null;
+          const deletePreview = conflictId
+            ? (deletePreviewBySkillId.get(conflictId) ?? null)
+            : null;
+          const deleteError = conflictId
+            ? (failedDeletePreviewBySkillId.get(conflictId) ?? null)
+            : null;
+          const decision = decisions[key] ?? {
+            action: "keep",
+            renamedSkillId: item.preview.skillId,
+          };
+          const existingConflict = conflictId
+            ? existingSkillSources.get(conflictId)
+            : null;
           const remoteSource = formatConflictSourceLabel(
             repositoryDisplayName(item.repo),
             item.preview.sourcePath,
-            unassignedSourceLabel
+            unassignedSourceLabel,
           );
           const existingSource = formatConflictSourceLabel(
             existingConflict?.repositoryLabel,
             existingConflict?.sourcePath,
-            unassignedSourceLabel
+            unassignedSourceLabel,
           );
           return (
-            <article key={key} className="rounded-xl border border-border bg-background p-3">
+            <article
+              key={key}
+              className="rounded-xl border border-border bg-background p-3"
+            >
               <div className="flex flex-wrap items-start gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-foreground">{item.preview.skillName}</div>
+                  <div className="font-medium text-foreground">
+                    {item.preview.skillName}
+                  </div>
                   <div className="text-xs text-muted-foreground">
-                    {item.repo.owner}/{item.repo.repo} · {item.preview.sourcePath}
+                    {item.repo.owner}/{item.repo.repo} ·{" "}
+                    {item.preview.sourcePath}
                   </div>
                   {item.preview.conflict && (
-                    <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                    <div className="mt-1 text-xs text-warning-foreground">
                       {t("central.repositorySyncConflict", {
                         remoteSource,
-                        skill: existingConflict?.skillName ?? item.preview.conflict.existingName,
+                        skill:
+                          existingConflict?.skillName ??
+                          item.preview.conflict.existingName,
                         existingSource,
                       })}
                     </div>
@@ -464,7 +532,12 @@ export function SkippedAdditionsPanel(props: SkippedAdditionsPanelProps) {
                 <DeleteOldSkillAction
                   selected={decision.action === "delete"}
                   disabled={!deletePreview}
-                  reason={deleteError ?? (!deletePreview ? t("central.repositorySyncDeleteUnavailable") : null)}
+                  reason={
+                    deleteError ??
+                    (!deletePreview
+                      ? t("central.repositorySyncDeleteUnavailable")
+                      : null)
+                  }
                   onClick={() =>
                     onChange(key, {
                       action: decision.action === "delete" ? "keep" : "delete",
@@ -538,7 +611,12 @@ export function RemoteMissingPanel({
           >
             {t("central.repositorySyncDeleteAllRemovable")}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => onBulkChange("keep")}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onBulkChange("keep")}
+          >
             {t("central.repositorySyncKeepAll")}
           </Button>
         </div>
@@ -554,10 +632,14 @@ export function RemoteMissingPanel({
         {items.map((missing) => {
           const skillId = missingSkillId(missing);
           const item = deletePreviewBySkillId.get(skillId) ?? null;
-          const previewError = failedDeletePreviewBySkillId.get(skillId) ?? null;
+          const previewError =
+            failedDeletePreviewBySkillId.get(skillId) ?? null;
           const decision = decisions[skillId] ?? "keep";
           return (
-            <article key={skillId} className="rounded-xl border border-border bg-background p-3">
+            <article
+              key={skillId}
+              className="rounded-xl border border-border bg-background p-3"
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="font-medium text-foreground">{skillId}</div>
@@ -572,16 +654,24 @@ export function RemoteMissingPanel({
                     </div>
                     <div>
                       {missing.state.source_path
-                        ? t("central.remoteMissingSource", { path: missing.state.source_path })
+                        ? t("central.remoteMissingSource", {
+                            path: missing.state.source_path,
+                          })
                         : t("central.remoteMissingSourceUnknown")}
                     </div>
                   </div>
                 </div>
-                <MissingChoice decision={decision} item={item} onChange={(next) => onChange(skillId, next)} />
+                <MissingChoice
+                  decision={decision}
+                  item={item}
+                  onChange={(next) => onChange(skillId, next)}
+                />
               </div>
               {previewError && decision !== "delete" && (
-                <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                  {t("central.remoteMissingPreviewFailed", { error: previewError })}
+                <div className="mt-2 text-xs text-warning-foreground">
+                  {t("central.remoteMissingPreviewFailed", {
+                    error: previewError,
+                  })}
                 </div>
               )}
               {decision === "delete" && (
@@ -601,7 +691,11 @@ export function RemoteMissingPanel({
   );
 }
 
-export function FailedRepositoriesPanel({ items }: { items: CentralRepositorySyncFailure[] }) {
+export function FailedRepositoriesPanel({
+  items,
+}: {
+  items: CentralRepositorySyncFailure[];
+}) {
   const { t } = useTranslation();
   if (items.length === 0) return <EmptyTab />;
   return (
@@ -612,148 +706,19 @@ export function FailedRepositoriesPanel({ items }: { items: CentralRepositorySyn
       </h3>
       <div className="space-y-2">
         {items.map((item) => (
-          <article key={item.repositoryId} className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
-            <div className="text-sm font-medium text-amber-800 dark:text-amber-200">
+          <article
+            key={item.repositoryId}
+            className="rounded-xl border border-warning/30 bg-warning/10 p-3"
+          >
+            <div className="text-sm font-medium text-warning-foreground">
               {item.name || item.repositoryId}
             </div>
-            <div className="mt-1 break-words text-xs text-amber-700 dark:text-amber-300">
+            <div className="mt-1 break-words text-xs text-warning-foreground">
               {item.error}
             </div>
           </article>
         ))}
       </div>
     </div>
-  );
-}
-
-function ActionGroup({ disabled, children }: { disabled?: boolean; children: ReactNode }) {
-  return <div className={`flex flex-wrap gap-1 text-xs ${disabled ? "opacity-60" : ""}`}>{children}</div>;
-}
-
-function ActionButton({
-  selected,
-  disabled,
-  onClick,
-  children,
-}: {
-  selected: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      className={`rounded-lg border px-2 py-1 ${
-        selected ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
-      }`}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-
-function RenameField({
-  value,
-  error,
-  onChange,
-}: {
-  value: string;
-  error?: string;
-  onChange: (value: string) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="mt-2 space-y-1">
-      <input
-        className={`w-full rounded-lg border bg-background px-3 py-2 text-sm ${
-          error ? "border-destructive" : "border-border"
-        }`}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-label={t("central.repositorySyncRenameLabel")}
-        aria-invalid={Boolean(error)}
-      />
-      {error && (
-        <p className="text-xs text-destructive" role="alert">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function DeleteOldSkillAction({
-  selected,
-  disabled,
-  reason,
-  onClick,
-}: {
-  selected: boolean;
-  disabled: boolean;
-  reason: string | null;
-  onClick: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="mt-3 border-t border-border/70 pt-3">
-      <Button
-        type="button"
-        variant={selected ? "destructive" : "outline"}
-        size="sm"
-        disabled={disabled}
-        onClick={onClick}
-      >
-        <Trash2 className="size-3.5" />
-        {t("central.repositorySyncDeleteOldSkill")}
-      </Button>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {reason ?? t("central.repositorySyncDeleteOldSkillDesc")}
-      </p>
-    </div>
-  );
-}
-
-function MissingChoice({
-  decision,
-  item,
-  onChange,
-}: {
-  decision: MissingDecision;
-  item: DeleteCentralSkillPreview | null;
-  onChange: (decision: MissingDecision) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="grid grid-cols-2 rounded-xl border border-border/70 bg-muted/20 p-1 text-xs">
-      {(["keep", "delete"] as MissingDecision[]).map((next) => (
-        <button
-          key={next}
-          type="button"
-          className={`rounded-lg px-3 py-1.5 font-medium ${
-            decision === next
-              ? next === "delete"
-                ? "bg-destructive text-destructive-foreground"
-                : "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:bg-background"
-          }`}
-          disabled={next === "delete" && !item}
-          onClick={() => onChange(next)}
-        >
-          {t(next === "delete" ? "central.remoteMissingDelete" : "central.remoteMissingKeep")}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function EmptyTab() {
-  const { t } = useTranslation();
-  return (
-    <p className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-      {t("central.repositorySyncTabEmpty")}
-    </p>
   );
 }

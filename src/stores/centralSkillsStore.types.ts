@@ -55,47 +55,65 @@ export interface CentralSkillsState {
 
   // Actions
   loadCentralSkills: () => Promise<void>;
-  previewCentralStoreLocationChange: (targetPath: string) => Promise<CentralStoreLocationPreview>;
+  previewCentralStoreLocationChange: (
+    targetPath: string,
+  ) => Promise<CentralStoreLocationPreview>;
   applyCentralStoreLocationChange: (
-    targetPath: string
+    targetPath: string,
   ) => Promise<CentralStoreLocationChangeResult>;
   installSkill: (
     skillId: string,
     agentIds: string[],
     method: string,
-    projectPath?: string | null
+    projectPath?: string | null,
   ) => Promise<BatchInstallResult>;
   batchInstallSkills: (
     skillIds: string[],
     agentIds: string[],
     method: string,
-    projectPath?: string | null
+    projectPath?: string | null,
   ) => Promise<CentralBatchInstallResult>;
   loadDeletePreview: (skillId: string) => Promise<SkillDetail>;
-  loadBatchDeletePreview: (skillIds: string[]) => Promise<BatchDeleteCentralSkillPreviewResult>;
-  loadRepositoryDeletePreview: (repositoryId: string) => Promise<DeleteSkillRepositoryPreview>;
-  deleteCentralSkill: (skillId: string, removeAgentIds: string[]) => Promise<void>;
+  loadBatchDeletePreview: (
+    skillIds: string[],
+  ) => Promise<BatchDeleteCentralSkillPreviewResult>;
+  loadRepositoryDeletePreview: (
+    repositoryId: string,
+  ) => Promise<DeleteSkillRepositoryPreview>;
+  deleteCentralSkill: (
+    skillId: string,
+    removeAgentIds: string[],
+  ) => Promise<void>;
   deleteCentralSkills: (
-    requests: BatchDeleteCentralSkillRequest[]
+    requests: BatchDeleteCentralSkillRequest[],
   ) => Promise<BatchDeleteCentralSkillResult>;
   deleteSkillRepository: (
     repositoryId: string,
-    requests: BatchDeleteCentralSkillRequest[]
+    requests: BatchDeleteCentralSkillRequest[],
   ) => Promise<DeleteSkillRepositoryResult>;
   togglePlatformLink: (skillId: string, agentId: string) => Promise<void>;
   createRepository: (name: string) => Promise<SkillRepository>;
-  assignSkillsToRepository: (skillIds: string[], repositoryId: string) => Promise<void>;
+  assignSkillsToRepository: (
+    skillIds: string[],
+    repositoryId: string,
+  ) => Promise<void>;
   setRepositoryPinned: (repositoryId: string, pinned: boolean) => Promise<void>;
   createTag: (name: string) => Promise<SkillTag>;
   assignSkillTags: (skillIds: string[], tagIds: string[]) => Promise<void>;
-  bulkSuggestSkillTags: (skillIds: string[]) => Promise<SkillTagSuggestionResult[]>;
-  checkSkillUpdates: (skillIds?: string[]) => Promise<CentralSkillUpdateState[]>;
+  /** 解除单个 skill 的若干 tag 关联（卡上删标签用）。 */
+  unassignSkillTags: (skillId: string, tagIds: string[]) => Promise<void>;
+  bulkSuggestSkillTags: (
+    skillIds: string[],
+  ) => Promise<SkillTagSuggestionResult[]>;
+  checkSkillUpdates: (
+    skillIds?: string[],
+  ) => Promise<CentralSkillUpdateState[]>;
   checkRepositorySync: (
     repositoryIds: string[],
-    skillIds?: string[]
+    skillIds?: string[],
   ) => Promise<CentralRepositorySyncPreview>;
   applyRepositorySync: (
-    decisions: CentralRepositorySyncDecisions
+    decisions: CentralRepositorySyncDecisions,
   ) => Promise<CentralRepositorySyncApplyResult>;
   updateSkills: (skillIds: string[]) => Promise<CentralSkillUpdateResult>;
   cancelCentralUpdates: () => Promise<void>;
@@ -109,19 +127,20 @@ export interface CentralSkillsState {
   subscribePortabilityProgress: () => Promise<() => void>;
   cancelSkillportStatePortability: () => Promise<void>;
   exportSkillportState: () => Promise<string>;
-  previewSkillportStateImport: (json: string) => Promise<SkillportStateImportPreview>;
+  previewSkillportStateImport: (
+    json: string,
+  ) => Promise<SkillportStateImportPreview>;
   importSkillportState: (
     json: string,
-    resolutions: SkillportStateImportResolution[]
+    resolutions: SkillportStateImportResolution[],
   ) => Promise<SkillportStateImportResult>;
   resetForTargetChange: () => void;
 }
 
-
 export type CentralStoreSet = (
   partial:
     | Partial<CentralSkillsState>
-    | ((state: CentralSkillsState) => Partial<CentralSkillsState>)
+    | ((state: CentralSkillsState) => Partial<CentralSkillsState>),
 ) => void;
 
 export type CentralStoreGet = () => CentralSkillsState;

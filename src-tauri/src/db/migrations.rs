@@ -23,22 +23,16 @@ pub(crate) async fn ensure_column(
     table: &str,
     column: &str,
     alter_sql: &str,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     let pragma = format!("PRAGMA table_info({table})");
-    let rows = sqlx::query(&pragma)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let rows = sqlx::query(&pragma).fetch_all(pool).await?;
 
     let has_column = rows
         .iter()
         .any(|row| row.get::<String, _>("name") == column);
 
     if !has_column {
-        sqlx::query(alter_sql)
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+        sqlx::query(alter_sql).execute(pool).await?;
     }
 
     Ok(())

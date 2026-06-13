@@ -11,6 +11,7 @@
 //! 命令层在 `crate::commands::projects`。
 
 pub mod crud;
+pub mod error;
 pub mod scan;
 pub mod types;
 
@@ -23,4 +24,5 @@ pub use crud::{
     remove_project_impl, rename_project_impl, rescan_project_impl, set_project_pinned_impl,
     uninstall_skill_from_project_impl,
 };
+pub use error::ProjectsError;
 pub use types::{ProjectDto, ProjectSkillDto, ProjectUsingSkillDto};

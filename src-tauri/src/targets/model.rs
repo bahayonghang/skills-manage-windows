@@ -9,6 +9,17 @@ pub const LOCAL_TARGET_ID: &str = "local";
 #[cfg(windows)]
 pub(super) const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+#[cfg(windows)]
+pub(super) fn hidden_child_creation_flags() -> u32 {
+    CREATE_NO_WINDOW
+}
+
+#[cfg(windows)]
+pub(super) fn hide_child_window(command: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(hidden_child_creation_flags());
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum TargetKind {

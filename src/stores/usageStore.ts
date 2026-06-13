@@ -32,6 +32,8 @@ interface UsageState {
   providers: ProviderHealth[];
   detail: SkillUsageDetail | null;
   scope: UsageScopeInfo | null;
+  /** 当前选中的平台（provider displayName）；null = 全部平台 */
+  selectedSource: string | null;
   loading: boolean;
   refreshing: boolean;
   error: string | null;
@@ -39,8 +41,13 @@ interface UsageState {
   lastRefreshMs: number | null;
 
   refresh: (force?: boolean) => Promise<UsageRefreshResult | null>;
-  loadOverview: (topSkillsLimit?: number) => Promise<void>;
-  loadRecent: (limit?: number) => Promise<void>;
+  /** 切换平台筛选：写状态后按所选 source 重拉 overview + recent。 */
+  selectSource: (source: string | null) => Promise<void>;
+  loadOverview: (
+    topSkillsLimit?: number,
+    source?: string | null,
+  ) => Promise<void>;
+  loadRecent: (limit?: number, source?: string | null) => Promise<void>;
   loadProviders: () => Promise<void>;
   loadDetail: (skill: string) => Promise<void>;
   loadScope: () => Promise<UsageScopeInfo | null>;
@@ -51,7 +58,13 @@ interface UsageState {
 }
 
 const BROWSER_FIXTURE_OVERVIEW: UsageOverview = {
-  kpis: { totalCalls: 0, uniqueSkills: 0, uniqueProjects: 0, uniqueSources: 0 },
+  kpis: {
+    totalCalls: 0,
+    uniqueSkills: 0,
+    uniqueProjects: 0,
+    uniqueSources: 0,
+    uniqueSessions: 0,
+  },
   topSkills: [],
   heatmap: Array.from({ length: 16 * 7 }, (_, i) => ({
     date: new Date(Date.now() - (16 * 7 - 1 - i) * 86_400_000)
@@ -79,9 +92,10 @@ const BROWSER_FIXTURE_PROVIDERS: ProviderHealth[] = [
   scannedAtMs: 0,
 }));
 
-let inFlightRefresh:
-  | { targetId: string; promise: Promise<UsageRefreshResult | null> }
-  | null = null;
+let inFlightRefresh: {
+  targetId: string;
+  promise: Promise<UsageRefreshResult | null>;
+} | null = null;
 let refreshSequence = 0;
 
 function activeUsageTargetId(): string {
@@ -94,6 +108,7 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   providers: [],
   detail: null,
   scope: null,
+  selectedSource: null,
   loading: false,
   refreshing: false,
   error: null,
@@ -108,7 +123,8 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     const requestSequence = ++refreshSequence;
     const refreshPromise = (async () => {
       const stillLatestRequest = () =>
-        requestSequence === refreshSequence && targetId === activeUsageTargetId();
+        requestSequence === refreshSequence &&
+        targetId === activeUsageTargetId();
 
       const applyRefreshResult = (result: UsageRefreshResult) => {
         if (!stillLatestRequest()) {
@@ -121,9 +137,27 @@ export const useUsageStore = create<UsageState>((set, get) => ({
           scope: result.scope,
           refreshing: false,
           error:
-            result.refreshError && !result.usedCachedData ? result.refreshError : null,
-          lastRefreshMs: result.summary.scannedAtMs > 0 ? result.summary.scannedAtMs : null,
+            result.refreshError && !result.usedCachedData
+              ? result.refreshError
+              : null,
+          lastRefreshMs:
+            result.summary.scannedAtMs > 0 ? result.summary.scannedAtMs : null,
         });
+
+        // refresh 永远返回未过滤 base + 完整 providers；若此前选中了某平台
+        // 且刷新后它仍有数据，则按 source 重拉 overview/recent；否则回落「全部」。
+        const selected = get().selectedSource;
+        if (selected) {
+          const stillHasData = result.providers.some(
+            (p) => p.displayName === selected && p.callCount > 0,
+          );
+          if (stillHasData) {
+            void get().loadOverview(50, selected);
+            void get().loadRecent(20, selected);
+          } else {
+            set({ selectedSource: null });
+          }
+        }
       };
 
       const applyRefreshError = (message: string) => {
@@ -159,7 +193,9 @@ export const useUsageStore = create<UsageState>((set, get) => ({
 
       set({ refreshing: true, error: null });
       try {
-        const result = await invoke<UsageRefreshResult>("usage_refresh", { force });
+        const result = await invoke<UsageRefreshResult>("usage_refresh", {
+          force,
+        });
         applyRefreshResult(result);
         if (result.usedCachedData && result.refreshError) {
           toast.info(i18n.t("skillUsage.showingCachedAfterError"));
@@ -179,7 +215,15 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     });
   },
 
-  async loadOverview(topSkillsLimit = 50) {
+  async selectSource(source) {
+    set({ selectedSource: source });
+    await Promise.all([
+      get().loadOverview(50, source),
+      get().loadRecent(20, source),
+    ]);
+  },
+
+  async loadOverview(topSkillsLimit = 50, source = null) {
     if (!isTauriRuntime()) {
       set({ overview: BROWSER_FIXTURE_OVERVIEW });
       return;
@@ -188,6 +232,7 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     try {
       const overview = await invoke<UsageOverview>("usage_get_overview", {
         topSkillsLimit,
+        source,
       });
       set({ overview, loading: false });
     } catch (e) {
@@ -195,13 +240,16 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     }
   },
 
-  async loadRecent(limit = 20) {
+  async loadRecent(limit = 20, source = null) {
     if (!isTauriRuntime()) {
       set({ recent: [] });
       return;
     }
     try {
-      const recent = await invoke<SkillCall[]>("usage_get_recent", { limit });
+      const recent = await invoke<SkillCall[]>("usage_get_recent", {
+        limit,
+        source,
+      });
       set({ recent });
     } catch (e) {
       set({ error: errorMessage(e) });
@@ -271,10 +319,12 @@ export const useUsageStore = create<UsageState>((set, get) => ({
       const unlisten = await listen<string>("usage://target-changed", () => {
         // 切换 target 后保留旧数据直到新 refresh 完成，但立刻清空 target-bound
         // 详情与 freshness，避免旧 target 的「刚刷新过」状态阻止重扫。
+        // 平台全集随机器变化，故所选平台也一并重置回「全部」。
         set({
           detail: null,
           lastRefreshMs: null,
           error: null,
+          selectedSource: null,
         });
         void get().refresh(true);
       });

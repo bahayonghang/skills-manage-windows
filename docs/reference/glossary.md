@@ -21,7 +21,9 @@ Vocabulary that appears across the UI, source code, and docs.
 | Collection | 集合 | User-defined group of skills for batch installs and import / export |
 | Repository | 技能仓库 | Local metadata grouping Central skills by their source repo |
 | Tag | 标签 | Local taxonomy entry, manual or AI-suggested |
-| Operation Log | 操作日志 | Structured row in `operation_logs` recording install / uninstall events |
+| Operation Log | 操作日志 | Structured row in `operation_logs` recording user-visible actions such as install, uninstall, scan, settings, target switch, import, or export |
+| Runtime Log | 运行时日志 | Bounded daily `skillport-YYYY-MM-DD.log` file for frontend/backend diagnostics; separate from Operation Log |
+| Observability Console | 可观测性控制台 | `/logs` UI with separate Operation and Runtime modes |
 | Target | 目标 | Either Local or an SSH host; the destination AppState resolves for commands |
 | Active Target | 活动目标 | The Target currently selected in the SSH banner |
 | Vault | Vault | An Obsidian-managed directory; SkillPort source-only scans them under `/obsidian` |
@@ -44,4 +46,4 @@ Vocabulary that appears across the UI, source code, and docs.
 - Platform → directory: see [Platform Paths](./platform-paths.md)
 - Install method semantics: see [Architecture → Installation Engine](../architecture/installation-engine.md)
 
-Last reviewed: 2026-05-25
+Last reviewed: 2026-06-03

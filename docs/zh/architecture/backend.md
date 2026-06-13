@@ -6,7 +6,7 @@ Rust 端是 Tauri v2 应用，分为薄 IPC 处理、业务服务、目标适配
 
 ```text
 src-tauri/src/
-├── lib.rs             Tauri builder + invoke_handler（107 个命令）
+├── lib.rs             Tauri builder + invoke_handler
 ├── main.rs            入口，调用 lib::run()
 ├── path_utils.rs      跨平台路径助手
 ├── paths.rs           稳定应用路径（~/.skillsmanage）
@@ -37,7 +37,7 @@ src-tauri/src/
 | --- | --- |
 | `bootstrap.rs` | dashboard 冷启动快照 |
 | `targets.rs` | 活动目标 + SSH 目标 CRUD |
-| `logs.rs` | 操作日志 list / get / clear / export |
+| `logs.rs` | Operation Log list / get / clear / export + Runtime Log 诊断 |
 | `scanner.rs` | 按需 `scan_all_skills` |
 | `agents.rs` | 27 个内置 + 自定义 agent |
 | `linker.rs` | 安装 / 卸载 / 批量安装 |
@@ -107,7 +107,8 @@ db/
 
 ## 日志与错误
 
-- **操作日志。** `operation_logs` 长生命周期结构化行。
+- **操作日志。** `operation_logs` 长生命周期结构化行，显示在日志页的 Operation layer。
+- **运行时日志。** `skillport-YYYY-MM-DD.log` 短生命周期日文件，由后端 tracing 与前端诊断写入，经白名单 IPC 读取 / 导出，并按保留周期清理。
 - **错误。** 所有命令返回 `Result<T, String>`。服务把错误上下文留在内部，到 IPC 边界才坍塌为字符串。
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-06-03

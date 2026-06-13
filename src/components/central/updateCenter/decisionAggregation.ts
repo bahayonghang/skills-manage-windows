@@ -5,16 +5,20 @@ import type {
 } from "@/types/centralRepositorySync";
 import type { UpdateCenterTab } from "@/stores/updateCenterStore";
 import type {
+  DeletedPlatformCopyRemoval,
   PlatformDuplicateRemoval,
+  SkillRefreshScopeKind,
   SkillUpdateDecisions,
   SkillUpdateInventory,
 } from "@/types/skillUpdateInventory";
 
+import type { DeletedPlatformCopyRowState } from "@/components/central/updateCenter/DeletedPlatformCopiesTabPanel";
 import type { PlatformDuplicateRowState } from "@/components/central/updateCenter/PlatformDuplicatesTabPanel";
 import type { RemoteAddedRowState } from "@/components/central/updateCenter/RemoteAddedTabPanel";
 import type { RemoteMissingRowState } from "@/components/central/updateCenter/RemoteMissingTabPanel";
 import type { UpdatableRowState } from "@/components/central/updateCenter/UpdatableTabPanel";
 import {
+  deletedPlatformCopyGroupKey,
   duplicateGroupKey,
   remoteAddedKey,
 } from "@/components/central/updateCenter/keys";
@@ -24,16 +28,25 @@ export interface DecisionState {
   added: Record<string, RemoteAddedRowState>;
   missing: Record<string, RemoteMissingRowState>;
   duplicates: Record<string, PlatformDuplicateRowState>;
+  deletedPlatformCopies: Record<string, DeletedPlatformCopyRowState>;
 }
 
 export function emptyDecisionState(): DecisionState {
-  return { updatable: {}, added: {}, missing: {}, duplicates: {} };
+  return {
+    updatable: {},
+    added: {},
+    missing: {},
+    duplicates: {},
+    deletedPlatformCopies: {},
+  };
 }
 
 export function buildInitialState(
   inventory: SkillUpdateInventory | null,
+  scopeKind: SkillRefreshScopeKind = "all",
 ): DecisionState {
   if (!inventory) return emptyDecisionState();
+  const shouldSelectPlatformCleanup = scopeKind === "platform";
   const updatable: Record<string, UpdatableRowState> = {};
   for (const item of inventory.updatable) {
     updatable[item.state.skill_id] = { selected: true };
@@ -55,23 +68,39 @@ export function buildInitialState(
   const duplicates: Record<string, PlatformDuplicateRowState> = {};
   for (const group of inventory.platformDuplicates) {
     duplicates[duplicateGroupKey(group)] = {
-      selectedPaths: [...group.writablePaths],
+      selectedPaths: shouldSelectPlatformCleanup ? [...group.writablePaths] : [],
     };
   }
-  return { updatable, added, missing, duplicates };
+  const deletedPlatformCopies: Record<string, DeletedPlatformCopyRowState> = {};
+  for (const group of inventory.deletedPlatformCopies ?? []) {
+    deletedPlatformCopies[deletedPlatformCopyGroupKey(group)] = {
+      selectedPaths: shouldSelectPlatformCleanup ? [...group.writablePaths] : [],
+    };
+  }
+  return { updatable, added, missing, duplicates, deletedPlatformCopies };
 }
 
 export function countsFromInventory(
   inventory: SkillUpdateInventory | null,
 ): Record<UpdateCenterTab, number> {
   if (!inventory) {
-    return { updatable: 0, added: 0, missing: 0, duplicates: 0, orphans: 0 };
+    return {
+      updatable: 0,
+      added: 0,
+      missing: 0,
+      failed: 0,
+      duplicates: 0,
+      deletedPlatformCopies: 0,
+      orphans: 0,
+    };
   }
   return {
     updatable: inventory.updatable.length,
     added: inventory.remoteAdded.length,
     missing: inventory.remoteMissing.length,
+    failed: inventory.failedRepositories.length,
     duplicates: inventory.platformDuplicates.length,
+    deletedPlatformCopies: inventory.deletedPlatformCopies?.length ?? 0,
     orphans: inventory.orphans.length,
   };
 }
@@ -95,14 +124,72 @@ export function countDecisionSelections(
   }
   for (const group of inventory.platformDuplicates) {
     const paths = decisions.duplicates[duplicateGroupKey(group)]?.selectedPaths ?? [];
-    if (paths.length > 0) count += 1;
+    count += paths.length;
+  }
+  for (const group of inventory.deletedPlatformCopies ?? []) {
+    const paths =
+      decisions.deletedPlatformCopies[deletedPlatformCopyGroupKey(group)]
+        ?.selectedPaths ?? [];
+    count += paths.length;
   }
   return count;
+}
+
+export interface DecisionSelectionSummary {
+  updatable: number;
+  added: number;
+  missing: number;
+  duplicates: number;
+  deletedPlatformCopies: number;
+}
+
+export function summarizeDecisionSelections(
+  decisions: DecisionState,
+  inventory: SkillUpdateInventory | null,
+): DecisionSelectionSummary {
+  if (!inventory) {
+    return {
+      updatable: 0,
+      added: 0,
+      missing: 0,
+      duplicates: 0,
+      deletedPlatformCopies: 0,
+    };
+  }
+  let updatable = 0;
+  let added = 0;
+  let missing = 0;
+  let duplicates = 0;
+  let deletedPlatformCopies = 0;
+
+  for (const item of inventory.updatable) {
+    if (decisions.updatable[item.state.skill_id]?.selected) updatable += 1;
+  }
+  for (const item of inventory.remoteAdded) {
+    const key = remoteAddedKey(item.repositoryId, item.sourcePath);
+    if (decisions.added[key]?.selected) added += 1;
+  }
+  for (const item of inventory.remoteMissing) {
+    const decision = decisions.missing[item.state.skill_id]?.decision;
+    if (decision === "keep" || decision === "delete") missing += 1;
+  }
+  for (const group of inventory.platformDuplicates) {
+    duplicates +=
+      decisions.duplicates[duplicateGroupKey(group)]?.selectedPaths.length ?? 0;
+  }
+  for (const group of inventory.deletedPlatformCopies ?? []) {
+    deletedPlatformCopies +=
+      decisions.deletedPlatformCopies[deletedPlatformCopyGroupKey(group)]
+        ?.selectedPaths.length ?? 0;
+  }
+
+  return { updatable, added, missing, duplicates, deletedPlatformCopies };
 }
 
 export function buildDecisions(
   decisions: DecisionState,
   inventory: SkillUpdateInventory,
+  allowedAgentIds?: string[],
 ): SkillUpdateDecisions {
   const updates: string[] = [];
   for (const item of inventory.updatable) {
@@ -169,7 +256,22 @@ export function buildDecisions(
     });
   }
 
+  const removeDeletedPlatformCopies: DeletedPlatformCopyRemoval[] = [];
+  for (const group of inventory.deletedPlatformCopies ?? []) {
+    const paths =
+      decisions.deletedPlatformCopies[deletedPlatformCopyGroupKey(group)]
+        ?.selectedPaths ?? [];
+    if (paths.length === 0) continue;
+    removeDeletedPlatformCopies.push({
+      agentId: group.agentId,
+      skillId: group.skillId,
+      paths,
+    });
+  }
+
   return {
+    allowedAgentIds:
+      allowedAgentIds && allowedAgentIds.length > 0 ? allowedAgentIds : null,
     updates,
     keepMissing,
     deleteMissing,
@@ -177,6 +279,7 @@ export function buildDecisions(
     skipAdditions,
     unskipAdditions: [],
     removePlatformDuplicates,
+    removeDeletedPlatformCopies,
   };
 }
 
@@ -192,6 +295,9 @@ export function inventorySignature(
     ...inventory.remoteMissing.map((item) => `m:${item.state.skill_id}`),
     ...inventory.platformDuplicates.map(
       (group) => `d:${group.agentId}:${group.skillId}`,
+    ),
+    ...(inventory.deletedPlatformCopies ?? []).map(
+      (group) => `x:${group.agentId}:${group.skillId}`,
     ),
   ];
   return parts.join("|");

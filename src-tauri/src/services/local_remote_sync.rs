@@ -9,7 +9,9 @@ use crate::targets::{
     ConnectedRemoteTarget,
 };
 
+mod error;
 mod types;
+pub use error::LocalRemoteSyncError;
 pub use types::*;
 
 struct LocalRemoteSyncPlan {
@@ -121,16 +123,18 @@ fi
 pub async fn preview_local_remote_sync_impl(
     active_target: ActiveTarget,
     repo_path: Option<String>,
-) -> Result<LocalRemoteSyncPreview, String> {
+) -> Result<LocalRemoteSyncPreview, LocalRemoteSyncError> {
     Ok(build_sync_plan(active_target, repo_path).await?.preview)
 }
 
 pub async fn apply_local_remote_sync_impl(
     active_target: ActiveTarget,
     repo_path: Option<String>,
-) -> Result<LocalRemoteSyncApplyResult, String> {
+) -> Result<LocalRemoteSyncApplyResult, LocalRemoteSyncError> {
     let plan = build_sync_plan(active_target.clone(), repo_path).await?;
-    let connection = connect_remote_target(&active_target).await?;
+    let connection = connect_remote_target(&active_target)
+        .await
+        .map_err(|e| LocalRemoteSyncError::Remote(e.to_string()))?;
     let mut result = LocalRemoteSyncApplyResult {
         target_id: plan.preview.target_id.clone(),
         target_label: plan.preview.target_label.clone(),
@@ -152,7 +156,7 @@ pub async fn apply_local_remote_sync_impl(
                     id: plan.preview.repo.id.clone(),
                     label: plan.preview.repo.label.clone(),
                     target_path: plan.preview.repo.remote_path.clone(),
-                    error,
+                    error: error.to_string(),
                 });
                 return Ok(result);
             }
@@ -186,7 +190,7 @@ pub async fn apply_local_remote_sync_impl(
                         id: preview.id,
                         label: preview.label,
                         target_path: preview.remote_path,
-                        error,
+                        error: error.to_string(),
                     }),
                 }
             }
@@ -209,12 +213,26 @@ pub async fn apply_local_remote_sync_impl(
 async fn build_sync_plan(
     active_target: ActiveTarget,
     repo_path: Option<String>,
-) -> Result<LocalRemoteSyncPlan, String> {
+) -> Result<LocalRemoteSyncPlan, LocalRemoteSyncError> {
     let repo_root = resolve_repo_root(repo_path.as_deref())?;
-    let repo_snapshot = collect_repo_snapshot(&repo_root)?;
+    let repo_root_for_snapshot = repo_root.clone();
+    let repo_snapshot = crate::fs_util::run_blocking_fs_with(
+        "local repository snapshot",
+        move || collect_repo_snapshot(&repo_root_for_snapshot),
+        LocalRemoteSyncError::task_join,
+    )
+    .await?;
     let skills_root = paths::central_skills_dir();
-    let skill_snapshots = collect_skill_snapshots(&skills_root)?;
-    let connection = connect_remote_target(&active_target).await?;
+    let skills_root_for_snapshot = skills_root.clone();
+    let skill_snapshots = crate::fs_util::run_blocking_fs_with(
+        "local skill snapshots",
+        move || collect_skill_snapshots(&skills_root_for_snapshot),
+        LocalRemoteSyncError::task_join,
+    )
+    .await?;
+    let connection = connect_remote_target(&active_target)
+        .await
+        .map_err(|e| LocalRemoteSyncError::Remote(e.to_string()))?;
     let remote_home = connection.remote_home().trim_end_matches('/').to_string();
     let repo_remote_root = remote_join(
         &remote_join(&remote_home, ".skillsmanage/repos"),
@@ -223,7 +241,7 @@ async fn build_sync_plan(
     let skills_remote_root = remote_join(&remote_home, ".skillsmanage/skills");
 
     let repo_remote_hash = remote_snapshot_hash(&connection, &repo_remote_root, &repo_snapshot)
-        .map_err(|error| format!("Failed to inspect remote repository snapshot: {error}"))?;
+        .map_err(|error| LocalRemoteSyncError::RepoRemoteInspect(error.to_string()))?;
     let repo_preview = preview_item(
         &repo_snapshot,
         LocalRemoteSyncItemKind::Repo,
@@ -239,7 +257,7 @@ async fn build_sync_plan(
         let (remote_hash, error) = match remote_snapshot_hash(&connection, &remote_path, &snapshot)
         {
             Ok(hash) => (hash, None),
-            Err(error) => (None, Some(error)),
+            Err(error) => (None, Some(error.to_string())),
         };
         let preview = preview_item(
             &snapshot,
@@ -279,22 +297,25 @@ async fn build_sync_plan(
     })
 }
 
-fn resolve_repo_root(repo_path: Option<&str>) -> Result<PathBuf, String> {
+fn resolve_repo_root(repo_path: Option<&str>) -> Result<PathBuf, LocalRemoteSyncError> {
     let root = match repo_path.map(str::trim).filter(|value| !value.is_empty()) {
         Some(path) => PathBuf::from(path),
-        None => std::env::current_dir()
-            .map_err(|error| format!("Failed to resolve current directory: {error}"))?,
+        None => std::env::current_dir().map_err(|error| {
+            LocalRemoteSyncError::io("Failed to resolve current directory", error)
+        })?,
     };
     if !root.is_dir() {
-        return Err(format!(
-            "Repository path '{}' is not a directory.",
-            root.display()
+        return Err(LocalRemoteSyncError::RepoPathNotDirectory(
+            root.display().to_string(),
         ));
     }
     root.canonicalize().map_err(|error| {
-        format!(
-            "Failed to canonicalize repository path '{}': {error}",
-            root.display()
+        LocalRemoteSyncError::io(
+            format!(
+                "Failed to canonicalize repository path '{}'",
+                root.display()
+            ),
+            error,
         )
     })
 }
@@ -332,10 +353,13 @@ fn preview_item(
 }
 
 pub fn repo_slug(root: &Path) -> String {
-    let slug = root
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("repo")
+    let root_string = root.to_string_lossy().replace('\\', "/");
+    let name = root_string
+        .rsplit('/')
+        .find(|segment| !segment.is_empty())
+        .unwrap_or("repo");
+
+    let slug = name
         .chars()
         .map(|ch| {
             if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
@@ -370,11 +394,14 @@ pub fn is_safe_relative_archive_path(path: &str) -> bool {
         .any(|component| !matches!(component, Component::Normal(_)))
 }
 
-pub fn collect_repo_snapshot(root: &Path) -> Result<LocalSnapshot, String> {
+pub fn collect_repo_snapshot(root: &Path) -> Result<LocalSnapshot, LocalRemoteSyncError> {
     let root = root.canonicalize().map_err(|error| {
-        format!(
-            "Failed to canonicalize repository path '{}': {error}",
-            root.display()
+        LocalRemoteSyncError::io(
+            format!(
+                "Failed to canonicalize repository path '{}'",
+                root.display()
+            ),
+            error,
         )
     })?;
     let mut files = Vec::new();
@@ -383,28 +410,30 @@ pub fn collect_repo_snapshot(root: &Path) -> Result<LocalSnapshot, String> {
     build_snapshot(repo_slug(&root), repo_slug(&root), root, files)
 }
 
-pub fn collect_skill_snapshots(root: &Path) -> Result<Vec<LocalSnapshot>, String> {
+pub fn collect_skill_snapshots(root: &Path) -> Result<Vec<LocalSnapshot>, LocalRemoteSyncError> {
     if !root.exists() {
         return Ok(Vec::new());
     }
     let mut dirs = std::fs::read_dir(root)
         .map_err(|error| {
-            format!(
-                "Failed to read local skills directory '{}': {error}",
-                root.display()
+            LocalRemoteSyncError::io(
+                format!("Failed to read local skills directory '{}'", root.display()),
+                error,
             )
         })?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("Failed to read local skills directory entry: {error}"))?;
+        .map_err(|error| {
+            LocalRemoteSyncError::io("Failed to read local skills directory entry", error)
+        })?;
     dirs.sort_by_key(|entry| entry.path());
 
     let mut snapshots = Vec::new();
     for entry in dirs {
         let path = entry.path();
         let file_type = entry.file_type().map_err(|error| {
-            format!(
-                "Failed to inspect local skill '{}': {error}",
-                path.display()
+            LocalRemoteSyncError::io(
+                format!("Failed to inspect local skill '{}'", path.display()),
+                error,
             )
         })?;
         if !file_type.is_dir() || !path.join("SKILL.md").is_file() {
@@ -413,18 +442,10 @@ pub fn collect_skill_snapshots(root: &Path) -> Result<Vec<LocalSnapshot>, String
         let id = path
             .file_name()
             .and_then(|value| value.to_str())
-            .ok_or_else(|| {
-                format!(
-                    "Local skill path '{}' has no UTF-8 directory name.",
-                    path.display()
-                )
-            })?
+            .ok_or_else(|| LocalRemoteSyncError::SkillDirNameNotUtf8(path.display().to_string()))?
             .to_string();
         if !is_safe_relative_archive_path(&id) {
-            return Err(format!(
-                "Local skill id '{}' is not safe for remote sync.",
-                id
-            ));
+            return Err(LocalRemoteSyncError::UnsafeSkillId(id));
         }
         let mut files = Vec::new();
         collect_snapshot_files(&path, &path, &mut files, false)?;
@@ -440,13 +461,13 @@ fn build_snapshot(
     label: String,
     root: PathBuf,
     files: Vec<SnapshotFile>,
-) -> Result<LocalSnapshot, String> {
+) -> Result<LocalSnapshot, LocalRemoteSyncError> {
     for file in &files {
         if !is_safe_relative_archive_path(&file.relative_path) {
-            return Err(format!(
-                "Snapshot '{}' contains unsupported path '{}'.",
-                id, file.relative_path
-            ));
+            return Err(LocalRemoteSyncError::UnsafeSnapshotPath {
+                id,
+                path: file.relative_path.clone(),
+            });
         }
     }
     let file_count = files.len();
@@ -468,18 +489,20 @@ fn collect_snapshot_files(
     current: &Path,
     files: &mut Vec<SnapshotFile>,
     apply_repo_excludes: bool,
-) -> Result<(), String> {
+) -> Result<(), LocalRemoteSyncError> {
     let mut entries = std::fs::read_dir(current)
-        .map_err(|error| format!("Failed to read '{}': {error}", current.display()))?
+        .map_err(|error| {
+            LocalRemoteSyncError::io(format!("Failed to read '{}'", current.display()), error)
+        })?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("Failed to read directory entry: {error}"))?;
+        .map_err(|error| LocalRemoteSyncError::io("Failed to read directory entry", error))?;
     entries.sort_by_key(|entry| entry.path());
 
     for entry in entries {
         let path = entry.path();
-        let file_type = entry
-            .file_type()
-            .map_err(|error| format!("Failed to inspect '{}': {error}", path.display()))?;
+        let file_type = entry.file_type().map_err(|error| {
+            LocalRemoteSyncError::io(format!("Failed to inspect '{}'", path.display()), error)
+        })?;
         if file_type.is_symlink() {
             continue;
         }
@@ -491,13 +514,13 @@ fn collect_snapshot_files(
         } else if file_type.is_file() {
             let relative_path = relative_path_string(root, &path)?;
             if !is_safe_relative_archive_path(&relative_path) {
-                return Err(format!(
-                    "Local path '{}' is not safe for archive sync.",
-                    path.display()
+                return Err(LocalRemoteSyncError::UnsafeLocalPath(
+                    path.display().to_string(),
                 ));
             }
-            let bytes = std::fs::read(&path)
-                .map_err(|error| format!("Failed to read '{}': {error}", path.display()))?;
+            let bytes = std::fs::read(&path).map_err(|error| {
+                LocalRemoteSyncError::io(format!("Failed to read '{}'", path.display()), error)
+            })?;
             files.push(SnapshotFile {
                 relative_path,
                 bytes,
@@ -507,13 +530,13 @@ fn collect_snapshot_files(
     Ok(())
 }
 
-fn should_exclude_repo_dir(root: &Path, path: &Path) -> Result<bool, String> {
-    let relative = path.strip_prefix(root).map_err(|error| {
-        format!(
-            "Failed to compute relative path for '{}': {error}",
-            path.display()
-        )
-    })?;
+fn should_exclude_repo_dir(root: &Path, path: &Path) -> Result<bool, LocalRemoteSyncError> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|error| LocalRemoteSyncError::RelativePath {
+            path: path.display().to_string(),
+            source: error,
+        })?;
     let components = relative
         .components()
         .filter_map(|component| match component {
@@ -534,20 +557,19 @@ fn should_exclude_repo_dir(root: &Path, path: &Path) -> Result<bool, String> {
         .any(|component| REPO_EXCLUDED_DIRS.contains(&component.as_str())))
 }
 
-fn relative_path_string(root: &Path, path: &Path) -> Result<String, String> {
-    let relative = path.strip_prefix(root).map_err(|error| {
-        format!(
-            "Failed to compute relative path for '{}': {error}",
-            path.display()
-        )
-    })?;
+fn relative_path_string(root: &Path, path: &Path) -> Result<String, LocalRemoteSyncError> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|error| LocalRemoteSyncError::RelativePath {
+            path: path.display().to_string(),
+            source: error,
+        })?;
     let parts = relative
         .components()
         .map(|component| match component {
             Component::Normal(value) => Ok(value.to_string_lossy().into_owned()),
-            _ => Err(format!(
-                "Local path '{}' contains unsupported components.",
-                path.display()
+            _ => Err(LocalRemoteSyncError::UnsupportedPathComponents(
+                path.display().to_string(),
             )),
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -582,15 +604,15 @@ fn hex_digest(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-pub fn build_archive(snapshot: &LocalSnapshot) -> Result<Vec<u8>, String> {
+pub fn build_archive(snapshot: &LocalSnapshot) -> Result<Vec<u8>, LocalRemoteSyncError> {
     let encoder = GzEncoder::new(Vec::new(), Compression::default());
     let mut builder = tar::Builder::new(encoder);
     for file in &snapshot.files {
         if !is_safe_relative_archive_path(&file.relative_path) {
-            return Err(format!(
-                "Snapshot '{}' contains unsupported path '{}'.",
-                snapshot.id, file.relative_path
-            ));
+            return Err(LocalRemoteSyncError::UnsafeSnapshotPath {
+                id: snapshot.id.clone(),
+                path: file.relative_path.clone(),
+            });
         }
         let mut header = tar::Header::new_gnu();
         header.set_size(file.bytes.len() as u64);
@@ -603,25 +625,25 @@ pub fn build_archive(snapshot: &LocalSnapshot) -> Result<Vec<u8>, String> {
                 file.bytes.as_slice(),
             )
             .map_err(|error| {
-                format!(
-                    "Failed to append archive entry '{}': {error}",
-                    file.relative_path
+                LocalRemoteSyncError::io(
+                    format!("Failed to append archive entry '{}'", file.relative_path),
+                    error,
                 )
             })?;
     }
     let encoder = builder
         .into_inner()
-        .map_err(|error| format!("Failed to finalize archive: {error}"))?;
+        .map_err(|error| LocalRemoteSyncError::io("Failed to finalize archive", error))?;
     encoder
         .finish()
-        .map_err(|error| format!("Failed to compress archive: {error}"))
+        .map_err(|error| LocalRemoteSyncError::io("Failed to compress archive", error))
 }
 
 fn remote_snapshot_hash(
     connection: &ConnectedRemoteTarget,
     remote_root: &str,
     snapshot: &LocalSnapshot,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, LocalRemoteSyncError> {
     let manifest = snapshot
         .files
         .iter()
@@ -629,7 +651,8 @@ fn remote_snapshot_hash(
         .collect::<Vec<_>>()
         .join("\n");
     let output = connection
-        .run_command_with_stdin_bytes(&remote_hash_command(remote_root), manifest.as_bytes())?;
+        .run_command_with_stdin_bytes(&remote_hash_command(remote_root), manifest.as_bytes())
+        .map_err(|e| LocalRemoteSyncError::Remote(e.to_string()))?;
     let output = String::from_utf8_lossy(&output);
     parse_remote_hash_output(&output)
 }
@@ -642,7 +665,7 @@ fn remote_hash_command(remote_root: &str) -> String {
     )
 }
 
-pub fn parse_remote_hash_output(output: &str) -> Result<Option<String>, String> {
+pub fn parse_remote_hash_output(output: &str) -> Result<Option<String>, LocalRemoteSyncError> {
     let mut entries = Vec::new();
     for line in output.lines() {
         let line = line.trim_end();
@@ -651,10 +674,7 @@ pub fn parse_remote_hash_output(output: &str) -> Result<Option<String>, String> 
         }
         if let Some(path) = line.strip_prefix("MISSING_FILE\t") {
             if !is_safe_relative_archive_path(path) {
-                return Err(format!(
-                    "Remote hash output contains unsafe path '{}'.",
-                    path
-                ));
+                return Err(LocalRemoteSyncError::UnsafeRemoteHashPath(path.to_string()));
             }
             entries.push((path.to_string(), "missing".to_string()));
             continue;
@@ -663,24 +683,19 @@ pub fn parse_remote_hash_output(output: &str) -> Result<Option<String>, String> 
             continue;
         }
         let Some((digest, path)) = line.split_once('\t') else {
-            return Err(format!(
-                "Remote hash output line is not supported: '{}'.",
-                line
+            return Err(LocalRemoteSyncError::UnsupportedRemoteHashLine(
+                line.to_string(),
             ));
         };
         let digest = digest.trim();
         let path = path.trim();
         if digest.len() != 64 || !digest.chars().all(|ch| ch.is_ascii_hexdigit()) {
-            return Err(format!(
-                "Remote hash digest is not supported for '{}'.",
-                path
+            return Err(LocalRemoteSyncError::UnsupportedRemoteHashDigest(
+                path.to_string(),
             ));
         }
         if !is_safe_relative_archive_path(path) {
-            return Err(format!(
-                "Remote hash output contains unsafe path '{}'.",
-                path
-            ));
+            return Err(LocalRemoteSyncError::UnsafeRemoteHashPath(path.to_string()));
         }
         entries.push((path.to_string(), digest.to_ascii_lowercase()));
     }
@@ -691,9 +706,9 @@ fn apply_snapshot(
     connection: &ConnectedRemoteTarget,
     snapshot: &LocalSnapshot,
     remote_path: &str,
-) -> Result<(), String> {
+) -> Result<(), LocalRemoteSyncError> {
     let parent = remote_parent(remote_path)
-        .ok_or_else(|| format!("Remote target path '{}' has no parent.", remote_path))?;
+        .ok_or_else(|| LocalRemoteSyncError::RemotePathNoParent(remote_path.to_string()))?;
     let archive = build_archive(snapshot)?;
     let safe_id = repo_slug(Path::new(&snapshot.id));
     let staging = format!(
@@ -714,7 +729,10 @@ fn apply_snapshot(
             &archive,
         )
         .map(|_| ())
-        .map_err(|error| format!("Remote apply failed for '{}': {error}", remote_path))
+        .map_err(|error| LocalRemoteSyncError::RemoteApply {
+            path: remote_path.to_string(),
+            message: error.to_string(),
+        })
 }
 
 fn remote_apply_command(

@@ -92,7 +92,7 @@ export function CentralSearchBar({
     installedFilterValue,
     installedFilterMatchCount,
     availableInstallAgents ?? [],
-    t
+    t,
   );
 
   const hasAnyChip =
@@ -157,8 +157,14 @@ export function CentralSearchBar({
               key={`repo-${chip.id}`}
               testId={`filter-chip-repo-selected-${chip.id}`}
               label={t("central.toolbarChipRepo", { name: chip.label })}
-              ariaLabel={t("central.toolbarChipRepoRemove", { name: chip.label })}
-              onRemove={onRemoveRepoFilter ? () => onRemoveRepoFilter(chip.id) : undefined}
+              ariaLabel={t("central.toolbarChipRepoRemove", {
+                name: chip.label,
+              })}
+              onRemove={
+                onRemoveRepoFilter
+                  ? () => onRemoveRepoFilter(chip.id)
+                  : undefined
+              }
               tone="primary"
             />
           ))}
@@ -171,8 +177,12 @@ export function CentralSearchBar({
                   ? t("central.toolbarChipUncategorized")
                   : t("central.toolbarChipTag", { name: chip.label })
               }
-              ariaLabel={t("central.toolbarChipTagRemove", { name: chip.label })}
-              onRemove={onRemoveTagFilter ? () => onRemoveTagFilter(chip.id) : undefined}
+              ariaLabel={t("central.toolbarChipTagRemove", {
+                name: chip.label,
+              })}
+              onRemove={
+                onRemoveTagFilter ? () => onRemoveTagFilter(chip.id) : undefined
+              }
               tone={chip.id === "uncategorized" ? "muted" : "primary"}
             />
           ))}
@@ -188,9 +198,11 @@ export function CentralSearchBar({
           {hasInvalid && (
             <span
               data-testid="central-search-invalid-hint"
-              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-amber-700 dark:text-amber-300"
+              className="rounded-md border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-warning-foreground"
             >
-              {t("central.v2.searchInvalidTokens", { tokens: queryAst.invalid.join(", ") })}
+              {t("central.v2.searchInvalidTokens", {
+                tokens: queryAst.invalid.join(", "),
+              })}
             </span>
           )}
         </div>
@@ -208,7 +220,7 @@ function getChipValue(filter: CentralQueryFilter): string {
 
 function resolveRepoLabel(
   repoId: string,
-  repositories: readonly SkillRepositoryWithStats[]
+  repositories: readonly SkillRepositoryWithStats[],
 ): string {
   if (repoId === "unassigned") return "unassigned";
   const repo = repositories.find((r) => r.id === repoId);
@@ -219,7 +231,7 @@ function resolveRepoLabel(
 function resolveTagLabel(
   tagId: string,
   tags: readonly SkillTag[],
-  t: TFunction
+  t: TFunction,
 ): string {
   if (tagId === "uncategorized") return t("central.toolbarChipUncategorized");
   const tag = tags.find((tg) => tg.id === tagId);
@@ -230,7 +242,7 @@ function resolveInstalledChip(
   value: InstalledSkillsFilterValue | undefined,
   matchCount: number | undefined,
   agents: readonly PlatformTarget[],
-  t: TFunction
+  t: TFunction,
 ): { label: string; ariaLabel: string } | null {
   if (!value || value === "all") return null;
   if (value === "installed") {
@@ -243,12 +255,15 @@ function resolveInstalledChip(
   const displayName = !agent
     ? platformId
     : isUniversalPlatformTarget(agent)
-    ? t("platformTargets.universalLabel")
-    : agent.display_name;
-  const titleAttr = agent && isUniversalPlatformTarget(agent)
-    ? getPlatformTargetMemberNames(agent).join(", ")
-    : displayName;
-  const label = t("central.toolbarChipInstalledPlatform", { platform: displayName });
+      ? t("platformTargets.universalLabel")
+      : agent.display_name;
+  const titleAttr =
+    agent && isUniversalPlatformTarget(agent)
+      ? getPlatformTargetMemberNames(agent).join(", ")
+      : displayName;
+  const label = t("central.toolbarChipInstalledPlatform", {
+    platform: displayName,
+  });
   return { label, ariaLabel: titleAttr };
 }
 
@@ -262,7 +277,9 @@ function FilterChip({
   t: TFunction;
 }) {
   const value = getChipValue(filter);
-  const labelKey = filter.negated ? "central.v2.filtersChipNegated" : "central.v2.filtersChip";
+  const labelKey = filter.negated
+    ? "central.v2.filtersChipNegated"
+    : "central.v2.filtersChip";
   return (
     <span
       data-testid={`filter-chip-${filter.kind}`}
@@ -270,7 +287,7 @@ function FilterChip({
         "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono",
         filter.negated
           ? "border-destructive/40 bg-destructive/10 text-destructive"
-          : "border-primary/30 bg-primary/10 text-primary"
+          : "border-primary/30 bg-primary/10 text-primary",
       )}
     >
       <span>{t(labelKey, { key: filter.kind, value })}</span>
@@ -305,8 +322,10 @@ function SimpleChip({
       className={cn(
         "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5",
         tone === "primary" && "border-primary/30 bg-primary/10 text-primary",
-        tone === "muted" && "border-border/70 bg-muted/40 text-muted-foreground",
-        tone === "accent" && "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+        tone === "muted" &&
+          "border-border/70 bg-muted/40 text-muted-foreground",
+        tone === "accent" &&
+          "border-warning/40 bg-warning/10 text-warning-foreground",
       )}
     >
       <span>{label}</span>

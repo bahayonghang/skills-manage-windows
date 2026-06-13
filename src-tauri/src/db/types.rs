@@ -70,6 +70,53 @@ pub const LOCAL_UNKNOWN_REPOSITORY_ID: &str = "local-unknown";
 /// 占位标签 ID：`uncategorized` 表示尚未归类的技能。
 pub const UNCATEGORIZED_TAG_ID: &str = "uncategorized";
 
+/// 唯一保留的普通内置标签 ID。
+pub const ACADEMIC_RESEARCH_WRITING_TAG_ID: &str = "academic-research-writing";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkType {
+    Native,
+    Symlink,
+    Copy,
+    Writable,
+}
+
+impl LinkType {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Native => "native",
+            Self::Symlink => "symlink",
+            Self::Copy => "copy",
+            Self::Writable => "writable",
+        }
+    }
+}
+
+impl std::fmt::Display for LinkType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for LinkType {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(match value {
+            "native" => Self::Native,
+            "symlink" => Self::Symlink,
+            "copy" => Self::Copy,
+            "writable" => Self::Writable,
+            other => {
+                return Err(format!(
+                    "Unsupported link_type '{other}'. Expected one of: native, symlink, copy, writable."
+                ))
+            }
+        })
+    }
+}
+
 // ─── Skill / Installation / Observation ──────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -209,6 +256,44 @@ pub struct SkillRepositoryPendingAddition {
     pub skill_name: String,
     pub conflict_existing_skill_id: Option<String>,
     pub discovered_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SkillUpdateInventoryRun {
+    pub inventory_id: String,
+    pub scope_kind: String,
+    pub mode: String,
+    pub skill_ids_json: Option<String>,
+    pub repository_ids_json: Option<String>,
+    pub agent_ids_json: Option<String>,
+    pub cache_policy: String,
+    pub generated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SkillUpdateInventoryEntry {
+    pub inventory_id: String,
+    pub bucket: String,
+    pub entity_key: String,
+    pub skill_id: Option<String>,
+    pub skill_name: Option<String>,
+    pub repository_id: Option<String>,
+    pub source_type: Option<String>,
+    pub source_url: Option<String>,
+    pub ref_name: Option<String>,
+    pub source_path: Option<String>,
+    pub agent_id: Option<String>,
+    pub local_hash: Option<String>,
+    pub baseline_hash: Option<String>,
+    pub remote_hash: Option<String>,
+    pub local_version: Option<String>,
+    pub remote_version: Option<String>,
+    pub cache_policy: String,
+    pub cache_hit: bool,
+    pub snapshot_fetched_at: Option<String>,
+    pub generated_at: String,
+    pub payload_json: String,
+    pub error: Option<String>,
 }
 
 // ─── Update State ────────────────────────────────────────────────────────────

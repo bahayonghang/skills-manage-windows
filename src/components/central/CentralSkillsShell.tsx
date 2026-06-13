@@ -16,13 +16,9 @@ import {
   ToolbarViewMenu,
   ToolbarMoreMenu,
 } from "@/components/central/CentralSkillsShellMenus";
-import {
-  CentralProgressTopLine,
-} from "@/components/central/CentralProgressTopLine";
+import { CentralProgressTopLine } from "@/components/central/CentralProgressTopLine";
 import { countActiveCentralTasks } from "@/components/central/centralTaskCenterHelpers";
-import {
-  TaskCenterDrawer,
-} from "@/components/central/TaskCenterDrawer";
+import { TaskCenterDrawer } from "@/components/central/TaskCenterDrawer";
 import { BulkActionBar } from "@/components/central/BulkActionBar";
 import { CategorizeDrawer } from "@/components/central/CategorizeDrawer";
 import type { CentralSkillCategorizePanelProps } from "@/components/central/CentralSkillCategorizePanel";
@@ -30,11 +26,16 @@ import { CentralSkillDialogs } from "@/components/central/CentralSkillDialogs";
 import { CentralSkillListContent } from "@/components/central/CentralSkillListContent";
 import { CentralSearchBar } from "@/components/central/CentralSearchBar";
 import { CentralSidebar } from "@/components/central/CentralSidebar";
+import {
+  CentralTopFilters,
+  type SourceFilterValue,
+} from "@/components/central/CentralTopFilters";
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";
 import { groupSkillsByMode } from "@/lib/centralGrouping";
 import type { FacetCounts } from "@/lib/centralFacetCounts";
+import { sanitizeSelectedTagIds } from "@/lib/centralTags";
 import type { CentralViewState, GroupByMode } from "@/lib/centralViewState";
 import { CentralGroupedSkillList } from "./CentralGroupedSkillList";
 import type {
@@ -48,7 +49,6 @@ import type {
   SkillRepositoryWithStats,
   SkillTag,
   SkillportStatePortabilityJob,
-  TagGroup,
 } from "@/types";
 
 /**
@@ -60,10 +60,16 @@ import type {
  * - 通过 viewState / setViewState 驱动新视图状态（repo 单选、tag 多选 + URL state 同步）
  */
 
-type ListContentProps = Omit<ComponentProps<typeof CentralSkillListContent>, "t" | "selectedCount">;
+type ListContentProps = Omit<
+  ComponentProps<typeof CentralSkillListContent>,
+  "t" | "selectedCount"
+>;
 type CategorizePanelProps = Omit<CentralSkillCategorizePanelProps, "t">;
 type DialogProps = Omit<ComponentProps<typeof CentralSkillDialogs>, "t">;
-type InstalledSkillsFilterProps = Omit<CentralInstalledSkillsQuickFilterProps, "t">;
+type InstalledSkillsFilterProps = Omit<
+  CentralInstalledSkillsQuickFilterProps,
+  "t"
+>;
 
 export interface CentralSkillsShellProps {
   t: TFunction;
@@ -73,7 +79,9 @@ export interface CentralSkillsShellProps {
   isCheckingUpdates: boolean;
   filterSidebarWidth: number;
   startFilterSidebarResize: (event: React.PointerEvent<HTMLElement>) => void;
-  handleFilterSidebarResizeKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+  handleFilterSidebarResizeKeyDown: (
+    event: React.KeyboardEvent<HTMLElement>,
+  ) => void;
 
   // V2 view state（来自 useCentralViewState 或 Shell 外维护的 hook）
   viewState: CentralViewState;
@@ -83,11 +91,11 @@ export interface CentralSkillsShellProps {
   // Facet 数据
   facetCounts: FacetCounts;
   repositories: readonly SkillRepositoryWithStats[];
+  /** repo.id → 可更新 skill 数（侧栏 repo 行角标）。 */
+  repoUpdateCounts?: Record<string, number>;
   tags: readonly SkillTag[];
-  /** 标签分组（M3）。 */
-  tagGroups?: readonly TagGroup[];
-  /** 分配 tag 到分组（M6）。 */
-  onAssignTagToGroup?: (tagId: string, groupId: string | null) => void;
+  /** 顶部筛选「更多▾」内的 Tag Groups 管理 UI。 */
+  topFiltersTagGroups?: ReactNode;
 
   // 排序选项（与 V1 保持一致）
   sortFieldOptions: Array<{ value: CentralSortField; label: string }>;
@@ -105,10 +113,12 @@ export interface CentralSkillsShellProps {
   bulkBar: {
     selectedCount: number;
     isInstalling: boolean;
+    isUninstalling: boolean;
     isDeleting: boolean;
     isAiBusy: boolean;
     aiTaggingAvailable: boolean;
     onBatchInstall: () => void;
+    onBatchUninstall: () => void;
     onBatchDelete: () => void;
     onClearSelection: () => void;
   };
@@ -150,6 +160,7 @@ export interface CentralSkillsShellProps {
   onUpdateSkills: (skillIds: string[]) => void;
   updateAvailableSkillCount: number;
   updateButton: { disabled: boolean; label: string; targetSkillIds: string[] };
+  checkModeControl?: ReactNode;
   checkButton: { label: string; disabled: boolean; onClick: () => void };
 
   /** 仓库删除（M4 回填）。 */
@@ -175,9 +186,9 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
     queryAst,
     facetCounts,
     repositories,
+    repoUpdateCounts,
     tags,
-    tagGroups,
-    onAssignTagToGroup,
+    topFiltersTagGroups,
     sortFieldOptions,
     sortDirectionOptions,
     groupByOptions,
@@ -196,6 +207,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
     onUpdateSkills,
     updateAvailableSkillCount,
     updateButton,
+    checkModeControl,
     checkButton,
     onDeleteRepository,
     onToggleRepositoryPin,
@@ -204,8 +216,14 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   } = props;
 
   const openUpdateCenter = useUpdateCenterStore((s) => s.openDialog);
+  const selectedTagIds = useMemo(
+    () =>
+      tags.length > 0 ? sanitizeSelectedTagIds(viewState.tags, tags) : viewState.tags,
+    [tags, viewState.tags],
+  );
   const updateCenterRefreshContext = useMemo(() => {
-    const selectedRepoId = viewState.repos.length === 1 ? viewState.repos[0] : null;
+    const selectedRepoId =
+      viewState.repos.length === 1 ? viewState.repos[0] : null;
     const selectedRepo = selectedRepoId
       ? repositories.find((repo) => repo.id === selectedRepoId)
       : null;
@@ -225,8 +243,27 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   };
 
   const handleToggleTag = (tagId: string) => {
-    const next = toggleId(viewState.tags, tagId);
+    const next = toggleId(selectedTagIds, tagId);
     setViewState({ ...viewState, tags: next });
+  };
+
+  // 来源筛选走 query AST 的 source: token（与 chip 渲染共享）。
+  const sourceFilter = queryAst.filters.find(
+    (f) => f.kind === "source" && !f.negated,
+  );
+  const activeSource: SourceFilterValue | null =
+    sourceFilter?.kind === "source" ? sourceFilter.value : null;
+
+  const handleToggleSource = (value: SourceFilterValue | null) => {
+    let q = viewState.q;
+    for (const f of queryAst.filters) {
+      if (f.kind === "source") {
+        const tok = filterToToken(f);
+        if (tok) q = stripFirstOccurrence(q, tok);
+      }
+    }
+    const nextQ = value ? `${q} source:${value}`.trim() : q.trim();
+    setViewState({ ...viewState, q: nextQ });
   };
 
   const handleClearAll = () => {
@@ -260,14 +297,14 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   const handleRemoveTag = (tagId: string) => {
     setViewState({
       ...viewState,
-      tags: viewState.tags.filter((id) => id !== tagId),
+      tags: selectedTagIds.filter((id) => id !== tagId),
     });
   };
 
   const activeTaskCount = countActiveCentralTasks(
     taskCenter.aiTagJob,
     taskCenter.updateJob,
-    taskCenter.portabilityJob
+    taskCenter.portabilityJob,
   );
 
   return (
@@ -280,9 +317,22 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       {/* Header ─────────────────────────────────────────────────────── */}
       <div className="border-b border-border px-6 py-3 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold leading-tight">{t("central.title")}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold leading-tight">
+              {t("central.title")}
+            </h1>
+            <span
+              data-testid="central-result-count"
+              className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground"
+            >
+              {listContent.sortedSkills.length}
+            </span>
+          </div>
           <div className="mt-0.5 flex min-w-0 items-center gap-2">
-            <p className="truncate text-[11px] text-muted-foreground/70" title={centralSkillsDir}>
+            <p
+              className="truncate text-[11px] text-muted-foreground/70"
+              title={centralSkillsDir}
+            >
               {centralSkillsDir}
             </p>
             <Button
@@ -314,12 +364,16 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           {/* 入口：更新中心（聚合可更新 / 新增 / 已删除 / 平台冗余）─── */}
           <Button
             variant="outline"
-            onClick={() => openUpdateCenter(undefined, updateCenterRefreshContext)}
+            onClick={() =>
+              openUpdateCenter(undefined, updateCenterRefreshContext)
+            }
             data-testid="central-open-update-center"
           >
             <ListChecks className="size-3.5" />
             {t("central.updateCenter.openButton")}
           </Button>
+
+          {checkModeControl}
 
           {/* 主 CTA：检查更新 ────────────────────────────────────── */}
           <Button
@@ -328,12 +382,14 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
             disabled={checkButton.disabled}
             data-testid="central-check-updates"
           >
-            <RefreshCw className={cn("size-3.5", isCheckingUpdates && "animate-spin")} />
+            <RefreshCw
+              className={cn("size-3.5", isCheckingUpdates && "animate-spin")}
+            />
             {checkButton.label}
             {updateAvailableSkillCount > 0 && (
               <span
                 data-testid="central-update-count-chip"
-                className="ml-1.5 inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300 dark:bg-amber-500/20"
+                className="ml-1.5 inline-flex items-center rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning-foreground ring-1 ring-warning/30"
               >
                 +{updateAvailableSkillCount}
               </span>
@@ -376,14 +432,16 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
               onClear={handleQueryClear}
               onOpenPalette={onOpenPalette}
               selectedRepoIds={viewState.repos}
-              selectedTagIds={viewState.tags}
+              selectedTagIds={selectedTagIds}
               repositories={repositories}
               tags={tags}
               onRemoveRepoFilter={handleRemoveRepo}
               onRemoveTagFilter={handleRemoveTag}
               installedFilterValue={installedSkillsFilter.value}
               installedFilterMatchCount={installedSkillsFilter.filteredCount}
-              availableInstallAgents={installedSkillsFilter.availableInstallAgents}
+              availableInstallAgents={
+                installedSkillsFilter.availableInstallAgents
+              }
               onClearInstalledFilter={installedSkillsFilter.onClear}
             />
           </div>
@@ -424,15 +482,51 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
               </span>
             </Button>
           )}
+          {selectionControls.selectedCount > 0 && (
+            <div
+              data-testid="central-selection-summary"
+              className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+            >
+              <span className="font-medium text-foreground">
+                {t("central.selectionInlineSummary", {
+                  count: selectionControls.selectedCount,
+                })}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={selectionControls.currentResultCount === 0}
+                onClick={selectionControls.onSelectCurrentResults}
+                data-testid="central-select-current-results"
+              >
+                {t("central.selectCurrentResults")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={selectionControls.onClearSelection}
+                data-testid="central-clear-selection"
+              >
+                {t("central.clearSelection")}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
-      <CentralSelectionControls
+      <CentralTopFilters
         t={t}
-        selectedCount={selectionControls.selectedCount}
-        currentResultCount={selectionControls.currentResultCount}
-        onSelectCurrentResults={selectionControls.onSelectCurrentResults}
-        onClearSelection={selectionControls.onClearSelection}
+        tags={tags}
+        selectedTagIds={selectedTagIds}
+        onToggleTag={handleToggleTag}
+        facetCounts={facetCounts}
+        activeSource={activeSource}
+        onToggleSource={handleToggleSource}
+        tagGroupsSlot={topFiltersTagGroups}
       />
 
       {/* Body: sidebar + list + categorize ───────────────────────────── */}
@@ -444,13 +538,12 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           handleResizeKeyDown={handleFilterSidebarResizeKeyDown}
           facetCounts={facetCounts}
           repositories={repositories}
-          tags={tags}
-          tagGroups={tagGroups}
-          onAssignTagToGroup={onAssignTagToGroup}
+          repoUpdateCounts={repoUpdateCounts}
           onDeleteRepository={onDeleteRepository}
           onToggleRepositoryPin={onToggleRepositoryPin}
+          onSyncNewSource={() => setIsGitHubImportOpen(true)}
           selectedRepos={viewState.repos}
-          selectedTags={viewState.tags}
+          selectedTags={selectedTagIds}
           onToggleRepo={handleToggleRepo}
           onToggleTag={handleToggleTag}
           onClearAll={handleClearAll}
@@ -480,11 +573,13 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       <BulkActionBar
         selectedCount={bulkBar.selectedCount}
         isInstalling={bulkBar.isInstalling}
+        isUninstalling={bulkBar.isUninstalling}
         isDeleting={bulkBar.isDeleting}
         isAiBusy={bulkBar.isAiBusy}
         aiTaggingAvailable={bulkBar.aiTaggingAvailable}
         t={t}
         onBatchInstall={bulkBar.onBatchInstall}
+        onBatchUninstall={bulkBar.onBatchUninstall}
         onBatchDelete={bulkBar.onBatchDelete}
         onOpenCategorize={categorizeDrawer.onOpenManual}
         onOpenAiSuggest={categorizeDrawer.onOpenAiSuggest}
@@ -512,61 +607,6 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   );
 }
 
-
-interface CentralSelectionControlsProps {
-  t: TFunction;
-  selectedCount: number;
-  currentResultCount: number;
-  onSelectCurrentResults: () => void;
-  onClearSelection: () => void;
-}
-
-function CentralSelectionControls({
-  t,
-  selectedCount,
-  currentResultCount,
-  onSelectCurrentResults,
-  onClearSelection,
-}: CentralSelectionControlsProps) {
-  const hasCurrentResults = currentResultCount > 0;
-
-  return (
-    <div className="border-b border-border/70 px-6 py-2">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span data-testid="central-selection-summary" className="font-medium text-foreground">
-          {t("central.selectionSummary", {
-            selectedCount,
-            currentCount: currentResultCount,
-          })}
-        </span>
-        <span className="hidden h-4 w-px bg-border sm:block" />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          disabled={!hasCurrentResults}
-          onClick={onSelectCurrentResults}
-          data-testid="central-select-current-results"
-        >
-          {t("central.selectCurrentResults")}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          disabled={selectedCount === 0}
-          onClick={onClearSelection}
-          data-testid="central-clear-selection"
-        >
-          {t("central.clearSelection")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 interface GroupedListViewProps {
   listContent: ListContentProps;
   selectedCount: number;
@@ -574,7 +614,12 @@ interface GroupedListViewProps {
   t: TFunction;
 }
 
-function GroupedListView({ listContent, selectedCount, group, t }: GroupedListViewProps) {
+function GroupedListView({
+  listContent,
+  selectedCount,
+  group,
+  t,
+}: GroupedListViewProps) {
   const groups = useMemo(
     () =>
       groupSkillsByMode(listContent.sortedSkills, group, {
@@ -609,6 +654,10 @@ function GroupedListView({ listContent, selectedCount, group, t }: GroupedListVi
       onUpdateCentral={listContent.onUpdateCentral}
       onDelete={listContent.onDelete}
       onTogglePlatform={listContent.onTogglePlatform}
+      onAddSkillTag={listContent.onAddSkillTag}
+      onCreateSkillTag={listContent.onCreateSkillTag}
+      onRemoveSkillTag={listContent.onRemoveSkillTag}
+      tags={listContent.tags}
       t={t}
     />
   );
@@ -622,9 +671,18 @@ function toggleId(arr: readonly string[], id: string): string[] {
   return [...set];
 }
 
-function filterToToken(filter: CentralQueryAst["filters"][number]): string | null {
+function filterToToken(
+  filter: CentralQueryAst["filters"][number],
+): string | null {
   const prefix = filter.negated ? "-" : "";
-  if (filter.kind === "tag" || filter.kind === "repo" || filter.kind === "owner" || filter.kind === "source" || filter.kind === "has" || filter.kind === "platform") {
+  if (
+    filter.kind === "tag" ||
+    filter.kind === "repo" ||
+    filter.kind === "owner" ||
+    filter.kind === "source" ||
+    filter.kind === "has" ||
+    filter.kind === "platform"
+  ) {
     return `${prefix}${filter.kind}:${filter.value}`;
   }
   if (filter.kind === "created" || filter.kind === "updated") {
@@ -635,7 +693,9 @@ function filterToToken(filter: CentralQueryAst["filters"][number]): string | nul
 
 function stripFirstOccurrence(query: string, token: string): string {
   const tokens = query.split(/\s+/).filter((tok) => tok.length > 0);
-  const idx = tokens.findIndex((tok) => tok.toLowerCase() === token.toLowerCase());
+  const idx = tokens.findIndex(
+    (tok) => tok.toLowerCase() === token.toLowerCase(),
+  );
   if (idx < 0) return query;
   tokens.splice(idx, 1);
   return tokens.join(" ");

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use sqlx::Row;
 
-use crate::db::types::{DbPool, SkillInstallation};
+use crate::db::types::{DbPool, LinkType, SkillInstallation};
 
 /// Insert or update a skill installation record.
 ///
@@ -15,7 +15,11 @@ use crate::db::types::{DbPool, SkillInstallation};
 pub async fn upsert_skill_installation(
     pool: &DbPool,
     installation: &SkillInstallation,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
+    installation
+        .link_type
+        .parse::<LinkType>()
+        .map_err(sqlx::Error::InvalidArgument)?;
     sqlx::query(
         "INSERT INTO skill_installations
          (skill_id, agent_id, installed_path, link_type, symlink_target, created_at)
@@ -34,7 +38,6 @@ pub async fn upsert_skill_installation(
     .execute(pool)
     .await
     .map(|_| ())
-    .map_err(|e| e.to_string())
 }
 
 /// Delete an installation record for a specific skill+agent pair.
@@ -42,14 +45,13 @@ pub async fn delete_skill_installation(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM skill_installations WHERE skill_id = ? AND agent_id = ?")
         .bind(skill_id)
         .bind(agent_id)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 /// Remove installation records for a given agent where the skill ID is NOT in
@@ -59,14 +61,13 @@ pub async fn delete_stale_skill_installations(
     pool: &DbPool,
     agent_id: &str,
     found_skill_ids: &[String],
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     if found_skill_ids.is_empty() {
         return sqlx::query("DELETE FROM skill_installations WHERE agent_id = ?")
             .bind(agent_id)
             .execute(pool)
             .await
-            .map(|_| ())
-            .map_err(|e| e.to_string());
+            .map(|_| ());
     }
 
     let placeholders = found_skill_ids
@@ -83,26 +84,25 @@ pub async fn delete_stale_skill_installations(
     for id in found_skill_ids {
         q = q.bind(id.as_str());
     }
-    q.execute(pool).await.map(|_| ()).map_err(|e| e.to_string())
+    q.execute(pool).await.map(|_| ())
 }
 
 /// Retrieve all installation records for a given skill.
 pub async fn get_skill_installations(
     pool: &DbPool,
     skill_id: &str,
-) -> Result<Vec<SkillInstallation>, String> {
+) -> Result<Vec<SkillInstallation>, sqlx::Error> {
     sqlx::query_as::<_, SkillInstallation>("SELECT * FROM skill_installations WHERE skill_id = ?")
         .bind(skill_id)
         .fetch_all(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// Retrieve all installation records for a batch of skills, grouped by skill_id.
 pub async fn get_skill_installations_for_skills(
     pool: &DbPool,
     skill_ids: &[String],
-) -> Result<HashMap<String, Vec<SkillInstallation>>, String> {
+) -> Result<HashMap<String, Vec<SkillInstallation>>, sqlx::Error> {
     if skill_ids.is_empty() {
         return Ok(HashMap::new());
     }
@@ -117,7 +117,7 @@ pub async fn get_skill_installations_for_skills(
         query = query.bind(id);
     }
 
-    let rows = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let rows = query.fetch_all(pool).await?;
     let mut grouped: HashMap<String, Vec<SkillInstallation>> = HashMap::new();
     for row in rows {
         grouped.entry(row.skill_id.clone()).or_default().push(row);
@@ -126,17 +126,18 @@ pub async fn get_skill_installations_for_skills(
 }
 
 /// Aggregate installations per agent_id → count.
-pub async fn get_skill_counts_by_agent(pool: &DbPool) -> Result<HashMap<String, usize>, String> {
+pub async fn get_skill_counts_by_agent(
+    pool: &DbPool,
+) -> Result<HashMap<String, usize>, sqlx::Error> {
     let rows =
         sqlx::query("SELECT agent_id, COUNT(*) AS cnt FROM skill_installations GROUP BY agent_id")
             .fetch_all(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
     let mut result = HashMap::with_capacity(rows.len());
     for row in rows {
-        let agent_id: String = row.try_get("agent_id").map_err(|e| e.to_string())?;
-        let cnt: i64 = row.try_get("cnt").map_err(|e| e.to_string())?;
+        let agent_id: String = row.try_get("agent_id")?;
+        let cnt: i64 = row.try_get("cnt")?;
         result.insert(agent_id, cnt.max(0) as usize);
     }
     Ok(result)

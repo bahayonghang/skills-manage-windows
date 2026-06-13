@@ -2,19 +2,18 @@
 
 use crate::db::types::{DbPool, SkillUpdateState};
 
-pub async fn get_skill_update_states(pool: &DbPool) -> Result<Vec<SkillUpdateState>, String> {
+pub async fn get_skill_update_states(pool: &DbPool) -> Result<Vec<SkillUpdateState>, sqlx::Error> {
     sqlx::query_as::<_, SkillUpdateState>(
         "SELECT * FROM skill_update_states ORDER BY last_checked_at DESC, skill_id",
     )
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn get_skill_update_states_for_skills(
     pool: &DbPool,
     skill_ids: &[String],
-) -> Result<Vec<SkillUpdateState>, String> {
+) -> Result<Vec<SkillUpdateState>, sqlx::Error> {
     if skill_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -29,13 +28,13 @@ pub async fn get_skill_update_states_for_skills(
         query = query.bind(skill_id);
     }
 
-    query.fetch_all(pool).await.map_err(|e| e.to_string())
+    query.fetch_all(pool).await
 }
 
 pub async fn upsert_skill_update_state(
     pool: &DbPool,
     state: &SkillUpdateState,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO skill_update_states
          (skill_id, source_type, source_url, ref_name, source_path, last_remote_hash,
@@ -67,5 +66,4 @@ pub async fn upsert_skill_update_state(
     .execute(pool)
     .await
     .map(|_| ())
-    .map_err(|e| e.to_string())
 }

@@ -6,13 +6,24 @@
   "permissions": [
     "core:default",
     "core:window:allow-show",
-    "sql:default",
-    "fs:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:allow-mkdir",
     "fs:allow-read-text-file",
     "fs:allow-write-text-file",
-    "dialog:default",
-    "shell:default",
-    "updater:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        "$HOME/.skillsmanage/skills/**",
+        "$HOME/.skillsmanage/exports/**",
+        "$HOME/**",
+        "$DOCUMENT/**",
+        "$DOWNLOAD/**",
+        "$DESKTOP/**"
+      ]
+    },
+    "updater:allow-check",
+    "updater:allow-download-and-install",
     "process:allow-restart"
   ]
 }

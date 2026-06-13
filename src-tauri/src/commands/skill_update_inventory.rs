@@ -3,13 +3,15 @@
 //! 在旧的 `check_central_skill_updates` / `check_central_repository_sync` 之上
 //! 提供面向"更新中心"统一面板的命令集合：
 //!
-//! - `refresh_skill_update_inventory`：拉远端 + 写 pending_additions / repo
-//!   last_synced_at，返回一份完整 inventory。是新接口与旧 check 的关键差别。
+//! - `refresh_skill_update_inventory`：拉远端并写入 update-inventory 表与
+//!   remote-addition bucket，返回一份完整 inventory；不更新安装 baseline。
 //! - `get_skill_update_inventory`：纯读视图，不触网。
-//! - `clear_skill_update_inventory`：清 pending_additions（不动 update_states，
-//!   避免误删 update_available 标记）。
+//! - `clear_skill_update_inventory`：清空所选 scope 的 inventory bucket，
+//!   不删除技能、不改 `skill_update_states` baseline。
 //! - `apply_skill_update_decisions`：把用户在面板里勾的决策一次性应用，
 //!   每步独立 partial success，复用 keep/delete/import/update/uninstall 既有 impl。
+//! - `force_update_central_skills` / `force_mirror_central_repositories`：
+//!   显式救援动作，绕过检测结果从远端覆盖/镜像同步。
 //! - `scan_platform_duplicate_skills`：观察各 agent 是否同 skill_id 同时有
 //!   writable 与 plugin readonly 两份，给前端去重弹窗用。
 //!
@@ -22,22 +24,35 @@ use tauri::{AppHandle, State};
 
 use crate::commands::central_updates::{
     self, error_state_from_assignment, load_remote_skill_content, prepare_skill_updates,
-    prepare_snapshots_for_repo_refs, remote_missing_state_from_assignment, state_from_remote,
-    unsupported_state_from_assignment, RemoteSkillLoadError, SkillUpdateStatus,
+    prepare_snapshots_for_repo_refs_with_policy, remote_missing_state_from_assignment,
+    state_from_remote, unsupported_state_from_assignment, RemoteSkillLoadError, SkillUpdateStatus,
+    SnapshotCachePolicy,
 };
 use crate::commands::central_updates_fs::{normalize_repo_path, CentralFs};
-use crate::commands::github_import::{self, GitHubRepoRef};
-use crate::db::{self, DbPool, SkillRepository, SkillRepositoryPendingAddition, SkillUpdateState};
+use crate::commands::github_import;
+use crate::db::{self, DbPool, SkillRepositoryPendingAddition};
 use crate::targets::ActiveTarget;
 use crate::AppState;
 
 mod apply_steps;
+mod force;
+mod persistence;
+mod relocation;
+mod repositories;
 mod scan;
+mod scope;
 mod types;
+mod view;
 
 pub(crate) use apply_steps::*;
+pub(crate) use force::*;
+use persistence::*;
+pub(crate) use relocation::*;
+pub(crate) use repositories::*;
 pub(crate) use scan::*;
+pub(crate) use scope::*;
 pub use types::*;
+pub(crate) use view::*;
 
 /*
  * ========================================================================
@@ -54,8 +69,9 @@ pub async fn refresh_skill_update_inventory(
     let fs = CentralFs::from_active_target(state.active_target().await?).await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
-    let client = github_import::github_client()?;
+            .await
+            .map_err(|e| e.to_string())?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
     refresh_skill_update_inventory_impl(
         &pool,
         &fs,
@@ -88,31 +104,49 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
      * 1) All：全部 central skill_ids + 全部 syncable github repo_ids
      * 2) Skills：仅指定 skill_ids，不扫 repo additions
      * 3) Repositories：仅指定 repo_ids，skill_ids 从这些 repo members 推导
+     * 4) Platform：从当前平台 agent_ids 已安装/已观测到的 central skills 推导
      */
+    let mode = scope.mode.unwrap_or(SkillRefreshMode::Sync);
+    let cache_policy = scope
+        .cache_policy
+        .unwrap_or(SkillRefreshCachePolicy::Bypass);
+    let include_sync_buckets = mode == SkillRefreshMode::Sync;
 
     // 1.1 决定 repo_ids 与 skill_ids
-    let (skill_ids_filter, repository_ids): (Option<Vec<String>>, Vec<String>) = match scope.kind {
+    let (skill_ids_filter, repository_ids, platform_agent_ids): (
+        Option<Vec<String>>,
+        Vec<String>,
+        Option<Vec<String>>,
+    ) = match scope.kind {
         SkillRefreshScopeKind::All => {
             let repo_ids = db::get_skill_repositories_with_stats(pool)
-                .await?
+                .await
+                .map_err(|e| e.to_string())?
                 .into_iter()
                 .filter(|r| !r.repository.is_unknown && r.repository.source_type == "github")
                 .map(|r| r.repository.id)
                 .collect::<Vec<_>>();
-            (None, repo_ids)
+            (None, repo_ids, None)
         }
         SkillRefreshScopeKind::Skills => {
-            let ids = scope.skill_ids.clone().unwrap_or_default();
-            (Some(ids), Vec::new())
+            let ids = normalize_ids(scope.skill_ids.clone().unwrap_or_default());
+            (Some(ids), Vec::new(), None)
         }
         SkillRefreshScopeKind::Repositories => {
-            let repo_ids = scope.repository_ids.clone().unwrap_or_default();
+            let repo_ids = normalize_ids(scope.repository_ids.clone().unwrap_or_default());
             let mut skill_ids = Vec::new();
             for repository_id in &repo_ids {
-                let ids = db::get_central_skill_ids_by_repository(pool, repository_id).await?;
+                let ids = db::get_central_skill_ids_by_repository(pool, repository_id)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 skill_ids.extend(ids);
             }
-            (Some(skill_ids), repo_ids)
+            (Some(normalize_ids(skill_ids)), repo_ids, None)
+        }
+        SkillRefreshScopeKind::Platform => {
+            let agent_ids = normalize_ids(scope.agent_ids.clone().unwrap_or_default());
+            let skill_ids = central_skill_ids_for_agents(pool, &agent_ids).await?;
+            (Some(skill_ids), Vec::new(), Some(agent_ids))
         }
     };
 
@@ -129,10 +163,14 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         if ids.is_empty() {
             Vec::new()
         } else {
-            db::get_central_skills_by_ids(pool, ids).await?
+            db::get_central_skills_by_ids(pool, ids)
+                .await
+                .map_err(|e| e.to_string())?
         }
     } else {
-        db::get_central_skills(pool).await?
+        db::get_central_skills(pool)
+            .await
+            .map_err(|e| e.to_string())?
     };
 
     let valid_repositories =
@@ -147,9 +185,14 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         .collect::<Vec<_>>();
     snapshot_repos.extend(valid_repositories.iter().map(|(_, repo)| repo.clone()));
 
-    let snapshots =
-        prepare_snapshots_for_repo_refs(client, auth_token, &snapshot_repos, snapshots_cache)
-            .await?;
+    let snapshots = prepare_snapshots_for_repo_refs_with_policy(
+        client,
+        auth_token,
+        &snapshot_repos,
+        snapshots_cache,
+        snapshot_cache_policy(cache_policy),
+    )
+    .await?;
 
     /*
      * ========================================================================
@@ -162,31 +205,54 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         .iter()
         .map(|(repository, _)| (repository.id.clone(), repository.clone()))
         .collect::<HashMap<_, _>>();
+    let repo_ref_by_id = valid_repositories
+        .iter()
+        .map(|(repository, repo)| (repository.id.clone(), repo.clone()))
+        .collect::<HashMap<_, _>>();
 
     let mut updatable = Vec::new();
     let mut remote_missing_states = Vec::new();
+    let mut failed_repositories = Vec::new();
+    let mut prepared_by_skill_id = HashMap::new();
 
     for prepared_skill in prepared {
         let skill = &prepared_skill.skill;
         let state_result = match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) => state_from_remote(skill, &remote, false),
             Ok(None) => unsupported_state_from_assignment(skill, &prepared_skill.assignment, None),
-            Err(RemoteSkillLoadError::RemoteMissing(reason)) => {
-                remote_missing_state_from_assignment(skill, &prepared_skill.assignment, &reason)
-            }
+            Err(RemoteSkillLoadError::RemoteMissing(reason)) => match mode {
+                SkillRefreshMode::Sync => {
+                    remote_missing_state_from_assignment(skill, &prepared_skill.assignment, &reason)
+                }
+                SkillRefreshMode::Regular => {
+                    failed_repositories.push(FailedRepository {
+                        repository_id: prepared_skill.assignment.repository.id.clone(),
+                        error: format!(
+                            "{} Switch to incremental and removal mode to decide whether to keep or delete '{}'.",
+                            reason, skill.id
+                        ),
+                        diagnostics: Some(diagnostic_from_state(
+                            &error_state_from_assignment(skill, &prepared_skill.assignment, &reason),
+                            cache_policy,
+                            false,
+                        )),
+                    });
+                    error_state_from_assignment(skill, &prepared_skill.assignment, &reason)
+                }
+            },
             Err(RemoteSkillLoadError::Other(error)) => {
                 error_state_from_assignment(skill, &prepared_skill.assignment, &error)
             }
         };
 
-        db::upsert_skill_update_state(pool, &state_result).await?;
-
         match state_result.status.parse::<SkillUpdateStatus>().ok() {
             Some(SkillUpdateStatus::UpdateAvailable) => {
                 let repository_id = repository_id_for_state(&repo_by_id, &state_result);
+                let diagnostics = Some(diagnostic_from_state(&state_result, cache_policy, false));
                 updatable.push(UpdatableSkill {
                     state: state_result,
                     repository_id,
+                    diagnostics,
                 });
             }
             Some(SkillUpdateStatus::RemoteMissing) => {
@@ -196,6 +262,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                 // up_to_date / unsupported / error / cancelled 不进入 inventory
             }
         }
+        prepared_by_skill_id.insert(skill.id.clone(), prepared_skill);
     }
 
     /*
@@ -206,10 +273,9 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
      * pending_additions。已 skip 的 addition 由 skill_repository_sync_skips
      * 持久化，不再回写 pending，避免 reload 后重新变成可操作新增项。
      */
-    let mut failed_repositories = Vec::new();
     let mut remote_added = Vec::new();
 
-    if !repository_ids.is_empty() {
+    if include_sync_buckets && !repository_ids.is_empty() {
         let mut failed_collector = Vec::<central_updates::CentralRepositorySyncFailure>::new();
         let collection = central_updates::collect_remote_added_skills(
             pool,
@@ -220,8 +286,22 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         )
         .await?;
 
+        let mut remote_added_items = collection.remote_added;
+        let mut relocation_ctx = RelocationContext {
+            pool,
+            prepared_by_skill_id: &prepared_by_skill_id,
+            snapshots: &snapshots,
+            repo_by_id: &repo_by_id,
+            repo_ref_by_id: &repo_ref_by_id,
+            remote_missing_states: &mut remote_missing_states,
+            remote_added_items: &mut remote_added_items,
+            updatable: &mut updatable,
+            failed_repositories: &mut failed_repositories,
+        };
+        reconcile_relocated_remote_skills(&mut relocation_ctx).await?;
+
         let now = Utc::now().to_rfc3339();
-        for item in &collection.remote_added {
+        for item in &remote_added_items {
             let source_path = normalize_repo_path(&item.preview.source_path)?;
             let addition = SkillRepositoryPendingAddition {
                 repository_id: item.repository_id.clone(),
@@ -235,19 +315,24 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                     .map(|c| c.existing_skill_id.clone()),
                 discovered_at: now.clone(),
             };
-            db::upsert_pending_addition(pool, &addition).await?;
+            db::upsert_pending_addition(pool, &addition)
+                .await
+                .map_err(|e| e.to_string())?;
         }
         for item in &collection.skipped_remote_added {
             let source_path = normalize_repo_path(&item.preview.source_path)?;
-            db::delete_pending_addition(pool, &item.repository_id, &source_path).await?;
+            db::delete_pending_addition(pool, &item.repository_id, &source_path)
+                .await
+                .map_err(|e| e.to_string())?;
         }
-        for item in collection.remote_added {
+        for item in remote_added_items {
             remote_added.push(remote_added_from_item(item));
         }
         for failure in failed_collector {
             failed_repositories.push(FailedRepository {
                 repository_id: failure.repository_id,
                 error: failure.error,
+                diagnostics: None,
             });
         }
     }
@@ -257,116 +342,60 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
      * 步骤5：build remote_missing + 平台冗余 + 更新 repo.last_synced_at
      * ========================================================================
      */
-    let remote_missing_built =
-        central_updates::build_remote_missing_skills(&repo_by_id, remote_missing_states);
-    let remote_missing = remote_missing_built
-        .into_iter()
-        .map(|item| RemoteMissingSkill {
-            repository_id: item.repository_id,
-            state: item.state,
-        })
-        .collect::<Vec<_>>();
+    let remote_missing = if include_sync_buckets {
+        central_updates::build_remote_missing_skills(&repo_by_id, remote_missing_states)
+            .into_iter()
+            .map(|item| RemoteMissingSkill {
+                diagnostics: Some(diagnostic_from_state(&item.state, cache_policy, false)),
+                repository_id: item.repository_id,
+                state: item.state,
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
 
-    let platform_duplicates = scan_platform_duplicate_skills_with_pool(pool, None).await?;
+    let platform_duplicates = if include_sync_buckets {
+        scan_platform_duplicate_skills_with_pool(pool, platform_agent_ids.clone()).await?
+    } else {
+        Vec::new()
+    };
+    let deleted_platform_copies = if include_sync_buckets {
+        scan_deleted_platform_copies_with_pool(pool, platform_agent_ids.clone()).await?
+    } else {
+        Vec::new()
+    };
 
     let now = Utc::now().to_rfc3339();
-    for repository_id in &repository_ids {
-        db::set_repository_last_synced_at(pool, repository_id, &now).await?;
+    if include_sync_buckets {
+        for repository_id in &repository_ids {
+            db::set_repository_last_synced_at(pool, repository_id, &now)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
     }
 
-    Ok(SkillUpdateInventory {
+    let inventory = SkillUpdateInventory {
         updatable,
         remote_added,
         remote_missing,
         platform_duplicates,
+        deleted_platform_copies,
         orphans: Vec::new(),
         failed_repositories,
         generated_at: now,
-    })
+    };
+    persist_refresh_inventory(pool, &scope, mode, cache_policy, &inventory).await?;
+    Ok(inventory)
 }
 
 #[tauri::command]
 pub async fn get_skill_update_inventory(
     state: State<'_, AppState>,
+    scope: Option<SkillRefreshScope>,
 ) -> Result<SkillUpdateInventory, String> {
     let pool = state.active_db().await?;
-    get_skill_update_inventory_impl(&pool).await
-}
-
-/// 内核版本：不依赖 `State<AppState>`，便于单元测试。
-pub(crate) async fn get_skill_update_inventory_impl(
-    pool: &DbPool,
-) -> Result<SkillUpdateInventory, String> {
-    /*
-     * ========================================================================
-     * 步骤1：读 skill_update_states，分出 update_available / remote_missing
-     * ========================================================================
-     * 这是不触网的"读视图"，仅汇总 DB 既有状态。
-     */
-
-    let states = db::get_skill_update_states(pool).await?;
-    let repo_with_stats = db::get_skill_repositories_with_stats(pool).await?;
-    let repo_by_id = repo_with_stats
-        .iter()
-        .map(|r| (r.repository.id.clone(), r.repository.clone()))
-        .collect::<HashMap<_, _>>();
-
-    let mut updatable = Vec::new();
-    let mut remote_missing = Vec::new();
-    for state_row in states {
-        let parsed = state_row.status.parse::<SkillUpdateStatus>().ok();
-        match parsed {
-            Some(SkillUpdateStatus::UpdateAvailable) => {
-                let repository_id = repository_id_for_state(&repo_by_id, &state_row);
-                updatable.push(UpdatableSkill {
-                    state: state_row,
-                    repository_id,
-                });
-            }
-            Some(SkillUpdateStatus::RemoteMissing) => {
-                let repository_id = repository_id_for_state(&repo_by_id, &state_row);
-                remote_missing.push(RemoteMissingSkill {
-                    state: state_row,
-                    repository_id,
-                });
-            }
-            _ => {}
-        }
-    }
-
-    /*
-     * ========================================================================
-     * 步骤2：读 pending_additions 转 remote_added
-     * ========================================================================
-     */
-    let pending = db::list_pending_additions(pool).await?;
-    let remote_added = pending
-        .into_iter()
-        .map(|p| RemoteAddedSkill {
-            repository_id: p.repository_id,
-            source_path: p.source_path,
-            skill_id: p.skill_id,
-            skill_name: p.skill_name,
-            conflict_existing_skill_id: p.conflict_existing_skill_id,
-        })
-        .collect();
-
-    /*
-     * ========================================================================
-     * 步骤3：平台冗余 + 组装
-     * ========================================================================
-     */
-    let platform_duplicates = scan_platform_duplicate_skills_with_pool(pool, None).await?;
-
-    Ok(SkillUpdateInventory {
-        updatable,
-        remote_added,
-        remote_missing,
-        platform_duplicates,
-        orphans: Vec::new(),
-        failed_repositories: Vec::new(),
-        generated_at: Utc::now().to_rfc3339(),
-    })
+    get_skill_update_inventory_impl_scoped(&pool, scope).await
 }
 
 #[tauri::command]
@@ -376,41 +405,6 @@ pub async fn clear_skill_update_inventory(
 ) -> Result<(), String> {
     let pool = state.active_db().await?;
     clear_skill_update_inventory_impl(&pool, scope).await
-}
-
-/// 内核版本：不依赖 `State<AppState>`，便于单元测试。
-pub(crate) async fn clear_skill_update_inventory_impl(
-    pool: &DbPool,
-    scope: Option<SkillRefreshScope>,
-) -> Result<(), String> {
-    /*
-     * ========================================================================
-     * 清除 pending_additions —— 不动 update_states 以避免误删 update_available
-     * ========================================================================
-     * - None / All：清空全表
-     * - Skills：与 pending 无关，noop
-     * - Repositories：清这些 repo 的 pending 行
-     */
-    match scope {
-        None => {
-            db::clear_pending_additions(pool).await?;
-        }
-        Some(scope) => match scope.kind {
-            SkillRefreshScopeKind::All => {
-                db::clear_pending_additions(pool).await?;
-            }
-            SkillRefreshScopeKind::Skills => {
-                // pending_additions 不挂在 skill_id 上，noop。
-            }
-            SkillRefreshScopeKind::Repositories => {
-                let ids = scope.repository_ids.unwrap_or_default();
-                if !ids.is_empty() {
-                    db::clear_pending_additions_for_repos(pool, &ids).await?;
-                }
-            }
-        },
-    }
-    Ok(())
 }
 
 #[tauri::command]
@@ -431,9 +425,11 @@ pub async fn apply_skill_update_decisions(
     let active_target = state.active_target().await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
+            .await
+            .map_err(|e| e.to_string())?;
 
     let mut result = SkillUpdateApplyResult::default();
+    let allowed_agent_ids = normalize_optional_id_set(decisions.allowed_agent_ids.as_deref());
 
     // 步骤1：keep_missing
     apply_keep_missing_step(&pool, &decisions.keep_missing, &mut result).await;
@@ -478,14 +474,9 @@ pub async fn apply_skill_update_decisions(
             continue;
         }
 
-        let repository = match db::get_skill_repository_by_id(&pool, &repository_id).await? {
-            Some(r) => r,
+        let repository = match load_repository_for_import_addition(&pool, &repository_id).await? {
+            Some(repository) => repository,
             None => {
-                result.failures.push(SkillUpdateApplyFailure {
-                    step: "import_addition".to_string(),
-                    identifier: repository_id,
-                    error: "Repository no longer exists.".to_string(),
-                });
                 continue;
             }
         };
@@ -542,7 +533,7 @@ pub async fn apply_skill_update_decisions(
             Err(error) => result.failures.push(SkillUpdateApplyFailure {
                 step: "import_addition".to_string(),
                 identifier: repository.id,
-                error,
+                error: error.to_string(),
             }),
         }
     }
@@ -580,10 +571,78 @@ pub async fn apply_skill_update_decisions(
     }
 
     // 步骤6：remove_platform_duplicates
-    apply_remove_platform_duplicates_step(&pool, decisions.remove_platform_duplicates, &mut result)
-        .await;
+    apply_remove_platform_duplicates_step(
+        &pool,
+        decisions.remove_platform_duplicates,
+        &mut result,
+        allowed_agent_ids.as_ref(),
+    )
+    .await;
+    // 步骤7：remove_deleted_platform_copies
+    apply_remove_deleted_platform_copies_step(
+        &pool,
+        &active_target,
+        decisions.remove_deleted_platform_copies,
+        &mut result,
+        allowed_agent_ids.as_ref(),
+    )
+    .await;
+
+    prune_applied_inventory_entries(&pool, &result).await;
 
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn force_update_central_skills(
+    state: State<'_, AppState>,
+    request: ForceSkillUpdateRequest,
+) -> Result<ForceSkillUpdateResult, String> {
+    let pool = state.active_db().await?;
+    let fs = CentralFs::from_active_target(state.active_target().await?).await?;
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await
+            .map_err(|e| e.to_string())?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
+    force_update_central_skills_impl(
+        &pool,
+        &fs,
+        auth.as_deref(),
+        &client,
+        &state.central_update_snapshots,
+        SnapshotCachePolicy::Bypass,
+        request,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn force_mirror_central_repositories(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: ForceRepositoryMirrorRequest,
+) -> Result<ForceRepositoryMirrorResult, String> {
+    let pool = state.active_db().await?;
+    let active_target = state.active_target().await?;
+    let fs = CentralFs::from_active_target(active_target.clone()).await?;
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await
+            .map_err(|e| e.to_string())?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
+    force_mirror_central_repositories_impl(
+        Some(&app),
+        &pool,
+        &active_target,
+        &fs,
+        auth.as_deref(),
+        &client,
+        &state.central_update_snapshots,
+        SnapshotCachePolicy::Bypass,
+        request,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -595,136 +654,44 @@ pub async fn scan_platform_duplicate_skills(
     scan_platform_duplicate_skills_with_pool(&pool, agent_ids).await
 }
 
+#[tauri::command]
+pub async fn scan_deleted_platform_copies(
+    state: State<'_, AppState>,
+    agent_ids: Option<Vec<String>>,
+) -> Result<Vec<DeletedPlatformCopyGroup>, String> {
+    let pool = state.active_db().await?;
+    scan_deleted_platform_copies_with_pool(&pool, agent_ids).await
+}
+
 /*
  * ========================================================================
  * 内部 helpers
  * ========================================================================
  */
 
-fn prepared_repo_ref(prepared: &central_updates::PreparedSkillUpdate) -> Option<GitHubRepoRef> {
-    repo_ref_for_repository(&prepared.assignment.repository)
-}
-
-fn remote_added_from_item(item: central_updates::CentralRemoteAddedSkill) -> RemoteAddedSkill {
-    let conflict_existing_skill_id = item
-        .preview
-        .conflict
-        .as_ref()
-        .map(|c| c.existing_skill_id.clone());
-    RemoteAddedSkill {
-        repository_id: item.repository_id,
-        source_path: item.preview.source_path,
-        skill_id: item.preview.skill_id,
-        skill_name: item.preview.skill_name,
-        conflict_existing_skill_id,
-    }
-}
-
-fn repo_ref_for_repository(repository: &SkillRepository) -> Option<GitHubRepoRef> {
-    if repository.source_type != "github" || repository.is_unknown {
-        return None;
-    }
-    let (Some(owner), Some(repo), Some(branch)) = (
-        repository.owner.as_ref(),
-        repository.repo.as_ref(),
-        repository.branch.as_ref(),
-    ) else {
-        return None;
-    };
-    Some(GitHubRepoRef {
-        owner: owner.clone(),
-        repo: repo.clone(),
-        branch: branch.clone(),
-        normalized_url: repository
-            .url
-            .clone()
-            .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}")),
-    })
-}
-
-fn repository_import_url(repository: &SkillRepository) -> Option<String> {
-    if repository.source_type != "github" || repository.is_unknown {
-        return None;
-    }
-    if let Some(url) = repository
-        .url
-        .as_deref()
-        .filter(|url| !url.trim().is_empty())
-    {
-        if let Some(branch) = repository
-            .branch
-            .as_deref()
-            .filter(|branch| !branch.is_empty())
-        {
-            return Some(format!(
-                "{}/tree/{}",
-                url.trim().trim_end_matches('/'),
-                branch
-            ));
-        }
-        return Some(url.to_string());
-    }
-    match (&repository.owner, &repository.repo, &repository.branch) {
-        (Some(owner), Some(repo), Some(branch)) => {
-            Some(format!("https://github.com/{owner}/{repo}/tree/{branch}"))
-        }
-        (Some(owner), Some(repo), None) => Some(format!("https://github.com/{owner}/{repo}")),
-        _ => None,
-    }
-}
-
-fn repository_id_for_state(
-    repo_by_id: &HashMap<String, SkillRepository>,
-    state_row: &SkillUpdateState,
-) -> Option<String> {
-    repo_by_id
-        .iter()
-        .find(|(_, repository)| {
-            repository.source_type == state_row.source_type
-                && repository.url == state_row.source_url
-                && repository.branch == state_row.ref_name
-        })
-        .map(|(id, _)| id.clone())
-}
-
-async fn load_syncable_github_repositories(
+async fn load_repository_for_import_addition(
     pool: &DbPool,
-    repository_ids: &[String],
-    auth_token: Option<&str>,
-) -> Result<Vec<(SkillRepository, GitHubRepoRef)>, String> {
-    let mut repositories = Vec::new();
-    for repository_id in repository_ids {
-        let Some(repository) = db::get_skill_repository_by_id(pool, repository_id).await? else {
-            continue;
-        };
-        if repository.is_unknown || repository.source_type != "github" {
-            continue;
+    repository_id: &str,
+) -> Result<Option<db::SkillRepository>, String> {
+    match db::get_skill_repository_by_id(pool, repository_id)
+        .await
+        .map_err(|e| e.to_string())?
+    {
+        Some(repository) => Ok(Some(repository)),
+        None => {
+            db::clear_pending_additions_for_repos(pool, &[repository_id.to_string()])
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(None)
         }
-        let repo_ref = if let (Some(owner), Some(repo), Some(branch)) = (
-            repository.owner.as_ref(),
-            repository.repo.as_ref(),
-            repository.branch.as_ref(),
-        ) {
-            GitHubRepoRef {
-                owner: owner.clone(),
-                repo: repo.clone(),
-                branch: branch.clone(),
-                normalized_url: repository
-                    .url
-                    .clone()
-                    .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}")),
-            }
-        } else {
-            let Some(url) = repository_import_url(&repository) else {
-                continue;
-            };
-            github_import::resolve_repo_source(&url, auth_token)
-                .await?
-                .repo
-        };
-        repositories.push((repository, repo_ref));
     }
-    Ok(repositories)
+}
+
+fn snapshot_cache_policy(policy: SkillRefreshCachePolicy) -> SnapshotCachePolicy {
+    match policy {
+        SkillRefreshCachePolicy::UseFresh => SnapshotCachePolicy::UseFresh,
+        SkillRefreshCachePolicy::Bypass => SnapshotCachePolicy::Bypass,
+    }
 }
 
 #[cfg(test)]

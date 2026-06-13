@@ -1,6 +1,7 @@
 pub mod central_migration;
 pub mod commands;
 pub mod db;
+pub mod fs_util;
 pub mod logging;
 pub mod operation_log;
 pub mod paths;
@@ -64,11 +65,17 @@ pub struct AppState {
 
 impl AppState {
     pub async fn active_db(&self) -> Result<DbPool, String> {
-        self.targets.active_db(&self.db).await
+        self.targets
+            .active_db(&self.db)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     pub async fn active_target(&self) -> Result<targets::ActiveTarget, String> {
-        self.targets.active_target(&self.db).await
+        self.targets
+            .active_target(&self.db)
+            .await
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -277,7 +284,7 @@ pub fn run() {
                         let _ = migration_handle.emit(
                             MIGRATION_PROGRESS_EVENT,
                             MigrationProgress::Failed {
-                                error: error.clone(),
+                                error: error.to_string(),
                             },
                         );
                     }
@@ -309,6 +316,11 @@ pub fn run() {
             commands::logs::get_operation_log,
             commands::logs::clear_operation_logs,
             commands::logs::export_operation_logs,
+            commands::logs::list_runtime_log_files,
+            commands::logs::read_runtime_log_file,
+            commands::logs::export_runtime_log_file,
+            commands::logs::clear_runtime_logs,
+            commands::logs::record_frontend_runtime_log,
             // Scanner
             commands::scanner::scan_all_skills,
             // Agents
@@ -347,6 +359,7 @@ pub fn run() {
             commands::central_metadata::get_skill_tags,
             commands::central_metadata::create_skill_tag,
             commands::central_metadata::assign_skill_tags,
+            commands::central_metadata::unassign_skill_tags,
             commands::central_metadata::suggest_skill_tags,
             commands::central_metadata::bulk_suggest_skill_tags,
             commands::central_metadata::cancel_ai_tag_job,
@@ -368,7 +381,10 @@ pub fn run() {
             commands::skill_update_inventory::get_skill_update_inventory,
             commands::skill_update_inventory::clear_skill_update_inventory,
             commands::skill_update_inventory::apply_skill_update_decisions,
+            commands::skill_update_inventory::force_update_central_skills,
+            commands::skill_update_inventory::force_mirror_central_repositories,
             commands::skill_update_inventory::scan_platform_duplicate_skills,
+            commands::skill_update_inventory::scan_deleted_platform_copies,
             // Collections
             commands::collections::create_collection,
             commands::collections::get_collections,
@@ -403,6 +419,7 @@ pub fn run() {
             // through the standalone obsidian module below.
             commands::obsidian::get_obsidian_vaults,
             commands::obsidian::get_obsidian_vault_skills,
+            commands::obsidian::open_obsidian_path,
             commands::obsidian::import_obsidian_skill_to_central,
             commands::obsidian::import_obsidian_skill_to_platform,
             commands::github_import::preview_github_repo_import,

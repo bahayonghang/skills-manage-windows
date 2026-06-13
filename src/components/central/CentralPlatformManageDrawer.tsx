@@ -15,7 +15,10 @@ import { Input } from "@/components/ui/input";
 import { CustomPlatformsSettingsSection } from "@/components/settings/CustomPlatformsSettingsSection";
 import { PlatformDialog } from "@/components/settings/PlatformDialog";
 import { PlatformVisibilitySettingsSection } from "@/components/settings/PlatformVisibilitySettingsSection";
-import { getNormalizedPlatformVisibilityQuery, getPlatformVisibilityGroups } from "@/pages/settingsViewModel";
+import {
+  getNormalizedPlatformVisibilityQuery,
+  getPlatformVisibilityGroups,
+} from "@/pages/settingsViewModel";
 import { createPlatformManagementActions } from "@/pages/platformManagementActions";
 import type { PlatformCategoryVisibility } from "@/lib/platformVisibility";
 import type { AgentWithStatus } from "@/types";
@@ -36,10 +39,13 @@ interface CentralPlatformManageDrawerProps {
       display_name: string;
       global_skills_dir: string;
       category: string;
-    }
+    },
   ) => Promise<unknown>;
   removeCustomAgent: (agentId: string) => Promise<void>;
-  setCategoryVisibility: (category: "coding" | "lobster", visible: boolean) => Promise<void>;
+  setCategoryVisibility: (
+    category: "coding" | "lobster",
+    visible: boolean,
+  ) => Promise<void>;
   setAgentEnabled: (agentId: string, enabled: boolean) => Promise<void>;
   refreshAfterPlatformChange: () => Promise<void>;
 }
@@ -64,11 +70,16 @@ export function CentralPlatformManageDrawer({
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [isPlatformDialogOpen, setIsPlatformDialogOpen] = useState(false);
-  const [editingPlatform, setEditingPlatform] = useState<AgentWithStatus | null>(null);
+  const [editingPlatform, setEditingPlatform] =
+    useState<AgentWithStatus | null>(null);
   const [platformError, setPlatformError] = useState<string | null>(null);
   const [removingAgent, setRemovingAgent] = useState<string | null>(null);
-  const normalizedQuery = useMemo(() => getNormalizedPlatformVisibilityQuery(query), [query]);
-  const safeCategoryVisibility = categoryVisibility ?? DEFAULT_PLATFORM_CATEGORIES;
+  const normalizedQuery = useMemo(
+    () => getNormalizedPlatformVisibilityQuery(query),
+    [query],
+  );
+  const safeCategoryVisibility =
+    categoryVisibility ?? DEFAULT_PLATFORM_CATEGORIES;
   const groups = useMemo(
     () =>
       getPlatformVisibilityGroups({
@@ -77,9 +88,12 @@ export function CentralPlatformManageDrawer({
         normalizedQuery,
         t,
       }),
-    [agents, normalizedQuery, safeCategoryVisibility, t]
+    [agents, normalizedQuery, safeCategoryVisibility, t],
   );
-  const customAgents = useMemo(() => agents.filter((agent) => !agent.is_builtin), [agents]);
+  const customAgents = useMemo(
+    () => agents.filter((agent) => !agent.is_builtin),
+    [agents],
+  );
   const titleId = "central-platform-manage-title";
 
   const {
@@ -109,7 +123,7 @@ export function CentralPlatformManageDrawer({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogPortal keepMounted={false}>
-          <DialogOverlay className="bg-black/20" />
+          <DialogOverlay className="bg-overlay" />
           <DialogPrimitive.Popup
             role="dialog"
             aria-modal="true"
@@ -120,8 +134,12 @@ export function CentralPlatformManageDrawer({
               <div className="shrink-0 border-b border-border p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">
-                    <DialogTitle id={titleId}>{t("central.platformManageTitle")}</DialogTitle>
-                    <p className="text-sm text-muted-foreground">{t("central.platformManageDesc")}</p>
+                    <DialogTitle id={titleId}>
+                      {t("central.platformManageTitle")}
+                    </DialogTitle>
+                    <p className="text-sm text-muted-foreground">
+                      {t("central.platformManageDesc")}
+                    </p>
                   </div>
                   <DialogClose
                     render={

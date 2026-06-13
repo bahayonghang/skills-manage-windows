@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import { useTargetStore } from "@/stores/targetStore";
@@ -35,11 +35,17 @@ export function useSkillCallCounts(
 
   // 把 names 序列化为 stable string，避免每次 render 都触发 effect
   const cacheId = cacheKey(activeTargetId, skillNames, days);
+  const skillNamesRef = useRef(skillNames);
+
+  useEffect(() => {
+    skillNamesRef.current = skillNames;
+  }, [cacheId, skillNames]);
 
   useEffect(() => {
     let cancelled = false;
+    const requestSkillNames = skillNamesRef.current;
 
-    if (skillNames.length === 0) {
+    if (requestSkillNames.length === 0) {
       setCounts({});
       return;
     }
@@ -59,7 +65,7 @@ export function useSkillCallCounts(
     void (async () => {
       try {
         const data = await invoke<Record<string, number>>("usage_get_skill_counts", {
-          skills: skillNames,
+          skills: requestSkillNames,
           days,
         });
         if (cancelled) return;
@@ -74,8 +80,6 @@ export function useSkillCallCounts(
     return () => {
       cancelled = true;
     };
-    // 仅依赖 cacheId / days；skillNames 引用变化但内容相同时不应重拉
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheId, days]);
 
   return counts;

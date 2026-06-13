@@ -12,6 +12,7 @@ use crate::{
     },
 };
 
+use super::error::PortableStateError;
 use super::progress::{check_cancel, emit_portability_step};
 use super::types::{
     CancelFlag, ImportGroup, PortableCentralSkill, PortableGithubSource, PortableSkillTag, RepoKey,
@@ -31,7 +32,7 @@ pub(crate) async fn import_skillport_state_impl(
     resolutions: Vec<SkillportStateImportResolution>,
     app: Option<&AppHandle>,
     cancel: Option<&CancelFlag>,
-) -> Result<SkillportStateImportResult, String> {
+) -> Result<SkillportStateImportResult, PortableStateError> {
     if check_cancel(cancel).is_err() {
         return Ok(cancelled_import_result(manifest, 0, 0));
     }
@@ -139,6 +140,7 @@ pub(crate) async fn import_skillport_state_impl(
                 }
             }
             Err(error) => {
+                let error = error.to_string();
                 for source_path in &selected_paths {
                     let skill = skill_by_source_path.get(source_path);
                     result.failed_skills.push(SkillportStateImportFailure {
@@ -212,7 +214,7 @@ fn mark_group_cancelled(
 pub(crate) async fn ensure_github_sources(
     pool: &DbPool,
     sources: &[PortableGithubSource],
-) -> Result<(usize, usize), String> {
+) -> Result<(usize, usize), PortableStateError> {
     let mut existing = existing_registry_identities(pool).await?;
     let mut seen_import_identities = HashSet::new();
     let mut added = 0;
@@ -242,8 +244,7 @@ pub(crate) async fn ensure_github_sources(
         .bind(source.is_enabled)
         .bind(&now)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
         existing.insert(identity);
         added += 1;
     }
@@ -255,7 +256,7 @@ pub(crate) async fn build_import_groups(
     pool: &DbPool,
     manifest: &SkillportStateManifest,
     resolutions: Vec<SkillportStateImportResolution>,
-) -> Result<(Vec<ImportGroup>, SkillportStateImportResult), String> {
+) -> Result<(Vec<ImportGroup>, SkillportStateImportResult), PortableStateError> {
     let resolution_map = resolutions
         .into_iter()
         .map(|resolution| {
@@ -369,7 +370,7 @@ pub(crate) async fn restore_skill_tags(
     pool: &DbPool,
     skill_id: &str,
     tags: &[PortableSkillTag],
-) -> Result<usize, String> {
+) -> Result<usize, PortableStateError> {
     let mut tag_ids = Vec::new();
     for tag in tags {
         let created = db::create_skill_tag(

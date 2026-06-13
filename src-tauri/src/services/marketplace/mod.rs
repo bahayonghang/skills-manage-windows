@@ -11,8 +11,10 @@ use crate::secrets::SecretStore;
 use crate::services::github_import;
 use crate::targets::{connect_remote_target, remote_join, ActiveTarget};
 
+mod error;
 mod skills_sh;
 
+pub use error::MarketplaceError;
 pub use skills_sh::{
     browse_skills_sh_directory_impl, install_from_skills_sh_impl, read_skills_sh_file_impl,
     resolve_skills_sh_url_impl, search_skills_sh_impl, SkillsShFileEntry, SkillsShSkill,
@@ -105,7 +107,7 @@ async fn fetch_github_skills(
     secrets: &dyn SecretStore,
     url: &str,
     registry_id: &str,
-) -> Result<Vec<MarketplaceSkill>, String> {
+) -> Result<Vec<MarketplaceSkill>, MarketplaceError> {
     let auth = github_import::github_direct_auth_from_secret_store(auth_pool, secrets).await?;
     let resolved = github_import::resolve_repo_source(url, auth.as_deref()).await?;
     let candidates = github_import::fetch_repo_skill_candidates_from_source(
@@ -147,7 +149,9 @@ pub(crate) fn marketplace_skills_from_candidates(
 
 // ─── Registry CRUD ───────────────────────────────────────────────────────────
 
-pub async fn list_registries_impl(pool: &crate::db::DbPool) -> Result<Vec<SkillRegistry>, String> {
+pub async fn list_registries_impl(
+    pool: &crate::db::DbPool,
+) -> Result<Vec<SkillRegistry>, MarketplaceError> {
     let rows = sqlx::query(
         "SELECT id, name, source_type, url, is_builtin, is_enabled, last_synced,
                 last_attempted_sync, last_sync_status, last_sync_error,
@@ -155,8 +159,7 @@ pub async fn list_registries_impl(pool: &crate::db::DbPool) -> Result<Vec<SkillR
          FROM skill_registries ORDER BY is_builtin DESC, name",
     )
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(rows
         .iter()
@@ -189,7 +192,7 @@ pub async fn add_registry_impl(
     source_type: String,
     url: String,
     cache_metadata: Option<RegistryCacheMetadata>,
-) -> Result<SkillRegistry, String> {
+) -> Result<SkillRegistry, MarketplaceError> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
     let cache_metadata = cache_metadata.unwrap_or_default();
@@ -210,8 +213,7 @@ pub async fn add_registry_impl(
     .bind(&cache_metadata.last_modified)
     .bind(&now)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(SkillRegistry {
         id,
@@ -235,18 +237,17 @@ pub async fn add_registry_impl(
 pub async fn remove_registry_impl(
     pool: &crate::db::DbPool,
     registry_id: String,
-) -> Result<(), String> {
+) -> Result<(), MarketplaceError> {
     // Don't allow removing built-in registries
     let row = sqlx::query("SELECT is_builtin FROM skill_registries WHERE id = ?")
         .bind(&registry_id)
         .fetch_optional(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     if let Some(r) = &row {
         use sqlx::Row;
         if r.get::<bool, _>("is_builtin") {
-            return Err("Cannot remove built-in registry".to_string());
+            return Err(MarketplaceError::BuiltinRegistryRemoval);
         }
     }
 
@@ -254,14 +255,12 @@ pub async fn remove_registry_impl(
     sqlx::query("DELETE FROM marketplace_skills WHERE registry_id = ?")
         .bind(&registry_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     sqlx::query("DELETE FROM skill_registries WHERE id = ?")
         .bind(&registry_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     Ok(())
 }
@@ -272,7 +271,7 @@ pub(crate) async fn sync_registry_impl(
     secrets: &dyn SecretStore,
     registry_id: String,
     options: SyncRegistryOptions,
-) -> Result<Vec<MarketplaceSkill>, String> {
+) -> Result<Vec<MarketplaceSkill>, MarketplaceError> {
     // Get registry info
     let row = sqlx::query(
         "SELECT id, name, source_type, url, is_builtin, is_enabled, last_synced,
@@ -282,9 +281,8 @@ pub(crate) async fn sync_registry_impl(
     )
     .bind(&registry_id)
     .fetch_optional(pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .ok_or_else(|| "Registry not found".to_string())?;
+    .await?
+    .ok_or(MarketplaceError::RegistryNotFound)?;
 
     let registry = {
         use sqlx::Row;
@@ -320,8 +318,7 @@ pub(crate) async fn sync_registry_impl(
     .bind(&attempt_time)
     .bind(&registry.id)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // Fetch skills based on source type
     let skills = match registry.source_type.as_str() {
@@ -336,11 +333,10 @@ pub(crate) async fn sync_registry_impl(
                     )
                     .bind(&attempt_time)
                     .bind(RegistrySyncStatus::Error.as_str())
-                    .bind(&error)
+                    .bind(error.to_string())
                     .bind(&registry.id)
                     .execute(pool)
-                    .await
-                    .map_err(|e| e.to_string())?;
+                    .await?;
 
                     if registry_has_cached_skills(pool, &registry.id).await? {
                         return search_marketplace_skills_impl(pool, Some(registry_id), None).await;
@@ -350,7 +346,11 @@ pub(crate) async fn sync_registry_impl(
                 }
             }
         }
-        _ => return Err(format!("Unsupported source type: {}", registry.source_type)),
+        _ => {
+            return Err(MarketplaceError::UnsupportedSourceType(
+                registry.source_type.clone(),
+            ))
+        }
     };
 
     let installed_central_names: HashSet<String> = crate::db::get_central_skills(pool)
@@ -383,8 +383,7 @@ pub(crate) async fn sync_registry_impl(
         .bind(&skill.synced_at)
         .bind(&skill.cache_updated_at)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     // Update last_synced
@@ -400,8 +399,7 @@ pub(crate) async fn sync_registry_impl(
         .bind(&now)
         .bind(&registry_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     // Return the updated list
     search_marketplace_skills_impl(pool, Some(registry_id), None).await
@@ -411,7 +409,7 @@ pub(crate) async fn search_marketplace_skills_impl(
     pool: &crate::db::DbPool,
     registry_id: Option<String>,
     query: Option<String>,
-) -> Result<Vec<MarketplaceSkill>, String> {
+) -> Result<Vec<MarketplaceSkill>, MarketplaceError> {
     let mut sql = String::from(
         r#"SELECT id, registry_id, name, description, download_url,
             is_installed, synced_at, cache_updated_at
@@ -438,21 +436,20 @@ pub(crate) async fn search_marketplace_skills_impl(
         q = q.bind(b);
     }
 
-    let rows = q.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let rows = q.fetch_all(pool).await?;
     Ok(rows.iter().map(row_to_marketplace_skill).collect())
 }
 
 pub(crate) async fn registry_has_cached_skills(
     pool: &crate::db::DbPool,
     registry_id: &str,
-) -> Result<bool, String> {
+) -> Result<bool, MarketplaceError> {
     let count = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM marketplace_skills WHERE registry_id = ?",
     )
     .bind(registry_id)
     .fetch_one(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(count > 0)
 }
@@ -489,7 +486,7 @@ pub async fn install_marketplace_skill_impl(
     pool: &crate::db::DbPool,
     active_target: ActiveTarget,
     skill_id: String,
-) -> Result<(), String> {
+) -> Result<(), MarketplaceError> {
     // Get skill info
     let skill = sqlx::query_as::<_, MarketplaceSkillRow>(
         "SELECT id, registry_id, name, description, download_url, is_installed, synced_at
@@ -497,52 +494,60 @@ pub async fn install_marketplace_skill_impl(
     )
     .bind(&skill_id)
     .fetch_optional(pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .ok_or_else(|| "Skill not found".to_string())?;
+    .await?
+    .ok_or(MarketplaceError::SkillNotFound)?;
 
     // Download SKILL.md content
     let client = reqwest::Client::builder()
         .user_agent(crate::commands::APP_USER_AGENT)
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| MarketplaceError::Http(e.to_string()))?;
 
     let resp = client
         .get(&skill.download_url)
         .send()
         .await
-        .map_err(|e| format!("Download failed: {}", e))?;
+        .map_err(|e| MarketplaceError::Http(format!("Download failed: {}", e)))?;
 
     if !resp.status().is_success() {
-        return Err(format!("Download returned {}", resp.status()));
+        return Err(MarketplaceError::Http(format!(
+            "Download returned {}",
+            resp.status()
+        )));
     }
 
     let content = resp
         .text()
         .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
+        .map_err(|e| MarketplaceError::Http(format!("Failed to read response: {}", e)))?;
 
     match &active_target {
         ActiveTarget::Local => {
             let skill_dir = central_skill_dir_for_name(&paths::central_skills_dir(), &skill.name);
             std::fs::create_dir_all(&skill_dir)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
+                .map_err(|e| MarketplaceError::io("Failed to create directory", e))?;
 
             let skill_md_path = skill_dir.join("SKILL.md");
             std::fs::write(&skill_md_path, &content)
-                .map_err(|e| format!("Failed to write SKILL.md: {}", e))?;
+                .map_err(|e| MarketplaceError::io("Failed to write SKILL.md", e))?;
         }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             let central = crate::db::get_agent_by_id(pool, "central")
                 .await?
-                .ok_or_else(|| "Central agent not found in database".to_string())?;
+                .ok_or(MarketplaceError::CentralAgentMissing)?;
             let skill_dir = remote_join(&central.global_skills_dir, &skill.name);
             let skill_md_path = remote_join(&skill_dir, "SKILL.md");
-            let connection = connect_remote_target(&active_target).await?;
-            connection.mkdir_p(&skill_dir).await?;
+            let connection = connect_remote_target(&active_target)
+                .await
+                .map_err(|e| MarketplaceError::Remote(e.to_string()))?;
+            connection
+                .mkdir_p(&skill_dir)
+                .await
+                .map_err(|e| MarketplaceError::Remote(e.to_string()))?;
             connection
                 .write_file(&skill_md_path, content.as_bytes())
-                .await?;
+                .await
+                .map_err(|e| MarketplaceError::Remote(e.to_string()))?;
         }
     }
 
@@ -550,8 +555,7 @@ pub async fn install_marketplace_skill_impl(
     sqlx::query("UPDATE marketplace_skills SET is_installed = 1 WHERE id = ?")
         .bind(&skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     Ok(())
 }

@@ -4,17 +4,25 @@
 
 use std::path::{Path, PathBuf};
 
-pub(crate) async fn run_blocking_fs<T, F>(label: &'static str, task: F) -> Result<T, String>
+use crate::services::resource_budget::ResourceBudget;
+
+use super::error::InstallationError;
+
+/// Run a synchronous filesystem task on the blocking-thread pool with
+/// installation-domain errors. Thin typed wrapper over
+/// [`crate::fs_util::run_blocking_fs_with`].
+pub(crate) async fn run_blocking_fs<T, F>(
+    label: &'static str,
+    task: F,
+) -> Result<T, InstallationError>
 where
     T: Send + 'static,
-    F: FnOnce() -> Result<T, String> + Send + 'static,
+    F: FnOnce() -> Result<T, InstallationError> + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(task)
-        .await
-        .map_err(|e| format!("Failed to join {} task: {}", label, e))?
+    crate::fs_util::run_blocking_fs_with(label, task, InstallationError::task_join).await
 }
 
-pub(crate) async fn path_exists_blocking(path: &Path) -> Result<bool, String> {
+pub(crate) async fn path_exists_blocking(path: &Path) -> Result<bool, InstallationError> {
     let path = path.to_path_buf();
     run_blocking_fs("path existence check", move || Ok(path.exists())).await
 }
@@ -30,7 +38,10 @@ pub(crate) fn resolved_symlink_target(link_path: &Path, raw_target: &Path) -> Pa
     }
 }
 
-pub(crate) fn symlink_points_to(link_path: &Path, expected_target: &Path) -> Result<bool, String> {
+pub(crate) fn symlink_points_to(
+    link_path: &Path,
+    expected_target: &Path,
+) -> Result<bool, InstallationError> {
     let metadata = match std::fs::symlink_metadata(link_path) {
         Ok(metadata) => metadata,
         Err(_) => return Ok(false),
@@ -40,10 +51,9 @@ pub(crate) fn symlink_points_to(link_path: &Path, expected_target: &Path) -> Res
     }
 
     let raw_target = std::fs::read_link(link_path).map_err(|e| {
-        format!(
-            "Failed to inspect symlink target '{}': {}",
-            link_path.display(),
-            e
+        InstallationError::io(
+            format!("Failed to inspect symlink target '{}'", link_path.display()),
+            e,
         )
     })?;
     let resolved_target = resolved_symlink_target(link_path, &raw_target);
@@ -53,7 +63,10 @@ pub(crate) fn symlink_points_to(link_path: &Path, expected_target: &Path) -> Res
     ))
 }
 
-pub(crate) fn dirs_have_same_contents(left: &Path, right: &Path) -> Result<bool, String> {
+pub(crate) fn dirs_have_same_contents(
+    left: &Path,
+    right: &Path,
+) -> Result<bool, InstallationError> {
     let left_metadata = match std::fs::symlink_metadata(left) {
         Ok(metadata) => metadata,
         Err(_) => return Ok(false),
@@ -74,10 +87,12 @@ pub(crate) fn dirs_have_same_contents(left: &Path, right: &Path) -> Result<bool,
     }
 
     if left_metadata.is_file() {
-        let left_bytes = std::fs::read(left)
-            .map_err(|e| format!("Failed to read '{}': {}", left.display(), e))?;
-        let right_bytes = std::fs::read(right)
-            .map_err(|e| format!("Failed to read '{}': {}", right.display(), e))?;
+        let left_bytes = std::fs::read(left).map_err(|e| {
+            InstallationError::io(format!("Failed to read '{}'", left.display()), e)
+        })?;
+        let right_bytes = std::fs::read(right).map_err(|e| {
+            InstallationError::io(format!("Failed to read '{}'", right.display()), e)
+        })?;
         return Ok(left_bytes == right_bytes);
     }
 
@@ -102,12 +117,14 @@ pub(crate) fn dirs_have_same_contents(left: &Path, right: &Path) -> Result<bool,
     Ok(true)
 }
 
-fn directory_entry_names(dir: &Path) -> Result<Vec<std::ffi::OsString>, String> {
-    let entries = std::fs::read_dir(dir)
-        .map_err(|e| format!("Failed to read directory '{}': {}", dir.display(), e))?;
+fn directory_entry_names(dir: &Path) -> Result<Vec<std::ffi::OsString>, InstallationError> {
+    let entries = std::fs::read_dir(dir).map_err(|e| {
+        InstallationError::io(format!("Failed to read directory '{}'", dir.display()), e)
+    })?;
     let mut names = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let entry =
+            entry.map_err(|e| InstallationError::io("Failed to read directory entry", e))?;
         names.push(entry.file_name());
     }
     Ok(names)
@@ -154,29 +171,30 @@ pub fn make_relative_path(from_dir: &Path, to_path: &Path) -> PathBuf {
 // ─── Platform-specific symlink creation ──────────────────────────────────────
 
 #[cfg(unix)]
-pub fn create_symlink(target: &Path, link: &Path) -> Result<(), String> {
-    std::os::unix::fs::symlink(target, link).map_err(|e| format!("Failed to create symlink: {}", e))
+pub fn create_symlink(target: &Path, link: &Path) -> Result<(), InstallationError> {
+    std::os::unix::fs::symlink(target, link).map_err(InstallationError::SymlinkCreate)
 }
 
 #[cfg(windows)]
-pub fn create_symlink(target: &Path, link: &Path) -> Result<(), String> {
-    std::os::windows::fs::symlink_dir(target, link)
-        .map_err(|e| format!("Failed to create symlink: {}", e))
+pub fn create_symlink(target: &Path, link: &Path) -> Result<(), InstallationError> {
+    std::os::windows::fs::symlink_dir(target, link).map_err(InstallationError::SymlinkCreate)
 }
 
 #[cfg(not(any(unix, windows)))]
-pub fn create_symlink(_target: &Path, _link: &Path) -> Result<(), String> {
-    Err("Symlink creation is only supported on Unix systems".to_string())
+pub fn create_symlink(_target: &Path, _link: &Path) -> Result<(), InstallationError> {
+    Err(InstallationError::SymlinkUnsupported)
 }
 
+/// Remove the symlink entry at `path`. Callers attach their own operation
+/// context (e.g. "Failed to remove existing symlink").
 #[cfg(windows)]
-pub(crate) fn remove_symlink_path(path: &Path) -> Result<(), String> {
-    std::fs::remove_dir(path).map_err(|e| format!("Failed to remove existing symlink: {}", e))
+pub(crate) fn remove_symlink_path(path: &Path) -> std::io::Result<()> {
+    std::fs::remove_dir(path)
 }
 
 #[cfg(not(windows))]
-pub(crate) fn remove_symlink_path(path: &Path) -> Result<(), String> {
-    std::fs::remove_file(path).map_err(|e| format!("Failed to remove existing symlink: {}", e))
+pub(crate) fn remove_symlink_path(path: &Path) -> std::io::Result<()> {
+    std::fs::remove_file(path)
 }
 
 /// Choose between an absolute path (cross-volume on Windows) or a relative
@@ -196,39 +214,111 @@ pub fn symlink_target_path(from_dir: &Path, to_path: &Path) -> PathBuf {
 
 // ─── Recursive Directory Copy ─────────────────────────────────────────────────
 
+#[derive(Debug)]
+struct CopyBudgetTracker {
+    limits: ResourceBudget,
+    root: PathBuf,
+    remaining_entries: usize,
+    remaining_bytes: u64,
+}
+
+impl CopyBudgetTracker {
+    fn new(root: &Path, limits: ResourceBudget) -> Self {
+        Self {
+            remaining_entries: limits.copy_entries,
+            remaining_bytes: limits.copy_bytes,
+            limits,
+            root: root.to_path_buf(),
+        }
+    }
+
+    fn consume_entry(&mut self) -> Result<(), InstallationError> {
+        if self.remaining_entries == 0 {
+            return Err(InstallationError::CopyEntryBudgetExceeded {
+                root: self.root.display().to_string(),
+                limit: self.limits.copy_entries,
+            });
+        }
+        self.remaining_entries -= 1;
+        Ok(())
+    }
+
+    fn consume_file_bytes(&mut self, path: &Path, bytes: u64) -> Result<(), InstallationError> {
+        if bytes > self.remaining_bytes {
+            return Err(InstallationError::CopyByteBudgetExceeded {
+                root: self.root.display().to_string(),
+                limit: self.limits.copy_bytes,
+                path: path.display().to_string(),
+            });
+        }
+        self.remaining_bytes -= bytes;
+        Ok(())
+    }
+}
+
 /// Recursively copy a directory tree from `src` to `dst`.
 ///
 /// `dst` must not exist prior to the call (or may be an empty dir).
 /// The behaviour mirrors `cp -r src dst` on Unix.
-pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
+pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), InstallationError> {
+    copy_dir_all_with_budget(src, dst, ResourceBudget::default_skill())
+}
+
+pub(crate) fn copy_dir_all_with_budget(
+    src: &Path,
+    dst: &Path,
+    limits: ResourceBudget,
+) -> Result<(), InstallationError> {
+    let mut tracker = CopyBudgetTracker::new(src, limits);
+    copy_dir_all_with_tracker(src, dst, &mut tracker)
+}
+
+fn copy_dir_all_with_tracker(
+    src: &Path,
+    dst: &Path,
+    tracker: &mut CopyBudgetTracker,
+) -> Result<(), InstallationError> {
     std::fs::create_dir_all(dst).map_err(|e| {
-        format!(
-            "Failed to create destination directory '{}': {}",
-            dst.display(),
-            e
+        InstallationError::io(
+            format!("Failed to create destination directory '{}'", dst.display()),
+            e,
         )
     })?;
 
-    for entry in std::fs::read_dir(src)
-        .map_err(|e| format!("Failed to read source directory '{}': {}", src.display(), e))?
-    {
-        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+    for entry in std::fs::read_dir(src).map_err(|e| {
+        InstallationError::io(
+            format!("Failed to read source directory '{}'", src.display()),
+            e,
+        )
+    })? {
+        let entry =
+            entry.map_err(|e| InstallationError::io("Failed to read directory entry", e))?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
+        tracker.consume_entry()?;
 
         let file_type = entry
             .file_type()
-            .map_err(|e| format!("Failed to determine file type: {}", e))?;
+            .map_err(|e| InstallationError::io("Failed to determine file type", e))?;
 
         if file_type.is_dir() {
-            copy_dir_all(&src_path, &dst_path)?;
+            copy_dir_all_with_tracker(&src_path, &dst_path, tracker)?;
         } else {
+            let file_size = entry
+                .metadata()
+                .map_err(|e| {
+                    InstallationError::io(format!("Failed to inspect '{}'", src_path.display()), e)
+                })?
+                .len();
+            tracker.consume_file_bytes(&src_path, file_size)?;
             std::fs::copy(&src_path, &dst_path).map_err(|e| {
-                format!(
-                    "Failed to copy '{}' -> '{}': {}",
-                    src_path.display(),
-                    dst_path.display(),
-                    e
+                InstallationError::io(
+                    format!(
+                        "Failed to copy '{}' -> '{}'",
+                        src_path.display(),
+                        dst_path.display()
+                    ),
+                    e,
                 )
             })?;
         }
@@ -237,8 +327,61 @@ pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) async fn copy_dir_all_blocking(src: &Path, dst: &Path) -> Result<(), String> {
+pub(crate) async fn copy_dir_all_blocking(src: &Path, dst: &Path) -> Result<(), InstallationError> {
     let src = src.to_path_buf();
     let dst = dst.to_path_buf();
     run_blocking_fs("directory copy", move || copy_dir_all(&src, &dst)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn write_file(path: &Path, size: usize) {
+        std::fs::write(path, vec![b'a'; size]).unwrap();
+    }
+
+    #[test]
+    fn copy_dir_all_with_budget_rejects_total_bytes() {
+        let temp = TempDir::new().unwrap();
+        let src = temp.path().join("src");
+        let dst = temp.path().join("dst");
+        std::fs::create_dir_all(&src).unwrap();
+        write_file(&src.join("big.txt"), 8);
+
+        let budget = ResourceBudget {
+            copy_bytes: 4,
+            ..ResourceBudget::default()
+        };
+        let err = copy_dir_all_with_budget(&src, &dst, budget).unwrap_err();
+
+        assert!(matches!(
+            err,
+            InstallationError::CopyByteBudgetExceeded { .. }
+        ));
+        assert!(err.to_string().contains("total copied bytes"));
+    }
+
+    #[test]
+    fn copy_dir_all_with_budget_rejects_entry_limit() {
+        let temp = TempDir::new().unwrap();
+        let src = temp.path().join("src");
+        let dst = temp.path().join("dst");
+        std::fs::create_dir_all(src.join("nested")).unwrap();
+        write_file(&src.join("nested").join("a.txt"), 1);
+        write_file(&src.join("nested").join("b.txt"), 1);
+
+        let budget = ResourceBudget {
+            copy_entries: 2,
+            ..ResourceBudget::default()
+        };
+        let err = copy_dir_all_with_budget(&src, &dst, budget).unwrap_err();
+
+        assert!(matches!(
+            err,
+            InstallationError::CopyEntryBudgetExceeded { .. }
+        ));
+        assert!(err.to_string().contains("exceeds 2 entries"));
+    }
 }

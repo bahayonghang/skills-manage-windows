@@ -121,7 +121,7 @@ fn push_operation_log_filters(
 pub async fn insert_operation_log(
     pool: &DbPool,
     entry: NewOperationLogEntry,
-) -> Result<OperationLogEntry, String> {
+) -> Result<OperationLogEntry, sqlx::Error> {
     let id = Uuid::new_v4().to_string();
     let created_at = Utc::now().to_rfc3339();
     let level = normalize_required_log_value(&entry.level, "info");
@@ -157,18 +157,17 @@ pub async fn insert_operation_log(
     .bind(entry.duration_ms)
     .bind(entry.batch_id)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
-    get_operation_log(pool, &id)
-        .await?
-        .ok_or_else(|| "Inserted operation log was not found.".to_string())
+    get_operation_log(pool, &id).await?.ok_or_else(|| {
+        sqlx::Error::InvalidArgument("Inserted operation log was not found.".to_string())
+    })
 }
 
 pub async fn get_operation_log(
     pool: &DbPool,
     log_id: &str,
-) -> Result<Option<OperationLogEntry>, String> {
+) -> Result<Option<OperationLogEntry>, sqlx::Error> {
     sqlx::query_as::<_, OperationLogEntry>(
         "SELECT
             id, created_at, level, target_kind, target_id, target_label,
@@ -180,13 +179,12 @@ pub async fn get_operation_log(
     .bind(log_id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn list_operation_logs(
     pool: &DbPool,
     filter: OperationLogFilter,
-) -> Result<OperationLogPage, String> {
+) -> Result<OperationLogPage, sqlx::Error> {
     let normalized = NormalizedOperationLogFilter::from(&filter);
     let limit = operation_log_limit(filter.limit);
     let offset = operation_log_offset(filter.offset);
@@ -194,14 +192,8 @@ pub async fn list_operation_logs(
     let mut count_builder =
         QueryBuilder::<Sqlite>::new("SELECT COUNT(*) AS cnt FROM operation_logs");
     push_operation_log_filters(&mut count_builder, &normalized);
-    let count_row = count_builder
-        .build()
-        .fetch_one(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let total = count_row
-        .try_get::<i64, _>("cnt")
-        .map_err(|e| e.to_string())?;
+    let count_row = count_builder.build().fetch_one(pool).await?;
+    let total = count_row.try_get::<i64, _>("cnt")?;
 
     let mut entries_builder = QueryBuilder::<Sqlite>::new(
         "SELECT
@@ -220,8 +212,7 @@ pub async fn list_operation_logs(
     let entries = entries_builder
         .build_query_as::<OperationLogEntry>()
         .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     Ok(OperationLogPage {
         entries,
@@ -234,7 +225,7 @@ pub async fn list_operation_logs(
 pub async fn clear_operation_logs(
     pool: &DbPool,
     filter: OperationLogFilter,
-) -> Result<u64, String> {
+) -> Result<u64, sqlx::Error> {
     let normalized = NormalizedOperationLogFilter::from(&filter);
     let mut builder = QueryBuilder::<Sqlite>::new("DELETE FROM operation_logs");
     push_operation_log_filters(&mut builder, &normalized);
@@ -244,7 +235,6 @@ pub async fn clear_operation_logs(
         .execute(pool)
         .await
         .map(|result| result.rows_affected())
-        .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Serialize)]
@@ -259,7 +249,7 @@ struct OperationLogsExport {
 pub async fn export_operation_logs_json(
     pool: &DbPool,
     filter: OperationLogFilter,
-) -> Result<String, String> {
+) -> Result<String, sqlx::Error> {
     let page = list_operation_logs(
         pool,
         OperationLogFilter {
@@ -276,5 +266,5 @@ pub async fn export_operation_logs_json(
         total: page.total,
         entries: page.entries,
     })
-    .map_err(|e| e.to_string())
+    .map_err(|e| sqlx::Error::InvalidArgument(e.to_string()))
 }

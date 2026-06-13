@@ -2,91 +2,47 @@ import {
   PackagePlus,
   Check,
   Link2,
-  FolderOpen,
-  Folder,
-  Globe,
   ArrowUpRight,
   Plus,
   ChevronRight,
   X,
   Loader2,
-  Lock,
   Trash2,
   Download,
 } from "lucide-react";
-import { memo, useMemo, type MouseEventHandler, type Ref } from "react";
+import { memo, useMemo, type MouseEventHandler, type ReactNode, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
-import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { CompactCardMoreMenu } from "@/components/skill/CompactCardMoreMenu";
+import {
+  PlatformToggleIcon,
+  UnifiedSkillCardFooter,
+} from "@/components/skill/UnifiedSkillCardFooter";
+import { CardTagEditor } from "@/components/skill/CardTagEditor";
+import { SkillCardMeta } from "@/components/skill/SkillCardMeta";
+import { SourceIndicator } from "@/components/skill/SkillCardBadges";
+import { useTextTruncation } from "@/hooks/useTextTruncation";
 import type { AgentWithStatus, CentralSkillUpdateState, ClaudeSourceKind } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberIds,
-  getPlatformTargetMemberNames,
-  isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
 import {
   selectSkillInventoryFlagsFromInventory,
   useUpdateCenterStore,
 } from "@/stores/updateCenterStore";
 
-// ─── Platform Toggle Icon (internal) ──────────────────────────────────────────
-
-const PlatformToggleIcon = memo(function PlatformToggleIcon({
-  agent,
-  skillName,
-  isLinked,
-  isToggling,
-  isLocked,
-  onToggle,
-}: {
-  agent: AgentWithStatus;
-  skillName: string;
-  isLinked: boolean;
-  isToggling: boolean;
-  isLocked: boolean;
-  onToggle: () => void;
-}) {
-  const { t } = useTranslation();
-  const memberNames = getPlatformTargetMemberNames(agent).join(", ");
-  const displayName = isUniversalPlatformTarget(agent)
-    ? t("platformTargets.universalShortLabel")
-    : agent.display_name;
-  const isDisabled = isToggling || isLocked;
-  const title = isLocked
-    ? `${displayName} - ${t("platformTargets.alwaysIncluded")} - ${memberNames}`
-    : displayName;
-
-  return (
-    <button
-      className={cn(
-        "p-1 rounded-md transition-colors cursor-pointer",
-        isLocked
-          ? "text-primary cursor-default"
-          : isLinked
-          ? "text-primary hover:bg-primary/15"
-          : "text-muted-foreground/40 hover:bg-muted/60 hover:text-muted-foreground",
-        isToggling && "animate-pulse pointer-events-none"
-      )}
-      title={title}
-      aria-label={
-        isLocked
-          ? title
-          : t("central.toggleInstallLabel", { platform: displayName, skill: skillName })
-      }
-      disabled={isDisabled}
-      onClick={onToggle}
-    >
-      <PlatformIcon agentId={agent.id} className="size-4 shrink-0" size={16} />
-    </button>
-  );
-});
-PlatformToggleIcon.displayName = "PlatformToggleIcon";
-
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+/**
+ * 卡片视觉密度：
+ * - `comfortable`（默认）：所有元素自适应、间距宽松；min-h 保底；描述 line-clamp-3 + fade mask
+ * - `compact`：idle 隐藏动作 / 平台图标条收成"已链接 N"；hover 展开；描述 line-clamp-2 + fade mask
+ * - `default`：旧别名，等同 `comfortable`，仅作向后兼容
+ */
+export type SkillCardDensity = "comfortable" | "compact" | "default";
 
 export interface UnifiedSkillCardProps {
   /** Core data — always required. */
@@ -139,7 +95,7 @@ export interface UnifiedSkillCardProps {
    */
   usageBadge?: number;
 
-  // ── actions (pass only the ones relevant to the context) ──
+  // ── actions ──
   onDetail?: MouseEventHandler<HTMLButtonElement>;
   onInstallTo?: () => void;
   onUpdateCentral?: () => void;
@@ -153,13 +109,37 @@ export interface UnifiedSkillCardProps {
   onRemove?: () => void;
   isLoading?: boolean;
   detailButtonRef?: Ref<HTMLButtonElement>;
+  density?: SkillCardDensity;
+
+  // ── central 重设计（方案 C）— 全部 prop 门控，其它 variant 不传则零回归 ──
+  /** 左侧状态竖条强度：amber=可更新，red=源缺失/错误；不传=无竖条。central 列表计算后传入。 */
+  statusAccent?: "amber" | "red";
+  /** 行 1 名称右侧的状态 chip 文案（如“可更新”/“源缺失”）；不传=不显示。 */
+  statusChipLabel?: string;
   /**
-   * 视觉密度。
-   * - `default`：所有元素始终可见（platform / project / marketplace / collection 默认值）。
-   * - `compact`：central 变体优化。idle 时一级动作隐藏、平台图标条收成「已链接 N」徽章；
-   *   hover/focus-within 时露出完整图标条 + 动作；删除从一级图标行收进 `⋯` popover。
+   * 可编辑标签行（central 专用）。不传 → 不渲染该行（其它 variant 仍用 SkillCardMeta 里的只读 tags）。
+   * - tags：已赋标签（含可选 color）
+   * - allTags：可选已存在标签（供 + 添加选择）
+   * - onAdd：选中一个已存在 tag
+   * - onCreate：输入新名创建并赋值
+   * - onRemove：移除一个 tag
    */
-  density?: "default" | "compact";
+  editableTags?: {
+    tags: { id: string; name: string; color?: string | null }[];
+    allTags: { id: string; name: string; color?: string | null }[];
+    onAdd: (tagId: string) => void;
+    onCreate: (name: string) => void;
+    onRemove: (tagId: string) => void;
+  };
+  /**
+   * footer 分隔区（central 专用）。传入时：底部出现 border-t footer，
+   * 左 = repo 色块+名 + usage；右 = 平台点（由现有 platformIcons 渲染）。
+   * 同时 SkillCardMeta 不再重复渲染 publisher / usageBadge。
+   */
+  footer?: {
+    repoName?: string;
+    repoColor?: string;
+  };
 }
 
 // ─── UnifiedSkillCard ─────────────────────────────────────────────────────────
@@ -201,10 +181,18 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     onRemove,
     isLoading,
     detailButtonRef,
-    density = "default",
+    density: rawDensity = "comfortable",
+    statusAccent,
+    statusChipLabel,
+    editableTags,
+    footer,
   } = props;
 
-  // 优先用显式传入的 skillId，没传时回退到 platformIcons.skillId（central 卡片）。
+  // "default" 是旧别名，归一化为 "comfortable"
+  const density: Exclude<SkillCardDensity, "default"> =
+    rawDensity === "default" ? "comfortable" : rawDensity;
+  const isCompact = density === "compact";
+
   const inventorySkillId = skillId ?? platformIcons?.skillId ?? null;
   const updateCenterInventory = useUpdateCenterStore((state) => state.inventory);
   const inventoryFlags = useMemo(
@@ -218,7 +206,6 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     [inventorySkillId, updateCenterInventory],
   );
 
-  // Determine variant features
   const hasCheckbox = !!checkbox;
   const hasPlatformIcons = !!platformIcons;
   const hasActions = !!(
@@ -251,7 +238,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     [platformIcons?.lockedAgentIds]
   );
 
-  const isCompact = density === "compact";
+  const summaryLineClamp: 2 | 3 = isCompact ? 2 : 3;
   const linkedTargetCount = useMemo(
     () =>
       targetAgents.filter((agent) =>
@@ -259,7 +246,6 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
       ).length,
     [targetAgents, linkedAgentSet]
   );
-  // compact 模式：删除从一级图标行收进 ⋯ popover。其他卡片动作（onRemove / onUninstall）保持现状。
   const compactMoreMenuItems = isCompact && onDeleteFromCentral ? { onDeleteFromCentral } : null;
 
   // ── Platform variant: clickable card style ──
@@ -269,22 +255,29 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
         role="button"
         onClick={onClick}
         className={cn(
-          "w-full h-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl",
+          "w-full h-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl group/skill-card",
           className
         )}
         aria-label={t("platform.searchSkillLabel", { name })}
       >
-        <div className="h-full flex flex-col rounded-xl bg-card ring-1 ring-border shadow-sm p-3 gap-3 transition-colors duration-150 hover:ring-primary/25 hover:bg-accent/30 cursor-pointer">
-          <div className="flex flex-1 items-start justify-between gap-3">
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground transition-colors group-hover/skill-card:text-primary">{name}</div>
+        <div className={cn(cardShellClass(false), "p-3.5 gap-2 hover:ring-primary/30 cursor-pointer")}>
+          <div className="flex flex-1 items-start justify-between gap-3 min-w-0">
+            <div className="min-w-0 flex-1 flex flex-col gap-2">
+              <div className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground transition-colors group-hover/skill-card:text-primary">
+                {name}
+              </div>
               {summaryText && (
                 <SkillCardSummary
                   text={summaryText}
                   label={hasAiSummary ? resolvedSummaryLabel : undefined}
+                  lineClamp={summaryLineClamp}
                 />
               )}
-              {sourceType && <SourceIndicator sourceType={sourceType} />}
+              {sourceType && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <SourceIndicator sourceType={sourceType} />
+                </div>
+              )}
             </div>
             <ChevronRight className="size-4 text-muted-foreground shrink-0 mt-0.5" />
           </div>
@@ -293,20 +286,20 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     );
   }
 
-  // ── Default card style (central, discover, marketplace) ──
+  // ── Default card style (central, discover, marketplace, collection) ──
   return (
     <div
       className={cn(
-        "rounded-xl bg-card ring-1 ring-border shadow-sm flex flex-col transition-colors",
-        isCompact ? "group/skill-card p-4" : "p-3",
-        checkbox?.checked && "ring-primary/40 bg-primary/5",
+        cardShellClass(checkbox?.checked),
+        "group/skill-card relative overflow-hidden p-3.5 gap-2",
+        isCompact ? "min-h-[168px]" : "min-h-[188px]",
         isLoading && "opacity-50",
         className
       )}
     >
-      <div className={cn("flex items-start", isCompact ? "gap-2" : "gap-2.5")}>
+      <div className="flex min-h-0 flex-1 items-start gap-2.5">
         {/* Optional checkbox (discover) */}
-        {hasCheckbox && (
+        {hasCheckbox && checkbox && (
           <div className="pt-0.5">
             <Checkbox
               checked={checkbox.checked}
@@ -317,10 +310,9 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
         )}
 
         {/* Main content */}
-        <div className={cn("flex-1 min-w-0", isCompact ? "space-y-2" : "space-y-1.5")}>
+        <div className="flex h-full min-w-0 flex-1 flex-col gap-2">
           {/* Row 1: Name + icon actions */}
           <div className="flex items-center justify-between gap-2">
-            {/* Skill name — clickable if onDetail provided */}
             {onDetail ? (
               <button
                 ref={detailButtonRef}
@@ -331,89 +323,107 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                 {name}
               </button>
             ) : (
-              <h3 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-[-0.01em] text-foreground">{name}</h3>
+              <h3 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-[-0.01em] text-foreground">
+                {name}
+              </h3>
             )}
 
-            {/* Icon action buttons */}
+            {statusChipLabel && (
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
+                  statusAccent === "red"
+                    ? "bg-destructive/10 text-destructive ring-destructive/30"
+                    : "bg-warning/10 text-warning-foreground ring-warning/30"
+                )}
+              >
+                {statusChipLabel}
+              </span>
+            )}
+
             {hasActions && (
               <div
                 className={cn(
                   "flex items-center gap-0.5 shrink-0",
                   isCompact &&
-                    "opacity-0 transition-opacity duration-150 group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100"
+                    "opacity-0 transition-opacity duration-150 group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100",
                 )}
               >
-                {/* Install To... (central / platform / collection / marketplace) */}
                 {onInstallTo && (
-                  <button
+                  <CardActionButton
                     onClick={onInstallTo}
                     disabled={isLoading}
                     title={t("central.installTo")}
-                    aria-label={t("central.installLabel", { name })}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
-                  >
-                    <PackagePlus className="size-4" />
-                  </button>
+                    ariaLabel={t("central.installLabel", { name })}
+                    icon={<PackagePlus className="size-4" />}
+                  />
                 )}
 
                 {onUpdateCentral && (
-                  <button
+                  <CardActionButton
                     onClick={onUpdateCentral}
                     disabled={
-                      isLoading ||
-                      updateStatus?.isUpdating ||
-                      !canUpdateCentral
+                      isLoading || updateStatus?.isUpdating || !canUpdateCentral
                     }
                     title={
                       canUpdateCentral
                         ? t("central.updateSkill")
                         : updateStatus?.error ?? t("central.checkUpdatesFirst")
                     }
-                    aria-label={t("central.updateSkillLabel", { name })}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
-                  >
-                    {updateStatus?.isUpdating ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  </button>
+                    ariaLabel={t("central.updateSkillLabel", { name })}
+                    icon={
+                      updateStatus?.isUpdating ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Download className="size-4" />
+                      )
+                    }
+                  />
                 )}
 
-                {/* Delete — compact 模式收进下面的 ⋯ popover，default 保持一级图标。 */}
+                {/* Delete — compact 模式收进下面的 ⋯ popover，comfortable 保持一级图标。 */}
                 {onDeleteFromCentral && !isCompact && (
-                  <button
+                  <CardActionButton
                     onClick={onDeleteFromCentral}
                     disabled={isLoading}
                     title={t("central.deleteSkill")}
-                    aria-label={t("central.deleteSkillLabel", { name })}
-                    data-testid={`delete-central-skill-${name}`}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50 disabled:cursor-default"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                    ariaLabel={t("central.deleteSkillLabel", { name })}
+                    testId={`delete-central-skill-${name}`}
+                    danger
+                    icon={<Trash2 className="size-4" />}
+                  />
                 )}
 
-                {/* Install to Central (discover) */}
                 {onInstallToCentral && !isCentral && (
-                  <button
+                  <CardActionButton
                     onClick={onInstallToCentral}
                     disabled={isLoading}
                     title={t("common.installToCentral")}
-                    aria-label={t("common.installToCentral")}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
-                  >
-                    {isLoading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpRight className="size-4" />}
-                  </button>
+                    ariaLabel={t("common.installToCentral")}
+                    icon={
+                      isLoading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <ArrowUpRight className="size-4" />
+                      )
+                    }
+                  />
                 )}
 
-                {/* Install to Platform (discover) */}
                 {onInstallToPlatform && (
-                  <button
+                  <CardActionButton
                     onClick={onInstallToPlatform}
                     disabled={isLoading}
                     title={t("common.installToPlatform")}
-                    aria-label={t("common.installToPlatform")}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
-                  >
-                    {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                  </button>
+                    ariaLabel={t("common.installToPlatform")}
+                    icon={
+                      isLoading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Plus className="size-4" />
+                      )
+                    }
+                  />
                 )}
 
                 {onUninstallFromPlatform && (
@@ -442,10 +452,10 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                         : installLabel ?? t("marketplace.install")
                     }
                     className={cn(
-                      "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+                      "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors",
                       isInstalled
                         ? "text-primary cursor-default"
-                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-default"
+                        : "text-muted-foreground hover:bg-accent/40 hover:text-primary disabled:opacity-50 disabled:cursor-default"
                     )}
                   >
                     {isLoading ? (
@@ -458,7 +468,6 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   </button>
                 )}
 
-                {/* Remove (collection) */}
                 {onRemove && (
                   <InlineConfirmAction
                     onConfirm={onRemove}
@@ -470,7 +479,6 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   />
                 )}
 
-                {/* compact 模式 ⋯ popover：承载 destructive 删除 */}
                 {compactMoreMenuItems && (
                   <CompactCardMoreMenu
                     skillName={name}
@@ -482,174 +490,111 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             )}
           </div>
 
-          {/* Row 2: Description — full width, not compressed by actions */}
+          {/* Row 2: Description */}
           {summaryText && (
             <SkillCardSummary
               text={summaryText}
               label={hasAiSummary ? resolvedSummaryLabel : undefined}
+              lineClamp={summaryLineClamp}
             />
           )}
 
-          {/* Row 3: Info badges */}
-          <div className="flex flex-wrap items-center gap-1.5 empty:hidden">
-            {originKind && <SourceOriginBadge originKind={originKind} />}
-            {isReadOnly && <ReadOnlyBadge />}
+          {/* Row 3: Meta badges — 统一一行展示，flex-wrap */}
+          <SkillCardMeta
+            originKind={originKind ?? undefined}
+            isReadOnly={isReadOnly}
+            sourceType={sourceType}
+            originBadge={originBadge}
+            usageBadge={footer ? undefined : usageBadge}
+            isCentral={isCentral}
+            platformBadge={platformBadge}
+            projectBadge={projectBadge}
+            publisher={footer ? undefined : publisher}
+            updateStatus={updateStatus}
+            inventoryFlags={inventoryFlags ?? undefined}
+            inventorySkillId={inventorySkillId ?? undefined}
+            tags={editableTags ? undefined : tags}
+          />
 
-            {/* Source indicator (platform) */}
-            {sourceType && <SourceIndicator sourceType={sourceType} />}
+          {/* Row 末: 彩色标签行（central 专用）— 收于 footer 上方，固定单行 */}
+          {editableTags && (
+            <div className="flex h-5 items-center overflow-hidden [&>div]:flex-nowrap">
+              <CardTagEditor {...editableTags} />
+            </div>
+          )}
 
-            {originBadge && <ProjectSourceBadge originBadge={originBadge} />}
-
-            {/* Skill Usage 30d call count — emitted by useSkillCallCounts hook */}
-            {typeof usageBadge === "number" && usageBadge > 0 && (
-              <span
-                data-testid="usage-badge"
-                title={t("skillUsage.badge.tooltip", {
-                  count: usageBadge,
-                  days: 30,
-                  defaultValue: `${usageBadge} calls in last 30 days`,
-                })}
-                className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary shadow-sm"
-              >
-                <span className="tabular-nums">
-                  {t("skillUsage.badge.countShort", { count: usageBadge })}
-                </span>
-                <span aria-hidden="true" className="text-primary/45">·</span>
-                <span className="tabular-nums text-primary/80">
-                  {t("skillUsage.badge.periodShort", { days: 30 })}
-                </span>
-              </span>
-            )}
-
-            {/* "Already in Central" badge */}
-            {isCentral && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
-                <Globe className="size-3" />
-                {t("common.alreadyCentral")}
-              </span>
-            )}
-
-            {/* Platform badge (discover) */}
-            {platformBadge && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <PlatformIcon agentId={platformBadge.id} className="size-3" />
-                {platformBadge.name}
-              </span>
-            )}
-
-            {/* Project badge (discover) */}
-            {projectBadge && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <Folder className="size-3" />
-                {projectBadge}
-              </span>
-            )}
-
-            {publisher && <SourceChip label={publisher} />}
-
-            {updateStatus && updateStatus.status !== "up_to_date" && (
-              <span
-                className={cn(
-                  "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
-                  updateStatus.status === "update_available"
-                    ? "bg-primary/10 text-primary ring-primary/20"
-                    : updateStatus.status === "error"
-                      ? "bg-destructive/10 text-destructive ring-destructive/20"
-                      : updateStatus.status === "remote_missing"
-                        ? "bg-amber-500/10 text-amber-700 ring-amber-500/30 dark:text-amber-300"
-                      : "bg-muted text-muted-foreground ring-border"
-                )}
-                title={updateStatus.error ?? undefined}
-              >
-                {t(`central.updateStatus.${updateStatus.status}`)}
-              </span>
-            )}
-            {/* Inventory 分类徽章：update / missing 由 updateStatus chip 覆盖。 */}
-            {inventoryFlags?.hasDuplicate && (
-              <span
-                data-testid={
-                  inventorySkillId
-                    ? `skill-card-duplicate-badge-${inventorySkillId}`
-                    : undefined
-                }
-                className="inline-flex items-center rounded-full bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 ring-1 ring-orange-500/30 dark:text-orange-300"
-              >
-                {t("central.updateCenter.badges.duplicate")}
-              </span>
-            )}
-            {inventoryFlags?.isOrphan && (
-              <span
-                data-testid={
-                  inventorySkillId
-                    ? `skill-card-orphan-badge-${inventorySkillId}`
-                    : undefined
-                }
-                className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border"
-              >
-                {t("central.updateCenter.badges.orphan")}
-              </span>
-            )}
-
-            {tags && tags.length > 0 && (
-              <div className="flex items-center gap-1">
-                {tags.slice(0, 2).map((tag) => (
-                  <span key={tag.key} className="text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded">
-                    {tag.label}
+          {/* Row 4: Footer (central 方案C) or Platform toggle icons */}
+          {footer ? (
+            <UnifiedSkillCardFooter
+              repoName={footer.repoName}
+              repoColor={footer.repoColor}
+              usageBadge={usageBadge}
+              agents={platformIcons?.agents ?? []}
+              linkedAgents={platformIcons?.linkedAgents ?? []}
+              lockedAgentIds={platformIcons?.lockedAgentIds}
+              skillId={platformIcons?.skillId}
+              togglingAgentId={platformIcons?.togglingAgentId ?? null}
+              skillName={name}
+              onToggle={platformIcons?.onToggle}
+            />
+          ) : (
+            hasPlatformIcons &&
+            platformIcons &&
+            targetAgents.length > 0 && (
+              <div className="mt-auto pt-1">
+                {isCompact && (
+                  <span
+                    data-testid={`skill-card-linked-summary-${platformIcons.skillId}`}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground",
+                      "group-hover/skill-card:hidden group-focus-within/skill-card:hidden",
+                    )}
+                  >
+                    <Link2 className="size-3" aria-hidden />
+                    {linkedTargetCount > 0
+                      ? t("common.skillCardLinkedSummary", {
+                          count: linkedTargetCount,
+                        })
+                      : t("common.skillCardLinkedSummaryNone")}
                   </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Row 3: Platform toggle icons (central) */}
-          {hasPlatformIcons && targetAgents.length > 0 && (
-            <div className={cn("mt-auto", isCompact ? "pt-2" : "space-y-1 pt-1")}>
-              {isCompact && (
-                <span
-                  data-testid={`skill-card-linked-summary-${platformIcons.skillId}`}
+                )}
+                <div
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground",
-                    "group-hover/skill-card:hidden group-focus-within/skill-card:hidden"
+                    "flex items-center gap-1 flex-wrap",
+                    isCompact &&
+                      "hidden group-hover/skill-card:flex group-focus-within/skill-card:flex",
                   )}
                 >
-                  <Link2 className="size-3" aria-hidden />
-                  {linkedTargetCount > 0
-                    ? t("common.skillCardLinkedSummary", { count: linkedTargetCount })
-                    : t("common.skillCardLinkedSummaryNone")}
-                </span>
-              )}
-              <div
-                className={cn(
-                  "flex items-center gap-1.5",
-                  isCompact &&
-                    "hidden group-hover/skill-card:flex group-focus-within/skill-card:flex"
-                )}
-              >
-                {!isCompact && (
-                  <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider w-14 shrink-0">
-                    {t("central.platformTargetsLabel")}
-                  </span>
-                )}
-                <div className="flex items-center gap-0.5 flex-wrap">
                   {targetAgents.map((agent) => (
                     <PlatformToggleIcon
                       key={agent.id}
                       agent={agent}
                       skillName={name}
-                      isLinked={getPlatformTargetMemberIds(agent).some((agentId) => linkedAgentSet.has(agentId))}
-                      isToggling={getPlatformTargetMemberIds(agent).some((agentId) => platformIcons.togglingAgentId === agentId)}
-                      isLocked={getPlatformTargetMemberIds(agent).some((agentId) => lockedAgentSet.has(agentId))}
+                      isLinked={getPlatformTargetMemberIds(agent).some(
+                        (agentId) => linkedAgentSet.has(agentId),
+                      )}
+                      isToggling={getPlatformTargetMemberIds(agent).some(
+                        (agentId) =>
+                          platformIcons.togglingAgentId === agentId,
+                      )}
+                      isLocked={getPlatformTargetMemberIds(agent).some(
+                        (agentId) => lockedAgentSet.has(agentId),
+                      )}
                       onToggle={() => {
-                        const [agentId] = getPlatformTargetInstallAgentIds(agent);
+                        const [agentId] =
+                          getPlatformTargetInstallAgentIds(agent);
                         if (agentId) {
-                          platformIcons.onToggle(platformIcons.skillId, agentId);
+                          platformIcons.onToggle(
+                            platformIcons.skillId,
+                            agentId,
+                          );
                         }
                       }}
                     />
                   ))}
                 </div>
               </div>
-            </div>
+            )
           )}
         </div>
       </div>
@@ -660,121 +605,96 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
 export const UnifiedSkillCard = memo(UnifiedSkillCardComponent);
 UnifiedSkillCard.displayName = "UnifiedSkillCard";
 
+// ─── Card Shell Styles ────────────────────────────────────────────────────────
+
+function cardShellClass(selected?: boolean): string {
+  return cn(
+    "h-full flex flex-col rounded-xl bg-card ring-1 ring-border/70 transition-all duration-150",
+    "shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_-6px_rgba(0,0,0,0.08)]",
+    "hover:ring-primary/25 hover:shadow-[0_2px_4px_rgba(0,0,0,0.05),0_10px_28px_-10px_color-mix(in_srgb,var(--primary)_24%,transparent)]",
+    selected && "ring-primary/45 bg-primary/[0.04]",
+  );
+}
+
+// ─── Card Action Button (internal) ────────────────────────────────────────────
+
+function CardActionButton({
+  onClick,
+  disabled,
+  title,
+  ariaLabel,
+  icon,
+  testId,
+  danger,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  title: string;
+  ariaLabel: string;
+  icon: ReactNode;
+  testId?: string;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      className={cn(
+        "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors text-muted-foreground disabled:opacity-50 disabled:cursor-default",
+        danger
+          ? "hover:bg-destructive/10 hover:text-destructive"
+          : "hover:bg-accent/40 hover:text-primary",
+      )}
+    >
+      {icon}
+    </button>
+  );
+}
+
+// ─── Skill Card Summary (description / aiSummary with fade mask) ─────────────
+
 function SkillCardSummary({
   text,
   label,
+  lineClamp = 2,
 }: {
   text: string;
   label?: string;
+  lineClamp?: 2 | 3;
 }) {
+  const { ref, isTruncated } = useTextTruncation<HTMLParagraphElement>(text);
   return (
-    <p className="line-clamp-2 rounded-lg border border-border/60 bg-muted/35 px-2 py-1.5 text-xs leading-relaxed text-muted-foreground/90 shadow-[inset_0_1px_0_color-mix(in_oklch,white_16%,transparent)]">
+    <div className="relative">
       {label && (
-        <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-[9px] font-medium leading-none text-primary/85">
+        <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary/85">
           {label}
         </span>
       )}
-      {text}
-    </p>
-  );
-}
-
-function SourceChip({ label }: { label: string }) {
-  return (
-    <span className="inline-flex max-w-full items-center rounded-md border border-border/60 bg-muted/35 px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground/80 shadow-sm">
-      <span className="truncate">{label}</span>
-    </span>
-  );
-}
-
-// ─── Source Indicator (internal) ──────────────────────────────────────────────
-
-function SourceIndicator({ sourceType }: { sourceType: string }) {
-  const { t, i18n } = useTranslation();
-  const isSymlink = sourceType === "symlink";
-  const isNative = sourceType === "native";
-  const primaryLabel = isSymlink ? t("platform.sourceCentral") : t("platform.sourceStandalone");
-  const secondaryLabel = isSymlink
-    ? t("platform.sourceSymlinkLabel")
-    : isNative
-      ? t("platform.sourceNativeLabel", {
-          defaultValue: i18n.language.startsWith("zh") ? "原生" : "native",
-        })
-      : t("platform.sourceCopyLabel");
-
-  return (
-    <div
-      className={cn(
-        "inline-flex items-center gap-1 text-xs font-medium",
-        isSymlink ? "text-primary/80" : "text-muted-foreground"
-      )}
-    >
-      {isSymlink ? <Link2 className="size-3 shrink-0" /> : <FolderOpen className="size-3 shrink-0" />}
-      <div className="inline-flex items-center gap-1">
-        <span>{primaryLabel}</span>
-        <span aria-hidden="true" className="h-px w-3 shrink-0 rounded-full bg-current opacity-40" />
-        <span className="sr-only"> - </span>
-        <span>{secondaryLabel}</span>
-      </div>
+      <p
+        ref={ref}
+        data-truncated={isTruncated ? "true" : "false"}
+        title={text}
+        className={cn(
+          "text-xs leading-relaxed text-muted-foreground/90",
+          lineClamp === 3 ? "line-clamp-3" : "line-clamp-2",
+          label && "inline",
+        )}
+      >
+        {text}
+      </p>
+      <span
+        aria-hidden
+        data-truncated={isTruncated ? "true" : "false"}
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 h-5",
+          "bg-gradient-to-t from-card to-transparent",
+          "opacity-0 transition-opacity duration-150",
+          "data-[truncated=true]:opacity-100",
+        )}
+      />
     </div>
-  );
-}
-
-function SourceOriginBadge({ originKind }: { originKind: ClaudeSourceKind }) {
-  const { t, i18n } = useTranslation();
-  const isPlugin = originKind === "plugin";
-
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
-        isPlugin
-          ? "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300"
-          : "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:text-sky-300"
-      )}
-    >
-      {isPlugin
-        ? t("platform.originPlugin", {
-            defaultValue: i18n.language.startsWith("zh") ? "插件来源" : "Plugin source",
-          })
-        : t("platform.originUser", {
-            defaultValue: i18n.language.startsWith("zh") ? "用户来源" : "User source",
-          })}
-    </span>
-  );
-}
-
-function ReadOnlyBadge() {
-  const { t, i18n } = useTranslation();
-
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70">
-      <Lock className="size-3 shrink-0" />
-      {t("platform.readOnly", {
-        defaultValue: i18n.language.startsWith("zh") ? "只读" : "Read-only",
-      })}
-    </span>
-  );
-}
-
-function ProjectSourceBadge({
-  originBadge,
-}: {
-  originBadge: { kind: "central" | "project" | string; label: string };
-}) {
-  const isCentral = originBadge.kind === "central";
-
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
-        isCentral
-          ? "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:text-sky-300"
-          : "bg-muted text-muted-foreground ring-border/70"
-      )}
-    >
-      {isCentral ? <Globe className="size-3 shrink-0" /> : <Folder className="size-3 shrink-0" />}
-      {originBadge.label}
-    </span>
   );
 }

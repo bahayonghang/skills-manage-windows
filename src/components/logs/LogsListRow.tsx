@@ -50,11 +50,17 @@ interface IconVisual {
 function statusVisual(status: string): IconVisual {
   switch (status) {
     case "succeeded":
-      return { icon: CheckCircle2, className: "bg-emerald-500/10 text-emerald-600" };
+      return {
+        icon: CheckCircle2,
+        className: "bg-success/10 text-success-foreground",
+      };
     case "failed":
       return { icon: XCircle, className: "bg-destructive/10 text-destructive" };
     case "partial":
-      return { icon: AlertCircle, className: "bg-amber-500/10 text-amber-600" };
+      return {
+        icon: AlertCircle,
+        className: "bg-warning/10 text-warning-foreground",
+      };
     case "cancelled":
       return { icon: Ban, className: "bg-muted text-muted-foreground" };
     default:
@@ -67,7 +73,7 @@ function levelVisual(level: string): IconVisual {
     case "error":
       return { icon: XCircle, className: "text-destructive" };
     case "warn":
-      return { icon: AlertTriangle, className: "text-amber-600" };
+      return { icon: AlertTriangle, className: "text-warning-foreground" };
     default:
       return { icon: Info, className: "text-muted-foreground" };
   }
@@ -78,7 +84,7 @@ function rowAccentClass(entry: OperationLogEntry): string {
     return "bg-destructive";
   }
   if (entry.status === "partial" || entry.level === "warn") {
-    return "bg-amber-500";
+    return "bg-warning";
   }
   return "bg-transparent";
 }
@@ -113,10 +119,7 @@ export function LogsListRow({
     >
       <span
         aria-hidden="true"
-        className={cn(
-          "absolute inset-y-0 left-0 w-0.5",
-          rowAccentClass(entry),
-        )}
+        className={cn("absolute inset-y-0 left-0 w-0.5", rowAccentClass(entry))}
       />
       <span className="flex flex-col" title={iso}>
         <span className="text-xs text-foreground">{relative}</span>
@@ -142,9 +145,7 @@ export function LogsListRow({
         </span>
       </span>
       <span className="min-w-0">
-        <span className="block truncate font-mono text-xs">
-          {entry.action}
-        </span>
+        <span className="block truncate font-mono text-xs">{entry.action}</span>
         <span className="block truncate text-xs text-muted-foreground">
           {entry.summary}
         </span>

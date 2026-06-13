@@ -5,6 +5,7 @@
  */
 
 import type { SkillRepositoryWithStats } from "@/types";
+import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 
 export type RepositoryGroupKind = "github" | "local";
 
@@ -41,6 +42,10 @@ function getEffectiveSkillCount(repo: SkillRepositoryWithStats): number {
   return repo.is_unknown ? repo.unknown_skill_count : repo.skill_count;
 }
 
+function shouldShowRepository(repo: SkillRepositoryWithStats): boolean {
+  return !repo.is_unknown || getEffectiveSkillCount(repo) > 0;
+}
+
 /**
  * 按 owner 折叠 GitHub 仓库；本地 / 无 owner 的仓库放进 flat 组。
  *
@@ -57,6 +62,8 @@ export function groupRepositoriesForSidebar(
   const local: SkillRepositoryWithStats[] = [];
 
   for (const repo of repositories) {
+    if (!shouldShowRepository(repo)) continue;
+
     if (isGithubRepo(repo)) {
       const owner = (repo.owner ?? "").trim();
       if (owner.length === 0) {
@@ -120,9 +127,79 @@ export function groupRepositoriesForSidebar(
   return sections;
 }
 
+export function filterRepositorySectionsForSearch(
+  sections: readonly RepositorySidebarSection[],
+  query: string
+): RepositorySidebarSection[] {
+  const normalizedQuery = normalizeSearchQuery(query);
+  if (!normalizedQuery) return sections.slice();
+
+  return sections
+    .map((section) => {
+      const groups = section.groups
+        .map((group): RepositorySidebarGroup | null => {
+          if (group.kind === "owner") {
+            const ownerMatches = normalizeSearchQuery(group.owner).includes(normalizedQuery);
+            const repositories = ownerMatches
+              ? group.repositories
+              : group.repositories.filter((repo) =>
+                  repositoryMatchesSearch(repo, normalizedQuery)
+                );
+
+            if (repositories.length === 0) return null;
+            return {
+              ...group,
+              repositories,
+              totalSkillCount: repositories.reduce(
+                (acc, repo) => acc + getEffectiveSkillCount(repo),
+                0
+              ),
+            };
+          }
+
+          const repositories = group.repositories.filter((repo) =>
+            repositoryMatchesSearch(repo, normalizedQuery)
+          );
+          if (repositories.length === 0) return null;
+          return {
+            ...group,
+            repositories,
+            totalSkillCount: repositories.reduce(
+              (acc, repo) => acc + getEffectiveSkillCount(repo),
+              0
+            ),
+          };
+        })
+        .filter((group): group is RepositorySidebarGroup => group !== null);
+
+      if (groups.length === 0) return null;
+      return {
+        ...section,
+        groups,
+        totalSkillCount: groups.reduce((acc, group) => acc + group.totalSkillCount, 0),
+      };
+    })
+    .filter((section): section is RepositorySidebarSection => section !== null);
+}
+
 function sortByRepoName(a: SkillRepositoryWithStats, b: SkillRepositoryWithStats): number {
   if (a.pinned !== b.pinned) {
     return a.pinned ? -1 : 1;
   }
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+}
+
+function repositoryMatchesSearch(
+  repo: SkillRepositoryWithStats,
+  normalizedQuery: string
+): boolean {
+  const fullName = repo.owner && repo.repo ? `${repo.owner}/${repo.repo}` : undefined;
+  return buildSearchText([
+    repo.owner,
+    repo.repo,
+    fullName,
+    repo.name,
+    repo.url,
+    repo.id,
+  ]).includes(normalizedQuery);
 }

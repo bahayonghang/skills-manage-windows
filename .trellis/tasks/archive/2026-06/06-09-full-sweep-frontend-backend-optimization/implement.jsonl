@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Shared guidance for detecting and consolidating duplicated code safely."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Shared guidance for preserving contracts across frontend, backend, database, and filesystem boundaries."}
+{"file": ".trellis/spec/ref/skillshare/frontend/component-guidelines.md", "reason": "Frontend project convention for Central Skills card-grid sizing and component reuse."}
+{"file": ".trellis/spec/ref/skillshare/frontend/state-management.md", "reason": "Frontend store-boundary convention; components should not gain direct backend calls."}
+{"file": ".trellis/spec/ref/skillshare/backend/quality-guidelines.md", "reason": "Backend convention for centralized GitHub import skip-segment rules and regression tests."}

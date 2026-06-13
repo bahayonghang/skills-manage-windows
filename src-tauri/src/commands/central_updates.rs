@@ -72,6 +72,12 @@ fn snapshot_cache_ttl() -> ChronoDuration {
 const SNAPSHOT_DOWNLOAD_CONCURRENCY: usize = 4;
 const COPY_INSTALL_REFRESH_CONCURRENCY: usize = 4;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SnapshotCachePolicy {
+    UseFresh,
+    Bypass,
+}
+
 pub mod repository_sync;
 #[allow(deprecated)]
 pub use repository_sync::{
@@ -189,7 +195,9 @@ pub async fn get_central_skill_update_states(
     state: State<'_, AppState>,
 ) -> Result<Vec<SkillUpdateState>, String> {
     let pool = state.active_db().await?;
-    db::get_skill_update_states(&pool).await
+    db::get_skill_update_states(&pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -206,8 +214,9 @@ pub async fn check_central_skill_updates(
     let skills = load_selected_central_skills(&pool, skill_ids.as_deref()).await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
-    let client = github_import::github_client()?;
+            .await
+            .map_err(|e| e.to_string())?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
     let total = skills.len();
     let mut counters = UpdateCounters::default();
     let mut states = Vec::with_capacity(total);
@@ -260,7 +269,9 @@ pub async fn check_central_skill_updates(
             }
         };
 
-        db::upsert_skill_update_state(&pool, &state_result).await?;
+        db::upsert_skill_update_state(&pool, &state_result)
+            .await
+            .map_err(|e| e.to_string())?;
         update_counters_for_state(&mut counters, &state_result);
         emit_update_progress(
             &app,
@@ -297,8 +308,9 @@ pub async fn update_central_skills(
     let skills = load_selected_central_skills(&pool, Some(&skill_ids)).await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
-    let client = github_import::github_client()?;
+            .await
+            .map_err(|e| e.to_string())?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
     let total = skills.len();
     let mut counters = UpdateCounters::default();
     let mut succeeded = Vec::new();
@@ -351,7 +363,9 @@ pub async fn update_central_skills(
         match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) if remote.remote_hash == remote.local_hash => {
                 let state_result = state_from_remote(skill, &remote, false);
-                db::upsert_skill_update_state(&pool, &state_result).await?;
+                db::upsert_skill_update_state(&pool, &state_result)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -371,7 +385,9 @@ pub async fn update_central_skills(
             }
             Ok(Some(remote)) => match update_one_skill(&pool, &fs, skill, remote).await {
                 Ok(state_result) => {
-                    db::upsert_skill_update_state(&pool, &state_result).await?;
+                    db::upsert_skill_update_state(&pool, &state_result)
+                        .await
+                        .map_err(|e| e.to_string())?;
                     counters.completed += 1;
                     counters.succeeded += 1;
                     succeeded.push(skill.id.clone());
@@ -389,7 +405,9 @@ pub async fn update_central_skills(
                 Err(error) => {
                     let state_result =
                         error_state_from_assignment(skill, &prepared_skill.assignment, &error);
-                    db::upsert_skill_update_state(&pool, &state_result).await?;
+                    db::upsert_skill_update_state(&pool, &state_result)
+                        .await
+                        .map_err(|e| e.to_string())?;
                     counters.completed += 1;
                     counters.failed += 1;
                     failed.push(CentralSkillUpdateFailure {
@@ -411,7 +429,9 @@ pub async fn update_central_skills(
             Ok(None) => {
                 let state_result =
                     unsupported_state_from_assignment(skill, &prepared_skill.assignment, None);
-                db::upsert_skill_update_state(&pool, &state_result).await?;
+                db::upsert_skill_update_state(&pool, &state_result)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -438,7 +458,9 @@ pub async fn update_central_skills(
                     &prepared_skill.assignment,
                     &reason,
                 );
-                db::upsert_skill_update_state(&pool, &state_result).await?;
+                db::upsert_skill_update_state(&pool, &state_result)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -459,7 +481,9 @@ pub async fn update_central_skills(
             Err(RemoteSkillLoadError::Other(error)) => {
                 let state_result =
                     error_state_from_assignment(skill, &prepared_skill.assignment, &error);
-                db::upsert_skill_update_state(&pool, &state_result).await?;
+                db::upsert_skill_update_state(&pool, &state_result)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 counters.completed += 1;
                 counters.failed += 1;
                 failed.push(CentralSkillUpdateFailure {
@@ -511,7 +535,9 @@ pub async fn keep_remote_missing_central_skills_impl(
         .cloned()
         .collect::<Vec<_>>();
 
-    let states = db::get_skill_update_states_for_skills(pool, &unique_skill_ids).await?;
+    let states = db::get_skill_update_states_for_skills(pool, &unique_skill_ids)
+        .await
+        .map_err(|e| e.to_string())?;
     let states_by_skill_id = states
         .into_iter()
         .map(|state| (state.skill_id.clone(), state))
@@ -519,7 +545,8 @@ pub async fn keep_remote_missing_central_skills_impl(
 
     for skill_id in &unique_skill_ids {
         let skill = db::get_skill_by_id(pool, skill_id)
-            .await?
+            .await
+            .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
         if !skill.is_central {
             return Err(format!("Skill '{}' is not a Central skill", skill_id));
@@ -540,7 +567,9 @@ pub async fn keep_remote_missing_central_skills_impl(
     }
 
     for skill_id in &unique_skill_ids {
-        db::detach_skill_remote_source(pool, skill_id).await?;
+        db::detach_skill_remote_source(pool, skill_id)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(unique_skill_ids)
@@ -563,9 +592,13 @@ async fn load_selected_central_skills(
     skill_ids: Option<&[String]>,
 ) -> Result<Vec<Skill>, String> {
     if let Some(skill_ids) = skill_ids {
-        return db::get_central_skills_by_ids(pool, skill_ids).await;
+        return db::get_central_skills_by_ids(pool, skill_ids)
+            .await
+            .map_err(|e| e.to_string());
     }
-    db::get_central_skills(pool).await
+    db::get_central_skills(pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub(crate) async fn prepare_skill_updates(
@@ -579,10 +612,15 @@ pub(crate) async fn prepare_skill_updates(
         .iter()
         .map(|skill| skill.id.clone())
         .collect::<Vec<_>>();
-    let mut assignments = db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
-    let unknown_repository = db::get_local_unknown_repository(pool).await?;
+    let mut assignments = db::get_skill_repository_assignments_for_skills(pool, &skill_ids)
+        .await
+        .map_err(|e| e.to_string())?;
+    let unknown_repository = db::get_local_unknown_repository(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let previous_states = db::get_skill_update_states_for_skills(pool, &skill_ids)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .into_iter()
         .map(|state| (state.skill_id.clone(), state))
         .collect::<HashMap<_, _>>();
@@ -671,6 +709,23 @@ pub(crate) async fn prepare_snapshots_for_repo_refs(
     repos: &[GitHubRepoRef],
     cache: &crate::CentralUpdateSnapshotCache,
 ) -> Result<HashMap<String, GitHubRepoSnapshot>, String> {
+    prepare_snapshots_for_repo_refs_with_policy(
+        client,
+        auth_token,
+        repos,
+        cache,
+        SnapshotCachePolicy::UseFresh,
+    )
+    .await
+}
+
+pub(crate) async fn prepare_snapshots_for_repo_refs_with_policy(
+    client: &reqwest::Client,
+    auth_token: Option<&str>,
+    repos: &[GitHubRepoRef],
+    cache: &crate::CentralUpdateSnapshotCache,
+    cache_policy: SnapshotCachePolicy,
+) -> Result<HashMap<String, GitHubRepoSnapshot>, String> {
     let mut repos_by_key = HashMap::<String, GitHubRepoRef>::new();
     for repo in repos {
         repos_by_key
@@ -680,8 +735,12 @@ pub(crate) async fn prepare_snapshots_for_repo_refs(
     let mut snapshots = HashMap::new();
     let mut missing = Vec::new();
     for (key, repo) in repos_by_key {
-        if let Some(snapshot) = cache.get_fresh(&key, snapshot_cache_ttl()) {
-            snapshots.insert(key, snapshot);
+        if cache_policy == SnapshotCachePolicy::UseFresh {
+            if let Some(snapshot) = cache.get_fresh(&key, snapshot_cache_ttl()) {
+                snapshots.insert(key, snapshot);
+            } else {
+                missing.push(repo);
+            }
         } else {
             missing.push(repo);
         }
@@ -698,8 +757,9 @@ pub(crate) async fn prepare_snapshots_for_repo_refs(
                 .acquire_owned()
                 .await
                 .map_err(|_| "Central update snapshot downloader closed.".to_string())?;
-            let snapshot =
-                github_import::download_repo_snapshot(&client, &repo, auth.as_deref()).await?;
+            let snapshot = github_import::download_repo_snapshot(&client, &repo, auth.as_deref())
+                .await
+                .map_err(|e| e.to_string())?;
             Ok::<_, String>((repo_cache_key(&repo), snapshot))
         }
     });
@@ -769,7 +829,7 @@ fn find_remote_skill_candidate(
         snapshot,
         Some(&source.source_path),
     )
-    .map_err(RemoteSkillLoadError::other)?;
+    .map_err(|e| RemoteSkillLoadError::other(e.to_string()))?;
 
     candidates
         .into_iter()
@@ -831,7 +891,8 @@ async fn resolve_github_update_source_from_assignment(
             )
         })?;
         github_import::resolve_repo_source(&url, auth_token)
-            .await?
+            .await
+            .map_err(|e| e.to_string())?
             .repo
     };
 
@@ -884,6 +945,23 @@ pub(crate) fn state_from_remote(
         },
         error: None,
     }
+}
+
+pub(crate) fn state_from_relocated_source(
+    prepared: &PreparedSkillUpdate,
+    repo: &GitHubRepoRef,
+    source_path: &str,
+    snapshots: &HashMap<String, GitHubRepoSnapshot>,
+) -> Result<SkillUpdateState, RemoteSkillLoadError> {
+    let mut relocated = prepared.clone();
+    relocated.source = Some(GitHubUpdateSource {
+        repo: repo.clone(),
+        source_path: source_path.to_string(),
+    });
+    relocated.assignment.source_path = Some(source_path.to_string());
+    let remote = load_remote_skill_content(&relocated, snapshots)?
+        .ok_or_else(|| RemoteSkillLoadError::other("Relocated GitHub source is unavailable."))?;
+    Ok(state_from_remote(&relocated.skill, &remote, false))
 }
 
 pub(crate) fn unsupported_state_from_assignment(
@@ -993,11 +1071,21 @@ fn unsupported_reason(assignment: &SkillRepositoryAssignment) -> String {
     "Automatic update is not supported for this source.".to_string()
 }
 
-async fn update_one_skill(
+pub(crate) async fn update_one_skill(
     pool: &DbPool,
     fs: &CentralFs,
     skill: &Skill,
     remote: RemoteSkillContent,
+) -> Result<SkillUpdateState, String> {
+    update_one_skill_with_options(pool, fs, skill, remote, true).await
+}
+
+pub(crate) async fn update_one_skill_with_options(
+    pool: &DbPool,
+    fs: &CentralFs,
+    skill: &Skill,
+    remote: RemoteSkillContent,
+    refresh_copies: bool,
 ) -> Result<SkillUpdateState, String> {
     fs.write_skill_dir_atomic(&skill.id, &remote.target_dir, &remote.files)
         .await?;
@@ -1019,7 +1107,9 @@ async fn update_one_skill(
         fs_created_at: None,
         fs_updated_at: None,
     };
-    db::upsert_skill(pool, &updated_skill).await?;
+    db::upsert_skill(pool, &updated_skill)
+        .await
+        .map_err(|e| e.to_string())?;
     db::assign_github_repository_to_skill(
         pool,
         &remote.source.repo.owner,
@@ -1029,8 +1119,11 @@ async fn update_one_skill(
         &skill.id,
         &remote.source.source_path,
     )
-    .await?;
-    refresh_copy_installations(pool, fs, &skill.id, &remote.target_dir).await?;
+    .await
+    .map_err(|e| e.to_string())?;
+    if refresh_copies {
+        refresh_copy_installations(pool, fs, &skill.id, &remote.target_dir).await?;
+    }
 
     Ok(state_from_remote(skill, &remote, true))
 }
@@ -1041,7 +1134,9 @@ async fn refresh_copy_installations(
     skill_id: &str,
     source_dir: &Path,
 ) -> Result<(), String> {
-    let installations = db::get_skill_installations(pool, skill_id).await?;
+    let installations = db::get_skill_installations(pool, skill_id)
+        .await
+        .map_err(|e| e.to_string())?;
     let mut seen_targets = HashSet::new();
     let copy_targets = installations
         .into_iter()

@@ -6,7 +6,7 @@
 
 use crate::db::DbPool;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
+pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     // settings table
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS settings (
@@ -15,8 +15,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // operation_logs table — local-only structured operation history.
     sqlx::query(
@@ -41,8 +40,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     for index_sql in [
         "CREATE INDEX IF NOT EXISTS idx_operation_logs_created_at
@@ -58,10 +56,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         "CREATE INDEX IF NOT EXISTS idx_operation_logs_batch_id
          ON operation_logs(batch_id)",
     ] {
-        sqlx::query(index_sql)
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+        sqlx::query(index_sql).execute(pool).await?;
     }
 
     Ok(())

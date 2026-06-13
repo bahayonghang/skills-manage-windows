@@ -3,11 +3,16 @@ import { Loader2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { UpdateCenterTab } from "@/stores/updateCenterStore";
-import type { SkillRefreshScopeKind } from "@/types/skillUpdateInventory";
+import type {
+  SkillRefreshMode,
+  SkillRefreshScopeKind,
+} from "@/types/skillUpdateInventory";
 
 interface UpdateCenterToolbarProps {
   scopeKind: SkillRefreshScopeKind;
   onScopeKindChange: (next: SkillRefreshScopeKind) => void;
+  refreshMode: SkillRefreshMode;
+  onRefreshModeChange: (next: SkillRefreshMode) => void;
   isRefreshing: boolean;
   onRefresh: () => void;
   lastRefreshedAt: string | null;
@@ -21,6 +26,8 @@ interface UpdateCenterToolbarProps {
 export function UpdateCenterToolbar({
   scopeKind,
   onScopeKindChange,
+  refreshMode,
+  onRefreshModeChange,
   isRefreshing,
   onRefresh,
   lastRefreshedAt,
@@ -52,8 +59,30 @@ export function UpdateCenterToolbar({
           <option value="repositories" disabled={!scopeEnabled.repositories}>
             {t("central.updateCenter.scopeRepository")}
           </option>
+          <option value="platform" disabled={!scopeEnabled.platform}>
+            {t("central.updateCenter.scopePlatform")}
+          </option>
           <option value="skills" disabled={!scopeEnabled.skills}>
             {t("central.updateCenter.scopeCurrent")}
+          </option>
+        </select>
+        <label className="sr-only" htmlFor="update-center-refresh-mode">
+          {t("central.updateCenter.modeLabel")}
+        </label>
+        <select
+          id="update-center-refresh-mode"
+          className="h-7 rounded-lg border border-border bg-background px-2 text-sm"
+          value={refreshMode}
+          onChange={(event) =>
+            onRefreshModeChange(event.target.value as SkillRefreshMode)
+          }
+          disabled={isRefreshing}
+        >
+          <option value="regular">
+            {t("central.updateCenter.modeRegular")}
+          </option>
+          <option value="sync">
+            {t("central.updateCenter.modeSync")}
           </option>
         </select>
         <Button size="sm" onClick={onRefresh} disabled={isRefreshing}>

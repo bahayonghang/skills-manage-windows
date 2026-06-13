@@ -5,7 +5,7 @@
 
 use crate::db::DbPool;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
+pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     // collections table
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS collections (
@@ -17,8 +17,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // collection_skills table
     sqlx::query(
@@ -30,16 +29,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_collection_skills_skill_id
          ON collection_skills(skill_id)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(())
 }

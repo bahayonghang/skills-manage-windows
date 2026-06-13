@@ -1,8 +1,10 @@
+use crate::services::resource_budget::ResourceBudget;
+
 use super::*;
 pub(crate) async fn resolve_repo_source(
     repo_url: &str,
     auth_token: Option<&str>,
-) -> Result<ResolvedGitHubRepoSource, String> {
+) -> Result<ResolvedGitHubRepoSource, GithubImportError> {
     let parsed = parse_github_source(repo_url)?;
     let owner = parsed.owner;
     let repo = parsed.repo;
@@ -23,18 +25,26 @@ pub(crate) async fn resolve_repo_source(
     .await?;
 
     if response.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err("GitHub repository not found.".to_string());
+        return Err(GithubImportError::RepoNotFound);
     }
     if !response.status().is_success() {
         let status = response.status();
         return Err(
             classify_github_denial_response(response, "inspecting the repository")
                 .await
-                .unwrap_or_else(|| format!("Failed to inspect GitHub repository: HTTP {}", status)),
+                .unwrap_or_else(|| {
+                    GithubImportError::Http(format!(
+                        "Failed to inspect GitHub repository: HTTP {}",
+                        status
+                    ))
+                }),
         );
     }
 
-    let payload: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    let payload: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| GithubImportError::Parse(e.to_string()))?;
     let branch = payload
         .get("default_branch")
         .and_then(|v| v.as_str())
@@ -54,13 +64,13 @@ pub(crate) async fn resolve_repo_source(
     })
 }
 
-pub(super) fn parse_github_source(url: &str) -> Result<ParsedGitHubSource, String> {
+pub(super) fn parse_github_source(url: &str) -> Result<ParsedGitHubSource, GithubImportError> {
     let trimmed = url.trim();
     if trimmed.is_empty() {
-        return Err("Invalid GitHub repository URL.".to_string());
+        return Err(GithubImportError::InvalidRepoUrl);
     }
     if has_raw_path_traversal(trimmed) {
-        return Err("Repository subpath traversal is not supported.".to_string());
+        return Err(GithubImportError::SubpathTraversal);
     }
 
     let parse_target =
@@ -72,34 +82,34 @@ pub(super) fn parse_github_source(url: &str) -> Result<ParsedGitHubSource, Strin
             trimmed.to_string()
         };
 
-    let parsed = reqwest::Url::parse(&parse_target)
-        .map_err(|_| "Invalid GitHub repository URL.".to_string())?;
+    let parsed =
+        reqwest::Url::parse(&parse_target).map_err(|_| GithubImportError::InvalidRepoUrl)?;
 
     if parsed.scheme() != "https" {
-        return Err("Only https:// GitHub repository URLs are supported.".to_string());
+        return Err(GithubImportError::RepoUrlNotHttps);
     }
     let host = parsed.host_str().unwrap_or_default();
     if host != "github.com" && host != "www.github.com" {
-        return Err("Only github.com repository URLs are supported.".to_string());
+        return Err(GithubImportError::RepoUrlNotGithub);
     }
 
     let segments = parsed
         .path_segments()
-        .ok_or_else(|| "Invalid GitHub repository URL.".to_string())?
+        .ok_or(GithubImportError::InvalidRepoUrl)?
         .filter(|segment| !segment.is_empty())
         .collect::<Vec<_>>();
     let owner = segments
         .first()
         .filter(|segment| !segment.is_empty())
-        .ok_or_else(|| "GitHub repository URL must include an owner.".to_string())?;
+        .ok_or(GithubImportError::RepoUrlMissingOwner)?;
     let repo = segments
         .get(1)
         .filter(|segment| !segment.is_empty())
-        .ok_or_else(|| "GitHub repository URL must include a repository name.".to_string())?;
+        .ok_or(GithubImportError::RepoUrlMissingRepo)?;
 
     let repo = repo.strip_suffix(".git").unwrap_or(repo);
     if owner.is_empty() || repo.is_empty() {
-        return Err("GitHub repository URL is missing owner or repository.".to_string());
+        return Err(GithubImportError::RepoUrlMissingOwnerRepo);
     }
 
     let (branch, source_segments) = match segments.get(2).copied() {
@@ -107,11 +117,11 @@ pub(super) fn parse_github_source(url: &str) -> Result<ParsedGitHubSource, Strin
             let branch = segments
                 .get(3)
                 .filter(|segment| !segment.is_empty())
-                .ok_or_else(|| "GitHub tree URL must include a branch.".to_string())?;
+                .ok_or(GithubImportError::TreeUrlMissingBranch)?;
             (Some((*branch).to_string()), &segments[4..])
         }
         Some("blob") => {
-            return Err("GitHub blob URLs are not supported for repository import.".to_string());
+            return Err(GithubImportError::BlobUrlUnsupported);
         }
         Some(_) => (None, &segments[2..]),
         None => (None, &segments[2..]),
@@ -155,14 +165,16 @@ pub(super) fn has_raw_path_traversal(value: &str) -> bool {
         .any(|segment| segment == ".." || segment == "%2e%2e")
 }
 
-pub(super) fn normalize_repo_subpath(segments: &[&str]) -> Result<Option<String>, String> {
+pub(super) fn normalize_repo_subpath(
+    segments: &[&str],
+) -> Result<Option<String>, GithubImportError> {
     if segments.is_empty() {
         return Ok(None);
     }
 
     let path = segments.join("/");
     if !is_safe_repo_relative_path(&path) {
-        return Err(format!("Repository subpath '{}' is not supported.", path));
+        return Err(GithubImportError::UnsupportedSubpath(path));
     }
 
     Ok(Some(path))
@@ -172,7 +184,7 @@ pub(crate) async fn fetch_repo_skill_candidates_from_source(
     repo: &GitHubRepoRef,
     source_path: Option<&str>,
     auth_token: Option<&str>,
-) -> Result<Vec<RemoteSkillCandidate>, String> {
+) -> Result<Vec<RemoteSkillCandidate>, GithubImportError> {
     let client = github_client()?;
     let snapshot = download_repo_snapshot(&client, repo, auth_token).await?;
     build_repo_skill_candidates_from_snapshot_at_path(repo, &snapshot, source_path)
@@ -181,7 +193,7 @@ pub(crate) async fn fetch_repo_skill_candidates_from_source(
 pub(crate) async fn inspect_github_repo_skills_with_auth(
     repo_url: &str,
     auth_token: Option<&str>,
-) -> Result<InspectedGitHubRepoSkills, String> {
+) -> Result<InspectedGitHubRepoSkills, GithubImportError> {
     let resolved = resolve_repo_source(repo_url, auth_token).await?;
     inspect_repo_skill_candidates_from_source(
         &resolved.repo,
@@ -195,7 +207,7 @@ pub(crate) async fn inspect_repo_skill_candidates_from_source(
     repo: &GitHubRepoRef,
     source_path: Option<&str>,
     auth_token: Option<&str>,
-) -> Result<InspectedGitHubRepoSkills, String> {
+) -> Result<InspectedGitHubRepoSkills, GithubImportError> {
     let client = github_client()?;
     let snapshot = download_repo_snapshot(&client, repo, auth_token).await?;
     inspect_repo_skill_candidates_from_snapshot_at_path(repo, &snapshot, source_path)
@@ -205,7 +217,7 @@ pub(crate) async fn inspect_repo_skill_candidates_from_source(
 pub(super) fn build_repo_skill_candidates_from_snapshot(
     repo: &GitHubRepoRef,
     snapshot: &GitHubRepoSnapshot,
-) -> Result<Vec<RemoteSkillCandidate>, String> {
+) -> Result<Vec<RemoteSkillCandidate>, GithubImportError> {
     build_repo_skill_candidates_from_snapshot_at_path(repo, snapshot, None)
 }
 
@@ -213,11 +225,11 @@ pub(crate) fn build_repo_skill_candidates_from_snapshot_at_path(
     repo: &GitHubRepoRef,
     snapshot: &GitHubRepoSnapshot,
     source_path: Option<&str>,
-) -> Result<Vec<RemoteSkillCandidate>, String> {
+) -> Result<Vec<RemoteSkillCandidate>, GithubImportError> {
     let inspected =
         inspect_repo_skill_candidates_from_snapshot_at_path(repo, snapshot, source_path)?;
     if let Some(invalid) = inspected.invalid_candidates.into_iter().next() {
-        return Err(invalid.detail);
+        return Err(GithubImportError::InvalidCandidate(invalid.detail));
     }
     Ok(inspected.valid_candidates)
 }
@@ -226,7 +238,7 @@ pub(crate) fn inspect_repo_skill_candidates_from_snapshot_at_path(
     repo: &GitHubRepoRef,
     snapshot: &GitHubRepoSnapshot,
     source_path: Option<&str>,
-) -> Result<InspectedGitHubRepoSkills, String> {
+) -> Result<InspectedGitHubRepoSkills, GithubImportError> {
     let direct_endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
     let manifests = discover_skill_manifests(snapshot, source_path)?;
 
@@ -267,7 +279,7 @@ pub(super) async fn build_remote_repo_skill_candidates_from_workspace(
     repo: &GitHubRepoRef,
     remote_repo_dir: &str,
     source_path: Option<&str>,
-) -> Result<Vec<RemoteSkillCandidate>, String> {
+) -> Result<Vec<RemoteSkillCandidate>, GithubImportError> {
     let direct_endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
     let manifest_paths = remote_skill_manifest_paths(connection, remote_repo_dir).await?;
     let manifests = discover_skill_manifests_from_paths(
@@ -279,9 +291,15 @@ pub(super) async fn build_remote_repo_skill_candidates_from_workspace(
     let mut seen_names = HashSet::new();
     for manifest in manifests {
         let skill_md_remote_path = remote_join(remote_repo_dir, &manifest.skill_md_path);
-        let raw = connection.read_file(&skill_md_remote_path).await?;
+        let raw = connection
+            .read_file(&skill_md_remote_path)
+            .await
+            .map_err(|e| GithubImportError::Remote(e.to_string()))?;
+        ResourceBudget::default_skill()
+            .reject_file_read_size(&skill_md_remote_path, raw.len() as u64)
+            .map_err(GithubImportError::Budget)?;
         let candidate = build_remote_skill_candidate(repo, &manifest, raw, direct_endpoint)
-            .map_err(|invalid| invalid.detail)?;
+            .map_err(|invalid| GithubImportError::InvalidCandidate(invalid.detail))?;
         if !seen_names.insert(candidate.skill_name.clone()) {
             continue;
         }
@@ -314,7 +332,7 @@ pub(super) fn build_remote_skill_candidate(
             sanitize_skill_id(&repo.repo).map_err(|error| InvalidRemoteSkillCandidate {
                 source_path: manifest.source_path.clone(),
                 reason: "invalid_skill_id".to_string(),
-                detail: error,
+                detail: error.to_string(),
             })?;
         repo_skill_id
             .strip_suffix("-skill")
@@ -325,7 +343,7 @@ pub(super) fn build_remote_skill_candidate(
             InvalidRemoteSkillCandidate {
                 source_path: manifest.source_path.clone(),
                 reason: "invalid_skill_id".to_string(),
-                detail: error,
+                detail: error.to_string(),
             }
         })?
     };
@@ -381,7 +399,7 @@ pub(super) fn invalid_frontmatter_message(manifest: &SnapshotSkillManifest) -> S
 pub(super) async fn remote_skill_manifest_paths(
     connection: &ConnectedRemoteTarget,
     remote_repo_dir: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, GithubImportError> {
     let output = connection
         .run_script(
             r#"set -eu
@@ -391,7 +409,8 @@ find . -type f -iname 'SKILL.md' -print | sed 's#^\./##'
 "#,
             &[remote_repo_dir],
         )
-        .await?;
+        .await
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
 
     output
         .lines()
@@ -417,14 +436,14 @@ pub(super) struct SnapshotSkillManifest {
 pub(super) fn discover_skill_manifests(
     snapshot: &GitHubRepoSnapshot,
     source_path: Option<&str>,
-) -> Result<Vec<SnapshotSkillManifest>, String> {
+) -> Result<Vec<SnapshotSkillManifest>, GithubImportError> {
     discover_skill_manifests_from_paths(snapshot.files.keys().map(String::as_str), source_path)
 }
 
 pub(super) fn discover_skill_manifests_from_paths<'a, I>(
     paths: I,
     source_path: Option<&str>,
-) -> Result<Vec<SnapshotSkillManifest>, String>
+) -> Result<Vec<SnapshotSkillManifest>, GithubImportError>
 where
     I: IntoIterator<Item = &'a str>,
 {
@@ -473,7 +492,7 @@ pub(super) fn direct_skill_manifest(
 pub(super) fn immediate_skill_manifests(
     paths: &HashSet<String>,
     search_root: &str,
-) -> Result<Vec<SnapshotSkillManifest>, String> {
+) -> Result<Vec<SnapshotSkillManifest>, GithubImportError> {
     let mut manifests = paths
         .iter()
         .filter(|path| is_immediate_skill_manifest(path, search_root))
@@ -486,7 +505,7 @@ pub(super) fn immediate_skill_manifests(
 pub(super) fn recursive_skill_manifests(
     paths: &HashSet<String>,
     base_path: &str,
-) -> Result<Vec<SnapshotSkillManifest>, String> {
+) -> Result<Vec<SnapshotSkillManifest>, GithubImportError> {
     let mut manifests = paths
         .iter()
         .filter(|path| is_recursive_skill_manifest(path, base_path))
@@ -583,7 +602,7 @@ pub(super) fn source_path_from_skill_md(path: &str) -> Option<String> {
         .map(|_| normalized[..normalized.len() - "/SKILL.md".len()].to_string())
 }
 
-pub(super) fn join_repo_path(base_path: &str, child: &str) -> Result<String, String> {
+pub(super) fn join_repo_path(base_path: &str, child: &str) -> Result<String, GithubImportError> {
     let mut parts = Vec::new();
     for part in base_path.split('/').chain(child.split('/')) {
         let trimmed = part.trim();
@@ -595,13 +614,13 @@ pub(super) fn join_repo_path(base_path: &str, child: &str) -> Result<String, Str
     normalize_repo_path(&parts.join("/"))
 }
 
-pub(super) fn normalize_repo_path(path: &str) -> Result<String, String> {
+pub(super) fn normalize_repo_path(path: &str) -> Result<String, GithubImportError> {
     let normalized = path.trim().trim_matches('/').replace('\\', "/");
     if normalized.is_empty() || normalized == "." {
         return Ok(String::new());
     }
     if !is_safe_repo_relative_path(&normalized) {
-        return Err(format!("Repository path '{}' is not supported.", path));
+        return Err(GithubImportError::UnsupportedRepoPath(path.to_string()));
     }
     Ok(normalized)
 }
@@ -650,7 +669,7 @@ pub(crate) fn parse_frontmatter(content: &str) -> Option<SkillFrontmatter> {
     None
 }
 
-pub(super) fn sanitize_skill_id(raw: &str) -> Result<String, String> {
+pub(super) fn sanitize_skill_id(raw: &str) -> Result<String, GithubImportError> {
     let lowered = raw.trim().to_lowercase();
     let mut sanitized = String::new();
     let mut last_was_dash = false;
@@ -665,7 +684,7 @@ pub(super) fn sanitize_skill_id(raw: &str) -> Result<String, String> {
     }
     let sanitized = sanitized.trim_matches('-').to_string();
     if sanitized.is_empty() {
-        return Err(format!("Skill identifier '{}' is not supported.", raw));
+        return Err(GithubImportError::InvalidSkillIdentifier(raw.to_string()));
     }
     Ok(sanitized)
 }

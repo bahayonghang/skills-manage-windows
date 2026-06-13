@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { SourceMeta } from "@/components/central/updateCenter/SourceMeta";
 import type { UpdatableSkill } from "@/types/skillUpdateInventory";
+import type { RepositorySourceDisplayInfo } from "@/lib/centralConflictSource";
 
 export interface UpdatableRowState {
   selected: boolean;
@@ -12,6 +14,7 @@ export interface UpdatableRowState {
 interface UpdatableTabPanelProps {
   items: UpdatableSkill[];
   state: Record<string, UpdatableRowState>;
+  repositorySources: ReadonlyMap<string, RepositorySourceDisplayInfo>;
   onChange: (skillId: string, patch: Partial<UpdatableRowState>) => void;
   onToggleAll: (selected: boolean) => void;
 }
@@ -19,6 +22,7 @@ interface UpdatableTabPanelProps {
 export function UpdatableTabPanel({
   items,
   state,
+  repositorySources,
   onChange,
   onToggleAll,
 }: UpdatableTabPanelProps) {
@@ -61,10 +65,14 @@ export function UpdatableTabPanel({
         {items.map((item) => {
           const skillId = item.state.skill_id;
           const checked = state[skillId]?.selected ?? false;
+          const source = item.repositoryId
+            ? repositorySources.get(item.repositoryId)
+            : null;
+          const repositoryLabel = source?.label ?? item.repositoryId;
           return (
             <label
               key={skillId}
-              className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-background p-3"
+              className="flex cursor-pointer items-start gap-3 rounded-xl bg-background/80 p-3 ring-1 ring-border/80 transition-colors hover:bg-muted/20"
             >
               <Checkbox
                 checked={checked}
@@ -75,13 +83,12 @@ export function UpdatableTabPanel({
                 <span className="block truncate text-sm font-medium text-foreground">
                   {skillId}
                 </span>
-                {item.state.source_path && (
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {t("central.updateCenter.sourcePath", {
-                      path: item.state.source_path,
-                    })}
-                  </span>
-                )}
+                <SourceMeta
+                  repositoryLabel={repositoryLabel}
+                  sourcePath={item.state.source_path}
+                  sourceUrl={item.state.source_url ?? source?.url}
+                  diagnostics={item.diagnostics}
+                />
               </span>
             </label>
           );

@@ -31,6 +31,10 @@ vi.mock("../stores/updateCenterStore", () => ({
   useUpdateCenterStore: vi.fn(),
 }));
 
+vi.mock("@/hooks/useSkillCallCounts", () => ({
+  useSkillCallCounts: vi.fn(() => ({})),
+}));
+
 vi.mock("sonner", () => ({
   toast: {
     success: vi.fn(),
@@ -84,6 +88,7 @@ import { useSkillStore } from "../stores/skillStore";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
 import { useSkillDetailStore } from "../stores/skillDetailStore";
 import { useUpdateCenterStore } from "../stores/updateCenterStore";
+import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
 import * as tauriBridge from "@/lib/tauri";
 
 const userSourceText = /用户来源|User source/i;
@@ -471,12 +476,14 @@ const mockRefreshCounts = vi.fn();
 const mockRefreshInstallations = vi.fn();
 const mockRescan = vi.fn();
 const mockScanDuplicates = vi.fn();
+const mockScanDeletedPlatformCopies = vi.fn();
 const mockOpenUpdateCenter = vi.fn();
 const mockUsePlatformStore = vi.mocked(usePlatformStore);
 const mockUseSkillStore = vi.mocked(useSkillStore);
 const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
 const mockUseSkillDetailStore = vi.mocked(useSkillDetailStore);
 const mockUseUpdateCenterStore = vi.mocked(useUpdateCenterStore);
+const mockUseSkillCallCounts = vi.mocked(useSkillCallCounts);
 const centralStoreHarness = mockUseCentralSkillsStore as typeof mockUseCentralSkillsStore & {
   setState: (nextState: Record<string, unknown>) => void;
 };
@@ -550,6 +557,7 @@ function buildUpdateCenterStoreState(overrides: Record<string, unknown> = {}) {
       remoteAdded: [],
       remoteMissing: [],
       platformDuplicates: [],
+      deletedPlatformCopies: [],
       orphans: [],
       failedRepositories: [],
       generatedAt: "2026-05-22T00:00:00Z",
@@ -557,6 +565,7 @@ function buildUpdateCenterStoreState(overrides: Record<string, unknown> = {}) {
     isDialogOpen: false,
     activeTab: "updatable",
     scanDuplicates: mockScanDuplicates,
+    scanDeletedPlatformCopies: mockScanDeletedPlatformCopies,
     openDialog: mockOpenUpdateCenter,
     closeDialog: vi.fn(),
     setActiveTab: vi.fn(),
@@ -644,7 +653,10 @@ describe("PlatformView", () => {
     mockBatchInstallSkills.mockResolvedValue({ succeeded: [], skipped: [], failed: [] });
     mockRescan.mockReset();
     mockScanDuplicates.mockReset();
+    mockScanDeletedPlatformCopies.mockReset();
     mockOpenUpdateCenter.mockReset();
+    mockUseSkillCallCounts.mockReset();
+    mockUseSkillCallCounts.mockReturnValue({});
     vi.mocked(toast.success).mockReset();
     vi.mocked(toast.error).mockReset();
     vi.mocked(toast.info).mockReset();
@@ -1250,6 +1262,47 @@ describe("PlatformView", () => {
     });
   });
 
+  it("sorts platform skills by 30-day call count using all platform skill names", async () => {
+    mockUseSkillCallCounts.mockReturnValue({
+      "Alpha Skill": 10,
+      "Beta Skill": 2,
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockSortablePlatformSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    expect(mockUseSkillCallCounts).toHaveBeenCalledWith(
+      ["Beta Skill", "Alpha Skill", "Gamma Skill"],
+      30
+    );
+
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort"));
+    expect(screen.getByTestId("platform-toolbar-sort-callCount-asc")).toHaveTextContent(
+      "调用次数"
+    );
+    expect(screen.getByTestId("platform-toolbar-sort-callCount-desc")).toHaveTextContent(
+      "调用次数"
+    );
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort-callCount-asc"));
+
+    await waitFor(() => {
+      expect(visibleSkillNames()).toEqual(["Gamma Skill", "Beta Skill", "Alpha Skill"]);
+    });
+
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort"));
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort-callCount-desc"));
+
+    await waitFor(() => {
+      expect(visibleSkillNames()).toEqual(["Alpha Skill", "Beta Skill", "Gamma Skill"]);
+    });
+  });
+
   it("combines Claude source tabs, search, and timestamp sorting", async () => {
     mockUseSkillStore.mockImplementation((selector?: unknown) => {
       const state = buildSkillStoreState({
@@ -1599,7 +1652,10 @@ describe("PlatformView", () => {
       expect(mockRescan).toHaveBeenCalledTimes(1);
       expect(mockGetSkillsByAgent).toHaveBeenCalledWith("claude-code");
       expect(mockScanDuplicates).toHaveBeenCalledWith(["claude-code"]);
-      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("duplicates");
+      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("duplicates", {
+        agentIds: ["claude-code"],
+        mode: "sync",
+      });
     });
     expect(toast.success).toHaveBeenCalled();
   });
@@ -1651,7 +1707,10 @@ describe("PlatformView", () => {
 
     await waitFor(() => {
       expect(mockScanDuplicates).toHaveBeenCalledWith(["codex"]);
-      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("duplicates");
+      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("duplicates", {
+        agentIds: ["codex"],
+        mode: "sync",
+      });
     });
   });
 
@@ -1663,6 +1722,55 @@ describe("PlatformView", () => {
     await waitFor(() => {
       expect(toast.info).toHaveBeenCalledWith("未发现可清理的重复技能");
     });
+    expect(mockOpenUpdateCenter).not.toHaveBeenCalled();
+  });
+
+  it("routes deleted-copy scans through the UpdateCenter store and opens the deleted platform copies tab", async () => {
+    mockScanDeletedPlatformCopies.mockImplementation(async () => {
+      const current = updateCenterHarness.getState();
+      updateCenterHarness.setState({
+        inventory: {
+          ...current.inventory,
+          deletedPlatformCopies: [
+            {
+              agentId: "claude-code",
+              skillId: "removed-skill",
+              skillName: "removed-skill",
+              writablePaths: ["~/.claude/skills/removed-skill"],
+            },
+          ],
+        },
+      });
+    });
+
+    renderPlatformView();
+    mockGetSkillsByAgent.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: /检测 Claude Code 中已删除技能的残留副本/ }));
+
+    await waitFor(() => {
+      expect(mockRescan).toHaveBeenCalledTimes(1);
+      expect(mockGetSkillsByAgent).toHaveBeenCalledWith("claude-code");
+      expect(mockScanDeletedPlatformCopies).toHaveBeenCalledWith(["claude-code"]);
+      expect(mockOpenUpdateCenter).toHaveBeenCalledWith("deletedPlatformCopies", {
+        agentIds: ["claude-code"],
+        mode: "sync",
+      });
+    });
+    expect(toast.success).toHaveBeenCalledWith(
+      "发现 1 个已删除技能，可清理 1 个平台副本",
+    );
+  });
+
+  it("shows a toast and does not open the UpdateCenter when no deleted platform copies are found", async () => {
+    renderPlatformView();
+
+    fireEvent.click(screen.getByRole("button", { name: /检测 Claude Code 中已删除技能的残留副本/ }));
+
+    await waitFor(() => {
+      expect(toast.info).toHaveBeenCalledWith("未发现可清理的已删除技能副本");
+    });
+    expect(mockScanDeletedPlatformCopies).toHaveBeenCalledWith(["claude-code"]);
     expect(mockOpenUpdateCenter).not.toHaveBeenCalled();
   });
 

@@ -1,18 +1,47 @@
 import { useMemo, type RefObject } from "react";
 import type { TFunction } from "i18next";
 
-import { CentralSkillEmptyState, CentralSkillFirstVisitEmptyState } from "@/components/central/CentralSkillEmptyStates";
+import {
+  CentralSkillEmptyState,
+  CentralSkillFirstVisitEmptyState,
+} from "@/components/central/CentralSkillEmptyStates";
+import { buildCentralSkillCardProps } from "@/components/central/centralSkillCardProps";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
+import {
+  CENTRAL_SKILL_CARD_GRID_GAP,
+  CENTRAL_SKILL_CARD_MAX_COLUMNS,
+  CENTRAL_SKILL_CARD_MIN_WIDTH,
+  centralSkillCardGridTemplateColumns,
+} from "@/lib/centralSkillGrid";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
+import type { ViewDensity, ViewMode } from "@/lib/centralViewState";
+import { getRepoDotColor } from "@/lib/tagColor";
 import { cn } from "@/lib/utils";
-import type {
-  CentralSkillUpdateState,
-  SkillWithLinks,
-} from "@/types";
+import type { CentralSkillUpdateState, SkillWithLinks } from "@/types";
+
+// 卡片高度常量 —— 必须与 UnifiedSkillCard 的 min-h 保持一致，
+// 否则虚拟列表会出现间隙或重叠。
+const LIST_ITEM_HEIGHT_COMFORTABLE = 196;
+const LIST_ITEM_HEIGHT_COMPACT = 148;
+// grid 卡含 footer 分隔区（repo·调用数｜平台点）+ 底部 tag 行；高度贴合内容，消除中部死白。
+const GRID_ITEM_HEIGHT_COMFORTABLE = 192;
+const GRID_ITEM_HEIGHT_COMPACT = 172;
+
+function listItemHeight(density: ViewDensity): number {
+  return density === "compact"
+    ? LIST_ITEM_HEIGHT_COMPACT
+    : LIST_ITEM_HEIGHT_COMFORTABLE;
+}
+
+function gridItemHeight(density: ViewDensity): number {
+  return density === "compact"
+    ? GRID_ITEM_HEIGHT_COMPACT
+    : GRID_ITEM_HEIGHT_COMFORTABLE;
+}
 
 export function CentralSkillListContent({
   availableInstallAgents,
@@ -20,9 +49,14 @@ export function CentralSkillListContent({
   filteredSkills,
   isLoading,
   isSearchActive,
+  viewMode = "grid",
+  viewDensity = "comfortable",
+  onAddSkillTag,
+  onCreateSkillTag,
   onDelete,
   onDetail,
   onInstallTo,
+  onRemoveSkillTag,
   onTogglePlatform,
   onToggleSelection,
   onUpdateCentral,
@@ -33,6 +67,7 @@ export function CentralSkillListContent({
   skillsCount,
   sortedSkills,
   t,
+  tags,
   togglingAgentId,
   updateStatuses,
   updatingSkillIds,
@@ -42,9 +77,14 @@ export function CentralSkillListContent({
   filteredSkills: SkillWithLinks[];
   isLoading: boolean;
   isSearchActive: boolean;
+  viewMode?: ViewMode;
+  viewDensity?: ViewDensity;
+  onAddSkillTag?: (skillId: string, tagId: string) => void;
+  onCreateSkillTag?: (skillId: string, name: string) => void;
   onDelete: (skill: SkillWithLinks) => void;
   onDetail: (skillId: string) => void;
   onInstallTo: (skill: SkillWithLinks) => void;
+  onRemoveSkillTag?: (skillId: string, tagId: string) => void;
   onTogglePlatform: (skillId: string, agentId: string) => Promise<void>;
   onToggleSelection: (skillId: string) => void;
   onUpdateCentral: (skillIds: string[]) => void;
@@ -55,81 +95,57 @@ export function CentralSkillListContent({
   skillsCount: number;
   sortedSkills: SkillWithLinks[];
   t: TFunction;
+  tags?: readonly { id: string; name: string; color?: string | null }[];
   togglingAgentId: string | null;
   updateStatuses: Record<string, CentralSkillUpdateState>;
   updatingSkillIds: string[];
 }) {
   const summarySkillIds = useMemo(
     () => sortedSkills.map((skill) => skill.id),
-    [sortedSkills]
+    [sortedSkills],
   );
   const aiSummaries = useSkillExplanationSummaries(summarySkillIds, "zh");
   const skillNamesForUsage = useMemo(
     () => Array.from(new Set(sortedSkills.map((s) => s.name))),
-    [sortedSkills]
+    [sortedSkills],
   );
   const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
 
-  function renderSearchResult(skill: SkillWithLinks) {
-    return (
-      <UnifiedSkillCard
-        key={skill.id}
-        name={skill.name}
-        description={skill.description}
-        aiSummary={aiSummaries[skill.id]}
-        usageBadge={usageCounts?.[skill.name]}
-        checkbox={{
-          checked: selectedSkillIdSet.has(skill.id),
-          onChange: () => onToggleSelection(skill.id),
-        }}
-        tags={(skill.tags ?? []).map((tag) => ({ key: tag.id, label: tag.name }))}
-        publisher={skill.repository?.name}
-        updateStatus={
-          updateStatuses[skill.id]
-            ? {
-                ...updateStatuses[skill.id],
-                isUpdating: updatingSkillIds.includes(skill.id),
-              }
-            : undefined
-        }
-        onDetail={() => onDetail(skill.id)}
-        onInstallTo={() => onInstallTo(skill)}
-        onUpdateCentral={() => onUpdateCentral([skill.id])}
-        onDeleteFromCentral={() => onDelete(skill)}
-        detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
-        density="compact"
-        className="h-[132px]"
-      />
-    );
+  // 搜索激活时强制 list 单列（更易扫读结果）；其他场景遵循 viewMode。
+  const effectiveView: ViewMode = isSearchActive ? "list" : viewMode;
+  const cardDensity = viewDensity;
+
+  function buildCardProps(skill: SkillWithLinks) {
+    return buildCentralSkillCardProps(skill, {
+      aiSummaries,
+      usageCounts,
+      selectedSkillIdSet,
+      updateStatuses,
+      updatingSkillIds,
+      tags,
+      t,
+      density: cardDensity,
+      setDetailButtonRef,
+      onToggleSelection,
+      onDetail,
+      onInstallTo,
+      onUpdateCentral,
+      onDelete,
+      onAddSkillTag,
+      onCreateSkillTag,
+      onRemoveSkillTag,
+    });
+  }
+
+  function renderListCard(skill: SkillWithLinks) {
+    return <UnifiedSkillCard key={skill.id} {...buildCardProps(skill)} />;
   }
 
   function renderGridCard(skill: SkillWithLinks) {
     return (
       <UnifiedSkillCard
         key={skill.id}
-        name={skill.name}
-        description={skill.description}
-        aiSummary={aiSummaries[skill.id]}
-        usageBadge={usageCounts?.[skill.name]}
-        checkbox={{
-          checked: selectedSkillIdSet.has(skill.id),
-          onChange: () => onToggleSelection(skill.id),
-        }}
-        tags={(skill.tags ?? []).map((tag) => ({ key: tag.id, label: tag.name }))}
-        publisher={skill.repository?.name}
-        updateStatus={
-          updateStatuses[skill.id]
-            ? {
-                ...updateStatuses[skill.id],
-                isUpdating: updatingSkillIds.includes(skill.id),
-              }
-            : undefined
-        }
-        onDetail={() => onDetail(skill.id)}
-        onInstallTo={() => onInstallTo(skill)}
-        onUpdateCentral={() => onUpdateCentral([skill.id])}
-        onDeleteFromCentral={() => onDelete(skill)}
-        detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
+        {...buildCardProps(skill)}
         platformIcons={{
           agents: availableInstallAgents,
           linkedAgents: skill.linked_agents,
@@ -138,8 +154,12 @@ export function CentralSkillListContent({
           onToggle: onTogglePlatform,
           togglingAgentId,
         }}
-        density="compact"
-        className="h-[212px]"
+        footer={{
+          repoName: skill.repository?.name,
+          repoColor: skill.repository?.name
+            ? getRepoDotColor(skill.repository.name)
+            : undefined,
+        }}
       />
     );
   }
@@ -150,7 +170,7 @@ export function CentralSkillListContent({
       data-testid="central-skill-list-scroll"
       className={cn(
         "scrollbar-subtle flex-1 overflow-auto p-6",
-        selectedCount > 0 && "pb-28"
+        selectedCount > 0 && "pb-28",
       )}
     >
       {isLoading ? (
@@ -158,38 +178,45 @@ export function CentralSkillListContent({
       ) : skillsCount === 0 ? (
         <CentralSkillFirstVisitEmptyState />
       ) : filteredSkills.length === 0 ? (
-        <CentralSkillEmptyState message={t("central.noMatch", { query: searchQuery })} />
-      ) : isSearchActive ? (
+        <CentralSkillEmptyState
+          message={t("central.noMatch", { query: searchQuery })}
+        />
+      ) : effectiveView === "list" ? (
         sortedSkills.length > 60 ? (
           <VirtualizedList
             items={sortedSkills}
-            itemHeight={132}
+            itemHeight={listItemHeight(cardDensity)}
             itemGap={12}
             overscan={8}
             scrollContainerRef={contentRef}
             itemKey={(skill) => skill.id}
-            renderItem={(skill) => renderSearchResult(skill)}
+            renderItem={(skill) => renderListCard(skill)}
           />
         ) : (
           <div className="space-y-3">
-            {sortedSkills.map((skill) => renderSearchResult(skill))}
+            {sortedSkills.map((skill) => renderListCard(skill))}
           </div>
         )
       ) : sortedSkills.length > 40 ? (
         <VirtualizedGrid
           items={sortedSkills}
-          itemHeight={212}
-          rowGap={16}
-          columnGap={16}
+          itemHeight={gridItemHeight(cardDensity)}
+          rowGap={CENTRAL_SKILL_CARD_GRID_GAP}
+          columnGap={CENTRAL_SKILL_CARD_GRID_GAP}
           overscanRows={3}
-          minColumnWidth={420}
-          maxColumns={2}
+          minColumnWidth={CENTRAL_SKILL_CARD_MIN_WIDTH}
+          maxColumns={CENTRAL_SKILL_CARD_MAX_COLUMNS}
           scrollContainerRef={contentRef}
           itemKey={(skill) => skill.id}
           renderItem={(skill) => renderGridCard(skill)}
         />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div
+          className="grid gap-4"
+          style={{
+            gridTemplateColumns: centralSkillCardGridTemplateColumns(),
+          }}
+        >
           {sortedSkills.map((skill) => renderGridCard(skill))}
         </div>
       )}

@@ -4,6 +4,8 @@ use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
+use super::error::AiProviderError;
+
 const LEGACY_AI_API_KEY_SETTING_KEY: &str = AI_API_KEY_SECRET_KEY;
 const DEFAULT_AI_PROVIDER: &str = "claude";
 const AI_API_KEY_MIGRATION_SETTING_KEY: &str = "ai_api_key_keyring_migration_v1";
@@ -40,10 +42,10 @@ fn secret_fingerprint(
     secrets: &dyn SecretStore,
     key: &str,
     action: &str,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, AiProviderError> {
     secrets
         .get(key)
-        .map_err(|error| map_secret_error(action, error))
+        .map_err(|error| AiProviderError::Secret(map_secret_error(action, error)))
         .map(|value| {
             value
                 .and_then(normalize_ai_api_key)
@@ -98,25 +100,27 @@ async fn record_ai_api_key_migration_failure(pool: &DbPool, error: &str, reason:
     .await;
 }
 
-async fn legacy_ai_api_key_from_settings(pool: &DbPool) -> Result<Option<String>, String> {
+async fn legacy_ai_api_key_from_settings(pool: &DbPool) -> Result<Option<String>, AiProviderError> {
     Ok(db::get_setting(pool, LEGACY_AI_API_KEY_SETTING_KEY)
         .await?
         .and_then(normalize_ai_api_key))
 }
 
-async fn mark_ai_api_key_migration_complete(pool: &DbPool) -> Result<(), String> {
-    db::set_setting(pool, AI_API_KEY_MIGRATION_SETTING_KEY, "1").await
+async fn mark_ai_api_key_migration_complete(pool: &DbPool) -> Result<(), AiProviderError> {
+    db::set_setting(pool, AI_API_KEY_MIGRATION_SETTING_KEY, "1").await?;
+    Ok(())
 }
 
-async fn is_ai_api_key_migration_marked(pool: &DbPool) -> Result<bool, String> {
+async fn is_ai_api_key_migration_marked(pool: &DbPool) -> Result<bool, AiProviderError> {
     Ok(db::get_setting(pool, AI_API_KEY_MIGRATION_SETTING_KEY)
         .await?
         .as_deref()
         == Some("1"))
 }
 
-async fn delete_legacy_ai_api_key_setting(pool: &DbPool) -> Result<(), String> {
-    db::delete_setting(pool, LEGACY_AI_API_KEY_SETTING_KEY).await
+async fn delete_legacy_ai_api_key_setting(pool: &DbPool) -> Result<(), AiProviderError> {
+    db::delete_setting(pool, LEGACY_AI_API_KEY_SETTING_KEY).await?;
+    Ok(())
 }
 
 fn log_ai_api_key_migration_warning(message: impl AsRef<str>) {
@@ -126,7 +130,7 @@ fn log_ai_api_key_migration_warning(message: impl AsRef<str>) {
 async fn migrate_ai_api_key_to_secret_store(
     pool: &DbPool,
     secrets: &dyn SecretStore,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, AiProviderError> {
     if is_ai_api_key_migration_marked(pool).await? {
         return Ok(None);
     }
@@ -191,7 +195,7 @@ async fn migrate_ai_api_key_to_provider_secret_store(
     pool: &DbPool,
     secrets: &dyn SecretStore,
     provider: &str,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, AiProviderError> {
     let Some(token) = legacy_ai_api_key_from_settings(pool).await? else {
         return Ok(None);
     };
@@ -260,7 +264,7 @@ async fn migrate_ai_api_key_to_provider_secret_store(
 pub async fn migrate_ai_api_key_on_startup(
     pool: &DbPool,
     secrets: &dyn SecretStore,
-) -> Result<(), String> {
+) -> Result<(), AiProviderError> {
     let _ = migrate_ai_api_key_to_secret_store(pool, secrets).await?;
     Ok(())
 }
@@ -269,7 +273,7 @@ pub(crate) async fn ai_api_key_from_secret_store(
     pool: &DbPool,
     secrets: &dyn SecretStore,
     provider: Option<&str>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, AiProviderError> {
     let key = provider_secret_key(provider);
     let provider_id = normalize_provider(provider);
     let mut secret_error = None;
@@ -319,7 +323,7 @@ pub(crate) async fn ai_api_key_from_secret_store(
     }
 
     if let Some(error) = migration_error.or(secret_error) {
-        return Err(error);
+        return Err(AiProviderError::Secret(error));
     }
 
     Ok(None)
@@ -329,11 +333,11 @@ fn available_secret_state(
     secrets: &dyn SecretStore,
     key: &str,
     action: &str,
-) -> Result<Option<SecretStorageState>, String> {
+) -> Result<Option<SecretStorageState>, AiProviderError> {
     match secrets.state(key) {
         Ok(state) if state.is_available() => Ok(Some(state)),
         Ok(_) => Ok(None),
-        Err(error) => Err(map_secret_error(action, error)),
+        Err(error) => Err(AiProviderError::Secret(map_secret_error(action, error))),
     }
 }
 
@@ -341,7 +345,7 @@ pub async fn get_ai_api_key_state_impl(
     pool: &DbPool,
     secrets: &dyn SecretStore,
     provider: Option<&str>,
-) -> Result<AiApiKeyState, String> {
+) -> Result<AiApiKeyState, AiProviderError> {
     let provider_id = resolve_operation_provider(pool, provider).await;
     let key = provider_secret_key(Some(&provider_id));
     let mut migration_error = migrate_ai_api_key_to_secret_store(pool, secrets).await?;
@@ -352,7 +356,7 @@ pub async fn get_ai_api_key_state_impl(
             let (fingerprint, fingerprint_error) =
                 match secret_fingerprint(secrets, &key, "fingerprint") {
                     Ok(fingerprint) => (fingerprint, None),
-                    Err(error) => (None, Some(error)),
+                    Err(error) => (None, Some(error.to_string())),
                 };
             return Ok(AiApiKeyState {
                 provider: provider_id,
@@ -363,7 +367,7 @@ pub async fn get_ai_api_key_state_impl(
             });
         }
         Ok(None) => {}
-        Err(error) => state_error = Some(error),
+        Err(error) => state_error = Some(error.to_string()),
     }
 
     match available_secret_state(secrets, AI_API_KEY_SECRET_KEY, "inspect legacy") {
@@ -371,7 +375,7 @@ pub async fn get_ai_api_key_state_impl(
             let (fingerprint, fingerprint_error) =
                 match secret_fingerprint(secrets, AI_API_KEY_SECRET_KEY, "fingerprint legacy") {
                     Ok(fingerprint) => (fingerprint, None),
-                    Err(error) => (None, Some(error)),
+                    Err(error) => (None, Some(error.to_string())),
                 };
             return Ok(AiApiKeyState {
                 provider: provider_id,
@@ -383,7 +387,7 @@ pub async fn get_ai_api_key_state_impl(
         }
         Ok(None) => {}
         Err(error) => {
-            state_error.get_or_insert(error);
+            state_error.get_or_insert(error.to_string());
         }
     };
 
@@ -423,7 +427,7 @@ pub async fn reveal_ai_api_key_impl(
     pool: &DbPool,
     secrets: &dyn SecretStore,
     provider: Option<&str>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, AiProviderError> {
     let provider_id = resolve_operation_provider(pool, provider).await;
     ai_api_key_from_secret_store(pool, secrets, Some(&provider_id)).await
 }
@@ -433,27 +437,23 @@ pub async fn set_ai_api_key_impl(
     secrets: &dyn SecretStore,
     value: String,
     provider: Option<&str>,
-) -> Result<AiApiKeyState, String> {
+) -> Result<AiApiKeyState, AiProviderError> {
     let provider_id = resolve_operation_provider(pool, provider).await;
     let key = provider_secret_key(Some(&provider_id));
-    let token = normalize_ai_api_key(&value)
-        .ok_or_else(|| "AI API key cannot be empty; clear the key instead.".to_string())?;
+    let token = normalize_ai_api_key(&value).ok_or(AiProviderError::EmptyApiKey)?;
     let storage_state = secrets
         .set(&key, &token)
-        .map_err(|error| map_secret_error("save", error))?;
+        .map_err(|error| AiProviderError::Secret(map_secret_error("save", error)))?;
     if !storage_state.is_available() {
-        return Err(format!(
-            "Failed to save AI API key: unavailable storage state {:?}",
-            storage_state
-        ));
+        return Err(AiProviderError::UnavailableKeyStorage(storage_state));
     }
 
     let saved = secrets
         .get(&key)
-        .map_err(|error| map_secret_error("verify", error))?
+        .map_err(|error| AiProviderError::Secret(map_secret_error("verify", error)))?
         .and_then(normalize_ai_api_key);
     if saved.as_deref() != Some(token.as_str()) {
-        return Err("Failed to verify saved AI API key.".to_string());
+        return Err(AiProviderError::SavedKeyVerificationFailed);
     }
 
     delete_legacy_ai_api_key_setting(pool).await?;
@@ -471,15 +471,15 @@ pub async fn clear_ai_api_key_impl(
     pool: &DbPool,
     secrets: &dyn SecretStore,
     provider: Option<&str>,
-) -> Result<AiApiKeyState, String> {
+) -> Result<AiApiKeyState, AiProviderError> {
     let provider_id = resolve_operation_provider(pool, provider).await;
     let key = provider_secret_key(Some(&provider_id));
     secrets
         .delete(&key)
-        .map_err(|error| map_secret_error("clear", error))?;
+        .map_err(|error| AiProviderError::Secret(map_secret_error("clear", error)))?;
     secrets
         .delete(AI_API_KEY_SECRET_KEY)
-        .map_err(|error| map_secret_error("clear legacy", error))?;
+        .map_err(|error| AiProviderError::Secret(map_secret_error("clear legacy", error)))?;
     delete_legacy_ai_api_key_setting(pool).await?;
     mark_ai_api_key_migration_complete(pool).await?;
     Ok(AiApiKeyState {

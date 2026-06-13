@@ -8,8 +8,10 @@ import {
   Layers,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
+  Search,
   Sparkles,
-  Tag,
+  X,
 } from "lucide-react";
 import type { TFunction } from "i18next";
 
@@ -17,15 +19,14 @@ import { FacetItem } from "@/components/central/FacetItem";
 import { FacetSection } from "@/components/central/FacetSection";
 import { SidebarExpansionProvider } from "@/components/central/SidebarExpansionProvider";
 import type { SidebarExpansionSignal } from "@/components/central/sidebarExpansionContext";
-import { groupRepositoriesForSidebar } from "@/lib/centralRepositoryGroups";
+import {
+  filterRepositorySectionsForSearch,
+  groupRepositoriesForSidebar,
+} from "@/lib/centralRepositoryGroups";
 import { cn } from "@/lib/utils";
 import type { FacetCounts } from "@/lib/centralFacetCounts";
-import type { SkillRepositoryWithStats, SkillTag, TagGroup } from "@/types";
-import {
-  RepositorySectionBlock,
-  TagGroupBlock,
-  SidebarTagRow,
-} from "@/components/central/CentralSidebarBlocks";
+import type { SkillRepositoryWithStats } from "@/types";
+import { RepositorySectionBlock } from "@/components/central/CentralSidebarBlocks";
 
 /**
  * Central Skills sidebar：折叠优先（M4）。
@@ -67,24 +68,26 @@ interface CommonSidebarProps {
 
   facetCounts: FacetCounts;
   repositories: readonly SkillRepositoryWithStats[];
-  tags: readonly SkillTag[];
-  /** 标签分组（M3）。为空数组时退化为 M1 的平铺展示。 */
-  tagGroups?: readonly TagGroup[];
+  /** repo.id → 该 repo 下可更新 skill 数（用于 repo 行角标）。 */
+  repoUpdateCounts?: Record<string, number>;
 
   selectedRepos: readonly string[];
   selectedTags: readonly string[];
 
   onToggleRepo: (repoId: string) => void;
+  /** 智能视图（未分类/可更新/AI 复核）仍走 tag facet 特殊值。 */
   onToggleTag: (tagId: string) => void;
   onClearAll: () => void;
   /** 智能视图改写为 tag facet 中的特殊值。 */
-  onSelectSmartView: (view: "all" | "uncategorized" | "updates" | "ai-review") => void;
-  /** 分配 tag 到指定分组（M6）。传 null 为移出分组。 */
-  onAssignTagToGroup?: (tagId: string, groupId: string | null) => void;
+  onSelectSmartView: (
+    view: "all" | "uncategorized" | "updates" | "ai-review",
+  ) => void;
   /** 删除仓库（M4 回填）。 */
   onDeleteRepository?: (repository: SkillRepositoryWithStats) => void;
   onToggleRepositoryPin?: (repository: SkillRepositoryWithStats) => void;
-  /** Sidebar 顶部插槽。 */
+  /** 「同步新源」入口（打开 GitHub 导入对话框）。 */
+  onSyncNewSource?: () => void;
+  /** Saved Views 插槽（下沉到 Repositories 之后）。 */
   savedViewsSlot?: ReactNode;
 }
 
@@ -95,25 +98,27 @@ export function CentralSidebar({
   handleResizeKeyDown,
   facetCounts,
   repositories,
-  tags,
-  tagGroups = [],
+  repoUpdateCounts,
   selectedRepos,
   selectedTags,
   onToggleRepo,
   onToggleTag,
   onClearAll,
   onSelectSmartView,
-  onAssignTagToGroup,
   onDeleteRepository,
   onToggleRepositoryPin,
+  onSyncNewSource,
   savedViewsSlot,
 }: CommonSidebarProps) {
-  const [isPinned, setIsPinned] = useState<boolean>(() => readPinnedFromStorage());
+  const [isPinned, setIsPinned] = useState<boolean>(() =>
+    readPinnedFromStorage(),
+  );
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [bulkExpansionSignal, setBulkExpansionSignal] =
     useState<SidebarExpansionSignal | null>(null);
   const [bulkExpanded, setBulkExpanded] = useState(true);
+  const [repositorySearchQuery, setRepositorySearchQuery] = useState("");
 
   const repoSelectionSet = new Set(selectedRepos);
   const tagSelectionSet = new Set(selectedTags);
@@ -122,19 +127,6 @@ export function CentralSidebar({
   const isExpanded = isPinned || isOverlayExpanded;
 
   const repositorySections = groupRepositoriesForSidebar(repositories);
-
-  const tagsSorted = [...tags].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
-  );
-
-  const tagGroupSorted = [...tagGroups].sort((a, b) => a.sort_order - b.sort_order);
-  const tagsByGroup = new Map<string, SkillTag[]>();
-  for (const tag of tagsSorted) {
-    const key = tag.group_id ?? "__ungrouped__";
-    const list = tagsByGroup.get(key);
-    if (list) list.push(tag);
-    else tagsByGroup.set(key, [tag]);
-  }
 
   const handleToggleAllGroups = () => {
     const nextExpanded = !bulkExpanded;
@@ -201,7 +193,7 @@ export function CentralSidebar({
             ? "w-full"
             : isExpanded
               ? "absolute inset-y-0 left-0 z-30 w-[280px] bg-background shadow-xl"
-              : "absolute inset-y-0 left-0 w-12"
+              : "absolute inset-y-0 left-0 w-12",
         )}
       >
         {isExpanded ? (
@@ -222,14 +214,14 @@ export function CentralSidebar({
             onToggleTag={onToggleTag}
             tagSelectionSet={tagSelectionSet}
             repositorySections={repositorySections}
+            repositorySearchQuery={repositorySearchQuery}
+            onRepositorySearchQueryChange={setRepositorySearchQuery}
             repoSelectionSet={repoSelectionSet}
+            repoUpdateCounts={repoUpdateCounts}
             onToggleRepo={onToggleRepo}
             onDeleteRepository={onDeleteRepository}
             onToggleRepositoryPin={onToggleRepositoryPin}
-            tagsSorted={tagsSorted}
-            tagGroupSorted={tagGroupSorted}
-            tagsByGroup={tagsByGroup}
-            onAssignTagToGroup={onAssignTagToGroup}
+            onSyncNewSource={onSyncNewSource}
             selectedReposCount={selectedRepos.length}
             selectedTagsCount={selectedTags.length}
           />
@@ -244,10 +236,6 @@ export function CentralSidebar({
               tagSelectionSet.has("ai-review")
             }
             reposActive={selectedRepos.length > 0}
-            tagsActive={
-              selectedTags.filter((id) => !["uncategorized", "updates", "ai-review"].includes(id))
-                .length > 0
-            }
           />
         )}
       </div>
@@ -281,19 +269,21 @@ interface ExpandedSidebarContentProps {
   savedViewsSlot?: ReactNode;
   facetCounts: FacetCounts;
   hasAnySelection: boolean;
-  onSelectSmartView: (view: "all" | "uncategorized" | "updates" | "ai-review") => void;
+  onSelectSmartView: (
+    view: "all" | "uncategorized" | "updates" | "ai-review",
+  ) => void;
   onClearAll: () => void;
   onToggleTag: (tagId: string) => void;
   tagSelectionSet: Set<string>;
   repositorySections: ReturnType<typeof groupRepositoriesForSidebar>;
+  repositorySearchQuery: string;
+  onRepositorySearchQueryChange: (query: string) => void;
   repoSelectionSet: Set<string>;
+  repoUpdateCounts?: Record<string, number>;
   onToggleRepo: (id: string) => void;
   onDeleteRepository?: (repository: SkillRepositoryWithStats) => void;
   onToggleRepositoryPin?: (repository: SkillRepositoryWithStats) => void;
-  tagsSorted: SkillTag[];
-  tagGroupSorted: TagGroup[];
-  tagsByGroup: Map<string, SkillTag[]>;
-  onAssignTagToGroup?: (tagId: string, groupId: string | null) => void;
+  onSyncNewSource?: () => void;
   selectedReposCount: number;
   selectedTagsCount: number;
 }
@@ -315,17 +305,23 @@ function ExpandedSidebarContent({
   onToggleTag,
   tagSelectionSet,
   repositorySections,
+  repositorySearchQuery,
+  onRepositorySearchQueryChange,
   repoSelectionSet,
+  repoUpdateCounts,
   onToggleRepo,
   onDeleteRepository,
   onToggleRepositoryPin,
-  tagsSorted,
-  tagGroupSorted,
-  tagsByGroup,
-  onAssignTagToGroup,
+  onSyncNewSource,
   selectedReposCount,
   selectedTagsCount,
 }: ExpandedSidebarContentProps) {
+  const filteredRepositorySections = filterRepositorySectionsForSearch(
+    repositorySections,
+    repositorySearchQuery
+  );
+  const isRepositorySearchActive = repositorySearchQuery.trim().length > 0;
+
   return (
     <>
       <div className="scrollbar-subtle min-h-0 flex-1 overflow-y-auto px-3 pb-6 pr-2">
@@ -335,17 +331,29 @@ function ExpandedSidebarContent({
             type="button"
             data-testid="sidebar-pin-toggle"
             aria-pressed={isPinned}
-            aria-label={isPinned ? t("central.v2.sidebarUnpin") : t("central.v2.sidebarPin")}
-            title={isPinned ? t("central.v2.sidebarUnpin") : t("central.v2.sidebarPin")}
+            aria-label={
+              isPinned
+                ? t("central.v2.sidebarUnpin")
+                : t("central.v2.sidebarPin")
+            }
+            title={
+              isPinned
+                ? t("central.v2.sidebarUnpin")
+                : t("central.v2.sidebarPin")
+            }
             onClick={onTogglePin}
             className={cn(
               "grid size-8 shrink-0 place-items-center rounded-md border transition-colors",
               isPinned
                 ? "border-primary/30 bg-primary/10 text-primary"
-                : "border-border/80 bg-background text-muted-foreground hover:border-primary/30 hover:text-primary"
+                : "border-border/80 bg-background text-muted-foreground hover:border-primary/30 hover:text-primary",
             )}
           >
-            {isPinned ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
+            {isPinned ? (
+              <PanelLeftClose className="size-4" />
+            ) : (
+              <PanelLeftOpen className="size-4" />
+            )}
           </button>
           <button
             type="button"
@@ -360,7 +368,7 @@ function ExpandedSidebarContent({
               "group flex flex-1 items-center gap-2 rounded-2xl border px-3 py-2 text-left text-xs font-semibold shadow-sm ring-1 transition-colors",
               bulkExpanded
                 ? "border-primary/25 bg-primary/10 text-primary ring-primary/10 hover:bg-primary/15"
-                : "border-border/90 bg-background text-foreground ring-border/40 hover:border-primary/30 hover:bg-muted/40"
+                : "border-border/90 bg-background text-foreground ring-border/40 hover:border-primary/30 hover:bg-muted/40",
             )}
           >
             <span className="grid size-7 shrink-0 place-items-center rounded-xl bg-background/85 text-primary ring-1 ring-primary/20 transition-colors group-hover:bg-background">
@@ -382,7 +390,6 @@ function ExpandedSidebarContent({
         </div>
 
         <SidebarExpansionProvider signal={bulkExpansionSignal}>
-          {savedViewsSlot ? <div className="mb-2">{savedViewsSlot}</div> : null}
           {/* Smart views ─────────────────────────────────────────────────── */}
           <FacetSection
             title={t("central.v2.smartViews")}
@@ -433,17 +440,55 @@ function ExpandedSidebarContent({
               icon={<FolderGit2 className="size-3.5" />}
               testId="sidebar-section-repos"
             >
-              {repositorySections.length === 0 ? (
+              <div className="px-1 pb-1">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/70" />
+                  <input
+                    type="search"
+                    data-testid="sidebar-repository-search"
+                    value={repositorySearchQuery}
+                    onChange={(event) =>
+                      onRepositorySearchQueryChange(event.currentTarget.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape" && repositorySearchQuery) {
+                        event.preventDefault();
+                        onRepositorySearchQueryChange("");
+                      }
+                    }}
+                    aria-label={t("central.v2.repositorySearchLabel")}
+                    placeholder={t("central.v2.repositorySearchPlaceholder")}
+                    className="h-8 w-full rounded-md border border-border/70 bg-background py-1 pl-7 pr-7 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 hover:border-border focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
+                  />
+                  {isRepositorySearchActive && (
+                    <button
+                      type="button"
+                      data-testid="sidebar-repository-search-clear"
+                      aria-label={t("central.v2.repositorySearchClear")}
+                      onClick={() => onRepositorySearchQueryChange("")}
+                      className="absolute right-1 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {filteredRepositorySections.length === 0 ? (
                 <p className="px-2 text-[11px] text-muted-foreground">
-                  {t("central.v2.facetEmpty")}
+                  {t(
+                    isRepositorySearchActive
+                      ? "central.v2.repositorySearchEmpty"
+                      : "central.v2.facetEmpty"
+                  )}
                 </p>
               ) : (
-                repositorySections.map((section) => (
+                filteredRepositorySections.map((section) => (
                   <RepositorySectionBlock
                     key={section.kind}
                     section={section}
                     facetCounts={facetCounts}
                     selectionSet={repoSelectionSet}
+                    repoUpdateCounts={repoUpdateCounts}
                     onToggleRepo={onToggleRepo}
                     onDeleteRepository={onDeleteRepository}
                     onToggleRepositoryPin={onToggleRepositoryPin}
@@ -451,74 +496,24 @@ function ExpandedSidebarContent({
                   />
                 ))
               )}
-            </FacetSection>
-          </div>
-
-          {/* Tags ─────────────────────────────────────────────────────── */}
-          <div className="mt-4">
-            <FacetSection
-              title={t("central.v2.tags")}
-              icon={<Tag className="size-3.5" />}
-              testId="sidebar-section-tags"
-            >
-              {tagsSorted.length === 0 ? (
-                <p className="px-2 text-[11px] text-muted-foreground">
-                  {t("central.v2.facetEmpty")}
-                </p>
-              ) : tagGroupSorted.length === 0 ? (
-                tagsSorted.map((tag) => (
-                  <SidebarTagRow
-                    key={tag.id}
-                    tag={tag}
-                    active={tagSelectionSet.has(tag.id)}
-                    count={facetCounts.tags[tag.id] ?? 0}
-                    onToggle={() => onToggleTag(tag.id)}
-                    tagGroups={tagGroupSorted}
-                    onAssignTagToGroup={onAssignTagToGroup}
-                    t={t}
-                  />
-                ))
-              ) : (
-                <>
-                  {tagGroupSorted.map((group) => {
-                    const groupTags = tagsByGroup.get(group.id) ?? [];
-                    if (groupTags.length === 0) return null;
-                    return (
-                      <TagGroupBlock
-                        key={group.id}
-                        group={group}
-                        tags={groupTags}
-                        tagSelectionSet={tagSelectionSet}
-                        facetCounts={facetCounts}
-                        onToggleTag={onToggleTag}
-                        allTagGroups={tagGroupSorted}
-                        onAssignTagToGroup={onAssignTagToGroup}
-                        t={t}
-                      />
-                    );
-                  })}
-                  {(() => {
-                    const ungrouped = tagsByGroup.get("__ungrouped__") ?? [];
-                    if (ungrouped.length === 0) return null;
-                    return (
-                      <TagGroupBlock
-                        key="__ungrouped__"
-                        group={null}
-                        tags={ungrouped}
-                        tagSelectionSet={tagSelectionSet}
-                        facetCounts={facetCounts}
-                        onToggleTag={onToggleTag}
-                        ungroupedLabel={t("central.v2.tagGroupsUngrouped")}
-                        allTagGroups={tagGroupSorted}
-                        onAssignTagToGroup={onAssignTagToGroup}
-                        t={t}
-                      />
-                    );
-                  })()}
-                </>
+              {onSyncNewSource && (
+                <button
+                  type="button"
+                  data-testid="sidebar-sync-new-source"
+                  onClick={onSyncNewSource}
+                  className="mt-1 flex w-full items-center gap-2 rounded-md border border-dashed border-border/70 px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                >
+                  <Plus className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {t("central.v2.sidebarSyncNewSource")}
+                  </span>
+                </button>
               )}
             </FacetSection>
           </div>
+
+          {/* Saved Views（下沉到底部） ──────────────────────────────────── */}
+          {savedViewsSlot ? <div className="mt-4">{savedViewsSlot}</div> : null}
         </SidebarExpansionProvider>
 
         {/* Quick clear footer */}
@@ -551,7 +546,6 @@ interface CollapsedSidebarRailProps {
   hasAnySelection: boolean;
   smartViewActive: boolean;
   reposActive: boolean;
-  tagsActive: boolean;
 }
 
 function CollapsedSidebarRail({
@@ -560,7 +554,6 @@ function CollapsedSidebarRail({
   hasAnySelection,
   smartViewActive,
   reposActive,
-  tagsActive,
 }: CollapsedSidebarRailProps) {
   return (
     <div
@@ -589,11 +582,6 @@ function CollapsedSidebarRail({
         active={reposActive}
         title={t("central.v2.sidebarReposShort")}
       />
-      <RailIndicator
-        icon={<Tag className="size-4" />}
-        active={tagsActive}
-        title={t("central.v2.sidebarTagsShort")}
-      />
       {hasAnySelection && (
         <span
           aria-hidden
@@ -619,7 +607,7 @@ function RailIndicator({
       title={title}
       className={cn(
         "grid size-8 place-items-center rounded-md text-muted-foreground/70",
-        active && "text-primary"
+        active && "text-primary",
       )}
     >
       {icon}

@@ -6,6 +6,7 @@ use super::common::{
     append_missing_agents, claude_conflict_metadata, installation_details, shared_root_agent_ids,
     skill_dir_path, skill_filesystem_timestamps,
 };
+use super::error::CentralSkillsError;
 use super::types::{CentralSkillsPage, CentralSkillsPageRequest, SkillDetail, SkillWithLinks};
 
 async fn get_observation_detail(
@@ -13,7 +14,7 @@ async fn get_observation_detail(
     skill_id: &str,
     agent_id: &str,
     row_id: Option<&str>,
-) -> Result<Option<SkillDetail>, String> {
+) -> Result<Option<SkillDetail>, CentralSkillsError> {
     let observations = db::get_agent_skill_observations(pool, agent_id).await?;
     if observations.is_empty() {
         return Ok(None);
@@ -36,18 +37,15 @@ async fn get_observation_detail(
             Some(observation) => observation,
             None if row_id == skill_id => return Ok(None),
             None => {
-                return Err(format!(
-                    "Source row '{}' not found for skill '{}'",
-                    row_id, skill_id
-                ))
+                return Err(CentralSkillsError::SourceRowNotFound {
+                    row_id: row_id.to_string(),
+                    skill_id: skill_id.to_string(),
+                })
             }
         },
         None if matches.len() == 1 => matches.into_iter().next().expect("single match"),
         None => {
-            return Err(format!(
-                "Multiple source rows found for skill '{}'; row_id is required",
-                skill_id,
-            ))
+            return Err(CentralSkillsError::MultipleSourceRows(skill_id.to_string()));
         }
     };
 
@@ -133,7 +131,7 @@ pub async fn get_skill_detail_with_row_impl(
     skill_id: &str,
     agent_id: Option<&str>,
     row_id: Option<&str>,
-) -> Result<SkillDetail, String> {
+) -> Result<SkillDetail, CentralSkillsError> {
     if let Some(agent_id) = agent_id {
         if let Some(detail) = get_observation_detail(pool, skill_id, agent_id, row_id).await? {
             return Ok(detail);
@@ -142,7 +140,7 @@ pub async fn get_skill_detail_with_row_impl(
 
     let skill = db::get_skill_by_id(pool, skill_id)
         .await?
-        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+        .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
 
     let row_id = skill.id.clone();
     let dir_path = skill_dir_path(&skill);
@@ -184,11 +182,13 @@ pub async fn get_skill_detail_with_row_impl(
 pub async fn get_skills_by_agent_impl(
     pool: &DbPool,
     agent_id: &str,
-) -> Result<Vec<SkillForAgent>, String> {
-    db::get_skills_for_agent(pool, agent_id).await
+) -> Result<Vec<SkillForAgent>, CentralSkillsError> {
+    Ok(db::get_skills_for_agent(pool, agent_id).await?)
 }
 
-pub async fn get_central_skills_impl(pool: &DbPool) -> Result<Vec<SkillWithLinks>, String> {
+pub async fn get_central_skills_impl(
+    pool: &DbPool,
+) -> Result<Vec<SkillWithLinks>, CentralSkillsError> {
     let skills = db::get_central_skills(pool).await?;
     skills_with_links_from_rows(pool, skills).await
 }
@@ -196,7 +196,7 @@ pub async fn get_central_skills_impl(pool: &DbPool) -> Result<Vec<SkillWithLinks
 async fn skills_with_links_from_rows(
     pool: &DbPool,
     skills: Vec<db::Skill>,
-) -> Result<Vec<SkillWithLinks>, String> {
+) -> Result<Vec<SkillWithLinks>, CentralSkillsError> {
     let agents = db::get_all_agents(pool).await?;
     let shared_root_agents = shared_root_agent_ids(&agents);
     let skill_ids = skills
@@ -251,7 +251,7 @@ async fn skills_with_links_from_rows(
 pub async fn get_central_skills_page_impl(
     pool: &DbPool,
     request: CentralSkillsPageRequest,
-) -> Result<CentralSkillsPage, String> {
+) -> Result<CentralSkillsPage, CentralSkillsError> {
     let mut items = get_central_skills_impl(pool).await?;
     filter_central_skill_page_items(&mut items, &request);
     sort_central_skill_page_items(&mut items, request.sort.as_deref());

@@ -344,17 +344,13 @@ describe("CentralSkillsView repositories + installs（V2 markup）", () => {
   });
 
 
-  it("shows delete button for each central skill (\u5728 \u22ef menu \u5185)", async () => {
+  it("shows delete button for each central skill", async () => {
     renderCentralSkillsView();
 
-    fireEvent.click(screen.getByTestId("skill-card-more-frontend-design"));
+    // comfortable \u5bc6\u5ea6\u4e0b\u5220\u9664\u662f\u4e00\u7ea7\u56fe\u6807\uff0c\u76f4\u63a5\u53ef\u89c1
     expect(
       await screen.findByTestId("delete-central-skill-frontend-design")
     ).toBeInTheDocument();
-    // \u5173\u95ed menu
-    fireEvent.keyDown(screen.getByTestId("delete-central-skill-frontend-design"), { key: "Escape" });
-
-    fireEvent.click(screen.getByTestId("skill-card-more-code-reviewer"));
     expect(
       await screen.findByTestId("delete-central-skill-code-reviewer")
     ).toBeInTheDocument();
@@ -366,8 +362,7 @@ describe("CentralSkillsView repositories + installs（V2 markup）", () => {
     mockDeleteCentralSkill.mockResolvedValueOnce(undefined);
     renderCentralSkillsView();
 
-    // V2\uff1adelete \u6536\u8fdb \u22ef menu
-    fireEvent.click(screen.getByTestId("skill-card-more-frontend-design"));
+    // V2\uff1acomfortable \u5bc6\u5ea6\u4e0b\u5220\u9664\u4ecd\u662f\u4e00\u7ea7\u56fe\u6807\uff0c\u4e0d\u9700\u8981\u70b9 \u22ef
     fireEvent.click(
       await screen.findByTestId("delete-central-skill-frontend-design")
     );

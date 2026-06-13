@@ -13,9 +13,6 @@ src-tauri/target/
 .codex/
 .opencode/
 .cursor/
-.trellis/
-
-
 
 .vscode/
 *.db
@@ -50,3 +47,7 @@ ref/
 
 .regent/
 .understand-anything/
+.reasonix/
+
+# spark visual-companion brainstorm sessions
+.superpowers/

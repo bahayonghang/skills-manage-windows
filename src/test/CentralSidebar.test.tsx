@@ -5,7 +5,7 @@ import type { TFunction } from "i18next";
 import { CentralSidebar } from "../components/central/CentralSidebar";
 import { FacetSection } from "../components/central/FacetSection";
 import type { FacetCounts } from "../lib/centralFacetCounts";
-import type { SkillRepositoryWithStats, SkillTag, TagGroup } from "../types";
+import type { SkillRepositoryWithStats } from "../types";
 import zh from "../i18n/locales/zh.json";
 
 type TranslationObj = { [key: string]: TranslationObj | string };
@@ -56,34 +56,26 @@ const repositories: SkillRepositoryWithStats[] = [
   },
 ];
 
-const tagGroups: TagGroup[] = [
+const searchableRepositories: SkillRepositoryWithStats[] = [
+  repositories[0],
   {
-    id: "group-design",
-    name: "设计类",
-    color: "#38bdf8",
-    sort_order: 0,
-    is_builtin: false,
-    created_at: "2026-05-11T00:00:00Z",
-    updated_at: "2026-05-11T00:00:00Z",
-  },
-];
-
-const tags: SkillTag[] = [
-  {
-    id: "frontend-visual-design",
-    name: "前端与视觉设计",
-    group_id: "group-design",
-    is_builtin: true,
-    created_at: "2026-04-10T00:00:00Z",
-    updated_at: "2026-04-10T00:00:00Z",
+    ...repositories[0],
+    id: "github-openai-agents-main",
+    name: "openai/agents",
+    repo: "agents",
+    url: "https://github.com/openai/agents",
+    skill_count: 2,
   },
   {
-    id: "uncategorized",
-    name: "未分类",
-    is_builtin: true,
-    created_at: "2026-04-10T00:00:00Z",
-    updated_at: "2026-04-10T00:00:00Z",
+    ...repositories[0],
+    id: "github-anthropic-tools-main",
+    name: "anthropic/tools",
+    owner: "anthropic",
+    repo: "tools",
+    url: "https://github.com/anthropic/tools",
+    skill_count: 3,
   },
+  repositories[1],
 ];
 
 const facetCounts: FacetCounts = {
@@ -110,6 +102,7 @@ function renderSidebar(
     repositories: SkillRepositoryWithStats[];
     selectedRepos: string[];
     onToggleRepositoryPin: (repository: SkillRepositoryWithStats) => void;
+    onSyncNewSource: () => void;
   }> = {}
 ) {
   const handlers = {
@@ -132,8 +125,6 @@ function renderSidebar(
       width={286}
       facetCounts={facetCounts}
       repositories={overrides.repositories ?? repositories}
-      tags={tags}
-      tagGroups={tagGroups}
       selectedRepos={overrides.selectedRepos ?? []}
       selectedTags={[]}
       savedViewsSlot={
@@ -148,6 +139,7 @@ function renderSidebar(
       }
       {...handlers}
       onToggleRepositoryPin={overrides.onToggleRepositoryPin ?? handlers.onToggleRepositoryPin}
+      onSyncNewSource={overrides.onSyncNewSource}
     />
   );
 
@@ -176,57 +168,43 @@ describe("CentralSidebar", () => {
     const { sidebar } = renderSidebar();
     const toggle = within(sidebar).getByTestId("sidebar-bulk-expansion-toggle");
 
+    // 标签区块已迁至顶部筛选行：侧栏展开态不再渲染 sidebar-section-tags。
+    expect(within(sidebar).queryByTestId("sidebar-section-tags")).not.toBeInTheDocument();
+
     expect(within(sidebar).getByTestId("central-saved-views-content")).not.toHaveClass("hidden");
-    expect(within(sidebar).getByTestId("central-tag-groups-section-content")).not.toHaveClass(
-      "hidden"
-    );
     expect(within(sidebar).getByTestId("sidebar-section-smart-content")).not.toHaveClass("hidden");
     expect(within(sidebar).getByTestId("sidebar-section-repos-content")).not.toHaveClass("hidden");
-    expect(within(sidebar).getByTestId("sidebar-section-tags-content")).not.toHaveClass("hidden");
 
     fireEvent.click(toggle);
 
     expect(within(sidebar).getByTestId("central-saved-views-content")).toHaveClass("hidden");
-    expect(within(sidebar).getByTestId("central-tag-groups-section-content")).toHaveClass(
-      "hidden"
-    );
     expect(within(sidebar).getByTestId("sidebar-section-smart-content")).toHaveClass("hidden");
     expect(within(sidebar).getByTestId("sidebar-section-repos-content")).toHaveClass("hidden");
-    expect(within(sidebar).getByTestId("sidebar-section-tags-content")).toHaveClass("hidden");
 
     fireEvent.click(toggle);
 
     expect(within(sidebar).getByTestId("central-saved-views-content")).not.toHaveClass("hidden");
-    expect(within(sidebar).getByTestId("central-tag-groups-section-content")).not.toHaveClass(
-      "hidden"
-    );
     expect(within(sidebar).getByTestId("sidebar-section-smart-content")).not.toHaveClass("hidden");
     expect(within(sidebar).getByTestId("sidebar-section-repos-content")).not.toHaveClass(
       "hidden"
     );
-    expect(within(sidebar).getByTestId("sidebar-section-tags-content")).not.toHaveClass("hidden");
   });
 
-  it("applies the global signal to owner and tag subgroups while preserving local toggles", () => {
+  it("applies the global signal to owner subgroups while preserving local toggles", () => {
     const { sidebar } = renderSidebar();
     const toggle = within(sidebar).getByTestId("sidebar-bulk-expansion-toggle");
 
     fireEvent.click(within(sidebar).getByRole("button", { name: "收起 openai" }));
     expect(within(sidebar).queryByTestId("repo-github-openai-skills-main")).not.toBeInTheDocument();
-    expect(within(sidebar).getByTestId("tag-frontend-visual-design")).toBeInTheDocument();
-
-    fireEvent.click(within(sidebar).getByTestId("tag-group-group-design"));
-    expect(within(sidebar).queryByTestId("tag-frontend-visual-design")).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
     fireEvent.click(toggle);
 
     expect(within(sidebar).getByTestId("repo-github-openai-skills-main")).toBeInTheDocument();
-    expect(within(sidebar).getByTestId("tag-frontend-visual-design")).toBeInTheDocument();
 
     fireEvent.click(within(sidebar).getByRole("button", { name: "收起 openai" }));
     expect(within(sidebar).queryByTestId("repo-github-openai-skills-main")).not.toBeInTheDocument();
-    expect(within(sidebar).getByTestId("sidebar-section-tags-content")).not.toHaveClass("hidden");
+    expect(within(sidebar).getByTestId("sidebar-section-repos-content")).not.toHaveClass("hidden");
   });
 
   it("shows pinned repository styling and does not select the row when pin is clicked", () => {
@@ -251,6 +229,94 @@ describe("CentralSidebar", () => {
       expect.objectContaining({ id: "github-openai-skills-main", pinned: true })
     );
     expect(handlers.onToggleRepo).not.toHaveBeenCalled();
+  });
+
+  it("renders the sync new source action with localized copy", () => {
+    const onSyncNewSource = vi.fn();
+    const { sidebar } = renderSidebar({ onSyncNewSource });
+
+    const button = within(sidebar).getByTestId("sidebar-sync-new-source");
+    expect(button).toHaveTextContent("同步新来源");
+    expect(button).not.toHaveTextContent("central.v2.sidebarSyncNewSource");
+
+    fireEvent.click(button);
+    expect(onSyncNewSource).toHaveBeenCalled();
+  });
+
+  it("renders a localized repository search input in the repositories section", () => {
+    const { sidebar } = renderSidebar();
+
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+    expect(input).toHaveAccessibleName("搜索仓库");
+    expect(input).toHaveAttribute("placeholder", "搜索仓库...");
+  });
+
+  it("filters repositories by owner while keeping all matching owner rows", () => {
+    const { sidebar } = renderSidebar({ repositories: searchableRepositories });
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+
+    fireEvent.change(input, { target: { value: "openai" } });
+
+    expect(within(sidebar).getByTestId("owner-openai")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("repo-github-openai-skills-main")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("repo-github-openai-agents-main")).toBeInTheDocument();
+    expect(within(sidebar).queryByTestId("owner-anthropic")).not.toBeInTheDocument();
+    expect(within(sidebar).queryByTestId("repo-github-anthropic-tools-main")).not.toBeInTheDocument();
+  });
+
+  it("filters repositories by repo name and clears back to the full tree", () => {
+    const { sidebar } = renderSidebar({ repositories: searchableRepositories });
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+
+    fireEvent.change(input, { target: { value: "agents" } });
+
+    expect(input).toHaveValue("agents");
+    expect(within(sidebar).getByTestId("owner-openai")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("repo-github-openai-agents-main")).toBeInTheDocument();
+    expect(within(sidebar).queryByTestId("repo-github-openai-skills-main")).not.toBeInTheDocument();
+    expect(within(sidebar).queryByTestId("repo-github-anthropic-tools-main")).not.toBeInTheDocument();
+
+    fireEvent.click(within(sidebar).getByTestId("sidebar-repository-search-clear"));
+
+    expect(input).toHaveValue("");
+    expect(within(sidebar).getByTestId("repo-github-openai-skills-main")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("repo-github-openai-agents-main")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("repo-github-anthropic-tools-main")).toBeInTheDocument();
+  });
+
+  it("shows a localized empty state when repository search has no matches", () => {
+    const { sidebar } = renderSidebar({ repositories: searchableRepositories });
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+
+    fireEvent.change(input, { target: { value: "missing-repo" } });
+
+    expect(within(sidebar).getByText("没有匹配的仓库")).toBeInTheDocument();
+    expect(within(sidebar).queryByTestId("repo-github-openai-skills-main")).not.toBeInTheDocument();
+  });
+
+  it("selects a repository through the existing handler after filtering", () => {
+    const { sidebar, handlers } = renderSidebar({ repositories: searchableRepositories });
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+
+    fireEvent.change(input, { target: { value: "agents" } });
+    fireEvent.click(within(sidebar).getByTestId("repo-github-openai-agents-main"));
+
+    expect(handlers.onToggleRepo).toHaveBeenCalledWith("github-openai-agents-main");
+  });
+
+  it("keeps saved views, tag groups, and selection footer visible during repo search", () => {
+    const { sidebar } = renderSidebar({
+      repositories: searchableRepositories,
+      selectedRepos: ["github-openai-skills-main"],
+    });
+    const input = within(sidebar).getByTestId("sidebar-repository-search");
+
+    fireEvent.change(input, { target: { value: "missing-repo" } });
+
+    expect(within(sidebar).getByTestId("saved-view-fixture")).toBeInTheDocument();
+    expect(within(sidebar).getByTestId("tag-group-fixture")).toBeInTheDocument();
+    expect(within(sidebar).getByText("清空筛选")).toBeInTheDocument();
+    expect(within(sidebar).getByText("已应用 1 个筛选")).toBeInTheDocument();
   });
 });
 

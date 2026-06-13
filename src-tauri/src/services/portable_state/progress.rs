@@ -2,22 +2,19 @@ use std::sync::atomic::Ordering;
 
 use tauri::{AppHandle, Emitter};
 
+use super::error::PortableStateError;
 use super::types::{
     CancelFlag, PortabilityProgressUpdate, SkillportStatePortabilityPhase,
     SkillportStatePortabilityProgressPayload, SkillportStatePortabilityStatus,
-    PORTABILITY_CANCELLED_MESSAGE, PORTABILITY_PROGRESS_EVENT, STATUS_CANCELLED,
+    PORTABILITY_PROGRESS_EVENT,
 };
 
-pub(crate) fn check_cancel(cancel: Option<&CancelFlag>) -> Result<(), String> {
+pub(crate) fn check_cancel(cancel: Option<&CancelFlag>) -> Result<(), PortableStateError> {
     if cancel.is_some_and(|cancel| cancel.load(Ordering::SeqCst)) {
-        Err(PORTABILITY_CANCELLED_MESSAGE.to_string())
+        Err(PortableStateError::Cancelled)
     } else {
         Ok(())
     }
-}
-
-pub(crate) fn is_cancelled_error(error: &str) -> bool {
-    error.contains(PORTABILITY_CANCELLED_MESSAGE) || error == STATUS_CANCELLED
 }
 
 pub(crate) fn emit_portability_step(

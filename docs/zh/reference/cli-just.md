@@ -7,37 +7,39 @@
 | 配方 | 作用 |
 | --- | --- |
 | `just sync-version` | 读取 `package.json`，把版本写入 `src-tauri/tauri.conf.json` / `Cargo.toml` / `Cargo.lock`。幂等。 |
-| `just ci` | 跑前端 `typecheck` + `lint` + `test` + `sizecheck`，再跑 Rust `cargo test` 与 `cargo clippy -- -D warnings`。完整本地门禁。 |
+| `just ci` | 并行运行前端 `typecheck` → `lint` → `sizecheck` → `test`，以及 Rust `cargo clippy -- -D warnings` → `cargo test`。完整本地门禁。 |
 | `just dev` | 启动 Tauri 开发模式（`pnpm tauri dev`）。 |
 | `just build` | 按当前平台构建，并把产物拷入 `outputs/`。 |
-| `just install` | 仅 Windows。构建 NSIS 安装包并以 passive 模式启动安装。 |
+| `just install` | Windows 上构建 NSIS 安装包并以 passive 模式启动安装；macOS 上显示提醒并改为运行 `just build`。 |
 
 ## 实现
 
-每个配方都是 `scripts/` 下 Node 脚本的薄包装：
+大多数配方都是 `scripts/` 下 Node 脚本的薄包装；`just install` 会先做平台分流，再进入构建或安装路径：
 
 ```text
 just sync-version  →  node scripts/sync-version.mjs
+just ci            →  node scripts/run-ci.mjs
 just build         →  node scripts/build.mjs
-just install       →  node scripts/install.mjs
+just install       →  macOS：just build；Windows：先 just build，再 node scripts/install.mjs
 ```
 
-要看每条配方实际做什么，最快的方式是直接读对应 Node 脚本。
+要看每条配方实际做什么，最快的方式是同时读 `justfile` 和对应 Node 脚本。
 
 ## 本地门禁
 
 ```text
-[just ci] ──► sync-version
-              │
-              ├── pnpm typecheck
-              ├── pnpm lint
-              ├── pnpm test
-              ├── pnpm sizecheck
-              ├── cargo test --manifest-path src-tauri/Cargo.toml
-              └── cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+[just ci] ──► sync-version ──► scripts/run-ci.mjs
+                                 │
+                                 ├─ web:  pnpm typecheck
+                                 │        pnpm lint
+                                 │        pnpm sizecheck
+                                 │        pnpm test
+                                 │
+                                 └─ rust: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+                                          cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-`just ci` 是 CI workflow 用来卡 PR 的同一组命令。push 前先跑一次。
+两条链并发执行；任一链失败会停止另一条链并让门禁失败。`just ci` 是 CI workflow 用来卡 PR 的同一组命令。push 前先跑一次。
 
 ## 输出
 
@@ -56,4 +58,4 @@ outputs/
 
 `just build` 只产出当前运行平台的产物。
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-05-31

@@ -4349,7 +4349,7 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 
 [[package]]
 name = "skillport"
-version = "0.10.9"
+version = "0.10.10"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4373,6 +4373,7 @@ dependencies = [
  "tauri-plugin-sql",
  "tauri-plugin-updater",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-appender",

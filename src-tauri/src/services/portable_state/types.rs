@@ -8,7 +8,6 @@ pub(crate) const EXPORT_KIND: &str = "skillport/state-export";
 pub(crate) const EXPORT_VERSION: u32 = 1;
 pub(crate) const REMOTE_CATALOG_CONCURRENCY_LIMIT: usize = 4;
 pub(crate) const PORTABILITY_PROGRESS_EVENT: &str = "central://state-portability-progress";
-pub(crate) const STATUS_CANCELLED: &str = "cancelled";
 pub(crate) const PORTABILITY_CANCELLED_MESSAGE: &str = "SkillPort state portability cancelled";
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -86,6 +85,16 @@ pub struct SkillportStateImportPreview {
     pub github_sources: Vec<SkillportStateSourcePreview>,
     pub skills: Vec<SkillportStateSkillPreview>,
     pub summary: SkillportStateImportPreviewSummary,
+    pub warnings: Vec<SkillportStateImportPreviewWarning>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillportStateImportPreviewWarning {
+    pub reason: String,
+    pub detail: String,
+    pub source_path: Option<String>,
+    pub repo_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

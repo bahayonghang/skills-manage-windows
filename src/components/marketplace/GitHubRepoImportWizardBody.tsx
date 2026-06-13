@@ -1,8 +1,4 @@
-import {
-  ArrowRight,
-  PartyPopper,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowRight, PartyPopper, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -166,7 +162,9 @@ export function GitHubRepoImportConfirmSummary({
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     {overwriteSelections.length > 0
-                      ? overwriteSelections.map((skill) => skill.skillName).join(", ")
+                      ? overwriteSelections
+                          .map((skill) => skill.skillName)
+                          .join(", ")
                       : t("marketplace.githubImportDecisionNone")}
                   </div>
                 </div>
@@ -201,7 +199,9 @@ export function GitHubRepoImportConfirmSummary({
                           ...skippedConflictSelections.map(
                             (skill) => skill.skillName,
                           ),
-                          ...skippedPreviewSkills.map((skill) => skill.skillName),
+                          ...skippedPreviewSkills.map(
+                            (skill) => skill.skillName,
+                          ),
                         ].join(", ")
                       : t("marketplace.githubImportDecisionNone")}
                   </div>
@@ -248,17 +248,17 @@ export function GitHubRepoImportResultHub({
       data-testid="github-import-result-hub"
     >
       <div className="min-h-0 flex-1 overflow-y-auto space-y-5 pr-1">
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+        <div className="rounded-xl border border-success/30 bg-success/5 p-5">
           <div className="flex items-start gap-3">
-            <div className="rounded-full bg-emerald-500/10 p-2 text-emerald-700 dark:text-emerald-300">
+            <div className="rounded-full bg-success/10 p-2 text-success-foreground">
               <PartyPopper className="size-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 text-emerald-700 dark:text-emerald-300">
+              <div className="flex flex-wrap items-center gap-2 text-success-foreground">
                 <div className="text-base font-semibold">
                   {t("marketplace.githubImportSuccessTitle")}
                 </div>
-                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium">
+                <span className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium">
                   {importResult.repo.owner}/{importResult.repo.repo}
                 </span>
               </div>
@@ -333,14 +333,19 @@ export function GitHubRepoImportResultHub({
                 {t("marketplace.githubImportResultNextDesc")}
               </div>
               <div className="mt-4 flex flex-col gap-2">
-                {importResult.importedSkills.length > 0 && canInstallImportedSkills ? (
+                {importResult.importedSkills.length > 0 &&
+                canInstallImportedSkills ? (
                   <Button
                     className="justify-between"
                     onClick={() =>
-                      onInstallImported(importResult.importedSkills[0].importedSkillId)
+                      onInstallImported(
+                        importResult.importedSkills[0].importedSkillId,
+                      )
                     }
                   >
-                    <span>{t("marketplace.githubImportResultActionInstall")}</span>
+                    <span>
+                      {t("marketplace.githubImportResultActionInstall")}
+                    </span>
                     <ArrowRight className="size-4" />
                   </Button>
                 ) : null}
@@ -349,7 +354,9 @@ export function GitHubRepoImportResultHub({
                   className="justify-between"
                   onClick={onOpenCentral}
                 >
-                  <span>{t("marketplace.githubImportResultActionCentral")}</span>
+                  <span>
+                    {t("marketplace.githubImportResultActionCentral")}
+                  </span>
                   <ArrowRight className="size-4" />
                 </Button>
                 <Button
@@ -357,7 +364,9 @@ export function GitHubRepoImportResultHub({
                   className="justify-between"
                   onClick={onStartAnotherImport}
                 >
-                  <span>{t("marketplace.githubImportResultActionRestart")}</span>
+                  <span>
+                    {t("marketplace.githubImportResultActionRestart")}
+                  </span>
                   <RefreshCw className="size-4" />
                 </Button>
               </div>
@@ -380,13 +389,7 @@ export function GitHubRepoImportResultHub({
   );
 }
 
-function ResultMetricCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
+function ResultMetricCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border border-border/70 bg-card/80 px-4 py-3">
       <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">

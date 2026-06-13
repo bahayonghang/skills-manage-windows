@@ -153,4 +153,53 @@ describe("platformSkillViewModel", () => {
       ["local"],
     ]);
   });
+
+  it("sorts by 30-day call count with missing counts treated as zero", () => {
+    const skills = [
+      skill({ id: "unused-beta", name: "Unused Beta" }),
+      skill({ id: "heavy", name: "Heavy Usage" }),
+      skill({ id: "unused-alpha", name: "Unused Alpha" }),
+      skill({ id: "light", name: "Light Usage" }),
+    ];
+
+    const ascRows = derivePlatformSkillRows({
+      skills,
+      searchQuery: "",
+      sourceFilter: "all",
+      sort: { field: "callCount", direction: "asc" },
+      groupBy: "none",
+      labels,
+      usageCounts: {
+        "Heavy Usage": 12,
+        "Light Usage": 2,
+      },
+    });
+
+    expect(ascRows.sortedSkills.map((row) => row.name)).toEqual([
+      "Unused Alpha",
+      "Unused Beta",
+      "Light Usage",
+      "Heavy Usage",
+    ]);
+
+    const descRows = derivePlatformSkillRows({
+      skills,
+      searchQuery: "",
+      sourceFilter: "all",
+      sort: { field: "callCount", direction: "desc" },
+      groupBy: "none",
+      labels,
+      usageCounts: {
+        "Heavy Usage": 12,
+        "Light Usage": 2,
+      },
+    });
+
+    expect(descRows.sortedSkills.map((row) => row.name)).toEqual([
+      "Heavy Usage",
+      "Light Usage",
+      "Unused Alpha",
+      "Unused Beta",
+    ]);
+  });
 });

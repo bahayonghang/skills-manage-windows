@@ -7,37 +7,39 @@ The repository ships a `justfile` for repeatable development and packaging tasks
 | Recipe | What it does |
 | --- | --- |
 | `just sync-version` | Reads `package.json` and writes the version into `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock`. Idempotent. |
-| `just ci` | Runs frontend `typecheck` + `lint` + `test` + `sizecheck`, then Rust `cargo test` and `cargo clippy -- -D warnings`. The full local gate. |
+| `just ci` | Runs frontend `typecheck` → `lint` → `sizecheck` → `test` in parallel with Rust `cargo clippy -- -D warnings` → `cargo test`. The full local gate. |
 | `just dev` | Starts the Tauri development app (`pnpm tauri dev`). |
 | `just build` | Builds the desktop app for the current platform and copies the bundle to `outputs/`. |
-| `just install` | Windows-only. Builds the NSIS installer, copies it to `outputs/`, and runs it in passive mode. |
+| `just install` | On Windows, builds the NSIS installer, copies it to `outputs/`, and runs it in passive mode. On macOS, prints a reminder and runs `just build` instead. |
 
 ## Implementation
 
-Each recipe is a thin wrapper around a Node script under `scripts/`:
+Most recipes are thin wrappers around Node scripts under `scripts/`; `just install` adds platform routing before invoking the build or install path:
 
 ```text
 just sync-version  →  node scripts/sync-version.mjs
+just ci            →  node scripts/run-ci.mjs
 just build         →  node scripts/build.mjs
-just install       →  node scripts/install.mjs
+just install       →  macOS: just build; Windows: node scripts/install.mjs after just build
 ```
 
-Reading the Node scripts is the fastest way to learn what each recipe will do on your OS.
+Reading the `justfile` plus the referenced Node scripts is the fastest way to learn what each recipe will do on your OS.
 
 ## Local Gate
 
 ```text
-[just ci] ──► sync-version
-              │
-              ├── pnpm typecheck
-              ├── pnpm lint
-              ├── pnpm test
-              ├── pnpm sizecheck
-              ├── cargo test --manifest-path src-tauri/Cargo.toml
-              └── cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+[just ci] ──► sync-version ──► scripts/run-ci.mjs
+                                 │
+                                 ├─ web:  pnpm typecheck
+                                 │        pnpm lint
+                                 │        pnpm sizecheck
+                                 │        pnpm test
+                                 │
+                                 └─ rust: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+                                          cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-`just ci` is what the CI workflow runs to gate PRs. Run it before pushing.
+The two chains run concurrently; either chain failing stops the sibling chain and fails the gate. `just ci` is what the CI workflow runs to gate PRs. Run it before pushing.
 
 ## Outputs
 
@@ -56,4 +58,4 @@ outputs/
 
 `just build` only produces artifacts for the running platform.
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-05-31

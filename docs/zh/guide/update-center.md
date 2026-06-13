@@ -17,11 +17,13 @@ PlatformView 的 **扫描重复** 按钮也会跳到这里，并直接定位到 
 
 ## 刷新与应用强分离
 
-刷新只读。它会按 scope 拉每个 GitHub 仓库的最新快照，和本地中央库、平台安装做 diff，把结果写到 inventory 表里。**刷新过程不会改动磁盘上的任何文件**，可以随便点。
+刷新只读。手动刷新会绕过内存里的 GitHub snapshot cache，按 scope 拉每个 GitHub 仓库的最新远端树，和本地中央库、平台安装的内容 hash 做 diff，把结果写到 inventory 表里。**刷新过程不会改动磁盘上的任何文件**，可以随便点。
 
 应用才真正改中央库和平台 symlink / copy。五个 Tab 的勾选会合并成一次提交，再按固定顺序执行，保证同一个 skill id 的新增 / 删除 / 更新 / 冗余清理不会互相覆盖。
 
-这一拆是有意为之。浏览 inventory 永远不该顺手写磁盘，写磁盘也不应该藏在看似只是“刷新”的按钮后面。
+这一拆是有意为之。浏览 inventory 永远不该顺手写磁盘，写磁盘也不应该藏在看似只是“刷新”的按钮后面。`skill_update_states` 只作为成功应用 / 更新后的已安装基线；刷新结果写入独立的 update inventory。
+
+更新检测以内容 hash 为准。`SKILL.md` 里的 `version` 字段只作为可展示的诊断元数据；没有版本号也能检测更新，版本号变化也不会覆盖“内容 hash 相同”的判断。
 
 ## scope
 
@@ -76,10 +78,19 @@ scope 在 session 内保持。刷新按钮旁会显示当前 scope，避免“�
 
 页脚的 **清空 inventory** 按钮会丢弃持久化的刷新结果。大规模重组之后用一下，避免遗留条目影响判断。**清空只是重置 checklist，不会删除任何 skill 或平台副本。**
 
+## 强制恢复动作
+
+当普通检测链路疑似出错时，更新中心还提供显式恢复动作。
+
+- **强制更新** 会从已跟踪的 GitHub 远端路径覆盖选中的 Central skills。它会绕过 snapshot cache，即使本地和远端内容 hash 相同也会覆盖，并刷新关联的 copy 安装。
+- **强制镜像仓库** 只在仓库 scope 下可用。它会绕过 snapshot cache，覆盖已跟踪 skills，导入远端新增，删除远端缺失的本地已跟踪 skills，并删除这些被删 skills 的 copy 安装。
+
+强制镜像是破坏性操作，不会在启动、被动刷新或普通应用流程中自动执行。界面会在执行前要求确认。
+
 ## 幕后变化
 
-- 新增 Tauri 命令：`refresh_skill_update_inventory`、`apply_skill_update_decisions`、`clear_skill_update_inventory`、`get_skill_update_inventory`、`scan_platform_duplicate_skills`。
-- 新增 DB 表：`skill_repository_pending_additions`。新增字段：`skill_repositories.last_synced_at`。
+- Tauri 命令：`refresh_skill_update_inventory`、`apply_skill_update_decisions`、`clear_skill_update_inventory`、`get_skill_update_inventory`、`force_update_central_skills`、`force_mirror_central_repositories`、`scan_platform_duplicate_skills`。
+- DB 表：`skill_update_inventory_runs`、`skill_update_inventory_entries`，以及兼容保留的 `skill_repository_pending_additions`。新增字段：`skill_repositories.last_synced_at`。
 - 后端 `SkillUpdateStatus` enum 取代原来的字符串常量。
 - 旧的 `check_central_skill_updates`、`check_central_repository_sync`、`apply_central_repository_sync` 命令仍保留兼容性，会在下一个 minor release 之后删除。
 
@@ -95,4 +106,4 @@ scope 在 session 内保持。刷新按钮旁会显示当前 scope，避免“�
 
 ---
 
-Last reviewed: 2026-05-22
+Last reviewed: 2026-06-11

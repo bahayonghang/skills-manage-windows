@@ -10,7 +10,7 @@
 
 ## Overview
 
-`SkillPort` follows the [Agent Skills](https://github.com/anthropics/agent-skills) open pattern, but keeps its private Central library in `~/.skillsmanage/skills/` by default. On the Local target, the Central page can change this location with a previewed migrate-and-switch flow: current Central skills overwrite same-name target skills, target-only skills are kept and scanned in, and the old directory is not deleted. The shared Universal Agents target remains `~/.agents/skills/`, so only skills explicitly installed there are exposed to Codex CLI, Cursor, OpenCode, Amp, Copilot, and other tools that read that location. SkillPort distinguishes Google's Antigravity app target from Antigravity CLI: Antigravity global skills stay in `~/.gemini/antigravity/skills/`, Antigravity CLI global skills use `~/.gemini/antigravity-cli/skills/`, and both use `.agents/skills/` for workspace/project installs. Gemini CLI remains available as a legacy/shared Google target at `~/.gemini/skills/`.
+`SkillPort` follows the [Agent Skills](https://github.com/anthropics/agent-skills) open pattern, but keeps its private Central library in `~/.skillsmanage/skills/` by default. On the Local target, the Central page can change this location with a previewed migrate-and-switch flow: current Central skills overwrite same-name target skills, target-only skills are kept and scanned in, and the old directory is not deleted. The shared Universal Agents target remains `~/.agents/skills/`, so only skills explicitly installed there are exposed to Codex CLI, Cursor, OpenCode, Amp, Copilot, and other tools that read that location. Grok is managed as its own upstream-compatible target at `~/.grok/skills/`, with project installs under `.grok/skills/`. SkillPort distinguishes Google's Antigravity app target from Antigravity CLI: Antigravity global skills stay in `~/.gemini/antigravity/skills/`, Antigravity CLI global skills use `~/.gemini/antigravity-cli/skills/`, and both use `.agents/skills/` for workspace/project installs. Gemini CLI remains available as a legacy/shared Google target at `~/.gemini/skills/`.
 
 ## Relationship to upstream
 
@@ -34,7 +34,7 @@ SkillPort can manage a remote Linux or macOS user's global skills through SSH. T
 
 - Add, test, delete, and switch SSH targets from Settings.
 - SSH targets support key-based and password-based OpenSSH login. Private key contents are never stored; password login stores the password in the system credential store instead of SQLite.
-- Remote HOME is detected after connection, then remote Central Skills use `~/.skillsmanage/skills/` and Universal Agents use `~/.agents/skills/` on that host.
+- Remote HOME is detected after connection, then remote Central Skills use `~/.skillsmanage/skills/`, Universal Agents use `~/.agents/skills/`, and Grok uses `~/.grok/skills/` on that host.
 - Each SSH target has its own local cache database under `~/.skillsmanage/targets/<target_id>/db.sqlite`.
 - Remote installs use copy mode by default. Symlink install and remote Discover project scanning are not enabled in this version.
 - File-manager actions are replaced by copying the remote path, because the path exists on the remote host, not on the local machine.
@@ -72,6 +72,7 @@ Remote mode manages the selected remote user's directories only. It does not mod
 - Latest release: <https://github.com/bahayonghang/skills-manage-windows/releases/latest>
 - Current desktop release targets: Windows x64 (`.exe`, `.msi`, `.zip`), macOS Universal (`.dmg`, `.zip`, `.tar.gz`), and Linux x86_64 / arm64 (`.deb`, `.rpm`, `.AppImage`)
 - Windows auto-update uses a Tauri-signed NSIS artifact plus `latest.json`; macOS remains unsigned / not notarized, and Linux arm64 availability depends on the GitHub Actions runner matrix
+- Maintainers: before publishing a desktop tag, run the scripted release preflight documented in `docs/reference/release-process.md` to validate the updater config, NSIS signature, and `latest.json`.
 
 ### macOS Unsigned Build
 
@@ -98,6 +99,7 @@ Then launch the app again from Finder. If your app is stored somewhere else, rep
 |----------|----------|-----------------|
 | Coding | Claude Code | `~/.claude/skills/` |
 | Coding | Codex CLI | `~/.agents/skills/` |
+| Coding | Grok | `~/.grok/skills/` |
 | Coding | Cursor | `~/.agents/skills/` |
 | Coding | Antigravity | `~/.gemini/antigravity/skills/` |
 | Coding | Antigravity CLI | `~/.gemini/antigravity-cli/skills/` |
@@ -138,7 +140,8 @@ Custom platforms can be added through Settings.
 - **No telemetry** — the app does not include analytics, crash reporting, or usage tracking.
 - **Network access is feature-driven** — outbound requests only happen when you explicitly use marketplace sync/download, GitHub import, or AI explanation generation.
 - **SSH is target-scoped** - SSH connections are made only for the active remote target, and remote file changes stay under that remote user's configured skills directories.
-- **Credentials are stored locally** — GitHub PAT and AI API keys are kept in the local SQLite settings table and are not encrypted at rest by the app.
+- **Credentials stay on this device** — GitHub PATs, AI API keys, and SSH passwords are saved through the OS credential store when available. On Windows, if the credential store is unavailable, SkillPort falls back to an app-local DPAPI-protected secret file under `~/.skillsmanage/protected-secrets/`.
+- **Legacy secret migration** — older GitHub PAT and AI API key values found in SQLite settings are migrated to the secret store and then removed from settings. If no persistent protected store is available, the value is kept only for the current app session.
 - Never post real secrets in issues, pull requests, screenshots, or logs.
 
 ## Tech Stack
@@ -180,10 +183,10 @@ just build
 just install
 ```
 
-- `just ci` runs frontend `typecheck` + `lint` + `test` + `sizecheck`, plus Rust `cargo test` and `cargo clippy`.
+- `just ci` runs the frontend chain (`typecheck` → `lint` → `sizecheck` → `test`) in parallel with the Rust chain (`cargo clippy` → `cargo test`).
 - `just dev` starts the Tauri development app directly.
 - `just build` builds the desktop app for the current platform and copies the latest bundle artifact to `outputs/` (`.exe` on Windows, `.app` + `.dmg` on macOS, `.AppImage`/`.deb` on Linux).
-- `just install` builds the Windows NSIS installer, copies it to `outputs/`, and runs it in passive mode. This command is Windows-only.
+- `just install` builds the Windows NSIS installer, copies it to `outputs/`, and runs it in passive mode. On macOS, it prints a reminder and runs `just build` instead.
 
 ### Run in Development
 

@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-04T00:00:00Z",
+  "title": "Design System: SkillPort",
+  "extensions": {
+    "colorMeta": {
+      "lavender-signal": {
+        "role": "primary",
+        "displayName": "Lavender Signal",
+        "canonical": "#b4befe",
+        "tonalRamp": ["#191a33", "#272a57", "#383c7e", "#4d52a6", "#6469c9", "#8a90e4", "#b4befe", "#d8ddff"]
+      },
+      "claude-coral": {
+        "role": "primary",
+        "displayName": "Claude Coral",
+        "canonical": "#cc785c",
+        "tonalRamp": ["#2e1a14", "#3f2419", "#5a3325", "#7a4632", "#9d5a41", "#cc785c", "#dd9479", "#ecb6a0"]
+      },
+      "mocha-base": {
+        "role": "neutral",
+        "displayName": "Mocha Base",
+        "canonical": "#1e1e2e",
+        "tonalRamp": ["#11111b", "#181825", "#1e1e2e", "#313244", "#45475a", "#585b70", "#7f849c", "#a6adc8"]
+      },
+      "mantle-panel": {
+        "role": "neutral",
+        "displayName": "Mantle Panel",
+        "canonical": "#181825",
+        "tonalRamp": ["#0b0b12", "#11111b", "#181825", "#1e1e2e", "#313244", "#45475a", "#585b70", "#7f849c"]
+      },
+      "catppuccin-text": {
+        "role": "neutral",
+        "displayName": "Catppuccin Text",
+        "canonical": "#cdd6f4",
+        "tonalRamp": ["#45475a", "#585b70", "#7f849c", "#9399b2", "#a6adc8", "#bac2de", "#cdd6f4", "#e6eafc"]
+      },
+      "catppuccin-red": {
+        "role": "tertiary",
+        "displayName": "Catppuccin Red",
+        "canonical": "#f38ba8",
+        "tonalRamp": ["#3a1722", "#5a2233", "#7e2f47", "#a63d5d", "#c94d72", "#e46b8d", "#f38ba8", "#f9b3c6"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "页面级主标题（技能详情 / Markdown H1）。固定 rem，不用 fluid clamp。" },
+      "title": { "displayName": "Title", "purpose": "卡片标题与面板小标题（font-heading / Geist）。" },
+      "body": { "displayName": "Body", "purpose": "应用主力正文与数据。默认等宽（JetBrains Mono），散文 ≤74ch。" },
+      "label": { "displayName": "Label", "purpose": "分组眉标 / 表头 / 计数徽标。短标签，UPPERCASE + tracking。" }
+    },
+    "shadows": [
+      { "name": "rest-card", "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)", "purpose": "卡片静止态，配合 ring-1 ring-border 细描边。" },
+      { "name": "hover-lift", "value": "0 4px 12px rgb(0 0 0 / 0.18)", "purpose": "卡片悬停抬升，唯一 sm→md 的态变，传达可交互。" },
+      { "name": "orbit-glass", "value": "0 24px 70px color-mix(in oklch, var(--background) 86%, transparent)", "purpose": "Dashboard 玻璃面板的大尺度软投影（--shadow-orbit）。" },
+      { "name": "inset-hairline", "value": "inset 0 1px 0 color-mix(in oklch, var(--foreground) 6%, transparent)", "purpose": "玻璃 / 激活态顶部 1px 高光，制造材质边。" },
+      { "name": "active-nav-glow", "value": "0 10px 28px color-mix(in oklch, var(--sidebar-primary) 22%, transparent)", "purpose": "侧栏激活项的 accent 发光，仅限选中态。" }
+    ],
+    "motion": [
+      { "name": "transition-fast", "value": "150ms ease", "purpose": "按钮 / 输入 / 导航的颜色态切换默认时长（150–250ms 区间下沿）。" },
+      { "name": "transition-link", "value": "140ms ease", "purpose": "Markdown 链接颜色 / 边 / 底的过渡。" },
+      { "name": "press", "value": "translateY(1px)", "purpose": "按钮 active 轻微下压反馈。" },
+      { "name": "nav-press", "value": "scale(0.98)", "purpose": "导航项 active 反馈。" }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "主操作按钮（安装 / 应用 / 确认）。accent 实填，仅用于主操作。",
+      "html": "<button class=\"ds-btn-primary\">安装到平台</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 10px;gap:6px;background:#b4befe;color:#181825;border:1px solid transparent;border-radius:10px;font-family:'JetBrains Mono Variable',ui-monospace,monospace;font-size:.875rem;font-weight:500;cursor:pointer;transition:background .15s ease;}.ds-btn-primary:hover{background:#a6b0f4;}.ds-btn-primary:focus-visible{outline:none;border-color:#b4befe;box-shadow:0 0 0 3px rgba(180,190,254,.5);}.ds-btn-primary:active{transform:translateY(1px);}"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "破坏性操作（删除旧 skill）。低饱和着色，非实心红块——SkillPort 的独特处理。",
+      "html": "<button class=\"ds-btn-destructive\">删除旧 skill</button>",
+      "css": ".ds-btn-destructive{display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 10px;background:rgba(243,139,168,.1);color:#f38ba8;border:1px solid transparent;border-radius:10px;font-family:'JetBrains Mono Variable',ui-monospace,monospace;font-size:.875rem;font-weight:500;cursor:pointer;transition:background .15s ease;}.ds-btn-destructive:hover{background:rgba(243,139,168,.2);}.ds-btn-destructive:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(243,139,168,.2);}"
+    },
+    {
+      "name": "Skill Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "UnifiedSkillCard 底样式：全应用技能卡片唯一实现。ring-1 描边 + 圆角 14px + 静止扁平。",
+      "html": "<div class=\"ds-skill-card\"><div class=\"ds-skill-card__title\">chinese-commit-conventions</div><div class=\"ds-skill-card__desc\">中文 Git 提交规范——适配国内团队的 commit message 与 changelog 自动化。</div></div>",
+      "css": ".ds-skill-card{display:flex;flex-direction:column;gap:16px;padding:16px;background:#181825;color:#cdd6f4;border-radius:14px;box-shadow:inset 0 0 0 1px #313244,0 1px 2px 0 rgba(0,0,0,.05);transition:box-shadow .15s ease;}.ds-skill-card:hover{box-shadow:inset 0 0 0 1px #313244,0 4px 12px rgba(0,0,0,.18);}.ds-skill-card__title{font-family:'Geist Variable',ui-sans-serif,system-ui,sans-serif;font-size:1rem;font-weight:500;line-height:1.4;}.ds-skill-card__desc{font-family:'JetBrains Mono Variable',ui-monospace,monospace;font-size:.875rem;line-height:1.6;color:#a6adc8;}"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "搜索 / 文本输入：透明底 + 描边 + 聚光焦点环。",
+      "html": "<input class=\"ds-input-search\" type=\"text\" placeholder=\"搜索技能…\" />",
+      "css": ".ds-input-search{box-sizing:border-box;height:32px;width:240px;padding:4px 10px;background:transparent;color:#cdd6f4;border:1px solid #313244;border-radius:10px;font-family:'JetBrains Mono Variable',ui-monospace,monospace;font-size:.875rem;outline:none;transition:border-color .15s ease,box-shadow .15s ease;}.ds-input-search::placeholder{color:#a6adc8;}.ds-input-search:focus-visible{border-color:#b4befe;box-shadow:0 0 0 3px rgba(180,190,254,.5);}"
+    },
+    {
+      "name": "Active Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "侧栏激活导航项：accent 渐变填充 + inset 高光 + 发光 + 左缘 3px 指示条 + 等宽计数徽标。",
+      "html": "<div class=\"ds-nav-active\"><span class=\"ds-nav-active__bar\"></span><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#181825\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/></svg><span class=\"ds-nav-active__label\">中央技能库</span><span class=\"ds-nav-active__count\">126</span></div>",
+      "css": ".ds-nav-active{position:relative;display:flex;align-items:center;gap:10px;width:184px;padding:6px 10px;border-radius:8px;color:#181825;font-family:'JetBrains Mono Variable',ui-monospace,monospace;font-size:.875rem;font-weight:600;background:linear-gradient(145deg,#c2c9fe,#a3adf0);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 10px 28px rgba(180,190,254,.22);}.ds-nav-active__bar{position:absolute;left:0;top:4px;bottom:4px;width:3px;border-radius:0 999px 999px 0;background:#181825;}.ds-nav-active svg{width:16px;height:16px;flex-shrink:0;}.ds-nav-active__label{flex:1;}.ds-nav-active__count{font-size:10px;font-variant-numeric:tabular-nums;padding:2px 6px;border-radius:999px;background:rgba(24,24,37,.25);}"
+    },
+    {
+      "name": "Readiness Plaque",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Dashboard 控制室签名件：玻璃 + 锥形渐变评分盘。「玻璃是营造点」的唯一合法重场景。",
+      "html": "<div class=\"ds-readiness\"><div class=\"ds-readiness__score\">92</div><div class=\"ds-readiness__label\">READINESS</div></div>",
+      "css": ".ds-readiness{position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:140px;height:140px;border-radius:18px;color:#cdd6f4;background:linear-gradient(145deg,rgba(24,24,37,.94),rgba(24,24,37,.82)),conic-gradient(from 215deg,rgba(180,190,254,.28) 0 300deg,transparent 300deg 360deg);box-shadow:inset 0 1px 0 rgba(205,214,244,.08),0 18px 48px rgba(17,17,27,.6);}.ds-readiness__score{font-family:'Geist Variable',ui-sans-serif,system-ui,sans-serif;font-size:2.25rem;font-weight:650;letter-spacing:-.03em;}.ds-readiness__label{font-family:'JetBrains Mono Variable',ui-monospace,monospace;font-size:.62rem;font-weight:650;letter-spacing:.18em;color:#a6adc8;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Control Room / 调度台",
+    "overview": "SkillPort 是一个冷静、密集的指挥中心。重度用户每天住在这里，把中央目录当作技能的唯一真源，一眼看清每个技能装在哪些平台、再一次操作路由到位。整套视觉的目的不是被欣赏，而是让技能的安装状态即时可读——工具消失在任务里。个性来自主题系统本身，而非装饰：6 套主题 × 14 种 accent，配色即身份；body 默认等宽（JetBrains Mono）强化终端原生的调度台手感；玻璃面板与径向光晕在 dashboard 营造控制室纵深。",
+    "keyCharacteristics": [
+      "调度台密度：高信息量 + 清晰层级，键盘优先",
+      "主题即身份：6 主题 × 14 accent，配色承载个性",
+      "等宽 body：JetBrains Mono 默认正文，技术感冷静",
+      "分层玻璃：玻璃面板 + 径向光晕营造控制室纵深",
+      "本地优先的诚实：界面状态如实映射文件系统真相"
+    ],
+    "rules": [
+      { "name": "The Theme-Is-Identity Rule", "body": "个性只允许通过主题与 accent 表达。任何为了好玩临时加的气泡化、玩具化装饰一律禁止。换肤是卖点；廉价点缀是噪音。", "section": "colors" },
+      { "name": "The Accent-Is-Rare Rule", "body": "Accent（primary/ring）只出现在主操作、当前选中、焦点与状态指示上，单屏占比保持克制。非激活状态禁止使用高饱和 accent 实色。", "section": "colors" },
+      { "name": "The Color-Is-Never-Alone Rule", "body": "14 种 accent 与 chart 配色不得成为唯一信息载体。状态与图表除色相外，必须辅以图标、文字或形状，保证色弱可辨。", "section": "colors" },
+      { "name": "The Fixed-Scale Rule", "body": "产品 UI 用固定 rem 阶梯（步进 ~1.125–1.25），不用随视口缩放的 clamp 标题。", "section": "typography" },
+      { "name": "The Mono-Body Rule", "body": "正文默认等宽是刻意的身份选择，服务调度台的技术冷静感；替换为 sans 是用户可选项，不是默认。", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "表面静止时扁平，深度靠中性分层（base → mantle → crust）传达。阴影/发光只作为状态响应出现，不作静态装饰。", "section": "elevation" },
+      { "name": "The Glass-Is-Earned Rule", "body": "玻璃态是营造点，不是默认皮肤。普通密集列表禁止铺满 backdrop-filter；玻璃只用在 dashboard 等少数控制室界面。", "section": "elevation" }
+    ],
+    "dos": [
+      "Do 用 ring-1 ring-border + bg-card + rounded-xl + shadow-sm 作为所有卡片的统一底；技能卡只用 UnifiedSkillCard。",
+      "Do 让 accent（primary/ring）只承担主操作、当前选中、焦点与状态指示；保持单屏占比克制。",
+      "Do 用中性分层（base → mantle → crust）传达深度，阴影/发光只作状态响应。",
+      "Do 给每个交互组件补齐 default / hover / focus-visible / active / disabled / error 全套态。",
+      "Do 让界面状态如实映射文件系统真相——安装/链接/失败/跳过/冲突都要诚实呈现。",
+      "Do 让状态与图表除色相外，附带图标 / 文字 / 形状，保证色弱可辨（WCAG AA）。",
+      "Do 把动效控制在 150–250ms，且只传达状态；尊重 prefers-reduced-motion，提供淡入或瞬切降级。"
+    ],
+    "donts": [
+      "Don't 做成千篇一律的 SaaS 仪表盘：禁止渐变大数字、hero-metric 模板、无差别卡片网格。",
+      "Don't 做成臃肿的企业级后台：禁止工具栏塞满、层级混乱、信息无优先级。",
+      "Don't 做成玩具感消费应用：卡片圆角封顶 14px，禁止 24/28/32px+ 的过度圆角与气泡化。",
+      "Don't 露出 AI 生成的通用感：不套通用模板，个性只走主题/accent。",
+      "Don't 用 border-left/right > 1px 的彩色侧边条作为卡片/列表/告警装饰（侧栏 active 的 3px 指示条是状态指示，例外且合法）。",
+      "Don't 用渐变文字、把玻璃态当默认皮肤、或给密集列表铺满 backdrop-filter。",
+      "Don't 用 fluid clamp 标题；产品 UI 用固定 rem 阶梯。",
+      "Don't 用装饰性动效或不传达状态的 page-load 编排；调度台直接载入任务。"
+    ]
+  }
+}

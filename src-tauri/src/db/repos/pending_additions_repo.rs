@@ -7,7 +7,7 @@ use crate::db::types::{DbPool, SkillRepositoryPendingAddition};
 
 pub async fn list_pending_additions(
     pool: &DbPool,
-) -> Result<Vec<SkillRepositoryPendingAddition>, String> {
+) -> Result<Vec<SkillRepositoryPendingAddition>, sqlx::Error> {
     sqlx::query_as::<_, SkillRepositoryPendingAddition>(
         "SELECT *
          FROM skill_repository_pending_additions
@@ -15,13 +15,12 @@ pub async fn list_pending_additions(
     )
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn list_pending_additions_for_repos(
     pool: &DbPool,
     repository_ids: &[String],
-) -> Result<Vec<SkillRepositoryPendingAddition>, String> {
+) -> Result<Vec<SkillRepositoryPendingAddition>, sqlx::Error> {
     if repository_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -43,13 +42,13 @@ pub async fn list_pending_additions_for_repos(
         query = query.bind(repository_id);
     }
 
-    query.fetch_all(pool).await.map_err(|e| e.to_string())
+    query.fetch_all(pool).await
 }
 
 pub async fn upsert_pending_addition(
     pool: &DbPool,
     addition: &SkillRepositoryPendingAddition,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO skill_repository_pending_additions
          (repository_id, source_path, skill_id, skill_name, conflict_existing_skill_id, discovered_at)
@@ -69,14 +68,13 @@ pub async fn upsert_pending_addition(
     .execute(pool)
     .await
     .map(|_| ())
-    .map_err(|e| e.to_string())
 }
 
 pub async fn delete_pending_addition(
     pool: &DbPool,
     repository_id: &str,
     source_path: &str,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         "DELETE FROM skill_repository_pending_additions
          WHERE repository_id = ? AND source_path = ?",
@@ -86,21 +84,32 @@ pub async fn delete_pending_addition(
     .execute(pool)
     .await
     .map(|_| ())
-    .map_err(|e| e.to_string())
 }
 
-pub async fn clear_pending_additions(pool: &DbPool) -> Result<(), String> {
+pub async fn clear_pending_additions(pool: &DbPool) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM skill_repository_pending_additions")
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
+}
+
+pub async fn prune_orphaned_pending_additions(pool: &DbPool) -> Result<u64, sqlx::Error> {
+    sqlx::query(
+        "DELETE FROM skill_repository_pending_additions
+         WHERE NOT EXISTS (
+           SELECT 1 FROM skill_repositories
+           WHERE skill_repositories.id = skill_repository_pending_additions.repository_id
+         )",
+    )
+    .execute(pool)
+    .await
+    .map(|result| result.rows_affected())
 }
 
 pub async fn clear_pending_additions_for_repos(
     pool: &DbPool,
     repository_ids: &[String],
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     if repository_ids.is_empty() {
         return Ok(());
     }
@@ -118,9 +127,25 @@ pub async fn clear_pending_additions_for_repos(
     for repository_id in repository_ids {
         query = query.bind(repository_id);
     }
-    query
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    query.execute(pool).await.map(|_| ())
+}
+
+pub async fn clear_pending_additions_for_skill_ids(
+    pool: &DbPool,
+    skill_ids: &[String],
+) -> Result<(), sqlx::Error> {
+    if skill_ids.is_empty() {
+        return Ok(());
+    }
+
+    let placeholders = skill_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "DELETE FROM skill_repository_pending_additions WHERE skill_id IN ({})",
+        placeholders
+    );
+    let mut query = sqlx::query(&sql);
+    for skill_id in skill_ids {
+        query = query.bind(skill_id);
+    }
+    query.execute(pool).await.map(|_| ())
 }

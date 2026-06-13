@@ -1,27 +1,23 @@
 use super::*;
 
-pub async fn list_wsl_distributions_impl() -> Result<Vec<WslDistributionSummary>, String> {
+pub async fn list_wsl_distributions_impl() -> Result<Vec<WslDistributionSummary>, TargetsError> {
     #[cfg(not(windows))]
     {
-        return Err("WSL distributions can only be discovered on Windows.".to_string());
+        Err(TargetsError::WslDiscoveryWindowsOnly)
     }
 
     #[cfg(windows)]
     {
-        let output = Command::new(super::wsl_program())
-            .arg("-l")
-            .arg("-v")
-            .stdin(Stdio::null())
+        let output = wsl_distribution_list_command()
             .output()
-            .map_err(|e| format!("Failed to start wsl.exe: {}", e))?;
+            .map_err(|e| TargetsError::io("Failed to start wsl.exe", e))?;
         if !output.status.success() {
             let detail = normalize_wsl_list_output(&output.stderr);
             let detail = detail.trim();
             return Err(if detail.is_empty() {
-                "Failed to list WSL distributions. Verify WSL is installed with `wsl.exe -l -v`."
-                    .to_string()
+                TargetsError::WslListFailed
             } else {
-                format!("Failed to list WSL distributions: {}", detail)
+                TargetsError::WslListFailedDetail(detail.to_string())
             });
         }
 
@@ -31,6 +27,15 @@ pub async fn list_wsl_distributions_impl() -> Result<Vec<WslDistributionSummary>
     }
 }
 
+#[cfg(windows)]
+pub(super) fn wsl_distribution_list_command() -> Command {
+    let mut command = Command::new(super::wsl_program());
+    hide_child_window(&mut command);
+    command.arg("-l").arg("-v").stdin(Stdio::null());
+    command
+}
+
+#[cfg(any(test, windows))]
 pub(super) fn normalize_wsl_list_output(bytes: &[u8]) -> String {
     let nul_count = bytes.iter().filter(|byte| **byte == 0).count();
     if !bytes.is_empty() && nul_count > bytes.len() / 4 {
@@ -51,6 +56,7 @@ pub(super) fn normalize_wsl_list_output(bytes: &[u8]) -> String {
     }
 }
 
+#[cfg(any(test, windows))]
 pub(super) fn parse_wsl_distribution_list(output: &str) -> Vec<WslDistributionSummary> {
     output
         .lines()
@@ -58,6 +64,7 @@ pub(super) fn parse_wsl_distribution_list(output: &str) -> Vec<WslDistributionSu
         .collect()
 }
 
+#[cfg(any(test, windows))]
 fn parse_wsl_distribution_row(line: &str) -> Option<WslDistributionSummary> {
     let trimmed = line.trim();
     let is_default = trimmed.starts_with('*');

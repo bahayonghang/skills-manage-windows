@@ -29,6 +29,7 @@ import {
   type AppUpdateStatus,
 } from "@/stores/appUpdateStore";
 import { cn } from "@/lib/utils";
+import { statusChipClass } from "@/lib/statusTone";
 
 interface AboutSettingsSectionProps {
   appVersion: string;
@@ -37,10 +38,22 @@ interface AboutSettingsSectionProps {
 }
 
 const HELP_RESOURCES = [
-  { key: "readme", href: "https://github.com/bahayonghang/skills-manage-windows#readme" },
-  { key: "readmeZh", href: "https://github.com/bahayonghang/skills-manage-windows/blob/main/README_CN.md" },
-  { key: "releases", href: "https://github.com/bahayonghang/skills-manage-windows/releases" },
-  { key: "issues", href: "https://github.com/bahayonghang/skills-manage-windows/issues" },
+  {
+    key: "readme",
+    href: "https://github.com/bahayonghang/skills-manage-windows#readme",
+  },
+  {
+    key: "readmeZh",
+    href: "https://github.com/bahayonghang/skills-manage-windows/blob/main/README_CN.md",
+  },
+  {
+    key: "releases",
+    href: "https://github.com/bahayonghang/skills-manage-windows/releases",
+  },
+  {
+    key: "issues",
+    href: "https://github.com/bahayonghang/skills-manage-windows/issues",
+  },
 ] as const;
 
 const STACK_ITEMS = [
@@ -77,19 +90,17 @@ export function AboutSettingsSection({
   const hasUpdate = Boolean(latestVersion);
 
   return (
-    <div
-      className="relative overflow-hidden rounded-[2rem] border border-border/70 bg-[#11111b] p-4 text-slate-100 shadow-2xl shadow-black/30 sm:p-6"
-    >
+    <div className="relative overflow-hidden rounded-[2rem] border border-border bg-card p-4 text-foreground shadow-sm sm:p-6">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-50 [background-image:linear-gradient(rgba(180,190,254,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(180,190,254,0.08)_1px,transparent_1px)] [background-size:24px_24px]"
+        className="pointer-events-none absolute inset-0 opacity-50 [background-image:linear-gradient(color-mix(in_srgb,var(--foreground)_6%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_srgb,var(--foreground)_6%,transparent)_1px,transparent_1px)] [background-size:24px_24px]"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full bg-primary/25 blur-3xl"
+        className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full bg-primary/15 blur-3xl"
       />
       <div className="relative space-y-5">
-        <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.06] p-5 shadow-xl shadow-black/20 backdrop-blur">
+        <section className="rounded-[1.5rem] border border-border bg-muted/40 p-5">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl space-y-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -100,15 +111,19 @@ export function AboutSettingsSection({
                 <StatusChip status={status} label={statusLabel} />
               </div>
               <div>
-                <h3 className="font-heading text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                <h3 className="font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
                   SkillPort
                 </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-300">
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {t("settings.aboutCockpit.heroDesc")}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 text-xs">
-                <MetaPill icon={<PackageCheck />} label={t("settings.appVersion")} value={`v${appVersion}`} />
+                <MetaPill
+                  icon={<PackageCheck />}
+                  label={t("settings.appVersion")}
+                  value={`v${appVersion}`}
+                />
                 <MetaPill
                   icon={<ShieldCheck />}
                   label={t("settings.aboutCockpit.channel")}
@@ -129,16 +144,23 @@ export function AboutSettingsSection({
               />
               <HeroMetric
                 label={t("settings.aboutCockpit.latestVersion")}
-                value={latestVersion ? `v${latestVersion}` : t("settings.aboutCockpit.pendingCheck")}
+                value={
+                  latestVersion
+                    ? `v${latestVersion}`
+                    : t("settings.aboutCockpit.pendingCheck")
+                }
               />
               <a
                 href={repoUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="group col-span-full flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200 transition hover:border-primary/50 hover:bg-primary/10"
+                className="group col-span-full flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-border bg-background px-4 py-3 text-sm text-muted-foreground transition hover:border-primary/50 hover:bg-primary/10 hover:text-foreground"
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  <Globe className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                  <Globe
+                    className="size-4 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
                   <span className="truncate">{repoUrl}</span>
                 </span>
                 <ExternalLink className="size-4 shrink-0 opacity-70 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
@@ -232,14 +254,21 @@ function ReleaseUpdateCard({
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <div className="text-xs uppercase tracking-[0.16em] text-slate-500">
+            <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
               {t("settings.aboutCockpit.updateState")}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <StatusChip status={status} label={statusLabel} />
               {latestVersion ? (
-                <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-xs text-emerald-200">
-                  {t("settings.aboutCockpit.newVersion", { version: latestVersion })}
+                <span
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-xs",
+                    statusChipClass.success,
+                  )}
+                >
+                  {t("settings.aboutCockpit.newVersion", {
+                    version: latestVersion,
+                  })}
                 </span>
               ) : null}
             </div>
@@ -248,11 +277,14 @@ function ReleaseUpdateCard({
             <Button
               type="button"
               variant="outline"
-              className="border-white/15 bg-white/5 text-slate-100 hover:bg-white/10"
               disabled={isChecking || isDownloading || isInstalling}
               onClick={onCheck}
             >
-              {isChecking ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+              {isChecking ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RotateCcw className="size-4" />
+              )}
               {isChecking
                 ? t("settings.aboutCockpit.checking")
                 : t("settings.aboutCockpit.checkUpdate")}
@@ -274,13 +306,13 @@ function ReleaseUpdateCard({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-          <div className="mb-2 flex items-center justify-between gap-3 text-xs text-slate-400">
+        <div className="rounded-2xl border border-border bg-background p-4">
+          <div className="mb-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
             <span>{t("settings.aboutCockpit.artifact")}</span>
             <span>{progressLabel}</span>
           </div>
           <div
-            className="h-2 overflow-hidden rounded-full bg-white/10"
+            className="h-2 overflow-hidden rounded-full bg-muted"
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={100}
@@ -288,7 +320,7 @@ function ReleaseUpdateCard({
             aria-label={t("settings.aboutCockpit.progressAria")}
           >
             <div
-              className="h-full rounded-full bg-gradient-to-r from-primary via-sky-300 to-emerald-300 transition-all duration-300"
+              className="h-full rounded-full bg-primary transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
@@ -310,11 +342,11 @@ function ReleaseUpdateCard({
           </InlineState>
         ) : null}
         {hasUpdate && releaseNotes ? (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-            <div className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+          <div className="rounded-2xl border border-border bg-muted/30 p-4">
+            <div className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
               {t("settings.aboutCockpit.releaseNotes")}
             </div>
-            <p className="max-h-28 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-300">
+            <p className="max-h-28 overflow-auto whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
               {releaseNotes}
             </p>
           </div>
@@ -324,7 +356,13 @@ function ReleaseUpdateCard({
   );
 }
 
-function DiagnosticCard({ dbPathDisplay, repoUrl }: { dbPathDisplay: string; repoUrl: string }) {
+function DiagnosticCard({
+  dbPathDisplay,
+  repoUrl,
+}: {
+  dbPathDisplay: string;
+  repoUrl: string;
+}) {
   const { t } = useTranslation();
   return (
     <CockpitCard
@@ -333,8 +371,17 @@ function DiagnosticCard({ dbPathDisplay, repoUrl }: { dbPathDisplay: string; rep
       description={t("settings.aboutCockpit.diagnosticsDesc")}
     >
       <div className="space-y-3">
-        <DiagnosticRow icon={<Database />} label={t("settings.dbPath")} value={dbPathDisplay} />
-        <DiagnosticRow icon={<Globe />} label={t("settings.repoUrl")} value={repoUrl} href={repoUrl} />
+        <DiagnosticRow
+          icon={<Database />}
+          label={t("settings.dbPath")}
+          value={dbPathDisplay}
+        />
+        <DiagnosticRow
+          icon={<Globe />}
+          label={t("settings.repoUrl")}
+          value={repoUrl}
+          href={repoUrl}
+        />
         <DiagnosticRow
           icon={<Cpu />}
           label={t("settings.aboutCockpit.buildTarget")}
@@ -362,7 +409,7 @@ function TechStackCard() {
         {STACK_ITEMS.map((item) => (
           <span
             key={item}
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-slate-200"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1.5 text-xs font-medium text-foreground"
           >
             <Sparkles className="size-3 text-primary" aria-hidden="true" />
             {item}
@@ -392,16 +439,16 @@ function HelpResourcesCard() {
               href={resource.href}
               target="_blank"
               rel="noreferrer"
-              className="group rounded-2xl border border-white/10 bg-black/20 p-4 text-sm transition hover:border-primary/50 hover:bg-primary/10"
+              className="group rounded-2xl border border-border bg-background p-4 text-sm transition hover:border-primary/50 hover:bg-primary/10"
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2 font-medium text-slate-100">
+                <span className="flex items-center gap-2 font-medium text-foreground">
                   <Icon className="size-4 text-primary" aria-hidden="true" />
                   {t(`settings.aboutCockpit.resources.${resource.key}.title`)}
                 </span>
-                <ExternalLink className="size-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                <ExternalLink className="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
               </div>
-              <p className="mt-2 text-xs leading-5 text-slate-400">
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
                 {t(`settings.aboutCockpit.resources.${resource.key}.desc`)}
               </p>
             </a>
@@ -427,7 +474,7 @@ function CockpitCard({
 }) {
   return (
     <section
-      className="rounded-[1.5rem] border border-white/10 bg-white/[0.06] p-5 shadow-xl shadow-black/20 backdrop-blur"
+      className="rounded-[1.5rem] border border-border bg-muted/40 p-5"
       data-testid={testId}
     >
       <div className="mb-4 flex items-start gap-3">
@@ -435,8 +482,12 @@ function CockpitCard({
           {icon}
         </span>
         <div>
-          <h4 className="font-heading text-base font-semibold text-white">{title}</h4>
-          <p className="mt-1 text-sm leading-5 text-slate-400">{description}</p>
+          <h4 className="font-heading text-base font-semibold text-foreground">
+            {title}
+          </h4>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">
+            {description}
+          </p>
         </div>
       </div>
       {children}
@@ -446,21 +497,36 @@ function CockpitCard({
 
 function HeroMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-      <div className="text-xs uppercase tracking-[0.16em] text-slate-500">{label}</div>
-      <div className="mt-1 truncate text-sm font-semibold text-slate-100">{value}</div>
+    <div className="rounded-2xl border border-border bg-background px-4 py-3">
+      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 truncate text-sm font-semibold text-foreground">
+        {value}
+      </div>
     </div>
   );
 }
 
-function MetaPill({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function MetaPill({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-slate-200">
-      <span className="[&_svg]:size-3.5 [&_svg]:text-primary" aria-hidden="true">
+    <span className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1.5 text-foreground">
+      <span
+        className="[&_svg]:size-3.5 [&_svg]:text-primary"
+        aria-hidden="true"
+      >
         {icon}
       </span>
-      <span className="text-slate-500">{label}</span>
-      <span className="font-medium text-slate-100">{value}</span>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-foreground">{value}</span>
     </span>
   );
 }
@@ -490,13 +556,15 @@ function DiagnosticRow({
   );
 
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-3">
+    <div className="flex items-start gap-3 rounded-2xl border border-border bg-background p-3">
       <span className="mt-0.5 text-primary [&_svg]:size-4" aria-hidden="true">
         {icon}
       </span>
       <div className="min-w-0">
-        <div className="text-xs uppercase tracking-[0.16em] text-slate-500">{label}</div>
-        <div className="mt-1 font-mono text-sm text-slate-200">{content}</div>
+        <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+          {label}
+        </div>
+        <div className="mt-1 font-mono text-sm text-foreground">{content}</div>
       </div>
     </div>
   );
@@ -515,9 +583,7 @@ function InlineState({
     <div
       className={cn(
         "flex items-start gap-2 rounded-2xl border px-3 py-2 text-sm",
-        tone === "success" && "border-emerald-400/30 bg-emerald-400/10 text-emerald-100",
-        tone === "warning" && "border-amber-400/30 bg-amber-400/10 text-amber-100",
-        tone === "error" && "border-red-400/30 bg-red-400/10 text-red-100"
+        statusChipClass[tone],
       )}
     >
       <span className="mt-0.5 [&_svg]:size-4" aria-hidden="true">
@@ -528,17 +594,27 @@ function InlineState({
   );
 }
 
-function StatusChip({ status, label }: { status: AppUpdateStatus; label: string }) {
-  const busy = status === "checking" || status === "downloading" || status === "installing";
+function StatusChip({
+  status,
+  label,
+}: {
+  status: AppUpdateStatus;
+  label: string;
+}) {
+  const busy =
+    status === "checking" ||
+    status === "downloading" ||
+    status === "installing";
   return (
     <span
       className={cn(
         "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
-        status === "available" && "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
-        status === "upToDate" && "border-sky-400/30 bg-sky-400/10 text-sky-200",
-        status === "unsupported" && "border-amber-400/30 bg-amber-400/10 text-amber-200",
-        status === "error" && "border-red-400/30 bg-red-400/10 text-red-200",
-        (status === "idle" || busy) && "border-white/10 bg-white/[0.06] text-slate-200"
+        status === "available" && statusChipClass.success,
+        status === "upToDate" && statusChipClass.info,
+        status === "unsupported" && statusChipClass.warning,
+        status === "error" && statusChipClass.error,
+        (status === "idle" || busy) &&
+          "border-border bg-muted text-muted-foreground",
       )}
     >
       {busy ? (

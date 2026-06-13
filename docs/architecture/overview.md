@@ -90,7 +90,7 @@ src-tauri/src/
 ## Cross-cutting Concerns
 
 - **State sync.** The backend emits `system://migration-progress` during startup so the UI can show a banner without polling.
-- **Operation logs.** Every install/uninstall writes a structured `operation_logs` row with `level`, `target_kind`, `category`, `action`, `summary`. The Logs page reads back through `commands::logs`.
+- **Observability.** User actions write structured `operation_logs` rows for the Operation layer, while frontend/backend diagnostics write bounded `skillport-YYYY-MM-DD.log` files for the Runtime layer. The `/logs` console reads both through `commands::logs`; see [Runtime Observability](./runtime-observability.md).
 - **Active target.** All commands resolve `AppState::active_db()` first so SSH-bound calls hit the remote SQLite cache instead of the local one.
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-06-03

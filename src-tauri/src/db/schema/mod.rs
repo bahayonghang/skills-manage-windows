@@ -35,11 +35,8 @@ use super::types::DbPool;
 /// 1. 主键表 / 其他表会引用的表先建（如 `marketplace_skills` FK → `skill_registries`）
 /// 2. 同一业务域的索引与 ALTER TABLE 跟在自家 CREATE TABLE 后面，避免漂移
 /// 3. WAL：连接池构造时已设置，这里再次执行以兼容外部直接传入的池实例
-pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
-    sqlx::query("PRAGMA journal_mode=WAL")
-        .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
+    sqlx::query("PRAGMA journal_mode=WAL").execute(pool).await?;
 
     core::init(pool).await?;
     collections::init(pool).await?;

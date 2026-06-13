@@ -1,0 +1,33 @@
+{
+  "id": "analysis-driven-fixes",
+  "name": "analysis-driven-fixes",
+  "title": "深度分析驱动的优化修复",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-06-11",
+  "completedAt": "2026-06-12",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "06-11-eng-hygiene-quickfixes",
+    "06-11-spawn-blocking-io",
+    "06-11-thiserror-batch1-infra",
+    "06-11-thiserror-batch2-mid",
+    "06-11-thiserror-batch3-tail",
+    "06-11-claude-md-rewrite"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

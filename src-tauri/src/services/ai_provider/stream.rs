@@ -8,7 +8,9 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 use super::cache::{cache_skill_explanation, explanation_has_content};
-use super::error::{classify_reqwest_error, ExplanationErrorInfo, ExplanationErrorKind};
+use super::error::{
+    classify_reqwest_error, AiProviderError, ExplanationErrorInfo, ExplanationErrorKind,
+};
 use super::prompt::{build_explanation_prompt, build_stream_request_body, truncate_content};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,15 +110,15 @@ pub(crate) async fn do_explain_skill_stream(
     skill_id: &str,
     content: &str,
     lang: &str,
-) -> Result<(), String> {
+) -> Result<(), AiProviderError> {
     let config = super::resolve_ai_provider_config(pool).await;
     let api_key = super::get_ai_api_key_for_provider(pool, secrets, &config.provider)
         .await?
         .ok_or_else(|| {
-            super::coded_error(
+            AiProviderError::MissingApiKey(super::coded_error(
                 super::AI_MISSING_API_KEY,
                 "Configure an AI API key in Settings before requesting an AI explanation.",
-            )
+            ))
         })?;
 
     let api_url = config.api_url.clone();
@@ -135,11 +137,11 @@ pub(crate) async fn do_explain_skill_stream(
         .pool_idle_timeout(Duration::from_secs(90))
         .build()
         .map_err(|e| {
-            super::coded_error_with_details(
+            AiProviderError::Http(super::coded_error_with_details(
                 super::AI_CLIENT_BUILD_FAILED,
                 "Failed to initialize the AI HTTP client.",
                 e.to_string(),
-            )
+            ))
         })?;
 
     // Try primary endpoint; on connect-layer failure, try fallback once
@@ -175,7 +177,7 @@ pub(crate) async fn do_explain_skill_stream(
                                     "error_info": fallback_err,
                                 }),
                             );
-                            return Err(fallback_err.message);
+                            return Err(AiProviderError::Http(fallback_err.message));
                         }
                     }
                 } else {
@@ -187,7 +189,7 @@ pub(crate) async fn do_explain_skill_stream(
                             "error_info": err_info,
                         }),
                     );
-                    return Err(err_info.message);
+                    return Err(AiProviderError::Http(err_info.message));
                 }
             } else {
                 let _ = app.emit(
@@ -198,7 +200,7 @@ pub(crate) async fn do_explain_skill_stream(
                         "error_info": err_info,
                     }),
                 );
-                return Err(err_info.message);
+                return Err(AiProviderError::Http(err_info.message));
             }
         }
     };
@@ -244,10 +246,9 @@ pub(crate) async fn do_explain_skill_stream(
                 "error_info": err_info,
             }),
         );
-        return Err(super::coded_error_with_details(
-            code,
-            &err_info.message,
-            &err_info.details,
+        return Err(AiProviderError::from_status(
+            status_code,
+            super::coded_error_with_details(code, &err_info.message, &err_info.details),
         ));
     }
 
@@ -259,11 +260,11 @@ pub(crate) async fn do_explain_skill_stream(
 
     while let Some(chunk_result) = stream.next().await {
         let chunk = chunk_result.map_err(|e| {
-            super::coded_error_with_details(
+            AiProviderError::Http(super::coded_error_with_details(
                 super::AI_RESPONSE_READ_FAILED,
                 "Failed to read the AI response stream.",
                 e.to_string(),
-            )
+            ))
         })?;
         sse_buffer.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -349,7 +350,7 @@ pub(crate) async fn do_explain_skill_stream(
                 "error_info": err_info,
             }),
         );
-        return Err("AI explanation returned no content.".to_string());
+        return Err(AiProviderError::EmptyExplanation);
     }
 
     cache_skill_explanation(pool, skill_id, lang, &model, &full_text).await?;

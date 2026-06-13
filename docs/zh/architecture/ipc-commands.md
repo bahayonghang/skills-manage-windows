@@ -23,7 +23,7 @@
 
 - **命名。** Rust 蛇形函数名与 JS `invoke()` 入参 1:1 对应：`invoke('scan_all_skills', {})`。
 - **入参。** Tauri 通过 serde 把 JS 驼峰键映射为蛇形参数；传普通对象即可。
-- **返回。** 所有命令返回 `Result<T, String>`。前端把字符串当作可见错误展示；详细诊断走 `operation_logs`。
+- **返回。** 所有命令返回 `Result<T, String>`。前端把字符串当作可见错误展示；详细诊断走 Runtime Log，而不是 `operation_logs`。
 - **注入参数。** `State<AppState>`、`Window`、`AppHandle`、`Emitter` 由 Tauri 注入，JS 调用时不传。
 
 ## 真相源

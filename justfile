@@ -11,16 +11,11 @@ sync-version:
 # 步骤2：检查工作流
 # ========================================================================
 # 目标：
-# 1) 运行前端类型检查、ESLint
-# 2) 运行前端测试与源码体积预算检查
-# 3) 运行 Rust 单元测试与 clippy 静态检查
+# 1) 先同步版本元数据
+# 2) 并行运行 Web 链（typecheck -> lint -> sizecheck -> test）
+# 3) 并行运行 Rust 链（clippy -> test）
 ci: sync-version
-    pnpm typecheck
-    pnpm lint
-    pnpm test
-    pnpm sizecheck
-    cargo test --manifest-path src-tauri/Cargo.toml
-    cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+    node scripts/run-ci.mjs
 
 # ========================================================================
 # 步骤3：构建桌面应用
@@ -35,9 +30,19 @@ build: sync-version
 # 步骤4：构建并安装桌面应用
 # ========================================================================
 # 目标：
-# 1) 复用 build 生成的当前平台产物
-# 2) Windows 上以 passive 模式运行 NSIS 安装器
+# 1) macOS 上提示并转为 just build
+# 2) Windows 上复用 build 生成的 NSIS 产物并以 passive 模式运行安装器
 install:
+    @just {{ if os() == "macos" { "_install_macos" } else if os() == "windows" { "_install_windows" } else { "_install_unsupported" } }}
+
+_install_macos:
+    @echo "[install] macOS detected; running just build instead of installing."
+    @just build
+
+_install_windows: build
+    node scripts/install.mjs
+
+_install_unsupported:
     node scripts/install.mjs
 
 # ========================================================================

@@ -516,7 +516,7 @@ async fn test_delete_central_skill_rejects_non_central_skill() {
         .await
         .unwrap_err();
 
-    assert!(error.contains("is not a Central skill"));
+    assert!(error.to_string().contains("is not a Central skill"));
 }
 
 #[tokio::test]
@@ -536,7 +536,7 @@ async fn test_delete_central_skill_rejects_path_outside_central_root() {
         .await
         .unwrap_err();
 
-    assert!(error.contains("outside Central Skills root"));
+    assert!(error.to_string().contains("outside Central Skills root"));
     assert!(outside_dir.exists());
     assert!(db::get_skill_by_id(&pool, "outside-skill")
         .await
@@ -907,7 +907,7 @@ async fn test_delete_skill_repository_rejects_unknown_repository() {
         .await
         .unwrap_err();
 
-    assert!(error.contains("cannot be deleted"));
+    assert!(error.to_string().contains("cannot be deleted"));
     assert!(
         db::get_skill_repository_by_id(&pool, db::LOCAL_UNKNOWN_REPOSITORY_ID)
             .await
@@ -1106,17 +1106,23 @@ async fn test_read_skill_content_file_not_found() {
 
 // ── Testable core implementations (without Tauri State) ───────────────────
 
-async fn get_central_skills_impl(pool: &SqlitePool) -> Result<Vec<SkillWithLinks>, String> {
+async fn get_central_skills_impl(
+    pool: &SqlitePool,
+) -> Result<Vec<SkillWithLinks>, CentralSkillsError> {
     super::get_central_skills_impl(pool).await
 }
 
-async fn get_skill_detail_impl(pool: &SqlitePool, skill_id: &str) -> Result<SkillDetail, String> {
+async fn get_skill_detail_impl(
+    pool: &SqlitePool,
+    skill_id: &str,
+) -> Result<SkillDetail, CentralSkillsError> {
     super::get_skill_detail_with_row_impl(pool, skill_id, None, None).await
 }
 
 async fn read_skill_content_impl(pool: &SqlitePool, skill_id: &str) -> Result<String, String> {
     let skill = db::get_skill_by_id(pool, skill_id)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
     std::fs::read_to_string(&skill.file_path)
         .map_err(|e| format!("Failed to read '{}': {}", skill.file_path, e))
@@ -1691,18 +1697,21 @@ async fn test_get_skills_by_agent_impl_copy_link_type() {
 #[tokio::test]
 async fn test_read_file_by_path_success() {
     let tmp = TempDir::new().unwrap();
-    let file_path = tmp.path().join("test-skill.md");
+    let skill_dir = tmp.path().join("test-skill");
+    fs::create_dir_all(&skill_dir).unwrap();
+    let file_path = skill_dir.join("SKILL.md");
     let content = "---\nname: Test\n---\n\n# Test Skill";
     fs::write(&file_path, content).unwrap();
 
-    let result = read_file_by_path_impl(&file_path.to_string_lossy());
+    let result = read_file_by_path_impl(&file_path.to_string_lossy(), &skill_dir.to_string_lossy());
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), content);
 }
 
 #[tokio::test]
 async fn test_read_file_by_path_not_found() {
-    let result = read_file_by_path_impl("/nonexistent/file.md");
+    let tmp = TempDir::new().unwrap();
+    let result = read_file_by_path_impl("/nonexistent/file.md", &tmp.path().to_string_lossy());
     assert!(result.is_err());
 }
 
@@ -1711,7 +1720,11 @@ async fn test_list_directory_tree_reads_nested_local_structure() {
     let tmp = TempDir::new().unwrap();
     make_directory_tree_fixture(tmp.path());
 
-    let result = super::files::list_directory_tree_impl(&tmp.path().to_string_lossy()).unwrap();
+    let result = super::files::list_directory_tree_impl(
+        &tmp.path().to_string_lossy(),
+        &tmp.path().to_string_lossy(),
+    )
+    .unwrap();
 
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].name, "examples");
@@ -1723,7 +1736,11 @@ async fn test_list_directory_tree_reads_nested_local_structure() {
 
 #[tokio::test]
 async fn test_list_directory_tree_rejects_missing_path() {
-    let result = super::files::list_directory_tree_impl("/definitely/missing/path");
+    let tmp = TempDir::new().unwrap();
+    let result = super::files::list_directory_tree_impl(
+        "/definitely/missing/path",
+        &tmp.path().to_string_lossy(),
+    );
     assert!(result.is_err());
 }
 
@@ -1731,6 +1748,10 @@ async fn test_list_directory_tree_rejects_missing_path() {
 
 #[tokio::test]
 async fn test_open_in_file_manager_nonexistent_path() {
-    let result = open_in_file_manager_checked_impl("/nonexistent/path/that/does/not/exist");
+    let tmp = TempDir::new().unwrap();
+    let result = open_in_file_manager_checked_impl(
+        "/nonexistent/path/that/does/not/exist",
+        &tmp.path().to_string_lossy(),
+    );
     assert!(result.is_err());
 }

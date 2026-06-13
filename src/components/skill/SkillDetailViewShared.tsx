@@ -18,16 +18,30 @@ export function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-export function MetadataRow({ label, value }: { label: string; value: string }) {
+export function MetadataRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="space-y-0.5">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">{label}</div>
-      <div className="break-all font-mono text-xs leading-relaxed text-foreground">{value}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+        {label}
+      </div>
+      <div className="break-all font-mono text-xs leading-relaxed text-foreground">
+        {value}
+      </div>
     </div>
   );
 }
 
-export function SourceOriginBadge({ originKind }: { originKind: ClaudeSourceKind }) {
+export function SourceOriginBadge({
+  originKind,
+}: {
+  originKind: ClaudeSourceKind;
+}) {
   const { t, i18n } = useTranslation();
   const isPlugin = originKind === "plugin";
 
@@ -36,16 +50,20 @@ export function SourceOriginBadge({ originKind }: { originKind: ClaudeSourceKind
       className={cn(
         "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
         isPlugin
-          ? "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300"
-          : "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:text-sky-300"
+          ? "bg-warning/10 text-warning-foreground ring-warning/20"
+          : "bg-info/10 text-info-foreground ring-info/20",
       )}
     >
       {isPlugin
         ? t("platform.originPlugin", {
-            defaultValue: i18n.language.startsWith("zh") ? "插件来源" : "Plugin source",
+            defaultValue: i18n.language.startsWith("zh")
+              ? "插件来源"
+              : "Plugin source",
           })
         : t("platform.originUser", {
-            defaultValue: i18n.language.startsWith("zh") ? "用户来源" : "User source",
+            defaultValue: i18n.language.startsWith("zh")
+              ? "用户来源"
+              : "User source",
           })}
     </span>
   );
@@ -58,7 +76,9 @@ export function ReadOnlySourceBadge() {
     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70">
       <Lock className="size-3 shrink-0" />
       {t("detail.readOnlySource", {
-        defaultValue: i18n.language.startsWith("zh") ? "只读来源" : "Read-only source",
+        defaultValue: i18n.language.startsWith("zh")
+          ? "只读来源"
+          : "Read-only source",
       })}
     </span>
   );
@@ -99,13 +119,16 @@ export function PlatformToggleIcon({
           : isInstalled
             ? "text-primary hover:bg-primary/15"
             : "text-muted-foreground/40 hover:bg-muted/60 hover:text-muted-foreground",
-        isLoading && "pointer-events-none animate-pulse"
+        isLoading && "pointer-events-none animate-pulse",
       )}
       title={title}
       aria-label={
         isLocked
           ? title
-          : t("central.toggleInstallLabel", { platform: displayName, skill: skillName })
+          : t("central.toggleInstallLabel", {
+              platform: displayName,
+              skill: skillName,
+            })
       }
       disabled={isLoading || isLocked}
       onClick={onToggle}
@@ -133,7 +156,7 @@ export function TabToggle({ activeTab, onChange }: TabToggleProps) {
           "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
           activeTab === "markdown"
             ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
+            : "text-muted-foreground hover:text-foreground",
         )}
       >
         <FileText className="size-3.5" />
@@ -147,7 +170,7 @@ export function TabToggle({ activeTab, onChange }: TabToggleProps) {
           "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
           activeTab === "raw"
             ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
+            : "text-muted-foreground hover:text-foreground",
         )}
       >
         <Code className="size-3.5" />
@@ -161,7 +184,7 @@ export function TabToggle({ activeTab, onChange }: TabToggleProps) {
           "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
           activeTab === "explanation"
             ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
+            : "text-muted-foreground hover:text-foreground",
         )}
       >
         <Bot className="size-3.5" />

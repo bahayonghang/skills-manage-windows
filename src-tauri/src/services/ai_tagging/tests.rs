@@ -1,8 +1,10 @@
 use super::{
-    bulk_suggest_skill_tags_impl, map_ai_suggestions, parse_ai_tag_suggestions,
-    AiTagProgressPayload, AiTagProgressStatus,
+    build_tagging_prompt, bulk_suggest_skill_tags_impl, map_ai_suggestions,
+    parse_ai_tag_suggestions, AiTagProgressPayload, AiTagProgressStatus,
 };
-use crate::db::{self, DbPool, Skill, SkillTag, UNCATEGORIZED_TAG_ID};
+use crate::db::{
+    self, DbPool, Skill, SkillTag, ACADEMIC_RESEARCH_WRITING_TAG_ID, UNCATEGORIZED_TAG_ID,
+};
 use crate::secrets::{MockSecretStore, AI_API_KEY_SECRET_KEY};
 use sqlx::sqlite::SqlitePoolOptions;
 use std::sync::{
@@ -20,6 +22,19 @@ fn tag(id: &str, name: &str) -> SkillTag {
         description: None,
         color: None,
         is_builtin: true,
+        created_at: "2026-04-24T00:00:00Z".to_string(),
+        updated_at: "2026-04-24T00:00:00Z".to_string(),
+        group_id: None,
+    }
+}
+
+fn custom_tag(id: &str, name: &str, description: &str) -> SkillTag {
+    SkillTag {
+        id: id.to_string(),
+        name: name.to_string(),
+        description: Some(description.to_string()),
+        color: None,
+        is_builtin: false,
         created_at: "2026-04-24T00:00:00Z".to_string(),
         updated_at: "2026-04-24T00:00:00Z".to_string(),
         group_id: None,
@@ -135,31 +150,91 @@ async fn spawn_ai_server(
 #[test]
 fn parses_tag_json_envelope() {
     let parsed = parse_ai_tag_suggestions(
-        r#"{"tags":[{"tag":"编程与 Agent 工程","confidence":0.91,"reason":"开发工具"}]}"#,
+        r#"{"tags":[{"tag":"academic-research-writing","confidence":0.91,"reason":"研究写作"}]}"#,
     )
     .expect("parse");
     assert_eq!(parsed.len(), 1);
-    assert_eq!(parsed[0].tag, "编程与 Agent 工程");
+    assert_eq!(parsed[0].tag, ACADEMIC_RESEARCH_WRITING_TAG_ID);
+}
+
+#[test]
+fn build_prompt_reuses_existing_candidate_ids_and_excludes_system_tags() {
+    let tags = vec![
+        tag(ACADEMIC_RESEARCH_WRITING_TAG_ID, "学术研究与写作"),
+        custom_tag(
+            "literature-review",
+            "文献综述",
+            "Systematic literature review workflows.",
+        ),
+        tag("programming-agent-engineering", "编程与 Agent 工程"),
+        tag(UNCATEGORIZED_TAG_ID, "未分类"),
+    ];
+
+    let prompt = build_tagging_prompt(
+        "paper-helper",
+        Some("Helps write related work"),
+        "# paper-helper\nResearch notes",
+        &tags,
+    );
+
+    assert!(prompt.contains("id: academic-research-writing"));
+    assert!(prompt.contains("id: literature-review"));
+    assert!(prompt.contains("kind: custom"));
+    assert!(prompt.contains("Systematic literature review workflows."));
+    assert!(prompt.contains("只能输出候选列表中的 tag id"));
+    assert!(prompt.contains("{\"tags\":[]}"));
+    assert!(!prompt.contains("programming-agent-engineering"));
+    assert!(!prompt.contains("uncategorized"));
+    assert!(!prompt.contains("未分类"));
 }
 
 #[test]
 fn maps_unknown_ai_tags_to_uncategorized() {
     let tags = vec![
-        tag("programming-agent-engineering", "编程与 Agent 工程"),
-        tag("uncategorized", "未分类"),
+        tag(ACADEMIC_RESEARCH_WRITING_TAG_ID, "学术研究与写作"),
+        tag(UNCATEGORIZED_TAG_ID, "未分类"),
     ];
     let parsed =
         parse_ai_tag_suggestions(r#"{"tags":[{"tag":"不存在","confidence":0.8,"reason":"测试"}]}"#)
             .expect("parse");
     let mapped = map_ai_suggestions("skill-a", &tags, parsed).expect("map");
-    assert_eq!(mapped[0].tag.id, "uncategorized");
+    assert_eq!(mapped[0].tag.id, UNCATEGORIZED_TAG_ID);
+    assert_eq!(mapped[0].confidence, 0.2);
+}
+
+#[test]
+fn maps_empty_ai_tags_to_uncategorized() {
+    let tags = vec![
+        tag(ACADEMIC_RESEARCH_WRITING_TAG_ID, "学术研究与写作"),
+        tag(UNCATEGORIZED_TAG_ID, "未分类"),
+    ];
+    let parsed = parse_ai_tag_suggestions(r#"{"tags":[]}"#).expect("parse");
+    let mapped = map_ai_suggestions("skill-a", &tags, parsed).expect("map");
+    assert_eq!(mapped[0].tag.id, UNCATEGORIZED_TAG_ID);
+    assert_eq!(mapped[0].confidence, 0.2);
+}
+
+#[test]
+fn ignores_uncategorized_returned_by_model_as_primary_tag() {
+    let tags = vec![
+        tag(ACADEMIC_RESEARCH_WRITING_TAG_ID, "学术研究与写作"),
+        tag(UNCATEGORIZED_TAG_ID, "未分类"),
+    ];
+    let parsed = parse_ai_tag_suggestions(
+        r#"{"tags":[{"tag":"uncategorized","confidence":0.95,"reason":"模型直返"}]}"#,
+    )
+    .expect("parse");
+    let mapped = map_ai_suggestions("skill-a", &tags, parsed).expect("map");
+    assert_eq!(mapped[0].tag.id, UNCATEGORIZED_TAG_ID);
+    assert_eq!(mapped[0].confidence, 0.2);
 }
 
 #[tokio::test]
 async fn bulk_ai_tagging_emits_progress_limits_parallelism_and_continues_on_failure() {
     let pool = setup_test_db().await;
     let secrets = test_ai_secret();
-    let response = r#"{"tags":[{"tag":"编程与 Agent 工程","confidence":0.9,"reason":"开发工具"},{"tag":"未分类","confidence":0.4,"reason":"不确定"}]}"#;
+    let response =
+        r#"{"tags":[{"tag":"academic-research-writing","confidence":0.9,"reason":"研究写作"}]}"#;
     let (api_url, _current, max_seen) = spawn_ai_server(response, true).await;
     configure_ai(&pool, &api_url).await;
 
@@ -216,13 +291,7 @@ async fn bulk_ai_tagging_emits_progress_limits_parallelism_and_continues_on_fail
         .expect("tags");
     assert!(tags
         .iter()
-        .any(|tag| tag.id == "programming-agent-engineering"));
-    let reviews = db::get_pending_ai_tag_reviews(&pool)
-        .await
-        .expect("reviews");
-    assert!(reviews
-        .iter()
-        .any(|review| review.tag.id == UNCATEGORIZED_TAG_ID));
+        .any(|tag| tag.id == ACADEMIC_RESEARCH_WRITING_TAG_ID));
 }
 
 #[tokio::test]
@@ -245,6 +314,7 @@ async fn bulk_ai_tagging_requires_configuration_before_writing() {
 
     assert!(result
         .expect_err("missing setting")
+        .to_string()
         .starts_with("ai.missing_api_key:"));
     let tags = db::get_skill_tags_for_skill(&pool, "skill-a")
         .await
@@ -256,7 +326,8 @@ async fn bulk_ai_tagging_requires_configuration_before_writing() {
 async fn bulk_ai_tagging_can_be_cancelled_before_requests_start() {
     let pool = setup_test_db().await;
     let secrets = test_ai_secret();
-    let response = r#"{"tags":[{"tag":"编程与 Agent 工程","confidence":0.9,"reason":"开发工具"}]}"#;
+    let response =
+        r#"{"tags":[{"tag":"academic-research-writing","confidence":0.9,"reason":"研究写作"}]}"#;
     let (api_url, _current, _max_seen) = spawn_ai_server(response, false).await;
     configure_ai(&pool, &api_url).await;
     db::upsert_skill(&pool, &make_skill("skill-a", "Skill A"))

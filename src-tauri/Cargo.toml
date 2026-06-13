@@ -1,6 +1,6 @@
 [package]
 name = "skillport"
-version = "0.10.9"
+version = "0.10.10"
 description = "AI Agent Skills Manager"
 authors = ["iamzhihuix"]
 license = "Apache-2.0"
@@ -37,6 +37,7 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 sha2 = "0.10"
+thiserror = "2"
 async-trait = "0.1"
 walkdir = "2"
 regex = "1"
@@ -45,3 +46,9 @@ tempfile = "3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+
+[profile.dev]
+debug = 0
+
+[profile.test]
+debug = 0

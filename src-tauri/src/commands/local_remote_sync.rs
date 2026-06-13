@@ -22,7 +22,9 @@ pub async fn preview_local_remote_sync(
     request: LocalRemoteSyncPreviewRequest,
 ) -> Result<LocalRemoteSyncPreview, String> {
     let active_target = selected_remote_target(&state, &request.target_id).await?;
-    preview_local_remote_sync_impl(active_target, request.repo_path).await
+    preview_local_remote_sync_impl(active_target, request.repo_path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -32,7 +34,9 @@ pub async fn apply_local_remote_sync(
 ) -> Result<LocalRemoteSyncApplyResult, String> {
     let active_target = selected_remote_target(&state, &request.target_id).await?;
     let target_context = target_context_from_active_target(&active_target);
-    let mut result = apply_local_remote_sync_impl(active_target.clone(), request.repo_path).await;
+    let mut result = apply_local_remote_sync_impl(active_target.clone(), request.repo_path)
+        .await
+        .map_err(|e| e.to_string());
     if let Ok(value) = &mut result {
         refresh_synced_target_cache(&state, &active_target, value).await;
     }
@@ -97,7 +101,11 @@ async fn selected_remote_target(
         return Err("Select an SSH or WSL target before syncing.".to_string());
     }
 
-    let target = state.targets.target_by_id(&state.db, target_id).await?;
+    let target = state
+        .targets
+        .target_by_id(&state.db, target_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
     match target {
         ActiveTarget::Local => Err("Select an SSH or WSL target before syncing.".to_string()),
@@ -124,10 +132,10 @@ async fn refresh_synced_target_cache(
     match pool {
         Ok(pool) => {
             if let Err(error) = scan_remote_skills_impl(&pool, active_target).await {
-                push_refresh_failure(active_target, result, error);
+                push_refresh_failure(active_target, result, error.to_string());
             }
         }
-        Err(error) => push_refresh_failure(active_target, result, error),
+        Err(error) => push_refresh_failure(active_target, result, error.to_string()),
     }
 }
 

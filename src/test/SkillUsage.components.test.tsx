@@ -4,6 +4,7 @@ import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 
 import { KpiStrip } from "../components/usage/KpiStrip";
 import { ProviderHealthList } from "../components/usage/ProviderHealthList";
+import { PlatformFilterBar } from "../components/usage/PlatformFilterBar";
 import { SkillBarChart } from "../components/usage/SkillBarChart";
 import { ActivityHeatmap } from "../components/usage/ActivityHeatmap";
 import { RecentCallsFeed } from "../components/usage/RecentCallsFeed";
@@ -20,6 +21,7 @@ beforeEach(() => {
     providers: [],
     detail: null,
     scope: null,
+    selectedSource: null,
     loading: false,
     refreshing: false,
     error: null,
@@ -28,7 +30,12 @@ beforeEach(() => {
   });
   useTargetStore.setState({
     targets: [{ id: "local", kind: "local", label: "Local", isActive: true }],
-    activeTarget: { id: "local", kind: "local", label: "Local", isActive: true },
+    activeTarget: {
+      id: "local",
+      kind: "local",
+      label: "Local",
+      isActive: true,
+    },
   });
 });
 
@@ -42,9 +49,10 @@ describe("KpiStrip", () => {
             uniqueSkills: 7,
             uniqueProjects: 3,
             uniqueSources: 2,
+            uniqueSessions: 5,
           }}
-        />
-      )
+        />,
+      ),
     );
 
     // toLocaleString → 1,234 (依 jsdom 默认 locale)
@@ -52,6 +60,67 @@ describe("KpiStrip", () => {
     expect(screen.getByText("7")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
+  });
+
+  it("shows sessions instead of sources in single-platform mode", () => {
+    render(
+      wrap(
+        <KpiStrip
+          singlePlatform
+          kpis={{
+            totalCalls: 10,
+            uniqueSkills: 4,
+            uniqueProjects: 2,
+            uniqueSources: 1,
+            uniqueSessions: 6,
+          }}
+        />,
+      ),
+    );
+
+    expect(document.body.textContent).toMatch(/会话数|Sessions/);
+    expect(document.body.textContent).not.toMatch(/数据源|Sources/);
+    expect(screen.getByText("6")).toBeInTheDocument();
+  });
+});
+
+describe("PlatformFilterBar", () => {
+  it("renders all providers and disables providers without calls", () => {
+    const onSelect = vi.fn();
+    render(
+      wrap(
+        <PlatformFilterBar
+          selected={null}
+          onSelect={onSelect}
+          providers={[
+            {
+              providerId: "claude-code",
+              displayName: "Claude Code",
+              available: true,
+              callCount: 42,
+              scannedAtMs: 0,
+            },
+            {
+              providerId: "antigravity",
+              displayName: "Antigravity",
+              available: false,
+              callCount: 0,
+              scannedAtMs: 0,
+            },
+          ]}
+        />,
+      ),
+    );
+
+    expect(screen.getByTestId("platform-pill-all")).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+    expect(screen.getByTestId("platform-pill-claude-code")).toBeEnabled();
+    expect(screen.getByTestId("platform-pill-antigravity")).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId("platform-pill-claude-code"));
+    expect(onSelect).toHaveBeenCalledWith("Claude Code");
   });
 });
 
@@ -76,12 +145,14 @@ describe("ProviderHealthList", () => {
               scannedAtMs: 0,
             },
           ]}
-        />
-      )
+        />,
+      ),
     );
 
     expect(screen.getByTestId("provider-row-claude-code")).toBeInTheDocument();
-    expect(screen.getByTestId("provider-row-claude-code")).toHaveTextContent("Claude Code");
+    expect(screen.getByTestId("provider-row-claude-code")).toHaveTextContent(
+      "Claude Code",
+    );
     expect(screen.getByText("42")).toBeInTheDocument();
 
     const antigravityRow = screen.getByTestId("provider-row-antigravity");
@@ -100,7 +171,13 @@ describe("ProviderHealthList", () => {
 
 describe("SkillBarChart", () => {
   const skills = [
-    { skill: "git-commit", count: 10, projects: 2, sessions: 5, lastUsedMs: 3000 },
+    {
+      skill: "git-commit",
+      count: 10,
+      projects: 2,
+      sessions: 5,
+      lastUsedMs: 3000,
+    },
     { skill: "review", count: 25, projects: 1, sessions: 8, lastUsedMs: 2000 },
     { skill: "facts", count: 5, projects: 3, sessions: 2, lastUsedMs: 5000 },
   ];
@@ -155,12 +232,12 @@ describe("SkillBarChart", () => {
           <Route path="/usage" element={<SkillBarChart skills={skills} />} />
           <Route path="/skill/:id" element={<Probe />} />
         </Routes>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     fireEvent.click(screen.getByTestId("bar-row-review"));
     await waitFor(() =>
-      expect(screen.getByTestId("loc")).toHaveTextContent("/skill/abc123")
+      expect(screen.getByTestId("loc")).toHaveTextContent("/skill/abc123"),
     );
   });
 
@@ -256,12 +333,23 @@ describe("SkillUsageView ScopeBadge", () => {
   // 后渲染整个 view 验证 badge data-scope-kind 属性。
   it("renders Local badge when scope.isRemote=false", async () => {
     useUsageStore.setState({
-      scope: { targetId: "local", label: "Local", isRemote: false, remoteReachable: false },
+      scope: {
+        targetId: "local",
+        label: "Local",
+        isRemote: false,
+        remoteReachable: false,
+      },
       lastRefreshMs: Date.now(),
       providers: [],
       recent: [],
       overview: {
-        kpis: { totalCalls: 0, uniqueSkills: 0, uniqueProjects: 0, uniqueSources: 0 },
+        kpis: {
+          totalCalls: 0,
+          uniqueSkills: 0,
+          uniqueProjects: 0,
+          uniqueSources: 0,
+          uniqueSessions: 0,
+        },
         topSkills: [],
         heatmap: [],
         lastScanMs: null,
@@ -297,7 +385,13 @@ describe("SkillUsageView ScopeBadge", () => {
       providers: [],
       recent: [],
       overview: {
-        kpis: { totalCalls: 9, uniqueSkills: 2, uniqueProjects: 1, uniqueSources: 1 },
+        kpis: {
+          totalCalls: 9,
+          uniqueSkills: 2,
+          uniqueProjects: 1,
+          uniqueSources: 1,
+          uniqueSessions: 2,
+        },
         topSkills: [
           {
             skill: "review",

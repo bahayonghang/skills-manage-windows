@@ -18,6 +18,50 @@ const mockedToast = vi.hoisted(() => ({
   info: vi.fn(),
 }));
 
+const mockedUpdateCenter = vi.hoisted(() => {
+  const emptyInventory = {
+    updatable: [],
+    remoteAdded: [],
+    remoteMissing: [],
+    failedRepositories: [],
+    platformDuplicates: [],
+    deletedPlatformCopies: [],
+    orphans: [],
+    generatedAt: "2026-05-30T00:00:00Z",
+  };
+  const refresh = vi.fn().mockResolvedValue(emptyInventory);
+  const openDialog = vi.fn();
+  const setRefreshMode = vi.fn();
+  return {
+    emptyInventory,
+    refresh,
+    openDialog,
+    closeDialog: vi.fn(),
+    setActiveTab: vi.fn(),
+    state: {
+      inventory: null,
+      isRefreshing: false,
+      isApplying: false,
+      lastRefreshedAt: null,
+      isDialogOpen: false,
+      activeTab: "updatable",
+      refreshContext: { repositoryIds: [], skillIds: [], agentIds: [] },
+      refreshMode: "sync",
+      error: null,
+      refresh,
+      apply: vi.fn(),
+      clear: vi.fn(),
+      loadInventory: vi.fn(),
+      scanDuplicates: vi.fn(),
+      scanDeletedPlatformCopies: vi.fn(),
+      openDialog,
+      closeDialog: vi.fn(),
+      setActiveTab: vi.fn(),
+      setRefreshMode,
+    },
+  };
+});
+
 // Mock stores
 vi.mock("@/stores/centralSkillsStore", () => ({
   useCentralSkillsStore: vi.fn(),
@@ -37,6 +81,29 @@ vi.mock("@/stores/marketplaceStore", () => ({
 
 vi.mock("@/stores/skillDetailStore", () => ({
   useSkillDetailStore: vi.fn(),
+}));
+
+vi.mock("@/stores/updateCenterStore", () => ({
+  useUpdateCenterStore: vi.fn((selector?: unknown) => {
+    if (typeof selector === "function") {
+      return selector(mockedUpdateCenter.state);
+    }
+    return mockedUpdateCenter.state;
+  }),
+  selectSkillInventoryFlags: vi.fn(() => ({
+    hasUpdate: false,
+    isMissing: false,
+    isAdded: false,
+    hasDuplicate: false,
+    isOrphan: false,
+  })),
+  selectSkillInventoryFlagsFromInventory: vi.fn(() => ({
+    hasUpdate: false,
+    isMissing: false,
+    isAdded: false,
+    hasDuplicate: false,
+    isOrphan: false,
+  })),
 }));
 
 vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
@@ -201,6 +268,10 @@ import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { useTargetStore as targetStoreHook } from "@/stores/targetStore";
+import {
+  createSettingsStoreInitialState,
+  useSettingsStore,
+} from "@/stores/settingsStore";
 import * as tauriBridgeModule from "@/lib/tauri";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -418,6 +489,7 @@ export const mockSubscribeAiTagProgress = vi.fn();
 export const mockSubscribeUpdateProgress = vi.fn();
 export const mockRescan = vi.fn();
 export const mockGetSkillsByAgent = vi.fn();
+export const mockBatchUninstallSkillsFromAgent = vi.fn();
 export const mockPreviewGitHubRepoImport = vi.fn();
 export const mockImportGitHubRepoSkills = vi.fn();
 export const mockResetGitHubImport = vi.fn();
@@ -430,6 +502,9 @@ export const mockUsePlatformStore = vi.mocked(usePlatformStore);
 export const mockUseSkillStore = vi.mocked(useSkillStore);
 export const mockUseMarketplaceStore = vi.mocked(useMarketplaceStore);
 export const mockUseSkillDetailStore = vi.mocked(useSkillDetailStore);
+export const mockRefreshUpdateInventory = mockedUpdateCenter.refresh;
+export const mockOpenUpdateCenterDialog = mockedUpdateCenter.openDialog;
+export const mockEmptyUpdateInventory = mockedUpdateCenter.emptyInventory;
 export const localTarget: TargetSummary = {
   id: "local",
   kind: "local",
@@ -536,8 +611,10 @@ export function buildSkillStoreState(overrides = {}) {
     platformPaths: {},
     skillsByAgent: {},
     loadingByAgent: {},
+    pendingSkillActionKeys: {},
     error: null,
     getSkillsByAgent: mockGetSkillsByAgent,
+    batchUninstallSkillsFromAgent: mockBatchUninstallSkillsFromAgent,
     ...overrides,
   };
 }
@@ -580,30 +657,31 @@ export function renderCentralSkillsView({
   skillDetailOverrides?: Record<string, unknown>;
   marketplaceOverrides?: Record<string, unknown>;
 } = {}) {
+  const centralState = buildCentralStoreState(centralOverrides);
+  const platformState = buildPlatformStoreState(platformOverrides);
+  const skillState = buildSkillStoreState(skillOverrides);
+  const marketplaceState = buildMarketplaceStoreState(marketplaceOverrides);
+  const skillDetailState = buildSkillDetailStoreState(skillDetailOverrides);
+
   mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
-    const state = buildCentralStoreState(centralOverrides);
-    if (typeof selector === "function") return selector(state);
-    return state;
+    if (typeof selector === "function") return selector(centralState);
+    return centralState;
   });
   mockUsePlatformStore.mockImplementation((selector?: unknown) => {
-    const state = buildPlatformStoreState(platformOverrides);
-    if (typeof selector === "function") return selector(state);
-    return state;
+    if (typeof selector === "function") return selector(platformState);
+    return platformState;
   });
   mockUseSkillStore.mockImplementation((selector?: unknown) => {
-    const state = buildSkillStoreState(skillOverrides);
-    if (typeof selector === "function") return selector(state);
-    return state;
+    if (typeof selector === "function") return selector(skillState);
+    return skillState;
   });
   mockUseMarketplaceStore.mockImplementation((selector?: unknown) => {
-    const state = buildMarketplaceStoreState(marketplaceOverrides);
-    if (typeof selector === "function") return selector(state);
-    return state;
+    if (typeof selector === "function") return selector(marketplaceState);
+    return marketplaceState;
   });
   mockUseSkillDetailStore.mockImplementation((selector?: unknown) => {
-    const state = buildSkillDetailStoreState(skillDetailOverrides);
-    if (typeof selector === "function") return selector(state);
-    return state;
+    if (typeof selector === "function") return selector(skillDetailState);
+    return skillDetailState;
   });
 
   return render(
@@ -619,6 +697,7 @@ export const toast = mockedToast;
 export const CentralSkillsView = CentralSkillsViewComponent;
 export const useTargetStore = targetStoreHook;
 export const tauriBridge = tauriBridgeModule;
+export const settingsStore = useSettingsStore;
 
 export function resetCentralSkillsViewTestState() {
   vi.clearAllMocks();
@@ -630,6 +709,10 @@ export function resetCentralSkillsViewTestState() {
   useTargetStore.setState({
     targets: [localTarget],
     activeTarget: localTarget,
+  });
+  useSettingsStore.setState({
+    ...createSettingsStoreInitialState(),
+    centralUpdateCheckModeLoaded: true,
   });
   mockCheckSkillUpdates.mockResolvedValue([]);
   mockCheckRepositorySync.mockResolvedValue({
@@ -651,6 +734,9 @@ export function resetCentralSkillsViewTestState() {
   });
   mockUpdateSkills.mockResolvedValue({ succeeded: [], failed: [], skipped: [], states: [] });
   mockKeepRemoteMissingSkills.mockResolvedValue([]);
+  mockBatchUninstallSkillsFromAgent.mockResolvedValue({ succeeded: [], failed: [] });
+  mockRefreshUpdateInventory.mockResolvedValue(mockEmptyUpdateInventory);
+  mockOpenUpdateCenterDialog.mockClear();
   mockPreviewCentralStoreLocationChange.mockResolvedValue({
     sourcePath: "/Users/test/.skillsmanage/skills",
     targetPath: "/Users/test/SkillPort/skills",

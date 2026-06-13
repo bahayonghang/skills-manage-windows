@@ -236,11 +236,15 @@ async fn export_counts_distinct_github_repositories_backing_central_skills() {
 #[test]
 fn parse_manifest_rejects_invalid_kind_and_version() {
     let invalid_kind = r#"{"kind":"other","version":1,"exportedAt":"","exportedFrom":{"app":"SkillPort"},"githubSources":[],"centralSkills":[],"unrestorableSkills":[]}"#;
-    assert!(parse_manifest(invalid_kind).unwrap_err().contains("kind"));
+    assert!(parse_manifest(invalid_kind)
+        .unwrap_err()
+        .to_string()
+        .contains("kind"));
 
     let invalid_version = r#"{"kind":"skillport/state-export","version":2,"exportedAt":"","exportedFrom":{"app":"SkillPort"},"githubSources":[],"centralSkills":[],"unrestorableSkills":[]}"#;
     assert!(parse_manifest(invalid_version)
         .unwrap_err()
+        .to_string()
         .contains("version"));
 }
 
@@ -340,6 +344,7 @@ async fn preview_reports_ready_conflict_missing_and_unrestorable() {
     assert_eq!(preview.summary.conflicts, 1);
     assert_eq!(preview.summary.missing, 1);
     assert_eq!(preview.summary.unrestorable, 1);
+    assert!(preview.warnings.is_empty());
 }
 
 #[tokio::test]
@@ -394,8 +399,22 @@ async fn preview_reports_internal_duplicate_skills_and_sources() {
 }
 
 #[tokio::test]
-async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_unrestorable() {
+async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_warning() {
     let pool = setup_test_db().await;
+    let existing = Skill {
+        id: "network-conflict".to_string(),
+        name: "network-conflict".to_string(),
+        description: None,
+        file_path: "/tmp/network-conflict/SKILL.md".to_string(),
+        canonical_path: Some("/tmp/network-conflict".to_string()),
+        is_central: true,
+        source: None,
+        content: None,
+        scanned_at: "2026-04-25T00:00:00Z".to_string(),
+        fs_created_at: None,
+        fs_updated_at: None,
+    };
+    db::upsert_skill(&pool, &existing).await.unwrap();
     let invalid_source = github_source_for_repo(
         "openai",
         "skills",
@@ -404,6 +423,12 @@ async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_unrestorab
     );
     let repo_error_source =
         github_source_for_repo("other", "skills", "main", "skills/network-error/SKILL.md");
+    let repo_conflict_source = github_source_for_repo(
+        "other",
+        "skills",
+        "main",
+        "skills/network-conflict/SKILL.md",
+    );
     let manifest = SkillportStateManifest {
         kind: EXPORT_KIND.to_string(),
         version: EXPORT_VERSION,
@@ -425,6 +450,13 @@ async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_unrestorab
                 name: "network-error".to_string(),
                 description: None,
                 source: repo_error_source.clone(),
+                tags: Vec::new(),
+            },
+            PortableCentralSkill {
+                id: "network-conflict".to_string(),
+                name: "network-conflict".to_string(),
+                description: None,
+                source: repo_conflict_source,
                 tags: Vec::new(),
             },
         ],
@@ -477,13 +509,31 @@ async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_unrestorab
         .iter()
         .find(|skill| skill.id == "network-error")
         .expect("repo failure skill");
-    assert_eq!(repo_failure.status, SkillPreviewStatus::Unrestorable);
-    assert_eq!(repo_failure.reason.as_deref(), Some("repo_unavailable"));
+    assert_eq!(repo_failure.status, SkillPreviewStatus::Ready);
+    assert_eq!(repo_failure.reason, None);
+    assert_eq!(repo_failure.detail, None);
+
+    let repo_conflict = preview
+        .skills
+        .iter()
+        .find(|skill| skill.id == "network-conflict")
+        .expect("repo conflict skill");
+    assert_eq!(repo_conflict.status, SkillPreviewStatus::Conflict);
     assert_eq!(
-        repo_failure.detail.as_deref(),
-        Some("GitHub rate limit was exceeded")
+        repo_conflict.reason.as_deref(),
+        Some("central_skill_exists")
     );
-    assert_eq!(preview.summary.unrestorable, 2);
+    assert_eq!(preview.summary.ready, 1);
+    assert_eq!(preview.summary.conflicts, 1);
+    assert_eq!(preview.summary.unrestorable, 1);
+    assert_eq!(preview.warnings.len(), 1);
+    assert_eq!(preview.warnings[0].reason, "repo_unavailable");
+    assert_eq!(preview.warnings[0].detail, "GitHub rate limit was exceeded");
+    assert_eq!(
+        preview.warnings[0].repo_url.as_deref(),
+        Some("https://github.com/other/skills/tree/main")
+    );
+    assert_eq!(preview.warnings[0].source_path, None);
 }
 
 #[tokio::test]

@@ -29,7 +29,9 @@ pub use crate::services::marketplace::{
 #[tauri::command]
 pub async fn list_registries(state: State<'_, AppState>) -> Result<Vec<SkillRegistry>, String> {
     let pool = state.active_db().await?;
-    marketplace::list_registries_impl(&pool).await
+    marketplace::list_registries_impl(&pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -40,7 +42,9 @@ pub async fn add_registry(
     url: String,
 ) -> Result<SkillRegistry, String> {
     let pool = state.active_db().await?;
-    marketplace::add_registry_impl(&pool, name, source_type, url, None).await
+    marketplace::add_registry_impl(&pool, name, source_type, url, None)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -49,7 +53,9 @@ pub async fn remove_registry(
     registry_id: String,
 ) -> Result<(), String> {
     let pool = state.active_db().await?;
-    marketplace::remove_registry_impl(&pool, registry_id).await
+    marketplace::remove_registry_impl(&pool, registry_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -66,6 +72,7 @@ pub async fn sync_registry(
         SyncRegistryOptions::default(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -83,6 +90,7 @@ pub async fn sync_registry_with_options(
         options.unwrap_or_default(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -92,7 +100,9 @@ pub async fn search_marketplace_skills(
     query: Option<String>,
 ) -> Result<Vec<MarketplaceSkill>, String> {
     let pool = state.active_db().await?;
-    marketplace::search_marketplace_skills_impl(&pool, registry_id, query).await
+    marketplace::search_marketplace_skills_impl(&pool, registry_id, query)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -102,7 +112,9 @@ pub async fn install_marketplace_skill(
 ) -> Result<(), String> {
     let active_target = state.active_target().await?;
     let pool = state.active_db().await?;
-    marketplace::install_marketplace_skill_impl(&pool, active_target, skill_id).await
+    marketplace::install_marketplace_skill_impl(&pool, active_target, skill_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -111,7 +123,9 @@ pub async fn search_skills_sh(
     query: String,
     limit: Option<u32>,
 ) -> Result<Vec<SkillsShSkill>, String> {
-    marketplace::search_skills_sh_impl(&state.db, state.secrets.as_ref(), query, limit).await
+    marketplace::search_skills_sh_impl(&state.db, state.secrets.as_ref(), query, limit)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -122,6 +136,7 @@ pub async fn resolve_skills_sh_url(
 ) -> Result<String, String> {
     marketplace::resolve_skills_sh_url_impl(&state.db, state.secrets.as_ref(), source, skill_id)
         .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -137,6 +152,7 @@ pub async fn browse_skills_sh_directory(
         skill_id,
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -147,6 +163,7 @@ pub async fn read_skills_sh_file(
 ) -> Result<String, String> {
     marketplace::read_skills_sh_file_impl(&state.db, state.secrets.as_ref(), source, file_path)
         .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -165,20 +182,25 @@ pub async fn install_from_skills_sh(
         skill_id,
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 // ─── AI Explanation ──────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn explain_skill(state: State<'_, AppState>, content: String) -> Result<String, String> {
-    ai_provider::explain_skill_impl(&state.db, state.secrets.as_ref(), content).await
+    ai_provider::explain_skill_impl(&state.db, state.secrets.as_ref(), content)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn test_ai_connection(
     state: State<'_, AppState>,
 ) -> Result<AiConnectionTestResult, String> {
-    ai_provider::test_ai_connection_impl(&state.db, state.secrets.as_ref()).await
+    ai_provider::test_ai_connection_impl(&state.db, state.secrets.as_ref())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -187,7 +209,9 @@ pub async fn get_skill_explanation(
     skill_id: String,
     lang: String,
 ) -> Result<Option<String>, String> {
-    ai_provider::get_skill_explanation_impl(&state.db, skill_id, lang).await
+    ai_provider::get_skill_explanation_impl(&state.db, skill_id, lang)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -196,7 +220,9 @@ pub async fn get_skill_explanation_summaries(
     skill_ids: Vec<String>,
     lang: String,
 ) -> Result<HashMap<String, String>, String> {
-    ai_provider::get_skill_explanation_summaries_impl(&state.db, skill_ids, lang).await
+    ai_provider::get_skill_explanation_summaries_impl(&state.db, skill_ids, lang)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -216,6 +242,7 @@ pub async fn explain_skill_stream(
         lang,
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -235,4 +262,5 @@ pub async fn refresh_skill_explanation(
         lang,
     )
     .await
+    .map_err(|e| e.to_string())
 }

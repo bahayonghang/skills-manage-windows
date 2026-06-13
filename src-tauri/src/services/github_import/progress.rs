@@ -18,7 +18,7 @@ pub(super) struct GitHubImportProgressState {
 pub(super) fn collect_snapshot_source_files(
     snapshot: &GitHubRepoSnapshot,
     source_path: &str,
-) -> Result<Vec<SnapshotSourceFile>, String> {
+) -> Result<Vec<SnapshotSourceFile>, GithubImportError> {
     let mut files = snapshot
         .files
         .iter()
@@ -48,54 +48,71 @@ pub(super) fn collect_snapshot_source_files(
     files.sort_by(|left, right| left.repo_path.cmp(&right.repo_path));
 
     if files.is_empty() {
-        return Err(format!(
-            "Repository path '{}' is no longer available in the archive.",
-            source_path
-        ));
+        return Err(GithubImportError::RepoPathGone(source_path.to_string()));
     }
 
     Ok(files)
 }
 
-pub(super) fn write_snapshot_source_to_target(
+pub(super) async fn write_snapshot_source_to_target(
     snapshot: &GitHubRepoSnapshot,
     files: &[SnapshotSourceFile],
     target_dir: &Path,
     source_path: &str,
     progress_state: &mut GitHubImportProgressState,
     app: Option<&AppHandle>,
-) -> Result<(), String> {
-    std::fs::create_dir_all(target_dir)
-        .map_err(|e| format!("Failed to create import target directory: {}", e))?;
+) -> Result<(), GithubImportError> {
+    // Same ordering as the original synchronous version: create the target
+    // directory first, then validate-and-write one file at a time. Each
+    // blocking write owns a transient clone of just that file's bytes. The
+    // `AppHandle` deliberately stays on the async side (by reference): moving
+    // it into a blocking closure links Tauri's dialog/menu drop-glue into test
+    // binaries, which then fail to load on Windows (comctl32 v6
+    // `TaskDialogIndirect` needs an app manifest).
+    let target_dir_for_create = target_dir.to_path_buf();
+    crate::fs_util::run_blocking_fs_with(
+        "import target directory creation",
+        move || {
+            std::fs::create_dir_all(&target_dir_for_create)
+                .map_err(|e| GithubImportError::io("Failed to create import target directory", e))
+        },
+        GithubImportError::task_join,
+    )
+    .await?;
 
     for file in files {
         if !is_safe_repo_relative_path(&file.relative_path) {
-            return Err(format!(
-                "Repository contains an unsupported path '{}'.",
-                file.repo_path
+            return Err(GithubImportError::RepoContainsUnsupportedPath(
+                file.repo_path.clone(),
             ));
         }
 
-        let bytes = snapshot.files.get(&file.repo_path).ok_or_else(|| {
-            format!(
-                "Repository file '{}' is no longer available in the archive.",
-                file.repo_path
-            )
-        })?;
+        let bytes = snapshot
+            .files
+            .get(&file.repo_path)
+            .ok_or_else(|| GithubImportError::RepoFileGone(file.repo_path.clone()))?
+            .clone();
 
         let destination = target_dir.join(&file.relative_path);
-        let parent = destination
-            .parent()
-            .ok_or_else(|| "Failed to determine imported file parent directory.".to_string())?;
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create imported file parent directory: {}", e))?;
-        std::fs::write(&destination, bytes).map_err(|e| {
-            format!(
-                "Failed to write imported file '{}': {}",
-                destination.display(),
-                e
-            )
-        })?;
+        crate::fs_util::run_blocking_fs_with(
+            "import file write",
+            move || {
+                let parent = destination
+                    .parent()
+                    .ok_or(GithubImportError::ImportParentDirUnknown)?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    GithubImportError::io("Failed to create imported file parent directory", e)
+                })?;
+                std::fs::write(&destination, &bytes).map_err(|e| {
+                    GithubImportError::io(
+                        format!("Failed to write imported file '{}'", destination.display()),
+                        e,
+                    )
+                })
+            },
+            GithubImportError::task_join,
+        )
+        .await?;
 
         progress_state.completed_files += 1;
         progress_state.completed_bytes += file.byte_len as u64;

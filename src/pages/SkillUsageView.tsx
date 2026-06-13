@@ -1,13 +1,24 @@
 import { useTranslation } from "react-i18next";
-import { Loader2, RefreshCw, BarChart3, Globe2, Monitor, AlertTriangle } from "lucide-react";
+import {
+  Loader2,
+  RefreshCw,
+  BarChart3,
+  Globe2,
+  Monitor,
+  AlertTriangle,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActivityHeatmap } from "@/components/usage/ActivityHeatmap";
 import { KpiStrip } from "@/components/usage/KpiStrip";
+import { PlatformFilterBar } from "@/components/usage/PlatformFilterBar";
 import { ProviderHealthList } from "@/components/usage/ProviderHealthList";
 import { RecentCallsFeed } from "@/components/usage/RecentCallsFeed";
 import { SkillBarChart } from "@/components/usage/SkillBarChart";
-import { useUsageBindings, useUsageBootstrap } from "@/pages/skillUsageBindings";
+import {
+  useUsageBindings,
+  useUsageBootstrap,
+} from "@/pages/skillUsageBindings";
 import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
 import type { UsageScopeInfo } from "@/types/usage";
@@ -19,14 +30,25 @@ import type { UsageScopeInfo } from "@/types/usage";
 export function SkillUsageView() {
   const { t } = useTranslation();
   useUsageBootstrap();
-  const { overview, providers, recent, scope, refreshing, error, lastRefreshMs, refresh } =
-    useUsageBindings();
+  const {
+    overview,
+    providers,
+    recent,
+    scope,
+    selectedSource,
+    refreshing,
+    error,
+    lastRefreshMs,
+    refresh,
+    selectSource,
+  } = useUsageBindings();
 
   const kpis = overview?.kpis ?? {
     totalCalls: 0,
     uniqueSkills: 0,
     uniqueProjects: 0,
     uniqueSources: 0,
+    uniqueSessions: 0,
   };
 
   return (
@@ -77,14 +99,27 @@ export function SkillUsageView() {
           <div
             role="alert"
             data-testid="remote-unreachable-banner"
-            className="mb-4 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400"
+            className="mb-4 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning-foreground"
           >
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <span>{t("skillUsage.remoteUnreachable", { host: scope.label })}</span>
+            <span>
+              {t("skillUsage.remoteUnreachable", { host: scope.label })}
+            </span>
           </div>
         )}
 
-        <KpiStrip kpis={kpis} className="mb-5" />
+        <PlatformFilterBar
+          providers={providers}
+          selected={selectedSource}
+          onSelect={selectSource}
+          className="mb-4"
+        />
+
+        <KpiStrip
+          kpis={kpis}
+          singlePlatform={selectedSource !== null}
+          className="mb-5"
+        />
 
         <div className="grid gap-5 lg:grid-cols-2">
           <Panel title={t("skillUsage.panels.topSkills")}>
@@ -94,14 +129,21 @@ export function SkillUsageView() {
           </Panel>
           <Panel title={t("skillUsage.panels.heatmap")}>
             <div className="h-[28rem]">
-              <ActivityHeatmap days={overview?.heatmap ?? []} className="h-full" />
+              <ActivityHeatmap
+                days={overview?.heatmap ?? []}
+                className="h-full"
+              />
             </div>
           </Panel>
           <Panel title={t("skillUsage.panels.recent")}>
             <RecentCallsFeed calls={recent} />
           </Panel>
           <Panel title={t("skillUsage.panels.providers")}>
-            <ProviderHealthList providers={providers} />
+            <ProviderHealthList
+              providers={providers}
+              activeSource={selectedSource}
+              onSelect={selectSource}
+            />
           </Panel>
         </div>
       </div>
@@ -128,8 +170,8 @@ function ScopeBadge({ scope }: { scope: UsageScopeInfo }) {
   const Icon = scope.isRemote ? Globe2 : Monitor;
   const tone = scope.isRemote
     ? scope.remoteReachable
-      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-      : "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+      ? "border-success/40 bg-success/10 text-success-foreground"
+      : "border-warning/40 bg-warning/10 text-warning-foreground"
     : "border-border bg-muted text-muted-foreground";
   return (
     <span
@@ -137,7 +179,7 @@ function ScopeBadge({ scope }: { scope: UsageScopeInfo }) {
       data-scope-kind={scope.isRemote ? "remote" : "local"}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs",
-        tone
+        tone,
       )}
       title={scope.isRemote ? scope.label : "Local target"}
     >

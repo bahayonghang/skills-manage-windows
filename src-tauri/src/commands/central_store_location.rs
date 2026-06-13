@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
+use crate::commands::central_updates_fs::run_blocking_fs;
 use crate::db::DbPool;
 use crate::services::installation::{copy_dir_all, create_symlink, symlink_target_path};
 use crate::services::scanner::scan_all_skills_impl;
@@ -98,8 +99,15 @@ pub async fn preview_central_store_location_change_impl(
     target_path: &str,
 ) -> Result<CentralStoreLocationPreview, String> {
     let (source_root, target_root) = validated_roots(pool, target_path).await?;
-    let source_ids = skill_dir_ids(&source_root)?;
-    let target_ids = skill_dir_ids(&target_root)?;
+    let source_root_for_scan = source_root.clone();
+    let target_root_for_scan = target_root.clone();
+    let (source_ids, target_ids) = run_blocking_fs("central store preview scan", move || {
+        Ok((
+            skill_dir_ids(&source_root_for_scan)?,
+            skill_dir_ids(&target_root_for_scan)?,
+        ))
+    })
+    .await?;
 
     let skills_to_overwrite = source_ids.intersection(&target_ids).count();
     let skills_to_copy = source_ids.len().saturating_sub(skills_to_overwrite);
@@ -126,48 +134,58 @@ pub async fn apply_central_store_location_change_impl(
     let preview = preview_central_store_location_change_impl(pool, target_path).await?;
     let source_root = PathBuf::from(&preview.source_path);
     let target_root = PathBuf::from(&preview.target_path);
-    std::fs::create_dir_all(&target_root).map_err(|e| {
-        format!(
-            "Failed to create central store target '{}': {}",
-            target_root.display(),
-            e
-        )
-    })?;
 
-    let mut copied = 0usize;
-    let mut overwritten = 0usize;
-    if source_root.exists() {
-        for entry in std::fs::read_dir(&source_root).map_err(|e| {
+    let source_root_for_copy = source_root.clone();
+    let target_root_for_copy = target_root.clone();
+    let (copied, overwritten) = run_blocking_fs("central store relocation copy", move || {
+        std::fs::create_dir_all(&target_root_for_copy).map_err(|e| {
             format!(
-                "Failed to read central store '{}': {}",
-                source_root.display(),
+                "Failed to create central store target '{}': {}",
+                target_root_for_copy.display(),
                 e
             )
-        })? {
-            let entry = entry.map_err(|e| format!("Failed to read central skill entry: {}", e))?;
-            let source_skill_dir = entry.path();
-            if !source_skill_dir.join("SKILL.md").exists() {
-                continue;
-            }
-            let target_skill_dir = target_root.join(entry.file_name());
-            let existed =
-                target_skill_dir.exists() || std::fs::symlink_metadata(&target_skill_dir).is_ok();
-            if existed {
-                remove_existing_path(&target_skill_dir)?;
-            }
-            copy_dir_all(&source_skill_dir, &target_skill_dir)?;
-            if existed {
-                overwritten += 1;
-            } else {
-                copied += 1;
+        })?;
+
+        let mut copied = 0usize;
+        let mut overwritten = 0usize;
+        if source_root_for_copy.exists() {
+            for entry in std::fs::read_dir(&source_root_for_copy).map_err(|e| {
+                format!(
+                    "Failed to read central store '{}': {}",
+                    source_root_for_copy.display(),
+                    e
+                )
+            })? {
+                let entry =
+                    entry.map_err(|e| format!("Failed to read central skill entry: {}", e))?;
+                let source_skill_dir = entry.path();
+                if !source_skill_dir.join("SKILL.md").exists() {
+                    continue;
+                }
+                let target_skill_dir = target_root_for_copy.join(entry.file_name());
+                let existed = target_skill_dir.exists()
+                    || std::fs::symlink_metadata(&target_skill_dir).is_ok();
+                if existed {
+                    remove_existing_path(&target_skill_dir)?;
+                }
+                copy_dir_all(&source_skill_dir, &target_skill_dir).map_err(|e| e.to_string())?;
+                if existed {
+                    overwritten += 1;
+                } else {
+                    copied += 1;
+                }
             }
         }
-    }
+        Ok((copied, overwritten))
+    })
+    .await?;
 
     update_central_root(pool, &source_root, &target_root).await?;
     let symlink_failures =
         rebuild_symlinks_pointing_to_old_root(pool, &source_root, &target_root).await?;
-    scan_all_skills_impl(pool).await?;
+    scan_all_skills_impl(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(CentralStoreLocationChangeResult {
         source_path: preview.source_path,
@@ -188,7 +206,8 @@ async fn validated_roots(pool: &DbPool, target_path: &str) -> Result<(PathBuf, P
     }
 
     let central = crate::db::get_agent_by_id(pool, CENTRAL_AGENT_ID)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| "Central agent not found".to_string())?;
     let source_root = normalize_local_root(Path::new(&central.global_skills_dir))?;
     let target_root = normalize_local_root(&crate::paths::expand_home_path(target_path))?;
@@ -224,9 +243,9 @@ fn is_nested_path(parent: &Path, child: &Path) -> bool {
 }
 
 fn equivalence_components(path: &Path) -> Vec<String> {
-    let mut value = crate::paths::normalize_stored_path(&path.to_string_lossy());
+    let value = crate::paths::normalize_stored_path(&path.to_string_lossy());
     #[cfg(windows)]
-    value.make_ascii_lowercase();
+    let value = value.to_ascii_lowercase();
     value
         .split('/')
         .filter(|part| !part.is_empty())
@@ -379,7 +398,13 @@ async fn rebuild_symlinks_pointing_to_old_root(
             .map(|parent| symlink_target_path(parent, &new_target))
             .unwrap_or_else(|| new_target.clone());
 
-        if let Err(error) = replace_symlink(&link_path, &new_link_value) {
+        let link_path_for_replace = link_path.clone();
+        let new_link_value_for_replace = new_link_value.clone();
+        let replace_result = run_blocking_fs("central store symlink rebuild", move || {
+            replace_symlink(&link_path_for_replace, &new_link_value_for_replace)
+        })
+        .await;
+        if let Err(error) = replace_result {
             failures.push(CentralStoreLocationSymlinkFailure {
                 table: row.table.to_string(),
                 skill_id: row.skill_id,
@@ -418,7 +443,7 @@ fn replace_symlink(link_path: &Path, target: &Path) -> Result<(), String> {
         return Err(format!("'{}' is not a symlink", link_path.display()));
     }
     remove_existing_path(link_path)?;
-    create_symlink(target, link_path)
+    create_symlink(target, link_path).map_err(|e| e.to_string())
 }
 
 fn remove_existing_path(path: &Path) -> Result<(), String> {

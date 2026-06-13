@@ -167,6 +167,7 @@ describe("skillDetailStore", () => {
     await useSkillDetailStore.getState().loadDetail({ skillId: "frontend-design" });
     expect(invoke).toHaveBeenCalledWith("read_file_by_path", {
       path: mockDetail.file_path,
+      skillId: "frontend-design",
     });
   });
 
@@ -186,6 +187,9 @@ describe("skillDetailStore", () => {
     });
     expect(invoke).toHaveBeenNthCalledWith(2, "read_file_by_path", {
       path: mockClaudePluginDetail.file_path,
+      skillId: "frontend-design",
+      agentId: "claude-code",
+      rowId: "claude-code::plugin::frontend-design",
     });
     expect(useSkillDetailStore.getState().content).toBe(mockContent);
   });
@@ -811,6 +815,9 @@ describe("skillDetailStore", () => {
   });
 
   it("loads a directory tree through the Tauri command", async () => {
+    useSkillDetailStore.setState({
+      detail: mockDetail,
+    });
     const directoryTree = [
       {
         name: "SKILL.md",
@@ -825,6 +832,7 @@ describe("skillDetailStore", () => {
 
     expect(invoke).toHaveBeenCalledWith("list_directory_tree", {
       path: "/tmp/frontend-design",
+      skillId: "frontend-design",
     });
     expect(useSkillDetailStore.getState().directoryTree).toEqual(directoryTree);
     expect(useSkillDetailStore.getState().isDirectoryLoading).toBe(false);

@@ -4,6 +4,7 @@ import {
   buildDecisions,
   buildInitialState,
   countDecisionSelections,
+  summarizeDecisionSelections,
 } from "@/components/central/updateCenter/decisionAggregation";
 import {
   buildRefreshScope,
@@ -18,16 +19,17 @@ import type {
 function emptyInventory(
   overrides: Partial<SkillUpdateInventory> = {},
 ): SkillUpdateInventory {
-  return {
+  const base: SkillUpdateInventory = {
     updatable: [],
     remoteAdded: [],
     remoteMissing: [],
     platformDuplicates: [],
+    deletedPlatformCopies: [],
     orphans: [],
     failedRepositories: [],
     generatedAt: "2026-05-23T00:00:00.000Z",
-    ...overrides,
   };
+  return { ...base, ...overrides };
 }
 
 function remoteMissing(skillId: string): RemoteMissingSkill {
@@ -77,6 +79,91 @@ describe("updateCenter decision aggregation", () => {
       ],
     });
   });
+
+  it("does not default global platform leftovers to selected", () => {
+    const inventory = emptyInventory({
+      deletedPlatformCopies: [
+        {
+          agentId: "claude-code",
+          skillId: "removed-skill",
+          skillName: "removed-skill",
+          writablePaths: [
+            "~/.claude/skills/removed-skill",
+            "~/.claude/skills/removed-skill-copy",
+          ],
+        },
+      ],
+    });
+    const decisions = buildInitialState(inventory);
+
+    expect(countDecisionSelections(decisions, inventory)).toBe(0);
+    expect(buildDecisions(decisions, inventory)).toMatchObject({
+      removeDeletedPlatformCopies: [],
+    });
+  });
+
+  it("defaults current-platform leftovers to selected and counts selected paths", () => {
+    const inventory = emptyInventory({
+      deletedPlatformCopies: [
+        {
+          agentId: "claude-code",
+          skillId: "removed-skill",
+          skillName: "removed-skill",
+          writablePaths: [
+            "~/.claude/skills/removed-skill",
+            "~/.claude/skills/removed-skill-copy",
+          ],
+        },
+      ],
+    });
+    const decisions = buildInitialState(inventory, "platform");
+
+    expect(countDecisionSelections(decisions, inventory)).toBe(2);
+    expect(summarizeDecisionSelections(decisions, inventory)).toMatchObject({
+      deletedPlatformCopies: 2,
+    });
+    expect(buildDecisions(decisions, inventory)).toMatchObject({
+      removeDeletedPlatformCopies: [
+        {
+          agentId: "claude-code",
+          skillId: "removed-skill",
+          paths: [
+            "~/.claude/skills/removed-skill",
+            "~/.claude/skills/removed-skill-copy",
+          ],
+        },
+      ],
+    });
+  });
+
+  it("only defaults duplicate cleanup paths inside current-platform scope", () => {
+    const inventory = emptyInventory({
+      platformDuplicates: [
+        {
+          agentId: "codex",
+          skillId: "dup-skill",
+          skillName: "dup-skill",
+          writablePaths: ["~/.agents/skills/dup-skill"],
+          pluginPaths: ["~/.codex/plugins/cache/plugin/skills/dup-skill"],
+        },
+      ],
+    });
+
+    expect(countDecisionSelections(buildInitialState(inventory), inventory)).toBe(0);
+
+    const platformDecisions = buildInitialState(inventory, "platform");
+    expect(countDecisionSelections(platformDecisions, inventory)).toBe(1);
+    expect(buildDecisions(platformDecisions, inventory, ["codex"])).toMatchObject({
+      allowedAgentIds: ["codex"],
+      removePlatformDuplicates: [
+        {
+          agentId: "codex",
+          skillId: "dup-skill",
+          paths: ["~/.agents/skills/dup-skill"],
+        },
+      ],
+    });
+  });
 });
 
 describe("updateCenter refresh scope", () => {
@@ -88,11 +175,27 @@ describe("updateCenter refresh scope", () => {
 
     expect(buildRefreshScope("repositories", context)).toEqual({
       kind: "repositories",
+      mode: "sync",
       repositoryIds: ["github:owner-repo-main"],
     });
-    expect(buildRefreshScope("skills", context)).toEqual({
+    expect(buildRefreshScope("skills", context, "regular")).toEqual({
       kind: "skills",
+      mode: "regular",
       skillIds: ["a", "b"],
+    });
+  });
+
+  it("builds current-platform payloads from opener context", () => {
+    const context = {
+      repositoryIds: [],
+      skillIds: ["a"],
+      agentIds: [" codex ", "codex", "amp"],
+    };
+
+    expect(buildRefreshScope("platform", context)).toEqual({
+      kind: "platform",
+      mode: "sync",
+      agentIds: ["codex", "amp"],
     });
   });
 
@@ -101,7 +204,8 @@ describe("updateCenter refresh scope", () => {
 
     expect(isRefreshScopeEnabled("repositories", empty)).toBe(false);
     expect(isRefreshScopeEnabled("skills", empty)).toBe(false);
+    expect(isRefreshScopeEnabled("platform", empty)).toBe(false);
     expect(coerceRefreshScopeKind("repositories", empty)).toBe("all");
-    expect(buildRefreshScope("skills", empty)).toEqual({ kind: "all" });
+    expect(buildRefreshScope("skills", empty)).toEqual({ kind: "all", mode: "sync" });
   });
 });

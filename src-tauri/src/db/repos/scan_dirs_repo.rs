@@ -10,13 +10,12 @@ use sqlx::Row;
 use crate::db::types::{DbPool, ScanDirectory};
 
 /// Retrieve all scan directories.
-pub async fn get_scan_directories(pool: &DbPool) -> Result<Vec<ScanDirectory>, String> {
+pub async fn get_scan_directories(pool: &DbPool) -> Result<Vec<ScanDirectory>, sqlx::Error> {
     sqlx::query_as::<_, ScanDirectory>(
         "SELECT * FROM scan_directories ORDER BY is_builtin DESC, added_at",
     )
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 /// Add a new scan directory entry (non-builtin by default).
@@ -24,7 +23,7 @@ pub async fn add_scan_directory(
     pool: &DbPool,
     path: &str,
     label: Option<&str>,
-) -> Result<ScanDirectory, String> {
+) -> Result<ScanDirectory, sqlx::Error> {
     let now = Utc::now().to_rfc3339();
     sqlx::query(
         "INSERT INTO scan_directories (path, label, is_active, is_builtin, added_at)
@@ -34,37 +33,39 @@ pub async fn add_scan_directory(
     .bind(label)
     .bind(&now)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query_as::<_, ScanDirectory>("SELECT * FROM scan_directories WHERE path = ?")
         .bind(path)
         .fetch_one(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// Remove a scan directory. Returns an error if the directory is builtin.
-pub async fn remove_scan_directory(pool: &DbPool, path: &str) -> Result<(), String> {
+pub async fn remove_scan_directory(pool: &DbPool, path: &str) -> Result<(), sqlx::Error> {
     let row = sqlx::query("SELECT is_builtin FROM scan_directories WHERE path = ?")
         .bind(path)
         .fetch_optional(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     match row {
-        None => Err(format!("Scan directory '{}' not found", path)),
+        None => Err(sqlx::Error::InvalidArgument(format!(
+            "Scan directory '{}' not found",
+            path
+        ))),
         Some(r) => {
-            let is_builtin: bool = r.try_get("is_builtin").map_err(|e| e.to_string())?;
+            let is_builtin: bool = r.try_get("is_builtin")?;
             if is_builtin {
-                return Err(format!("Cannot remove built-in scan directory '{}'", path));
+                return Err(sqlx::Error::InvalidArgument(format!(
+                    "Cannot remove built-in scan directory '{}'",
+                    path
+                )));
             }
             sqlx::query("DELETE FROM scan_directories WHERE path = ?")
                 .bind(path)
                 .execute(pool)
                 .await
                 .map(|_| ())
-                .map_err(|e| e.to_string())
         }
     }
 }
@@ -74,12 +75,11 @@ pub async fn toggle_scan_directory(
     pool: &DbPool,
     path: &str,
     is_active: bool,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE scan_directories SET is_active = ? WHERE path = ?")
         .bind(is_active)
         .bind(path)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }

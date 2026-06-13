@@ -25,6 +25,8 @@ export interface FacetItemProps {
   className?: string;
   "data-pinned"?: boolean;
   onClick: () => void;
+  /** 常驻显示的右侧角标（如「可更新数」），在 count 之前渲染。 */
+  badge?: ReactNode;
   /** Hover 时显示的右侧操作（如 delete）。 */
   trailingAction?: ReactNode;
 }
@@ -41,6 +43,7 @@ export function FacetItem({
   className,
   "data-pinned": dataPinned,
   onClick,
+  badge,
   trailingAction,
 }: FacetItemProps) {
   return (
@@ -52,7 +55,7 @@ export function FacetItem({
           ? "border-primary/25 bg-background text-foreground shadow-sm ring-1 ring-primary/10"
           : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-background/70 hover:text-foreground",
         disabled && "pointer-events-none opacity-50",
-        className
+        className,
       )}
       data-pinned={dataPinned}
     >
@@ -71,11 +74,14 @@ export function FacetItem({
         ) : null}
         <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
       </button>
+      {badge}
       {typeof count === "number" && (
         <span
           className={cn(
             "shrink-0 rounded-md border bg-background px-1.5 py-0.5 font-mono text-[10px] tabular-nums",
-            active ? "border-primary/30 text-foreground" : "border-border/80 text-muted-foreground"
+            active
+              ? "border-primary/30 text-foreground"
+              : "border-border/80 text-muted-foreground",
           )}
         >
           {count}

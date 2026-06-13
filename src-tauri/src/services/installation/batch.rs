@@ -91,7 +91,7 @@ pub async fn batch_install_central_skills_impl(
                 Err(error) => failed.push(CentralBatchInstallFailure {
                     skill_id: skill_id.clone(),
                     agent_id: agent_id.clone(),
-                    error,
+                    error: error.to_string(),
                 }),
             }
         }
@@ -137,7 +137,7 @@ pub async fn batch_uninstall_skills_from_agent_impl(
             Err(error) => failed.push(BatchUninstallSkillFailure {
                 skill_id: request.skill_id,
                 row_id: request.row_id,
-                error,
+                error: error.to_string(),
             }),
         }
     }

@@ -8,8 +8,8 @@
 //! 1. Translates `State<AppState>` + arguments into service calls.
 //! 2. Wraps every call with an `OperationLogEvent` recorder.
 //!
-//! Down-stream callers (commands/collections.rs, commands/discover.rs,
-//! commands/central_updates.rs, central_migration.rs) still see the same
+//! Down-stream callers (commands/collections.rs, commands/central_updates.rs)
+//! still see the same
 //! types and helpers under `commands::linker::*` because of the `pub use`
 //! bridge near the top of this file.
 
@@ -27,8 +27,8 @@ use crate::targets::{connect_remote_target, ActiveTarget};
 use crate::AppState;
 
 // Re-export the public surface so existing call-sites under `super::linker::*`
-// or `crate::commands::linker::*` (collections / discover / central_migration
-// / central_updates) keep compiling without changes.
+// or `crate::commands::linker::*` (collections / central_updates)
+// keep compiling without changes.
 pub use crate::services::installation::{
     batch_install_central_skills_impl, batch_uninstall_skills_from_agent_impl, copy_dir_all,
     create_symlink, install_skill_to_agent_auto_impl, install_skill_to_agent_copy_impl,
@@ -81,6 +81,7 @@ pub async fn install_skill_to_agent(
             .await
         }
     };
+    let result = result.map_err(|e| e.to_string());
     let status = if result.is_ok() {
         "succeeded"
     } else {
@@ -143,6 +144,7 @@ pub async fn uninstall_skill_from_agent(
             .await
         }
     };
+    let result = result.map_err(|e| e.to_string());
     let status = if result.is_ok() {
         "succeeded"
     } else {
@@ -206,7 +208,7 @@ pub async fn batch_uninstall_skills_from_agent(
                     Err(error) => failed.push(BatchUninstallSkillFailure {
                         skill_id: request.skill_id,
                         row_id: request.row_id,
-                        error,
+                        error: error.to_string(),
                     }),
                 }
             }
@@ -295,6 +297,7 @@ pub async fn batch_install_to_agents(
             match connect_remote_target(&active_target).await {
                 Ok(connection) => Some(connection),
                 Err(error) => {
+                    let error = error.to_string();
                     failed.extend(agent_ids.iter().map(|agent_id| FailedInstall {
                         agent_id: agent_id.clone(),
                         error: error.clone(),
@@ -346,7 +349,7 @@ pub async fn batch_install_to_agents(
                     Ok(installation::InstallOutcome::Skipped(item)) => skipped.push(item),
                     Err(e) => failed.push(FailedInstall {
                         agent_id: agent_id.clone(),
-                        error: e,
+                        error: e.to_string(),
                     }),
                 }
             }
@@ -371,7 +374,7 @@ pub async fn batch_install_to_agents(
                     Ok(_) => succeeded.push(agent_id.clone()),
                     Err(e) => failed.push(FailedInstall {
                         agent_id: agent_id.clone(),
-                        error: e,
+                        error: e.to_string(),
                     }),
                 }
             }
@@ -473,6 +476,7 @@ pub async fn batch_install_central_skills(
         let connection = match connect_remote_target(&active_target).await {
             Ok(connection) => connection,
             Err(error) => {
+                let error = error.to_string();
                 for skill_id in &skill_ids {
                     for agent_id in &agent_ids {
                         failed.push(CentralBatchInstallFailure {
@@ -544,7 +548,7 @@ pub async fn batch_install_central_skills(
                     Err(error) => failed.push(CentralBatchInstallFailure {
                         skill_id: skill_id.clone(),
                         agent_id: agent_id.clone(),
-                        error,
+                        error: error.to_string(),
                     }),
                 }
             }

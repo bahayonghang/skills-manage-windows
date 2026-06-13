@@ -72,7 +72,7 @@ export function TaskCenterDrawer({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal keepMounted={false}>
-        <DialogOverlay className="bg-black/20" />
+        <DialogOverlay className="bg-overlay" />
         <DialogPrimitive.Popup
           data-testid="central-task-center-drawer"
           role="dialog"
@@ -177,8 +177,8 @@ function TaskRow({
             hasFailed
               ? "bg-destructive/10 text-destructive ring-destructive/20"
               : isCompleted
-                ? "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-300"
-                : "bg-primary/10 text-primary ring-primary/20"
+                ? "bg-success/10 text-success-foreground ring-success/20"
+                : "bg-primary/10 text-primary ring-primary/20",
           )}
         >
           {icon}
@@ -199,7 +199,7 @@ function TaskRow({
         <div
           className={cn(
             "h-full w-full origin-left rounded-full transition-transform duration-300 ease-out",
-            hasFailed ? "bg-destructive" : "bg-primary"
+            hasFailed ? "bg-destructive" : "bg-primary",
           )}
           style={{ transform: `scaleX(${ratio})` }}
         />
@@ -216,9 +216,7 @@ function TaskRow({
         <p
           className={cn(
             "mt-2 text-xs",
-            hasFailed
-              ? "text-destructive"
-              : "text-amber-700 dark:text-amber-300"
+            hasFailed ? "text-destructive" : "text-warning-foreground",
           )}
         >
           {error}
@@ -241,12 +239,14 @@ function StatusBadge({
     <span
       className={cn(
         "rounded-full px-2 py-0.5 text-[10px] font-medium",
-        tone === "running" && "bg-primary/10 text-primary ring-1 ring-primary/20",
+        tone === "running" &&
+          "bg-primary/10 text-primary ring-1 ring-primary/20",
         tone === "ok" &&
-          "bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/20 dark:text-emerald-300",
+          "bg-success/10 text-success-foreground ring-1 ring-success/20",
         tone === "warn" &&
-          "bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/20 dark:text-amber-300",
-        tone === "fail" && "bg-destructive/10 text-destructive ring-1 ring-destructive/20"
+          "bg-warning/10 text-warning-foreground ring-1 ring-warning/20",
+        tone === "fail" &&
+          "bg-destructive/10 text-destructive ring-1 ring-destructive/20",
       )}
     >
       {label}
@@ -256,35 +256,54 @@ function StatusBadge({
 
 function renderStatusBadge(
   status: string,
-  t: TFunction
+  t: TFunction,
 ): { node: ReactNode; tone: "running" | "ok" | "warn" | "fail" } | null {
   if (status === "running") {
     return {
-      node: <StatusBadge tone="running" label={t("central.taskCenterStatusRunning")} />,
+      node: (
+        <StatusBadge
+          tone="running"
+          label={t("central.taskCenterStatusRunning")}
+        />
+      ),
       tone: "running",
     };
   }
   if (status === "cancelling") {
     return {
-      node: <StatusBadge tone="warn" label={t("central.taskCenterStatusCancelling")} />,
+      node: (
+        <StatusBadge
+          tone="warn"
+          label={t("central.taskCenterStatusCancelling")}
+        />
+      ),
       tone: "warn",
     };
   }
   if (status === "completed") {
     return {
-      node: <StatusBadge tone="ok" label={t("central.taskCenterStatusCompleted")} />,
+      node: (
+        <StatusBadge tone="ok" label={t("central.taskCenterStatusCompleted")} />
+      ),
       tone: "ok",
     };
   }
   if (status === "failed") {
     return {
-      node: <StatusBadge tone="fail" label={t("central.taskCenterStatusFailed")} />,
+      node: (
+        <StatusBadge tone="fail" label={t("central.taskCenterStatusFailed")} />
+      ),
       tone: "fail",
     };
   }
   if (status === "cancelled") {
     return {
-      node: <StatusBadge tone="warn" label={t("central.taskCenterStatusCancelled")} />,
+      node: (
+        <StatusBadge
+          tone="warn"
+          label={t("central.taskCenterStatusCancelled")}
+        />
+      ),
       tone: "warn",
     };
   }
@@ -423,7 +442,8 @@ function UpdateTaskRow({
           <span>{t("central.updateSkipped", { count: job.skipped })}</span>
           <span
             className={cn(
-              job.failed > 0 && "rounded-full bg-destructive/10 px-1.5 text-destructive"
+              job.failed > 0 &&
+                "rounded-full bg-destructive/10 px-1.5 text-destructive",
             )}
           >
             {t("central.updateFailed", { count: job.failed })}

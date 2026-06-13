@@ -68,110 +68,120 @@ export function GitHubPatSettingsSection({
       description={t("settings.githubPatDesc")}
       icon={<KeyRound className="size-5 shrink-0 text-muted-foreground" />}
     >
-        <div className="space-y-4">
-          <div className="rounded-xl border border-border/70 bg-background/70 p-3 shadow-sm">
-            <SecretValueInput
-              id="github-pat"
-              label={t("settings.githubPatLabel")}
-              value={githubPatInput}
-              configured={githubPatState.configured}
-              disabled={isLoadingGitHubPat || isSavingGitHubPat}
-              placeholder={t("settings.githubPatPlaceholder")}
-              revealScopeKey="github-pat"
-              inputShowLabel={t("settings.githubPatShowInput")}
-              inputHideLabel={t("settings.githubPatHideInput")}
-              savedRevealLabel={t("settings.githubPatRevealSaved")}
-              savedHideLabel={t("settings.githubPatHideSaved")}
-              savedHiddenHint={t("settings.githubPatSavedHiddenHint")}
-              savedRevealedHint={t("settings.githubPatSavedRevealedHint")}
-              inputReplacementHint={t("settings.githubPatWillReplace")}
-              onChange={onInputChange}
-              onRevealSaved={onReveal}
-              onRevealError={setRevealError}
-            />
-          </div>
+      <div className="space-y-4">
+        <div className="rounded-xl border border-border/70 bg-background/70 p-3 shadow-sm">
+          <SecretValueInput
+            id="github-pat"
+            label={t("settings.githubPatLabel")}
+            value={githubPatInput}
+            configured={githubPatState.configured}
+            disabled={isLoadingGitHubPat || isSavingGitHubPat}
+            placeholder={t("settings.githubPatPlaceholder")}
+            revealScopeKey="github-pat"
+            inputShowLabel={t("settings.githubPatShowInput")}
+            inputHideLabel={t("settings.githubPatHideInput")}
+            savedRevealLabel={t("settings.githubPatRevealSaved")}
+            savedHideLabel={t("settings.githubPatHideSaved")}
+            savedHiddenHint={t("settings.githubPatSavedHiddenHint")}
+            savedRevealedHint={t("settings.githubPatSavedRevealedHint")}
+            inputReplacementHint={t("settings.githubPatWillReplace")}
+            onChange={onInputChange}
+            onRevealSaved={onReveal}
+            onRevealError={setRevealError}
+          />
+        </div>
 
-          <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${storageTone}`}>
-              <ShieldCheck className="size-3.5" />
-              {storageLabel}
+        <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+          <span
+            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${storageTone}`}
+          >
+            <ShieldCheck className="size-3.5" />
+            {storageLabel}
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/20 px-2.5 py-1">
+            <Zap className="size-3.5 text-primary" />
+            {t("settings.githubPatRateLimitChip")}
+          </span>
+          <span className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 sm:col-span-2">
+            {t("settings.githubPatDirectOnly")}
+          </span>
+          <span className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+            {t("settings.githubPatRateLimitHint")}
+          </span>
+          <span className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+            {t("settings.githubPatAppWideHint")}
+          </span>
+          {githubPatState.error ? (
+            <span className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-warning-foreground sm:col-span-2">
+              {t("settings.githubPatMigrationWarning")}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/20 px-2.5 py-1">
-              <Zap className="size-3.5 text-primary" />
-              {t("settings.githubPatRateLimitChip")}
-            </span>
-            <span className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 sm:col-span-2">
-              {t("settings.githubPatDirectOnly")}
-            </span>
-            <span className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
-              {t("settings.githubPatRateLimitHint")}
-            </span>
-            <span className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
-              {t("settings.githubPatAppWideHint")}
-            </span>
-            {githubPatState.error ? (
-              <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-300 sm:col-span-2">
-                {t("settings.githubPatMigrationWarning")}
+          ) : null}
+        </div>
+
+        {effectiveMessage ? (
+          <p
+            className={
+              effectiveMessage.type === "error"
+                ? "text-sm text-destructive"
+                : "text-sm text-success-foreground"
+            }
+            role="status"
+          >
+            {effectiveMessage.text}
+            {effectiveMessage.detail ? (
+              <span className="mt-1 block text-xs opacity-80">
+                {effectiveMessage.detail}
               </span>
             ) : null}
-          </div>
+          </p>
+        ) : null}
 
-          {effectiveMessage ? (
-            <p
-              className={
-                effectiveMessage.type === "error"
-                  ? "text-sm text-destructive"
-                  : "text-sm text-emerald-600 dark:text-emerald-400"
-              }
-              role="status"
-            >
-              {effectiveMessage.text}
-              {effectiveMessage.detail ? (
-                <span className="mt-1 block text-xs opacity-80">
-                  {effectiveMessage.detail}
-                </span>
-              ) : null}
-            </p>
-          ) : null}
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              onClick={onSave}
-              disabled={
-                isLoadingGitHubPat || isSavingGitHubPat || !githubPatInput.trim()
-              }
-            >
-              {isSavingGitHubPat ? <Loader2 className="size-4 animate-spin" /> : null}
-              <span>{t("common.save")}</span>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={onClear}
-              disabled={
-                isLoadingGitHubPat || isSavingGitHubPat || !githubPatState.configured
-              }
-            >
-              <span>{t("settings.githubPatClear")}</span>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={onTest}
-              disabled={
-                isLoadingGitHubPat ||
-                isSavingGitHubPat ||
-                isTestingGitHubPat ||
-                !githubPatState.configured ||
-                Boolean(githubPatInput.trim())
-              }
-            >
-              {isTestingGitHubPat ? <Loader2 className="size-4 animate-spin" /> : null}
-              <span>{t("settings.githubPatTest")}</span>
-            </Button>
-            {isLoadingGitHubPat ? (
-              <span className="text-xs text-muted-foreground">{t("settings.loading")}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={onSave}
+            disabled={
+              isLoadingGitHubPat || isSavingGitHubPat || !githubPatInput.trim()
+            }
+          >
+            {isSavingGitHubPat ? (
+              <Loader2 className="size-4 animate-spin" />
             ) : null}
-          </div>
+            <span>{t("common.save")}</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onClear}
+            disabled={
+              isLoadingGitHubPat ||
+              isSavingGitHubPat ||
+              !githubPatState.configured
+            }
+          >
+            <span>{t("settings.githubPatClear")}</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onTest}
+            disabled={
+              isLoadingGitHubPat ||
+              isSavingGitHubPat ||
+              isTestingGitHubPat ||
+              !githubPatState.configured ||
+              Boolean(githubPatInput.trim())
+            }
+          >
+            {isTestingGitHubPat ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : null}
+            <span>{t("settings.githubPatTest")}</span>
+          </Button>
+          {isLoadingGitHubPat ? (
+            <span className="text-xs text-muted-foreground">
+              {t("settings.loading")}
+            </span>
+          ) : null}
         </div>
+      </div>
     </SettingsCollapsibleCard>
   );
 }
@@ -179,9 +189,9 @@ export function GitHubPatSettingsSection({
 function githubPatStorageTone(state: SecretStorageState) {
   switch (state) {
     case "stored":
-      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return "border-success/40 bg-success/10 text-success-foreground";
     case "session":
-      return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+      return "border-warning/40 bg-warning/10 text-warning-foreground";
     case "unreadable":
       return "border-destructive/40 bg-destructive/10 text-destructive";
     case "missing":

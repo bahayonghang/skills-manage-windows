@@ -13,12 +13,14 @@ import {
   applyFontPreferences,
   loadFontPreferences,
 } from "./lib/displayFont";
+import { installRuntimeLogger } from "./lib/runtimeLogger";
 
 // Apply theme synchronously before React renders to prevent flash of wrong theme
 useThemeStore.getState().init();
 // 字体偏好：先 apply 默认值避免 layout 跳动；Tauri 端 IPC 完成后再覆盖
 applyFontPreferences(DEFAULT_FONT_PREFERENCES);
 void loadFontPreferences().then(applyFontPreferences);
+installRuntimeLogger();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

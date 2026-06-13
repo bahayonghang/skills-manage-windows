@@ -14,6 +14,7 @@ use crate::db::{self, DbPool};
 mod askpass;
 mod commands;
 mod cred;
+mod error;
 mod exec;
 mod model;
 mod registry;
@@ -33,6 +34,7 @@ use wsl_discovery::*;
 
 pub use askpass::{connect_ssh_target, ConnectedSshTarget};
 pub use commands::*;
+pub use error::TargetsError;
 pub use exec::*;
 pub use model::*;
 pub use registry::TargetRegistry;

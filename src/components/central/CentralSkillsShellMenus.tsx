@@ -1,4 +1,15 @@
-import { ActivityIcon, ArrowUpDown, Check, FileJson, MoreHorizontal, SlidersHorizontal } from "lucide-react";
+import {
+  ActivityIcon,
+  ArrowUpDown,
+  Check,
+  FileJson,
+  LayoutGrid,
+  List,
+  MoreHorizontal,
+  Rows3,
+  Rows4,
+  SlidersHorizontal,
+} from "lucide-react";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import type { TFunction } from "i18next";
 
@@ -182,13 +193,23 @@ export function ToolbarViewMenu({
   const installedCount = installedSkillsFilter.installedCount;
   const uncategorizedActive = viewState.tags.includes("uncategorized");
   const hasActiveModifiers =
-    viewState.group !== "none" || installedValue !== "all" || uncategorizedActive;
+    viewState.group !== "none" ||
+    installedValue !== "all" ||
+    uncategorizedActive ||
+    viewState.view !== "grid" ||
+    viewState.density !== "comfortable";
   const platformOptions = (installedSkillsFilter.availableInstallAgents ?? []).filter(
     (agent) => agent.id !== "central"
   );
 
   const handleSelectGroup = (group: GroupByMode) => {
     setViewState({ ...viewState, group });
+  };
+  const handleSelectLayout = (view: "grid" | "list") => {
+    setViewState({ ...viewState, view });
+  };
+  const handleSelectDensity = (density: "comfortable" | "compact") => {
+    setViewState({ ...viewState, density });
   };
   const handleToggleUncategorized = () => {
     const next = uncategorizedActive
@@ -227,6 +248,92 @@ export function ToolbarViewMenu({
       <MenuPrimitive.Portal>
         <MenuPrimitive.Positioner align="end" sideOffset={6} className="z-50 outline-none">
           <MenuPrimitive.Popup className={menuPopupClassName("min-w-[240px]")}>
+            <MenuPrimitive.Group>
+              <MenuPrimitive.GroupLabel className={menuLabelClassName()}>
+                {t("central.toolbarViewSectionLayout", {
+                  defaultValue: "布局",
+                })}
+              </MenuPrimitive.GroupLabel>
+              <MenuPrimitive.Item
+                data-testid="central-toolbar-view-layout-grid"
+                onClick={() => handleSelectLayout("grid")}
+                className={menuItemClassName(
+                  viewState.view === "grid" && "bg-accent/60 text-accent-foreground",
+                )}
+              >
+                <LayoutGrid className="size-3.5 shrink-0" />
+                <span>
+                  {t("central.toolbarViewLayoutGrid", { defaultValue: "网格（双列）" })}
+                </span>
+                {viewState.view === "grid" && (
+                  <Check className="ml-auto size-3" aria-hidden />
+                )}
+              </MenuPrimitive.Item>
+              <MenuPrimitive.Item
+                data-testid="central-toolbar-view-layout-list"
+                onClick={() => handleSelectLayout("list")}
+                className={menuItemClassName(
+                  viewState.view === "list" && "bg-accent/60 text-accent-foreground",
+                )}
+              >
+                <List className="size-3.5 shrink-0" />
+                <span>
+                  {t("central.toolbarViewLayoutList", { defaultValue: "列表（单列）" })}
+                </span>
+                {viewState.view === "list" && (
+                  <Check className="ml-auto size-3" aria-hidden />
+                )}
+              </MenuPrimitive.Item>
+            </MenuPrimitive.Group>
+
+            <div role="separator" className="my-1 h-px bg-border/60" />
+
+            <MenuPrimitive.Group>
+              <MenuPrimitive.GroupLabel className={menuLabelClassName()}>
+                {t("central.toolbarViewSectionDensity", {
+                  defaultValue: "密度",
+                })}
+              </MenuPrimitive.GroupLabel>
+              <MenuPrimitive.Item
+                data-testid="central-toolbar-view-density-comfortable"
+                onClick={() => handleSelectDensity("comfortable")}
+                className={menuItemClassName(
+                  viewState.density === "comfortable" &&
+                    "bg-accent/60 text-accent-foreground",
+                )}
+              >
+                <Rows3 className="size-3.5 shrink-0" />
+                <span>
+                  {t("central.toolbarViewDensityComfortable", {
+                    defaultValue: "宽松",
+                  })}
+                </span>
+                {viewState.density === "comfortable" && (
+                  <Check className="ml-auto size-3" aria-hidden />
+                )}
+              </MenuPrimitive.Item>
+              <MenuPrimitive.Item
+                data-testid="central-toolbar-view-density-compact"
+                onClick={() => handleSelectDensity("compact")}
+                className={menuItemClassName(
+                  viewState.density === "compact" &&
+                    "bg-accent/60 text-accent-foreground",
+                )}
+              >
+                <Rows4 className="size-3.5 shrink-0" />
+                <span>
+                  {t("central.toolbarViewDensityCompact", {
+                    defaultValue: "紧凑",
+                  })}
+                </span>
+                {viewState.density === "compact" && (
+                  <Check className="ml-auto size-3" aria-hidden />
+                )}
+              </MenuPrimitive.Item>
+            </MenuPrimitive.Group>
+
+            <div role="separator" className="my-1 h-px bg-border/60" />
+
             {hasGroupOptions && groupByOptions && (
               <MenuPrimitive.Group>
                 <MenuPrimitive.GroupLabel className={menuLabelClassName()}>

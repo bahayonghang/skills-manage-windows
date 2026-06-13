@@ -22,6 +22,7 @@ import ClaudeCodeIcon from "@lobehub/icons/es/ClaudeCode/components/Mono";
 import GithubCopilotIcon from "@lobehub/icons/es/GithubCopilot/components/Mono";
 import GeminiCliIcon from "@lobehub/icons/es/GeminiCLI/components/Mono";
 import AntigravityIcon from "@lobehub/icons/es/Antigravity/components/Mono";
+import GrokIcon from "@lobehub/icons/es/Grok/components/Mono";
 import JunieIcon from "@lobehub/icons/es/Junie/components/Mono";
 import QwenIcon from "@lobehub/icons/es/Qwen/components/Mono";
 import OpenCodeIcon from "@lobehub/icons/es/OpenCode/components/Mono";
@@ -59,6 +60,7 @@ const LOBEHUB_ICONS: Record<string, React.ComponentType<LobeIconProps>> = {
   "claude-code": ClaudeCodeIcon,
   "antigravity": AntigravityIcon,
   "antigravity-cli": AntigravityIcon,
+  grok: GrokIcon,
   "copilot": GithubCopilotIcon,
   "gemini-cli": GeminiCliIcon,
   "junie": JunieIcon,
@@ -160,6 +162,20 @@ function PlatformIconComponent({ agentId, className, size = 16 }: PlatformIconPr
           <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.35" />
           <path d="M8 1.8c1.9 1.5 2.9 3.6 2.9 6.2S9.9 12.7 8 14.2C6.1 12.7 5.1 10.6 5.1 8S6.1 3.3 8 1.8z" fill="none" stroke="currentColor" strokeWidth="1.2" />
           <path d="M2.7 6h10.6M2.7 10h10.6" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+
+    case "reasonix":
+      // Reasonix official brand: blue rounded square with white geometric mark
+      // Simplified from docs/brand/reasonix-icon.svg (esengine/DeepSeek-Reasonix)
+      return (
+        <svg {...svgProps} fill="none">
+          <rect x="1" y="1" width="14" height="14" rx="3" fill="#0153e5" />
+          <path
+            d="M4.5 11V5h2.3c1.2 0 2 .3 2.5.9.5.6.7 1.4.5 2.2-.2.7-.6 1.2-1.2 1.5L10.2 11H8.8L7.2 9H5.5v2H4.5zM5.5 8.2h2c.4 0 .8-.1 1-.4.2-.3.3-.7.2-1-.1-.4-.4-.6-.8-.6h-2.4v2z"
+            fill="#fff"
+          />
+          <circle cx="11.5" cy="4.5" r="0.8" fill="#fff" />
         </svg>
       );
 

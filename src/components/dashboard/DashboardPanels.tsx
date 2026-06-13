@@ -21,7 +21,7 @@ function logStatusClass(status: string) {
       return "border-destructive/30 bg-destructive/10 text-destructive";
     case "partial":
     case "cancelled":
-      return "border-primary/30 bg-primary/10 text-primary";
+      return "border-primary/30 bg-primary/10 text-primary-text";
     default:
       return "border-border bg-muted/40 text-muted-foreground";
   }
@@ -94,7 +94,7 @@ export function StatusTile({
       data-testid={testId}
       className="flex min-w-0 items-start gap-3 border-b border-border/70 bg-card px-3 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
     >
-      <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border/80 bg-muted/40 text-primary">
+      <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border/80 bg-muted/40 text-primary-text">
         {icon}
       </span>
       <div className="min-w-0">
@@ -184,10 +184,10 @@ export function StatButton({
       )}
     >
       <span className="flex items-center justify-between gap-2 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
-        <span className={cn("truncate", emphasized && "text-primary")}>
+        <span className={cn("truncate", emphasized && "text-primary-text")}>
           {label}
         </span>
-        <span className={cn("shrink-0", emphasized && "text-primary")}>
+        <span className={cn("shrink-0", emphasized && "text-primary-text")}>
           {icon}
         </span>
       </span>
@@ -218,7 +218,7 @@ export function QueueRow({
       onClick={onClick}
       className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left transition-colors first:border-t-0 hover:bg-muted/25"
     >
-      <span className="grid size-9 place-items-center rounded-md border border-primary/25 bg-primary/10 text-sm font-semibold tabular-nums text-primary">
+      <span className="grid size-9 place-items-center rounded-md border border-primary/25 bg-primary/10 text-sm font-semibold tabular-nums text-primary-text">
         {count}
       </span>
       <span className="min-w-0">

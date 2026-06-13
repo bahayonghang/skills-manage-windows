@@ -9,6 +9,8 @@ use tauri::State;
 use crate::db::{self, DbPool, SavedView};
 use crate::AppState;
 
+use super::serde_helpers::deserialize_optional_optional_string;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSavedViewInput {
@@ -27,29 +29,15 @@ pub struct UpdateSavedViewInput {
     pub query: Option<String>,
     /// `Some(None)` 表示清空 icon；`None` 表示不变。前端发 `null` 字面量时 serde
     /// 会反序列化成 `Some(None)`，而省略字段反序列化为 `None`。
-    #[serde(default, deserialize_with = "deserialize_optional_optional")]
+    #[serde(default, deserialize_with = "deserialize_optional_optional_string")]
     pub icon: Option<Option<String>>,
     pub pinned: Option<bool>,
-}
-
-/// 双重 Option 反序列化：区分「字段缺失」与「字段为 null」。
-fn deserialize_optional_optional<'de, D>(
-    deserializer: D,
-) -> Result<Option<Option<String>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::Deserialize;
-    Option::<Option<String>>::deserialize(deserializer).or_else(|_| {
-        // 兜底：失败时按缺失处理
-        Ok(None)
-    })
 }
 
 // ─── impl layer (pool-driven, used by tests and command wrappers) ────────────
 
 pub async fn list_saved_views_impl(pool: &DbPool) -> Result<Vec<SavedView>, String> {
-    db::list_saved_views(pool).await
+    db::list_saved_views(pool).await.map_err(|e| e.to_string())
 }
 
 pub async fn create_saved_view_impl(
@@ -73,6 +61,7 @@ pub async fn create_saved_view_impl(
         },
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 pub async fn update_saved_view_impl(
@@ -102,17 +91,26 @@ pub async fn update_saved_view_impl(
         },
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 pub async fn delete_saved_view_impl(pool: &DbPool, id: &str) -> Result<(), String> {
-    if db::get_saved_view(pool, id).await?.is_none() {
+    if db::get_saved_view(pool, id)
+        .await
+        .map_err(|e| e.to_string())?
+        .is_none()
+    {
         return Err(format!("Saved view '{id}' not found"));
     }
-    db::delete_saved_view(pool, id).await
+    db::delete_saved_view(pool, id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub async fn reorder_saved_views_impl(pool: &DbPool, ids: Vec<String>) -> Result<(), String> {
-    db::reorder_saved_views(pool, &ids).await
+    db::reorder_saved_views(pool, &ids)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ─── Tauri commands ──────────────────────────────────────────────────────────

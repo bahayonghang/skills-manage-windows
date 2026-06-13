@@ -1,9 +1,9 @@
-//! Repository layer — Phase 2c.
+//! Repository layer.
 //!
 //! Each submodule owns the SQL for one or a small group of related tables.
-//! Functions are re-exported through `db/mod.rs` so existing
-//! `use crate::db::{...}` call sites in `commands/*` keep working without
-//! per-call-site edits during the cutover.
+//! Public helpers are re-exported through `db/mod.rs` as a compatibility
+//! surface for existing `use crate::db::{...}` call sites. Prefer adding new
+//! SQL here and gradually migrating services to narrower repo imports.
 
 pub(crate) mod agents_repo;
 pub(crate) mod collections_repo;
@@ -19,5 +19,6 @@ pub(crate) mod settings_repo;
 pub(crate) mod skills_repo;
 pub(crate) mod tag_groups_repo;
 pub(crate) mod tags_repo;
+pub(crate) mod update_inventory_repo;
 pub(crate) mod update_states_repo;
 pub(crate) mod usage_repo;

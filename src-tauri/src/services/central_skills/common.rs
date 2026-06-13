@@ -4,7 +4,22 @@ use std::path::Path;
 use crate::db;
 pub(super) use crate::skill_time::skill_filesystem_timestamps;
 
+use super::error::CentralSkillsError;
 use super::types::SkillInstallationDetail;
+
+/// Run a synchronous filesystem task on the blocking-thread pool with
+/// Central-Skills-domain errors. Thin typed wrapper over
+/// [`crate::fs_util::run_blocking_fs_with`].
+pub(super) async fn run_blocking_fs<T, F>(
+    label: &'static str,
+    task: F,
+) -> Result<T, CentralSkillsError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, CentralSkillsError> + Send + 'static,
+{
+    crate::fs_util::run_blocking_fs_with(label, task, CentralSkillsError::task_join).await
+}
 
 pub(super) fn skill_dir_path(skill: &db::Skill) -> String {
     skill

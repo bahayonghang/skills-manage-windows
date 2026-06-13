@@ -71,9 +71,21 @@ SkillPort 通过 SSH 管理远程 Linux 或 macOS 用户的全局 skills。桌�
 
 ### Operation Log
 
-SkillPort 的操作日志。记录安装、卸载、扫描、设置、target 切换、导入导出等用户可见操作。
+SkillPort 的操作日志。记录安装、卸载、扫描、设置、target 切换、导入导出等用户可见操作，是面向用户审计和历史回看的一层。
 
 Operation Log 必须保护敏感信息。password、token、PAT、API key、secret、private key、credential 等字段需要 redaction。
+
+Operation Log 不用于承载前后端异常栈、IPC 失败、tracing 诊断或开发期调试噪声；这类内容属于 Runtime Log。
+
+### Runtime Log
+
+SkillPort 的运行时诊断日志。记录 Rust tracing、前端 `error` / `unhandledrejection`、显式 `frontend.runtime` 事件和 IPC 失败等可诊断事件。
+
+Runtime Log 是有界本地文件日志，不是 `operation_logs` 表。文件名固定为 `skillport-YYYY-MM-DD.log`，默认保留 14 天；读取、导出和前端写入都必须做敏感字段 redaction。
+
+### Observability Console
+
+`/logs` 页面中的双层日志控制台。Operation layer 展示 Operation Log；Runtime layer 展示 Runtime Log。两个 layer 共享诊断视觉语言，但数据源、生命周期和清理语义必须保持分离。
 
 ### Local-first storage
 

@@ -12,6 +12,7 @@ export const PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY = "platform_category_visib
 export const DEFAULT_ENABLED_PLATFORM_IDS = [
   "claude-code",
   "codex",
+  "grok",
   "antigravity",
   "antigravity-cli",
   "opencode",

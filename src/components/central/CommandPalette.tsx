@@ -12,6 +12,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
+import { getVisibleSkillTags } from "@/lib/centralTags";
 import type { SavedView, SkillRepositoryWithStats, SkillTag } from "@/types";
 
 export interface CommandPaletteAction {
@@ -68,7 +69,7 @@ export function CommandPalette({
   }, [open, onOpenChange]);
 
   const visibleSavedViews = savedViews.slice(0, 8);
-  const visibleTags = tags.slice(0, 8);
+  const visibleTags = getVisibleSkillTags(tags).slice(0, 8);
   const visibleRepositories = repositories.slice(0, 8);
 
   function handleSelect(callback: () => void) {

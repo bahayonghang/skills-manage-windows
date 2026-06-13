@@ -292,6 +292,34 @@ fn test_remote_project_paths_expand_home_and_universal_dir() {
 }
 
 #[test]
+fn test_remote_project_paths_use_grok_project_dir() {
+    let agent = db::Agent {
+        id: "grok".to_string(),
+        display_name: "Grok".to_string(),
+        category: "coding".to_string(),
+        global_skills_dir: "/home/alice/.grok/skills".to_string(),
+        project_skills_dir: Some(".grok/skills".to_string()),
+        icon_name: None,
+        is_detected: true,
+        is_builtin: true,
+        is_enabled: true,
+    };
+
+    assert_eq!(
+        remote_project_relative_skills_dir(&agent).unwrap(),
+        ".grok/skills"
+    );
+    let paths =
+        remote_project_install_paths("/home/alice", "~/repo", &agent, "code-reviewer").unwrap();
+
+    assert_eq!(paths.project_path, "/home/alice/repo");
+    assert_eq!(
+        paths.target_path,
+        "/home/alice/repo/.grok/skills/code-reviewer"
+    );
+}
+
+#[test]
 fn test_remote_project_path_requires_absolute_posix_path() {
     let agent = db::Agent {
         id: "claude-code".to_string(),
@@ -308,7 +336,11 @@ fn test_remote_project_path_requires_absolute_posix_path() {
     let error =
         remote_project_install_paths("/home/alice", "relative/repo", &agent, "demo").unwrap_err();
 
-    assert!(error.contains("absolute POSIX path"));
+    assert!(matches!(
+        error,
+        super::error::InstallationError::RemoteProjectPathNotAbsolute(_)
+    ));
+    assert!(error.to_string().contains("absolute POSIX path"));
 }
 
 #[test]
@@ -353,7 +385,13 @@ fn test_remote_project_install_rejects_existing_real_directory() {
 fn test_remote_project_method_rejects_disabled_symlink() {
     assert_eq!(remote_project_method("copy", false).unwrap(), "copy");
     let error = remote_project_method("symlink", false).unwrap_err();
-    assert!(error.contains("Remote symlink install is disabled"));
+    assert!(matches!(
+        error,
+        super::error::InstallationError::RemoteSymlinkDisabled
+    ));
+    assert!(error
+        .to_string()
+        .contains("Remote symlink install is disabled"));
     assert_eq!(remote_project_method("symlink", true).unwrap(), "symlink");
 }
 
@@ -726,9 +764,9 @@ async fn test_uninstall_same_root_agent_is_rejected_without_deleting_central_dir
     let result =
         uninstall_skill_from_agent_impl(&pool, "shared-root-uninstall-skill", "codex").await;
     assert!(
-        result
-            .as_ref()
-            .is_err_and(|error| error.contains("cannot be uninstalled independently")),
+        result.as_ref().is_err_and(|error| error
+            .to_string()
+            .contains("cannot be uninstalled independently")),
         "same-root uninstall should be rejected: {:?}",
         result
     );
@@ -840,7 +878,7 @@ async fn test_uninstall_claude_plugin_row_is_rejected_without_deleting_path() {
     assert!(
         result
             .as_ref()
-            .is_err_and(|error| error.contains("read-only")),
+            .is_err_and(|error| error.to_string().contains("read-only")),
         "plugin source rows should be rejected: {:?}",
         result
     );
@@ -877,7 +915,7 @@ async fn test_uninstall_claude_row_rejects_skill_id_mismatch() {
     assert!(
         result
             .as_ref()
-            .is_err_and(|error| error.contains("belongs to skill")),
+            .is_err_and(|error| error.to_string().contains("belongs to skill")),
         "mismatched row/skill should be rejected: {:?}",
         result
     );
@@ -1489,6 +1527,50 @@ async fn test_project_install_uses_agents_dir_for_antigravity_cli() {
 }
 
 #[tokio::test]
+async fn test_project_install_uses_grok_project_dir() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&central_dir, "grok-project-skill");
+
+    let result = install_central_skill_to_project_outcome_impl(
+        &pool,
+        "grok-project-skill",
+        "grok",
+        &project_dir,
+        "copy",
+    )
+    .await
+    .unwrap();
+    let result = match result {
+        InstallOutcome::Installed(result) => result,
+        InstallOutcome::Skipped(skipped) => panic!("expected install, got skip: {:?}", skipped),
+    };
+    let target = project_dir
+        .join(".grok")
+        .join("skills")
+        .join("grok-project-skill");
+
+    assert_eq!(PathBuf::from(result.symlink_path), target);
+    assert!(target.join("SKILL.md").exists());
+    assert!(
+        !project_dir
+            .join(".agents")
+            .join("skills")
+            .join("grok-project-skill")
+            .exists(),
+        "Grok project installs must stay in .grok/skills, not Universal Agents"
+    );
+}
+
+#[tokio::test]
 async fn test_project_install_refuses_existing_real_dir() {
     let tmp = TempDir::new().unwrap();
     let central_dir = tmp.path().join("central");
@@ -1518,7 +1600,7 @@ async fn test_project_install_refuses_existing_real_dir() {
     assert!(
         result
             .as_ref()
-            .is_err_and(|error| error.contains("Refusing to overwrite")),
+            .is_err_and(|error| error.to_string().contains("Refusing to overwrite")),
         "project install should refuse existing real dir: {:?}",
         result
     );
@@ -1698,7 +1780,7 @@ async fn batch_install_impl(
             Ok(InstallOutcome::Skipped(item)) => skipped.push(item),
             Err(e) => failed.push(FailedInstall {
                 agent_id: agent_id.clone(),
-                error: e,
+                error: e.to_string(),
             }),
         }
     }
@@ -1996,7 +2078,7 @@ async fn test_batch_install_uses_copy_method() {
             Ok(_) => succeeded.push(agent_id.clone()),
             Err(e) => failed.push(FailedInstall {
                 agent_id: agent_id.clone(),
-                error: e,
+                error: e.to_string(),
             }),
         }
     }

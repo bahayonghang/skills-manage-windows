@@ -2,14 +2,15 @@
 //!
 //! 表分组：
 //! - `skill_repositories` / `skill_repository_members`：技能按源仓库分组
-//! - `skill_update_states`：远端版本号、抓取状态、错误
+//! - `skill_update_states`：成功应用后的远端基线和兼容更新状态
+//! - `skill_update_inventory_*`：更新中心 refresh 生成的待处理检查结果
 //! - `skill_tags` / `skill_tag_links`：本地分类标签（含手动 / AI 双 source）
 //! - `skill_ai_tag_reviews`：待审核的 AI 标签建议
 
 use crate::db::migrations::ensure_column;
 use crate::db::DbPool;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
+pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     // skill_repositories — local metadata for grouping Central skills by source repo.
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_repositories (
@@ -27,8 +28,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     ensure_column(
         pool,
@@ -48,23 +48,20 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // Phase 7: `(repository_id, skill_id)` makes repository → member scans
     // covering and replaces the older single-column index.
     sqlx::query("DROP INDEX IF EXISTS idx_skill_repository_members_repository_id")
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_repository_members_repository_skill_id
          ON skill_repository_members(repository_id, skill_id)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_repository_sync_skips (
@@ -79,16 +76,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_repository_sync_skips_repository_seen
          ON skill_repository_sync_skips(repository_id, last_seen_at DESC)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_update_states (
@@ -106,29 +101,25 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query("DROP INDEX IF EXISTS idx_skill_update_states_status")
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_update_states_checked_skill
          ON skill_update_states(last_checked_at DESC, skill_id)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_update_states_status_skill
          ON skill_update_states(status, skill_id)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // skill_tag_groups — 标签分组（M3）。一级，不允许嵌套（D4）。tag.group_id 是
     // skill_tag_groups.id 的 nullable 引用；group 被删除时由 commands 把成员的
@@ -145,16 +136,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_tag_groups_sort_order
          ON skill_tag_groups(sort_order)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // skill_tags — local category taxonomy separate from user Collections.
     sqlx::query(
@@ -169,8 +158,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // M3 增量列：tag 隶属哪个 group。旧 db 文件升级时通过 ensure_column 安全加列。
     ensure_column(
@@ -193,16 +181,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_tag_links_tag_id
          ON skill_tag_links(tag_id)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_ai_tag_reviews (
@@ -217,21 +203,18 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query("DROP INDEX IF EXISTS idx_skill_ai_tag_reviews_status")
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_ai_tag_reviews_status_updated_skill_tag
          ON skill_ai_tag_reviews(status, updated_at DESC, skill_id, tag_id)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     /*
      * ========================================================================
@@ -261,16 +244,73 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_repository_pending_additions_repo
          ON skill_repository_pending_additions(repository_id, discovered_at DESC)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_update_inventory_runs (
+            inventory_id        TEXT PRIMARY KEY,
+            scope_kind          TEXT NOT NULL,
+            mode                TEXT NOT NULL,
+            skill_ids_json      TEXT,
+            repository_ids_json TEXT,
+            agent_ids_json      TEXT,
+            cache_policy        TEXT NOT NULL,
+            generated_at        TEXT NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_update_inventory_entries (
+            inventory_id        TEXT NOT NULL,
+            bucket              TEXT NOT NULL,
+            entity_key          TEXT NOT NULL,
+            skill_id            TEXT,
+            skill_name          TEXT,
+            repository_id       TEXT,
+            source_type         TEXT,
+            source_url          TEXT,
+            ref_name            TEXT,
+            source_path         TEXT,
+            agent_id            TEXT,
+            local_hash          TEXT,
+            baseline_hash       TEXT,
+            remote_hash         TEXT,
+            local_version       TEXT,
+            remote_version      TEXT,
+            cache_policy        TEXT NOT NULL,
+            cache_hit           INTEGER NOT NULL DEFAULT 0,
+            snapshot_fetched_at TEXT,
+            generated_at        TEXT NOT NULL,
+            payload_json        TEXT NOT NULL,
+            error               TEXT,
+            PRIMARY KEY (inventory_id, bucket, entity_key)
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_update_inventory_entries_skill
+         ON skill_update_inventory_entries(skill_id, bucket)",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_update_inventory_entries_repo
+         ON skill_update_inventory_entries(repository_id, bucket)",
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

@@ -104,9 +104,10 @@ describe("BatchInstallCentralSkillsDialog", () => {
   });
 
   it("keeps Tauri dialog permission for project folder picking", () => {
-    const capability = defaultCapability as { permissions: string[] };
+    const capability = defaultCapability as { permissions: Array<string | { identifier: string }> };
 
-    expect(capability.permissions).toContain("dialog:default");
+    expect(capability.permissions).toContain("dialog:allow-open");
+    expect(capability.permissions).not.toContain("dialog:default");
   });
 
   it("opens platform management from the target area", () => {

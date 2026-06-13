@@ -26,17 +26,21 @@ if (testFiles.length === 0) {
 }
 
 const tempDir = mkdtempSync(join(tmpdir(), "skillport-vitest-"));
-const localStorageFile = join(tempDir, "localstorage.json");
 const inheritedNodeOptions = process.env.NODE_OPTIONS;
-const nodeOptions = [
-  inheritedNodeOptions || "--max-old-space-size=4096",
-  `--localstorage-file=${localStorageFile}`,
-].join(" ");
 
 let exitCode = 0;
 
 try {
   for (const testFile of testFiles) {
+    const localStorageFile = join(
+      tempDir,
+      `${testFile.replace(/[^a-zA-Z0-9._-]/g, "_")}.localstorage.json`
+    );
+    const nodeOptions = [
+      inheritedNodeOptions || "--max-old-space-size=4096",
+      `--localstorage-file=${localStorageFile}`,
+    ].join(" ");
+
     console.log(`[test] running ${testFile}`);
     const result = spawnSync(
       process.execPath,

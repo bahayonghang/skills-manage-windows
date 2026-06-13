@@ -12,7 +12,7 @@ use sqlx::Row;
 use crate::db::migrations::ensure_column;
 use crate::db::DbPool;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
+pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     // skills：中央技能 / 平台技能的元数据合表。
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skills (
@@ -30,8 +30,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // skill_installations：(skill_id, agent_id) 唯一安装关系。
     sqlx::query(
@@ -39,7 +38,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
             skill_id       TEXT NOT NULL,
             agent_id       TEXT NOT NULL,
             installed_path TEXT NOT NULL,
-            link_type      TEXT NOT NULL,
+            link_type      TEXT NOT NULL CHECK (link_type IN ('native', 'symlink', 'copy', 'writable')),
             symlink_target TEXT,
             created_at     TEXT NOT NULL DEFAULT (datetime('now')),
             PRIMARY KEY (skill_id, agent_id)
@@ -47,7 +46,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     )
     .execute(pool)
     .await
-    .map_err(|e| e.to_string())?;
+    ?;
 
     // Phase 7: `(agent_id, skill_id)` covers the hot
     // `WHERE agent_id = ?` lookup plus the subsequent join back to `skills`.
@@ -55,16 +54,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     // prefix subsumes it.
     sqlx::query("DROP INDEX IF EXISTS idx_skill_installations_agent_id")
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_installations_agent_skill_id
          ON skill_installations(agent_id, skill_id)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // agent_skill_observations：每次 agent 扫描到技能时的事实记录。
     sqlx::query(
@@ -78,7 +75,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
             dir_path       TEXT NOT NULL,
             source_kind    TEXT NOT NULL,
             source_root    TEXT NOT NULL,
-            link_type      TEXT NOT NULL,
+            link_type      TEXT NOT NULL CHECK (link_type IN ('native', 'symlink', 'copy', 'writable')),
             symlink_target TEXT,
             is_read_only   BOOLEAN NOT NULL DEFAULT 0,
             scanned_at     TEXT NOT NULL,
@@ -88,23 +85,21 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     )
     .execute(pool)
     .await
-    .map_err(|e| e.to_string())?;
+    ?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_agent_skill_observations_agent_id
          ON agent_skill_observations(agent_id)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_agent_skill_observations_agent_name_dir
          ON agent_skill_observations(agent_id, name, dir_path)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     ensure_column(
         pool,
@@ -142,8 +137,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     // 新行始终由应用显式写入 created_at，迁移后不再需要 DEFAULT。
     let columns = sqlx::query("PRAGMA table_info(skill_installations)")
         .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     let has_created_at = columns.iter().any(|row| {
         row.try_get::<String, _>("name")
@@ -154,15 +148,13 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
     if !has_created_at {
         sqlx::query("ALTER TABLE skill_installations ADD COLUMN created_at TEXT")
             .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         sqlx::query(
             "UPDATE skill_installations SET created_at = datetime('now') WHERE created_at IS NULL",
         )
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     // agents：内置与自定义 agent 元数据。
@@ -180,24 +172,21 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skills_is_central
          ON skills(is_central)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skills_is_central_name
          ON skills(is_central, name)",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(())
 }

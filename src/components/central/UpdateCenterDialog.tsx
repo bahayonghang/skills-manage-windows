@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -34,6 +34,7 @@ import {
   countsFromInventory,
   emptyDecisionState,
   inventorySignature,
+  summarizeDecisionSelections,
   type DecisionState,
 } from "@/components/central/updateCenter/decisionAggregation";
 import {
@@ -42,7 +43,7 @@ import {
   isRefreshScopeEnabled,
 } from "@/lib/updateCenterRefreshScope";
 import {
-  buildRepositoryDisplayNameMap,
+  buildRepositorySourceDisplayMap,
   buildSkillConflictSourceMap,
 } from "@/lib/centralConflictSource";
 
@@ -50,7 +51,9 @@ const TAB_ORDER: readonly UpdateCenterTab[] = [
   "updatable",
   "added",
   "missing",
+  "failed",
   "duplicates",
+  "deletedPlatformCopies",
   "orphans",
 ] as const;
 
@@ -60,15 +63,22 @@ export function UpdateCenterDialog() {
   const isDialogOpen = useUpdateCenterStore((state) => state.isDialogOpen);
   const isRefreshing = useUpdateCenterStore((state) => state.isRefreshing);
   const isApplying = useUpdateCenterStore((state) => state.isApplying);
+  const isForcing = useUpdateCenterStore((state) => state.isForcing);
   const activeTab = useUpdateCenterStore((state) => state.activeTab);
   const refreshContext = useUpdateCenterStore((state) => state.refreshContext);
+  const refreshMode = useUpdateCenterStore((state) => state.refreshMode);
   const lastRefreshedAt = useUpdateCenterStore((state) => state.lastRefreshedAt);
   const error = useUpdateCenterStore((state) => state.error);
   const closeDialog = useUpdateCenterStore((state) => state.closeDialog);
   const refresh = useUpdateCenterStore((state) => state.refresh);
   const apply = useUpdateCenterStore((state) => state.apply);
   const clear = useUpdateCenterStore((state) => state.clear);
+  const forceUpdateSkills = useUpdateCenterStore((state) => state.forceUpdateSkills);
+  const forceMirrorRepositories = useUpdateCenterStore(
+    (state) => state.forceMirrorRepositories,
+  );
   const setActiveTab = useUpdateCenterStore((state) => state.setActiveTab);
+  const setRefreshMode = useUpdateCenterStore((state) => state.setRefreshMode);
   const skills = useCentralSkillsStore((state) => state.skills ?? []);
   const repositories = useCentralSkillsStore((state) => state.repositories ?? []);
 
@@ -78,8 +88,8 @@ export function UpdateCenterDialog() {
     () => buildSkillConflictSourceMap(skills),
     [skills],
   );
-  const repositoryLabels = useMemo(
-    () => buildRepositoryDisplayNameMap(repositories),
+  const repositorySources = useMemo(
+    () => buildRepositorySourceDisplayMap(repositories),
     [repositories],
   );
 
@@ -87,19 +97,23 @@ export function UpdateCenterDialog() {
     () => inventorySignature(inventory),
     [inventory],
   );
+  const inventoryRef = useRef(inventory);
+
+  useEffect(() => {
+    inventoryRef.current = inventory;
+  }, [inventory, inventoryKey]);
 
   useEffect(() => {
     if (!isDialogOpen) return;
-    setDecisions(buildInitialState(inventory));
-    // 依赖 inventory 内容签名而非引用，避免无意义重置。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDialogOpen, inventoryKey]);
+    setDecisions(buildInitialState(inventoryRef.current, scopeKind));
+  }, [isDialogOpen, inventoryKey, scopeKind]);
 
   const counts = countsFromInventory(inventory);
   const scopeEnabled = useMemo(
     () => ({
       all: true,
       repositories: isRefreshScopeEnabled("repositories", refreshContext),
+      platform: isRefreshScopeEnabled("platform", refreshContext),
       skills: isRefreshScopeEnabled("skills", refreshContext),
     }),
     [refreshContext],
@@ -108,6 +122,16 @@ export function UpdateCenterDialog() {
     () => countDecisionSelections(decisions, inventory),
     [decisions, inventory],
   );
+  const selectionSummary = useMemo(
+    () => summarizeDecisionSelections(decisions, inventory),
+    [decisions, inventory],
+  );
+  const selectedUpdateIds = useMemo(() => {
+    if (!inventory) return [];
+    return inventory.updatable
+      .map((item) => item.state.skill_id)
+      .filter((skillId) => decisions.updatable[skillId]?.selected);
+  }, [decisions.updatable, inventory]);
 
   useEffect(() => {
     if (!isDialogOpen) return;
@@ -117,23 +141,46 @@ export function UpdateCenterDialog() {
     }
   }, [isDialogOpen, refreshContext, scopeKind]);
 
-  function handleRefresh() {
-    const scope: SkillRefreshScope = buildRefreshScope(
+  useEffect(() => {
+    if (!isDialogOpen) return;
+    if (refreshContext.agentIds.length > 0) {
+      setScopeKind("platform");
+    } else if (refreshContext.repositoryIds.length > 0) {
+      setScopeKind("repositories");
+    } else if (refreshContext.skillIds.length > 0) {
+      setScopeKind("skills");
+    } else {
+      setScopeKind("all");
+    }
+  }, [isDialogOpen, refreshContext]);
+
+  function currentRefreshScope(): SkillRefreshScope {
+    return buildRefreshScope(
       scopeKind,
       refreshContext,
+      refreshMode,
     );
+  }
+
+  function handleRefresh() {
+    const scope = currentRefreshScope();
     void refresh(scope);
   }
 
   function handleClear() {
-    void clear();
+    void clear(currentRefreshScope());
   }
 
-  async function handleApplyAll() {
+  async function handleApplySelected() {
     if (!inventory) return;
-    const payload = buildDecisions(decisions, inventory);
+    const scope = currentRefreshScope();
+    const payload = buildDecisions(
+      decisions,
+      inventory,
+      scope.kind === "platform" ? scope.agentIds ?? [] : undefined,
+    );
     try {
-      const result = await apply(payload);
+      const result = await apply(payload, scope);
       const succeeded =
         result.updatedSkillIds.length
         + result.keptMissingSkillIds.length
@@ -141,7 +188,8 @@ export function UpdateCenterDialog() {
         + result.importedSkillIds.length
         + result.skippedAdditions.length
         + result.unskippedAdditions.length
-        + result.removedPlatformDuplicatePaths.length;
+        + result.removedPlatformDuplicatePaths.length
+        + result.removedDeletedPlatformCopyPaths.length;
       const failedCount = result.failures.length;
       if (failedCount === 0) {
         toast.success(
@@ -161,6 +209,76 @@ export function UpdateCenterDialog() {
     } catch (err) {
       toast.error(
         t("central.updateCenter.applyError", { error: String(err) }),
+      );
+    }
+  }
+
+  async function handleForceUpdateSelected() {
+    if (selectedUpdateIds.length === 0) return;
+    const confirmed = window.confirm(
+      t("central.updateCenter.forceUpdateConfirm", {
+        count: selectedUpdateIds.length,
+      }),
+    );
+    if (!confirmed) return;
+    const scope = currentRefreshScope();
+    try {
+      const result = await forceUpdateSkills(
+        { skillIds: selectedUpdateIds, refreshCopyInstallations: true },
+        scope,
+      );
+      toast.success(
+        t("central.updateCenter.forceUpdateSuccess", {
+          count: result.overwritten.length,
+        }),
+      );
+      for (const failure of result.failed.slice(0, 3)) {
+        toast.error(`${failure.skillId}: ${failure.error}`);
+      }
+    } catch (err) {
+      toast.error(
+        t("central.updateCenter.forceUpdateError", { error: String(err) }),
+      );
+    }
+  }
+
+  async function handleForceMirrorRepositories() {
+    const repositoryIds = refreshContext.repositoryIds;
+    if (scopeKind !== "repositories" || repositoryIds.length === 0) return;
+    const confirmed = window.confirm(
+      t("central.updateCenter.forceMirrorConfirm", {
+        repositories: repositoryIds.length,
+        updates: inventory?.updatable.length ?? 0,
+        additions: inventory?.remoteAdded.length ?? 0,
+        deletes: inventory?.remoteMissing.length ?? 0,
+      }),
+    );
+    if (!confirmed) return;
+    const scope = currentRefreshScope();
+    try {
+      const result = await forceMirrorRepositories(
+        {
+          repositoryIds,
+          overwriteTracked: true,
+          importAdded: true,
+          deleteMissing: true,
+          removeCopyInstallationsForDeleted: true,
+        },
+        scope,
+      );
+      toast.success(
+        t("central.updateCenter.forceMirrorSuccess", {
+          overwritten: result.overwritten.length,
+          imported: result.imported.length,
+          deleted: result.deleted.succeeded.length,
+        }),
+      );
+      for (const failure of result.failedItems.slice(0, 3)) {
+        toast.error(`${failure.skillId}: ${failure.error}`);
+      }
+    } catch (err) {
+      toast.error(
+        t("central.updateCenter.forceMirrorError", { error: String(err) }),
       );
     }
   }
@@ -231,6 +349,18 @@ export function UpdateCenterDialog() {
         },
       }));
     },
+    updateDeletedPlatformCopies(key, patch) {
+      setDecisions((current) => ({
+        ...current,
+        deletedPlatformCopies: {
+          ...current.deletedPlatformCopies,
+          [key]: {
+            ...(current.deletedPlatformCopies[key] ?? { selectedPaths: [] }),
+            ...patch,
+          },
+        },
+      }));
+    },
   };
 
   return (
@@ -249,6 +379,8 @@ export function UpdateCenterDialog() {
           <UpdateCenterToolbar
             scopeKind={scopeKind}
             onScopeKindChange={setScopeKind}
+            refreshMode={refreshMode}
+            onRefreshModeChange={setRefreshMode}
             isRefreshing={isRefreshing}
             onRefresh={handleRefresh}
             lastRefreshedAt={lastRefreshedAt}
@@ -271,7 +403,7 @@ export function UpdateCenterDialog() {
               decisions={decisions}
               handlers={handlers}
               existingSkillSources={existingSkillSources}
-              repositoryLabels={repositoryLabels}
+              repositorySources={repositorySources}
             />
           </div>
         </DialogBody>
@@ -281,33 +413,71 @@ export function UpdateCenterDialog() {
             variant="outline"
             size="sm"
             onClick={handleClear}
-            disabled={isApplying || isRefreshing}
+            disabled={isApplying || isRefreshing || isForcing}
           >
             {t("central.updateCenter.clearInventory")}
           </Button>
           <Button
             variant="outline"
             size="sm"
+            onClick={handleForceUpdateSelected}
+            disabled={
+              isApplying
+              || isRefreshing
+              || isForcing
+              || selectedUpdateIds.length === 0
+            }
+          >
+            {t("central.updateCenter.forceUpdateSelected", {
+              count: selectedUpdateIds.length,
+            })}
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleForceMirrorRepositories}
+            disabled={
+              isApplying
+              || isRefreshing
+              || isForcing
+              || scopeKind !== "repositories"
+              || refreshContext.repositoryIds.length === 0
+            }
+          >
+            {t("central.updateCenter.forceMirrorRepositories")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={closeDialog}
-            disabled={isApplying}
+            disabled={isApplying || isForcing}
           >
             {t("common.cancel")}
           </Button>
           <Button
             size="sm"
-            onClick={handleApplyAll}
-            disabled={isApplying || totalSelected === 0 || !inventory}
+            onClick={handleApplySelected}
+            disabled={isApplying || isForcing || totalSelected === 0 || !inventory}
           >
-            {isApplying ? (
+            {isApplying || isForcing ? (
               <>
                 <Loader2 className="size-3.5 animate-spin" />
-                {t("central.updateCenter.applyingChanges")}
+                {t(
+                  isForcing
+                    ? "central.updateCenter.forcingChanges"
+                    : "central.updateCenter.applyingChanges",
+                )}
               </>
             ) : (
-              t("central.updateCenter.applyAll", { count: totalSelected })
+              t("central.updateCenter.applySelected", { count: totalSelected })
             )}
           </Button>
         </DialogFooter>
+        <p className="px-6 pb-4 text-xs text-muted-foreground">
+          {t("central.updateCenter.selectionSummary", {
+            ...selectionSummary,
+          })}
+        </p>
       </DialogContent>
     </Dialog>
   );

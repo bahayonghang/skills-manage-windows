@@ -2,10 +2,11 @@ use reqwest::Client;
 use serde_json::Value;
 
 use crate::{
-    db::{Skill, SkillTag, UNCATEGORIZED_TAG_ID},
+    db::{Skill, SkillTag, ACADEMIC_RESEARCH_WRITING_TAG_ID, UNCATEGORIZED_TAG_ID},
     services::ai_provider,
 };
 
+use super::error::AiTaggingError;
 use super::types::{
     AiTaggingContext, RawAiTagSuggestion, RawAiTagSuggestionEnvelope, SkillTagSuggestion,
 };
@@ -13,7 +14,7 @@ use super::types::{
 pub(crate) async fn suggest_skill_tags_for_skill(
     context: &AiTaggingContext,
     skill: &Skill,
-) -> Result<Vec<SkillTagSuggestion>, String> {
+) -> Result<Vec<SkillTagSuggestion>, AiTaggingError> {
     let content = skill
         .content
         .clone()
@@ -38,7 +39,7 @@ pub(crate) async fn suggest_skill_tags_for_skill(
     map_ai_suggestions(&skill.id, &context.tags, parsed)
 }
 
-fn build_tagging_prompt(
+pub(crate) fn build_tagging_prompt(
     name: &str,
     description: Option<&str>,
     content: &str,
@@ -46,16 +47,27 @@ fn build_tagging_prompt(
 ) -> String {
     let candidates = tags
         .iter()
-        .map(|tag| format!("- {} ({})", tag.name, tag.id))
+        .filter(|tag| !tag.is_builtin || tag.id == ACADEMIC_RESEARCH_WRITING_TAG_ID)
+        .map(|tag| {
+            let kind = if tag.is_builtin { "built-in" } else { "custom" };
+            let description = tag.description.as_deref().unwrap_or("无");
+            format!(
+                "- id: {} | name: {} | kind: {} | description: {}",
+                tag.id, tag.name, kind, description
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n");
     let summary = content.chars().take(4_000).collect::<String>();
 
     format!(
-        "你是 SkillPort 的本地分类器。请只从候选大类中选择 1 到 3 个标签。\n\
+        "你是 SkillPort 的本地分类器。请只从候选标签中选择 0 到 3 个标签。\n\
+         只能输出候选列表中的 tag id，不要输出名称、翻译、同义词或新标签。\n\
+         优先复用最具体的已有 custom 标签；只有强匹配时 confidence 才能 >= 0.7。\n\
+         没有明确匹配时返回 {{\"tags\":[]}}，不要为了凑数选择宽泛默认标签。\n\
          输出必须是 JSON，不要解释额外文本。\n\
-         JSON 格式：{{\"tags\":[{{\"tag\":\"标签名或ID\",\"confidence\":0.0,\"reason\":\"不超过20字\"}}]}}\n\n\
-         候选大类：\n{candidates}\n\n\
+         JSON 格式：{{\"tags\":[{{\"tag\":\"候选标签ID\",\"confidence\":0.0,\"reason\":\"不超过20字\"}}]}}\n\n\
+         候选标签：\n{candidates}\n\n\
          Skill 名称：{name}\n\
          Description：{}\n\
          SKILL.md 摘要：\n{}",
@@ -71,7 +83,7 @@ async fn call_ai_for_tagging(
     model: &str,
     protocol: ai_provider::ExplanationApiProtocol,
     prompt: &str,
-) -> Result<String, String> {
+) -> Result<String, AiTaggingError> {
     let is_openai = !protocol.is_anthropic_compatible();
     let body = if is_openai {
         serde_json::json!({
@@ -97,43 +109,50 @@ async fn call_ai_for_tagging(
     };
 
     let response = request.send().await.map_err(|e| {
-        ai_provider::coded_error_with_details(
+        AiTaggingError::Http(ai_provider::coded_error_with_details(
             ai_provider::AI_REQUEST_FAILED,
             "AI tagging request failed.",
             e.to_string(),
-        )
+        ))
     })?;
     let status = response.status();
     let text = response
         .text()
         .await
-        .map_err(|e| format!("Failed to read AI tagging response: {}", e))?;
+        .map_err(|e| AiTaggingError::Http(format!("Failed to read AI tagging response: {}", e)))?;
     if !status.is_success() {
         if status.as_u16() == 429 {
-            return Err(ai_provider::coded_error_with_details(
+            return Err(AiTaggingError::RateLimited(ai_provider::coded_error_with_details(
                 ai_provider::AI_RATE_LIMIT,
                 "AI tagging was rate limited. Reduce AI Tag concurrency or increase the request interval in Settings.",
                 format!("HTTP {status}: {text}"),
-            ));
+            )));
         }
-        return Err(ai_provider::coded_error_with_details(
+        return Err(AiTaggingError::Http(ai_provider::coded_error_with_details(
             ai_provider::AI_RESPONSE_ERROR,
             format!("AI tagging returned HTTP {status}."),
             text,
-        ));
+        )));
     }
 
     extract_ai_response_text(&text, is_openai)
 }
 
-fn extract_ai_response_text(response_text: &str, is_openai: bool) -> Result<String, String> {
+fn extract_ai_response_text(
+    response_text: &str,
+    is_openai: bool,
+) -> Result<String, AiTaggingError> {
     let value: Value = serde_json::from_str(response_text)
-        .map_err(|e| format!("AI tagging response is not JSON: {}", e))?;
+        .map_err(|e| AiTaggingError::Parse(format!("AI tagging response is not JSON: {}", e)))?;
     if is_openai {
         return value["choices"][0]["message"]["content"]
             .as_str()
             .map(ToString::to_string)
-            .ok_or_else(|| "AI tagging response did not include message content.".to_string());
+            .ok_or_else(|| {
+                AiTaggingError::Parse(
+                    "AI tagging response did not include message content.".to_string(),
+                )
+            });
     }
 
     value["content"]
@@ -145,10 +164,14 @@ fn extract_ai_response_text(response_text: &str, is_openai: bool) -> Result<Stri
                     .map(ToString::to_string)
             })
         })
-        .ok_or_else(|| "AI tagging response did not include text content.".to_string())
+        .ok_or_else(|| {
+            AiTaggingError::Parse("AI tagging response did not include text content.".to_string())
+        })
 }
 
-pub(crate) fn parse_ai_tag_suggestions(raw: &str) -> Result<Vec<RawAiTagSuggestion>, String> {
+pub(crate) fn parse_ai_tag_suggestions(
+    raw: &str,
+) -> Result<Vec<RawAiTagSuggestion>, AiTaggingError> {
     let cleaned = raw
         .trim()
         .trim_start_matches("```json")
@@ -166,26 +189,33 @@ pub(crate) fn parse_ai_tag_suggestions(raw: &str) -> Result<Vec<RawAiTagSuggesti
     let start = cleaned
         .find('{')
         .or_else(|| cleaned.find('['))
-        .ok_or_else(|| "AI tagging response did not include JSON.".to_string())?;
+        .ok_or_else(|| {
+            AiTaggingError::Parse("AI tagging response did not include JSON.".to_string())
+        })?;
     let end = cleaned
         .rfind('}')
         .or_else(|| cleaned.rfind(']'))
-        .ok_or_else(|| "AI tagging response did not include complete JSON.".to_string())?;
+        .ok_or_else(|| {
+            AiTaggingError::Parse("AI tagging response did not include complete JSON.".to_string())
+        })?;
     let json_slice = &cleaned[start..=end];
     serde_json::from_str::<RawAiTagSuggestionEnvelope>(json_slice)
         .map(|envelope| envelope.tags)
         .or_else(|_| serde_json::from_str::<Vec<RawAiTagSuggestion>>(json_slice))
-        .map_err(|e| format!("Failed to parse AI tagging JSON: {}", e))
+        .map_err(|e| AiTaggingError::Parse(format!("Failed to parse AI tagging JSON: {}", e)))
 }
 
 pub(crate) fn map_ai_suggestions(
     skill_id: &str,
     tags: &[SkillTag],
     raw: Vec<RawAiTagSuggestion>,
-) -> Result<Vec<SkillTagSuggestion>, String> {
+) -> Result<Vec<SkillTagSuggestion>, AiTaggingError> {
     let mut suggestions = Vec::new();
     for item in raw {
         let key = item.tag.trim();
+        if key == UNCATEGORIZED_TAG_ID {
+            continue;
+        }
         let Some(tag) = tags
             .iter()
             .find(|tag| tag.id == key || tag.name == key)
@@ -207,7 +237,7 @@ pub(crate) fn map_ai_suggestions(
             .iter()
             .find(|tag| tag.id == UNCATEGORIZED_TAG_ID)
             .cloned()
-            .ok_or_else(|| "AI tagging returned no usable candidate tags.".to_string())?;
+            .ok_or(AiTaggingError::NoUsableCandidateTags)?;
         suggestions.push(SkillTagSuggestion {
             skill_id: skill_id.to_string(),
             tag: fallback,

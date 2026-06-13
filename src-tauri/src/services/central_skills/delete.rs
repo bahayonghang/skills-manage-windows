@@ -1,189 +1,139 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use crate::db::{self, DbPool, SkillRepository, SkillRepositoryWithStats};
+use crate::db::{self, DbPool};
 use crate::targets::{
     connect_remote_target, ActiveTarget, ConnectedRemoteTarget, RemoteTargetConfig,
 };
 
-use super::common::{installation_details, shared_root_agent_ids, unique_agent_ids};
+use super::common::{
+    installation_details, run_blocking_fs, shared_root_agent_ids, unique_agent_ids,
+};
+use super::error::CentralSkillsError;
 use super::types::{
     BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest,
     BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, DeleteCentralSkillPreview,
-    DeleteCentralSkillResult, DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult,
-    FailedCentralSkillDelete,
+    DeleteCentralSkillResult, FailedCentralSkillDelete,
 };
 
-async fn get_deletable_repository_with_skill_ids(
-    pool: &DbPool,
-    repository_id: &str,
-) -> Result<(SkillRepository, Vec<String>), String> {
-    let repository = db::get_skill_repository_by_id(pool, repository_id)
-        .await?
-        .ok_or_else(|| format!("Repository '{}' not found", repository_id))?;
-    if repository.id == db::LOCAL_UNKNOWN_REPOSITORY_ID || repository.is_unknown {
-        return Err("The system unknown-source repository cannot be deleted".to_string());
-    }
+mod repository;
 
-    let skill_ids = db::get_central_skill_ids_by_repository(pool, &repository.id).await?;
-    Ok((repository, skill_ids))
-}
-
-fn repository_with_stats(
-    repository: SkillRepository,
-    skill_count: usize,
-) -> SkillRepositoryWithStats {
-    SkillRepositoryWithStats {
-        repository,
-        skill_count: skill_count as i64,
-        unknown_skill_count: 0,
-    }
-}
-
-fn build_repository_delete_requests(
-    repository_id: &str,
-    skill_ids: &[String],
-    requests: &[BatchDeleteCentralSkillRequest],
-) -> Result<Vec<BatchDeleteCentralSkillRequest>, String> {
-    let valid_skill_ids: HashSet<&str> = skill_ids.iter().map(String::as_str).collect();
-    let mut remove_agents_by_skill: HashMap<String, Vec<String>> = HashMap::new();
-
-    for request in requests {
-        if !valid_skill_ids.contains(request.skill_id.as_str()) {
-            return Err(format!(
-                "Skill '{}' does not belong to repository '{}'",
-                request.skill_id, repository_id
-            ));
-        }
-
-        let entry = remove_agents_by_skill
-            .entry(request.skill_id.clone())
-            .or_default();
-        for agent_id in &request.remove_agent_ids {
-            if !entry.contains(agent_id) {
-                entry.push(agent_id.clone());
-            }
-        }
-    }
-
-    Ok(skill_ids
-        .iter()
-        .map(|skill_id| BatchDeleteCentralSkillRequest {
-            skill_id: skill_id.clone(),
-            remove_agent_ids: remove_agents_by_skill
-                .remove(skill_id)
-                .map(unique_agent_ids)
-                .unwrap_or_default(),
-        })
-        .collect())
-}
+pub use repository::{
+    delete_skill_repository_impl, delete_skill_repository_remote_impl,
+    delete_skill_repository_ssh_impl, preview_delete_skill_repository_impl,
+    preview_delete_skill_repository_ssh_impl,
+};
 
 #[cfg(windows)]
-fn remove_symlink_path(path: &Path) -> Result<(), String> {
-    std::fs::remove_dir(path).map_err(|e| format!("Failed to remove symlink: {}", e))
+fn remove_symlink_path(path: &Path) -> Result<(), CentralSkillsError> {
+    std::fs::remove_dir(path).map_err(|e| CentralSkillsError::io("Failed to remove symlink", e))
 }
 
 #[cfg(not(windows))]
-fn remove_symlink_path(path: &Path) -> Result<(), String> {
-    std::fs::remove_file(path).map_err(|e| format!("Failed to remove symlink: {}", e))
+fn remove_symlink_path(path: &Path) -> Result<(), CentralSkillsError> {
+    std::fs::remove_file(path).map_err(|e| CentralSkillsError::io("Failed to remove symlink", e))
 }
 
-fn skill_delete_dir(skill: &db::Skill) -> Result<PathBuf, String> {
+fn skill_delete_dir(skill: &db::Skill) -> Result<PathBuf, CentralSkillsError> {
     skill
         .canonical_path
         .as_deref()
         .map(PathBuf::from)
         .or_else(|| Path::new(&skill.file_path).parent().map(Path::to_path_buf))
-        .ok_or_else(|| format!("Skill '{}' has no canonical directory", skill.id))
+        .ok_or_else(|| CentralSkillsError::SkillNoCanonicalDir(skill.id.clone()))
 }
 
-fn ensure_child_path(root: &Path, child: &Path, label: &str) -> Result<(), String> {
+fn ensure_child_path(root: &Path, child: &Path, label: &str) -> Result<(), CentralSkillsError> {
     let root_cmp = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let child_cmp = child.canonicalize().unwrap_or_else(|_| child.to_path_buf());
 
     if crate::paths::paths_equivalent(&root_cmp, &child_cmp) {
-        return Err(format!(
-            "Refusing to delete the Central Skills root for {}",
-            label
+        return Err(CentralSkillsError::CentralRootDeleteRefused(
+            label.to_string(),
         ));
     }
 
     if !child_cmp.starts_with(&root_cmp) {
-        return Err(format!(
-            "Refusing to delete '{}' because it is outside Central Skills root '{}'",
-            child.display(),
-            root.display()
-        ));
+        return Err(CentralSkillsError::OutsideCentralRoot {
+            path: child.display().to_string(),
+            root: root.display().to_string(),
+        });
     }
 
     Ok(())
 }
 
-fn remove_skill_dir(path: &Path) -> Result<(), String> {
+fn remove_skill_dir(path: &Path) -> Result<(), CentralSkillsError> {
     match std::fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => remove_symlink_path(path),
         Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(path).map_err(|e| {
-            format!(
-                "Failed to remove skill directory '{}': {}",
-                path.display(),
-                e
+            CentralSkillsError::io(
+                format!("Failed to remove skill directory '{}'", path.display()),
+                e,
             )
         }),
-        Ok(_) => Err(format!(
-            "Path '{}' is not a directory. Refusing to delete.",
-            path.display()
+        Ok(_) => Err(CentralSkillsError::NotADirectoryDeleteRefused(
+            path.display().to_string(),
         )),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("Failed to inspect '{}': {}", path.display(), error)),
+        Err(error) => Err(CentralSkillsError::io(
+            format!("Failed to inspect '{}'", path.display()),
+            error,
+        )),
     }
 }
 
-fn remove_installation_path(installation: &db::SkillInstallation) -> Result<(), String> {
+fn remove_installation_path(
+    installation: &db::SkillInstallation,
+) -> Result<(), CentralSkillsError> {
     let path = Path::new(&installation.installed_path);
     match std::fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => remove_symlink_path(path),
         Ok(metadata) if metadata.is_dir() && installation.link_type == "copy" => {
             std::fs::remove_dir_all(path).map_err(|e| {
-                format!(
-                    "Failed to remove copied skill directory '{}': {}",
-                    path.display(),
-                    e
+                CentralSkillsError::io(
+                    format!(
+                        "Failed to remove copied skill directory '{}'",
+                        path.display()
+                    ),
+                    e,
                 )
             })
         }
-        Ok(metadata) if metadata.is_dir() => Err(format!(
-            "Path '{}' is not a managed copy. Refusing to delete.",
-            path.display()
+        Ok(metadata) if metadata.is_dir() => Err(CentralSkillsError::NotAManagedCopy(
+            path.display().to_string(),
         )),
-        Ok(_) => Err(format!(
-            "Path '{}' is not a directory or symlink. Refusing to delete.",
-            path.display()
+        Ok(_) => Err(CentralSkillsError::NotDirectoryOrSymlink(
+            path.display().to_string(),
         )),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("Failed to inspect '{}': {}", path.display(), error)),
+        Err(error) => Err(CentralSkillsError::io(
+            format!("Failed to inspect '{}'", path.display()),
+            error,
+        )),
     }
 }
 
-fn remote_skill_delete_dir(skill: &db::Skill) -> Result<String, String> {
+fn remote_skill_delete_dir(skill: &db::Skill) -> Result<String, CentralSkillsError> {
     skill
         .canonical_path
         .as_deref()
         .map(str::to_string)
         .or_else(|| crate::targets::remote_parent(&skill.file_path))
-        .ok_or_else(|| format!("Skill '{}' has no canonical directory", skill.id))
+        .ok_or_else(|| CentralSkillsError::SkillNoCanonicalDir(skill.id.clone()))
 }
 
-fn normalize_remote_path(path: &str) -> Result<String, String> {
+fn normalize_remote_path(path: &str) -> Result<String, CentralSkillsError> {
     let trimmed = path.trim();
     if trimmed.is_empty() || !trimmed.starts_with('/') || trimmed.contains('\0') {
-        return Err(format!("Invalid remote path '{}'", path));
+        return Err(CentralSkillsError::InvalidRemotePath(path.to_string()));
     }
 
     let mut segments = Vec::new();
     for segment in trimmed.split('/') {
         match segment {
             "" | "." => {}
-            ".." => return Err(format!("Remote path '{}' contains traversal", path)),
+            ".." => return Err(CentralSkillsError::RemotePathTraversal(path.to_string())),
             value => segments.push(value),
         }
     }
@@ -199,30 +149,29 @@ pub(super) fn ensure_remote_child_path(
     root: &str,
     child: &str,
     label: &str,
-) -> Result<String, String> {
+) -> Result<String, CentralSkillsError> {
     let root_cmp = normalize_remote_path(root)?;
     let child_cmp = normalize_remote_path(child)?;
 
     if root_cmp == "/" {
-        return Err(format!(
-            "Refusing to delete under remote root for {}",
-            label
+        return Err(CentralSkillsError::RemoteRootDeleteRefused(
+            label.to_string(),
         ));
     }
 
     if root_cmp == child_cmp {
-        return Err(format!(
-            "Refusing to delete the remote root '{}' for {}",
-            root_cmp, label
-        ));
+        return Err(CentralSkillsError::RemoteRootDeletion {
+            root: root_cmp,
+            label: label.to_string(),
+        });
     }
 
     let prefix = format!("{}/", root_cmp.trim_end_matches('/'));
     if !child_cmp.starts_with(&prefix) {
-        return Err(format!(
-            "Refusing to delete '{}' because it is outside remote root '{}'",
-            child, root
-        ));
+        return Err(CentralSkillsError::OutsideRemoteRoot {
+            path: child.to_string(),
+            root: root.to_string(),
+        });
     }
 
     Ok(child_cmp)
@@ -248,17 +197,17 @@ fn remote_shared_root_agent_ids(agents: &[db::Agent], central_root: &str) -> Vec
 async fn preview_delete_central_skill_ssh_impl(
     pool: &DbPool,
     skill_id: &str,
-) -> Result<DeleteCentralSkillPreview, String> {
+) -> Result<DeleteCentralSkillPreview, CentralSkillsError> {
     let skill = db::get_skill_by_id(pool, skill_id)
         .await?
-        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+        .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
     if !skill.is_central {
-        return Err(format!("Skill '{}' is not a Central skill", skill_id));
+        return Err(CentralSkillsError::NotCentralSkill(skill_id.to_string()));
     }
 
     let central = db::get_agent_by_id(pool, "central")
         .await?
-        .ok_or_else(|| "Central agent not found in database".to_string())?;
+        .ok_or(CentralSkillsError::CentralAgentMissing)?;
     let central_skill_dir = remote_skill_delete_dir(&skill)?;
     let central_path =
         ensure_remote_child_path(&central.global_skills_dir, &central_skill_dir, skill_id)?;
@@ -294,7 +243,7 @@ async fn preview_delete_central_skill_ssh_impl(
 pub async fn preview_delete_central_skills_ssh_impl(
     pool: &DbPool,
     skill_ids: &[String],
-) -> Result<BatchDeleteCentralSkillPreviewResult, String> {
+) -> Result<BatchDeleteCentralSkillPreviewResult, CentralSkillsError> {
     let mut previews = Vec::new();
     let mut failed = Vec::new();
     let mut seen = HashSet::new();
@@ -308,7 +257,7 @@ pub async fn preview_delete_central_skills_ssh_impl(
             Ok(preview) => previews.push(preview),
             Err(error) => failed.push(FailedCentralSkillDelete {
                 skill_id: skill_id.clone(),
-                error,
+                error: error.to_string(),
             }),
         }
     }
@@ -320,16 +269,19 @@ async fn remove_remote_installation_path(
     connection: &ConnectedRemoteTarget,
     installation: &db::SkillInstallation,
     agents_by_id: &HashMap<String, db::Agent>,
-) -> Result<(), String> {
+) -> Result<(), CentralSkillsError> {
     let agent = agents_by_id
         .get(&installation.agent_id)
-        .ok_or_else(|| format!("Agent '{}' not found", installation.agent_id))?;
+        .ok_or_else(|| CentralSkillsError::AgentNotFound(installation.agent_id.clone()))?;
     let path = ensure_remote_child_path(
         &agent.global_skills_dir,
         &installation.installed_path,
         &installation.agent_id,
     )?;
-    connection.remove_tree(&path).await
+    connection
+        .remove_tree(&path)
+        .await
+        .map_err(|e| CentralSkillsError::Remote(e.to_string()))
 }
 
 pub async fn delete_central_skill_remote_impl(
@@ -337,17 +289,17 @@ pub async fn delete_central_skill_remote_impl(
     active_target: &ActiveTarget,
     skill_id: &str,
     remove_agent_ids: &[String],
-) -> Result<DeleteCentralSkillResult, String> {
+) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
     let skill = db::get_skill_by_id(pool, skill_id)
         .await?
-        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+        .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
     if !skill.is_central {
-        return Err(format!("Skill '{}' is not a Central skill", skill_id));
+        return Err(CentralSkillsError::NotCentralSkill(skill_id.to_string()));
     }
 
     let central = db::get_agent_by_id(pool, "central")
         .await?
-        .ok_or_else(|| "Central agent not found in database".to_string())?;
+        .ok_or(CentralSkillsError::CentralAgentMissing)?;
     let central_skill_dir = remote_skill_delete_dir(&skill)?;
     let central_path =
         ensure_remote_child_path(&central.global_skills_dir, &central_skill_dir, skill_id)?;
@@ -358,11 +310,13 @@ pub async fn delete_central_skill_remote_impl(
         let installation = installations
             .iter()
             .find(|item| item.agent_id == *agent_id)
-            .ok_or_else(|| format!("Skill '{}' is not installed for '{}'", skill_id, agent_id))?;
+            .ok_or_else(|| CentralSkillsError::SkillNotInstalledForAgent {
+                skill_id: skill_id.to_string(),
+                agent_id: agent_id.clone(),
+            })?;
         if installation.link_type != "copy" {
-            return Err(format!(
-                "Only copy installations can be selected for platform deletion: {}",
-                agent_id
+            return Err(CentralSkillsError::OnlyCopyInstallationsDeletable(
+                agent_id.clone(),
             ));
         }
     }
@@ -372,7 +326,9 @@ pub async fn delete_central_skill_remote_impl(
         .into_iter()
         .map(|agent| (agent.id.clone(), agent))
         .collect();
-    let connection = connect_remote_target(active_target).await?;
+    let connection = connect_remote_target(active_target)
+        .await
+        .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
 
     let mut removed_agent_ids = Vec::new();
     let mut retained_agent_ids = Vec::new();
@@ -396,7 +352,10 @@ pub async fn delete_central_skill_remote_impl(
         }
     }
 
-    connection.remove_tree(&central_path).await?;
+    connection
+        .remove_tree(&central_path)
+        .await
+        .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
     db::delete_skill(pool, skill_id).await?;
 
     Ok(DeleteCentralSkillResult {
@@ -411,7 +370,7 @@ pub async fn delete_central_skill_ssh_impl(
     target: &RemoteTargetConfig,
     skill_id: &str,
     remove_agent_ids: &[String],
-) -> Result<DeleteCentralSkillResult, String> {
+) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
     let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
     delete_central_skill_remote_impl(pool, &active_target, skill_id, remove_agent_ids).await
 }
@@ -420,7 +379,7 @@ pub async fn delete_central_skills_remote_impl(
     pool: &DbPool,
     active_target: &ActiveTarget,
     requests: &[BatchDeleteCentralSkillRequest],
-) -> Result<BatchDeleteCentralSkillResult, String> {
+) -> Result<BatchDeleteCentralSkillResult, CentralSkillsError> {
     let mut ordered_requests: Vec<BatchDeleteCentralSkillRequest> = Vec::new();
     for request in requests {
         if let Some(existing) = ordered_requests
@@ -459,7 +418,7 @@ pub async fn delete_central_skills_remote_impl(
             }),
             Err(error) => failed.push(FailedCentralSkillDelete {
                 skill_id: request.skill_id,
-                error,
+                error: error.to_string(),
             }),
         }
     }
@@ -471,7 +430,7 @@ pub async fn delete_central_skills_ssh_impl(
     pool: &DbPool,
     target: &RemoteTargetConfig,
     requests: &[BatchDeleteCentralSkillRequest],
-) -> Result<BatchDeleteCentralSkillResult, String> {
+) -> Result<BatchDeleteCentralSkillResult, CentralSkillsError> {
     let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
     delete_central_skills_remote_impl(pool, &active_target, requests).await
 }
@@ -479,17 +438,17 @@ pub async fn delete_central_skills_ssh_impl(
 pub async fn preview_delete_central_skill_impl(
     pool: &DbPool,
     skill_id: &str,
-) -> Result<DeleteCentralSkillPreview, String> {
+) -> Result<DeleteCentralSkillPreview, CentralSkillsError> {
     let skill = db::get_skill_by_id(pool, skill_id)
         .await?
-        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+        .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
     if !skill.is_central {
-        return Err(format!("Skill '{}' is not a Central skill", skill_id));
+        return Err(CentralSkillsError::NotCentralSkill(skill_id.to_string()));
     }
 
     let central = db::get_agent_by_id(pool, "central")
         .await?
-        .ok_or_else(|| "Central agent not found in database".to_string())?;
+        .ok_or(CentralSkillsError::CentralAgentMissing)?;
     let central_root = PathBuf::from(&central.global_skills_dir);
     let central_skill_dir = skill_delete_dir(&skill)?;
     ensure_child_path(&central_root, &central_skill_dir, skill_id)?;
@@ -525,7 +484,7 @@ pub async fn preview_delete_central_skill_impl(
 pub async fn preview_delete_central_skills_impl(
     pool: &DbPool,
     skill_ids: &[String],
-) -> Result<BatchDeleteCentralSkillPreviewResult, String> {
+) -> Result<BatchDeleteCentralSkillPreviewResult, CentralSkillsError> {
     let mut previews = Vec::new();
     let mut failed = Vec::new();
     let mut seen = HashSet::new();
@@ -539,7 +498,7 @@ pub async fn preview_delete_central_skills_impl(
             Ok(preview) => previews.push(preview),
             Err(error) => failed.push(FailedCentralSkillDelete {
                 skill_id: skill_id.clone(),
-                error,
+                error: error.to_string(),
             }),
         }
     }
@@ -551,17 +510,17 @@ pub async fn delete_central_skill_impl(
     pool: &DbPool,
     skill_id: &str,
     remove_agent_ids: &[String],
-) -> Result<DeleteCentralSkillResult, String> {
+) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
     let skill = db::get_skill_by_id(pool, skill_id)
         .await?
-        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+        .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
     if !skill.is_central {
-        return Err(format!("Skill '{}' is not a Central skill", skill_id));
+        return Err(CentralSkillsError::NotCentralSkill(skill_id.to_string()));
     }
 
     let central = db::get_agent_by_id(pool, "central")
         .await?
-        .ok_or_else(|| "Central agent not found in database".to_string())?;
+        .ok_or(CentralSkillsError::CentralAgentMissing)?;
     let central_root = PathBuf::from(&central.global_skills_dir);
     let central_skill_dir = skill_delete_dir(&skill)?;
     ensure_child_path(&central_root, &central_skill_dir, skill_id)?;
@@ -572,38 +531,46 @@ pub async fn delete_central_skill_impl(
         let installation = installations
             .iter()
             .find(|item| item.agent_id == *agent_id)
-            .ok_or_else(|| format!("Skill '{}' is not installed for '{}'", skill_id, agent_id))?;
+            .ok_or_else(|| CentralSkillsError::SkillNotInstalledForAgent {
+                skill_id: skill_id.to_string(),
+                agent_id: agent_id.clone(),
+            })?;
         if installation.link_type != "copy" {
-            return Err(format!(
-                "Only copy installations can be selected for platform deletion: {}",
-                agent_id
+            return Err(CentralSkillsError::OnlyCopyInstallationsDeletable(
+                agent_id.clone(),
             ));
         }
     }
 
-    let mut removed_agent_ids = Vec::new();
-    let mut retained_agent_ids = Vec::new();
-    for installation in &installations {
-        match installation.link_type.as_str() {
-            "copy" if remove_agent_set.contains(&installation.agent_id) => {
-                remove_installation_path(installation)?;
-                removed_agent_ids.push(installation.agent_id.clone());
+    let central_skill_dir_for_remove = central_skill_dir.clone();
+    let (removed_agent_ids, retained_agent_ids) =
+        run_blocking_fs("central skill deletion", move || {
+            let mut removed_agent_ids = Vec::new();
+            let mut retained_agent_ids = Vec::new();
+            for installation in &installations {
+                match installation.link_type.as_str() {
+                    "copy" if remove_agent_set.contains(&installation.agent_id) => {
+                        remove_installation_path(installation)?;
+                        removed_agent_ids.push(installation.agent_id.clone());
+                    }
+                    "copy" => retained_agent_ids.push(installation.agent_id.clone()),
+                    "symlink" => {
+                        remove_installation_path(installation)?;
+                        removed_agent_ids.push(installation.agent_id.clone());
+                    }
+                    "native" => {
+                        removed_agent_ids.push(installation.agent_id.clone());
+                    }
+                    _ => {
+                        retained_agent_ids.push(installation.agent_id.clone());
+                    }
+                }
             }
-            "copy" => retained_agent_ids.push(installation.agent_id.clone()),
-            "symlink" => {
-                remove_installation_path(installation)?;
-                removed_agent_ids.push(installation.agent_id.clone());
-            }
-            "native" => {
-                removed_agent_ids.push(installation.agent_id.clone());
-            }
-            _ => {
-                retained_agent_ids.push(installation.agent_id.clone());
-            }
-        }
-    }
 
-    remove_skill_dir(&central_skill_dir)?;
+            remove_skill_dir(&central_skill_dir_for_remove)?;
+            Ok((removed_agent_ids, retained_agent_ids))
+        })
+        .await?;
     db::delete_skill(pool, skill_id).await?;
 
     Ok(DeleteCentralSkillResult {
@@ -616,7 +583,7 @@ pub async fn delete_central_skill_impl(
 pub async fn delete_central_skills_impl(
     pool: &DbPool,
     requests: &[BatchDeleteCentralSkillRequest],
-) -> Result<BatchDeleteCentralSkillResult, String> {
+) -> Result<BatchDeleteCentralSkillResult, CentralSkillsError> {
     let mut ordered_requests: Vec<BatchDeleteCentralSkillRequest> = Vec::new();
     for request in requests {
         if let Some(existing) = ordered_requests
@@ -648,108 +615,10 @@ pub async fn delete_central_skills_impl(
             }),
             Err(error) => failed.push(FailedCentralSkillDelete {
                 skill_id: request.skill_id,
-                error,
+                error: error.to_string(),
             }),
         }
     }
 
     Ok(BatchDeleteCentralSkillResult { succeeded, failed })
-}
-
-pub async fn preview_delete_skill_repository_impl(
-    pool: &DbPool,
-    repository_id: &str,
-) -> Result<DeleteSkillRepositoryPreview, String> {
-    let (repository, skill_ids) =
-        get_deletable_repository_with_skill_ids(pool, repository_id).await?;
-    let delete_preview = preview_delete_central_skills_impl(pool, &skill_ids).await?;
-
-    Ok(DeleteSkillRepositoryPreview {
-        repository: repository_with_stats(repository, skill_ids.len()),
-        delete_preview,
-    })
-}
-
-pub async fn preview_delete_skill_repository_ssh_impl(
-    pool: &DbPool,
-    repository_id: &str,
-) -> Result<DeleteSkillRepositoryPreview, String> {
-    let (repository, skill_ids) =
-        get_deletable_repository_with_skill_ids(pool, repository_id).await?;
-    let delete_preview = preview_delete_central_skills_ssh_impl(pool, &skill_ids).await?;
-
-    Ok(DeleteSkillRepositoryPreview {
-        repository: repository_with_stats(repository, skill_ids.len()),
-        delete_preview,
-    })
-}
-
-pub async fn delete_skill_repository_impl(
-    pool: &DbPool,
-    repository_id: &str,
-    requests: &[BatchDeleteCentralSkillRequest],
-) -> Result<DeleteSkillRepositoryResult, String> {
-    let (repository, skill_ids) =
-        get_deletable_repository_with_skill_ids(pool, repository_id).await?;
-    let delete_requests = build_repository_delete_requests(&repository.id, &skill_ids, requests)?;
-    let delete_result = delete_central_skills_impl(pool, &delete_requests).await?;
-    let deleted_repository = if delete_result.failed.is_empty() {
-        if skill_ids.is_empty() {
-            db::delete_empty_skill_repository(pool, &repository.id).await?
-        } else {
-            db::prune_empty_skill_repositories(pool).await?;
-            db::get_skill_repository_by_id(pool, &repository.id)
-                .await?
-                .is_none()
-        }
-    } else {
-        false
-    };
-
-    Ok(DeleteSkillRepositoryResult {
-        repository,
-        deleted_repository,
-        delete_result,
-    })
-}
-
-pub async fn delete_skill_repository_remote_impl(
-    pool: &DbPool,
-    active_target: &ActiveTarget,
-    repository_id: &str,
-    requests: &[BatchDeleteCentralSkillRequest],
-) -> Result<DeleteSkillRepositoryResult, String> {
-    let (repository, skill_ids) =
-        get_deletable_repository_with_skill_ids(pool, repository_id).await?;
-    let delete_requests = build_repository_delete_requests(&repository.id, &skill_ids, requests)?;
-    let delete_result =
-        delete_central_skills_remote_impl(pool, active_target, &delete_requests).await?;
-    let deleted_repository = if delete_result.failed.is_empty() {
-        if skill_ids.is_empty() {
-            db::delete_empty_skill_repository(pool, &repository.id).await?
-        } else {
-            db::prune_empty_skill_repositories(pool).await?;
-            db::get_skill_repository_by_id(pool, &repository.id)
-                .await?
-                .is_none()
-        }
-    } else {
-        false
-    };
-
-    Ok(DeleteSkillRepositoryResult {
-        repository,
-        deleted_repository,
-        delete_result,
-    })
-}
-
-pub async fn delete_skill_repository_ssh_impl(
-    pool: &DbPool,
-    target: &RemoteTargetConfig,
-    repository_id: &str,
-    requests: &[BatchDeleteCentralSkillRequest],
-) -> Result<DeleteSkillRepositoryResult, String> {
-    let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
-    delete_skill_repository_remote_impl(pool, &active_target, repository_id, requests).await
 }

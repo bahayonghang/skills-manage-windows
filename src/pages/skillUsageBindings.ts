@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { useUsageStore } from "@/stores/usageStore";
 import { useTargetStore } from "@/stores/targetStore";
@@ -13,21 +13,40 @@ export function useUsageBootstrap() {
   const refresh = useUsageStore((s) => s.refresh);
   const subscribeTargetChanged = useUsageStore((s) => s.subscribeTargetChanged);
   const activeTargetId = useTargetStore((s) => s.activeTarget.id);
+  const initialBootstrapStateRef = useRef({
+    activeTargetId,
+    lastRefreshMs,
+    overview,
+    refresh,
+    scope,
+    subscribeTargetChanged,
+  });
 
   useEffect(() => {
+    const {
+      activeTargetId: initialActiveTargetId,
+      lastRefreshMs: initialLastRefreshMs,
+      overview: initialOverview,
+      refresh: initialRefresh,
+      scope: initialScope,
+      subscribeTargetChanged: initialSubscribeTargetChanged,
+    } = initialBootstrapStateRef.current;
     const now = Date.now();
     const targetMismatch = Boolean(
-      overview && (!scope || scope.targetId !== activeTargetId)
+      initialOverview &&
+      (!initialScope || initialScope.targetId !== initialActiveTargetId),
     );
     const stale =
-      !overview || lastRefreshMs === null || now - lastRefreshMs > AUTO_REFRESH_TTL_MS;
+      !initialOverview ||
+      initialLastRefreshMs === null ||
+      now - initialLastRefreshMs > AUTO_REFRESH_TTL_MS;
     if (stale || targetMismatch) {
-      void refresh(false);
+      void initialRefresh(false);
     }
     // 订阅 active target 切换事件——切换后 store 自动 evict + reload
     let disposed = false;
     let unlistenFn: (() => void) | null = null;
-    void subscribeTargetChanged().then((u) => {
+    void initialSubscribeTargetChanged().then((u) => {
       if (disposed) {
         try {
           u();
@@ -48,8 +67,6 @@ export function useUsageBootstrap() {
         }
       }
     };
-    // 仅在挂载时触发；后续依赖手动 Refresh 按钮
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }
 
@@ -60,10 +77,12 @@ export function useUsageBindings() {
   const providers = useUsageStore((s) => s.providers);
   const detail = useUsageStore((s) => s.detail);
   const scope = useUsageStore((s) => s.scope);
+  const selectedSource = useUsageStore((s) => s.selectedSource);
   const refreshing = useUsageStore((s) => s.refreshing);
   const error = useUsageStore((s) => s.error);
   const lastRefreshMs = useUsageStore((s) => s.lastRefreshMs);
   const refresh = useUsageStore((s) => s.refresh);
+  const selectSource = useUsageStore((s) => s.selectSource);
   const loadDetail = useUsageStore((s) => s.loadDetail);
   const clearDetail = useUsageStore((s) => s.clearDetail);
   const resolveSkillId = useUsageStore((s) => s.resolveSkillId);
@@ -74,10 +93,12 @@ export function useUsageBindings() {
     providers,
     detail,
     scope,
+    selectedSource,
     refreshing,
     error,
     lastRefreshMs,
     refresh,
+    selectSource,
     loadDetail,
     clearDetail,
     resolveSkillId,

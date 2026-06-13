@@ -18,6 +18,7 @@ import {
 } from "@/lib/platformPathPolicy";
 import { normalizeSearchQuery } from "@/lib/search";
 import { isTauriRuntime } from "@/lib/tauri";
+import { getVisibleSkillTags } from "@/lib/centralTags";
 import type {
   AgentWithStatus,
   AiTagJob,
@@ -263,7 +264,8 @@ export function useCentralSkillsDerivedData({
   );
   const filteredManualTags = useMemo(() => {
     const query = normalizeSearchQuery(manualTagQuery);
-    return query ? tags.filter((tag) => normalizeSearchQuery(tag.name).includes(query)) : tags;
+    const visibleTags = getVisibleSkillTags(tags);
+    return query ? visibleTags.filter((tag) => normalizeSearchQuery(tag.name).includes(query)) : visibleTags;
   }, [manualTagQuery, tags]);
   const canCreateManualTag = useMemo(() => {
     const name = manualTagQuery.trim();

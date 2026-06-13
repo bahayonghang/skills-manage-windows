@@ -35,7 +35,9 @@ fn protected_settings_error(key: &str) -> String {
 
 /// Return all scan directories, built-in first then custom ordered by added_at.
 pub async fn get_scan_directories_impl(pool: &DbPool) -> Result<Vec<ScanDirectory>, String> {
-    db::get_scan_directories(pool).await
+    db::get_scan_directories(pool)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Add a new custom (non-builtin) scan directory.
@@ -59,7 +61,9 @@ async fn add_scan_directory_impl_for_home(
         return Err("Scan directory path cannot be empty".to_string());
     }
     let expanded_path = expand_scan_directory_path(path, remote_home);
-    db::add_scan_directory(pool, &expanded_path, label).await
+    db::add_scan_directory(pool, &expanded_path, label)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn expand_scan_directory_path(path: &str, remote_home: Option<&str>) -> String {
@@ -72,7 +76,9 @@ fn expand_scan_directory_path(path: &str, remote_home: Option<&str>) -> String {
 /// Remove a custom (non-builtin) scan directory by path.
 /// Returns an error if the directory is built-in or not found.
 pub async fn remove_scan_directory_impl(pool: &DbPool, path: &str) -> Result<(), String> {
-    db::remove_scan_directory(pool, path).await
+    db::remove_scan_directory(pool, path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Toggle the `is_active` flag on a scan directory by path.
@@ -81,7 +87,9 @@ pub async fn set_scan_directory_active_impl(
     path: &str,
     is_active: bool,
 ) -> Result<(), String> {
-    db::toggle_scan_directory(pool, path, is_active).await
+    db::toggle_scan_directory(pool, path, is_active)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Get a settings value by key. Returns `None` if the key is not set.
@@ -89,7 +97,7 @@ pub async fn get_setting_impl(pool: &DbPool, key: &str) -> Result<Option<String>
     if is_protected_settings_key(key) {
         return Err(protected_settings_error(key));
     }
-    db::get_setting(pool, key).await
+    db::get_setting(pool, key).await.map_err(|e| e.to_string())
 }
 
 /// Get multiple settings values by key. Missing keys map to `None`.
@@ -100,7 +108,9 @@ pub async fn get_settings_impl(
     if let Some(key) = keys.iter().find(|key| is_protected_settings_key(key)) {
         return Err(protected_settings_error(key));
     }
-    db::get_settings(pool, keys).await
+    db::get_settings(pool, keys)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Set (upsert) a settings value.
@@ -111,7 +121,9 @@ pub async fn set_setting_impl(pool: &DbPool, key: &str, value: &str) -> Result<(
     if is_protected_settings_key(key) {
         return Err(protected_settings_error(key));
     }
-    db::set_setting(pool, key, value).await
+    db::set_setting(pool, key, value)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Set (upsert) multiple settings values in one batch.
@@ -125,7 +137,9 @@ pub async fn set_settings_impl(
     if let Some(key) = values.keys().find(|key| is_protected_settings_key(key)) {
         return Err(protected_settings_error(key));
     }
-    db::set_settings(pool, values).await
+    db::set_settings(pool, values)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -306,6 +320,7 @@ pub async fn get_ai_api_key_state(
         provider.as_deref(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -319,6 +334,7 @@ pub async fn reveal_ai_api_key(
         provider.as_deref(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -334,6 +350,7 @@ pub async fn set_ai_api_key(
         provider.as_deref(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -347,6 +364,7 @@ pub async fn clear_ai_api_key(
         provider.as_deref(),
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 /// Tauri command: set (upsert) a settings value.

@@ -6,6 +6,7 @@ type RepositoryDisplayLike = {
   name?: string | null;
   owner?: string | null;
   repo?: string | null;
+  url?: string | null;
   is_unknown?: boolean | null;
 };
 
@@ -18,6 +19,11 @@ export interface SkillConflictSourceInfo {
   skillName: string;
   repositoryLabel: string | null;
   sourcePath: string | null;
+}
+
+export interface RepositorySourceDisplayInfo {
+  label: string;
+  url: string | null;
 }
 
 export function repositoryDisplayName(
@@ -39,6 +45,20 @@ export function buildRepositoryDisplayNameMap(
     repositories.map((repository) => [
       repository.id,
       repositoryDisplayName(repository) ?? repository.id,
+    ]),
+  );
+}
+
+export function buildRepositorySourceDisplayMap(
+  repositories: readonly RepositoryWithId[],
+): Map<string, RepositorySourceDisplayInfo> {
+  return new Map(
+    repositories.map((repository) => [
+      repository.id,
+      {
+        label: repositoryDisplayName(repository) ?? repository.id,
+        url: repository.url?.trim() || null,
+      },
     ]),
   );
 }

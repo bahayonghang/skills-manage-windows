@@ -1,7 +1,18 @@
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, Download, FolderOpen, Loader2, Monitor, Plus, RefreshCw, Tag } from "lucide-react";
+import {
+  Copy,
+  Download,
+  ExternalLink,
+  FolderOpen,
+  Loader2,
+  Monitor,
+  Plus,
+  RefreshCw,
+  Tag,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { repositoryDisplayName } from "@/lib/centralConflictSource";
 import { cn } from "@/lib/utils";
 import { formatPathForDisplay } from "@/lib/path";
 import {
@@ -70,6 +81,21 @@ interface SkillDetailSidebarProps {
   /** 3.8: 反向视图——本 skill 装在哪些项目下。仅在中央非只读 skill 上有值。 */
   projectsUsingSkill?: ProjectUsingSkill[];
   isLoadingProjectsUsingSkill?: boolean;
+}
+
+type RepositoryLinkLike = Pick<
+  SkillRepositoryWithStats,
+  "is_unknown" | "owner" | "repo" | "url"
+>;
+
+function buildGitHubRepositoryUrl(repository?: RepositoryLinkLike | null): string | null {
+  if (!repository || repository.is_unknown) return null;
+  const explicitUrl = repository.url?.trim();
+  if (explicitUrl) return explicitUrl;
+  const owner = repository.owner?.trim();
+  const repo = repository.repo?.trim();
+  if (!owner || !repo) return null;
+  return `https://github.com/${owner}/${repo}`;
 }
 
 function PlatformInstallStatusGroups({
@@ -229,6 +255,8 @@ export function SkillDetailSidebar({
   isLoadingProjectsUsingSkill = false,
 }: SkillDetailSidebarProps) {
   const { t, i18n } = useTranslation();
+  const repositoryLabel = repositoryDisplayName(detail?.repository);
+  const githubRepositoryUrl = buildGitHubRepositoryUrl(detail?.repository);
 
   return (
     <aside
@@ -282,14 +310,11 @@ export function SkillDetailSidebar({
 
           <section aria-label={t("detail.metadataRegion")}>
             <SectionLabel>{t("detail.metadata")}</SectionLabel>
-            <div className="space-y-2.5">
-              <MetadataRow label={t("detail.filePath")} value={detail.file_path} />
+            <div className="space-y-3">
               {detail.dir_path && (
-                <div className="space-y-1.5">
+                <div className={inspectorCardClassName}>
                   <MetadataRow
-                    label={t("detail.directoryPath", {
-                      defaultValue: i18n.language.startsWith("zh") ? "目录路径" : "Directory path",
-                    })}
+                    label={t("detail.localDirectory")}
                     value={detail.dir_path}
                   />
                   <Button
@@ -297,53 +322,70 @@ export function SkillDetailSidebar({
                     size="sm"
                     variant="outline"
                     onClick={onOpenDetailDirectory}
-                    className="h-7 gap-1.5 px-2 text-xs"
+                    className={cn(
+                      inspectorActionButtonClassName,
+                      "h-9 justify-start gap-2 px-3 text-xs font-medium",
+                    )}
                   >
                     {isRemoteTarget ? (
-                      <Copy className="size-3.5" />
+                      <Copy className="size-3.5 shrink-0" />
                     ) : (
-                      <FolderOpen className="size-3.5" />
+                      <FolderOpen className="size-3.5 shrink-0" />
                     )}
-                    {isRemoteTarget
-                      ? t("detail.copyRemoteFolderPath")
-                      : t("detail.openFolder")}
+                    <span className="min-w-0 truncate">
+                      {isRemoteTarget
+                        ? t("detail.copyRemoteFolderPath")
+                        : t("detail.openFolder")}
+                    </span>
                   </Button>
                 </div>
               )}
-              {detail.canonical_path && (
-                <MetadataRow label={t("detail.canonical")} value={detail.canonical_path} />
+
+              {githubRepositoryUrl && repositoryLabel && (
+                <div className={inspectorCardClassName}>
+                  <MetadataRow label={t("detail.githubRepository")} value={repositoryLabel} />
+                  <a
+                    href={githubRepositoryUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cn(
+                      inspectorActionButtonClassName,
+                      "inline-flex h-9 items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-xs transition-[color,box-shadow] hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    )}
+                  >
+                    <ExternalLink className="size-3.5 shrink-0" />
+                    <span className="min-w-0 truncate">{t("detail.openGithubRepo")}</span>
+                  </a>
+                  {detail.source_path && (
+                    <MetadataRow label={t("detail.repositoryPath")} value={detail.source_path} />
+                  )}
+                </div>
               )}
-              {detail.source_root && (
-                <MetadataRow
-                  label={t("detail.sourceRoot", {
-                    defaultValue: i18n.language.startsWith("zh") ? "来源根目录" : "Source root",
-                  })}
-                  value={detail.source_root}
-                />
-              )}
-              {!detail.source_kind && detail.source && (
-                <MetadataRow label={t("detail.source")} value={detail.source} />
-              )}
-              {detail.repository && (
-                <MetadataRow
-                  label={t("detail.repository", {
-                    defaultValue: i18n.language.startsWith("zh") ? "仓库来源" : "Repository",
-                  })}
-                  value={detail.repository.name}
-                />
-              )}
-              {detail.source_path && (
-                <MetadataRow
-                  label={t("detail.sourcePath", {
-                    defaultValue: i18n.language.startsWith("zh") ? "来源路径" : "Source path",
-                  })}
-                  value={detail.source_path}
-                />
-              )}
-              <MetadataRow
-                label={t("detail.scannedAt")}
-                value={new Date(detail.scanned_at).toLocaleString()}
-              />
+
+              <details
+                data-testid="detail-technical-details"
+                className={cn(inspectorCardClassName, "group")}
+              >
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+                  {t("detail.technicalDetails")}
+                </summary>
+                <div className="mt-3 space-y-2.5">
+                  <MetadataRow label={t("detail.filePath")} value={detail.file_path} />
+                  {detail.canonical_path && (
+                    <MetadataRow label={t("detail.canonical")} value={detail.canonical_path} />
+                  )}
+                  {detail.source_root && (
+                    <MetadataRow label={t("detail.sourceRoot")} value={detail.source_root} />
+                  )}
+                  {detail.source && (
+                    <MetadataRow label={t("detail.source")} value={detail.source} />
+                  )}
+                  <MetadataRow
+                    label={t("detail.scannedAt")}
+                    value={new Date(detail.scanned_at).toLocaleString()}
+                  />
+                </div>
+              </details>
             </div>
           </section>
 
@@ -569,10 +611,10 @@ export function SkillDetailSidebar({
                       </div>
                       <span
                         className={cn(
-                          "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1",
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
                           row.linkType === "symlink"
-                            ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-300"
-                            : "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300"
+                            ? "bg-success/10 text-success-foreground ring-success/20"
+                            : "bg-warning/10 text-warning-foreground ring-warning/20"
                         )}
                       >
                         {row.linkType}

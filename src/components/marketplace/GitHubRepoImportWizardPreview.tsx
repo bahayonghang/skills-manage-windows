@@ -10,10 +10,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import type {
-  GitHubRepoPreview,
-  GitHubSkillPreview,
-} from "@/types";
+import type { GitHubRepoPreview, GitHubSkillPreview } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MarkdownPreview } from "@/components/marketplace/MarkdownPreview";
@@ -205,31 +202,35 @@ export function GitHubRepoImportPreviewWorkspace({
                           )}
                           onClick={(event) => event.stopPropagation()}
                         >
-                          {(["skip", "overwrite"] as const).map((nextResolution) => {
-                            const isCurrent = resolution === nextResolution;
-                            return (
-                              <Button
-                                key={nextResolution}
-                                type="button"
-                                variant={isCurrent ? "default" : "ghost"}
-                                size="sm"
-                                className={cn(
-                                  "h-7 rounded-md px-2.5 text-[11px]",
-                                  isCurrent
-                                    ? "shadow-sm"
-                                    : "text-muted-foreground hover:text-foreground",
-                                )}
-                                aria-pressed={isCurrent}
-                                onClick={() =>
-                                  onUpdateSelection(skill, {
-                                    resolution: nextResolution,
-                                  })
-                                }
-                              >
-                                {t(`marketplace.duplicateResolution.${nextResolution}`)}
-                              </Button>
-                            );
-                          })}
+                          {(["skip", "overwrite"] as const).map(
+                            (nextResolution) => {
+                              const isCurrent = resolution === nextResolution;
+                              return (
+                                <Button
+                                  key={nextResolution}
+                                  type="button"
+                                  variant={isCurrent ? "default" : "ghost"}
+                                  size="sm"
+                                  className={cn(
+                                    "h-7 rounded-md px-2.5 text-[11px]",
+                                    isCurrent
+                                      ? "shadow-sm"
+                                      : "text-muted-foreground hover:text-foreground",
+                                  )}
+                                  aria-pressed={isCurrent}
+                                  onClick={() =>
+                                    onUpdateSelection(skill, {
+                                      resolution: nextResolution,
+                                    })
+                                  }
+                                >
+                                  {t(
+                                    `marketplace.duplicateResolution.${nextResolution}`,
+                                  )}
+                                </Button>
+                              );
+                            },
+                          )}
                         </div>
                       ) : null}
                     </div>
@@ -326,12 +327,12 @@ function GitHubRepoImportPreviewDetailPane({
   const resolvedRenameId =
     currentSelection?.renamedSkillId?.trim() || selectedPreviewSkill.skillId;
   const statusBadgeClassName = !selectedPreviewSkill.conflict
-    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+    ? "border-success/30 bg-success/10 text-success-foreground"
     : currentResolution === "overwrite"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+      ? "border-warning/30 bg-warning/10 text-warning-foreground"
       : currentResolution === "rename"
-        ? "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"
-        : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+        ? "border-info/30 bg-info/10 text-info-foreground"
+        : "border-warning/30 bg-warning/10 text-warning-foreground";
   const aiSummary = aiSummaries[selectedPreviewSkill.sourcePath];
   const markdownEntry = skillMarkdown[selectedPreviewSkill.sourcePath];
 
@@ -377,7 +378,8 @@ function GitHubRepoImportPreviewDetailPane({
                 <Input
                   ref={renameInputRef}
                   value={
-                    currentSelection?.renamedSkillId ?? selectedPreviewSkill.skillId
+                    currentSelection?.renamedSkillId ??
+                    selectedPreviewSkill.skillId
                   }
                   onChange={(event) =>
                     onUpdateSelection(selectedPreviewSkill, {
@@ -516,10 +518,7 @@ function GitHubRepoImportPreviewDetailPane({
         <div className="flex gap-5">
           {(
             [
-              [
-                "overview",
-                t("marketplace.githubImportDetailTabs.overview"),
-              ],
+              ["overview", t("marketplace.githubImportDetailTabs.overview")],
               ["ai", t("marketplace.githubImportDetailTabs.ai")],
             ] as const
           ).map(([tabId, label]) => {
@@ -555,7 +554,9 @@ function GitHubRepoImportPreviewDetailPane({
             {browserMode ? (
               <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                 <FileQuestion className="size-6 text-muted-foreground/70" />
-                <span>{t("marketplace.githubImportMarkdownBrowserFallback")}</span>
+                <span>
+                  {t("marketplace.githubImportMarkdownBrowserFallback")}
+                </span>
               </div>
             ) : !markdownEntry || markdownEntry.status === "loading" ? (
               <div className="space-y-3 py-2">
@@ -617,7 +618,8 @@ function GitHubRepoImportPreviewDetailPane({
                   size="sm"
                   onClick={() => {
                     const content =
-                      markdownEntry?.status === "ready" && markdownEntry.content?.trim()
+                      markdownEntry?.status === "ready" &&
+                      markdownEntry.content?.trim()
                         ? markdownEntry.content
                         : (selectedPreviewSkill.description?.trim() ?? "");
                     if (!content) return;

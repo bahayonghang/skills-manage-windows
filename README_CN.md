@@ -10,7 +10,7 @@
 
 ## 项目简介
 
-`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库默认使用私有目录 `~/.skillsmanage/skills/`。在本机 Local 目标下，可以在中央技能库页面修改这个位置：切换前会先预览，迁移时当前中央库覆盖目标目录同名技能，目标目录独有技能会保留并扫描导入，旧目录不会删除。共享的 Universal Agents 目标仍是 `~/.agents/skills/`，只有显式安装到这里的技能才会暴露给 Codex CLI、Cursor、OpenCode、Amp、Copilot 等读取该目录的工具。SkillPort 明确区分 Google 的 Antigravity 应用目标与 Antigravity CLI：Antigravity 全局技能保留在 `~/.gemini/antigravity/skills/`，Antigravity CLI 全局技能使用 `~/.gemini/antigravity-cli/skills/`，两者的 workspace / project 安装都使用 `.agents/skills/`。Gemini CLI 仍作为 legacy/shared Google 目标保留在 `~/.gemini/skills/`。
+`SkillPort` 遵循 [Agent Skills](https://github.com/anthropics/agent-skills) 的开放模式，但中央技能库默认使用私有目录 `~/.skillsmanage/skills/`。在本机 Local 目标下，可以在中央技能库页面修改这个位置：切换前会先预览，迁移时当前中央库覆盖目标目录同名技能，目标目录独有技能会保留并扫描导入，旧目录不会删除。共享的 Universal Agents 目标仍是 `~/.agents/skills/`，只有显式安装到这里的技能才会暴露给 Codex CLI、Cursor、OpenCode、Amp、Copilot 等读取该目录的工具。Grok 按上游兼容的独立目标管理，全局目录为 `~/.grok/skills/`，项目安装目录为 `.grok/skills/`。SkillPort 明确区分 Google 的 Antigravity 应用目标与 Antigravity CLI：Antigravity 全局技能保留在 `~/.gemini/antigravity/skills/`，Antigravity CLI 全局技能使用 `~/.gemini/antigravity-cli/skills/`，两者的 workspace / project 安装都使用 `.agents/skills/`。Gemini CLI 仍作为 legacy/shared Google 目标保留在 `~/.gemini/skills/`。
 
 ## 与上游关系
 
@@ -33,7 +33,7 @@ SkillPort 可以通过 SSH 管理远程 Linux 或 macOS 用户目录里的全局
 
 - 在 Settings 中新增、测试、删除和切换 SSH 目标。
 - SSH 目标支持 key 和账号密码两种 OpenSSH 登录方式。SkillPort 不保存私钥内容；密码登录会把密码存入系统凭据库，不写入 SQLite。
-- 连接成功后探测远程 HOME；远程 Central Skills 使用该主机上的 `~/.skillsmanage/skills/`，Universal Agents 使用 `~/.agents/skills/`。
+- 连接成功后探测远程 HOME；远程 Central Skills 使用该主机上的 `~/.skillsmanage/skills/`，Universal Agents 使用 `~/.agents/skills/`，Grok 使用 `~/.grok/skills/`。
 - 每个 SSH 目标都有独立的本机缓存数据库：`~/.skillsmanage/targets/<target_id>/db.sqlite`。
 - 远程安装默认使用 copy。首版不启用 symlink 安装，也不启用远程 Discover 项目扫描。
 - 文件管理器打开动作会改为复制远程路径，因为该路径存在于远程主机，不存在于本机。
@@ -71,6 +71,7 @@ SkillPort 可以通过 SSH 管理远程 Linux 或 macOS 用户目录里的全局
 - 最新发布：<https://github.com/bahayonghang/skills-manage-windows/releases/latest>
 - 当前桌面发布目标：Windows x64（`.exe`、`.msi`、`.zip`）、macOS Universal（`.dmg`、`.zip`、`.tar.gz`），以及 Linux x86_64 / arm64（`.deb`、`.rpm`、`.AppImage`）
 - Windows 自动更新使用 Tauri 签名的 NSIS 产物和 `latest.json`；macOS 仍未签名 / notarize，Linux arm64 产物是否可用取决于 GitHub Actions runner 矩阵
+- 维护者在发布桌面 tag 前，请按 `docs/reference/release-process.md` 中的说明运行脚本化 release preflight，校验 updater 配置、NSIS 签名和 `latest.json`。
 
 ### macOS 未签名构建说明
 
@@ -97,6 +98,7 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 |------|------|------------|
 | Coding | Claude Code | `~/.claude/skills/` |
 | Coding | Codex CLI | `~/.agents/skills/` |
+| Coding | Grok | `~/.grok/skills/` |
 | Coding | Cursor | `~/.agents/skills/` |
 | Coding | Antigravity | `~/.gemini/antigravity/skills/` |
 | Coding | Antigravity CLI | `~/.gemini/antigravity-cli/skills/` |
@@ -137,7 +139,8 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 - **无遥测** — 应用不包含分析、崩溃上报或使用追踪。
 - **网络访问由功能触发** — 只有在你显式使用 marketplace 同步/下载、GitHub 导入或 AI explanation 时才会发起外部请求。
 - **SSH 只作用于当前目标** - 只有当前远程目标会建立 SSH 连接；远程文件改动只发生在该远程用户的 skills 目录内。
-- **凭据仅本地存储** — GitHub PAT 和 AI API key 会保存在本地 SQLite settings 表中，应用本身不提供静态加密。
+- **凭据只保存在本机** — GitHub PAT、AI API key 和 SSH 密码会优先写入操作系统凭据库。Windows 上如果系统凭据库不可用，SkillPort 会退回到 `~/.skillsmanage/protected-secrets/` 下由 DPAPI 保护的应用本地 secret 文件。
+- **旧版密钥迁移** — 如果 SQLite settings 中仍有旧版 GitHub PAT 或 AI API key，应用会把它们迁移到 secret store，并从 settings 中移除。若无法使用持久化受保护存储，该值只会保留在当前应用会话中。
 - 不要在 issue、PR、截图或日志里公开真实密钥。
 
 ## 技术栈
@@ -179,10 +182,10 @@ just build
 just install
 ```
 
-- `just ci` 会运行前端 `typecheck`、`lint`、`test`、`sizecheck`，以及 Rust 的 `cargo test` 和 `cargo clippy`。
+- `just ci` 会并行运行前端链（`typecheck` → `lint` → `sizecheck` → `test`）与 Rust 链（`cargo clippy` → `cargo test`）。
 - `just dev` 会直接启动 Tauri 开发应用。
 - `just build` 会按当前平台构建桌面应用，并把最新打包产物复制到 `outputs/`（Windows 为 `.exe`，macOS 为 `.app` + `.dmg`，Linux 为 `.AppImage`/`.deb`）。
-- `just install` 会构建 Windows NSIS 安装包、复制到 `outputs/`，并以 passive 模式运行安装器；该命令仅支持 Windows。
+- `just install` 会构建 Windows NSIS 安装包、复制到 `outputs/`，并以 passive 模式运行安装器；在 macOS 上会显示提醒并改为运行 `just build`。
 
 ### 启动开发环境
 

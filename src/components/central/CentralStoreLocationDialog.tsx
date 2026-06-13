@@ -104,7 +104,8 @@ export function CentralStoreLocationDialog({
     }
   };
 
-  const canPreview = targetPath.trim().length > 0 && !isPreviewing && !isApplying;
+  const canPreview =
+    targetPath.trim().length > 0 && !isPreviewing && !isApplying;
   const canApply = Boolean(previewResult) && !isPreviewing && !isApplying;
 
   return (
@@ -112,7 +113,9 @@ export function CentralStoreLocationDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("central.storeLocation.title")}</DialogTitle>
-          <DialogDescription>{t("central.storeLocation.description")}</DialogDescription>
+          <DialogDescription>
+            {t("central.storeLocation.description")}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -129,7 +132,10 @@ export function CentralStoreLocationDialog({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium" htmlFor="central-store-location-target">
+            <label
+              className="text-xs font-medium"
+              htmlFor="central-store-location-target"
+            >
               {t("central.storeLocation.newPath")}
             </label>
             <div className="flex gap-2">
@@ -151,7 +157,9 @@ export function CentralStoreLocationDialog({
                 aria-label={t("central.storeLocation.browseAria")}
               >
                 <FolderOpen className="size-3.5" aria-hidden="true" />
-                <span className="hidden sm:inline">{t("central.storeLocation.browse")}</span>
+                <span className="hidden sm:inline">
+                  {t("central.storeLocation.browse")}
+                </span>
               </Button>
             </div>
           </div>
@@ -164,17 +172,28 @@ export function CentralStoreLocationDialog({
 
           {previewResult ? (
             <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3 text-xs">
-              <div className="font-medium">{t("central.storeLocation.previewTitle")}</div>
+              <div className="font-medium">
+                {t("central.storeLocation.previewTitle")}
+              </div>
               <dl className="grid grid-cols-2 gap-2 text-muted-foreground">
                 <dt>{t("central.storeLocation.skillsToCopy")}</dt>
-                <dd className="text-right text-foreground">{previewResult.skillsToCopy}</dd>
+                <dd className="text-right text-foreground">
+                  {previewResult.skillsToCopy}
+                </dd>
                 <dt>{t("central.storeLocation.skillsToOverwrite")}</dt>
-                <dd className="text-right text-foreground">{previewResult.skillsToOverwrite}</dd>
+                <dd className="text-right text-foreground">
+                  {previewResult.skillsToOverwrite}
+                </dd>
                 <dt>{t("central.storeLocation.targetOnlySkills")}</dt>
-                <dd className="text-right text-foreground">{previewResult.targetOnlySkills}</dd>
+                <dd className="text-right text-foreground">
+                  {previewResult.targetOnlySkills}
+                </dd>
               </dl>
-              <div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-amber-700 dark:text-amber-300">
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-2 text-warning-foreground">
+                <AlertTriangle
+                  className="mt-0.5 size-3.5 shrink-0"
+                  aria-hidden="true"
+                />
                 <span>{t("central.storeLocation.overwriteWarning")}</span>
               </div>
             </div>
@@ -182,10 +201,19 @@ export function CentralStoreLocationDialog({
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
             {t("common.cancel")}
           </Button>
-          <Button type="button" variant="outline" disabled={!canPreview} onClick={handlePreview}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!canPreview}
+            onClick={handlePreview}
+          >
             {isPreviewing
               ? t("central.storeLocation.previewing")
               : t("central.storeLocation.preview")}
@@ -208,9 +236,11 @@ function formatCentralStoreLocationError(t: TFunction, err: unknown): string {
 }
 
 const CENTRAL_STORE_LOCATION_ERROR_KEYS: Record<string, string> = {
-  central_store_location_unsupported_target: "central.storeLocation.unsupportedTarget",
+  central_store_location_unsupported_target:
+    "central.storeLocation.unsupportedTarget",
   central_store_location_empty_path: "central.storeLocation.emptyPath",
   central_store_location_same_path: "central.storeLocation.samePath",
   central_store_location_nested_path: "central.storeLocation.nestedPath",
-  central_store_location_requires_overwrite: "central.storeLocation.requiresOverwrite",
+  central_store_location_requires_overwrite:
+    "central.storeLocation.requiresOverwrite",
 };

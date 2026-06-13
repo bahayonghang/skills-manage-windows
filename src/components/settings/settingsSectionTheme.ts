@@ -7,6 +7,7 @@ export type SettingsSectionTone =
   | "platform-visibility"
   | "github-pat"
   | "ai-provider"
+  | "central-update-check-mode"
   | "scan-directories"
   | "about";
 
@@ -17,6 +18,7 @@ export interface SettingsSectionTheme {
 
 export type SettingsSectionThemeStyle = CSSProperties & {
   "--settings-section-accent": string;
+  "--settings-section-accent-text": string;
   "--settings-section-accent-soft": string;
   "--settings-section-accent-faint": string;
   "--settings-section-accent-border": string;
@@ -52,6 +54,10 @@ const SETTINGS_SECTION_THEMES: Record<string, SettingsSectionTheme> = {
     accentVar: "--ctp-lavender",
     tone: "ai-provider",
   },
+  "central-update-check-mode": {
+    accentVar: "--ctp-sapphire",
+    tone: "central-update-check-mode",
+  },
   "scan-directories": {
     accentVar: "--ctp-green",
     tone: "scan-directories",
@@ -85,6 +91,7 @@ export function getSettingsSectionThemeStyle(
 
   return {
     "--settings-section-accent": accent,
+    "--settings-section-accent-text": `color-mix(in srgb, var(--foreground) 70%, ${accent})`,
     "--settings-section-accent-soft": `color-mix(in srgb, ${accent} 15%, transparent)`,
     "--settings-section-accent-faint": `color-mix(in srgb, ${accent} 7%, transparent)`,
     "--settings-section-accent-border": `color-mix(in srgb, ${accent} 40%, var(--border))`,

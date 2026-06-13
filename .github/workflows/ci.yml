@@ -57,15 +57,7 @@ jobs:
 
       - name: Run repository CI checks
         shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-
-          pnpm typecheck
-          pnpm lint
-          pnpm test
-          pnpm sizecheck
-          cargo test --manifest-path src-tauri/Cargo.toml
-          cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        run: node scripts/run-ci.mjs
 
   windows-package:
     name: Windows x64 smoke package

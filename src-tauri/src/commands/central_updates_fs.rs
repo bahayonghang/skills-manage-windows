@@ -11,6 +11,7 @@ use std::path::{Component, Path, PathBuf};
 
 use uuid::Uuid;
 
+use crate::fs_util::run_blocking_fs_with;
 use crate::targets::{
     connect_remote_target, remote_parent, shell_quote, ActiveTarget, ConnectedRemoteTarget,
 };
@@ -24,6 +25,21 @@ use remote_scripts::{
     REMOTE_CENTRAL_UPDATE_SCRIPT, REMOTE_HASH_SCRIPT, REMOTE_HASH_UNSUPPORTED_EXIT_CODE,
     REMOTE_REFRESH_COPY_SCRIPT,
 };
+
+/// Run a synchronous filesystem task on the blocking-thread pool with string
+/// errors. Commands-layer (IPC boundary) counterpart of
+/// [`crate::fs_util::run_blocking_fs_with`]; typed service domains use that
+/// wrapper with their own join-error constructor instead.
+pub(crate) async fn run_blocking_fs<T, F>(label: &'static str, task: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    run_blocking_fs_with(label, task, |label, message| {
+        format!("Failed to join {} task: {}", label, message)
+    })
+    .await
+}
 
 #[derive(Debug, Clone)]
 pub(super) struct RemoteSkillFile {
@@ -48,7 +64,9 @@ impl CentralFs {
         match target {
             ActiveTarget::Local => Ok(Self::Local),
             ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-                let conn = connect_remote_target(&target).await?;
+                let conn = connect_remote_target(&target)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 Ok(Self::Remote(Box::new(conn)))
             }
         }
@@ -62,11 +80,15 @@ impl CentralFs {
     ) -> Result<HashMap<PathBuf, String>, String> {
         match self {
             Self::Local => {
-                let mut hashes = HashMap::with_capacity(roots.len());
-                for root in roots {
-                    hashes.insert(root.clone(), hash_local_directory(root)?);
-                }
-                Ok(hashes)
+                let roots = roots.to_vec();
+                run_blocking_fs("central skill hashing", move || {
+                    let mut hashes = HashMap::with_capacity(roots.len());
+                    for root in &roots {
+                        hashes.insert(root.clone(), hash_local_directory(root)?);
+                    }
+                    Ok(hashes)
+                })
+                .await
             }
             Self::Remote(conn) => hash_remote_directories(conn, roots).await,
         }
@@ -84,7 +106,15 @@ impl CentralFs {
         files: &[RemoteSkillFile],
     ) -> Result<(), String> {
         match self {
-            Self::Local => write_skill_dir_atomic_local(skill_id, target_dir, files),
+            Self::Local => {
+                let skill_id = skill_id.to_string();
+                let target_dir = target_dir.to_path_buf();
+                let files = files.to_vec();
+                run_blocking_fs("central skill atomic write", move || {
+                    write_skill_dir_atomic_local(&skill_id, &target_dir, &files)
+                })
+                .await
+            }
             Self::Remote(conn) => {
                 write_skill_dir_atomic_remote(conn, skill_id, &posix_path(target_dir), files).await
             }
@@ -103,7 +133,15 @@ impl CentralFs {
         target: &str,
     ) -> Result<(), String> {
         match self {
-            Self::Local => refresh_copy_install_local(skill_id, source_dir, target),
+            Self::Local => {
+                let skill_id = skill_id.to_string();
+                let source_dir = source_dir.to_path_buf();
+                let target = target.to_string();
+                run_blocking_fs("copy install refresh", move || {
+                    refresh_copy_install_local(&skill_id, &source_dir, &target)
+                })
+                .await
+            }
             Self::Remote(conn) => {
                 refresh_copy_install_remote(conn, skill_id, &posix_path(source_dir), target).await
             }
@@ -341,7 +379,7 @@ fn refresh_copy_install_local(
     if std::fs::symlink_metadata(&target_path).is_ok() {
         remove_path(&target_path)?;
     }
-    linker::copy_dir_all(source_dir, &target_path)
+    linker::copy_dir_all(source_dir, &target_path).map_err(|e| e.to_string())
 }
 
 async fn refresh_copy_install_remote(
@@ -360,6 +398,7 @@ async fn refresh_copy_install_remote(
     conn.run_script(REMOTE_REFRESH_COPY_SCRIPT, &[source_dir, target, skill_id])
         .await
         .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -437,7 +476,7 @@ fn hash_local_directory(root: &Path) -> Result<String, String> {
 /// [`hash_local_directory`]. Symlinks and special entries are skipped, only
 /// regular files contribute to the hash.
 async fn hash_remote_directory(conn: &ConnectedRemoteTarget, root: &str) -> Result<String, String> {
-    if !conn.exists(root).await? {
+    if !conn.exists(root).await.map_err(|e| e.to_string())? {
         // Treat a missing canonical directory as an empty hash so the upper
         // layer can still mark this skill as `update_available`.
         return Ok(hash_entries(Vec::new()));
@@ -448,7 +487,10 @@ async fn hash_remote_directory(conn: &ConnectedRemoteTarget, root: &str) -> Resu
     queue.push_back(root.to_string());
 
     while let Some(current) = queue.pop_front() {
-        let dir_entries = conn.list_dir(&current).await?;
+        let dir_entries = conn
+            .list_dir(&current)
+            .await
+            .map_err(|e| e.to_string())?;
         for entry in dir_entries {
             let child_path = format!("{}/{}", current.trim_end_matches('/'), entry.name);
             match entry.file_type.as_str() {
@@ -461,7 +503,10 @@ async fn hash_remote_directory(conn: &ConnectedRemoteTarget, root: &str) -> Resu
                             child_path
                         ));
                     }
-                    let bytes = conn.read_file(&child_path).await?;
+                    let bytes = conn
+                        .read_file(&child_path)
+                        .await
+                        .map_err(|e| e.to_string())?;
                     let digest = Sha256::digest(&bytes);
                     entries.push((relative, hex_digest(&digest)));
                 }
@@ -505,7 +550,7 @@ async fn hash_remote_directories(
                     hashes.insert(root.clone(), hash);
                 }
             }
-            Err(error) if error.contains(REMOTE_HASH_UNSUPPORTED_EXIT_CODE) => {
+            Err(error) if error.to_string().contains(REMOTE_HASH_UNSUPPORTED_EXIT_CODE) => {
                 tracing::warn!(
                     error = %error,
                     "Remote target has no sha256 tool; falling back to per-file SSH hashing"
@@ -517,7 +562,7 @@ async fn hash_remote_directories(
                     );
                 }
             }
-            Err(error) => return Err(error),
+            Err(error) => return Err(error.to_string()),
         }
     }
     Ok(hashes)

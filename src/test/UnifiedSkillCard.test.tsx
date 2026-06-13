@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
@@ -12,7 +13,7 @@ function resetUpdateCenterStore() {
     lastRefreshedAt: null,
     isDialogOpen: false,
     activeTab: "updatable",
-    refreshContext: { repositoryIds: [], skillIds: [] },
+    refreshContext: { repositoryIds: [], skillIds: [], agentIds: [] },
     error: null,
   });
 }
@@ -77,6 +78,7 @@ describe("UnifiedSkillCard", () => {
         remoteAdded: [],
         remoteMissing: [],
         platformDuplicates: [],
+        deletedPlatformCopies: [],
         orphans: [],
         failedRepositories: [],
         generatedAt: "2026-05-23T00:00:00.000Z",
@@ -131,5 +133,56 @@ describe("UnifiedSkillCard", () => {
 
     rerender(<UnifiedSkillCard name="x" />);
     expect(screen.queryByTestId("usage-badge")).not.toBeInTheDocument();
+  });
+
+  it("传入 statusChipLabel 渲染文字状态 chip", () => {
+    render(
+      <UnifiedSkillCard name="s" statusAccent="amber" statusChipLabel="可更新" />,
+    );
+    expect(screen.getByText("可更新")).toBeInTheDocument();
+  });
+
+  it("不传 statusChipLabel 时无状态 chip", () => {
+    render(<UnifiedSkillCard name="s" />);
+    expect(screen.queryByText("可更新")).not.toBeInTheDocument();
+  });
+
+  it("editableTags：渲染彩色标签，hover × 调用 onRemove", async () => {
+    const onRemove = vi.fn();
+    render(
+      <UnifiedSkillCard
+        name="s"
+        editableTags={{
+          tags: [{ id: "t1", name: "frontend" }],
+          allTags: [
+            { id: "t1", name: "frontend" },
+            { id: "t2", name: "backend" },
+          ],
+          onAdd: vi.fn(),
+          onCreate: vi.fn(),
+          onRemove,
+        }}
+      />,
+    );
+    await userEvent.click(
+      screen.getByLabelText(/移除标签 frontend|remove tag frontend/i),
+    );
+    expect(onRemove).toHaveBeenCalledWith("t1");
+  });
+
+  it("footer：显示 repo 名", () => {
+    render(
+      <UnifiedSkillCard
+        name="s"
+        footer={{ repoName: "anthropics/skills", repoColor: "#7c3aed" }}
+        usageBadge={5}
+      />,
+    );
+    expect(screen.getByText("anthropics/skills")).toBeInTheDocument();
+  });
+
+  it("不传 footer 时不渲染 footer 区域", () => {
+    const { container } = render(<UnifiedSkillCard name="s" />);
+    expect(container.querySelector("[data-testid='card-footer']")).toBeNull();
   });
 });

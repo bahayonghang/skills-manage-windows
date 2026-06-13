@@ -10,7 +10,7 @@
 use super::super::migrations::ensure_column;
 use crate::db::DbPool;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
+pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     // skill_registries — remote skill sources (marketplace).
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_registries (
@@ -32,8 +32,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // marketplace_skills — cached remote skill metadata.
     sqlx::query(
@@ -50,8 +49,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // skill_explanations — cached AI-generated skill explanations.
     sqlx::query(
@@ -66,8 +64,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), String> {
         )",
     )
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     // 老库 skill_registries / marketplace_skills 缺列：逐列幂等增补。
     let alter_specs: &[(&str, &str, &str)] = &[

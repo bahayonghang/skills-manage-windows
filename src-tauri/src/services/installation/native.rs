@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::db::{self, AgentSkillObservation, DbPool, SkillInstallation};
 
 use super::centralize::{agents_share_skills_dir, ensure_centralized, ensure_replaceable_target};
+use super::error::InstallationError;
 use super::fs_util::{
     copy_dir_all_blocking, create_symlink, remove_symlink_path, run_blocking_fs,
     symlink_target_path,
@@ -20,12 +21,11 @@ pub(crate) async fn record_native_installation(
     skill_id: &str,
     agent_id: &str,
     canonical_dir: &Path,
-) -> Result<InstallResult, String> {
+) -> Result<InstallResult, InstallationError> {
     let skill_md = canonical_dir.join("SKILL.md");
     if !skill_md.exists() {
-        return Err(format!(
-            "Canonical skill not found at '{}'",
-            skill_md.display()
+        return Err(InstallationError::CanonicalSkillMissing(
+            skill_md.display().to_string(),
         ));
     }
 
@@ -59,7 +59,7 @@ pub async fn install_skill_to_agent_impl(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
-) -> Result<InstallResult, String> {
+) -> Result<InstallResult, InstallationError> {
     install_skill_to_agent_outcome_impl(pool, skill_id, agent_id)
         .await
         .map(InstallOutcome::into_install_result)
@@ -69,21 +69,21 @@ pub(crate) async fn install_skill_to_agent_outcome_impl(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
-) -> Result<InstallOutcome, String> {
+) -> Result<InstallOutcome, InstallationError> {
     // Guard: cannot install to the central agent itself.
     if agent_id == "central" {
-        return Err("Cannot install a skill to the central agent itself".to_string());
+        return Err(InstallationError::CentralAgentTarget);
     }
 
     // 1. Look up the target agent.
     let agent = db::get_agent_by_id(pool, agent_id)
         .await?
-        .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
+        .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
 
     // 2. Look up the central agent to determine the canonical root.
     let central = db::get_agent_by_id(pool, "central")
         .await?
-        .ok_or_else(|| "Central agent not found in database".to_string())?;
+        .ok_or(InstallationError::CentralAgentMissing)?;
 
     let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
 
@@ -104,7 +104,7 @@ pub(crate) async fn install_skill_to_agent_outcome_impl(
     let agent_dir_for_create = agent_dir.clone();
     run_blocking_fs("agent skills directory creation", move || {
         std::fs::create_dir_all(&agent_dir_for_create)
-            .map_err(|e| format!("Failed to create agent skills directory: {}", e))
+            .map_err(|e| InstallationError::io("Failed to create agent skills directory", e))
     })
     .await?;
 
@@ -150,7 +150,7 @@ pub async fn install_skill_to_agent_auto_impl(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
-) -> Result<InstallResult, String> {
+) -> Result<InstallResult, InstallationError> {
     install_skill_to_agent_auto_outcome_impl(pool, skill_id, agent_id)
         .await
         .map(InstallOutcome::into_install_result)
@@ -160,7 +160,7 @@ pub(crate) async fn install_skill_to_agent_auto_outcome_impl(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
-) -> Result<InstallOutcome, String> {
+) -> Result<InstallOutcome, InstallationError> {
     match install_skill_to_agent_outcome_impl(pool, skill_id, agent_id).await {
         Ok(result) => Ok(result),
         Err(error) if should_fallback_to_copy(&error) => {
@@ -171,12 +171,12 @@ pub(crate) async fn install_skill_to_agent_auto_outcome_impl(
 }
 
 #[cfg(windows)]
-pub(crate) fn should_fallback_to_copy(error: &str) -> bool {
-    error.contains("Failed to create symlink")
+pub(crate) fn should_fallback_to_copy(error: &InstallationError) -> bool {
+    matches!(error, InstallationError::SymlinkCreate(_))
 }
 
 #[cfg(not(windows))]
-pub(crate) fn should_fallback_to_copy(_error: &str) -> bool {
+pub(crate) fn should_fallback_to_copy(_error: &InstallationError) -> bool {
     false
 }
 
@@ -189,7 +189,7 @@ pub async fn install_skill_to_agent_copy_impl(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
-) -> Result<InstallResult, String> {
+) -> Result<InstallResult, InstallationError> {
     install_skill_to_agent_copy_outcome_impl(pool, skill_id, agent_id)
         .await
         .map(InstallOutcome::into_install_result)
@@ -199,21 +199,21 @@ pub(crate) async fn install_skill_to_agent_copy_outcome_impl(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
-) -> Result<InstallOutcome, String> {
+) -> Result<InstallOutcome, InstallationError> {
     // Guard: cannot install to the central agent itself.
     if agent_id == "central" {
-        return Err("Cannot install a skill to the central agent itself".to_string());
+        return Err(InstallationError::CentralAgentTarget);
     }
 
     // 1. Look up the target agent.
     let agent = db::get_agent_by_id(pool, agent_id)
         .await?
-        .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
+        .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
 
     // 2. Look up the central agent to determine the canonical root.
     let central = db::get_agent_by_id(pool, "central")
         .await?
-        .ok_or_else(|| "Central agent not found in database".to_string())?;
+        .ok_or(InstallationError::CentralAgentMissing)?;
 
     let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
 
@@ -234,7 +234,7 @@ pub(crate) async fn install_skill_to_agent_copy_outcome_impl(
     let agent_dir_for_create = agent_dir.clone();
     run_blocking_fs("agent skills directory creation", move || {
         std::fs::create_dir_all(&agent_dir_for_create)
-            .map_err(|e| format!("Failed to create agent skills directory: {}", e))
+            .map_err(|e| InstallationError::io("Failed to create agent skills directory", e))
     })
     .await?;
 
@@ -273,7 +273,7 @@ pub(crate) async fn install_central_skill_to_agent_outcome_by_method(
     skill_id: &str,
     agent_id: &str,
     method: &str,
-) -> Result<InstallOutcome, String> {
+) -> Result<InstallOutcome, InstallationError> {
     match method {
         "copy" => install_skill_to_agent_copy_outcome_impl(pool, skill_id, agent_id).await,
         "symlink" => install_skill_to_agent_outcome_impl(pool, skill_id, agent_id).await,
@@ -281,32 +281,33 @@ pub(crate) async fn install_central_skill_to_agent_outcome_by_method(
     }
 }
 
-fn remove_install_path(path: &Path, link_type: &str, allow_native_dir: bool) -> Result<(), String> {
+fn remove_install_path(
+    path: &Path,
+    link_type: &str,
+    allow_native_dir: bool,
+) -> Result<(), InstallationError> {
     match std::fs::symlink_metadata(path) {
         Ok(meta) if meta.file_type().is_symlink() => {
-            remove_symlink_path(path).map_err(|e| e.replace("existing symlink", "symlink"))?;
+            remove_symlink_path(path)
+                .map_err(|e| InstallationError::io("Failed to remove symlink", e))?;
         }
         Ok(meta) if meta.is_dir() => {
             if link_type == "copy" || (allow_native_dir && link_type == "native") {
                 std::fs::remove_dir_all(path).map_err(|e| {
-                    format!(
-                        "Failed to remove copied skill directory '{}': {}",
-                        path.display(),
-                        e
+                    InstallationError::io(
+                        format!(
+                            "Failed to remove copied skill directory '{}'",
+                            path.display()
+                        ),
+                        e,
                     )
                 })?;
             } else {
-                return Err(format!(
-                    "Path '{}' exists but is not a symlink. Refusing to delete.",
-                    path.display()
-                ));
+                return Err(InstallationError::NotASymlink(path.display().to_string()));
             }
         }
         Ok(_) => {
-            return Err(format!(
-                "Path '{}' exists but is not a symlink. Refusing to delete.",
-                path.display()
-            ));
+            return Err(InstallationError::NotASymlink(path.display().to_string()));
         }
         Err(_) => {
             // Path doesn't exist — still clean up DB state.
@@ -320,53 +321,52 @@ fn ensure_claude_user_observation(
     observation: &AgentSkillObservation,
     skill_id: &str,
     agent_id: &str,
-) -> Result<(), String> {
+) -> Result<(), InstallationError> {
     if observation.agent_id != agent_id {
-        return Err(format!(
-            "Claude row '{}' belongs to agent '{}', not '{}'",
-            observation.row_id, observation.agent_id, agent_id
-        ));
+        return Err(InstallationError::ClaudeRowAgentMismatch {
+            row_id: observation.row_id.clone(),
+            actual: observation.agent_id.clone(),
+            expected: agent_id.to_string(),
+        });
     }
 
     if observation.skill_id != skill_id {
-        return Err(format!(
-            "Claude row '{}' belongs to skill '{}', not '{}'",
-            observation.row_id, observation.skill_id, skill_id
-        ));
+        return Err(InstallationError::ClaudeRowSkillMismatch {
+            row_id: observation.row_id.clone(),
+            actual: observation.skill_id.clone(),
+            expected: skill_id.to_string(),
+        });
     }
 
     if observation.source_kind != "user" || observation.is_read_only {
-        return Err(format!(
-            "Claude row '{}' is read-only and cannot be uninstalled",
-            observation.row_id
+        return Err(InstallationError::ClaudeRowReadOnly(
+            observation.row_id.clone(),
         ));
     }
 
     Ok(())
 }
 
-fn ensure_child_path(root: &Path, child: &Path) -> Result<(), String> {
+fn ensure_child_path(root: &Path, child: &Path) -> Result<(), InstallationError> {
     if crate::paths::paths_equivalent(root, child) {
-        return Err(format!(
-            "Refusing to delete the Claude user skills root '{}'",
-            root.display()
+        return Err(InstallationError::ClaudeRootDeletion(
+            root.display().to_string(),
         ));
     }
 
     let root_cmp = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let child_parent = child
         .parent()
-        .ok_or_else(|| format!("Path '{}' has no parent", child.display()))?;
+        .ok_or_else(|| InstallationError::PathHasNoParent(child.display().to_string()))?;
     let child_parent_cmp = child_parent
         .canonicalize()
         .unwrap_or_else(|_| child_parent.to_path_buf());
 
     if !child_parent_cmp.starts_with(&root_cmp) {
-        return Err(format!(
-            "Refusing to delete '{}' because it is outside Claude user skills root '{}'",
-            child.display(),
-            root.display()
-        ));
+        return Err(InstallationError::OutsideClaudeRoot {
+            child: child.display().to_string(),
+            root: root.display().to_string(),
+        });
     }
 
     Ok(())
@@ -377,17 +377,17 @@ async fn uninstall_claude_observation_from_agent_impl(
     skill_id: &str,
     agent_id: &str,
     row_id: &str,
-) -> Result<(), String> {
+) -> Result<(), InstallationError> {
     if agent_id != "claude-code" {
-        return Err("Row-aware uninstall is only supported for Claude Code".to_string());
+        return Err(InstallationError::RowUninstallUnsupported);
     }
 
     let agent = db::get_agent_by_id(pool, agent_id)
         .await?
-        .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
+        .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
     let observation = db::get_agent_skill_observation_by_row_id(pool, row_id)
         .await?
-        .ok_or_else(|| format!("Claude row '{}' not found", row_id))?;
+        .ok_or_else(|| InstallationError::ClaudeRowNotFound(row_id.to_string()))?;
     ensure_claude_user_observation(&observation, skill_id, agent_id)?;
 
     let user_root = PathBuf::from(&agent.global_skills_dir);
@@ -411,7 +411,7 @@ pub async fn uninstall_skill_from_agent_with_row_impl(
     skill_id: &str,
     agent_id: &str,
     row_id: Option<&str>,
-) -> Result<(), String> {
+) -> Result<(), InstallationError> {
     if let Some(row_id) = row_id {
         return uninstall_claude_observation_from_agent_impl(pool, skill_id, agent_id, row_id)
             .await;
@@ -432,21 +432,20 @@ pub async fn uninstall_skill_from_agent_impl(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
-) -> Result<(), String> {
+) -> Result<(), InstallationError> {
     // 1. Look up the agent.
     let agent = db::get_agent_by_id(pool, agent_id)
         .await?
-        .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
+        .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
 
     let central = db::get_agent_by_id(pool, "central")
         .await?
-        .ok_or_else(|| "Central agent not found in database".to_string())?;
+        .ok_or(InstallationError::CentralAgentMissing)?;
 
     if agent_id == "central" || agents_share_skills_dir(&agent, &central) {
-        return Err(format!(
-            "{} shares the Central Skills directory and cannot be uninstalled independently.",
-            agent.display_name
-        ));
+        return Err(InstallationError::SharedCentralUninstall {
+            display_name: agent.display_name,
+        });
     }
 
     // 2. Compute the expected install location.

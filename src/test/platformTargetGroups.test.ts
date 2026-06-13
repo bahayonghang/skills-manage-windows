@@ -62,6 +62,10 @@ describe("platformTargetGroups", () => {
   it("keeps independent platforms unchanged", () => {
     const agents = [
       agent("codex", "Codex CLI", "~/.agents/skills"),
+      {
+        ...agent("grok", "Grok", "~/.grok/skills"),
+        project_skills_dir: ".grok/skills",
+      },
       agent("claude-code", "Claude Code", "~/.claude/skills"),
       agent("kiro", "Kiro", "~/.kiro/skills"),
       agent("central", "Central Skills", "~/.skillsmanage/skills"),
@@ -74,9 +78,12 @@ describe("platformTargetGroups", () => {
 
     expect(groups.map((group) => group.id)).toEqual([
       "universal-agents",
+      "grok",
       "claude-code",
       "kiro",
     ]);
+    expect(isUniversalPlatformTarget(groups[1])).toBe(false);
+    expect(hasProjectSkillPattern(groups[1])).toBe(true);
   });
 
   it("keeps Antigravity as a standalone global install target", () => {
@@ -112,6 +119,10 @@ describe("platformTargetGroups", () => {
   it("folds Antigravity into the project Universal target", () => {
     const agents = [
       agent("codex", "Codex CLI", "~/.agents/skills"),
+      {
+        ...agent("grok", "Grok", "~/.grok/skills"),
+        project_skills_dir: ".grok/skills",
+      },
       agent("antigravity", "Antigravity", "~/.gemini/antigravity/skills"),
       agent("antigravity-cli", "Antigravity CLI", "~/.gemini/antigravity-cli/skills"),
       agent("claude-code", "Claude Code", "~/.claude/skills"),
@@ -125,6 +136,7 @@ describe("platformTargetGroups", () => {
 
     expect(groups.map((group) => group.id)).toEqual([
       "universal-agents",
+      "grok",
       "claude-code",
     ]);
     expect(getPlatformTargetMemberIds(groups[0])).toEqual([
@@ -133,6 +145,8 @@ describe("platformTargetGroups", () => {
       "codex",
     ]);
     expect(getPlatformTargetInstallAgentIds(groups[0])).toEqual(["codex"]);
+    expect(isUniversalPlatformTarget(groups[1])).toBe(false);
+    expect(hasProjectSkillPattern(groups[1])).toBe(true);
   });
 
   it("hides the Universal target when every member is hidden", () => {

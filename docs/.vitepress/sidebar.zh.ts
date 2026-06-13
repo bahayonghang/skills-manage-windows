@@ -61,6 +61,7 @@ export const sidebarZh: DefaultTheme.SidebarMulti = {
         { text: '安装引擎', link: '/zh/architecture/installation-engine' },
         { text: 'Marketplace 流水线', link: '/zh/architecture/marketplace-pipeline' },
         { text: 'SSH 模式', link: '/zh/architecture/ssh-mode' },
+        { text: '运行时可观测性', link: '/zh/architecture/runtime-observability' },
       ],
     },
   ],

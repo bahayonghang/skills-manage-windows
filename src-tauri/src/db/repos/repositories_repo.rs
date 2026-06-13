@@ -8,8 +8,9 @@ use std::collections::HashMap;
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::db::repos::skills_repo::upsert_skill_in_transaction;
 use crate::db::types::{
-    DbPool, SkillRepository, SkillRepositoryAssignment, SkillRepositoryMember,
+    DbPool, Skill, SkillRepository, SkillRepositoryAssignment, SkillRepositoryMember,
     SkillRepositorySyncSkip, SkillRepositoryWithStats, LOCAL_UNKNOWN_REPOSITORY_ID,
 };
 use crate::db::util::now_rfc3339;
@@ -41,27 +42,30 @@ pub fn github_repository_id(owner: &str, repo: &str, branch: &str) -> String {
     )
 }
 
-pub async fn get_local_unknown_repository(pool: &DbPool) -> Result<SkillRepository, String> {
+pub async fn get_local_unknown_repository(pool: &DbPool) -> Result<SkillRepository, sqlx::Error> {
     get_skill_repository_by_id(pool, LOCAL_UNKNOWN_REPOSITORY_ID)
         .await?
-        .ok_or_else(|| "Local unknown repository metadata is not initialized".to_string())
+        .ok_or_else(|| {
+            sqlx::Error::InvalidArgument(
+                "Local unknown repository metadata is not initialized".to_string(),
+            )
+        })
 }
 
 pub async fn get_skill_repository_by_id(
     pool: &DbPool,
     repository_id: &str,
-) -> Result<Option<SkillRepository>, String> {
+) -> Result<Option<SkillRepository>, sqlx::Error> {
     sqlx::query_as::<_, SkillRepository>("SELECT * FROM skill_repositories WHERE id = ?")
         .bind(repository_id)
         .fetch_optional(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
 pub async fn get_central_skill_ids_by_repository(
     pool: &DbPool,
     repository_id: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, sqlx::Error> {
     sqlx::query_scalar::<_, String>(
         "SELECT s.id
          FROM skill_repository_members m
@@ -72,13 +76,12 @@ pub async fn get_central_skill_ids_by_repository(
     .bind(repository_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn get_central_repository_members_by_repositories(
     pool: &DbPool,
     repository_ids: &[String],
-) -> Result<Vec<SkillRepositoryMember>, String> {
+) -> Result<Vec<SkillRepositoryMember>, sqlx::Error> {
     if repository_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -120,40 +123,26 @@ pub async fn get_central_repository_members_by_repositories(
     }
     query = query.bind(LOCAL_UNKNOWN_REPOSITORY_ID);
 
-    let rows = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let rows = query.fetch_all(pool).await?;
     let mut members = Vec::with_capacity(rows.len());
     for row in rows {
         let repository = SkillRepository {
-            id: row.try_get("repository_id").map_err(|e| e.to_string())?,
-            name: row.try_get("repository_name").map_err(|e| e.to_string())?,
-            source_type: row
-                .try_get("repository_source_type")
-                .map_err(|e| e.to_string())?,
-            owner: row.try_get("repository_owner").map_err(|e| e.to_string())?,
-            repo: row.try_get("repository_repo").map_err(|e| e.to_string())?,
-            branch: row
-                .try_get("repository_branch")
-                .map_err(|e| e.to_string())?,
-            url: row.try_get("repository_url").map_err(|e| e.to_string())?,
-            pinned: row
-                .try_get("repository_pinned")
-                .map_err(|e| e.to_string())?,
-            is_unknown: row
-                .try_get("repository_is_unknown")
-                .map_err(|e| e.to_string())?,
-            created_at: row
-                .try_get("repository_created_at")
-                .map_err(|e| e.to_string())?,
-            updated_at: row
-                .try_get("repository_updated_at")
-                .map_err(|e| e.to_string())?,
-            last_synced_at: row
-                .try_get("repository_last_synced_at")
-                .map_err(|e| e.to_string())?,
+            id: row.try_get("repository_id")?,
+            name: row.try_get("repository_name")?,
+            source_type: row.try_get("repository_source_type")?,
+            owner: row.try_get("repository_owner")?,
+            repo: row.try_get("repository_repo")?,
+            branch: row.try_get("repository_branch")?,
+            url: row.try_get("repository_url")?,
+            pinned: row.try_get("repository_pinned")?,
+            is_unknown: row.try_get("repository_is_unknown")?,
+            created_at: row.try_get("repository_created_at")?,
+            updated_at: row.try_get("repository_updated_at")?,
+            last_synced_at: row.try_get("repository_last_synced_at")?,
         };
         members.push(SkillRepositoryMember {
-            skill_id: row.try_get("skill_id").map_err(|e| e.to_string())?,
-            source_path: row.try_get("source_path").map_err(|e| e.to_string())?,
+            skill_id: row.try_get("skill_id")?,
+            source_path: row.try_get("source_path")?,
             repository,
         });
     }
@@ -164,7 +153,7 @@ pub async fn get_central_repository_members_by_repositories(
 pub async fn get_skill_repository_sync_skips(
     pool: &DbPool,
     repository_ids: &[String],
-) -> Result<Vec<SkillRepositorySyncSkip>, String> {
+) -> Result<Vec<SkillRepositorySyncSkip>, sqlx::Error> {
     if repository_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -186,7 +175,7 @@ pub async fn get_skill_repository_sync_skips(
         query = query.bind(repository_id);
     }
 
-    query.fetch_all(pool).await.map_err(|e| e.to_string())
+    query.fetch_all(pool).await
 }
 
 pub async fn upsert_skill_repository_sync_skip(
@@ -195,7 +184,7 @@ pub async fn upsert_skill_repository_sync_skip(
     source_path: &str,
     skill_id: &str,
     skill_name: &str,
-) -> Result<SkillRepositorySyncSkip, String> {
+) -> Result<SkillRepositorySyncSkip, sqlx::Error> {
     let now = now_rfc3339();
     sqlx::query(
         "INSERT INTO skill_repository_sync_skips
@@ -215,8 +204,7 @@ pub async fn upsert_skill_repository_sync_skip(
     .bind(&now)
     .bind(&now)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query_as::<_, SkillRepositorySyncSkip>(
         "SELECT *
@@ -226,16 +214,17 @@ pub async fn upsert_skill_repository_sync_skip(
     .bind(repository_id)
     .bind(source_path)
     .fetch_optional(pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .ok_or_else(|| "Failed to retrieve repository sync skip".to_string())
+    .await?
+    .ok_or_else(|| {
+        sqlx::Error::InvalidArgument("Failed to retrieve repository sync skip".to_string())
+    })
 }
 
 pub async fn delete_skill_repository_sync_skip(
     pool: &DbPool,
     repository_id: &str,
     source_path: &str,
-) -> Result<bool, String> {
+) -> Result<bool, sqlx::Error> {
     let result = sqlx::query(
         "DELETE FROM skill_repository_sync_skips
          WHERE repository_id = ? AND source_path = ?",
@@ -243,23 +232,20 @@ pub async fn delete_skill_repository_sync_skip(
     .bind(repository_id)
     .bind(source_path)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn detach_skill_remote_source(pool: &DbPool, skill_id: &str) -> Result<(), String> {
+pub async fn detach_skill_remote_source(pool: &DbPool, skill_id: &str) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM skill_update_states WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     sqlx::query("DELETE FROM skill_repository_members WHERE skill_id = ?")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     prune_empty_skill_repositories(pool).await?;
     Ok(())
 }
@@ -267,12 +253,16 @@ pub async fn detach_skill_remote_source(pool: &DbPool, skill_id: &str) -> Result
 pub async fn delete_empty_skill_repository(
     pool: &DbPool,
     repository_id: &str,
-) -> Result<bool, String> {
+) -> Result<bool, sqlx::Error> {
     let repository = get_skill_repository_by_id(pool, repository_id)
         .await?
-        .ok_or_else(|| format!("Repository '{}' not found", repository_id))?;
+        .ok_or_else(|| {
+            sqlx::Error::InvalidArgument(format!("Repository '{}' not found", repository_id))
+        })?;
     if repository.id == LOCAL_UNKNOWN_REPOSITORY_ID || repository.is_unknown {
-        return Err("The system unknown-source repository cannot be deleted".to_string());
+        return Err(sqlx::Error::InvalidArgument(
+            "The system unknown-source repository cannot be deleted".to_string(),
+        ));
     }
 
     let result = sqlx::query(
@@ -288,13 +278,12 @@ pub async fn delete_empty_skill_repository(
     .bind(repository_id)
     .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn prune_empty_skill_repositories(pool: &DbPool) -> Result<u64, String> {
+pub async fn prune_empty_skill_repositories(pool: &DbPool) -> Result<u64, sqlx::Error> {
     let result = sqlx::query(
         "DELETE FROM skill_repositories
          WHERE id <> ?
@@ -306,8 +295,7 @@ pub async fn prune_empty_skill_repositories(pool: &DbPool) -> Result<u64, String
     )
     .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(result.rows_affected())
 }
@@ -323,7 +311,7 @@ pub async fn create_or_update_skill_repository(
     branch: Option<&str>,
     url: Option<&str>,
     is_unknown: bool,
-) -> Result<SkillRepository, String> {
+) -> Result<SkillRepository, sqlx::Error> {
     let normalized_id = id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
@@ -357,11 +345,13 @@ pub async fn create_or_update_skill_repository(
     .bind(&now)
     .execute(pool)
     .await
-    .map_err(|e| e.to_string())?;
+    ?;
 
     get_skill_repository_by_id(pool, &normalized_id)
         .await?
-        .ok_or_else(|| "Failed to retrieve repository metadata".to_string())
+        .ok_or_else(|| {
+            sqlx::Error::InvalidArgument("Failed to retrieve repository metadata".to_string())
+        })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -373,7 +363,7 @@ pub async fn assign_github_repository_to_skill(
     url: &str,
     skill_id: &str,
     source_path: &str,
-) -> Result<SkillRepository, String> {
+) -> Result<SkillRepository, sqlx::Error> {
     let repository_id = github_repository_id(owner, repo, branch);
     let name = format!("{owner}/{repo}");
     let repository = create_or_update_skill_repository(
@@ -398,16 +388,91 @@ pub async fn assign_github_repository_to_skill(
     Ok(repository)
 }
 
+/// Atomically persist an imported GitHub skill row and its repository assignment.
+///
+/// GitHub imports write files before touching the database. Keeping the skill
+/// upsert and repository membership in one transaction prevents a half-state
+/// where the Central skill row exists without source metadata (or vice versa)
+/// if the second write fails.
+#[allow(clippy::too_many_arguments)]
+pub async fn upsert_skill_with_github_repository(
+    pool: &DbPool,
+    skill: &Skill,
+    owner: &str,
+    repo: &str,
+    branch: &str,
+    url: &str,
+    source_path: &str,
+) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
+
+    upsert_skill_in_transaction(&mut transaction, skill).await?;
+
+    let repository_id = github_repository_id(owner, repo, branch);
+    let repository_name = format!("{owner}/{repo}");
+    let now = now_rfc3339();
+
+    sqlx::query(
+        "INSERT INTO skill_repositories
+         (id, name, source_type, owner, repo, branch, url, pinned, is_unknown, created_at, updated_at)
+         VALUES (?, ?, 'github', ?, ?, ?, ?, 0, 0, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           source_type = excluded.source_type,
+           owner = excluded.owner,
+           repo = excluded.repo,
+           branch = excluded.branch,
+           url = excluded.url,
+           pinned = skill_repositories.pinned,
+           is_unknown = excluded.is_unknown,
+           updated_at = excluded.updated_at",
+    )
+    .bind(&repository_id)
+    .bind(&repository_name)
+    .bind(owner)
+    .bind(repo)
+    .bind(branch)
+    .bind(url)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *transaction)
+    .await
+    ?;
+
+    sqlx::query(
+        "INSERT INTO skill_repository_members
+         (skill_id, repository_id, source_path, added_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(skill_id) DO UPDATE SET
+           repository_id = excluded.repository_id,
+           source_path = COALESCE(excluded.source_path, skill_repository_members.source_path),
+           updated_at = excluded.updated_at",
+    )
+    .bind(&skill.id)
+    .bind(&repository_id)
+    .bind(source_path)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *transaction)
+    .await?;
+
+    transaction.commit().await
+}
+
 pub async fn set_skill_repository_pinned(
     pool: &DbPool,
     repository_id: &str,
     pinned: bool,
-) -> Result<SkillRepository, String> {
+) -> Result<SkillRepository, sqlx::Error> {
     let repository = get_skill_repository_by_id(pool, repository_id)
         .await?
-        .ok_or_else(|| format!("Repository '{}' not found", repository_id))?;
+        .ok_or_else(|| {
+            sqlx::Error::InvalidArgument(format!("Repository '{}' not found", repository_id))
+        })?;
     if repository.id == LOCAL_UNKNOWN_REPOSITORY_ID || repository.is_unknown {
-        return Err("The system unknown-source repository cannot be pinned".to_string());
+        return Err(sqlx::Error::InvalidArgument(
+            "The system unknown-source repository cannot be pinned".to_string(),
+        ));
     }
 
     let now = now_rfc3339();
@@ -421,12 +486,13 @@ pub async fn set_skill_repository_pinned(
     .bind(repository_id)
     .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     get_skill_repository_by_id(pool, repository_id)
         .await?
-        .ok_or_else(|| "Failed to retrieve repository metadata".to_string())
+        .ok_or_else(|| {
+            sqlx::Error::InvalidArgument("Failed to retrieve repository metadata".to_string())
+        })
 }
 
 pub async fn assign_skills_to_repository(
@@ -434,10 +500,13 @@ pub async fn assign_skills_to_repository(
     repository_id: &str,
     skill_ids: &[String],
     source_path: Option<&str>,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     let existing = get_skill_repository_by_id(pool, repository_id).await?;
     if existing.is_none() {
-        return Err(format!("Repository '{}' not found", repository_id));
+        return Err(sqlx::Error::InvalidArgument(format!(
+            "Repository '{}' not found",
+            repository_id
+        )));
     }
 
     let now = now_rfc3339();
@@ -457,8 +526,7 @@ pub async fn assign_skills_to_repository(
         .bind(&now)
         .bind(&now)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     Ok(())
@@ -467,7 +535,7 @@ pub async fn assign_skills_to_repository(
 pub async fn get_skill_repository_assignment(
     pool: &DbPool,
     skill_id: &str,
-) -> Result<SkillRepositoryAssignment, String> {
+) -> Result<SkillRepositoryAssignment, sqlx::Error> {
     let assigned = sqlx::query_as::<_, SkillRepository>(
         "SELECT r.* FROM skill_repositories r
          JOIN skill_repository_members m ON r.id = m.repository_id
@@ -475,8 +543,7 @@ pub async fn get_skill_repository_assignment(
     )
     .bind(skill_id)
     .fetch_optional(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     if let Some(repository) = assigned {
         let source_path = sqlx::query_scalar::<_, Option<String>>(
@@ -484,8 +551,7 @@ pub async fn get_skill_repository_assignment(
         )
         .bind(skill_id)
         .fetch_optional(pool)
-        .await
-        .map_err(|e| e.to_string())?
+        .await?
         .flatten();
         return Ok(SkillRepositoryAssignment {
             is_source_unknown: repository.is_unknown,
@@ -504,7 +570,7 @@ pub async fn get_skill_repository_assignment(
 pub async fn get_skill_repository_assignments_for_skills(
     pool: &DbPool,
     skill_ids: &[String],
-) -> Result<HashMap<String, SkillRepositoryAssignment>, String> {
+) -> Result<HashMap<String, SkillRepositoryAssignment>, sqlx::Error> {
     if skill_ids.is_empty() {
         return Ok(HashMap::new());
     }
@@ -536,44 +602,30 @@ pub async fn get_skill_repository_assignments_for_skills(
         query = query.bind(skill_id);
     }
 
-    let rows = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let rows = query.fetch_all(pool).await?;
     let mut assignments = HashMap::with_capacity(rows.len());
     for row in rows {
-        let skill_id: String = row.try_get("skill_id").map_err(|e| e.to_string())?;
+        let skill_id: String = row.try_get("skill_id")?;
         let repository = SkillRepository {
-            id: row.try_get("repository_id").map_err(|e| e.to_string())?,
-            name: row.try_get("repository_name").map_err(|e| e.to_string())?,
-            source_type: row
-                .try_get("repository_source_type")
-                .map_err(|e| e.to_string())?,
-            owner: row.try_get("repository_owner").map_err(|e| e.to_string())?,
-            repo: row.try_get("repository_repo").map_err(|e| e.to_string())?,
-            branch: row
-                .try_get("repository_branch")
-                .map_err(|e| e.to_string())?,
-            url: row.try_get("repository_url").map_err(|e| e.to_string())?,
-            pinned: row
-                .try_get("repository_pinned")
-                .map_err(|e| e.to_string())?,
-            is_unknown: row
-                .try_get("repository_is_unknown")
-                .map_err(|e| e.to_string())?,
-            created_at: row
-                .try_get("repository_created_at")
-                .map_err(|e| e.to_string())?,
-            updated_at: row
-                .try_get("repository_updated_at")
-                .map_err(|e| e.to_string())?,
-            last_synced_at: row
-                .try_get("repository_last_synced_at")
-                .map_err(|e| e.to_string())?,
+            id: row.try_get("repository_id")?,
+            name: row.try_get("repository_name")?,
+            source_type: row.try_get("repository_source_type")?,
+            owner: row.try_get("repository_owner")?,
+            repo: row.try_get("repository_repo")?,
+            branch: row.try_get("repository_branch")?,
+            url: row.try_get("repository_url")?,
+            pinned: row.try_get("repository_pinned")?,
+            is_unknown: row.try_get("repository_is_unknown")?,
+            created_at: row.try_get("repository_created_at")?,
+            updated_at: row.try_get("repository_updated_at")?,
+            last_synced_at: row.try_get("repository_last_synced_at")?,
         };
         assignments.insert(
             skill_id,
             SkillRepositoryAssignment {
                 is_source_unknown: repository.is_unknown,
                 repository,
-                source_path: row.try_get("source_path").map_err(|e| e.to_string())?,
+                source_path: row.try_get("source_path")?,
             },
         );
     }
@@ -583,7 +635,7 @@ pub async fn get_skill_repository_assignments_for_skills(
 
 pub async fn get_skill_repositories_with_stats(
     pool: &DbPool,
-) -> Result<Vec<SkillRepositoryWithStats>, String> {
+) -> Result<Vec<SkillRepositoryWithStats>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT
             r.id, r.name, r.source_type, r.owner, r.repo, r.branch, r.url,
@@ -617,31 +669,28 @@ pub async fn get_skill_repositories_with_stats(
     .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
     .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     let mut result = Vec::with_capacity(rows.len());
     for row in rows {
         let repository = SkillRepository {
-            id: row.try_get("id").map_err(|e| e.to_string())?,
-            name: row.try_get("name").map_err(|e| e.to_string())?,
-            source_type: row.try_get("source_type").map_err(|e| e.to_string())?,
-            owner: row.try_get("owner").map_err(|e| e.to_string())?,
-            repo: row.try_get("repo").map_err(|e| e.to_string())?,
-            branch: row.try_get("branch").map_err(|e| e.to_string())?,
-            url: row.try_get("url").map_err(|e| e.to_string())?,
-            pinned: row.try_get("pinned").map_err(|e| e.to_string())?,
-            is_unknown: row.try_get("is_unknown").map_err(|e| e.to_string())?,
-            created_at: row.try_get("created_at").map_err(|e| e.to_string())?,
-            updated_at: row.try_get("updated_at").map_err(|e| e.to_string())?,
-            last_synced_at: row.try_get("last_synced_at").map_err(|e| e.to_string())?,
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            source_type: row.try_get("source_type")?,
+            owner: row.try_get("owner")?,
+            repo: row.try_get("repo")?,
+            branch: row.try_get("branch")?,
+            url: row.try_get("url")?,
+            pinned: row.try_get("pinned")?,
+            is_unknown: row.try_get("is_unknown")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
+            last_synced_at: row.try_get("last_synced_at")?,
         };
         result.push(SkillRepositoryWithStats {
-            unknown_skill_count: row
-                .try_get("unknown_skill_count")
-                .map_err(|e| e.to_string())?,
+            unknown_skill_count: row.try_get("unknown_skill_count")?,
             repository,
-            skill_count: row.try_get("skill_count").map_err(|e| e.to_string())?,
+            skill_count: row.try_get("skill_count")?,
         });
     }
 
@@ -656,12 +705,11 @@ pub async fn set_repository_last_synced_at(
     pool: &DbPool,
     repository_id: &str,
     timestamp: &str,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE skill_repositories SET last_synced_at = ? WHERE id = ?")
         .bind(timestamp)
         .bind(repository_id)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }

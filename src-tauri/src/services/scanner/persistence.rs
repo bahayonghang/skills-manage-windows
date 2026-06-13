@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::db::{self, AgentSkillObservation, DbPool, Skill, SkillInstallation};
+use crate::db::{self, AgentSkillObservation, DbPool, LinkType, Skill, SkillInstallation};
+
+use super::ScannerError;
 
 #[derive(Default)]
 pub(super) struct ScanPersistenceBatch {
@@ -49,18 +51,15 @@ impl ScanPersistenceBatch {
 async fn execute_scan_query<'q>(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>,
-) -> Result<(), String> {
-    query
-        .execute(&mut **tx)
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+) -> Result<(), ScannerError> {
+    query.execute(&mut **tx).await?;
+    Ok(())
 }
 
 async fn upsert_scan_skill(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     skill: &Skill,
-) -> Result<(), String> {
+) -> Result<(), ScannerError> {
     execute_scan_query(
         tx,
         sqlx::query(
@@ -122,7 +121,11 @@ async fn upsert_scan_skill(
 async fn upsert_scan_installation(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     installation: &SkillInstallation,
-) -> Result<(), String> {
+) -> Result<(), ScannerError> {
+    installation
+        .link_type
+        .parse::<LinkType>()
+        .map_err(ScannerError::InvalidLinkType)?;
     execute_scan_query(
         tx,
         sqlx::query(
@@ -147,7 +150,11 @@ async fn upsert_scan_installation(
 async fn upsert_scan_observation(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     observation: &AgentSkillObservation,
-) -> Result<(), String> {
+) -> Result<(), ScannerError> {
+    observation
+        .link_type
+        .parse::<LinkType>()
+        .map_err(ScannerError::InvalidLinkType)?;
     execute_scan_query(
         tx,
         sqlx::query(
@@ -193,7 +200,7 @@ async fn upsert_scan_observation(
 
 async fn reset_scan_temp_tables(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), String> {
+) -> Result<(), ScannerError> {
     let statements = [
         "CREATE TEMP TABLE IF NOT EXISTS scan_keep_skills (skill_id TEXT PRIMARY KEY)",
         "CREATE TEMP TABLE IF NOT EXISTS scan_touched_install_agents (agent_id TEXT PRIMARY KEY)",
@@ -223,7 +230,7 @@ async fn reset_scan_temp_tables(
 async fn persist_scan_keep_tables(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     batch: &ScanPersistenceBatch,
-) -> Result<(), String> {
+) -> Result<(), ScannerError> {
     for skill_id in &batch.global_found_skill_ids {
         execute_scan_query(
             tx,
@@ -282,7 +289,7 @@ async fn persist_scan_keep_tables(
 
 async fn delete_scan_stale_rows(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), String> {
+) -> Result<(), ScannerError> {
     let statements = [
         "DELETE FROM skill_installations
          WHERE agent_id IN (SELECT agent_id FROM scan_touched_install_agents)
@@ -346,8 +353,8 @@ async fn delete_scan_stale_rows(
 pub(super) async fn persist_scan_batch(
     pool: &DbPool,
     batch: ScanPersistenceBatch,
-) -> Result<(), String> {
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+) -> Result<(), ScannerError> {
+    let mut tx = pool.begin().await?;
     reset_scan_temp_tables(&mut tx).await?;
 
     for (agent_id, is_detected) in &batch.agent_detected {
@@ -371,5 +378,6 @@ pub(super) async fn persist_scan_batch(
 
     persist_scan_keep_tables(&mut tx, &batch).await?;
     delete_scan_stale_rows(&mut tx).await?;
-    tx.commit().await.map_err(|e| e.to_string())
+    tx.commit().await?;
+    Ok(())
 }

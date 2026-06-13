@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -48,6 +48,11 @@ export function AppShell() {
   const [hasLoadedTargets, setHasLoadedTargets] = useState(false);
   const lastTargetIdRef = useRef<string | null>(null);
   const isInitialTargetLoadRef = useRef(true);
+  const startupActionsRef = useRef({ initialize, loadTargets });
+  const handleGlobalRescan = useCallback(async () => {
+    await rescan();
+    await loadCentralSkills();
+  }, [loadCentralSkills, rescan]);
 
   useEffect(() => {
     void showMainWindowWhenReady().catch(() => undefined);
@@ -56,16 +61,16 @@ export function AppShell() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      await loadTargets().catch(() => undefined);
+      const { initialize: initialInitialize, loadTargets: initialLoadTargets } =
+        startupActionsRef.current;
+      await initialLoadTargets().catch(() => undefined);
       if (cancelled) return;
       setHasLoadedTargets(true);
-      await initialize().catch(() => undefined);
+      await initialInitialize().catch(() => undefined);
     })();
     return () => {
       cancelled = true;
     };
-    // reason: startup bootstrap must run once; store action references are stable by convention.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -92,9 +97,15 @@ export function AppShell() {
     resetSkillsForTargetChange();
     resetMarketplaceForTargetChange();
     void handleGlobalRescan();
-    // reason: target-change reset should react only to target identity/load state, not store action references.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTargetId, hasLoadedTargets]);
+  }, [
+    activeTargetId,
+    handleGlobalRescan,
+    hasLoadedTargets,
+    resetCentralForTargetChange,
+    resetMarketplaceForTargetChange,
+    resetPlatformForTargetChange,
+    resetSkillsForTargetChange,
+  ]);
 
   useEffect(() => {
     if (!mainRef.current) return;
@@ -143,11 +154,6 @@ export function AppShell() {
       disposeListener(unlisten);
     };
   }, [t]);
-
-  async function handleGlobalRescan() {
-    await rescan();
-    await loadCentralSkills();
-  }
 
   function handleAction(action: string) {
     switch (action) {

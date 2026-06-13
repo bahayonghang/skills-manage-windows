@@ -4,7 +4,7 @@ pub(crate) async fn preview_github_repo_import_impl(
     pool: &DbPool,
     secrets: &dyn crate::secrets::SecretStore,
     repo_url: &str,
-) -> Result<GitHubRepoPreview, String> {
+) -> Result<GitHubRepoPreview, GithubImportError> {
     let auth = github_direct_auth_from_secret_store(pool, secrets).await?;
     preview_github_repo_import_with_auth(pool, repo_url, auth.as_deref()).await
 }
@@ -13,7 +13,7 @@ pub(crate) async fn preview_github_repo_import_with_auth(
     pool: &DbPool,
     repo_url: &str,
     auth: Option<&str>,
-) -> Result<GitHubRepoPreview, String> {
+) -> Result<GitHubRepoPreview, GithubImportError> {
     let resolved = resolve_repo_source(repo_url, auth).await?;
     let candidates = fetch_repo_skill_candidates_from_source(
         &resolved.repo,
@@ -24,7 +24,7 @@ pub(crate) async fn preview_github_repo_import_with_auth(
     let skills = build_preview_skills(pool, &candidates).await?;
 
     if skills.is_empty() {
-        return Err(NO_IMPORTABLE_SKILLS_ERROR.to_string());
+        return Err(GithubImportError::NoImportableSkills);
     }
 
     Ok(GitHubRepoPreview {
@@ -39,9 +39,11 @@ pub(crate) async fn preview_github_repo_import_remote_with_auth(
     active_target: &ActiveTarget,
     repo_url: &str,
     auth: Option<&str>,
-) -> Result<GitHubRepoPreview, String> {
+) -> Result<GitHubRepoPreview, GithubImportError> {
     let resolved = resolve_repo_source(repo_url, auth).await?;
-    let connection = connect_remote_target(active_target).await?;
+    let connection = connect_remote_target(active_target)
+        .await
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
     cleanup_expired_preview_workspaces_for_connection(&connection).await;
 
     let workspace = create_remote_preview_workspace(&connection, &resolved, auth).await?;
@@ -55,7 +57,7 @@ pub(crate) async fn preview_github_repo_import_remote_with_auth(
         .await?;
         let skills = build_preview_skills(pool, &candidates).await?;
         if skills.is_empty() {
-            return Err(NO_IMPORTABLE_SKILLS_ERROR.to_string());
+            return Err(GithubImportError::NoImportableSkills);
         }
         Ok(skills)
     }

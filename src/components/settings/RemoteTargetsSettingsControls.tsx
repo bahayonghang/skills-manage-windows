@@ -685,7 +685,7 @@ export function WslTargetForm({
           <p className="text-xs text-destructive">{distributionError}</p>
         ) : distributions.length === 0 && !isLoadingDistributions ? (
           <p className="text-xs text-muted-foreground">
-            {t("targets.wslListEmpty")}
+            {t("targets.wslListManualEmpty")}
           </p>
         ) : null}
       </div>

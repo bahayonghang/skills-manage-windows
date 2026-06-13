@@ -7,20 +7,18 @@
 use crate::db::types::{Agent, DbPool};
 
 /// Retrieve all agents.
-pub async fn get_all_agents(pool: &DbPool) -> Result<Vec<Agent>, String> {
+pub async fn get_all_agents(pool: &DbPool) -> Result<Vec<Agent>, sqlx::Error> {
     sqlx::query_as::<_, Agent>("SELECT * FROM agents ORDER BY is_builtin DESC, display_name")
         .fetch_all(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// Retrieve a single agent by ID.
-pub async fn get_agent_by_id(pool: &DbPool, agent_id: &str) -> Result<Option<Agent>, String> {
+pub async fn get_agent_by_id(pool: &DbPool, agent_id: &str) -> Result<Option<Agent>, sqlx::Error> {
     sqlx::query_as::<_, Agent>("SELECT * FROM agents WHERE id = ?")
         .bind(agent_id)
         .fetch_optional(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// Update the `is_detected` flag for an agent.
@@ -28,14 +26,13 @@ pub async fn update_agent_detected(
     pool: &DbPool,
     agent_id: &str,
     is_detected: bool,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE agents SET is_detected = ? WHERE id = ?")
         .bind(is_detected)
         .bind(agent_id)
         .execute(pool)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 /// Update the `is_enabled` flag for an agent and return the refreshed row.
@@ -43,26 +40,28 @@ pub async fn update_agent_enabled(
     pool: &DbPool,
     agent_id: &str,
     is_enabled: bool,
-) -> Result<Agent, String> {
+) -> Result<Agent, sqlx::Error> {
     let existing = get_agent_by_id(pool, agent_id).await?;
     if existing.is_none() {
-        return Err(format!("Agent '{}' not found", agent_id));
+        return Err(sqlx::Error::InvalidArgument(format!(
+            "Agent '{}' not found",
+            agent_id
+        )));
     }
 
     sqlx::query("UPDATE agents SET is_enabled = ? WHERE id = ?")
         .bind(is_enabled)
         .bind(agent_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     get_agent_by_id(pool, agent_id)
         .await?
-        .ok_or_else(|| "Failed to retrieve updated agent".to_string())
+        .ok_or_else(|| sqlx::Error::InvalidArgument("Failed to retrieve updated agent".to_string()))
 }
 
 /// Insert a new custom agent (non-builtin).
-pub async fn insert_custom_agent(pool: &DbPool, agent: &Agent) -> Result<(), String> {
+pub async fn insert_custom_agent(pool: &DbPool, agent: &Agent) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO agents
          (id, display_name, category, global_skills_dir, project_skills_dir,
@@ -79,21 +78,25 @@ pub async fn insert_custom_agent(pool: &DbPool, agent: &Agent) -> Result<(), Str
     .execute(pool)
     .await
     .map(|_| ())
-    .map_err(|e| e.to_string())
 }
 
 /// Delete a custom (non-builtin) agent by ID. Returns an error if the agent is builtin.
-pub async fn delete_custom_agent(pool: &DbPool, agent_id: &str) -> Result<(), String> {
+pub async fn delete_custom_agent(pool: &DbPool, agent_id: &str) -> Result<(), sqlx::Error> {
     let agent = get_agent_by_id(pool, agent_id).await?;
     match agent {
-        None => Err(format!("Agent '{}' not found", agent_id)),
-        Some(a) if a.is_builtin => Err(format!("Cannot delete built-in agent '{}'", agent_id)),
+        None => Err(sqlx::Error::InvalidArgument(format!(
+            "Agent '{}' not found",
+            agent_id
+        ))),
+        Some(a) if a.is_builtin => Err(sqlx::Error::InvalidArgument(format!(
+            "Cannot delete built-in agent '{}'",
+            agent_id
+        ))),
         Some(_) => sqlx::query("DELETE FROM agents WHERE id = ?")
             .bind(agent_id)
             .execute(pool)
             .await
-            .map(|_| ())
-            .map_err(|e| e.to_string()),
+            .map(|_| ()),
     }
 }
 
@@ -105,12 +108,20 @@ pub async fn update_custom_agent(
     display_name: &str,
     category: &str,
     global_skills_dir: &str,
-) -> Result<Agent, String> {
+) -> Result<Agent, sqlx::Error> {
     let agent = get_agent_by_id(pool, agent_id).await?;
     match agent {
-        None => return Err(format!("Agent '{}' not found", agent_id)),
+        None => {
+            return Err(sqlx::Error::InvalidArgument(format!(
+                "Agent '{}' not found",
+                agent_id
+            )))
+        }
         Some(a) if a.is_builtin => {
-            return Err(format!("Cannot update built-in agent '{}'", agent_id))
+            return Err(sqlx::Error::InvalidArgument(format!(
+                "Cannot update built-in agent '{}'",
+                agent_id
+            )))
         }
         Some(_) => {}
     }
@@ -123,10 +134,9 @@ pub async fn update_custom_agent(
     .bind(global_skills_dir)
     .bind(agent_id)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     get_agent_by_id(pool, agent_id)
         .await?
-        .ok_or_else(|| "Failed to retrieve updated agent".to_string())
+        .ok_or_else(|| sqlx::Error::InvalidArgument("Failed to retrieve updated agent".to_string()))
 }

@@ -222,7 +222,7 @@ async fn cache_skill_explanation_rejects_blank_text() {
     let err = cache_skill_explanation(&pool, "defuddle", "zh", "MiniMax-M2.7", "   ")
         .await
         .expect_err("blank explanations should be rejected");
-    assert!(err.contains("no content"));
+    assert!(err.to_string().contains("no content"));
 
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM skill_explanations WHERE skill_id = ? AND lang = ?",

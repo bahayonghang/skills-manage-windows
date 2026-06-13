@@ -62,7 +62,7 @@ SkillPort 是一个三层桌面应用：React UI 通过 Tauri IPC 与 Rust 后�
 ## 横切关注点
 
 - **状态同步。** 启动时后端 emit `system://migration-progress`，UI 显示横幅，无需轮询。
-- **操作日志。** 每次安装/卸载写入结构化 `operation_logs` 行，含 `level`、`target_kind`、`category`、`action`、`summary`。日志页通过 `commands::logs` 回读。
+- **可观测性。** 用户操作写入 Operation layer 的结构化 `operation_logs` 行，前后端诊断写入 Runtime layer 的有界 `skillport-YYYY-MM-DD.log` 文件。`/logs` 控制台通过 `commands::logs` 回读两层；见[运行时可观测性](./runtime-observability.md)。
 - **活动目标。** 所有命令优先解析 `AppState::active_db()`，SSH 模式落到远端 SQLite 缓存。
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-06-03

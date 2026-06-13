@@ -8,6 +8,8 @@ use tauri::State;
 use crate::db::{self, DbPool, TagGroup};
 use crate::AppState;
 
+use super::serde_helpers::deserialize_optional_optional_string;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateTagGroupInput {
@@ -21,24 +23,14 @@ pub struct CreateTagGroupInput {
 pub struct UpdateTagGroupInput {
     pub name: Option<String>,
     /// `Some(None)` 清空 color；`None` 不变。
-    #[serde(default, deserialize_with = "deserialize_optional_optional")]
+    #[serde(default, deserialize_with = "deserialize_optional_optional_string")]
     pub color: Option<Option<String>>,
-}
-
-fn deserialize_optional_optional<'de, D>(
-    deserializer: D,
-) -> Result<Option<Option<String>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::Deserialize;
-    Option::<Option<String>>::deserialize(deserializer).or_else(|_| Ok(None))
 }
 
 // ─── impl layer ──────────────────────────────────────────────────────────────
 
 pub async fn list_tag_groups_impl(pool: &DbPool) -> Result<Vec<TagGroup>, String> {
-    db::list_tag_groups(pool).await
+    db::list_tag_groups(pool).await.map_err(|e| e.to_string())
 }
 
 pub async fn create_tag_group_impl(
@@ -57,6 +49,7 @@ pub async fn create_tag_group_impl(
         },
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 pub async fn update_tag_group_impl(
@@ -79,17 +72,26 @@ pub async fn update_tag_group_impl(
         },
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 pub async fn delete_tag_group_impl(pool: &DbPool, id: &str) -> Result<(), String> {
-    if db::get_tag_group(pool, id).await?.is_none() {
+    if db::get_tag_group(pool, id)
+        .await
+        .map_err(|e| e.to_string())?
+        .is_none()
+    {
         return Err(format!("Tag group '{id}' not found"));
     }
-    db::delete_tag_group(pool, id).await
+    db::delete_tag_group(pool, id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub async fn reorder_tag_groups_impl(pool: &DbPool, ids: Vec<String>) -> Result<(), String> {
-    db::reorder_tag_groups(pool, &ids).await
+    db::reorder_tag_groups(pool, &ids)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub async fn set_tag_group_impl(
@@ -97,7 +99,9 @@ pub async fn set_tag_group_impl(
     tag_id: &str,
     group_id: Option<&str>,
 ) -> Result<(), String> {
-    db::set_tag_group(pool, tag_id, group_id).await
+    db::set_tag_group(pool, tag_id, group_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ─── Tauri commands ──────────────────────────────────────────────────────────

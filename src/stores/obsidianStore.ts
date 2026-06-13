@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invokeCommand } from "@/lib/ipc";
 import type { ObsidianSkill, ObsidianVault } from "@/types";
 
 const BROWSER_FIXTURE_VAULTS: ObsidianVault[] = [
@@ -73,7 +74,7 @@ export const useObsidianStore = create<ObsidianState>((set) => ({
     }
 
     try {
-      const vaults = await invoke<ObsidianVault[]>("get_obsidian_vaults");
+      const vaults = await invokeCommand("get_obsidian_vaults");
       set({ vaults: vaults ?? [], isLoadingVaults: false });
     } catch (err) {
       set({ error: String(err), isLoadingVaults: false });
@@ -104,9 +105,7 @@ export const useObsidianStore = create<ObsidianState>((set) => ({
     }
 
     try {
-      const skills = await invoke<ObsidianSkill[]>("get_obsidian_vault_skills", {
-        vaultId,
-      });
+      const skills = await invokeCommand("get_obsidian_vault_skills", { vaultId });
       set((state) => ({
         skillsByVault: {
           ...state.skillsByVault,

@@ -9,12 +9,24 @@ use sha2::{Digest, Sha256};
 
 use crate::db::{self, DbPool, Project, ProjectSkillInstallation};
 use crate::services::installation::centralize::ensure_replaceable_target;
-use crate::services::installation::fs_util::{copy_dir_all_blocking, run_blocking_fs};
+use crate::services::installation::fs_util::copy_dir_all_blocking;
 use crate::services::installation::project::project_relative_skills_dir;
 use crate::services::installation::{create_symlink, symlink_target_path};
 
+use super::error::ProjectsError;
 use super::scan::rescan_project;
 use super::types::{ProjectDto, ProjectSkillDto, ProjectUsingSkillDto};
+
+/// Run a synchronous filesystem task on the blocking-thread pool with
+/// projects-domain errors. Thin typed wrapper over
+/// [`crate::fs_util::run_blocking_fs_with`].
+async fn run_blocking_fs<T, F>(label: &'static str, task: F) -> Result<T, ProjectsError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, ProjectsError> + Send + 'static,
+{
+    crate::fs_util::run_blocking_fs_with(label, task, ProjectsError::task_join).await
+}
 
 /// 规范化项目路径：canonicalize 失败时退回到原始字符串，避免阻塞 add。
 pub fn normalize_project_path(input: &str) -> String {
@@ -47,18 +59,15 @@ fn project_name_from_path(normalized_path: &str) -> String {
 ///
 /// 注意：本函数仅落库，不触发扫描。扫描由 IPC 层在返回 Project 后异步起一条
 /// `rescan_project` 任务执行。
-pub async fn add_project_impl(pool: &DbPool, raw_path: &str) -> Result<Project, String> {
+pub async fn add_project_impl(pool: &DbPool, raw_path: &str) -> Result<Project, ProjectsError> {
     let trimmed = raw_path.trim();
     if trimmed.is_empty() {
-        return Err("Project path cannot be empty".to_string());
+        return Err(ProjectsError::ProjectPathEmpty);
     }
 
     let normalized = normalize_project_path(trimmed);
     if !Path::new(&normalized).is_dir() {
-        return Err(format!(
-            "Project path '{}' does not exist or is not a directory",
-            normalized
-        ));
+        return Err(ProjectsError::ProjectPathInvalid(normalized));
     }
 
     if let Some(existing) = db::get_project_by_path(pool, &normalized).await? {
@@ -85,7 +94,7 @@ pub async fn add_project_impl(pool: &DbPool, raw_path: &str) -> Result<Project, 
 }
 
 /// 列出所有项目 + skill 数。
-pub async fn list_projects_impl(pool: &DbPool) -> Result<Vec<ProjectDto>, String> {
+pub async fn list_projects_impl(pool: &DbPool) -> Result<Vec<ProjectDto>, ProjectsError> {
     let projects = db::list_projects(pool).await?;
 
     let mut dtos = Vec::with_capacity(projects.len());
@@ -104,26 +113,30 @@ pub async fn list_projects_impl(pool: &DbPool) -> Result<Vec<ProjectDto>, String
     Ok(dtos)
 }
 
-pub async fn rename_project_impl(pool: &DbPool, id: &str, name: &str) -> Result<(), String> {
+pub async fn rename_project_impl(pool: &DbPool, id: &str, name: &str) -> Result<(), ProjectsError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
-        return Err("Project name cannot be empty".to_string());
+        return Err(ProjectsError::ProjectNameEmpty);
     }
     if db::get_project_by_id(pool, id).await?.is_none() {
-        return Err(format!("Project '{}' not found", id));
+        return Err(ProjectsError::ProjectNotFound(id.to_string()));
     }
-    db::update_project_name(pool, id, trimmed).await
+    Ok(db::update_project_name(pool, id, trimmed).await?)
 }
 
-pub async fn set_project_pinned_impl(pool: &DbPool, id: &str, pinned: bool) -> Result<(), String> {
+pub async fn set_project_pinned_impl(
+    pool: &DbPool,
+    id: &str,
+    pinned: bool,
+) -> Result<(), ProjectsError> {
     if db::get_project_by_id(pool, id).await?.is_none() {
-        return Err(format!("Project '{}' not found", id));
+        return Err(ProjectsError::ProjectNotFound(id.to_string()));
     }
-    db::update_project_pinned(pool, id, pinned).await
+    Ok(db::update_project_pinned(pool, id, pinned).await?)
 }
 
 /// 扫描项目并刷 psi。返回扫到的 skill 数量。
-pub async fn rescan_project_impl(pool: &DbPool, id: &str) -> Result<usize, String> {
+pub async fn rescan_project_impl(pool: &DbPool, id: &str) -> Result<usize, ProjectsError> {
     rescan_project(pool, id).await
 }
 
@@ -131,9 +144,9 @@ pub async fn rescan_project_impl(pool: &DbPool, id: &str) -> Result<usize, Strin
 pub async fn get_project_skills_impl(
     pool: &DbPool,
     id: &str,
-) -> Result<Vec<ProjectSkillDto>, String> {
+) -> Result<Vec<ProjectSkillDto>, ProjectsError> {
     if db::get_project_by_id(pool, id).await?.is_none() {
-        return Err(format!("Project '{}' not found", id));
+        return Err(ProjectsError::ProjectNotFound(id.to_string()));
     }
 
     let psi_rows = db::list_project_skill_installations(pool, id).await?;
@@ -159,8 +172,7 @@ pub async fn get_project_skills_impl(
             )
             .bind(&psi.skill_id)
             .fetch_optional(pool)
-            .await
-            .map_err(|e| e.to_string())?
+            .await?
             {
                 Some((n, d)) => (n, d),
                 None => (psi.skill_id.clone(), None),
@@ -191,41 +203,46 @@ pub async fn remove_project_impl(
     pool: &DbPool,
     id: &str,
     uninstall_skills: bool,
-) -> Result<(), String> {
+) -> Result<(), ProjectsError> {
     let project = db::get_project_by_id(pool, id)
         .await?
-        .ok_or_else(|| format!("Project '{}' not found", id))?;
+        .ok_or_else(|| ProjectsError::ProjectNotFound(id.to_string()))?;
 
     if uninstall_skills {
         let psi_rows = db::list_project_skill_installations(pool, &project.id).await?;
-        for psi in psi_rows {
-            // 删盘上文件失败不要让整个 remove 中断：路径可能已被外部清理，
-            // 表里的 psi 行还是要清掉。失败原因吞掉，只 log。
-            let target = PathBuf::from(&psi.installed_path);
-            let result = if psi.link_type == "symlink" {
-                #[cfg(windows)]
-                {
-                    std::fs::remove_dir(&target).or_else(|_| std::fs::remove_file(&target))
+        let project_id_for_log = project.id.clone();
+        run_blocking_fs("project skills removal", move || {
+            for psi in psi_rows {
+                // 删盘上文件失败不要让整个 remove 中断：路径可能已被外部清理，
+                // 表里的 psi 行还是要清掉。失败原因吞掉，只 log。
+                let target = PathBuf::from(&psi.installed_path);
+                let result = if psi.link_type == "symlink" {
+                    #[cfg(windows)]
+                    {
+                        std::fs::remove_dir(&target).or_else(|_| std::fs::remove_file(&target))
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        std::fs::remove_file(&target)
+                    }
+                } else {
+                    std::fs::remove_dir_all(&target)
+                };
+                if let Err(e) = result {
+                    tracing::warn!(
+                        project_id = %project_id_for_log,
+                        path = %target.display(),
+                        error = %e,
+                        "Failed to remove project skill on project removal; ignoring"
+                    );
                 }
-                #[cfg(not(windows))]
-                {
-                    std::fs::remove_file(&target)
-                }
-            } else {
-                std::fs::remove_dir_all(&target)
-            };
-            if let Err(e) = result {
-                tracing::warn!(
-                    project_id = %project.id,
-                    path = %target.display(),
-                    error = %e,
-                    "Failed to remove project skill on project removal; ignoring"
-                );
             }
-        }
+            Ok(())
+        })
+        .await?;
     }
 
-    db::delete_project(pool, &project.id).await
+    Ok(db::delete_project(pool, &project.id).await?)
 }
 
 /// 反向查询：一个中央 skill 装在哪些项目下。
@@ -235,7 +252,7 @@ pub async fn remove_project_impl(
 pub async fn list_projects_using_skill_impl(
     pool: &DbPool,
     skill_id: &str,
-) -> Result<Vec<ProjectUsingSkillDto>, String> {
+) -> Result<Vec<ProjectUsingSkillDto>, ProjectsError> {
     let agents = db::get_all_agents(pool).await?;
     let agent_name: HashMap<String, String> = agents
         .iter()
@@ -257,8 +274,7 @@ pub async fn list_projects_using_skill_impl(
     )
     .bind(skill_id)
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(rows
         .into_iter()
@@ -308,54 +324,42 @@ pub async fn install_skill_to_project_impl(
     skill_id: &str,
     agent_id: &str,
     method: &str,
-) -> Result<ProjectSkillInstallation, String> {
+) -> Result<ProjectSkillInstallation, ProjectsError> {
     let project = db::get_project_by_id(pool, project_id)
         .await?
-        .ok_or_else(|| format!("Project '{}' not found", project_id))?;
+        .ok_or_else(|| ProjectsError::ProjectNotFound(project_id.to_string()))?;
 
     let project_root = PathBuf::from(&project.path);
     if !project_root.is_dir() {
-        return Err(format!(
-            "Project path '{}' is missing or not a directory",
-            project.path
-        ));
+        return Err(ProjectsError::ProjectPathMissingOrNotDir(project.path));
     }
 
     if agent_id == "central" {
-        return Err("Cannot install a project skill to the central agent itself".to_string());
+        return Err(ProjectsError::CentralAgentProjectTarget);
     }
 
     let agent = db::get_agent_by_id(pool, agent_id)
         .await?
-        .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
+        .ok_or_else(|| ProjectsError::AgentNotFound(agent_id.to_string()))?;
     if !agent.is_enabled {
-        return Err(format!("Agent '{}' is disabled", agent.display_name));
+        return Err(ProjectsError::AgentDisabled(agent.display_name));
     }
 
     let skill = db::get_skill_by_id(pool, skill_id)
         .await?
-        .ok_or_else(|| format!("Skill '{}' not found in central library", skill_id))?;
+        .ok_or_else(|| ProjectsError::SkillNotFoundInCentral(skill_id.to_string()))?;
     if !skill.is_central {
-        return Err(format!(
-            "Skill '{}' is not centralized; centralize it before installing to a project",
-            skill_id
-        ));
+        return Err(ProjectsError::SkillNotCentralized(skill_id.to_string()));
     }
     let canonical_path = skill
         .canonical_path
         .clone()
         .filter(|p| !p.trim().is_empty())
-        .ok_or_else(|| {
-            format!(
-                "Skill '{}' has no canonical_path; cannot install to a project",
-                skill_id
-            )
-        })?;
+        .ok_or_else(|| ProjectsError::SkillNoCanonicalPath(skill_id.to_string()))?;
     let canonical_dir = PathBuf::from(&canonical_path);
     if !canonical_dir.is_dir() {
-        return Err(format!(
-            "Central skill directory '{}' does not exist",
-            canonical_dir.display()
+        return Err(ProjectsError::CentralSkillDirMissing(
+            canonical_dir.display().to_string(),
         ));
     }
 
@@ -366,10 +370,12 @@ pub async fn install_skill_to_project_impl(
     let project_skills_dir_for_create = project_skills_dir.clone();
     run_blocking_fs("project skills directory creation", move || {
         std::fs::create_dir_all(&project_skills_dir_for_create).map_err(|e| {
-            format!(
-                "Failed to create project skills directory '{}': {}",
-                project_skills_dir_for_create.display(),
-                e
+            ProjectsError::io(
+                format!(
+                    "Failed to create project skills directory '{}'",
+                    project_skills_dir_for_create.display()
+                ),
+                e,
             )
         })
     })
@@ -386,7 +392,7 @@ pub async fn install_skill_to_project_impl(
         let target_for_create = target_path.clone();
         let target_value = relative_target.clone();
         run_blocking_fs("project skill symlink creation", move || {
-            create_symlink(&target_value, &target_for_create)
+            create_symlink(&target_value, &target_for_create).map_err(ProjectsError::from)
         })
         .await?;
         (
@@ -427,14 +433,13 @@ pub async fn uninstall_skill_from_project_impl(
     project_id: &str,
     skill_id: &str,
     agent_id: &str,
-) -> Result<(), String> {
+) -> Result<(), ProjectsError> {
     let psi = db::get_project_skill_installation(pool, project_id, skill_id, agent_id)
         .await?
-        .ok_or_else(|| {
-            format!(
-                "Skill '{}' is not installed in project '{}' for agent '{}'",
-                skill_id, project_id, agent_id
-            )
+        .ok_or_else(|| ProjectsError::SkillNotInstalledInProject {
+            skill_id: skill_id.to_string(),
+            project_id: project_id.to_string(),
+            agent_id: agent_id.to_string(),
         })?;
 
     let target = PathBuf::from(&psi.installed_path);
@@ -450,29 +455,31 @@ pub async fn uninstall_skill_from_project_impl(
                 std::fs::remove_dir(&target_for_remove)
                     .or_else(|_| std::fs::remove_file(&target_for_remove))
                     .map_err(|e| {
-                        format!(
-                            "Failed to remove symlink '{}': {}",
-                            target_for_remove.display(),
-                            e
+                        ProjectsError::io(
+                            format!("Failed to remove symlink '{}'", target_for_remove.display()),
+                            e,
                         )
                     })
             }
             #[cfg(not(windows))]
             {
                 std::fs::remove_file(&target_for_remove).map_err(|e| {
-                    format!(
-                        "Failed to remove symlink '{}': {}",
-                        target_for_remove.display(),
-                        e
+                    ProjectsError::io(
+                        format!("Failed to remove symlink '{}'", target_for_remove.display()),
+                        e,
                     )
                 })
             }
         } else {
-            std::fs::remove_dir_all(&target_for_remove)
-                .map_err(|e| format!("Failed to remove '{}': {}", target_for_remove.display(), e))
+            std::fs::remove_dir_all(&target_for_remove).map_err(|e| {
+                ProjectsError::io(
+                    format!("Failed to remove '{}'", target_for_remove.display()),
+                    e,
+                )
+            })
         }
     })
     .await?;
 
-    db::delete_project_skill_installation(pool, project_id, skill_id, agent_id).await
+    Ok(db::delete_project_skill_installation(pool, project_id, skill_id, agent_id).await?)
 }

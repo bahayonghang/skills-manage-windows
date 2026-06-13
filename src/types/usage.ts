@@ -26,6 +26,7 @@ export interface UsageKpis {
   uniqueSkills: number;
   uniqueProjects: number;
   uniqueSources: number;
+  uniqueSessions: number;
 }
 
 export interface UsageOverview {

@@ -37,6 +37,7 @@ function overviewFixture() {
       uniqueSkills: 2,
       uniqueProjects: 1,
       uniqueSources: 1,
+      uniqueSessions: 2,
     },
     topSkills: [],
     heatmap: [],
@@ -58,6 +59,7 @@ beforeEach(() => {
     loading: false,
     refreshing: false,
     error: null,
+    selectedSource: null,
     lastRefreshMs: null,
     ...initialActions,
   });
@@ -212,6 +214,119 @@ describe("usageStore", () => {
     const state = useUsageStore.getState();
     expect(state.overview?.heatmap.length).toBe(16 * 7);
     expect(state.providers.length).toBe(8);
+  });
+
+  it("selectSource reloads overview and recent with the selected source", async () => {
+    invokeMock.mockResolvedValueOnce({
+      ...overviewFixture(),
+      kpis: {
+        ...overviewFixture().kpis,
+        totalCalls: 2,
+        uniqueSessions: 2,
+      },
+    });
+    invokeMock.mockResolvedValueOnce([]);
+
+    await useUsageStore.getState().selectSource("Claude Code");
+
+    expect(useUsageStore.getState().selectedSource).toBe("Claude Code");
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "usage_get_overview", {
+      topSkillsLimit: 50,
+      source: "Claude Code",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "usage_get_recent", {
+      limit: 20,
+      source: "Claude Code",
+    });
+  });
+
+  it("refresh preserves selected source when the provider still has calls", async () => {
+    useUsageStore.setState({ selectedSource: "Claude Code" });
+    invokeMock.mockResolvedValueOnce({
+      summary: {
+        cached: false,
+        callsWritten: 4,
+        providersAvailable: 1,
+        scannedAtMs: 1700000000000,
+      },
+      overview: overviewFixture(),
+      recent: [],
+      providers: [
+        {
+          providerId: "claude-code",
+          displayName: "Claude Code",
+          available: true,
+          callCount: 4,
+          scannedAtMs: 1700000000000,
+        },
+      ],
+      scope: {
+        targetId: "local",
+        label: "Local",
+        isRemote: false,
+        remoteReachable: false,
+      },
+      usedCachedData: false,
+      refreshError: null,
+    });
+    invokeMock.mockResolvedValueOnce({
+      ...overviewFixture(),
+      kpis: {
+        ...overviewFixture().kpis,
+        totalCalls: 4,
+        uniqueSessions: 2,
+      },
+    });
+    invokeMock.mockResolvedValueOnce([]);
+
+    await useUsageStore.getState().refresh(true);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(3));
+
+    expect(useUsageStore.getState().selectedSource).toBe("Claude Code");
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "usage_get_overview", {
+      topSkillsLimit: 50,
+      source: "Claude Code",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "usage_get_recent", {
+      limit: 20,
+      source: "Claude Code",
+    });
+  });
+
+  it("refresh falls back to all platforms when selected provider has no calls", async () => {
+    useUsageStore.setState({ selectedSource: "Claude Code" });
+    invokeMock.mockResolvedValue({
+      summary: {
+        cached: false,
+        callsWritten: 0,
+        providersAvailable: 0,
+        scannedAtMs: 1700000000000,
+      },
+      overview: overviewFixture(),
+      recent: [],
+      providers: [
+        {
+          providerId: "claude-code",
+          displayName: "Claude Code",
+          available: true,
+          callCount: 0,
+          scannedAtMs: 1700000000000,
+        },
+      ],
+      scope: {
+        targetId: "local",
+        label: "Local",
+        isRemote: false,
+        remoteReachable: false,
+      },
+      usedCachedData: false,
+      refreshError: null,
+    });
+
+    await useUsageStore.getState().refresh(true);
+
+    expect(useUsageStore.getState().selectedSource).toBeNull();
+    expect(invokeMock).toHaveBeenCalledTimes(1);
   });
 
   it("bootstrap refreshes when active target differs from cached usage scope inside TTL", async () => {

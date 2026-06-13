@@ -30,12 +30,12 @@ const FACTOR_TONE_CLASS: Record<FactorProps["tone"], string> = {
   primary: "from-primary to-primary/55",
   accent: "from-chart-1 to-primary/45",
   neutral: "from-muted-foreground/70 to-muted-foreground/35",
-  success: "from-emerald-500 to-emerald-500/45",
+  success: "from-success to-success/45",
 };
 
 const STATUS_CLASS: Record<ReadinessStatus, string> = {
-  ready: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
-  review: "border-primary/35 bg-primary/10 text-primary",
+  ready: "border-success/30 bg-success/10 text-success-foreground",
+  review: "border-primary/35 bg-primary/10 text-primary-text",
   triage: "border-destructive/30 bg-destructive/10 text-destructive",
 };
 

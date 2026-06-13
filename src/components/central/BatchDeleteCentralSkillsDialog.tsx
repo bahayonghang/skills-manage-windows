@@ -37,7 +37,7 @@ interface BatchDeleteCentralSkillsDialogProps {
   confirmLabel?: string;
   confirmTestId?: string;
   onConfirm: (
-    requests: BatchDeleteCentralSkillRequest[]
+    requests: BatchDeleteCentralSkillRequest[],
   ) => Promise<BatchDeleteCentralSkillResult>;
 }
 
@@ -47,15 +47,15 @@ function uniqueIds(ids: string[]): string[] {
 
 function copyPathsForAgents(
   preview: BatchDeleteCentralSkillPreviewResult | null,
-  agentIds: string[]
+  agentIds: string[],
 ): string {
   const agentSet = new Set(agentIds);
   return uniqueIds(
     (preview?.previews ?? []).flatMap((item) =>
       item.copy_installations
         .filter((installation) => agentSet.has(installation.agent_id))
-        .map((installation) => installation.installed_path)
-    )
+        .map((installation) => installation.installed_path),
+    ),
   ).join(", ");
 }
 
@@ -76,7 +76,9 @@ export function BatchDeleteCentralSkillsDialog({
   onConfirm,
 }: BatchDeleteCentralSkillsDialogProps) {
   const { t } = useTranslation();
-  const [selectedCopyAgentIds, setSelectedCopyAgentIds] = useState<Set<string>>(new Set());
+  const [selectedCopyAgentIds, setSelectedCopyAgentIds] = useState<Set<string>>(
+    new Set(),
+  );
   const skillIdsKey = useMemo(() => skillIds.join("\0"), [skillIds]);
 
   useEffect(() => {
@@ -88,14 +90,14 @@ export function BatchDeleteCentralSkillsDialog({
   const copyAgentIds = useMemo(() => {
     return uniqueIds(
       (preview?.previews ?? []).flatMap((item) =>
-        item.copy_installations.map((installation) => installation.agent_id)
-      )
+        item.copy_installations.map((installation) => installation.agent_id),
+      ),
     );
   }, [preview]);
 
   const autoRemovedAgentIds = useMemo(() => {
     return uniqueIds(
-      (preview?.previews ?? []).flatMap((item) => item.auto_removed_agent_ids)
+      (preview?.previews ?? []).flatMap((item) => item.auto_removed_agent_ids),
     );
   }, [preview]);
   const copyAgentGroups = useMemo(
@@ -103,24 +105,26 @@ export function BatchDeleteCentralSkillsDialog({
       groupPlatformAgentIds(
         agents,
         copyAgentIds,
-        t("platformTargets.universalLabel")
+        t("platformTargets.universalLabel"),
       ),
-    [agents, copyAgentIds, t]
+    [agents, copyAgentIds, t],
   );
   const autoRemovedGroups = useMemo(
     () =>
       groupPlatformAgentIds(
         agents,
         autoRemovedAgentIds,
-        t("platformTargets.universalLabel")
+        t("platformTargets.universalLabel"),
       ),
-    [agents, autoRemovedAgentIds, t]
+    [agents, autoRemovedAgentIds, t],
   );
 
   function copyCountForAgents(agentIds: string[]): number {
     const agentSet = new Set(agentIds);
     return (preview?.previews ?? []).filter((item) =>
-      item.copy_installations.some((installation) => agentSet.has(installation.agent_id))
+      item.copy_installations.some((installation) =>
+        agentSet.has(installation.agent_id),
+      ),
     ).length;
   }
 
@@ -157,13 +161,16 @@ export function BatchDeleteCentralSkillsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{title ?? t("central.batchDeleteTitle", { count: skillIds.length })}</DialogTitle>
+          <DialogTitle>
+            {title ?? t("central.batchDeleteTitle", { count: skillIds.length })}
+          </DialogTitle>
           <DialogClose />
         </DialogHeader>
 
         <DialogBody className="space-y-4">
           <DialogDescription>
-            {description ?? t("central.batchDeleteDesc", { count: skillIds.length })}
+            {description ??
+              t("central.batchDeleteDesc", { count: skillIds.length })}
           </DialogDescription>
 
           <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm">
@@ -203,8 +210,13 @@ export function BatchDeleteCentralSkillsDialog({
                   </div>
                   <div className="space-y-2">
                     {autoRemovedGroups.map((group) => (
-                      <div key={group.id} className="rounded-xl border border-border bg-muted/30 p-3">
-                        <div className="text-sm font-medium text-foreground">{group.label}</div>
+                      <div
+                        key={group.id}
+                        className="rounded-xl border border-border bg-muted/30 p-3"
+                      >
+                        <div className="text-sm font-medium text-foreground">
+                          {group.label}
+                        </div>
                         {group.detail && (
                           <div className="mt-1 truncate text-xs text-muted-foreground">
                             {group.detail}
@@ -224,7 +236,7 @@ export function BatchDeleteCentralSkillsDialog({
                   <div className="space-y-2">
                     {copyAgentGroups.map((group) => {
                       const checked = group.agentIds.every((agentId) =>
-                        selectedCopyAgentIds.has(agentId)
+                        selectedCopyAgentIds.has(agentId),
                       );
                       const paths = copyPathsForAgents(preview, group.agentIds);
                       return (
@@ -234,13 +246,20 @@ export function BatchDeleteCentralSkillsDialog({
                         >
                           <Checkbox
                             checked={checked}
-                            onCheckedChange={(value) => handleToggleCopy(group.agentIds, !!value)}
-                            aria-label={t("central.batchDeletePlatformCopyLabel", {
-                              platform: group.label,
-                            })}
+                            onCheckedChange={(value) =>
+                              handleToggleCopy(group.agentIds, !!value)
+                            }
+                            aria-label={t(
+                              "central.batchDeletePlatformCopyLabel",
+                              {
+                                platform: group.label,
+                              },
+                            )}
                           />
                           <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-medium text-foreground">{group.label}</span>
+                            <span className="block text-sm font-medium text-foreground">
+                              {group.label}
+                            </span>
                             <span className="mt-1 block text-xs text-muted-foreground">
                               {t("central.batchDeletePlatformCopyCount", {
                                 count: copyCountForAgents(group.agentIds),
@@ -264,8 +283,10 @@ export function BatchDeleteCentralSkillsDialog({
               ) : null}
 
               {preview && preview.failed.length > 0 && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-                  <div className="font-medium">{t("central.batchDeletePreviewFailures")}</div>
+                <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning-foreground">
+                  <div className="font-medium">
+                    {t("central.batchDeletePreviewFailures")}
+                  </div>
                   <div className="mt-2 space-y-1">
                     {preview.failed.map((item) => (
                       <div key={item.skill_id}>
@@ -286,7 +307,11 @@ export function BatchDeleteCentralSkillsDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isDeleting}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isDeleting}
+          >
             {t("common.cancel")}
           </Button>
           <Button

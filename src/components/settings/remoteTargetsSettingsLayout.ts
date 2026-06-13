@@ -22,7 +22,7 @@ export function sshCredentialStatusClass(status: string | null) {
     case "stored":
       return "border-primary/30 bg-primary/10 text-primary";
     case "session":
-      return "border-amber-500/40 bg-amber-500/10 text-amber-600";
+      return "border-warning/40 bg-warning/10 text-warning-foreground";
     case "unreadable":
       return "border-destructive/40 bg-destructive/10 text-destructive";
     default:

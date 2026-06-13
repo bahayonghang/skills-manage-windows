@@ -22,6 +22,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, State};
+
+mod summaries;
+
+pub(crate) use summaries::build_remote_missing_skills;
+use summaries::build_repository_sync_summaries;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRemoteAddedSkill {
@@ -141,8 +146,9 @@ pub async fn check_central_repository_sync(
     let repository_ids = unique_non_empty(repository_ids);
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
-    let client = github_import::github_client()?;
+            .await
+            .map_err(|e| e.to_string())?;
+    let client = github_import::github_client().map_err(|e| e.to_string())?;
     let valid_repositories =
         load_syncable_github_repositories(&pool, &repository_ids, auth.as_deref()).await?;
     let repo_refs = valid_repositories
@@ -218,7 +224,9 @@ pub async fn check_central_repository_sync(
             }
         };
 
-        db::upsert_skill_update_state(&pool, &state_result).await?;
+        db::upsert_skill_update_state(&pool, &state_result)
+            .await
+            .map_err(|e| e.to_string())?;
         update_counters_for_state(&mut counters, &state_result);
         emit_update_progress(
             &app,
@@ -279,7 +287,8 @@ pub async fn apply_central_repository_sync(
     let active_target = state.active_target().await?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await?;
+            .await
+            .map_err(|e| e.to_string())?;
 
     let kept_skill_ids =
         keep_remote_missing_central_skills_impl(&pool, &decisions.keep_skill_ids).await?;
@@ -293,7 +302,8 @@ pub async fn apply_central_repository_sync(
         match &active_target {
             ActiveTarget::Local => {
                 central_skills::delete_central_skills_impl(&pool, &decisions.delete_requests)
-                    .await?
+                    .await
+                    .map_err(|e| e.to_string())?
             }
             ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
                 central_skills::delete_central_skills_remote_impl(
@@ -301,7 +311,8 @@ pub async fn apply_central_repository_sync(
                     &active_target,
                     &decisions.delete_requests,
                 )
-                .await?
+                .await
+                .map_err(|e| e.to_string())?
             }
         }
     };
@@ -316,7 +327,8 @@ pub async fn apply_central_repository_sync(
             &request.skill_id,
             &request.skill_name,
         )
-        .await?;
+        .await
+        .map_err(|e| e.to_string())?;
         skipped_additions.push(CentralRepositoryAdditionSkipRequest {
             repository_id: saved.repository_id,
             source_path: saved.source_path,
@@ -329,7 +341,8 @@ pub async fn apply_central_repository_sync(
     for request in decisions.unskip_additions {
         let source_path = normalize_repo_path(&request.source_path)?;
         if db::delete_skill_repository_sync_skip(&pool, &request.repository_id, &source_path)
-            .await?
+            .await
+            .map_err(|e| e.to_string())?
         {
             unskipped_additions.push(CentralRepositoryAdditionUnskipRequest {
                 repository_id: request.repository_id,
@@ -353,7 +366,8 @@ pub async fn apply_central_repository_sync(
                     &source_path,
                     &source_path,
                 )
-                .await?;
+                .await
+                .map_err(|e| e.to_string())?;
                 skipped_additions.push(CentralRepositoryAdditionSkipRequest {
                     repository_id: saved.repository_id,
                     source_path: saved.source_path,
@@ -368,7 +382,10 @@ pub async fn apply_central_repository_sync(
         if import_selections.is_empty() {
             continue;
         }
-        let Some(repository) = db::get_skill_repository_by_id(&pool, &repository_id).await? else {
+        let Some(repository) = db::get_skill_repository_by_id(&pool, &repository_id)
+            .await
+            .map_err(|e| e.to_string())?
+        else {
             failed_repositories.push(CentralRepositorySyncFailure {
                 repository_id,
                 name: None,
@@ -418,19 +435,22 @@ pub async fn apply_central_repository_sync(
                 for imported in &result.imported_skills {
                     let source_path = normalize_repo_path(&imported.source_path)?;
                     db::delete_skill_repository_sync_skip(&pool, &repository_id, &source_path)
-                        .await?;
+                        .await
+                        .map_err(|e| e.to_string())?;
                 }
                 import_results.push(result);
             }
             Err(error) => failed_repositories.push(CentralRepositorySyncFailure {
                 repository_id: repository.id,
                 name: Some(repository.name),
-                error,
+                error: error.to_string(),
             }),
         }
     }
 
-    let states = db::get_skill_update_states(&pool).await?;
+    let states = db::get_skill_update_states(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(CentralRepositorySyncApplyResult {
         kept_skill_ids,
         delete_result,
@@ -459,7 +479,10 @@ async fn load_syncable_github_repositories(
 ) -> Result<Vec<(SkillRepository, GitHubRepoRef)>, String> {
     let mut repositories = Vec::new();
     for repository_id in repository_ids {
-        let Some(repository) = db::get_skill_repository_by_id(pool, repository_id).await? else {
+        let Some(repository) = db::get_skill_repository_by_id(pool, repository_id)
+            .await
+            .map_err(|e| e.to_string())?
+        else {
             continue;
         };
         let Some(repo) = resolve_github_repo_ref_from_repository(&repository, auth_token).await?
@@ -500,7 +523,8 @@ async fn resolve_github_repo_ref_from_repository(
     };
     Ok(Some(
         github_import::resolve_repo_source(&url, auth_token)
-            .await?
+            .await
+            .map_err(|e| e.to_string())?
             .repo,
     ))
 }
@@ -543,7 +567,9 @@ pub(crate) async fn collect_remote_added_skills(
     snapshots: &HashMap<String, GitHubRepoSnapshot>,
     failed_repositories: &mut Vec<CentralRepositorySyncFailure>,
 ) -> Result<CentralRemoteAddedCollection, String> {
-    let members = db::get_central_repository_members_by_repositories(pool, repository_ids).await?;
+    let members = db::get_central_repository_members_by_repositories(pool, repository_ids)
+        .await
+        .map_err(|e| e.to_string())?;
     let mut source_paths_by_repo = HashMap::<String, HashSet<String>>::new();
     for member in members {
         let Some(source_path) = member
@@ -560,7 +586,9 @@ pub(crate) async fn collect_remote_added_skills(
             .or_default()
             .insert(source_path);
     }
-    let skips = db::get_skill_repository_sync_skips(pool, repository_ids).await?;
+    let skips = db::get_skill_repository_sync_skips(pool, repository_ids)
+        .await
+        .map_err(|e| e.to_string())?;
     let mut skipped_paths_by_repo = HashMap::<String, HashSet<String>>::new();
     for skip in skips {
         let source_path = normalize_repo_path(&skip.source_path)?;
@@ -590,7 +618,7 @@ pub(crate) async fn collect_remote_added_skills(
                 failed_repositories.push(CentralRepositorySyncFailure {
                     repository_id: repository.id.clone(),
                     name: Some(repository.name.clone()),
-                    error,
+                    error: error.to_string(),
                 });
                 continue;
             }
@@ -617,7 +645,9 @@ pub(crate) async fn collect_remote_added_skills(
                     .map(|_| candidate)
             })
             .collect::<Vec<_>>();
-        let previews = github_import::build_preview_skills(pool, &candidates).await?;
+        let previews = github_import::build_preview_skills(pool, &candidates)
+            .await
+            .map_err(|e| e.to_string())?;
         let skipped_paths = skipped_paths_by_repo
             .get(&repository.id)
             .cloned()
@@ -637,7 +667,8 @@ pub(crate) async fn collect_remote_added_skills(
                     &item.preview.skill_id,
                     &item.preview.skill_name,
                 )
-                .await?;
+                .await
+                .map_err(|e| e.to_string())?;
                 skipped_remote_added.push(item);
             } else {
                 remote_added.push(item);
@@ -648,153 +679,5 @@ pub(crate) async fn collect_remote_added_skills(
     Ok(CentralRemoteAddedCollection {
         remote_added,
         skipped_remote_added,
-    })
-}
-
-fn build_repository_sync_summaries(
-    repo_by_id: &HashMap<String, SkillRepository>,
-    states: &[SkillUpdateState],
-    remote_added: &[CentralRemoteAddedSkill],
-    skipped_remote_added: &[CentralRemoteAddedSkill],
-    remote_missing: &[CentralRemoteMissingSkill],
-) -> Vec<CentralRepositorySyncSummary> {
-    let mut checked_by_repo = HashMap::<String, usize>::new();
-    let mut update_available_by_repo = HashMap::<String, usize>::new();
-    let mut unsupported_by_repo = HashMap::<String, usize>::new();
-    let mut failed_by_repo = HashMap::<String, usize>::new();
-    for state in states {
-        let Some(repo_id) = repository_id_for_update_state(repo_by_id, state) else {
-            continue;
-        };
-        *checked_by_repo.entry(repo_id.clone()).or_default() += 1;
-        match state.status.parse::<SkillUpdateStatus>().ok() {
-            Some(SkillUpdateStatus::UpdateAvailable) => {
-                *update_available_by_repo.entry(repo_id).or_default() += 1;
-            }
-            Some(SkillUpdateStatus::Unsupported) => {
-                *unsupported_by_repo.entry(repo_id).or_default() += 1;
-            }
-            Some(SkillUpdateStatus::Error) => {
-                *failed_by_repo.entry(repo_id).or_default() += 1;
-            }
-            _ => {}
-        }
-    }
-
-    let mut remote_missing_by_repo = HashMap::<String, usize>::new();
-    for item in remote_missing {
-        if let Some(repo_id) = &item.repository_id {
-            *remote_missing_by_repo.entry(repo_id.clone()).or_default() += 1;
-        }
-    }
-    let mut remote_added_by_repo = HashMap::<String, usize>::new();
-    for item in remote_added {
-        *remote_added_by_repo
-            .entry(item.repository_id.clone())
-            .or_default() += 1;
-    }
-    let mut skipped_remote_added_by_repo = HashMap::<String, usize>::new();
-    for item in skipped_remote_added {
-        *skipped_remote_added_by_repo
-            .entry(item.repository_id.clone())
-            .or_default() += 1;
-    }
-
-    let mut summaries = repo_by_id
-        .iter()
-        .map(|(repository_id, repository)| CentralRepositorySyncSummary {
-            repository_id: repository_id.clone(),
-            name: repository.name.clone(),
-            checked: checked_by_repo.get(repository_id).copied().unwrap_or(0),
-            update_available: update_available_by_repo
-                .get(repository_id)
-                .copied()
-                .unwrap_or(0),
-            remote_missing: remote_missing_by_repo
-                .get(repository_id)
-                .copied()
-                .unwrap_or(0),
-            unsupported: unsupported_by_repo.get(repository_id).copied().unwrap_or(0),
-            failed: failed_by_repo.get(repository_id).copied().unwrap_or(0),
-            remote_added: remote_added_by_repo
-                .get(repository_id)
-                .copied()
-                .unwrap_or(0),
-            skipped_remote_added: skipped_remote_added_by_repo
-                .get(repository_id)
-                .copied()
-                .unwrap_or(0),
-        })
-        .collect::<Vec<_>>();
-    summaries.sort_by(|left, right| left.name.cmp(&right.name));
-    summaries
-}
-
-pub(crate) fn build_remote_missing_skills(
-    repo_by_id: &HashMap<String, SkillRepository>,
-    states: Vec<SkillUpdateState>,
-) -> Vec<CentralRemoteMissingSkill> {
-    states
-        .into_iter()
-        .map(|state| {
-            let repository = repository_for_update_state(repo_by_id, &state);
-            CentralRemoteMissingSkill {
-                repository_id: repository.map(|(id, _)| id.clone()),
-                repository_name: repository
-                    .map(|(_, repository)| repository_display_name(repository))
-                    .unwrap_or_else(|| "Unknown source".to_string()),
-                repo: repository.and_then(|(_, repository)| repo_ref_for_repository(repository)),
-                state,
-            }
-        })
-        .collect()
-}
-
-fn repository_display_name(repository: &SkillRepository) -> String {
-    match (&repository.owner, &repository.repo) {
-        (Some(owner), Some(repo)) if !owner.is_empty() && !repo.is_empty() => {
-            format!("{owner}/{repo}")
-        }
-        _ => repository.name.clone(),
-    }
-}
-
-fn repo_ref_for_repository(repository: &SkillRepository) -> Option<GitHubRepoRef> {
-    if repository.source_type != "github" || repository.is_unknown {
-        return None;
-    }
-    let (Some(owner), Some(repo), Some(branch)) = (
-        repository.owner.as_ref(),
-        repository.repo.as_ref(),
-        repository.branch.as_ref(),
-    ) else {
-        return None;
-    };
-    Some(GitHubRepoRef {
-        owner: owner.clone(),
-        repo: repo.clone(),
-        branch: branch.clone(),
-        normalized_url: repository
-            .url
-            .clone()
-            .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}")),
-    })
-}
-
-fn repository_id_for_update_state(
-    repo_by_id: &HashMap<String, SkillRepository>,
-    state: &SkillUpdateState,
-) -> Option<String> {
-    repository_for_update_state(repo_by_id, state).map(|(id, _)| id.clone())
-}
-
-fn repository_for_update_state<'a>(
-    repo_by_id: &'a HashMap<String, SkillRepository>,
-    state: &SkillUpdateState,
-) -> Option<(&'a String, &'a SkillRepository)> {
-    repo_by_id.iter().find(|(_, repository)| {
-        repository.source_type == state.source_type
-            && repository.url == state.source_url
-            && repository.branch == state.ref_name
     })
 }

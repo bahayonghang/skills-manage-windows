@@ -133,7 +133,7 @@ async fn e2e_symlink_full_lifecycle() {
             .await;
     let psi = match install_result {
         Ok(p) => p,
-        Err(e) if e.to_lowercase().contains("symlink") => return, // Windows 非开发者模式
+        Err(e) if e.to_string().to_lowercase().contains("symlink") => return, // Windows 非开发者模式
         Err(e) => panic!("unexpected install error: {e}"),
     };
     assert_eq!(psi.link_type, "symlink");

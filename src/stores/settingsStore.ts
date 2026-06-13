@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import {
+  CENTRAL_UPDATE_CHECK_MODE_SETTING_KEY,
+  DEFAULT_UPDATE_CHECK_MODE,
+  normalizeUpdateCheckMode,
+  type UpdateCheckMode,
+} from "@/pages/centralUpdateCheckMode";
+import {
   GitHubPatState,
   GitHubPatTestResult,
   ScanDirectory,
@@ -18,6 +24,9 @@ export type { AiConnectionTestResult, AiSaveStatus, AiSettings };
 
 interface SettingsState extends AiSettingsSlice {
   scanDirectories: ScanDirectory[];
+  centralUpdateCheckMode: UpdateCheckMode;
+  centralUpdateCheckModeLoaded: boolean;
+  isLoadingCentralUpdateCheckMode: boolean;
   isLoadingScanDirs: boolean;
   error: string | null;
   isLoadingGitHubPat: boolean;
@@ -30,6 +39,9 @@ interface SettingsState extends AiSettingsSlice {
   addScanDirectory: (path: string, label?: string) => Promise<ScanDirectory>;
   removeScanDirectory: (path: string) => Promise<void>;
   toggleScanDirectory: (path: string, active: boolean) => Promise<void>;
+
+  loadCentralUpdateCheckMode: () => Promise<void>;
+  setCentralUpdateCheckMode: (mode: UpdateCheckMode) => Promise<void>;
 
   loadGitHubPat: () => Promise<void>;
   revealGitHubPat: () => Promise<string | null>;
@@ -69,6 +81,9 @@ const BROWSER_FIXTURE_GITHUB_PAT_TEST_RESULT: GitHubPatTestResult = {
 export function createSettingsStoreInitialState(): Pick<
   SettingsState,
   | "scanDirectories"
+  | "centralUpdateCheckMode"
+  | "centralUpdateCheckModeLoaded"
+  | "isLoadingCentralUpdateCheckMode"
   | "isLoadingScanDirs"
   | "error"
   | "isLoadingGitHubPat"
@@ -80,6 +95,9 @@ export function createSettingsStoreInitialState(): Pick<
   ReturnType<typeof createAiSettingsInitialState> {
   return {
     scanDirectories: [],
+    centralUpdateCheckMode: DEFAULT_UPDATE_CHECK_MODE,
+    centralUpdateCheckModeLoaded: false,
+    isLoadingCentralUpdateCheckMode: false,
     isLoadingScanDirs: false,
     error: null,
     isLoadingGitHubPat: false,
@@ -169,6 +187,58 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         dir.path === path ? { ...dir, is_active: active } : dir
       ),
     }));
+  },
+
+  loadCentralUpdateCheckMode: async () => {
+    set({ isLoadingCentralUpdateCheckMode: true, error: null });
+    if (!isTauriRuntime()) {
+      set({
+        centralUpdateCheckMode: DEFAULT_UPDATE_CHECK_MODE,
+        centralUpdateCheckModeLoaded: true,
+        isLoadingCentralUpdateCheckMode: false,
+      });
+      return;
+    }
+    try {
+      const value = await invoke<string | null>("get_setting", {
+        key: CENTRAL_UPDATE_CHECK_MODE_SETTING_KEY,
+      });
+      set({
+        centralUpdateCheckMode: normalizeUpdateCheckMode(value),
+        centralUpdateCheckModeLoaded: true,
+        isLoadingCentralUpdateCheckMode: false,
+      });
+    } catch (err) {
+      set({
+        error: String(err),
+        centralUpdateCheckModeLoaded: true,
+        isLoadingCentralUpdateCheckMode: false,
+      });
+    }
+  },
+
+  setCentralUpdateCheckMode: async (mode) => {
+    const normalizedMode = normalizeUpdateCheckMode(mode);
+    set({
+      centralUpdateCheckMode: normalizedMode,
+      centralUpdateCheckModeLoaded: true,
+      isLoadingCentralUpdateCheckMode: true,
+      error: null,
+    });
+    if (!isTauriRuntime()) {
+      set({ isLoadingCentralUpdateCheckMode: false });
+      return;
+    }
+    try {
+      await invoke("set_setting", {
+        key: CENTRAL_UPDATE_CHECK_MODE_SETTING_KEY,
+        value: normalizedMode,
+      });
+      set({ isLoadingCentralUpdateCheckMode: false });
+    } catch (err) {
+      set({ error: String(err), isLoadingCentralUpdateCheckMode: false });
+      throw err;
+    }
   },
 
   loadGitHubPat: async () => {

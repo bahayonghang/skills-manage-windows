@@ -52,7 +52,9 @@ pub async fn add_project(
     path: String,
 ) -> Result<ProjectDto, String> {
     let pool = state.db.clone();
-    let project = projects::add_project_impl(&pool, &path).await?;
+    let project = projects::add_project_impl(&pool, &path)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let project_id = project.id.clone();
     let scan_pool = pool.clone();
@@ -94,7 +96,9 @@ pub async fn add_project(
 
 #[tauri::command]
 pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectDto>, String> {
-    projects::list_projects_impl(&state.db).await
+    projects::list_projects_impl(&state.db)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -103,7 +107,9 @@ pub async fn rename_project(
     id: String,
     name: String,
 ) -> Result<(), String> {
-    projects::rename_project_impl(&state.db, &id, &name).await
+    projects::rename_project_impl(&state.db, &id, &name)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -112,7 +118,9 @@ pub async fn set_project_pinned(
     id: String,
     pinned: bool,
 ) -> Result<(), String> {
-    projects::set_project_pinned_impl(&state.db, &id, pinned).await
+    projects::set_project_pinned_impl(&state.db, &id, pinned)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -121,7 +129,9 @@ pub async fn rescan_project(
     app: AppHandle,
     id: String,
 ) -> Result<usize, String> {
-    let count = projects::rescan_project_impl(&state.db, &id).await?;
+    let count = projects::rescan_project_impl(&state.db, &id)
+        .await
+        .map_err(|e| e.to_string())?;
     let _ = app.emit(
         PROJECT_SCANNED_EVENT,
         ProjectScannedPayload {
@@ -137,7 +147,9 @@ pub async fn get_project_skills(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<Vec<ProjectSkillDto>, String> {
-    projects::get_project_skills_impl(&state.db, &id).await
+    projects::get_project_skills_impl(&state.db, &id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -146,7 +158,9 @@ pub async fn remove_project(
     id: String,
     uninstall_skills: bool,
 ) -> Result<(), String> {
-    projects::remove_project_impl(&state.db, &id, uninstall_skills).await
+    projects::remove_project_impl(&state.db, &id, uninstall_skills)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 装一个中央 skill 到项目下某个 agent 目录。
@@ -161,6 +175,7 @@ pub async fn install_skill_to_project(
 ) -> Result<crate::db::ProjectSkillInstallation, String> {
     projects::install_skill_to_project_impl(&state.db, &project_id, &skill_id, &agent_id, &method)
         .await
+        .map_err(|e| e.to_string())
 }
 
 /// 从项目下指定 agent 目录卸载 skill。
@@ -171,7 +186,9 @@ pub async fn uninstall_skill_from_project(
     skill_id: String,
     agent_id: String,
 ) -> Result<(), String> {
-    projects::uninstall_skill_from_project_impl(&state.db, &project_id, &skill_id, &agent_id).await
+    projects::uninstall_skill_from_project_impl(&state.db, &project_id, &skill_id, &agent_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 反查中央 skill 装在哪些项目，供详情页 sidebar 展示。
@@ -180,5 +197,7 @@ pub async fn list_projects_using_skill(
     state: State<'_, AppState>,
     skill_id: String,
 ) -> Result<Vec<ProjectUsingSkillDto>, String> {
-    projects::list_projects_using_skill_impl(&state.db, &skill_id).await
+    projects::list_projects_using_skill_impl(&state.db, &skill_id)
+        .await
+        .map_err(|e| e.to_string())
 }

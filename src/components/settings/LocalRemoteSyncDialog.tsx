@@ -39,8 +39,9 @@ function formatBytes(bytes: number) {
 
 function changedSkillCount(preview: LocalRemoteSyncPreview | null) {
   return (
-    preview?.skills.filter((item) => item.status === "add" || item.status === "update")
-      .length ?? 0
+    preview?.skills.filter(
+      (item) => item.status === "add" || item.status === "update",
+    ).length ?? 0
   );
 }
 
@@ -54,13 +55,19 @@ function countByStatus(preview: LocalRemoteSyncPreview | null) {
 
 function hasSyncableChanges(preview: LocalRemoteSyncPreview | null) {
   if (!preview) return false;
-  if (preview.repo.status === "add" || preview.repo.status === "update") return true;
-  return preview.skills.some((item) => item.status === "add" || item.status === "update");
+  if (preview.repo.status === "add" || preview.repo.status === "update")
+    return true;
+  return preview.skills.some(
+    (item) => item.status === "add" || item.status === "update",
+  );
 }
 
 function hasItemErrors(preview: LocalRemoteSyncPreview | null) {
   if (!preview) return false;
-  return preview.repo.status === "error" || preview.skills.some((item) => item.status === "error");
+  return (
+    preview.repo.status === "error" ||
+    preview.skills.some((item) => item.status === "error")
+  );
 }
 
 function SyncFlowSteps() {
@@ -98,7 +105,7 @@ function SyncPreviewSummary({ preview }: { preview: LocalRemoteSyncPreview }) {
     <div
       className={`rounded-xl border p-3 text-sm ${
         errors
-          ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          ? "border-warning/30 bg-warning/10 text-warning-foreground"
           : "border-primary/25 bg-primary/10 text-primary"
       }`}
       role="status"
@@ -129,7 +136,9 @@ function SyncItemCard({ item }: { item: LocalRemoteSyncItemPreview }) {
     <article className="rounded-xl border border-border bg-background p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-foreground">{item.label}</div>
+          <div className="truncate text-sm font-medium text-foreground">
+            {item.label}
+          </div>
           <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
             {item.remotePath}
           </div>
@@ -168,7 +177,10 @@ export function LocalRemoteSyncDialog({
 }: LocalRemoteSyncDialogProps) {
   const { t } = useTranslation();
   const canApply =
-    Boolean(preview) && hasSyncableChanges(preview) && !isPreviewing && !isApplying;
+    Boolean(preview) &&
+    hasSyncableChanges(preview) &&
+    !isPreviewing &&
+    !isApplying;
   const changed = changedSkillCount(preview);
 
   return (
@@ -241,7 +253,7 @@ export function LocalRemoteSyncDialog({
             <div
               className={`rounded-xl border p-3 text-sm ${
                 result.failed.length > 0
-                  ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                  ? "border-warning/30 bg-warning/10 text-warning-foreground"
                   : "border-primary/25 bg-primary/10 text-primary"
               }`}
               role="status"
@@ -278,11 +290,21 @@ export function LocalRemoteSyncDialog({
           ) : null}
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isApplying}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isApplying}
+          >
             {t("common.cancel")}
           </Button>
-          <Button variant="outline" onClick={onPreview} disabled={isPreviewing || isApplying}>
-            {isPreviewing ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          <Button
+            variant="outline"
+            onClick={onPreview}
+            disabled={isPreviewing || isApplying}
+          >
+            {isPreviewing ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : null}
             {t("settings.localRemoteSync.preview")}
           </Button>
           <Button

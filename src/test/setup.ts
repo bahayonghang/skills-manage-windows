@@ -140,29 +140,18 @@ function createTestStorage(): Storage {
   };
 }
 
-let testLocalStorage: Storage | null = null;
-try {
-  if (
-    typeof window.localStorage?.getItem === "function"
-    && typeof window.localStorage?.setItem === "function"
-  ) {
-    testLocalStorage = window.localStorage;
-  }
-} catch {
-  testLocalStorage = null;
-}
+const testLocalStorage = createTestStorage();
 
-if (!testLocalStorage) {
-  testLocalStorage = createTestStorage();
-  Object.defineProperty(window, "localStorage", {
-    value: testLocalStorage,
-    configurable: true,
-  });
-}
+Object.defineProperty(window, "localStorage", {
+  value: testLocalStorage,
+  configurable: true,
+  writable: true,
+});
 
 Object.defineProperty(globalThis, "localStorage", {
   value: testLocalStorage,
   configurable: true,
+  writable: true,
 });
 
 // Mock Tauri APIs for testing

@@ -153,9 +153,14 @@ const defaultAiSettings: AiSettings = {
 
 function setupMocks({
   scanDirs = [] as ScanDirectory[],
+  centralUpdateCheckMode = "regular" as const,
+  centralUpdateCheckModeLoaded = true,
+  isLoadingCentralUpdateCheckMode = false,
   isLoadingScanDirs = false,
   agents = [] as AgentWithStatus[],
   loadScanDirectories = vi.fn(),
+  loadCentralUpdateCheckMode = vi.fn(),
+  setCentralUpdateCheckMode = vi.fn(),
   addScanDirectory = vi.fn(),
   removeScanDirectory = vi.fn(),
   toggleScanDirectory = vi.fn(),
@@ -236,9 +241,14 @@ function setupMocks({
   vi.mocked(useSettingsStore).mockImplementation((selector) =>
     selector({
       scanDirectories: scanDirs,
+      centralUpdateCheckMode,
+      centralUpdateCheckModeLoaded,
+      isLoadingCentralUpdateCheckMode,
       isLoadingScanDirs,
       error: null,
       loadScanDirectories,
+      loadCentralUpdateCheckMode,
+      setCentralUpdateCheckMode,
       addScanDirectory,
       removeScanDirectory,
       toggleScanDirectory,
@@ -397,7 +407,9 @@ describe("SettingsView", () => {
   it("renders the settings header", () => {
     setupMocks();
     renderSettingsView();
-    expect(screen.getByRole("heading", { name: "设置" })).toBeTruthy();
+    const heading = screen.getByRole("heading", { name: "设置" });
+    expect(heading).toBeTruthy();
+    expect(heading).toHaveClass("font-heading");
   });
 
   it("renders the github token section", () => {
@@ -504,6 +516,82 @@ describe("SettingsView", () => {
     expect(screen.getByLabelText("模型")).toBeTruthy();
     expect(screen.getByLabelText("并发数")).toBeTruthy();
     expect(screen.getByLabelText("请求间隔 ms")).toBeTruthy();
+  });
+
+  it("shows the selected provider API key acquisition link", () => {
+    setupMocks({
+      aiSettings: {
+        ...defaultAiSettings,
+        provider: "openrouter",
+        model: "anthropic/claude-sonnet-4.6",
+      },
+    });
+    renderSettingsView("/settings/integrations");
+
+    const link = screen.getByRole("link", {
+      name: "打开 OpenRouter API Key 获取页面",
+    });
+    expect(link).toHaveAttribute("href", "https://openrouter.ai/keys");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  it("uses the selected region for provider API key acquisition links", () => {
+    setupMocks({
+      aiSettings: {
+        ...defaultAiSettings,
+        provider: "glm",
+        region: "cn",
+        model: "glm-5",
+      },
+    });
+    const view = renderSettingsView("/settings/integrations");
+
+    expect(
+      screen.getByRole("link", {
+        name: "打开 智谱 GLM API Key 获取页面",
+      })
+    ).toHaveAttribute("href", "https://bigmodel.cn/usercenter/proj-mgmt/apikeys");
+
+    setupMocks({
+      aiSettings: {
+        ...defaultAiSettings,
+        provider: "glm",
+        region: "intl",
+        model: "glm-5",
+      },
+    });
+    view.rerender(
+      <MemoryRouter initialEntries={["/settings/integrations"]}>
+        <Routes>
+          <Route path="/settings/*" element={<SettingsView />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByRole("link", {
+        name: "打开 智谱 GLM API Key 获取页面",
+      })
+    ).toHaveAttribute("href", "https://z.ai/manage-apikey/apikey-list");
+  });
+
+  it("hides the API key acquisition link for custom providers", () => {
+    setupMocks({
+      aiSettings: {
+        provider: "custom",
+        region: "intl",
+        apiKey: "",
+        model: "custom-model",
+        customUrl: "https://proxy.example.com/v1",
+        protocol: "openai",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+    });
+    renderSettingsView("/settings/integrations");
+
+    expect(screen.queryByRole("link", { name: /API Key 获取页面/ })).toBeNull();
   });
 
   it("hides a saved AI API key until the reveal eye is clicked", async () => {
@@ -771,6 +859,42 @@ describe("SettingsView", () => {
     ).toBeTruthy();
   });
 
+  it("stacks the integrations sections vertically", () => {
+    setupMocks();
+    const { container } = renderSettingsView("/settings/integrations");
+
+    const integrationsLayout = container.querySelector(
+      'div.space-y-4 > section#github-pat-section + section#ai-section'
+    );
+
+    expect(integrationsLayout).toBeTruthy();
+    expect(
+      container.querySelector(
+        'div.grid.xl\\:grid-cols-\\[minmax\\(0\\,0\\.85fr\\)_minmax\\(0\\,1\\.15fr\\)\\]'
+      )
+    ).toBeNull();
+  });
+
+  it("wires settings titles through heading font and descriptive text through body defaults", () => {
+    setupMocks();
+    const { container } = renderSettingsView("/settings/connections");
+
+    expect(screen.getByRole("heading", { name: "设置" })).toHaveClass(
+      "font-heading"
+    );
+    expect(screen.getByRole("heading", { name: "连接与同步" })).toHaveClass(
+      "font-heading"
+    );
+    expect(
+      container.querySelector('[data-slot="card-title"]')
+    ).toHaveClass("font-heading");
+    expect(
+      screen
+        .getAllByText("管理本机、SSH 与 WSL 目标，并启动本机到远程同步。")
+        .every((node) => !node.className.includes("font-heading"))
+    ).toBe(true);
+  });
+
   it("keeps the settings side navigation aria-current state when navigating pages", async () => {
     setupMocks();
     const { container } = renderSettingsView();
@@ -794,6 +918,14 @@ describe("SettingsView", () => {
 
     expect(await screen.findByRole("heading", { name: "连接与同步" })).toBeTruthy();
     expect(screen.getByText("新增 SSH 目标")).toBeTruthy();
+  });
+
+  it("maps Central update mode hashes to Skill Sources", async () => {
+    setupMocks();
+    renderSettingsView("/settings#central-update-check-mode");
+
+    expect(await screen.findByRole("heading", { name: "技能来源" })).toBeTruthy();
+    expect(screen.getByText("更新检查模式")).toBeTruthy();
   });
 
   it("persists collapsed settings sections in localStorage", () => {
@@ -860,11 +992,37 @@ describe("SettingsView", () => {
     expect(loadGitHubPat).toHaveBeenCalled();
   });
 
-  it("loads WSL distributions on mount", () => {
+  it("does not load targets or WSL distributions outside the connections page", () => {
+    const loadTargets = vi.fn().mockResolvedValue(undefined);
+    const loadWslDistributions = vi.fn().mockResolvedValue(undefined);
+    setupMocks({ loadTargets, loadWslDistributions });
+    renderSettingsView("/settings");
+    expect(loadTargets).not.toHaveBeenCalled();
+    expect(loadWslDistributions).not.toHaveBeenCalled();
+  });
+
+  it("loads targets on connections page without auto-discovering WSL distributions", () => {
+    const loadTargets = vi.fn().mockResolvedValue(undefined);
+    const loadWslDistributions = vi.fn().mockResolvedValue(undefined);
+    setupMocks({ loadTargets, loadWslDistributions });
+    renderSettingsView("/settings/connections");
+    expect(loadTargets).toHaveBeenCalledTimes(1);
+    expect(loadWslDistributions).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("不会自动探测 WSL。点击“刷新 WSL 列表”后再选择发行版。")
+    ).toBeTruthy();
+  });
+
+  it("discovers WSL distributions only after manual refresh", () => {
     const loadWslDistributions = vi.fn().mockResolvedValue(undefined);
     setupMocks({ loadWslDistributions });
     renderSettingsView("/settings/connections");
-    expect(loadWslDistributions).toHaveBeenCalled();
+
+    expect(loadWslDistributions).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新 WSL 列表" }));
+
+    expect(loadWslDistributions).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the saved github pat hidden until reveal", async () => {
@@ -1191,6 +1349,26 @@ describe("SettingsView", () => {
     setupMocks({ isLoadingScanDirs: true });
     renderSettingsView("/settings/skill-sources");
     expect(screen.getByText("加载中...")).toBeTruthy();
+  });
+
+  it("renders and persists the Central update check mode preference", async () => {
+    const setCentralUpdateCheckMode = vi.fn().mockResolvedValue(undefined);
+    setupMocks({
+      centralUpdateCheckMode: "regular",
+      setCentralUpdateCheckMode,
+    });
+    renderSettingsView("/settings/skill-sources");
+
+    expect(screen.getByText("更新检查模式")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /常规检查/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /增量和删减模式/ }));
+
+    await waitFor(() => {
+      expect(setCentralUpdateCheckMode).toHaveBeenCalledWith("sync");
+    });
   });
 
   it("shows empty state when no scan directories", () => {

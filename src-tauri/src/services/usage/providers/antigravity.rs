@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 
-use crate::services::usage::{Scope, SkillCall, UsageProvider};
+use crate::services::usage::{Scope, SkillCall, UsageError, UsageProvider};
 
 pub struct AntigravityProvider;
 
@@ -20,7 +20,7 @@ impl UsageProvider for AntigravityProvider {
     async fn available(&self, _scope: &Scope) -> bool {
         false
     }
-    async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, String> {
+    async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
         Ok(vec![])
     }
 }

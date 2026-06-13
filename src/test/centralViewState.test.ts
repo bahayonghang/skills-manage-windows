@@ -17,6 +17,7 @@ describe("centralViewState", () => {
       repos: [],
       tags: [],
       view: "grid",
+      density: "comfortable",
       group: "none",
       sortField: "name",
       sortDir: "asc",
@@ -41,7 +42,9 @@ describe("centralViewState", () => {
   });
 
   it("parses installed platform count sort", () => {
-    const s = parseCentralViewState(new URLSearchParams("sort=installedPlatformCount:desc"));
+    const s = parseCentralViewState(
+      new URLSearchParams("sort=installedPlatformCount:desc"),
+    );
     expect(s.sortField).toBe("installedPlatformCount");
     expect(s.sortDir).toBe("desc");
   });

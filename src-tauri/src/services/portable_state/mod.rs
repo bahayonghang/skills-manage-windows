@@ -4,6 +4,7 @@
 //! manifest types, JSON validation, preview classification, GitHub-backed import
 //! orchestration, and progress helpers.
 
+mod error;
 mod export;
 mod import;
 mod preview;
@@ -18,6 +19,7 @@ use std::collections::HashSet;
 
 use crate::db::DbPool;
 
+pub use error::PortableStateError;
 pub(crate) use export::export_skillport_state_impl;
 pub(crate) use import::import_skillport_state_impl;
 #[cfg(test)]
@@ -25,26 +27,27 @@ use import::{build_import_groups, ensure_github_sources, restore_skill_tags};
 pub(crate) use preview::{
     build_remote_catalog, parse_manifest, preview_skillport_state_import_impl,
 };
-pub(crate) use progress::{emit_portability_progress, is_cancelled_error};
+pub(crate) use progress::emit_portability_progress;
 pub(crate) use types::PortabilityProgressUpdate;
 use types::RepoKey;
 pub use types::{
     ExportedFrom, PortableCentralSkill, PortableCentralSkillSource, PortableGithubSource,
     PortableSkillTag, PortableUnrestorableSkill, SkillPreviewStatus, SkillportStateExportOptions,
     SkillportStateImportFailure, SkillportStateImportPreview, SkillportStateImportPreviewSummary,
-    SkillportStateImportResolution, SkillportStateImportResult, SkillportStateImportedSkill,
-    SkillportStateManifest, SkillportStatePortabilityPhase,
+    SkillportStateImportPreviewWarning, SkillportStateImportResolution, SkillportStateImportResult,
+    SkillportStateImportedSkill, SkillportStateManifest, SkillportStatePortabilityPhase,
     SkillportStatePortabilityProgressPayload, SkillportStatePortabilityStatus,
     SkillportStateSkillPreview, SkillportStateSourcePreview, SourcePreviewStatus,
 };
 #[cfg(test)]
 use types::{RemoteCatalogEntry, RemoteCatalogInvalidCandidate, EXPORT_KIND, EXPORT_VERSION};
 
-async fn existing_registry_identities(pool: &DbPool) -> Result<HashSet<String>, String> {
+async fn existing_registry_identities(
+    pool: &DbPool,
+) -> Result<HashSet<String>, PortableStateError> {
     let rows = sqlx::query("SELECT url FROM skill_registries WHERE source_type = 'github'")
         .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     Ok(rows
         .iter()
         .map(|row| normalize_registry_identity(row.get::<String, _>("url").as_str()))

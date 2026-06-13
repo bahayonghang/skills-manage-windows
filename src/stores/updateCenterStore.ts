@@ -2,14 +2,21 @@ import { create } from "zustand";
 
 import { invoke, isTauriRuntime } from "@/lib/tauri";
 import type {
+  DeletedPlatformCopyGroup,
+  ForceRepositoryMirrorRequest,
+  ForceRepositoryMirrorResult,
+  ForceSkillUpdateRequest,
+  ForceSkillUpdateResult,
   PlatformDuplicateGroup,
   SkillRefreshScope,
+  SkillRefreshMode,
   SkillUpdateApplyResult,
   SkillUpdateDecisions,
   SkillRefreshContext,
   SkillUpdateInventory,
 } from "@/types/skillUpdateInventory";
 import { normalizeRefreshContext } from "@/lib/updateCenterRefreshScope";
+import { normalizeUpdateCheckMode } from "@/pages/centralUpdateCheckMode";
 
 export interface SkillInventoryFlags {
   /** inventory.updatable 中含此 skill_id（远端有新版本可拉取）。 */
@@ -36,26 +43,46 @@ export type UpdateCenterTab =
   | "updatable"
   | "added"
   | "missing"
+  | "failed"
   | "duplicates"
+  | "deletedPlatformCopies"
   | "orphans";
 
 interface UpdateCenterState {
   inventory: SkillUpdateInventory | null;
   isRefreshing: boolean;
   isApplying: boolean;
+  isForcing: boolean;
   lastRefreshedAt: string | null;
   isDialogOpen: boolean;
   activeTab: UpdateCenterTab;
   refreshContext: SkillRefreshContext;
+  refreshMode: SkillRefreshMode;
   error: string | null;
-  refresh(scope: SkillRefreshScope): Promise<void>;
-  apply(decisions: SkillUpdateDecisions): Promise<SkillUpdateApplyResult>;
+  refresh(scope: SkillRefreshScope): Promise<SkillUpdateInventory | null>;
+  apply(
+    decisions: SkillUpdateDecisions,
+    scope?: SkillRefreshScope,
+  ): Promise<SkillUpdateApplyResult>;
   clear(scope?: SkillRefreshScope): Promise<void>;
-  loadInventory(): Promise<void>;
+  loadInventory(scope?: SkillRefreshScope): Promise<void>;
   scanDuplicates(agentIds?: string[]): Promise<void>;
-  openDialog(tab?: UpdateCenterTab, context?: Partial<SkillRefreshContext>): void;
+  scanDeletedPlatformCopies(agentIds?: string[]): Promise<void>;
+  forceUpdateSkills(
+    request: ForceSkillUpdateRequest,
+    scope?: SkillRefreshScope,
+  ): Promise<ForceSkillUpdateResult>;
+  forceMirrorRepositories(
+    request: ForceRepositoryMirrorRequest,
+    scope?: SkillRefreshScope,
+  ): Promise<ForceRepositoryMirrorResult>;
+  openDialog(
+    tab?: UpdateCenterTab,
+    context?: Partial<SkillRefreshContext> & { mode?: SkillRefreshMode },
+  ): void;
   closeDialog(): void;
   setActiveTab(tab: UpdateCenterTab): void;
+  setRefreshMode(mode: SkillRefreshMode): void;
 }
 
 function emptyInventory(): SkillUpdateInventory {
@@ -64,6 +91,7 @@ function emptyInventory(): SkillUpdateInventory {
     remoteAdded: [],
     remoteMissing: [],
     platformDuplicates: [],
+    deletedPlatformCopies: [],
     orphans: [],
     failedRepositories: [],
     generatedAt: new Date().toISOString(),
@@ -79,6 +107,7 @@ function emptyApplyResult(): SkillUpdateApplyResult {
     skippedAdditions: [],
     unskippedAdditions: [],
     removedPlatformDuplicatePaths: [],
+    removedDeletedPlatformCopyPaths: [],
     failures: [],
   };
 }
@@ -87,39 +116,43 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   inventory: null,
   isRefreshing: false,
   isApplying: false,
+  isForcing: false,
   lastRefreshedAt: null,
   isDialogOpen: false,
   activeTab: "updatable",
-  refreshContext: { repositoryIds: [], skillIds: [] },
+  refreshContext: { repositoryIds: [], skillIds: [], agentIds: [] },
+  refreshMode: "sync",
   error: null,
 
   async refresh(scope) {
     set({ isRefreshing: true, error: null });
     try {
       if (!isTauriRuntime()) {
+        const inventory = emptyInventory();
         set({
-          inventory: emptyInventory(),
+          inventory,
           lastRefreshedAt: new Date().toISOString(),
           isRefreshing: false,
         });
-        return;
+        return inventory;
       }
       const inventory = await invoke<SkillUpdateInventory>(
         "refresh_skill_update_inventory",
-        { scope },
+        { scope: { ...scope, cachePolicy: scope.cachePolicy ?? "bypass" } },
       );
       set({
         inventory,
         lastRefreshedAt: new Date().toISOString(),
         isRefreshing: false,
       });
+      return inventory;
     } catch (err) {
       set({ error: String(err), isRefreshing: false });
       throw err;
     }
   },
 
-  async apply(decisions) {
+  async apply(decisions, scope) {
     set({ isApplying: true, error: null });
     try {
       const result = isTauriRuntime()
@@ -127,7 +160,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
             decisions,
           })
         : emptyApplyResult();
-      await get().loadInventory();
+      await get().loadInventory(scope);
       set({ isApplying: false });
       return result;
     } catch (err) {
@@ -143,13 +176,14 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     set({ inventory: emptyInventory() });
   },
 
-  async loadInventory() {
+  async loadInventory(scope) {
     if (!isTauriRuntime()) {
       set({ inventory: emptyInventory() });
       return;
     }
     const inventory = await invoke<SkillUpdateInventory>(
       "get_skill_update_inventory",
+      { scope: scope ?? null },
     );
     set({ inventory });
   },
@@ -167,11 +201,67 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     }));
   },
 
+  async scanDeletedPlatformCopies(agentIds) {
+    if (!isTauriRuntime()) return;
+    const deletedPlatformCopies = await invoke<DeletedPlatformCopyGroup[]>(
+      "scan_deleted_platform_copies",
+      { agentIds: agentIds ?? null },
+    );
+    set((state) => ({
+      inventory: state.inventory
+        ? { ...state.inventory, deletedPlatformCopies }
+        : { ...emptyInventory(), deletedPlatformCopies },
+    }));
+  },
+
+  async forceUpdateSkills(request, scope) {
+    set({ isForcing: true, error: null });
+    try {
+      const result = isTauriRuntime()
+        ? await invoke<ForceSkillUpdateResult>("force_update_central_skills", {
+            request,
+          })
+        : { overwritten: [], skipped: [], failed: [] };
+      await get().loadInventory(scope);
+      set({ isForcing: false });
+      return result;
+    } catch (err) {
+      set({ error: String(err), isForcing: false });
+      throw err;
+    }
+  },
+
+  async forceMirrorRepositories(request, scope) {
+    set({ isForcing: true, error: null });
+    try {
+      const result = isTauriRuntime()
+        ? await invoke<ForceRepositoryMirrorResult>(
+            "force_mirror_central_repositories",
+            { request },
+          )
+        : {
+            overwritten: [],
+            imported: [],
+            deleted: { succeeded: [], failed: [] },
+            skipped: [],
+            failedRepositories: [],
+            failedItems: [],
+          };
+      await get().loadInventory(scope);
+      set({ isForcing: false });
+      return result;
+    } catch (err) {
+      set({ error: String(err), isForcing: false });
+      throw err;
+    }
+  },
+
   openDialog(tab, context) {
     set({
       isDialogOpen: true,
       activeTab: tab ?? "updatable",
       refreshContext: normalizeRefreshContext(context),
+      refreshMode: normalizeUpdateCheckMode(context?.mode ?? get().refreshMode),
     });
   },
   closeDialog() {
@@ -179,6 +269,9 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   },
   setActiveTab(tab) {
     set({ activeTab: tab });
+  },
+  setRefreshMode(mode) {
+    set({ refreshMode: normalizeUpdateCheckMode(mode) });
   },
 }));
 
@@ -204,6 +297,8 @@ export function selectSkillInventoryFlagsFromInventory(
     isMissing: inventory.remoteMissing.some((entry) => entry.state.skill_id === skillId),
     isAdded: inventory.remoteAdded.some((entry) => entry.skillId === skillId),
     hasDuplicate: inventory.platformDuplicates.some((entry) => entry.skillId === skillId),
-    isOrphan: inventory.orphans.some((entry) => entry.skillId === skillId),
+    isOrphan:
+      inventory.orphans.some((entry) => entry.skillId === skillId)
+      || (inventory.deletedPlatformCopies ?? []).some((entry) => entry.skillId === skillId),
   };
 }

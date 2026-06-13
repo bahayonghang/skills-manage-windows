@@ -9,27 +9,30 @@ use crate::db::repos::repositories_repo::normalize_repository_component;
 use crate::db::types::{DbPool, SkillAiTagReview, SkillTag};
 use crate::db::util::now_rfc3339;
 
-pub async fn get_skill_tags(pool: &DbPool) -> Result<Vec<SkillTag>, String> {
+pub async fn get_skill_tags(pool: &DbPool) -> Result<Vec<SkillTag>, sqlx::Error> {
     sqlx::query_as::<_, SkillTag>("SELECT * FROM skill_tags ORDER BY is_builtin DESC, name")
         .fetch_all(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
-pub async fn get_skill_tag_by_id(pool: &DbPool, tag_id: &str) -> Result<Option<SkillTag>, String> {
+pub async fn get_skill_tag_by_id(
+    pool: &DbPool,
+    tag_id: &str,
+) -> Result<Option<SkillTag>, sqlx::Error> {
     sqlx::query_as::<_, SkillTag>("SELECT * FROM skill_tags WHERE id = ?")
         .bind(tag_id)
         .fetch_optional(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
-pub async fn get_skill_tag_by_name(pool: &DbPool, name: &str) -> Result<Option<SkillTag>, String> {
+pub async fn get_skill_tag_by_name(
+    pool: &DbPool,
+    name: &str,
+) -> Result<Option<SkillTag>, sqlx::Error> {
     sqlx::query_as::<_, SkillTag>("SELECT * FROM skill_tags WHERE name = ?")
         .bind(name)
         .fetch_optional(pool)
         .await
-        .map_err(|e| e.to_string())
 }
 
 pub async fn create_skill_tag(
@@ -37,10 +40,12 @@ pub async fn create_skill_tag(
     name: &str,
     description: Option<&str>,
     color: Option<&str>,
-) -> Result<SkillTag, String> {
+) -> Result<SkillTag, sqlx::Error> {
     let trimmed_name = name.trim();
     if trimmed_name.is_empty() {
-        return Err("Tag name is required".to_string());
+        return Err(sqlx::Error::InvalidArgument(
+            "Tag name is required".to_string(),
+        ));
     }
 
     if let Some(existing) = get_skill_tag_by_name(pool, trimmed_name).await? {
@@ -66,12 +71,11 @@ pub async fn create_skill_tag(
     .bind(&now)
     .bind(&now)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     get_skill_tag_by_id(pool, &tag_id)
         .await?
-        .ok_or_else(|| "Failed to retrieve created tag".to_string())
+        .ok_or_else(|| sqlx::Error::InvalidArgument("Failed to retrieve created tag".to_string()))
 }
 
 pub async fn assign_skill_tags(
@@ -81,11 +85,14 @@ pub async fn assign_skill_tags(
     source: &str,
     confidence: Option<f64>,
     reason: Option<&str>,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     let now = now_rfc3339();
     for tag_id in tag_ids {
         if get_skill_tag_by_id(pool, tag_id).await?.is_none() {
-            return Err(format!("Tag '{}' not found", tag_id));
+            return Err(sqlx::Error::InvalidArgument(format!(
+                "Tag '{}' not found",
+                tag_id
+            )));
         }
     }
 
@@ -107,11 +114,33 @@ pub async fn assign_skill_tags(
             .bind(source)
             .bind(&now)
             .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
         }
     }
 
+    Ok(())
+}
+
+/// 删除指定 skill 的若干 tag 关联（只删传入的 tag_ids，其余保留）。
+/// 与 `assign_skill_tags` 对称；空 tag_ids 为 no-op。
+pub async fn unassign_skill_tags(
+    pool: &DbPool,
+    skill_id: &str,
+    tag_ids: &[String],
+) -> Result<(), sqlx::Error> {
+    if tag_ids.is_empty() {
+        return Ok(());
+    }
+    let placeholders = tag_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let sql = format!(
+        "DELETE FROM skill_tag_links WHERE skill_id = ? AND tag_id IN ({})",
+        placeholders
+    );
+    let mut q = sqlx::query(&sql).bind(skill_id);
+    for tag_id in tag_ids {
+        q = q.bind(tag_id);
+    }
+    q.execute(pool).await?;
     Ok(())
 }
 
@@ -119,12 +148,11 @@ pub async fn replace_skill_ai_tags(
     pool: &DbPool,
     skill_id: &str,
     suggestions: &[(String, f64, String)],
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM skill_tag_links WHERE skill_id = ? AND source = 'ai'")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     for (tag_id, confidence, reason) in suggestions {
         assign_skill_tags(
@@ -145,17 +173,19 @@ pub async fn replace_pending_ai_tag_reviews(
     pool: &DbPool,
     skill_id: &str,
     suggestions: &[(String, f64, String)],
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     let now = now_rfc3339();
     sqlx::query("DELETE FROM skill_ai_tag_reviews WHERE skill_id = ? AND status = 'pending'")
         .bind(skill_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     for (tag_id, confidence, reason) in suggestions {
         if get_skill_tag_by_id(pool, tag_id).await?.is_none() {
-            return Err(format!("Tag '{}' not found", tag_id));
+            return Err(sqlx::Error::InvalidArgument(format!(
+                "Tag '{}' not found",
+                tag_id
+            )));
         }
 
         sqlx::query(
@@ -175,14 +205,15 @@ pub async fn replace_pending_ai_tag_reviews(
         .bind(&now)
         .bind(&now)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     Ok(())
 }
 
-pub async fn get_pending_ai_tag_reviews(pool: &DbPool) -> Result<Vec<SkillAiTagReview>, String> {
+pub async fn get_pending_ai_tag_reviews(
+    pool: &DbPool,
+) -> Result<Vec<SkillAiTagReview>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT
            r.skill_id,
@@ -206,8 +237,7 @@ pub async fn get_pending_ai_tag_reviews(pool: &DbPool) -> Result<Vec<SkillAiTagR
          ORDER BY r.updated_at DESC, skill_name, t.name",
     )
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     rows.into_iter()
         .map(|row| {
@@ -239,9 +269,11 @@ pub async fn accept_ai_tag_reviews(
     pool: &DbPool,
     skill_id: &str,
     tag_ids: &[String],
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     if tag_ids.is_empty() {
-        return Err("No review tags selected".to_string());
+        return Err(sqlx::Error::InvalidArgument(
+            "No review tags selected".to_string(),
+        ));
     }
 
     for tag_id in tag_ids {
@@ -253,8 +285,7 @@ pub async fn accept_ai_tag_reviews(
         .bind(skill_id)
         .bind(tag_id)
         .fetch_optional(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
         let confidence = review
             .as_ref()
@@ -287,8 +318,7 @@ pub async fn accept_ai_tag_reviews(
         .bind(skill_id)
         .bind(tag_id)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     sqlx::query(
@@ -299,13 +329,12 @@ pub async fn accept_ai_tag_reviews(
     .bind(&now)
     .bind(skill_id)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok(())
 }
 
-pub async fn skip_ai_tag_reviews(pool: &DbPool, skill_id: &str) -> Result<(), String> {
+pub async fn skip_ai_tag_reviews(pool: &DbPool, skill_id: &str) -> Result<(), sqlx::Error> {
     let now = now_rfc3339();
     sqlx::query(
         "UPDATE skill_ai_tag_reviews
@@ -317,13 +346,12 @@ pub async fn skip_ai_tag_reviews(pool: &DbPool, skill_id: &str) -> Result<(), St
     .execute(pool)
     .await
     .map(|_| ())
-    .map_err(|e| e.to_string())
 }
 
 pub async fn get_skill_tags_for_skill(
     pool: &DbPool,
     skill_id: &str,
-) -> Result<Vec<SkillTag>, String> {
+) -> Result<Vec<SkillTag>, sqlx::Error> {
     sqlx::query_as::<_, SkillTag>(
         "SELECT t.* FROM skill_tags t
          JOIN skill_tag_links l ON t.id = l.tag_id
@@ -333,13 +361,12 @@ pub async fn get_skill_tags_for_skill(
     .bind(skill_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())
 }
 
 pub async fn get_skill_tags_for_skills(
     pool: &DbPool,
     skill_ids: &[String],
-) -> Result<HashMap<String, Vec<SkillTag>>, String> {
+) -> Result<HashMap<String, Vec<SkillTag>>, sqlx::Error> {
     if skill_ids.is_empty() {
         return Ok(HashMap::new());
     }
@@ -367,19 +394,19 @@ pub async fn get_skill_tags_for_skills(
         query = query.bind(skill_id);
     }
 
-    let rows = query.fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let rows = query.fetch_all(pool).await?;
     let mut grouped: HashMap<String, Vec<SkillTag>> = HashMap::new();
     for row in rows {
-        let skill_id: String = row.try_get("skill_id").map_err(|e| e.to_string())?;
+        let skill_id: String = row.try_get("skill_id")?;
         grouped.entry(skill_id).or_default().push(SkillTag {
-            id: row.try_get("tag_id").map_err(|e| e.to_string())?,
-            name: row.try_get("tag_name").map_err(|e| e.to_string())?,
-            description: row.try_get("tag_description").map_err(|e| e.to_string())?,
-            color: row.try_get("tag_color").map_err(|e| e.to_string())?,
-            is_builtin: row.try_get("tag_is_builtin").map_err(|e| e.to_string())?,
-            created_at: row.try_get("tag_created_at").map_err(|e| e.to_string())?,
-            updated_at: row.try_get("tag_updated_at").map_err(|e| e.to_string())?,
-            group_id: row.try_get("tag_group_id").map_err(|e| e.to_string())?,
+            id: row.try_get("tag_id")?,
+            name: row.try_get("tag_name")?,
+            description: row.try_get("tag_description")?,
+            color: row.try_get("tag_color")?,
+            is_builtin: row.try_get("tag_is_builtin")?,
+            created_at: row.try_get("tag_created_at")?,
+            updated_at: row.try_get("tag_updated_at")?,
+            group_id: row.try_get("tag_group_id")?,
         });
     }
 

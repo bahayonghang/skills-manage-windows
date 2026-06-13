@@ -27,4 +27,16 @@ i18n
     },
   });
 
+// Keep <html lang> in sync with the active language so screen readers announce
+// content in the right language (index.html ships a static default before JS runs).
+function syncDocumentLang(lng?: string) {
+  if (typeof document !== "undefined" && lng) {
+    document.documentElement.lang = lng;
+  }
+}
+i18n.on("languageChanged", syncDocumentLang);
+i18n.on("initialized", () =>
+  syncDocumentLang(i18n.resolvedLanguage ?? i18n.language),
+);
+
 export default i18n;

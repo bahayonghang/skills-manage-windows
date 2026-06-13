@@ -53,7 +53,7 @@ interface ProjectsShellProps {
 
 function getProjectPlatformDisplayName(
   target: PlatformTarget | null,
-  t: ReturnType<typeof useTranslation>["t"]
+  t: ReturnType<typeof useTranslation>["t"],
 ): string {
   if (!target) {
     return t("projects.otherPlatforms");
@@ -66,7 +66,7 @@ function getProjectPlatformDisplayName(
 
 function getProjectPlatformTitle(
   target: PlatformTarget | null,
-  fallback: string
+  fallback: string,
 ): string {
   if (!target) return fallback;
   return isUniversalPlatformTarget(target)
@@ -86,7 +86,7 @@ interface ProjectCliSidebarItem {
 
 function getSkillCountForTarget(
   skills: readonly ProjectSkill[],
-  target: PlatformTarget
+  target: PlatformTarget,
 ): number {
   const memberIds = new Set(getPlatformTargetMemberIds(target));
   return skills.filter((skill) => memberIds.has(skill.agentId)).length;
@@ -94,7 +94,7 @@ function getSkillCountForTarget(
 
 function getSkillCountForRawAgentIds(
   skills: readonly ProjectSkill[],
-  rawAgentIds: readonly string[]
+  rawAgentIds: readonly string[],
 ): number {
   const memberIds = new Set(rawAgentIds);
   return skills.filter((skill) => memberIds.has(skill.agentId)).length;
@@ -140,7 +140,7 @@ function ProjectList({
     if (!q) return sorted;
     return sorted.filter(
       (p) =>
-        p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q)
+        p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q),
     );
   }, [projects, projectSearch]);
 
@@ -190,7 +190,7 @@ function ProjectList({
                   "group flex items-center gap-1 w-full text-left transition-colors border rounded-md mb-0.5",
                   isActive
                     ? "bg-primary/10 border-primary/60 text-foreground font-medium shadow-sm"
-                    : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/40"
+                    : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/40",
                 )}
               >
                 <button
@@ -202,12 +202,14 @@ function ProjectList({
                   <Folder
                     className={cn(
                       "size-3.5 shrink-0",
-                      isActive ? "text-primary" : "text-muted-foreground"
+                      isActive ? "text-primary" : "text-muted-foreground",
                     )}
                   />
-                  <span className="text-sm truncate flex-1">{project.name}</span>
+                  <span className="text-sm truncate flex-1">
+                    {project.name}
+                  </span>
                   {project.pinned && (
-                    <Pin className="size-3 shrink-0 text-amber-500" />
+                    <Pin className="size-3 shrink-0 text-warning" />
                   )}
                   {isScanning ? (
                     <Loader2 className="size-3 shrink-0 animate-spin" />
@@ -306,7 +308,8 @@ function ProjectCliSidebar({
                 isActive
                   ? "border-primary/60 bg-primary/10 text-foreground shadow-sm"
                   : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50",
-                item.disabled && "cursor-not-allowed opacity-50 hover:border-transparent hover:bg-transparent"
+                item.disabled &&
+                  "cursor-not-allowed opacity-50 hover:border-transparent hover:bg-transparent",
               )}
             >
               {item.target ? (
@@ -366,16 +369,16 @@ function SkillPanel({
       : t("projects.otherPlatforms");
   const visibleGroups = useMemo(
     () => (selectedGroup ? [selectedGroup] : []),
-    [selectedGroup]
+    [selectedGroup],
   );
   const centralSkillIds = useMemo(
     () =>
       visibleGroups.flatMap((group) =>
         group.skills
           .filter((skill) => skill.sourceOrigin === "central")
-          .map((skill) => skill.skillId)
+          .map((skill) => skill.skillId),
       ),
-    [visibleGroups]
+    [visibleGroups],
   );
   const aiSummaries = useSkillExplanationSummaries(centralSkillIds, "zh");
 
@@ -444,11 +447,7 @@ function SkillPanel({
             <p className="text-xs text-muted-foreground text-center max-w-sm">
               {t("projects.noSkillsHint")}
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onOpenInstallDialog}
-            >
+            <Button variant="outline" size="sm" onClick={onOpenInstallDialog}>
               <PackagePlus className="size-3.5 mr-1" />
               {t("projects.installFromCentral")}
             </Button>
@@ -470,7 +469,10 @@ function SkillPanel({
         ) : (
           <div className="space-y-4">
             {visibleGroups.map((group) => {
-              const platformName = getProjectPlatformDisplayName(group.target, t);
+              const platformName = getProjectPlatformDisplayName(
+                group.target,
+                t,
+              );
               const title = getProjectPlatformTitle(group.target, platformName);
               const headingId = `project-platform-${group.id}`;
               return (
@@ -511,7 +513,9 @@ function SkillPanel({
                       const linkSource =
                         skill.linkType === "symlink" ? "symlink" : "copy";
                       const sourceOrigin =
-                        skill.sourceOrigin === "central" ? "central" : "project";
+                        skill.sourceOrigin === "central"
+                          ? "central"
+                          : "project";
                       const badgeName = group.target
                         ? platformName
                         : skill.agentDisplayName;
@@ -535,7 +539,9 @@ function SkillPanel({
                             id: badgeId,
                             name: badgeName,
                           }}
-                          onUninstallFromPlatform={() => onUninstallSkill(skill)}
+                          onUninstallFromPlatform={() =>
+                            onUninstallSkill(skill)
+                          }
                           uninstallFromLabel={t("projects.uninstallFromAgent", {
                             agent: badgeName,
                           })}
@@ -584,7 +590,7 @@ export function ProjectsShell({
   >({});
   const platformGroups = useMemo(
     () => groupProjectSkillsByPlatform(skills, platformTargets),
-    [skills, platformTargets]
+    [skills, platformTargets],
   );
   const cliSidebarItems = useMemo<ProjectCliSidebarItem[]>(() => {
     const items: ProjectCliSidebarItem[] = [];
@@ -628,10 +634,10 @@ export function ProjectsShell({
 
   const selectedCliId = currentProject
     ? cliSidebarItems.some(
-        (item) => item.id === selectedCliIdByProject[currentProject.id]
+        (item) => item.id === selectedCliIdByProject[currentProject.id],
       )
       ? selectedCliIdByProject[currentProject.id]
-      : cliSidebarItems[0]?.id ?? ""
+      : (cliSidebarItems[0]?.id ?? "")
     : "";
 
   const handleSelectCli = (id: string) => {

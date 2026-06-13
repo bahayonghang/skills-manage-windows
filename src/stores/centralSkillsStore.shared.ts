@@ -196,6 +196,13 @@ export function mergeAiTagProgress(current: AiTagJob, payload: AiTagProgressPayl
   if (payload.skillId && payload.status === "cancelled") {
     items[payload.skillId] = "cancelled";
   }
+  if (payload.status === "cancelled") {
+    for (const [skillId, status] of Object.entries(items)) {
+      if (status === "queued" || status === "running") {
+        items[skillId] = "cancelled";
+      }
+    }
+  }
 
   const status =
     payload.status === "completed"

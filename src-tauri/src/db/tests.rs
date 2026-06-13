@@ -354,12 +354,13 @@ async fn operation_log_export_contains_metadata_and_entries() {
 async fn test_builtin_agents_seeded() {
     let pool = setup_test_db().await;
     let agents = get_all_agents(&pool).await.unwrap();
-    assert_eq!(agents.len(), 35, "Should have exactly 35 built-in agents");
+    assert_eq!(agents.len(), 37, "Should have exactly 37 built-in agents");
 
     let ids: Vec<&str> = agents.iter().map(|a| a.id.as_str()).collect();
     // Coding platforms
     assert!(ids.contains(&"claude-code"));
     assert!(ids.contains(&"codex"));
+    assert!(ids.contains(&"grok"));
     assert!(ids.contains(&"cursor"));
     assert!(ids.contains(&"gemini-cli"));
     assert!(ids.contains(&"trae"));
@@ -387,6 +388,7 @@ async fn test_builtin_agents_seeded() {
     assert!(ids.contains(&"copilot"));
     assert!(ids.contains(&"warp"));
     assert!(ids.contains(&"aider"));
+    assert!(ids.contains(&"reasonix"));
     // Lobster platforms
     assert!(ids.contains(&"openclaw"));
     assert!(ids.contains(&"qclaw"));
@@ -460,6 +462,25 @@ async fn test_universal_agents_share_universal_skills_dir() {
         Some(UNIVERSAL_PROJECT_SKILLS_DIR)
     );
 
+    let grok = agents
+        .iter()
+        .find(|agent| agent.id == "grok")
+        .expect("grok agent should exist");
+    assert_eq!(grok.display_name, "Grok");
+    assert_eq!(grok.category, "coding");
+    assert_eq!(grok.icon_name.as_deref(), Some("grok"));
+    assert!(
+        !crate::paths::paths_equivalent(Path::new(&grok.global_skills_dir), &universal_dir),
+        "grok global skills should stay separate from ~/.agents/skills"
+    );
+    assert!(
+        grok.global_skills_dir
+            .replace('\\', "/")
+            .ends_with(".grok/skills"),
+        "grok should use ~/.grok/skills"
+    );
+    assert_eq!(grok.project_skills_dir.as_deref(), Some(".grok/skills"));
+
     let antigravity_cli = agents
         .iter()
         .find(|agent| agent.id == "antigravity-cli")
@@ -528,6 +549,10 @@ async fn test_universal_agents_share_universal_skills_dir() {
 fn test_remote_builtin_agents_rewrite_google_platform_paths() {
     let agents = builtin_agents_for_posix_home("/home/alice");
 
+    let grok = agents
+        .iter()
+        .find(|agent| agent.id == "grok")
+        .expect("grok agent should exist");
     let antigravity = agents
         .iter()
         .find(|agent| agent.id == "antigravity")
@@ -541,6 +566,8 @@ fn test_remote_builtin_agents_rewrite_google_platform_paths() {
         .find(|agent| agent.id == "gemini-cli")
         .expect("gemini-cli agent should exist");
 
+    assert_eq!(grok.global_skills_dir, "/home/alice/.grok/skills");
+    assert_eq!(grok.project_skills_dir.as_deref(), Some(".grok/skills"));
     assert_eq!(
         antigravity.global_skills_dir,
         "/home/alice/.gemini/antigravity/skills"
@@ -570,6 +597,7 @@ async fn test_builtin_agents_seed_default_enabled_subset() {
     let expected_enabled_ids = std::collections::HashSet::from([
         "claude-code",
         "codex",
+        "grok",
         "antigravity",
         "antigravity-cli",
         "opencode",
@@ -585,7 +613,7 @@ async fn test_init_does_not_duplicate_agents_on_reinit() {
     let pool = setup_test_db().await;
     init_database(&pool).await.unwrap(); // Call a second time
     let agents = get_all_agents(&pool).await.unwrap();
-    assert_eq!(agents.len(), 35, "Reinit must not duplicate agents");
+    assert_eq!(agents.len(), 37, "Reinit must not duplicate agents");
 }
 
 // ── Skills ────────────────────────────────────────────────────────────────
@@ -864,6 +892,49 @@ async fn test_upsert_and_get_skill_installation() {
 }
 
 #[tokio::test]
+async fn test_upsert_skill_installation_rejects_invalid_link_type() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("bad-link", "Bad Link", false);
+    upsert_skill(&pool, &skill).await.unwrap();
+
+    let err = upsert_skill_installation(&pool, &make_installation("bad-link", "cursor", "weird"))
+        .await
+        .unwrap_err();
+
+    assert!(err.to_string().contains("Unsupported link_type"));
+}
+
+#[tokio::test]
+async fn test_upsert_agent_skill_observation_rejects_invalid_link_type() {
+    let pool = setup_test_db().await;
+
+    let err = upsert_agent_skill_observation(
+        &pool,
+        &AgentSkillObservation {
+            row_id: "row-1".to_string(),
+            agent_id: "cursor".to_string(),
+            skill_id: "bad-link".to_string(),
+            name: "Bad Link".to_string(),
+            description: None,
+            file_path: "/tmp/cursor/bad-link/SKILL.md".to_string(),
+            dir_path: "/tmp/cursor/bad-link".to_string(),
+            source_kind: "user".to_string(),
+            source_root: "/tmp/cursor".to_string(),
+            link_type: "broken".to_string(),
+            symlink_target: None,
+            is_read_only: false,
+            scanned_at: Utc::now().to_rfc3339(),
+            fs_created_at: None,
+            fs_updated_at: None,
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert!(err.to_string().contains("Unsupported link_type"));
+}
+
+#[tokio::test]
 async fn test_delete_skill_installation() {
     let pool = setup_test_db().await;
     let skill = make_skill("del-skill", "Del Skill", false);
@@ -980,7 +1051,7 @@ async fn test_insert_custom_agent() {
     insert_custom_agent(&pool, &custom).await.unwrap();
 
     let all = get_all_agents(&pool).await.unwrap();
-    assert_eq!(all.len(), 36, "Should have 35 builtins + 1 custom");
+    assert_eq!(all.len(), 38, "Should have 37 builtins + 1 custom");
 
     let retrieved = get_agent_by_id(&pool, "my-custom-agent")
         .await
@@ -1199,6 +1270,81 @@ async fn test_builtin_skill_metadata_seeded_and_idempotent() {
         tags.iter().filter(|tag| tag.is_builtin).count(),
         builtin_skill_tags().len()
     );
+    assert!(tags
+        .iter()
+        .any(|tag| tag.id == ACADEMIC_RESEARCH_WRITING_TAG_ID));
+    assert!(!tags
+        .iter()
+        .any(|tag| tag.id == "programming-agent-engineering"));
+}
+
+#[tokio::test]
+async fn test_init_prunes_obsolete_builtin_skill_tags_only() {
+    let pool = setup_test_db().await;
+    let now = Utc::now().to_rfc3339();
+    let skill = make_skill("obsolete-tag-skill", "Obsolete Tag Skill", true);
+    upsert_skill(&pool, &skill).await.unwrap();
+    let custom = create_skill_tag(&pool, "用户自定义", None, None)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "INSERT INTO skill_tags
+         (id, name, description, color, is_builtin, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, ?, ?)",
+    )
+    .bind("programming-agent-engineering")
+    .bind("编程与 Agent 工程")
+    .bind("Retired default tag")
+    .bind("#7c3aed")
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assign_skill_tags(
+        &pool,
+        &[skill.id.clone()],
+        &[
+            "programming-agent-engineering".to_string(),
+            custom.id.clone(),
+        ],
+        "manual",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    replace_pending_ai_tag_reviews(
+        &pool,
+        &skill.id,
+        &[
+            (
+                "programming-agent-engineering".to_string(),
+                0.8,
+                "旧默认分类".to_string(),
+            ),
+            (custom.id.clone(), 0.8, "自定义分类".to_string()),
+        ],
+    )
+    .await
+    .unwrap();
+
+    init_database(&pool).await.unwrap();
+
+    let tags = get_skill_tags(&pool).await.unwrap();
+    assert!(!tags
+        .iter()
+        .any(|tag| tag.id == "programming-agent-engineering"));
+    assert!(tags.iter().any(|tag| tag.id == custom.id));
+    let linked_tags = get_skill_tags_for_skill(&pool, &skill.id).await.unwrap();
+    assert_eq!(linked_tags.len(), 1);
+    assert_eq!(linked_tags[0].id, custom.id);
+    let reviews = get_pending_ai_tag_reviews(&pool).await.unwrap();
+    assert!(reviews
+        .iter()
+        .all(|review| review.tag.id != "programming-agent-engineering"));
+    assert!(reviews.iter().any(|review| review.tag.id == custom.id));
 }
 
 #[tokio::test]
@@ -1372,7 +1518,7 @@ async fn test_set_skill_repository_pinned_rejects_unknown_repository() {
         .await
         .unwrap_err();
 
-    assert!(error.contains("cannot be pinned"));
+    assert!(error.to_string().contains("cannot be pinned"));
 }
 
 #[tokio::test]
@@ -1445,7 +1591,7 @@ async fn test_delete_empty_skill_repository_rejects_unknown_repository() {
         .await
         .unwrap_err();
 
-    assert!(error.contains("cannot be deleted"));
+    assert!(error.to_string().contains("cannot be deleted"));
     assert!(
         get_skill_repository_by_id(&pool, LOCAL_UNKNOWN_REPOSITORY_ID)
             .await
@@ -1500,6 +1646,44 @@ async fn test_assign_skill_tags_supports_multi_tag_binding() {
     let ids = tags.iter().map(|tag| tag.id.as_str()).collect::<Vec<_>>();
     assert!(ids.contains(&custom.id.as_str()));
     assert!(ids.contains(&UNCATEGORIZED_TAG_ID));
+}
+
+#[tokio::test]
+async fn test_unassign_skill_tags_removes_only_target_links() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("skill-a", "Skill A", true);
+    upsert_skill(&pool, &skill).await.unwrap();
+    let tag_keep = create_skill_tag(&pool, "keep", None, None).await.unwrap();
+    let tag_drop = create_skill_tag(&pool, "drop", None, None).await.unwrap();
+
+    assign_skill_tags(
+        &pool,
+        &["skill-a".to_string()],
+        &[tag_keep.id.clone(), tag_drop.id.clone()],
+        "manual",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    unassign_skill_tags(&pool, "skill-a", std::slice::from_ref(&tag_drop.id))
+        .await
+        .unwrap();
+
+    let tags = get_skill_tags_for_skill(&pool, "skill-a").await.unwrap();
+    let ids: Vec<String> = tags.into_iter().map(|t| t.id).collect();
+    assert!(ids.contains(&tag_keep.id), "kept tag must remain");
+    assert!(!ids.contains(&tag_drop.id), "dropped tag must be removed");
+}
+
+#[tokio::test]
+async fn test_unassign_skill_tags_empty_is_noop() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("skill-b", "Skill B", true);
+    upsert_skill(&pool, &skill).await.unwrap();
+    // 空 tag_ids 不应报错、不应影响其它行
+    unassign_skill_tags(&pool, "skill-b", &[]).await.unwrap();
 }
 
 #[tokio::test]

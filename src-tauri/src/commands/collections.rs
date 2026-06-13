@@ -9,6 +9,10 @@ use super::linker::{
     FailedInstall,
 };
 
+mod export_import;
+
+pub use export_import::{export_collection_impl, import_collection_impl, CollectionExport};
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /// A Collection with its member skills included.
@@ -23,19 +27,6 @@ pub struct CollectionDetail {
     pub skills: Vec<Skill>,
 }
 
-/// Export format for a collection, matching the spec in docs/desktop-design.md.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CollectionExport {
-    pub version: u32,
-    pub name: String,
-    pub description: Option<String>,
-    /// Skill IDs (the skill names/identifiers, not UUIDs).
-    pub skills: Vec<String>,
-    pub created_at: String,
-    pub exported_from: String,
-}
-
 // ─── Core Implementations (testable without Tauri State) ─────────────────────
 
 /// Create a new collection and return it.
@@ -47,12 +38,23 @@ pub async fn create_collection_impl(
     if name.trim().is_empty() {
         return Err("Collection name cannot be empty".to_string());
     }
-    db::create_collection(pool, name, description).await
+    db::create_collection(pool, name, description)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Return all collections.
 pub async fn get_collections_impl(pool: &DbPool) -> Result<Vec<Collection>, String> {
-    db::get_all_collections(pool).await
+    db::get_all_collections(pool)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn get_collection_or_err(pool: &DbPool, collection_id: &str) -> Result<Collection, String> {
+    db::get_collection_by_id(pool, collection_id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Collection '{}' not found", collection_id))
 }
 
 /// Return a collection with its member skills.
@@ -60,11 +62,11 @@ pub async fn get_collection_detail_impl(
     pool: &DbPool,
     collection_id: &str,
 ) -> Result<CollectionDetail, String> {
-    let collection = db::get_collection_by_id(pool, collection_id)
-        .await?
-        .ok_or_else(|| format!("Collection '{}' not found", collection_id))?;
+    let collection = get_collection_or_err(pool, collection_id).await?;
 
-    let skills = db::get_collection_skills(pool, collection_id).await?;
+    let skills = db::get_collection_skills(pool, collection_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(CollectionDetail {
         id: collection.id,
@@ -82,12 +84,11 @@ pub async fn add_skill_to_collection_impl(
     collection_id: &str,
     skill_id: &str,
 ) -> Result<(), String> {
-    // Verify the collection exists.
-    db::get_collection_by_id(pool, collection_id)
-        .await?
-        .ok_or_else(|| format!("Collection '{}' not found", collection_id))?;
+    get_collection_or_err(pool, collection_id).await?;
 
-    db::add_skill_to_collection(pool, collection_id, skill_id).await
+    db::add_skill_to_collection(pool, collection_id, skill_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Remove a skill from a collection.
@@ -96,22 +97,20 @@ pub async fn remove_skill_from_collection_impl(
     collection_id: &str,
     skill_id: &str,
 ) -> Result<(), String> {
-    // Verify the collection exists.
-    db::get_collection_by_id(pool, collection_id)
-        .await?
-        .ok_or_else(|| format!("Collection '{}' not found", collection_id))?;
+    get_collection_or_err(pool, collection_id).await?;
 
-    db::remove_skill_from_collection(pool, collection_id, skill_id).await
+    db::remove_skill_from_collection(pool, collection_id, skill_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Delete a collection and all its skill memberships.
 pub async fn delete_collection_impl(pool: &DbPool, collection_id: &str) -> Result<(), String> {
-    // Verify the collection exists before trying to delete it.
-    db::get_collection_by_id(pool, collection_id)
-        .await?
-        .ok_or_else(|| format!("Collection '{}' not found", collection_id))?;
+    get_collection_or_err(pool, collection_id).await?;
 
-    db::delete_collection(pool, collection_id).await
+    db::delete_collection(pool, collection_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Update a collection's name and optional description.
@@ -125,15 +124,15 @@ pub async fn update_collection_impl(
         return Err("Collection name cannot be empty".to_string());
     }
 
-    // Verify the collection exists.
-    db::get_collection_by_id(pool, collection_id)
-        .await?
-        .ok_or_else(|| format!("Collection '{}' not found", collection_id))?;
+    get_collection_or_err(pool, collection_id).await?;
 
-    db::update_collection(pool, collection_id, name, description).await?;
+    db::update_collection(pool, collection_id, name, description)
+        .await
+        .map_err(|e| e.to_string())?;
 
     db::get_collection_by_id(pool, collection_id)
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Collection '{}' not found after update", collection_id))
 }
 
@@ -146,12 +145,11 @@ pub async fn batch_install_collection_impl(
     collection_id: &str,
     agent_ids: &[String],
 ) -> Result<BatchInstallResult, String> {
-    // Verify the collection exists.
-    db::get_collection_by_id(pool, collection_id)
-        .await?
-        .ok_or_else(|| format!("Collection '{}' not found", collection_id))?;
+    get_collection_or_err(pool, collection_id).await?;
 
-    let skills = db::get_collection_skills(pool, collection_id).await?;
+    let skills = db::get_collection_skills(pool, collection_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
@@ -162,7 +160,7 @@ pub async fn batch_install_collection_impl(
                 Ok(_) => succeeded.push(format!("{}:{}", skill.id, agent_id)),
                 Err(e) => failed.push(FailedInstall {
                     agent_id: format!("{}:{}", skill.id, agent_id),
-                    error: e,
+                    error: e.to_string(),
                 }),
             }
         }
@@ -173,57 +171,6 @@ pub async fn batch_install_collection_impl(
         skipped: Vec::new(),
         failed,
     })
-}
-
-/// Export a collection to a JSON string matching the spec in docs/desktop-design.md.
-pub async fn export_collection_impl(pool: &DbPool, collection_id: &str) -> Result<String, String> {
-    let collection = db::get_collection_by_id(pool, collection_id)
-        .await?
-        .ok_or_else(|| format!("Collection '{}' not found", collection_id))?;
-
-    let skills = db::get_collection_skills(pool, collection_id).await?;
-    let skill_ids: Vec<String> = skills.into_iter().map(|s| s.id).collect();
-
-    let export = CollectionExport {
-        version: 1,
-        name: collection.name,
-        description: collection.description,
-        skills: skill_ids,
-        created_at: collection.created_at,
-        exported_from: "SkillPort".to_string(),
-    };
-
-    serde_json::to_string_pretty(&export).map_err(|e| e.to_string())
-}
-
-/// Import a collection from a JSON string.
-///
-/// Creates a new collection with the given name/description and links any
-/// skills whose IDs exist in the database. Skills that are not found are
-/// silently skipped (they may not yet be scanned on this machine).
-///
-/// Returns the newly created collection.
-pub async fn import_collection_impl(pool: &DbPool, json: &str) -> Result<Collection, String> {
-    let export: CollectionExport =
-        serde_json::from_str(json).map_err(|e| format!("Invalid collection JSON: {}", e))?;
-
-    if export.name.trim().is_empty() {
-        return Err("Imported collection name cannot be empty".to_string());
-    }
-
-    // Create the collection.
-    let collection =
-        db::create_collection(pool, &export.name, export.description.as_deref()).await?;
-
-    // Link skills that exist in the local database.
-    for skill_id in &export.skills {
-        // Only add the skill if it exists in the local DB; silently skip otherwise.
-        if let Ok(Some(_)) = db::get_skill_by_id(pool, skill_id).await {
-            db::add_skill_to_collection(pool, &collection.id, skill_id).await?;
-        }
-    }
-
-    Ok(collection)
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -310,10 +257,10 @@ pub async fn batch_install_collection(
     let active_target = state.active_target().await?;
     let pool = state.active_db().await?;
     if active_target.is_remote_like() {
-        db::get_collection_by_id(&pool, &collection_id)
-            .await?
-            .ok_or_else(|| format!("Collection '{}' not found", collection_id))?;
-        let skills = db::get_collection_skills(&pool, &collection_id).await?;
+        get_collection_or_err(&pool, &collection_id).await?;
+        let skills = db::get_collection_skills(&pool, &collection_id)
+            .await
+            .map_err(|e| e.to_string())?;
         let mut succeeded = Vec::new();
         let mut failed = Vec::new();
         for skill in &skills {
@@ -330,7 +277,7 @@ pub async fn batch_install_collection(
                     Ok(_) => succeeded.push(format!("{}:{}", skill.id, agent_id)),
                     Err(error) => failed.push(FailedInstall {
                         agent_id: format!("{}:{}", skill.id, agent_id),
-                        error,
+                        error: error.to_string(),
                     }),
                 }
             }

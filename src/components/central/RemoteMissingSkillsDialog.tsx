@@ -34,7 +34,7 @@ interface RemoteMissingSkillsDialogProps {
   error: string | null;
   onConfirm: (
     keepSkillIds: string[],
-    deleteRequests: BatchDeleteCentralSkillRequest[]
+    deleteRequests: BatchDeleteCentralSkillRequest[],
   ) => Promise<void>;
 }
 
@@ -63,28 +63,41 @@ export function RemoteMissingSkillsDialog({
   onConfirm,
 }: RemoteMissingSkillsDialogProps) {
   const { t } = useTranslation();
-  const [decisions, setDecisions] = useState<Record<string, RemoteMissingDecision>>({});
-  const [selectedCopyKeys, setSelectedCopyKeys] = useState<Set<string>>(new Set());
-  const statesKey = useMemo(() => states.map((state) => state.skill_id).join("\0"), [states]);
+  const [decisions, setDecisions] = useState<
+    Record<string, RemoteMissingDecision>
+  >({});
+  const [selectedCopyKeys, setSelectedCopyKeys] = useState<Set<string>>(
+    new Set(),
+  );
+  const statesKey = useMemo(
+    () => states.map((state) => state.skill_id).join("\0"),
+    [states],
+  );
 
   useEffect(() => {
     if (open) {
-      setDecisions(Object.fromEntries(states.map((state) => [state.skill_id, "keep"])));
+      setDecisions(
+        Object.fromEntries(states.map((state) => [state.skill_id, "keep"])),
+      );
       setSelectedCopyKeys(new Set());
     }
   }, [open, statesKey, states]);
 
   const previewBySkillId = useMemo(
-    () => new Map((preview?.previews ?? []).map((item) => [item.skill_id, item])),
-    [preview]
+    () =>
+      new Map((preview?.previews ?? []).map((item) => [item.skill_id, item])),
+    [preview],
   );
   const failedPreviewBySkillId = useMemo(
-    () => new Map((preview?.failed ?? []).map((item) => [item.skill_id, item.error])),
-    [preview]
+    () =>
+      new Map(
+        (preview?.failed ?? []).map((item) => [item.skill_id, item.error]),
+      ),
+    [preview],
   );
   const agentNameById = useMemo(
     () => new Map(agents.map((agent) => [agent.id, agent.display_name])),
-    [agents]
+    [agents],
   );
 
   function setDecision(skillId: string, decision: RemoteMissingDecision) {
@@ -124,7 +137,9 @@ export function RemoteMissingSkillsDialog({
             remove_agent_ids: uniqueIds(
               item.copy_installations
                 .map((installation) => installation.agent_id)
-                .filter((agentId) => selectedCopyKeys.has(copyKey(item.skill_id, agentId)))
+                .filter((agentId) =>
+                  selectedCopyKeys.has(copyKey(item.skill_id, agentId)),
+                ),
             ),
           },
         ];
@@ -167,14 +182,18 @@ export function RemoteMissingSkillsDialog({
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="font-medium text-foreground">{state.skill_id}</div>
+                        <div className="font-medium text-foreground">
+                          {state.skill_id}
+                        </div>
                         <div className="mt-1 text-xs text-muted-foreground">
                           {state.source_path
-                            ? t("central.remoteMissingSource", { path: state.source_path })
+                            ? t("central.remoteMissingSource", {
+                                path: state.source_path,
+                              })
                             : t("central.remoteMissingSourceUnknown")}
                         </div>
                         {state.error && (
-                          <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                          <div className="mt-1 text-xs text-warning-foreground">
                             {state.error}
                           </div>
                         )}
@@ -209,52 +228,64 @@ export function RemoteMissingSkillsDialog({
                     </div>
 
                     {previewError && (
-                      <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+                      <div className="mt-3 rounded-lg border border-warning/30 bg-warning/10 p-2 text-xs text-warning-foreground">
                         <AlertTriangle className="mr-1 inline size-3.5" />
-                        {t("central.remoteMissingPreviewFailed", { error: previewError })}
-                      </div>
-                    )}
-
-                    {decision === "delete" && item && item.copy_installations.length > 0 && (
-                      <div className="mt-3 space-y-2 border-t border-border/70 pt-3">
-                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          {t("central.remoteMissingCopyInstalls")}
-                        </div>
-                        {item.copy_installations.map((installation) => {
-                          const checked = selectedCopyKeys.has(
-                            copyKey(item.skill_id, installation.agent_id)
-                          );
-                          return (
-                            <label
-                              key={`${item.skill_id}:${installation.agent_id}`}
-                              className="flex cursor-pointer items-start gap-2 rounded-lg border border-border/70 p-2 text-sm"
-                            >
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={(value) =>
-                                  toggleCopy(item.skill_id, installation.agent_id, !!value)
-                                }
-                                aria-label={t("central.remoteMissingCopyLabel", {
-                                  platform:
-                                    agentNameById.get(installation.agent_id) ??
-                                    installation.agent_id,
-                                  skill: item.skill_name,
-                                })}
-                              />
-                              <span className="min-w-0">
-                                <span className="block font-medium text-foreground">
-                                  {agentNameById.get(installation.agent_id) ??
-                                    installation.agent_id}
-                                </span>
-                                <span className="block truncate text-xs text-muted-foreground">
-                                  {installation.installed_path}
-                                </span>
-                              </span>
-                            </label>
-                          );
+                        {t("central.remoteMissingPreviewFailed", {
+                          error: previewError,
                         })}
                       </div>
                     )}
+
+                    {decision === "delete" &&
+                      item &&
+                      item.copy_installations.length > 0 && (
+                        <div className="mt-3 space-y-2 border-t border-border/70 pt-3">
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {t("central.remoteMissingCopyInstalls")}
+                          </div>
+                          {item.copy_installations.map((installation) => {
+                            const checked = selectedCopyKeys.has(
+                              copyKey(item.skill_id, installation.agent_id),
+                            );
+                            return (
+                              <label
+                                key={`${item.skill_id}:${installation.agent_id}`}
+                                className="flex cursor-pointer items-start gap-2 rounded-lg border border-border/70 p-2 text-sm"
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(value) =>
+                                    toggleCopy(
+                                      item.skill_id,
+                                      installation.agent_id,
+                                      !!value,
+                                    )
+                                  }
+                                  aria-label={t(
+                                    "central.remoteMissingCopyLabel",
+                                    {
+                                      platform:
+                                        agentNameById.get(
+                                          installation.agent_id,
+                                        ) ?? installation.agent_id,
+                                      skill: item.skill_name,
+                                    },
+                                  )}
+                                />
+                                <span className="min-w-0">
+                                  <span className="block font-medium text-foreground">
+                                    {agentNameById.get(installation.agent_id) ??
+                                      installation.agent_id}
+                                  </span>
+                                  <span className="block truncate text-xs text-muted-foreground">
+                                    {installation.installed_path}
+                                  </span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
                   </section>
                 );
               })}
@@ -269,7 +300,11 @@ export function RemoteMissingSkillsDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isApplying}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isApplying}
+          >
             {t("common.cancel")}
           </Button>
           <Button

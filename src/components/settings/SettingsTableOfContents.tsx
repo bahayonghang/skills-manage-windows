@@ -95,7 +95,7 @@ export function SettingsTableOfContents({ entries }: SettingsTableOfContentsProp
                 className={cn(
                   "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
                   active
-                    ? "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-[color:var(--settings-section-accent)] shadow-[0_0_0_1px_var(--settings-section-accent-faint)]"
+                    ? "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-[color:var(--settings-section-accent-text)] shadow-[0_0_0_1px_var(--settings-section-accent-faint)]"
                     : "border-transparent text-muted-foreground hover:border-[color:var(--settings-section-accent-border)] hover:bg-[color:var(--settings-section-accent-faint)] hover:text-foreground",
                 )}
               >

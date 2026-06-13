@@ -45,8 +45,13 @@ export function SettingsView() {
   const navigate = useNavigate();
   const {
     scanDirectories,
+    centralUpdateCheckMode,
+    centralUpdateCheckModeLoaded,
+    isLoadingCentralUpdateCheckMode,
     isLoadingScanDirs,
     loadScanDirectories,
+    loadCentralUpdateCheckMode,
+    setCentralUpdateCheckMode,
     addScanDirectory,
     removeScanDirectory,
     toggleScanDirectory,
@@ -193,10 +198,23 @@ export function SettingsView() {
 
   useEffect(() => {
     loadScanDirectories();
+    if (!centralUpdateCheckModeLoaded) {
+      void loadCentralUpdateCheckMode();
+    }
     loadGitHubPat();
-    loadTargets();
-    void loadWslDistributions().catch(() => undefined);
-  }, [loadScanDirectories, loadGitHubPat, loadTargets, loadWslDistributions]);
+  }, [
+    centralUpdateCheckModeLoaded,
+    loadCentralUpdateCheckMode,
+    loadScanDirectories,
+    loadGitHubPat,
+  ]);
+
+  useEffect(() => {
+    if (activePageId !== "connections") {
+      return;
+    }
+    void loadTargets();
+  }, [activePageId, loadTargets]);
 
   useEffect(() => {
     if (wslTargetForm.distribution.trim() || wslDistributions.length !== 1) {
@@ -408,7 +426,7 @@ export function SettingsView() {
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
           {t("settings.pages.eyebrow")}
         </p>
-        <h1 className="mt-1 text-xl font-semibold">{t("settings.title")}</h1>
+        <h1 className="mt-1 font-heading text-xl font-semibold">{t("settings.title")}</h1>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -421,7 +439,7 @@ export function SettingsView() {
                   <PageIcon className="size-5" aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="text-2xl font-semibold tracking-tight">
+                  <h2 className="font-heading text-2xl font-semibold tracking-tight">
                     {t(activePage.titleKey)}
                   </h2>
                   <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
@@ -487,6 +505,8 @@ export function SettingsView() {
               resolvedUrl={resolvedUrl}
               scanDirError={scanDirError}
               scanDirectories={scanDirectories}
+              centralUpdateCheckMode={centralUpdateCheckMode}
+              isLoadingCentralUpdateCheckMode={isLoadingCentralUpdateCheckMode}
               showAiTestDetails={showAiTestDetails}
               showBuiltinDirs={showBuiltinDirs}
               sshTargetEditForm={sshTargetEditForm}
@@ -583,6 +603,9 @@ export function SettingsView() {
               }}
               onToggleDirectory={(path, active) => {
                 void handleToggleDirectory(path, active);
+              }}
+              onCentralUpdateCheckModeChange={(mode) => {
+                void setCentralUpdateCheckMode(mode);
               }}
               onTogglePlatformVisibility={(agentId, enabled) => {
                 void handleTogglePlatformVisibility(agentId, enabled);

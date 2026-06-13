@@ -8,6 +8,7 @@ import {
   SkillDetail as SkillDetailType,
   SkillRepositoryWithStats,
   SkillTag,
+  TargetSummary,
 } from "../types";
 
 // ─── Mock stores ──────────────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ vi.mock("../components/collection/CollectionPickerDialog", () => ({
 import { useSkillDetailStore } from "../stores/skillDetailStore";
 import { usePlatformStore } from "../stores/platformStore";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
+import { useTargetStore } from "../stores/targetStore";
 
 // ─── Mock react-markdown ──────────────────────────────────────────────────────
 
@@ -102,6 +104,22 @@ const mockAgents: AgentWithStatus[] = [
     is_enabled: true,
   },
 ];
+
+const localTarget: TargetSummary = {
+  id: "local",
+  kind: "local",
+  label: "Local",
+  isActive: true,
+};
+
+const remoteTarget: TargetSummary = {
+  id: "ssh-demo",
+  kind: "ssh",
+  label: "SSH Demo",
+  isActive: true,
+  remoteHome: "/home/demo",
+  remoteOs: "Linux",
+};
 
 const mockRepositories: SkillRepositoryWithStats[] = [
   {
@@ -407,6 +425,10 @@ function makeUpdateAvailableState(
 describe("SkillDetailView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useTargetStore.setState({
+      targets: [localTarget],
+      activeTarget: localTarget,
+    });
     mockAssignSkillsToRepository.mockResolvedValue(undefined);
     mockAssignSkillTags.mockResolvedValue(undefined);
     mockCheckSkillUpdates.mockResolvedValue([]);
@@ -478,11 +500,37 @@ describe("SkillDetailView", () => {
     expect(screen.getByRole("region", { name: /技能基本信息/i })).toBeInTheDocument();
   });
 
-  it("shows file path", () => {
+  it("keeps raw file path in collapsed technical details", () => {
     renderView();
+
+    const details = screen.getByTestId("detail-technical-details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+
+    fireEvent.click(within(details).getByText("技术详情"));
+    expect(details.open).toBe(true);
     expect(
-      screen.getByText("~/.skillsmanage/skills/frontend-design/SKILL.md")
+      within(details).getByText("~/.skillsmanage/skills/frontend-design/SKILL.md")
     ).toBeInTheDocument();
+  });
+
+  it("shows GitHub repository and repository path in primary metadata", () => {
+    applyStoreMocks({
+      detail: {
+        ...mockDetail,
+        source: "github:openai/skills",
+        repository: mockRepositories[1],
+        source_path: "skills/frontend-design",
+      },
+    });
+
+    renderView("frontend-design", "page", { skipMockSetup: true });
+
+    const sidebar = screen.getByTestId("skill-detail-right-sidebar");
+    const link = within(sidebar).getByRole("link", { name: "打开 GitHub 仓库" });
+
+    expect(within(sidebar).getAllByText("openai/skills").length).toBeGreaterThan(0);
+    expect(within(sidebar).getByText("skills/frontend-design")).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", "https://github.com/openai/skills");
   });
 
   it("uses the widened inspector rail classes in page variant", () => {
@@ -634,9 +682,15 @@ describe("SkillDetailView", () => {
     expect(mockLoadDetail).toHaveBeenCalledWith({ skillId: "frontend-design" });
   });
 
-  it("shows canonical path", () => {
+  it("keeps canonical path in technical details", () => {
     renderView();
-    expect(screen.getAllByText("~/.skillsmanage/skills/frontend-design").length).toBeGreaterThan(0);
+
+    const details = screen.getByTestId("detail-technical-details");
+    fireEvent.click(within(details).getByText("技术详情"));
+
+    expect(
+      within(details).getByText("~/.skillsmanage/skills/frontend-design")
+    ).toBeInTheDocument();
   });
 
   it("opens the central skill directory from metadata controls", async () => {
@@ -651,9 +705,33 @@ describe("SkillDetailView", () => {
     });
   });
 
-  it("shows source", () => {
+  it("keeps raw source in technical details", () => {
     renderView();
-    expect(screen.getByText("native")).toBeInTheDocument();
+
+    const details = screen.getByTestId("detail-technical-details");
+    fireEvent.click(within(details).getByText("技术详情"));
+
+    expect(within(details).getByText("native")).toBeInTheDocument();
+  });
+
+  it("copies the remote skill directory from the styled folder action", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    useTargetStore.setState({
+      targets: [localTarget, remoteTarget],
+      activeTarget: remoteTarget,
+    });
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "复制远程路径" }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("~/.skillsmanage/skills/frontend-design");
+    });
+    expect(mockOpenInFileManager).not.toHaveBeenCalled();
   });
 
   it("shows a read-only plugin source state and blocks management actions", () => {

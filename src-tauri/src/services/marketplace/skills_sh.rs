@@ -10,6 +10,8 @@ use crate::secrets::SecretStore;
 use crate::services::github_import;
 use crate::targets::ActiveTarget;
 
+use super::error::MarketplaceError;
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct SkillsShSkill {
     pub id: String,
@@ -61,7 +63,7 @@ pub async fn search_skills_sh_impl(
     secrets: &dyn SecretStore,
     query: String,
     limit: Option<u32>,
-) -> Result<Vec<SkillsShSkill>, String> {
+) -> Result<Vec<SkillsShSkill>, MarketplaceError> {
     let trimmed_query = query.trim();
     if trimmed_query.is_empty() {
         return Ok(Vec::new());
@@ -79,16 +81,21 @@ pub async fn search_skills_sh_impl(
         ])
         .send()
         .await
-        .map_err(|e| format!("skills.sh search failed: {}", e))?;
+        .map_err(|e| MarketplaceError::Http(format!("skills.sh search failed: {}", e)))?;
 
     if !response.status().is_success() {
-        return Err(format!("skills.sh returned HTTP {}", response.status()));
+        return Err(MarketplaceError::Http(format!(
+            "skills.sh returned HTTP {}",
+            response.status()
+        )));
     }
 
     let payload = response
         .json::<SkillsShSearchResponse>()
         .await
-        .map_err(|e| format!("Failed to parse skills.sh search results: {}", e))?;
+        .map_err(|e| {
+            MarketplaceError::Parse(format!("Failed to parse skills.sh search results: {}", e))
+        })?;
     let mut skills = payload
         .skills
         .into_iter()
@@ -179,7 +186,7 @@ pub async fn resolve_skills_sh_url_impl(
     secrets: &dyn SecretStore,
     source: String,
     skill_id: String,
-) -> Result<String, String> {
+) -> Result<String, MarketplaceError> {
     let auth = github_import::github_direct_auth_from_secret_store(pool, secrets).await?;
     let (resolved, auth_used) = resolved_skills_sh_source_with_auth(&source, &auth).await?;
     let candidate =
@@ -192,7 +199,7 @@ pub async fn browse_skills_sh_directory_impl(
     secrets: &dyn SecretStore,
     source: String,
     skill_id: String,
-) -> Result<Vec<SkillsShFileEntry>, String> {
+) -> Result<Vec<SkillsShFileEntry>, MarketplaceError> {
     let auth = github_import::github_direct_auth_from_secret_store(pool, secrets).await?;
     let (resolved, snapshot, _) = skills_sh_snapshot_with_auth(&source, &auth).await?;
     let candidate =
@@ -208,7 +215,7 @@ pub async fn read_skills_sh_file_impl(
     secrets: &dyn SecretStore,
     source: String,
     file_path: String,
-) -> Result<String, String> {
+) -> Result<String, MarketplaceError> {
     let auth = github_import::github_direct_auth_from_secret_store(pool, secrets).await?;
     let (resolved, auth_used) = resolved_skills_sh_source_with_auth(&source, &auth).await?;
     let normalized_path = normalize_skills_sh_file_path(&file_path)?;
@@ -217,7 +224,7 @@ pub async fn read_skills_sh_file_impl(
         "https://raw.githubusercontent.com/{}/{}/{}/{}",
         resolved.repo.owner, resolved.repo.repo, resolved.repo.branch, normalized_path
     );
-    github_import::fetch_raw_text(&client, &url, auth_used.as_deref()).await
+    Ok(github_import::fetch_raw_text(&client, &url, auth_used.as_deref()).await?)
 }
 
 pub async fn install_from_skills_sh_impl(
@@ -226,7 +233,7 @@ pub async fn install_from_skills_sh_impl(
     active_target: ActiveTarget,
     source: String,
     skill_id: String,
-) -> Result<String, String> {
+) -> Result<String, MarketplaceError> {
     let auth = github_import::github_direct_auth_from_secret_store(pool, secrets).await?;
     let (resolved, snapshot, auth_used) = skills_sh_snapshot_with_auth(&source, &auth).await?;
     let candidate =
@@ -245,8 +252,9 @@ pub async fn install_from_skills_sh_impl(
                 invalid_candidates: Vec::new(),
             };
             let central_root = github_import::central_skills_root(pool).await?;
-            std::fs::create_dir_all(&central_root)
-                .map_err(|e| format!("Failed to create central skills directory: {}", e))?;
+            std::fs::create_dir_all(&central_root).map_err(|e| {
+                MarketplaceError::io("Failed to create central skills directory", e)
+            })?;
             let result = github_import::import_github_repo_skills_from_snapshot_partially(
                 pool,
                 &resolved.repo,
@@ -260,7 +268,7 @@ pub async fn install_from_skills_sh_impl(
             let imported = result
                 .imported_skills
                 .first()
-                .ok_or_else(|| format!("Skill '{}' was not imported.", skill_id))?;
+                .ok_or_else(|| MarketplaceError::SkillNotImported(skill_id.clone()))?;
             Ok(imported.imported_skill_id.clone())
         }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
@@ -278,7 +286,7 @@ pub async fn install_from_skills_sh_impl(
             let imported = result
                 .imported_skills
                 .first()
-                .ok_or_else(|| format!("Skill '{}' was not imported.", skill_id))?;
+                .ok_or_else(|| MarketplaceError::SkillNotImported(skill_id.clone()))?;
             Ok(imported.imported_skill_id.clone())
         }
     }
@@ -293,7 +301,7 @@ async fn skills_sh_snapshot_with_auth(
         github_import::GitHubRepoSnapshot,
         Option<String>,
     ),
-    String,
+    MarketplaceError,
 > {
     let (resolved, auth_used) = resolved_skills_sh_source_with_auth(source, auth).await?;
     let client = github_import::github_client()?;
@@ -306,17 +314,17 @@ async fn skills_sh_snapshot_with_auth(
 async fn resolved_skills_sh_source_with_auth(
     source: &str,
     auth: &Option<String>,
-) -> Result<(github_import::ResolvedGitHubRepoSource, Option<String>), String> {
+) -> Result<(github_import::ResolvedGitHubRepoSource, Option<String>), MarketplaceError> {
     let repo_url = source_to_github_url(source)?;
     match github_import::resolve_repo_source(&repo_url, auth.as_deref()).await {
         Ok(resolved) => Ok((resolved, auth.clone())),
         Err(auth_error) if auth.is_some() => {
             let resolved = github_import::resolve_repo_source(&repo_url, None)
                 .await
-                .map_err(|_| auth_error)?;
+                .map_err(|_| MarketplaceError::from(auth_error))?;
             Ok((resolved, None))
         }
-        Err(error) => Err(error),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -324,7 +332,7 @@ async fn resolve_skills_sh_candidate(
     repo: &github_import::GitHubRepoRef,
     skill_id: &str,
     auth: Option<&str>,
-) -> Result<github_import::RemoteSkillCandidate, String> {
+) -> Result<github_import::RemoteSkillCandidate, MarketplaceError> {
     let client = github_import::github_client()?;
     let snapshot = github_import::download_repo_snapshot(&client, repo, auth).await?;
     resolve_skills_sh_candidate_from_snapshot(repo, &snapshot, skill_id)
@@ -334,7 +342,7 @@ pub(crate) fn resolve_skills_sh_candidate_from_snapshot(
     repo: &github_import::GitHubRepoRef,
     snapshot: &github_import::GitHubRepoSnapshot,
     skill_id: &str,
-) -> Result<github_import::RemoteSkillCandidate, String> {
+) -> Result<github_import::RemoteSkillCandidate, MarketplaceError> {
     let normalized_skill_id = normalize_skills_sh_skill_id(skill_id)?;
     let candidates =
         github_import::build_repo_skill_candidates_from_snapshot_at_path(repo, snapshot, None)?;
@@ -361,11 +369,10 @@ pub(crate) fn resolve_skills_sh_candidate_from_snapshot(
         }
     }
 
-    fallback_match.ok_or_else(|| {
-        format!(
-            "Could not find SKILL.md for '{}' in {}/{}",
-            skill_id, repo.owner, repo.repo
-        )
+    fallback_match.ok_or_else(|| MarketplaceError::SkillsShCandidateNotFound {
+        skill_id: skill_id.to_string(),
+        owner: repo.owner.clone(),
+        repo: repo.repo.clone(),
     })
 }
 
@@ -428,10 +435,10 @@ pub(crate) fn skills_sh_file_entries_from_snapshot(
         .collect()
 }
 
-pub(crate) fn source_to_github_url(source: &str) -> Result<String, String> {
+pub(crate) fn source_to_github_url(source: &str) -> Result<String, MarketplaceError> {
     let trimmed = source.trim().trim_matches('/');
     if !is_valid_github_owner_repo(trimmed) {
-        return Err("skills.sh source must be a GitHub owner/repo value.".to_string());
+        return Err(MarketplaceError::SkillsShSourceInvalid);
     }
     Ok(format!("https://github.com/{trimmed}"))
 }
@@ -451,23 +458,23 @@ fn is_valid_github_owner_repo(value: &str) -> bool {
     })
 }
 
-fn normalize_skills_sh_skill_id(skill_id: &str) -> Result<String, String> {
+fn normalize_skills_sh_skill_id(skill_id: &str) -> Result<String, MarketplaceError> {
     let trimmed = skill_id.trim();
     if trimmed.is_empty() || trimmed.contains('/') || trimmed.contains('\\') || trimmed == "." {
-        return Err("skills.sh skill id is not supported.".to_string());
+        return Err(MarketplaceError::SkillsShSkillIdUnsupported);
     }
     Ok(trimmed.to_string())
 }
 
-fn normalize_skills_sh_file_path(path: &str) -> Result<String, String> {
+fn normalize_skills_sh_file_path(path: &str) -> Result<String, MarketplaceError> {
     let normalized = normalize_repo_path_for_marketplace(path)?;
     if normalized.is_empty() {
-        return Err("skills.sh file path is required.".to_string());
+        return Err(MarketplaceError::SkillsShFilePathRequired);
     }
     Ok(normalized)
 }
 
-fn normalize_repo_path_for_marketplace(path: &str) -> Result<String, String> {
+fn normalize_repo_path_for_marketplace(path: &str) -> Result<String, MarketplaceError> {
     let normalized = path.trim().trim_matches('/').replace('\\', "/");
     if normalized.is_empty() || normalized == "." {
         return Ok(String::new());
@@ -478,7 +485,7 @@ fn normalize_repo_path_for_marketplace(path: &str) -> Result<String, String> {
             .components()
             .all(|component| matches!(component, Component::Normal(_)))
     {
-        return Err(format!("Repository path '{}' is not supported.", path));
+        return Err(MarketplaceError::UnsupportedRepoPath(path.to_string()));
     }
     Ok(normalized)
 }

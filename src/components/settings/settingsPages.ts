@@ -66,7 +66,7 @@ export const SETTINGS_PAGES: readonly SettingsPageDefinition[] = [
     titleKey: "settings.pages.skillSources.title",
     descriptionKey: "settings.pages.skillSources.description",
     icon: FolderSearch,
-    sectionIds: ["scan-directories"],
+    sectionIds: ["central-update-check-mode", "scan-directories"],
   },
   {
     id: "about",
@@ -100,6 +100,8 @@ const LEGACY_SECTION_TO_PAGE: Record<string, SettingsPageId> = {
   "ai-provider-section": "integrations",
   "scan-directories": "skill-sources",
   "scan-directories-section": "skill-sources",
+  "central-update-check-mode": "skill-sources",
+  "central-update-check-mode-section": "skill-sources",
   "skill-sources": "skill-sources",
   "skill-sources-section": "skill-sources",
   about: "about",

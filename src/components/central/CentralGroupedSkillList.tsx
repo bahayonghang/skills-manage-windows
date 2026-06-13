@@ -3,11 +3,14 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 
+import { buildCentralSkillCardProps } from "@/components/central/centralSkillCardProps";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
+import { centralSkillCardGridTemplateColumns } from "@/lib/centralSkillGrid";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type { SkillGroup } from "@/lib/centralGrouping";
+import { getRepoDotColor } from "@/lib/tagColor";
 import { cn } from "@/lib/utils";
 import type { CentralSkillUpdateState, SkillWithLinks } from "@/types";
 
@@ -37,6 +40,10 @@ export interface CentralGroupedSkillListProps {
   onUpdateCentral: (skillIds: string[]) => void;
   onDelete: (skill: SkillWithLinks) => void;
   onTogglePlatform: (skillId: string, agentId: string) => Promise<void>;
+  onAddSkillTag?: (skillId: string, tagId: string) => void;
+  onCreateSkillTag?: (skillId: string, name: string) => void;
+  onRemoveSkillTag?: (skillId: string, tagId: string) => void;
+  tags?: readonly { id: string; name: string; color?: string | null }[];
   t: TFunction;
 }
 
@@ -56,15 +63,19 @@ export function CentralGroupedSkillList({
   onUpdateCentral,
   onDelete,
   onTogglePlatform,
+  onAddSkillTag,
+  onCreateSkillTag,
+  onRemoveSkillTag,
+  tags,
   t,
 }: CentralGroupedSkillListProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const visibleSkillIds = useMemo(
     () =>
       groups.flatMap((group) =>
-        collapsed[group.key] ? [] : group.skills.map((skill) => skill.id)
+        collapsed[group.key] ? [] : group.skills.map((skill) => skill.id),
       ),
-    [collapsed, groups]
+    [collapsed, groups],
   );
   const aiSummaries = useSkillExplanationSummaries(visibleSkillIds, "zh");
   const skillNamesForUsage = useMemo(
@@ -72,11 +83,11 @@ export function CentralGroupedSkillList({
       Array.from(
         new Set(
           groups.flatMap((group) =>
-            collapsed[group.key] ? [] : group.skills.map((skill) => skill.name)
-          )
-        )
+            collapsed[group.key] ? [] : group.skills.map((skill) => skill.name),
+          ),
+        ),
       ),
-    [collapsed, groups]
+    [collapsed, groups],
   );
   const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
 
@@ -86,7 +97,7 @@ export function CentralGroupedSkillList({
       data-testid="central-skill-list-scroll"
       className={cn(
         "scrollbar-subtle flex-1 overflow-auto p-6",
-        selectedCount > 0 && "pb-28"
+        selectedCount > 0 && "pb-28",
       )}
     >
       <div className="space-y-6">
@@ -98,7 +109,10 @@ export function CentralGroupedSkillList({
               <button
                 type="button"
                 onClick={() =>
-                  setCollapsed((prev) => ({ ...prev, [group.key]: !isCollapsed }))
+                  setCollapsed((prev) => ({
+                    ...prev,
+                    [group.key]: !isCollapsed,
+                  }))
                 }
                 aria-expanded={!isCollapsed}
                 className="sticky top-0 z-10 mb-3 flex w-full items-center gap-2 rounded-md border border-border/60 bg-background/95 px-3 py-2 text-left text-sm font-medium backdrop-blur"
@@ -112,52 +126,52 @@ export function CentralGroupedSkillList({
               </button>
               {!isCollapsed && (
                 <div
-                  className="grid grid-cols-1 gap-4 lg:grid-cols-2"
+                  className="grid gap-4"
                   data-testid={`group-body-${group.key}`}
+                  style={{
+                    gridTemplateColumns: centralSkillCardGridTemplateColumns(),
+                  }}
                 >
-                  {group.skills.map((skill) => (
-                    <UnifiedSkillCard
-                      key={skill.id}
-                      name={skill.name}
-                      description={skill.description}
-                      aiSummary={aiSummaries[skill.id]}
-                      usageBadge={usageCounts?.[skill.name]}
-                      checkbox={{
-                        checked: selectedSkillIdSet.has(skill.id),
-                        onChange: () => onToggleSelection(skill.id),
-                      }}
-                      tags={(skill.tags ?? []).map((tag) => ({
-                        key: tag.id,
-                        label: tag.name,
-                      }))}
-                      publisher={skill.repository?.name}
-                      updateStatus={
-                        updateStatuses[skill.id]
-                          ? {
-                              ...updateStatuses[skill.id],
-                              isUpdating: updatingSkillIds.includes(skill.id),
-                            }
-                          : undefined
-                      }
-                      onDetail={() => onDetail(skill.id)}
-                      onInstallTo={() => onInstallTo(skill)}
-                      onUpdateCentral={() => onUpdateCentral([skill.id])}
-                      onDeleteFromCentral={() => onDelete(skill)}
-                      detailButtonRef={(node) =>
-                        setDetailButtonRef(skill.id, node)
-                      }
-                      platformIcons={{
-                        agents: availableInstallAgents,
-                        linkedAgents: skill.linked_agents,
-                        lockedAgentIds: skill.shared_root_agents,
-                        skillId: skill.id,
-                        onToggle: onTogglePlatform,
-                        togglingAgentId,
-                      }}
-                      density="compact"
-                      className="h-[212px]"
-                    />
-                  ))}
+                  {group.skills.map((skill) => {
+                    return (
+                      <UnifiedSkillCard
+                        key={skill.id}
+                        {...buildCentralSkillCardProps(skill, {
+                          aiSummaries,
+                          usageCounts,
+                          selectedSkillIdSet,
+                          updateStatuses,
+                          updatingSkillIds,
+                          tags,
+                          t,
+                          density: "compact",
+                          setDetailButtonRef,
+                          onToggleSelection,
+                          onDetail,
+                          onInstallTo,
+                          onUpdateCentral,
+                          onDelete,
+                          onAddSkillTag,
+                          onCreateSkillTag,
+                          onRemoveSkillTag,
+                        })}
+                        platformIcons={{
+                          agents: availableInstallAgents,
+                          linkedAgents: skill.linked_agents,
+                          lockedAgentIds: skill.shared_root_agents,
+                          skillId: skill.id,
+                          onToggle: onTogglePlatform,
+                          togglingAgentId,
+                        }}
+                        footer={{
+                          repoName: skill.repository?.name,
+                          repoColor: skill.repository?.name
+                            ? getRepoDotColor(skill.repository.name)
+                            : undefined,
+                        }}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </section>

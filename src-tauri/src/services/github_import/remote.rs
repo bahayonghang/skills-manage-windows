@@ -1,3 +1,5 @@
+use crate::services::resource_budget::ResourceBudget;
+
 use super::*;
 pub(super) async fn cleanup_expired_preview_workspaces_for_connection(
     connection: &ConnectedRemoteTarget,
@@ -15,7 +17,7 @@ pub(super) async fn create_remote_preview_workspace(
     connection: &ConnectedRemoteTarget,
     resolved: &ResolvedGitHubRepoSource,
     auth: Option<&str>,
-) -> Result<GitHubPreviewWorkspace, String> {
+) -> Result<GitHubPreviewWorkspace, GithubImportError> {
     let archive_url = github_archive_url(&resolved.repo);
     let script = remote_workspace_download_script(auth)?;
     let output = connection
@@ -23,13 +25,14 @@ pub(super) async fn create_remote_preview_workspace(
             &script,
             &[archive_url.as_str(), crate::commands::APP_USER_AGENT],
         )
-        .await?;
+        .await
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
     let remote_workspace_dir = output
         .lines()
         .last()
         .map(str::trim)
         .filter(|line| !line.is_empty())
-        .ok_or_else(|| "Remote GitHub preview did not return a workspace path.".to_string())?
+        .ok_or(GithubImportError::RemotePreviewNoWorkspacePath)?
         .to_string();
     let remote_repo_dir = remote_join(&remote_workspace_dir, "repo");
     let now = Utc::now();
@@ -53,7 +56,10 @@ pub(super) fn github_archive_url(repo: &GitHubRepoRef) -> String {
     )
 }
 
-pub(super) fn remote_workspace_download_script(auth: Option<&str>) -> Result<String, String> {
+pub(super) fn remote_workspace_download_script(
+    auth: Option<&str>,
+) -> Result<String, GithubImportError> {
+    let budget = ResourceBudget::default_skill();
     let auth_block = match auth.filter(|token| !token.trim().is_empty()) {
         Some(token) => {
             let header = curl_auth_header_config_line(token)?;
@@ -73,6 +79,10 @@ SKILLPORT_CURL_CONF
         r#"set -eu
 archive_url=$1
 user_agent=$2
+archive_limit={archive_limit}
+archive_files_limit={archive_files_limit}
+archive_expanded_limit={archive_expanded_limit}
+archive_entry_limit={archive_entry_limit}
 workspace=""
 curl_conf=""
 cleanup() {{
@@ -86,7 +96,7 @@ cleanup() {{
   exit "$status"
 }}
 trap cleanup EXIT
-for tool in sh curl tar find mktemp; do
+for tool in sh curl tar find mktemp wc; do
   command -v "$tool" >/dev/null 2>&1 || {{
     printf 'Missing required remote tool: %s\n' "$tool" >&2
     exit 127
@@ -102,16 +112,46 @@ if [ -n "$curl_conf" ]; then
 else
   curl -fL --retry 2 --connect-timeout 30 -A "$user_agent" -o "$archive_file" "$archive_url"
 fi
+set -- $(wc -c < "$archive_file")
+archive_size=$1
+if [ "$archive_size" -gt "$archive_limit" ]; then
+  printf 'GitHub repository archive exceeds the resource budget (%s bytes > %s bytes).\n' "$archive_size" "$archive_limit" >&2
+  exit 24
+fi
 tar -xzf "$archive_file" -C "$repo_dir" --strip-components=1
+file_count=0
+expanded_size=0
+find "$repo_dir" -type f -print | while IFS= read -r file; do
+  file_count=$((file_count + 1))
+  if [ "$file_count" -gt "$archive_files_limit" ]; then
+    printf 'GitHub repository archive exceeds the resource budget (more than %s files).\n' "$archive_files_limit" >&2
+    exit 25
+  fi
+  set -- $(wc -c < "$file")
+  file_size=$1
+  if [ "$file_size" -gt "$archive_entry_limit" ]; then
+    printf "GitHub repository archive entry '%s' exceeds the resource budget (%s bytes > %s bytes).\n" "$file" "$file_size" "$archive_entry_limit" >&2
+    exit 26
+  fi
+  expanded_size=$((expanded_size + file_size))
+  if [ "$expanded_size" -gt "$archive_expanded_limit" ]; then
+    printf 'GitHub repository expanded archive contents exceeds the resource budget (%s bytes > %s bytes).\n' "$expanded_size" "$archive_expanded_limit" >&2
+    exit 27
+  fi
+done
 rm -f -- "$archive_file"
 printf '%s\n' "$workspace"
-"#
+"#,
+        archive_limit = budget.archive_bytes,
+        archive_files_limit = budget.archive_files,
+        archive_expanded_limit = budget.archive_expanded_bytes,
+        archive_entry_limit = budget.archive_entry_bytes,
     ))
 }
 
-pub(super) fn curl_auth_header_config_line(token: &str) -> Result<String, String> {
+pub(super) fn curl_auth_header_config_line(token: &str) -> Result<String, GithubImportError> {
     if token.contains('\n') || token.contains('\r') {
-        return Err("GitHub token contains unsupported newline characters.".to_string());
+        return Err(GithubImportError::PatTokenHasNewline);
     }
     let escaped = token.replace('\\', "\\\\").replace('"', "\\\"");
     Ok(format!("header = \"Authorization: Bearer {escaped}\""))
@@ -124,7 +164,7 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
     preview_workspace_id: Option<&str>,
     app: Option<&AppHandle>,
     auth: Option<&str>,
-) -> Result<GitHubRepoImportResult, String> {
+) -> Result<GitHubRepoImportResult, GithubImportError> {
     emit_github_import_progress(
         app,
         GitHubImportProgressPayload {
@@ -139,15 +179,20 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
     );
 
     if selections.is_empty() {
-        return Err("Select at least one skill to import.".to_string());
+        return Err(GithubImportError::NoSelections);
     }
 
     let central = db::get_agent_by_id(pool, "central")
         .await?
-        .ok_or_else(|| "Central agent not found in database".to_string())?;
+        .ok_or(GithubImportError::CentralAgentMissing)?;
     let central_root = central.global_skills_dir;
-    let connection = connect_remote_target(active_target).await?;
-    connection.mkdir_p(&central_root).await?;
+    let connection = connect_remote_target(active_target)
+        .await
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
+    connection
+        .mkdir_p(&central_root)
+        .await
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
 
     let resolved = resolve_repo_source(repo_url, auth).await?;
     let workspace =
@@ -200,12 +245,16 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
                 uuid::Uuid::new_v4()
             ),
         );
-        if connection.exists(&target_dir).await? && op.resolution != DuplicateResolution::Overwrite
+        if connection
+            .exists(&target_dir)
+            .await
+            .map_err(|e| GithubImportError::Remote(e.to_string()))?
+            && op.resolution != DuplicateResolution::Overwrite
         {
             for path in created_paths.iter().rev() {
                 let _ = connection.remove_tree(path).await;
             }
-            return Err(format!("Target directory '{}' already exists.", target_dir));
+            return Err(GithubImportError::TargetDirExists(target_dir));
         }
 
         created_stages.push(stage_dir.clone());
@@ -230,7 +279,7 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
             for path in created_paths.iter().rev() {
                 let _ = connection.remove_tree(path).await;
             }
-            return Err(error);
+            return Err(GithubImportError::Remote(error.to_string()));
         }
         created_stages.pop();
 
@@ -328,7 +377,7 @@ pub(super) async fn resolve_remote_import_workspace(
     resolved: &ResolvedGitHubRepoSource,
     preview_workspace_id: Option<&str>,
     auth: Option<&str>,
-) -> Result<GitHubPreviewWorkspace, String> {
+) -> Result<GitHubPreviewWorkspace, GithubImportError> {
     cleanup_expired_preview_workspaces_for_connection(connection).await;
 
     if let Some(workspace_id) = preview_workspace_id {
@@ -338,10 +387,7 @@ pub(super) async fn resolve_remote_import_workspace(
                 &resolved.repo,
                 resolved.source_path.as_deref(),
             ) {
-                return Err(
-                    "GitHub preview workspace does not match the active target or repository. Preview the repository again."
-                        .to_string(),
-                );
+                return Err(GithubImportError::PreviewWorkspaceMismatch);
             }
             if !workspace.is_expired(Utc::now()) {
                 return Ok(workspace);
@@ -361,7 +407,7 @@ pub(super) async fn resolve_remote_import_workspace(
 pub(super) fn remote_skill_source_dir(
     remote_repo_dir: &str,
     source_path: &str,
-) -> Result<String, String> {
+) -> Result<String, GithubImportError> {
     if source_path == "." {
         return Ok(remote_repo_dir.to_string());
     }
@@ -407,41 +453,41 @@ pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
     state: &State<'_, AppState>,
     workspace_id: &str,
     source_path: Option<&str>,
-) -> Result<String, String> {
-    let workspace = get_preview_workspace(workspace_id).ok_or_else(|| {
-        "GitHub preview workspace has expired. Preview the repository again.".to_string()
-    })?;
+) -> Result<String, GithubImportError> {
+    let workspace =
+        get_preview_workspace(workspace_id).ok_or(GithubImportError::PreviewWorkspaceExpired)?;
     if workspace.is_expired(Utc::now()) {
         let _ = take_preview_workspace(workspace_id);
-        return Err(
-            "GitHub preview workspace has expired. Preview the repository again.".to_string(),
-        );
+        return Err(GithubImportError::PreviewWorkspaceExpired);
     }
-    let source_path = source_path.ok_or_else(|| {
-        "A source path is required for remote GitHub markdown preview.".to_string()
-    })?;
-    let active_target = state.active_target().await?;
+    let source_path = source_path.ok_or(GithubImportError::PreviewSourcePathRequired)?;
+    let active_target = state
+        .active_target()
+        .await
+        .map_err(GithubImportError::Remote)?;
     if active_target.is_remote_like() && active_target.id() != workspace.target_id {
-        return Err(
-            "The active remote target changed after preview. Preview the repository again."
-                .to_string(),
-        );
+        return Err(GithubImportError::PreviewTargetChanged);
     }
     if !active_target.is_remote_like() {
-        return Err(
-            "Remote GitHub preview workspace is only available on its remote target.".to_string(),
-        );
+        return Err(GithubImportError::PreviewTargetNotRemote);
     }
     let skill_md_path = if source_path == "." {
         "SKILL.md".to_string()
     } else {
         join_repo_path(source_path, "SKILL.md")?
     };
-    let connection = connect_remote_target(&active_target).await?;
+    let connection = connect_remote_target(&active_target)
+        .await
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
     let bytes = connection
         .read_file(&remote_join(&workspace.remote_repo_dir, &skill_md_path))
-        .await?;
-    String::from_utf8(bytes).map_err(|e| format!("Remote SKILL.md is not valid UTF-8: {}", e))
+        .await
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
+    ResourceBudget::default_skill()
+        .reject_file_read_size(&skill_md_path, bytes.len() as u64)
+        .map_err(GithubImportError::Budget)?;
+    String::from_utf8(bytes)
+        .map_err(|e| GithubImportError::Parse(format!("Remote SKILL.md is not valid UTF-8: {}", e)))
 }
 
 pub(crate) async fn discard_preview_workspace_for_active_target(
