@@ -539,3 +539,36 @@ Filled backend and frontend Trellis spec docs for ref/skillshare with source-bac
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: Filter generic skill updates and style source metadata
+
+**Date**: 2026-06-13
+**Task**: Filter generic skill updates and style source metadata
+**Branch**: `dev`
+
+### Summary
+
+Filtered non-root GitHub import candidates whose normalized skill id is exactly 'skill', added Update Center inventory and import safety regressions, and gave repository/path/url/cache/hash source metadata distinct chip styles.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1b01fd8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
