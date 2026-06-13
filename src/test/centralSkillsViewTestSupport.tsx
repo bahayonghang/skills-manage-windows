@@ -657,30 +657,31 @@ export function renderCentralSkillsView({
   skillDetailOverrides?: Record<string, unknown>;
   marketplaceOverrides?: Record<string, unknown>;
 } = {}) {
+  const centralState = buildCentralStoreState(centralOverrides);
+  const platformState = buildPlatformStoreState(platformOverrides);
+  const skillState = buildSkillStoreState(skillOverrides);
+  const marketplaceState = buildMarketplaceStoreState(marketplaceOverrides);
+  const skillDetailState = buildSkillDetailStoreState(skillDetailOverrides);
+
   mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
-    const state = buildCentralStoreState(centralOverrides);
-    if (typeof selector === "function") return selector(state);
-    return state;
+    if (typeof selector === "function") return selector(centralState);
+    return centralState;
   });
   mockUsePlatformStore.mockImplementation((selector?: unknown) => {
-    const state = buildPlatformStoreState(platformOverrides);
-    if (typeof selector === "function") return selector(state);
-    return state;
+    if (typeof selector === "function") return selector(platformState);
+    return platformState;
   });
   mockUseSkillStore.mockImplementation((selector?: unknown) => {
-    const state = buildSkillStoreState(skillOverrides);
-    if (typeof selector === "function") return selector(state);
-    return state;
+    if (typeof selector === "function") return selector(skillState);
+    return skillState;
   });
   mockUseMarketplaceStore.mockImplementation((selector?: unknown) => {
-    const state = buildMarketplaceStoreState(marketplaceOverrides);
-    if (typeof selector === "function") return selector(state);
-    return state;
+    if (typeof selector === "function") return selector(marketplaceState);
+    return marketplaceState;
   });
   mockUseSkillDetailStore.mockImplementation((selector?: unknown) => {
-    const state = buildSkillDetailStoreState(skillDetailOverrides);
-    if (typeof selector === "function") return selector(state);
-    return state;
+    if (typeof selector === "function") return selector(skillDetailState);
+    return skillDetailState;
   });
 
   return render(
