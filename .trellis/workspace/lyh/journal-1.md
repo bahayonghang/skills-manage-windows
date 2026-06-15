@@ -572,3 +572,37 @@ Filtered non-root GitHub import candidates whose normalized skill id is exactly 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: Archive skill detail platform installs task
+
+**Date**: 2026-06-15
+**Task**: Archive skill detail platform installs task
+**Branch**: `dev`
+
+### Summary
+
+Archived the completed skill detail repository-link and platform-install removal task after confirming the working tree was clean and the task recorded focused Vitest plus just ci validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `91cb9d1` | (see git log) |
+| `b08602c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
