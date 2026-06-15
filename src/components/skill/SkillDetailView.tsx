@@ -14,10 +14,20 @@ import { Bot, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CentralUpdateConfirmDialog } from "@/components/central/CentralUpdateConfirmDialog";
 import { CollectionPickerDialog } from "@/components/collection/CollectionPickerDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SkillDetailPreview } from "@/components/skill/SkillDetailPreview";
 import { SkillDetailSidebar } from "@/components/skill/SkillDetailSidebar";
+import type { InstalledPlatformUninstallRequest } from "@/components/skill/skillDetailInstalledPlatformsModel";
 import { TabToggle } from "@/components/skill/SkillDetailViewShared";
 import { formatBackendError } from "@/lib/backendError";
+import { openExternalUrl } from "@/lib/externalUrl";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { arePathsEquivalent } from "@/lib/path";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
@@ -34,6 +44,7 @@ import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { useTargetStore } from "@/stores/targetStore";
 import type {
   CentralSkillUpdateState,
+  SkillDetail,
   SkillDetailRequest,
   SkillInstallation,
 } from "@/types";
@@ -44,6 +55,15 @@ export type { SourceMetadata } from "@/components/skill/skillDetailViewTypes";
 const NOOP_ASYNC = async () => undefined;
 const NOOP = () => undefined;
 const EMPTY_DIRECTORY_TREE: never[] = [];
+
+function rowAwareUninstallId(
+  agentId: string,
+  detail: SkillDetail | null
+): string | undefined {
+  return agentId === "claude-code" && detail?.source_kind === "user" && !detail.is_read_only
+    ? detail.row_id
+    : undefined;
+}
 
 /**
  * Shared presentation component for skill detail. Rendered by both the
@@ -170,6 +190,8 @@ export function SkillDetailView({
   const [selectedTagId, setSelectedTagId] = useState("");
   const [isUpdateConfirmOpen, setIsUpdateConfirmOpen] = useState(false);
   const [pendingUpdateStates, setPendingUpdateStates] = useState<CentralSkillUpdateState[]>([]);
+  const [pendingPlatformUninstall, setPendingPlatformUninstall] =
+    useState<InstalledPlatformUninstallRequest | null>(null);
   const addToCollectionButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -265,14 +287,11 @@ export function SkillDetailView({
       }
 
       const isInstalled = installationMap.has(targetAgentId);
-      const rowAwareUninstallId =
-        targetAgentId === "claude-code" && detail?.source_kind === "user" && !detail.is_read_only
-          ? detail.row_id
-          : undefined;
+      const uninstallRowId = rowAwareUninstallId(targetAgentId, detail);
       try {
         if (isInstalled) {
-          if (rowAwareUninstallId) {
-            await uninstallSkill(skillId, targetAgentId, rowAwareUninstallId);
+          if (uninstallRowId) {
+            await uninstallSkill(skillId, targetAgentId, uninstallRowId);
           } else {
             await uninstallSkill(skillId, targetAgentId);
           }
@@ -289,9 +308,7 @@ export function SkillDetailView({
       }
     },
     [
-      detail?.is_read_only,
-      detail?.row_id,
-      detail?.source_kind,
+      detail,
       installationMap,
       installSkill,
       refreshCounts,
@@ -448,6 +465,52 @@ export function SkillDetailView({
     }
   }, [detail?.dir_path, isRemoteTarget, openInFileManager, t]);
 
+  const handleOpenGitHubRepository = useCallback(async (url: string) => {
+    try {
+      await openExternalUrl(url);
+    } catch (err) {
+      toast.error(
+        t("detail.openGithubRepoError", {
+          error: formatBackendError(err, t),
+        })
+      );
+    }
+  }, [t]);
+
+  const handleConfirmPlatformUninstall = useCallback(async () => {
+    if (!skillId || !detail || !pendingPlatformUninstall) {
+      return;
+    }
+
+    try {
+      const uninstallRowId = rowAwareUninstallId(
+        pendingPlatformUninstall.agentId,
+        detail
+      );
+      if (uninstallRowId) {
+        await uninstallSkill(skillId, pendingPlatformUninstall.agentId, uninstallRowId);
+      } else {
+        await uninstallSkill(skillId, pendingPlatformUninstall.agentId);
+      }
+      await Promise.all([refreshCounts(), refreshInstallations(skillId)]);
+      setPendingPlatformUninstall(null);
+    } catch (err) {
+      toast.error(
+        t("detail.uninstallError", {
+          error: formatBackendError(err, t),
+        })
+      );
+    }
+  }, [
+    detail,
+    pendingPlatformUninstall,
+    refreshCounts,
+    refreshInstallations,
+    skillId,
+    t,
+    uninstallSkill,
+  ]);
+
   const handleOpenFileTreePath = useCallback(async (path: string) => {
     if (!path) {
       return;
@@ -579,6 +642,10 @@ export function SkillDetailView({
               onToggleInstall={(targetAgentId) => {
                 void handleToggle(targetAgentId);
               }}
+              onOpenGitHubRepository={(url) => {
+                void handleOpenGitHubRepository(url);
+              }}
+              onRequestUninstallInstalledPlatform={setPendingPlatformUninstall}
               skillCollections={skillCollections}
               addToCollectionButtonRef={addToCollectionButtonRef}
               onOpenCollectionPicker={() => setIsCollectionPickerOpen(true)}
@@ -612,6 +679,50 @@ export function SkillDetailView({
         isApplying={isUpdatingThisSkill}
         onConfirm={handleConfirmUpdateSkill}
       />
+
+      <Dialog
+        open={pendingPlatformUninstall !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingPlatformUninstall(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("detail.uninstallPlatformTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("detail.uninstallPlatformDesc", {
+                skill: detail?.name ?? skillId ?? "",
+                platform: pendingPlatformUninstall?.displayName ?? "",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingPlatformUninstall(null)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              data-testid="confirm-detail-platform-uninstall"
+              disabled={
+                !!pendingPlatformUninstall
+                && installingAgentId === pendingPlatformUninstall.agentId
+              }
+              onClick={() => {
+                void handleConfirmPlatformUninstall();
+              }}
+            >
+              {t("detail.uninstallPlatformConfirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

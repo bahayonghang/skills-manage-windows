@@ -40,6 +40,13 @@ import {
   SectionLabel,
   SourceOriginBadge,
 } from "./SkillDetailViewShared";
+import {
+  InstalledPlatformList,
+} from "./SkillDetailInstalledPlatforms";
+import {
+  buildInstalledPlatformRows,
+  type InstalledPlatformUninstallRequest,
+} from "./skillDetailInstalledPlatformsModel";
 import { SkillDetailFileTree } from "./SkillDetailFileTree";
 import type { SourceMetadata } from "./skillDetailViewTypes";
 import type { DirectoryTreeEntry } from "@/types";
@@ -75,6 +82,8 @@ interface SkillDetailSidebarProps {
   sharedRootAgentIds: Set<string>;
   installingAgentId: string | null;
   onToggleInstall: (agentId: string) => void;
+  onOpenGitHubRepository: (url: string) => void;
+  onRequestUninstallInstalledPlatform: (request: InstalledPlatformUninstallRequest) => void;
   skillCollections: Collection[];
   addToCollectionButtonRef: RefObject<HTMLButtonElement | null>;
   onOpenCollectionPicker: () => void;
@@ -248,6 +257,8 @@ export function SkillDetailSidebar({
   sharedRootAgentIds,
   installingAgentId,
   onToggleInstall,
+  onOpenGitHubRepository,
+  onRequestUninstallInstalledPlatform,
   skillCollections,
   addToCollectionButtonRef,
   onOpenCollectionPicker,
@@ -257,6 +268,11 @@ export function SkillDetailSidebar({
   const { t, i18n } = useTranslation();
   const repositoryLabel = repositoryDisplayName(detail?.repository);
   const githubRepositoryUrl = buildGitHubRepositoryUrl(detail?.repository);
+  const installedPlatformRows = buildInstalledPlatformRows(
+    targetAgents,
+    installationMap,
+    sharedRootAgentIds
+  );
 
   return (
     <aside
@@ -344,10 +360,9 @@ export function SkillDetailSidebar({
               {githubRepositoryUrl && repositoryLabel && (
                 <div className={inspectorCardClassName}>
                   <MetadataRow label={t("detail.githubRepository")} value={repositoryLabel} />
-                  <a
-                    href={githubRepositoryUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => onOpenGitHubRepository(githubRepositoryUrl)}
                     className={cn(
                       inspectorActionButtonClassName,
                       "inline-flex h-9 items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-xs transition-[color,box-shadow] hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -355,7 +370,7 @@ export function SkillDetailSidebar({
                   >
                     <ExternalLink className="size-3.5 shrink-0" />
                     <span className="min-w-0 truncate">{t("detail.openGithubRepo")}</span>
-                  </a>
+                  </button>
                   {detail.source_path && (
                     <MetadataRow label={t("detail.repositoryPath")} value={detail.source_path} />
                   )}
@@ -566,15 +581,22 @@ export function SkillDetailSidebar({
               ) : targetAgents.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t("detail.noPlatforms")}</p>
               ) : (
-                <PlatformInstallStatusGroups
-                  lobsterAgents={lobsterAgents}
-                  codingAgents={codingAgents}
-                  installationMap={installationMap}
-                  sharedRootAgentIds={sharedRootAgentIds}
-                  installingAgentId={installingAgentId}
-                  onToggleInstall={onToggleInstall}
-                  skillName={detail.name}
-                />
+                <>
+                  <PlatformInstallStatusGroups
+                    lobsterAgents={lobsterAgents}
+                    codingAgents={codingAgents}
+                    installationMap={installationMap}
+                    sharedRootAgentIds={sharedRootAgentIds}
+                    installingAgentId={installingAgentId}
+                    onToggleInstall={onToggleInstall}
+                    skillName={detail.name}
+                  />
+                  <InstalledPlatformList
+                    rows={installedPlatformRows}
+                    skillName={detail.name}
+                    onRequestUninstall={onRequestUninstallInstalledPlatform}
+                  />
+                </>
               )}
             </div>
           </section>
