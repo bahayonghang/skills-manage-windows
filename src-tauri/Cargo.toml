@@ -1,6 +1,6 @@
 [package]
 name = "skillport"
-version = "0.10.10"
+version = "0.10.11"
 description = "AI Agent Skills Manager"
 authors = ["iamzhihuix"]
 license = "Apache-2.0"
