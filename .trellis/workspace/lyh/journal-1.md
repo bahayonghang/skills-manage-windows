@@ -606,3 +606,37 @@ Archived the completed skill detail repository-link and platform-install removal
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: Align repository-scoped update check labels
+
+**Date**: 2026-06-18
+**Task**: Align repository-scoped update check labels
+**Branch**: `dev`
+
+### Summary
+
+Implemented repository-scoped update-check copy for sync mode, added focused UI tests, committed Trellis task metadata, and archived task 06-18-repo-scoped-update-check-labels.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2876b79` | (see git log) |
+| `d4325f1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

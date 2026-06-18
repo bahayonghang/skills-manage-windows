@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
-- **Last Active**: 2026-06-15
+- **Total Sessions**: 17
+- **Last Active**: 2026-06-18
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~608 | Active |
+| `journal-1.md` | ~642 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-06-18 | Align repository-scoped update check labels | `2876b79`, `d4325f1` | `dev` |
 | 16 | 2026-06-15 | Archive skill detail platform installs task | `91cb9d1`, `b08602c` | `dev` |
 | 15 | 2026-06-13 | Filter generic skill updates and style source metadata | `1b01fd8` | `dev` |
 | 14 | 2026-06-12 | thiserror 批次3：尾批五域+db/repos 透传+全局收尾 | `7cd0fe8`, `ac0d618`, `4bdcf09`, `997a494`, `f1229d1`, `5353479`, `d62b8a5`, `ea6631f`, `83a802d`, `53d152b`, `50023a1` | `dev` |
