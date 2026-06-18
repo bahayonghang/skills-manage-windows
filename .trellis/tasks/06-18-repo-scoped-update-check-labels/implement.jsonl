@@ -1,0 +1,6 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "src/pages/centralSkillsCheckButton.ts", "reason": "mode-aware regular and repository-sync CTA labels"}
+{"file": "src/pages/centralUpdateCheckModeController.tsx", "reason": "choose CTA and dialog scope label by effective update mode"}
+{"file": "src/components/central/UpdateCheckModeDialog.tsx", "reason": "show dialog scope wording for selected local mode"}
+{"file": "src/i18n/locales/en.json", "reason": "English repository-scoped update labels"}
+{"file": "src/i18n/locales/zh.json", "reason": "Chinese repository-scoped update labels"}
