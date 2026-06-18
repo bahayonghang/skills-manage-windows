@@ -19,7 +19,8 @@ import type { UpdateCheckMode } from "@/pages/centralUpdateCheckMode";
 interface UpdateCheckModeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  scopeLabel: string;
+  regularScopeLabel: string;
+  syncScopeLabel: string;
   mode?: UpdateCheckMode;
   isSubmitting?: boolean;
   syncDisabled?: boolean;
@@ -30,7 +31,8 @@ interface UpdateCheckModeDialogProps {
 export function UpdateCheckModeDialog({
   open,
   onOpenChange,
-  scopeLabel,
+  regularScopeLabel,
+  syncScopeLabel,
   mode: initialMode = "regular",
   isSubmitting = false,
   syncDisabled = false,
@@ -47,6 +49,7 @@ export function UpdateCheckModeDialog({
   }, [initialMode, open, syncDisabled]);
 
   const effectiveMode = mode === "sync" && syncDisabled ? "regular" : mode;
+  const scopeLabel = effectiveMode === "sync" ? syncScopeLabel : regularScopeLabel;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

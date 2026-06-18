@@ -49,6 +49,10 @@ export function useCentralUpdateCheckModeController({
   const setModePreference = useSettingsStore((state) => state.setCentralUpdateCheckMode);
   const syncableRepositoryAvailable = hasSyncableGitHubRepository(repositories);
   const syncDisabledReason = t("central.updateCheckMode.sync.disabledNoRepository");
+  const checkButtonLabel =
+    modePreference === "sync" && syncableRepositoryAvailable
+      ? checkButtonState.syncLabel
+      : checkButtonState.regularLabel;
 
   useEffect(() => {
     if (!modeLoaded) {
@@ -93,7 +97,7 @@ export function useCentralUpdateCheckModeController({
 
   return {
     checkButton: {
-      label: checkButtonState.label,
+      label: checkButtonLabel,
       disabled:
         disabled ||
         isUpdateCenterRefreshing ||
@@ -115,7 +119,8 @@ export function useCentralUpdateCheckModeController({
         open={open}
         onOpenChange={setOpen}
         mode={modePreference}
-        scopeLabel={checkButtonState.label}
+        regularScopeLabel={checkButtonState.regularLabel}
+        syncScopeLabel={checkButtonState.syncLabel}
         isSubmitting={isSubmitting}
         syncDisabled={!syncableRepositoryAvailable}
         syncDisabledReason={syncDisabledReason}

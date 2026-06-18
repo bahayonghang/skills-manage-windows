@@ -671,8 +671,9 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     mockRefreshUpdateInventory.mockResolvedValueOnce(inventory);
     renderCentralSkillsView();
 
-    fireEvent.click(screen.getByRole("button", { name: "检查全部（2）" }));
+    fireEvent.click(screen.getByRole("button", { name: "检查全部仓库（1 个）" }));
     const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/当前范围：检查全部仓库（1 个）/)).toBeInTheDocument();
     expect(within(dialog).getByTestId("update-check-mode-regular")).toBeInTheDocument();
     expect(within(dialog).getByTestId("update-check-mode-sync")).toHaveAttribute(
       "aria-pressed",
@@ -686,6 +687,28 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     expect(mockOpenUpdateCenterDialog).toHaveBeenCalledWith("added", { mode: "sync" });
     expect(mockCheckRepositorySync).not.toHaveBeenCalled();
   });
+
+  it("shows all repository scope for selected skills when incremental mode would check all", async () => {
+    settingsStore.setState({ centralUpdateCheckMode: "sync", centralUpdateCheckModeLoaded: true });
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    fireEvent.click(screen.getAllByLabelText("选择技能")[1]);
+
+    const checkAllRepositories = await screen.findByRole("button", {
+      name: "检查全部仓库（1 个）",
+    });
+    fireEvent.click(checkAllRepositories);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/当前范围：检查全部仓库（1 个）/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
+
+    await waitFor(() => {
+      expect(mockRefreshUpdateInventory).toHaveBeenCalledWith({ kind: "all", mode: "sync" });
+    });
+  });
+
   it("routes single-card update actions through the same confirmation dialog", async () => {
     const updateState: CentralSkillUpdateState = {
       skill_id: "frontend-design",
@@ -829,11 +852,12 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
 
     fireEvent.click(screen.getByTestId(`repo-${githubRepo.id}`));
     const checkCurrentResults = await screen.findByRole("button", {
-      name: "检查 openai/skills（2）",
+      name: "检查 openai/skills（1 个仓库）",
     });
     fireEvent.click(checkCurrentResults);
 
     const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/当前范围：检查 openai\/skills（1 个仓库）/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     await waitFor(() => {

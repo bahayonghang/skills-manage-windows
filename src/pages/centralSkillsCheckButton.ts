@@ -19,10 +19,13 @@ export interface CentralSkillsCheckButtonInput {
 
 export interface CentralSkillsCheckButtonState {
   label: string;
+  regularLabel: string;
+  syncLabel: string;
   mode: CheckButtonMode;
   scope: CheckButtonScope;
   repositoryIds?: string[];
   scopedSkillIds?: string[];
+  syncableRepositoryIds: string[];
   targetSkillIds: string[];
 }
 
@@ -53,19 +56,29 @@ export function getCentralSkillsCheckButtonState({
     scope === "all" ? syncableRepoIds : isSingleRepoScope ? selectedRepoIds : [];
   const mode: CheckButtonMode = repositoryIds.length > 0 ? "repository-sync" : "skill";
   const selectedRepository = repositories.find((repo) => repo.id === selectedRepoIds[0]);
+  const regularLabel = getCheckButtonLabel({
+    scope,
+    t,
+    targetSkillIds,
+    totalSkillCount,
+    repositoryName: isSingleRepoScope ? selectedRepository?.name : undefined,
+  });
+  const syncLabel = getSyncCheckButtonLabel({
+    isSingleRepoScope,
+    repositoryName: selectedRepository?.name,
+    syncableRepositoryIds: syncableRepoIds,
+    t,
+  });
 
   return {
-    label: getCheckButtonLabel({
-      scope,
-      t,
-      targetSkillIds,
-      totalSkillCount,
-      repositoryName: isSingleRepoScope ? selectedRepository?.name : undefined,
-    }),
+    label: regularLabel,
+    regularLabel,
+    syncLabel,
     mode,
     scope,
     repositoryIds,
     scopedSkillIds: scope === "all" ? undefined : targetSkillIds,
+    syncableRepositoryIds: syncableRepoIds,
     targetSkillIds,
   };
 }
@@ -130,4 +143,26 @@ function getCheckButtonLabel({
     return t("central.checkUpdatesCurrentResults", { count: targetSkillIds.length });
   }
   return t("central.checkUpdatesAll", { count: totalSkillCount });
+}
+
+function getSyncCheckButtonLabel({
+  isSingleRepoScope,
+  repositoryName,
+  syncableRepositoryIds,
+  t,
+}: {
+  isSingleRepoScope: boolean;
+  repositoryName?: string;
+  syncableRepositoryIds: string[];
+  t: TFunction;
+}): string {
+  if (isSingleRepoScope && repositoryName) {
+    return t("central.checkUpdatesRepositorySync", {
+      repo: repositoryName,
+      count: 1,
+    });
+  }
+  return t("central.checkUpdatesAllRepositories", {
+    count: syncableRepositoryIds.length,
+  });
 }

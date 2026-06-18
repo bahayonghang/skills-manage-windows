@@ -1073,6 +1073,8 @@
     "checkUpdatesSelected": "检查所选（{{count}}）",
     "checkUpdatesCurrentResults": "检查当前结果（{{count}}）",
     "checkUpdatesRepository": "检查 {{repo}}（{{count}}）",
+    "checkUpdatesRepositorySync": "检查 {{repo}}（{{count}} 个仓库）",
+    "checkUpdatesAllRepositories": "检查全部仓库（{{count}} 个）",
     "cancelUpdateJob": "中断更新检查",
     "cancellingUpdateJob": "中断中…",
     "updateCancelRequested": "已请求中断",

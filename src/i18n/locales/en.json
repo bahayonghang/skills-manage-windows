@@ -1073,6 +1073,8 @@
     "checkUpdatesSelected": "Check selected ({{count}})",
     "checkUpdatesCurrentResults": "Check current results ({{count}})",
     "checkUpdatesRepository": "Check {{repo}} ({{count}})",
+    "checkUpdatesRepositorySync": "Check {{repo}} ({{count}} repo)",
+    "checkUpdatesAllRepositories": "Check all repositories ({{count}})",
     "cancelUpdateJob": "Cancel update check",
     "cancellingUpdateJob": "Cancelling…",
     "updateCancelRequested": "Cancellation requested",
