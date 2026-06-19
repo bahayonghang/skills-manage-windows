@@ -28,20 +28,34 @@ import { cn } from "@/lib/utils";
 import {
   JsonViewToggle,
   SummaryTile,
-  type JsonViewMode,
+  TargetBoundaryBadge,
 } from "@/components/central/statePortabilityDialogParts";
+import {
+  conflictKey,
+  defaultExportFileName,
+  EMPTY_SUMMARY,
+  type ExportSummary,
+  isManifestPreviewError,
+  parseExportSummary,
+  parseOriginTarget,
+  prettifyJson,
+  statusTone,
+  targetDisplayLabel,
+  type JsonViewMode,
+} from "@/components/central/statePortabilityDialogUtils";
 import type {
   SkillportStateImportPreview,
   SkillportStateImportResolution,
   SkillportStateImportResolutionType,
   SkillportStateImportResult,
   SkillportStatePortabilityJob,
-  SkillportStateSkillPreview,
+  TargetSummary,
 } from "@/types";
 
 interface CentralStatePortabilityDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  activeTarget: TargetSummary;
   exportState: () => Promise<string>;
   previewImport: (json: string) => Promise<SkillportStateImportPreview>;
   importState: (
@@ -53,19 +67,7 @@ interface CentralStatePortabilityDialogProps {
   onAfterImport?: () => Promise<void> | void;
 }
 
-interface ExportSummary {
-  githubSources: number;
-  centralSkills: number;
-  unrestorableSkills: number;
-}
-
 type TabId = "export" | "import";
-
-const EMPTY_SUMMARY: ExportSummary = {
-  githubSources: 0,
-  centralSkills: 0,
-  unrestorableSkills: 0,
-};
 
 const IDLE_PORTABILITY_JOB: SkillportStatePortabilityJob = {
   phase: null,
@@ -74,58 +76,10 @@ const IDLE_PORTABILITY_JOB: SkillportStatePortabilityJob = {
   completed: 0,
 };
 
-function parseExportSummary(json: string): ExportSummary {
-  const parsed = JSON.parse(json) as {
-    githubSources?: unknown[];
-    centralSkills?: unknown[];
-    unrestorableSkills?: unknown[];
-  };
-  return {
-    githubSources: parsed.githubSources?.length ?? 0,
-    centralSkills: parsed.centralSkills?.length ?? 0,
-    unrestorableSkills: parsed.unrestorableSkills?.length ?? 0,
-  };
-}
-
-function prettifyJson(json: string) {
-  return JSON.stringify(JSON.parse(json), null, 2);
-}
-
-function defaultExportFileName() {
-  const date = new Date().toISOString().slice(0, 10);
-  return `skillport-state-${date}.json`;
-}
-
-function statusTone(status: SkillportStateSkillPreview["status"]) {
-  if (status === "ready")
-    return "border-success/40 bg-success/10 text-success-foreground";
-  if (status === "conflict")
-    return "border-warning/40 bg-warning/10 text-warning-foreground";
-  if (status === "missing")
-    return "border-destructive/40 bg-destructive/10 text-destructive";
-  if (status === "duplicate_skipped")
-    return "border-info/40 bg-info/10 text-info-foreground";
-  return "border-muted-foreground/30 bg-muted text-muted-foreground";
-}
-
-function isManifestPreviewError(error: unknown) {
-  const message = String(error);
-  return (
-    message.includes("Invalid SkillPort state JSON:") ||
-    message.includes("Unsupported SkillPort state export kind") ||
-    message.includes("Unsupported SkillPort state export version:")
-  );
-}
-
-function conflictKey(
-  skill: Pick<SkillportStateSkillPreview, "id" | "sourcePath">,
-) {
-  return `${skill.id}\u001f${skill.sourcePath ?? ""}`;
-}
-
 export function CentralStatePortabilityDialog({
   open,
   onOpenChange,
+  activeTarget,
   exportState,
   previewImport,
   importState,
@@ -181,6 +135,24 @@ export function CentralStatePortabilityDialog({
     exportViewMode === "pretty" && !exportPrettyError
       ? exportJsonPretty
       : exportJsonRaw;
+  const activeTargetLabel = useMemo(
+    () => targetDisplayLabel(activeTarget, t),
+    [activeTarget, t],
+  );
+  const importOriginTarget = useMemo(
+    () => parseOriginTarget(importJson),
+    [importJson],
+  );
+  const importOriginWarning =
+    importOriginTarget &&
+    (importOriginTarget.id !== activeTarget.id ||
+      importOriginTarget.kind !== activeTarget.kind ||
+      importOriginTarget.label !== activeTarget.label)
+      ? t("central.portabilityOriginTargetWarning", {
+          origin: targetDisplayLabel(importOriginTarget, t),
+          active: activeTargetLabel,
+        })
+      : null;
 
   const refreshExportPreview = useCallback(async () => {
     setIsExportLoading(true);
@@ -364,6 +336,14 @@ export function CentralStatePortabilityDialog({
         <DialogHeader>
           <DialogTitle>{t("central.portabilityTitle")}</DialogTitle>
           <DialogDescription>{t("central.portabilityDesc")}</DialogDescription>
+          <TargetBoundaryBadge
+            label={
+              activeTab === "export"
+                ? t("central.portabilityExportTarget")
+                : t("central.portabilityImportTarget")
+            }
+            targetLabel={activeTargetLabel}
+          />
           <DialogClose />
         </DialogHeader>
 
@@ -557,6 +537,17 @@ export function CentralStatePortabilityDialog({
                   {t("central.portabilityPrettyError", {
                     error: importFormatError,
                   })}
+                </div>
+              )}
+              {importOriginWarning && (
+                <div
+                  className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning-foreground"
+                  data-testid="central-portability-origin-warning"
+                >
+                  <div className="flex gap-2">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <span>{importOriginWarning}</span>
+                  </div>
                 </div>
               )}
               {preview && (

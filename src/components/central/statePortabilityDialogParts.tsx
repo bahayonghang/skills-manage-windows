@@ -1,6 +1,28 @@
-import { cn } from "@/lib/utils";
+import { Server } from "lucide-react";
 
-export type JsonViewMode = "raw" | "pretty";
+import { cn } from "@/lib/utils";
+import type { JsonViewMode } from "@/components/central/statePortabilityDialogUtils";
+
+export function TargetBoundaryBadge({
+  label,
+  targetLabel,
+}: {
+  label: string;
+  targetLabel: string;
+}) {
+  return (
+    <div
+      className="mt-2 inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-xs"
+      data-testid="central-portability-active-target"
+    >
+      <Server className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="truncate font-medium text-foreground">
+        {targetLabel}
+      </span>
+    </div>
+  );
+}
 
 export function JsonViewToggle({
   value,

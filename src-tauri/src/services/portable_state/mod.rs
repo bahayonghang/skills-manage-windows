@@ -21,24 +21,28 @@ use crate::db::DbPool;
 
 pub use error::PortableStateError;
 pub(crate) use export::export_skillport_state_impl;
-pub(crate) use import::import_skillport_state_impl;
+pub(crate) use import::import_skillport_state_for_target;
 #[cfg(test)]
-use import::{build_import_groups, ensure_github_sources, restore_skill_tags};
+use import::{
+    build_import_groups, ensure_github_sources, import_skillport_state_impl,
+    portable_import_target_kind, restore_skill_tags, PortableImportTargetKind,
+};
 pub(crate) use preview::{
     build_remote_catalog, parse_manifest, preview_skillport_state_import_impl,
 };
 pub(crate) use progress::emit_portability_progress;
-pub(crate) use types::PortabilityProgressUpdate;
 use types::RepoKey;
 pub use types::{
-    ExportedFrom, PortableCentralSkill, PortableCentralSkillSource, PortableGithubSource,
-    PortableSkillTag, PortableUnrestorableSkill, SkillPreviewStatus, SkillportStateExportOptions,
-    SkillportStateImportFailure, SkillportStateImportPreview, SkillportStateImportPreviewSummary,
-    SkillportStateImportPreviewWarning, SkillportStateImportResolution, SkillportStateImportResult,
-    SkillportStateImportedSkill, SkillportStateManifest, SkillportStatePortabilityPhase,
+    ExportedFrom, ExportedTarget, PortableCentralSkill, PortableCentralSkillSource,
+    PortableGithubSource, PortableSkillTag, PortableUnrestorableSkill, SkillPreviewStatus,
+    SkillportStateExportOptions, SkillportStateImportFailure, SkillportStateImportPreview,
+    SkillportStateImportPreviewSummary, SkillportStateImportPreviewWarning,
+    SkillportStateImportResolution, SkillportStateImportResult, SkillportStateImportedSkill,
+    SkillportStateManifest, SkillportStatePortabilityPhase,
     SkillportStatePortabilityProgressPayload, SkillportStatePortabilityStatus,
     SkillportStateSkillPreview, SkillportStateSourcePreview, SourcePreviewStatus,
 };
+pub(crate) use types::{PortabilityProgressUpdate, PortableStateTargetContext};
 #[cfg(test)]
 use types::{RemoteCatalogEntry, RemoteCatalogInvalidCandidate, EXPORT_KIND, EXPORT_VERSION};
 
