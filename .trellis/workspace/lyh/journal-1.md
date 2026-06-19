@@ -640,3 +640,38 @@ Implemented repository-scoped update-check copy for sync mode, added focused UI 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: Target-aware Central state portability
+
+**Date**: 2026-06-19
+**Task**: Target-aware Central state portability
+**Branch**: `dev`
+
+### Summary
+
+Fixed Windows just shell execution, implemented target-aware Central state import/export for Local/SSH/WSL, and recorded the Trellis task plan and verification artifacts.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `011dac1d` | (see git log) |
+| `3a976b1a` | (see git log) |
+| `c98283be` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

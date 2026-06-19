@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 17
-- **Last Active**: 2026-06-18
+- **Total Sessions**: 18
+- **Last Active**: 2026-06-19
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~642 | Active |
+| `journal-1.md` | ~677 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 18 | 2026-06-19 | Target-aware Central state portability | `011dac1d`, `3a976b1a`, `c98283be` | `dev` |
 | 17 | 2026-06-18 | Align repository-scoped update check labels | `2876b79`, `d4325f1` | `dev` |
 | 16 | 2026-06-15 | Archive skill detail platform installs task | `91cb9d1`, `b08602c` | `dev` |
 | 15 | 2026-06-13 | Filter generic skill updates and style source metadata | `1b01fd8` | `dev` |
