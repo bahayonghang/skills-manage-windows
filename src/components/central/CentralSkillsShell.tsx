@@ -315,15 +315,15 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
         portabilityJob={taskCenter.portabilityJob}
       />
       {/* Header ─────────────────────────────────────────────────────── */}
-      <div className="border-b border-border px-6 py-3 flex items-center justify-between gap-4">
-        <div className="min-w-0">
+      <div className="flex flex-col items-start gap-3 border-b border-border/65 bg-background/95 px-4 py-3 shadow-[0_1px_0_color-mix(in_srgb,var(--foreground)_4%,transparent)] sm:px-6 xl:flex-row xl:items-center xl:justify-between">
+        <div className="w-full min-w-0 xl:w-auto">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold leading-tight">
+            <h1 className="text-balance text-xl font-semibold leading-tight">
               {t("central.title")}
             </h1>
             <span
               data-testid="central-result-count"
-              className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground"
+              className="shrink-0 rounded-full bg-muted/70 px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground ring-1 ring-border/60"
             >
               {listContent.sortedSkills.length}
             </span>
@@ -339,7 +339,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
               type="button"
               variant="ghost"
               size="sm"
-              className="h-6 shrink-0 gap-1 px-2 text-[11px]"
+              className="h-7 shrink-0 gap-1 rounded-lg px-2 text-[11px] transition-[scale,background-color,color] active:scale-[0.96]"
               disabled={centralStoreLocation.disabled}
               onClick={centralStoreLocation.onOpen}
               title={centralStoreLocation.disabledReason}
@@ -350,10 +350,11 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
             </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full min-w-0 flex-col items-stretch gap-2 min-[521px]:flex-row min-[521px]:flex-wrap min-[521px]:items-center xl:w-auto xl:justify-end">
           {/* 核心入口：GitHub 导入 ─────────────────────────────────── */}
           <Button
             variant="outline"
+            className="h-9 rounded-xl pl-3 pr-3.5 transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
             onClick={() => setIsGitHubImportOpen(true)}
             data-testid="central-github-import-open"
           >
@@ -364,6 +365,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           {/* 入口：更新中心（聚合可更新 / 新增 / 已删除 / 平台冗余）─── */}
           <Button
             variant="outline"
+            className="h-9 rounded-xl pl-3 pr-3.5 transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
             onClick={() =>
               openUpdateCenter(undefined, updateCenterRefreshContext)
             }
@@ -378,6 +380,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           {/* 主 CTA：检查更新 ────────────────────────────────────── */}
           <Button
             variant="default"
+            className="h-9 rounded-xl pl-3 pr-3.5 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_22%,transparent),0_8px_18px_-14px_color-mix(in_srgb,var(--primary)_70%,transparent)] transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
             onClick={checkButton.onClick}
             disabled={checkButton.disabled}
             data-testid="central-check-updates"
@@ -400,6 +403,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           {updateAvailableSkillCount > 0 && (
             <Button
               variant="outline"
+              className="h-9 rounded-xl pl-3 pr-3.5 transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
               onClick={() => onUpdateSkills(updateButton.targetSkillIds)}
               disabled={updateButton.disabled}
             >
@@ -420,9 +424,9 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       </div>
 
       {/* Search + toolbar ──────────────────────────────────────────── */}
-      <div className="px-6 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <div className="flex-1 min-w-0">
+      <div className="border-b border-border/60 bg-background/80 px-4 py-3 shadow-[0_1px_0_color-mix(in_srgb,var(--foreground)_3%,transparent)] sm:px-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-[240px] flex-1">
             <CentralSearchBar
               t={t}
               value={viewState.q}
@@ -471,7 +475,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
               type="button"
               variant="outline"
               size="sm"
-              className="h-9 shrink-0 gap-1.5"
+              className="h-9 shrink-0 gap-1.5 rounded-xl transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
               onClick={() => taskCenter.onOpenChange(true)}
               aria-label={t("central.taskCenterOpenLabel")}
               data-testid="central-toolbar-task-center-chip"
@@ -530,7 +534,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       />
 
       {/* Body: sidebar + list + categorize ───────────────────────────── */}
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1">
         <CentralSidebar
           t={t}
           width={filterSidebarWidth}

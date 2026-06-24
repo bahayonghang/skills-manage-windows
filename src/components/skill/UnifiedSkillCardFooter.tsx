@@ -34,7 +34,7 @@ export const PlatformToggleIcon = memo(function PlatformToggleIcon({
   return (
     <button
       className={cn(
-        "p-1 rounded-md transition-colors cursor-pointer",
+        "grid size-8 place-items-center rounded-lg transition-[scale,background-color,color] active:not-disabled:scale-[0.96]",
         isLocked
           ? "text-primary cursor-default"
           : isLinked
@@ -85,7 +85,7 @@ export const UnifiedSkillCardFooter = memo(function UnifiedSkillCardFooter({
   const lockedAgentSet = useMemo(() => new Set(lockedAgentIds ?? []), [lockedAgentIds]);
 
   return (
-    <div data-testid="card-footer" className="mt-auto flex items-center justify-between gap-2 border-t border-border/70 pt-2">
+    <div data-testid="card-footer" className="mt-auto flex items-center justify-between gap-2 border-t border-border/50 pt-2">
       <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
         {repoName && (
           <span className="flex min-w-0 items-center gap-1">

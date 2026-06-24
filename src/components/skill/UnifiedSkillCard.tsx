@@ -255,12 +255,12 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
         role="button"
         onClick={onClick}
         className={cn(
-          "w-full h-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl group/skill-card",
+          "group/skill-card h-full w-full rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           className
         )}
         aria-label={t("platform.searchSkillLabel", { name })}
       >
-        <div className={cn(cardShellClass(false), "p-3.5 gap-2 hover:ring-primary/30 cursor-pointer")}>
+        <div className={cn(cardShellClass(false), "cursor-pointer gap-2 p-3.5")}>
           <div className="flex flex-1 items-start justify-between gap-3 min-w-0">
             <div className="min-w-0 flex-1 flex flex-col gap-2">
               <div className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground transition-colors group-hover/skill-card:text-primary">
@@ -291,7 +291,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     <div
       className={cn(
         cardShellClass(checkbox?.checked),
-        "group/skill-card relative overflow-hidden p-3.5 gap-2",
+        "group/skill-card relative overflow-hidden gap-2 p-3.5",
         isCompact ? "min-h-[168px]" : "min-h-[188px]",
         isLoading && "opacity-50",
         className
@@ -305,6 +305,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
               checked={checkbox.checked}
               onCheckedChange={checkbox.onChange}
               aria-label={t("common.selectSkill")}
+              className="relative size-5 after:absolute after:left-1/2 after:top-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']"
             />
           </div>
         )}
@@ -316,7 +317,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             {onDetail ? (
               <button
                 ref={detailButtonRef}
-                className="min-w-0 flex-1 truncate rounded-sm text-left text-sm font-semibold tracking-[-0.01em] text-foreground underline-offset-4 transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="min-h-7 min-w-0 flex-1 truncate rounded-md text-left text-sm font-semibold tracking-[-0.01em] text-foreground underline-offset-4 transition-[color,box-shadow] hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={onDetail}
                 aria-label={t("central.viewDetailsLabel", { name })}
               >
@@ -344,7 +345,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             {hasActions && (
               <div
                 className={cn(
-                  "flex items-center gap-0.5 shrink-0",
+                  "flex shrink-0 items-center gap-0.5",
                   isCompact &&
                     "opacity-0 transition-opacity duration-150 group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100",
                 )}
@@ -452,7 +453,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                         : installLabel ?? t("marketplace.install")
                     }
                     className={cn(
-                      "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+                      "inline-flex h-8 w-8 items-center justify-center rounded-lg transition-[scale,background-color,color] active:not-disabled:scale-[0.96]",
                       isInstalled
                         ? "text-primary cursor-default"
                         : "text-muted-foreground hover:bg-accent/40 hover:text-primary disabled:opacity-50 disabled:cursor-default"
@@ -546,7 +547,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   <span
                     data-testid={`skill-card-linked-summary-${platformIcons.skillId}`}
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground",
+                      "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground",
                       "group-hover/skill-card:hidden group-focus-within/skill-card:hidden",
                     )}
                   >
@@ -609,10 +610,8 @@ UnifiedSkillCard.displayName = "UnifiedSkillCard";
 
 function cardShellClass(selected?: boolean): string {
   return cn(
-    "h-full flex flex-col rounded-xl bg-card ring-1 ring-border/70 transition-all duration-150",
-    "shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_-6px_rgba(0,0,0,0.08)]",
-    "hover:ring-primary/25 hover:shadow-[0_2px_4px_rgba(0,0,0,0.05),0_10px_28px_-10px_color-mix(in_srgb,var(--primary)_24%,transparent)]",
-    selected && "ring-primary/45 bg-primary/[0.04]",
+    "central-skill-card-surface flex h-full flex-col rounded-xl bg-card",
+    selected && "central-skill-card-selected bg-primary/[0.04]",
   );
 }
 
@@ -643,7 +642,7 @@ function CardActionButton({
       aria-label={ariaLabel}
       data-testid={testId}
       className={cn(
-        "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors text-muted-foreground disabled:opacity-50 disabled:cursor-default",
+        "inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-[scale,background-color,color] active:not-disabled:scale-[0.96] disabled:cursor-default disabled:opacity-50",
         danger
           ? "hover:bg-destructive/10 hover:text-destructive"
           : "hover:bg-accent/40 hover:text-primary",
@@ -678,7 +677,7 @@ function SkillCardSummary({
         data-truncated={isTruncated ? "true" : "false"}
         title={text}
         className={cn(
-          "text-xs leading-relaxed text-muted-foreground/90",
+          "text-pretty break-words text-xs leading-relaxed text-muted-foreground/90",
           lineClamp === 3 ? "line-clamp-3" : "line-clamp-2",
           label && "inline",
         )}

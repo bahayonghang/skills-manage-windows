@@ -169,7 +169,7 @@ export function CentralSkillListContent({
       ref={contentRef}
       data-testid="central-skill-list-scroll"
       className={cn(
-        "scrollbar-subtle flex-1 overflow-auto p-6",
+        "scrollbar-subtle min-w-0 flex-1 overflow-auto p-4 sm:p-6",
         selectedCount > 0 && "pb-28",
       )}
     >

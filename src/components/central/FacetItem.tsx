@@ -49,7 +49,7 @@ export function FacetItem({
   return (
     <div
       className={cn(
-        "group relative flex min-h-8 w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition-colors",
+        "group relative flex min-h-9 w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs transition-[background-color,border-color,box-shadow,color]",
         indentLevel === 1 && "ml-3",
         active
           ? "border-primary/25 bg-background text-foreground shadow-sm ring-1 ring-primary/10"
@@ -65,14 +65,14 @@ export function FacetItem({
         data-active={active}
         onClick={onClick}
         title={description}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        className="flex min-h-7 min-w-0 flex-1 items-center gap-2 text-left"
       >
         {icon ? (
           <span className="grid size-4 shrink-0 place-items-center text-muted-foreground/80">
             {icon}
           </span>
         ) : null}
-        <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+        <span className="min-w-0 flex-1 truncate text-pretty font-medium">{label}</span>
       </button>
       {badge}
       {typeof count === "number" && (

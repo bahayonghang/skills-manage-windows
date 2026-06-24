@@ -24,7 +24,7 @@ export function UpdateModePreferenceSelect({
   return (
     <label
       className={cn(
-        "inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-2 text-xs text-muted-foreground",
+        "inline-flex h-9 min-w-0 shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-2 text-xs text-muted-foreground",
         disabled && "opacity-60",
       )}
       title={title}
@@ -34,7 +34,7 @@ export function UpdateModePreferenceSelect({
       </span>
       <select
         data-testid="central-update-check-mode-select"
-        className="h-7 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground outline-none focus:ring-2 focus:ring-ring"
+        className="h-7 min-w-0 flex-1 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground outline-none focus:ring-2 focus:ring-ring"
         value={mode}
         disabled={disabled}
         onChange={(event) => {

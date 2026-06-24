@@ -902,6 +902,33 @@
   }
 }
 
+/* ─── Central Skills polish primitives ────────────────────────────────────── */
+@layer components {
+  .central-skill-card-surface {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent),
+      0 1px 2px -1px color-mix(in srgb, var(--foreground) 10%, transparent),
+      0 14px 30px -22px color-mix(in srgb, var(--foreground) 34%, transparent);
+    transition-property: background-color, box-shadow, scale;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  .central-skill-card-surface:hover {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary) 30%, var(--border)),
+      0 2px 4px -2px color-mix(in srgb, var(--foreground) 13%, transparent),
+      0 20px 42px -24px color-mix(in srgb, var(--primary) 34%, transparent);
+  }
+
+  .central-skill-card-surface.central-skill-card-selected {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary) 54%, transparent),
+      0 2px 4px -2px color-mix(in srgb, var(--foreground) 13%, transparent),
+      0 18px 36px -24px color-mix(in srgb, var(--primary) 42%, transparent);
+  }
+}
+
 /* ─── Skill markdown surfaces ─────────────────────────────────────────────── */
 .skill-markdown-panel {
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);

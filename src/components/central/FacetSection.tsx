@@ -45,11 +45,11 @@ export function FacetSection({
 
   return (
     <section data-testid={testId}>
-      <div className="sticky top-0 z-10 -mx-3 flex items-center gap-1.5 border-b border-border/40 bg-background/90 px-4 py-2 text-[11px] font-medium tracking-normal text-muted-foreground backdrop-blur-md">
+      <div className="sticky top-0 z-10 -mx-3 flex items-center gap-1.5 border-b border-border/40 bg-background/90 px-4 py-2 text-[11px] font-medium tracking-normal text-muted-foreground shadow-[0_1px_0_color-mix(in_srgb,var(--foreground)_3%,transparent)] backdrop-blur-md">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="flex flex-1 items-center gap-1.5 text-left hover:text-foreground"
+          className="flex min-h-8 flex-1 items-center gap-1.5 rounded-lg text-left transition-[color,background-color] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           aria-expanded={expanded}
         >
           <Caret className="size-3 shrink-0" />
