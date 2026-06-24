@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 
+import { matchesShortcut } from "@/lib/keyboardShortcuts";
+
 /**
  * Registers a global keyboard shortcut.
  * @param key - The key combo (e.g. "mod+k"). "mod" maps to Meta on Mac, Ctrl elsewhere.
@@ -7,30 +9,10 @@ import { useEffect } from "react";
  */
 export function useHotkey(key: string, callback: () => void) {
   useEffect(() => {
-    const parts = key.toLowerCase().split("+");
-    const needsMeta = parts.includes("meta") || parts.includes("mod");
-    const needsCtrl = parts.includes("ctrl") || parts.includes("mod");
-    const needsShift = parts.includes("shift");
-    const mainKey = parts.filter(
-      (p) => !["meta", "ctrl", "shift", "mod"].includes(p)
-    )[0];
+    if (typeof window === "undefined") return;
 
     function handler(e: KeyboardEvent) {
-      const isMac = navigator.platform.toUpperCase().includes("MAC");
-      const metaOk = needsMeta
-        ? isMac
-          ? e.metaKey
-          : e.ctrlKey
-        : !e.metaKey && !e.ctrlKey;
-      const ctrlOk = needsCtrl ? e.ctrlKey : !e.ctrlKey || (isMac && needsMeta);
-      const shiftOk = needsShift ? e.shiftKey : !e.shiftKey;
-
-      if (
-        metaOk &&
-        (needsMeta || ctrlOk) &&
-        shiftOk &&
-        e.key.toLowerCase() === mainKey
-      ) {
+      if (matchesShortcut(e, key)) {
         e.preventDefault();
         callback();
       }

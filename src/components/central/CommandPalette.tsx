@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Bookmark, Sparkles, Tag } from "lucide-react";
 
@@ -12,6 +11,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
+import { useHotkey } from "@/hooks/useHotkey";
 import { getVisibleSkillTags } from "@/lib/centralTags";
 import type { SavedView, SkillRepositoryWithStats, SkillTag } from "@/types";
 
@@ -38,7 +38,7 @@ export interface CommandPaletteProps {
 }
 
 /**
- * 全局命令面板（⌘K / Ctrl+K）。
+ * 全局命令面板（mod+K）。
  *
  * 三段：Saved views / Tags / Repositories / Actions。每段限制 8 项避免列表过长。
  * 选中后自动关闭。
@@ -56,17 +56,7 @@ export function CommandPalette({
 }: CommandPaletteProps) {
   const { t } = useTranslation();
 
-  // 全局快捷键 ⌘K / Ctrl+K
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        onOpenChange(!open);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onOpenChange]);
+  useHotkey("mod+k", () => onOpenChange(!open));
 
   const visibleSavedViews = savedViews.slice(0, 8);
   const visibleTags = getVisibleSkillTags(tags).slice(0, 8);

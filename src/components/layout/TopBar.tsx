@@ -6,6 +6,7 @@ import { usePlatformStore } from "@/stores/platformStore";
 import { useThemeStore, type ThemeFlavor } from "@/stores/themeStore";
 import { TargetQuickSwitcher } from "@/components/layout/TargetQuickSwitcher";
 import { Button } from "@/components/ui/button";
+import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
@@ -86,10 +87,6 @@ export function TopBar({ onSearchClick }: TopBarProps) {
     return { label: "", count: undefined };
   })();
 
-  const isMac =
-    typeof navigator !== "undefined" &&
-    navigator.platform.toUpperCase().includes("MAC");
-
   function handleToggleTheme() {
     setFlavor(FLAVOR_TOGGLE_MAP[flavor] ?? "latte");
   }
@@ -122,9 +119,10 @@ export function TopBar({ onSearchClick }: TopBarProps) {
             <span className="truncate flex-1 text-left">
               {t("globalSearch.trigger")}
             </span>
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono text-muted-foreground/60 border border-border/50 rounded px-1 py-0.5">
-              {isMac ? "⌘" : "Ctrl"}K
-            </kbd>
+            <ShortcutHint
+              shortcut="mod+k"
+              className="hidden rounded border border-border/50 px-1 py-0.5 text-[10px] text-muted-foreground/60 sm:inline-flex"
+            />
           </button>
         </div>
       </div>

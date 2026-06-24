@@ -2,6 +2,7 @@ import { Search, X } from "lucide-react";
 import type { TFunction } from "i18next";
 
 import { Input } from "@/components/ui/input";
+import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { cn } from "@/lib/utils";
 import {
   getInstalledFilterPlatformId,
@@ -133,7 +134,7 @@ export function CentralSearchBar({
               aria-label={t("central.v2.commandPaletteOpen")}
               className="inline-flex items-center gap-1 rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground"
             >
-              ⌘K
+              <ShortcutHint shortcut="mod+k" />
             </button>
           )}
         </div>
