@@ -37,6 +37,7 @@ export interface CentralGroupedSkillListProps {
   onToggleSelection: (skillId: string) => void;
   onDetail: (skillId: string) => void;
   onInstallTo: (skill: SkillWithLinks) => void;
+  onUninstallFromPlatforms: (skill: SkillWithLinks) => void;
   onUpdateCentral: (skillIds: string[]) => void;
   onDelete: (skill: SkillWithLinks) => void;
   onTogglePlatform: (skillId: string, agentId: string) => Promise<void>;
@@ -60,6 +61,7 @@ export function CentralGroupedSkillList({
   onToggleSelection,
   onDetail,
   onInstallTo,
+  onUninstallFromPlatforms,
   onUpdateCentral,
   onDelete,
   onTogglePlatform,
@@ -149,6 +151,7 @@ export function CentralGroupedSkillList({
                           onToggleSelection,
                           onDetail,
                           onInstallTo,
+                          onUninstallFromPlatforms,
                           onUpdateCentral,
                           onDelete,
                           onAddSkillTag,

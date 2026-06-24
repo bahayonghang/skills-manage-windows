@@ -370,6 +370,74 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     );
   });
 
+  it("opens single-card platform uninstall for only the clicked central skill", async () => {
+    mockBatchUninstallSkillsFromAgent
+      .mockResolvedValueOnce({
+        succeeded: [{ skill_id: "frontend-design" }],
+        failed: [],
+      })
+      .mockResolvedValueOnce({
+        succeeded: [{ skill_id: "frontend-design" }],
+        failed: [],
+    });
+    renderCentralSkillsView();
+
+    screen.getAllByLabelText("选择技能").forEach((checkbox) => {
+      fireEvent.click(checkbox);
+    });
+    fireEvent.click(screen.getByTestId("uninstall-platforms-skill-frontend-design"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText("此操作只取消平台安装，不会删除中央技能库中的技能、仓库、标签或技能文件。"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(dialog).getByTestId("confirm-batch-uninstall-central-skills"),
+    );
+
+    await waitFor(() => {
+      expect(mockBatchUninstallSkillsFromAgent).toHaveBeenCalledTimes(2);
+    });
+    expect(mockBatchUninstallSkillsFromAgent).toHaveBeenCalledWith(
+      "claude-code",
+      [{ skill_id: "frontend-design" }],
+    );
+    expect(mockBatchUninstallSkillsFromAgent).toHaveBeenCalledWith("codex", [
+      { skill_id: "frontend-design" },
+    ]);
+    expect(mockBatchUninstallSkillsFromAgent).not.toHaveBeenCalledWith(
+      "codex",
+      expect.arrayContaining([{ skill_id: "code-reviewer" }]),
+    );
+  });
+
+  it("shows no-op dialog from single-card uninstall when the skill has no removable installs", async () => {
+    const skills: SkillWithLinks[] = [
+      {
+        ...mockSkills[0]!,
+        id: "shared-only",
+        name: "shared-only",
+        linked_agents: ["cursor"],
+        shared_root_agents: ["cursor"],
+      },
+    ];
+    renderCentralSkillsView({ centralOverrides: { skills } });
+
+    fireEvent.click(screen.getByTestId("uninstall-platforms-skill-shared-only"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByTestId("central-batch-uninstall-noop"),
+    ).toHaveTextContent("已选技能没有可独立卸载的平台安装。");
+    expect(
+      within(dialog).getByText("共享中央目录平台不会独立卸载"),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByTestId("confirm-batch-uninstall-central-skills"),
+    ).toBeDisabled();
+    expect(mockBatchUninstallSkillsFromAgent).not.toHaveBeenCalled();
+  });
+
 
   it("previews and batch deletes selected central skills with selected platform copies", async () => {
     mockLoadBatchDeletePreview.mockResolvedValueOnce({

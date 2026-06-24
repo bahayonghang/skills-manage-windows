@@ -24,6 +24,7 @@ interface CentralSkillCardPropsContext {
   onToggleSelection: (skillId: string) => void;
   onDetail: (skillId: string) => void;
   onInstallTo: (skill: SkillWithLinks) => void;
+  onUninstallFromPlatforms: (skill: SkillWithLinks) => void;
   onUpdateCentral: (skillIds: string[]) => void;
   onDelete: (skill: SkillWithLinks) => void;
   onAddSkillTag?: (skillId: string, tagId: string) => void;
@@ -76,6 +77,7 @@ export function buildCentralSkillCardProps(
       : undefined,
     onDetail: () => context.onDetail(skill.id),
     onInstallTo: () => context.onInstallTo(skill),
+    onUninstallFromPlatforms: () => context.onUninstallFromPlatforms(skill),
     onUpdateCentral: () => context.onUpdateCentral([skill.id]),
     onDeleteFromCentral: () => context.onDelete(skill),
     detailButtonRef: (node) => context.setDetailButtonRef(skill.id, node),

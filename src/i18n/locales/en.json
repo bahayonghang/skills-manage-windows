@@ -639,6 +639,8 @@
     "viewDetailsLabel": "View details for {{name}}",
     "installLabel": "Install {{name}} to platforms",
     "installTo": "Install to...",
+    "uninstallFromPlatforms": "Uninstall from platforms",
+    "uninstallFromPlatformsLabel": "Uninstall {{name}} from platforms",
     "deleteSkill": "Delete from Central Skills",
     "deleteSkillLabel": "Delete {{name}} from Central Skills",
     "deleteDialogTitle": "Delete {{name}}",

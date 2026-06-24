@@ -655,6 +655,7 @@ function GroupedListView({
       onToggleSelection={listContent.onToggleSelection}
       onDetail={listContent.onDetail}
       onInstallTo={listContent.onInstallTo}
+      onUninstallFromPlatforms={listContent.onUninstallFromPlatforms}
       onUpdateCentral={listContent.onUpdateCentral}
       onDelete={listContent.onDelete}
       onTogglePlatform={listContent.onTogglePlatform}

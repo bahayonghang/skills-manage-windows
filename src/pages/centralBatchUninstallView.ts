@@ -19,11 +19,22 @@ export function useCentralBatchUninstallView({
   ) => Promise<CentralBatchUninstallApplyResult>;
 }) {
   const [open, setOpen] = useState(false);
+  const [singleSkillId, setSingleSkillId] = useState<string | null>(null);
   const [isUninstalling, setIsUninstalling] = useState(false);
   const preview = useMemo(
-    () => createCentralBatchUninstallPreview(selectedSkillIds, skills),
-    [selectedSkillIds, skills],
+    () =>
+      createCentralBatchUninstallPreview(
+        singleSkillId ? [singleSkillId] : selectedSkillIds,
+        skills,
+      ),
+    [selectedSkillIds, singleSkillId, skills],
   );
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setSingleSkillId(null);
+    }
+  }, []);
   const confirm = useCallback(
     async (nextPreview: CentralBatchUninstallPreview) => {
       setIsUninstalling(true);
@@ -40,13 +51,20 @@ export function useCentralBatchUninstallView({
     dialog: {
       open,
       onConfirm: confirm,
-      onOpenChange: setOpen,
+      onOpenChange: handleOpenChange,
       preview,
       isUninstalling,
     },
+    openForSkill: (skillId: string) => {
+      setSingleSkillId(skillId);
+      setOpen(true);
+    },
     bulkBar: {
       isUninstalling,
-      onBatchUninstall: () => setOpen(true),
+      onBatchUninstall: () => {
+        setSingleSkillId(null);
+        setOpen(true);
+      },
     },
   };
 }

@@ -639,6 +639,8 @@
     "viewDetailsLabel": "查看 {{name}} 的详情",
     "installLabel": "将 {{name}} 安装到平台",
     "installTo": "安装到...",
+    "uninstallFromPlatforms": "从平台卸载",
+    "uninstallFromPlatformsLabel": "从平台卸载 {{name}}",
     "deleteSkill": "从中央技能库删除",
     "deleteSkillLabel": "从中央技能库删除 {{name}}",
     "deleteDialogTitle": "删除 {{name}}",

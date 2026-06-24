@@ -615,8 +615,8 @@ export function CentralSkillsView() {
     onDelete: (skill: SkillWithLinks) => {
       void handleDeleteClick(skill);
     },
-    onDetail: handleOpenDrawer,
-    onInstallTo: handleInstallClick,
+    onDetail: handleOpenDrawer, onInstallTo: handleInstallClick,
+    onUninstallFromPlatforms: (skill: SkillWithLinks) => batchUninstall.openForSkill(skill.id),
     onTogglePlatform: handleTogglePlatform,
     onToggleSelection: handleToggleSelectionPreservingScroll,
     onUpdateCentral: (skillIds: string[]) => {

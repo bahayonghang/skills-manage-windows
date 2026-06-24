@@ -2,6 +2,7 @@ import {
   PackagePlus,
   Check,
   Link2,
+  Unlink,
   ArrowUpRight,
   Plus,
   ChevronRight,
@@ -98,6 +99,7 @@ export interface UnifiedSkillCardProps {
   // ── actions ──
   onDetail?: MouseEventHandler<HTMLButtonElement>;
   onInstallTo?: () => void;
+  onUninstallFromPlatforms?: () => void;
   onUpdateCentral?: () => void;
   updateStatus?: CentralSkillUpdateState & { isUpdating?: boolean };
   onDeleteFromCentral?: () => void;
@@ -170,6 +172,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     usageBadge,
     onDetail,
     onInstallTo,
+    onUninstallFromPlatforms,
     onUpdateCentral,
     updateStatus,
     onDeleteFromCentral,
@@ -211,6 +214,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   const hasActions = !!(
     onDetail ||
     onInstallTo ||
+    onUninstallFromPlatforms ||
     onUpdateCentral ||
     onDeleteFromCentral ||
     onInstallToCentral ||
@@ -379,6 +383,19 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                         <Download className="size-4" />
                       )
                     }
+                  />
+                )}
+
+                {onUninstallFromPlatforms && (
+                  <CardActionButton
+                    onClick={onUninstallFromPlatforms}
+                    disabled={isLoading}
+                    title={t("central.uninstallFromPlatforms")}
+                    ariaLabel={t("central.uninstallFromPlatformsLabel", {
+                      name,
+                    })}
+                    testId={`uninstall-platforms-skill-${name}`}
+                    icon={<Unlink className="size-4" />}
                   />
                 )}
 
