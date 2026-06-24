@@ -675,3 +675,38 @@ Fixed Windows just shell execution, implemented target-aware Central state impor
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: 修复跨平台快捷键提示
+
+**Date**: 2026-06-24
+**Task**: 修复跨平台快捷键提示
+**Branch**: `dev`
+
+### Summary
+
+统一 mod+k 快捷键显示和事件匹配，修复 Windows 上显示 macOS ⌘K 的问题，补充 focused 测试与 Trellis 记录，并提交当前 TODO 占位改动。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `42afa5e6` | (see git log) |
+| `d1429dbb` | (see git log) |
+| `1d297ca3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
