@@ -10,3 +10,4 @@
 - [x] 解决当repo中添加或者删除skills带来的检查更新问题
 - [x] 优化更新机制
 - [x] 为zed添加skills路径: ~/.config/zed/skills/（社区兼容路径）
+- [ ]
