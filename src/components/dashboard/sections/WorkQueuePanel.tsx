@@ -21,6 +21,9 @@ const FILTERS: { key: QueueFilter; labelKey: string }[] = [
   { key: "metadata", labelKey: "dashboard.queue.tabs.metadata" },
 ];
 
+const dashboardControlMotion =
+  "transition-[scale,background-color,border-color,color] duration-150 ease-out active:scale-[0.96]";
+
 function queueDestination(key: string): string {
   switch (key) {
     case "ai":
@@ -71,7 +74,8 @@ export function WorkQueuePanel({
                   aria-selected={active}
                   onClick={() => setFilter(option.key)}
                   className={cn(
-                    "rounded-full px-2.5 py-1 text-[0.7rem] font-medium transition-colors",
+                    "min-h-10 rounded-full px-3 py-1 text-[0.7rem] font-medium",
+                    dashboardControlMotion,
                     active
                       ? "bg-primary/15 text-primary-text"
                       : "text-muted-foreground hover:text-foreground",
@@ -92,7 +96,10 @@ export function WorkQueuePanel({
                 <button
                   type="button"
                   onClick={() => onNavigate(queueDestination(item.key))}
-                  className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/25"
+                  className={cn(
+                    "grid w-full grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left hover:bg-muted/25",
+                    dashboardControlMotion,
+                  )}
                 >
                   <span className="grid size-10 place-items-center rounded-xl border border-primary/25 bg-primary/10 font-display text-base font-semibold tabular-nums text-primary-text">
                     {item.count}

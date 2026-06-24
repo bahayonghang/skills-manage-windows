@@ -59,12 +59,12 @@ function MiniStat({ label, value, testId }: MiniProps) {
   return (
     <div
       data-testid={testId}
-      className="rounded-2xl border border-border/70 bg-card/60 px-3 py-2.5"
+      className="rounded-xl border border-border/65 bg-card/45 px-3 py-2.5 shadow-[0_0_0_1px_color-mix(in_oklch,var(--border)_54%,transparent)]"
     >
       <div className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
-      <div className="mt-1 font-display text-xl font-semibold tabular-nums tracking-tight">
+      <div className="mt-1 font-display text-xl font-semibold tabular-nums">
         {value}
       </div>
     </div>
@@ -76,12 +76,12 @@ function FactorRail({ label, value, tone }: FactorProps) {
   const percent = toPercent(safeValue);
 
   return (
-    <div className="readiness-rail rounded-2xl border border-border/60 bg-card/50 px-3 py-2.5">
+    <div className="readiness-rail rounded-xl border border-border/55 bg-card/40 px-3 py-2.5 shadow-[0_0_0_1px_color-mix(in_oklch,var(--border)_44%,transparent)]">
       <div className="flex items-center justify-between gap-3">
         <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">
           {label}
         </span>
-        <span className="font-display text-xs font-semibold tabular-nums tracking-tight">
+        <span className="font-display text-xs font-semibold tabular-nums">
           {percent}
         </span>
       </div>
@@ -142,7 +142,7 @@ export function HealthOrbit({
               {t("dashboard.readiness.label")}
             </div>
             <div
-              className="readiness-score-plaque mt-3 inline-flex items-end gap-2 rounded-3xl px-4 py-3"
+              className="readiness-score-plaque mt-3 inline-flex items-end gap-2 rounded-2xl px-4 py-3"
               aria-label={t("dashboard.readiness.ariaLabel", { score })}
               role="img"
               style={
@@ -151,7 +151,7 @@ export function HealthOrbit({
                 } as CSSProperties
               }
             >
-              <span className="font-display text-6xl font-semibold leading-none tabular-nums tracking-[-0.08em]">
+              <span className="font-display text-[3.35rem] font-semibold leading-none tabular-nums">
                 {score}
               </span>
               <span className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">

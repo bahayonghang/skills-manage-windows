@@ -31,12 +31,12 @@ export function HeroSection({
         : "border-success/35 bg-success/10 text-success-foreground";
 
   return (
-    <section className="surface-glass relative overflow-hidden rounded-3xl px-6 py-7 sm:px-8 sm:py-9">
+    <section className="surface-glass relative overflow-hidden rounded-3xl px-6 py-6 sm:px-8 sm:py-8">
       <span
         aria-hidden="true"
-        className="dashboard-hero-glow pointer-events-none absolute -right-24 -top-16 h-64 w-64 rounded-full opacity-60 blur-3xl"
+        className="dashboard-hero-glow pointer-events-none absolute -right-24 -top-16 h-56 w-56 rounded-full opacity-45 blur-3xl"
       />
-      <div className="relative flex max-w-3xl flex-col gap-5">
+      <div className="relative flex max-w-[46rem] flex-col gap-4">
         <div className="inline-flex items-center gap-2 self-start rounded-full border border-border/70 bg-card/60 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           <span
             className={cn(
@@ -49,20 +49,24 @@ export function HeroSection({
           </span>
           <span>{t("dashboard.hero.eyebrow")}</span>
         </div>
-        <h1 className="font-display text-balance text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl">
+        <h1 className="font-display text-balance text-[2.35rem] font-semibold leading-[1.08] sm:text-[3rem] xl:text-[3.25rem]">
           {t("dashboard.hero.title")}
         </h1>
-        <p className="max-w-2xl text-pretty text-sm leading-7 text-muted-foreground sm:text-base sm:leading-7">
+        <p className="max-w-[42rem] text-pretty text-sm leading-6 text-muted-foreground sm:text-[0.95rem] sm:leading-7">
           {t("dashboard.hero.description")}
         </p>
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button onClick={() => onNavigate("/central")}>
+          <Button
+            className="h-10 px-3.5 transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
+            onClick={() => onNavigate("/central")}
+          >
             <ArrowUpRight className="size-4" />
             {t("dashboard.hero.ctaBrowse")}
           </Button>
           {showReviewCta && (
             <Button
               variant="outline"
+              className="h-10 px-3.5 transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
               onClick={() => onNavigate("/central?filter=uncategorized")}
             >
               {t("dashboard.hero.ctaReview", { count: uncategorizedCount })}
@@ -71,6 +75,7 @@ export function HeroSection({
           )}
           <Button
             variant="outline"
+            className="h-10 px-3.5 transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
             data-testid="dashboard-action-marketplace"
             onClick={() => onNavigate("/marketplace")}
           >
@@ -79,6 +84,7 @@ export function HeroSection({
           </Button>
           <Button
             variant="outline"
+            className="h-10 px-3.5 transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
             title={quickMigrateDescription}
             data-testid="dashboard-action-quick-migrate"
             onClick={() => onNavigate(quickMigratePath)}

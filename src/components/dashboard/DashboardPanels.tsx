@@ -10,6 +10,9 @@ import {
 import { cn } from "@/lib/utils";
 import type { OperationLogEntry } from "@/types";
 
+const dashboardControlMotion =
+  "transition-[scale,background-color,border-color,box-shadow,color] duration-150 ease-out active:scale-[0.96]";
+
 function ratio(count: number, total: number) {
   if (total <= 0) return 0;
   return Math.min(1, Math.max(0, count / total));
@@ -61,11 +64,11 @@ export function PanelHeader({
     <CardHeader className="border-b border-border/70 px-4 py-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <CardTitle className="truncate text-sm font-semibold">
+          <CardTitle className="truncate text-sm font-semibold text-balance">
             {title}
           </CardTitle>
           {description && (
-            <CardDescription className="mt-1 max-w-full break-words text-xs leading-5">
+            <CardDescription className="mt-1 max-w-full break-words text-pretty text-xs leading-5">
               {description}
             </CardDescription>
           )}
@@ -177,10 +180,11 @@ export function StatButton({
       data-testid={testId}
       onClick={onClick}
       className={cn(
-        "flex min-h-[6.75rem] min-w-0 flex-col rounded-md border px-3 py-3 text-left transition-colors",
+        "flex min-h-[6.75rem] min-w-0 flex-col rounded-2xl border px-3.5 py-3 text-left shadow-[0_0_0_1px_color-mix(in_oklch,var(--border)_72%,transparent)]",
+        dashboardControlMotion,
         emphasized
-          ? "border-primary/35 bg-primary/10 hover:border-primary/55"
-          : "border-border/80 bg-background hover:border-primary/40 hover:bg-muted/25"
+          ? "border-primary/30 bg-primary/10 hover:border-primary/50 hover:shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary)_36%,transparent),0_10px_24px_color-mix(in_oklch,var(--primary)_10%,transparent)]"
+          : "border-border/70 bg-card/55 hover:border-primary/35 hover:bg-muted/25 hover:shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary)_24%,transparent)]"
       )}
     >
       <span className="flex items-center justify-between gap-2 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
@@ -191,7 +195,7 @@ export function StatButton({
           {icon}
         </span>
       </span>
-      <span className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
+      <span className="mt-2 text-2xl font-semibold tabular-nums">
         {value}
       </span>
       <span className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
@@ -216,9 +220,12 @@ export function QueueRow({
     <button
       type="button"
       onClick={onClick}
-      className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left transition-colors first:border-t-0 hover:bg-muted/25"
+      className={cn(
+        "grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left first:border-t-0 hover:bg-muted/25",
+        dashboardControlMotion,
+      )}
     >
-      <span className="grid size-9 place-items-center rounded-md border border-primary/25 bg-primary/10 text-sm font-semibold tabular-nums text-primary-text">
+      <span className="grid size-9 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-sm font-semibold tabular-nums text-primary-text">
         {count}
       </span>
       <span className="min-w-0">
@@ -227,7 +234,7 @@ export function QueueRow({
           {description}
         </span>
       </span>
-      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-muted-foreground">
+      <span className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-xs font-medium text-muted-foreground">
         <ChevronRight className="size-3" />
       </span>
     </button>

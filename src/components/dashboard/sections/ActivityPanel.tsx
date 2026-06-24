@@ -43,7 +43,7 @@ export function ActivityPanel({
       <CardContent className="space-y-4 p-4">
         <div className="flex items-baseline justify-between gap-3">
           <div>
-            <span className="font-display text-3xl font-semibold tabular-nums tracking-tight">
+            <span className="font-display text-3xl font-semibold tabular-nums">
               {activity.total}
             </span>
             <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">

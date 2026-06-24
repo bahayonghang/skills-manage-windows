@@ -18,6 +18,9 @@ interface AgentsPanelProps {
   skillsByAgent: Record<string, number>;
 }
 
+const dashboardControlMotion =
+  "transition-[scale,background-color,border-color,color] duration-150 ease-out active:scale-[0.96]";
+
 export function AgentsPanel({
   onNavigate,
   visiblePlatformTargets,
@@ -38,6 +41,7 @@ export function AgentsPanel({
           <Button
             variant="ghost"
             size="sm"
+            className="min-h-10 transition-[scale,background-color,border-color,color] active:scale-[0.96]"
             onClick={() => onNavigate("/settings/platforms")}
           >
             {t("dashboard.agents.manage")}
@@ -62,10 +66,10 @@ export function AgentsPanel({
                   <button
                     type="button"
                     onClick={() => onNavigate(`/platform/${agent.id}`)}
-                    className="grid w-full grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left transition-colors first:border-t-0 hover:bg-muted/25"
+                    className={`grid w-full grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left first:border-t-0 hover:bg-muted/25 ${dashboardControlMotion}`}
                     aria-label={t("dashboard.agents.openLabel", { name: label })}
                   >
-                    <span className="grid size-8 place-items-center rounded-md border border-border/80 bg-background text-primary-text">
+                    <span className="grid size-8 place-items-center rounded-xl border border-border/70 bg-card/70 text-primary-text">
                       <PlatformIcon agentId={agent.id} className="size-4" />
                     </span>
                     <span className="min-w-0">
