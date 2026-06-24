@@ -777,3 +777,37 @@ Created the Central Skills polish task from screenshot audit, implemented fronte
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: Central skill platform uninstall button
+
+**Date**: 2026-06-24
+**Task**: Central skill platform uninstall button
+**Branch**: `dev`
+
+### Summary
+
+Added card-level Central skill platform uninstall action and recorded the Trellis task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a64cdce3` | (see git log) |
+| `cf3a055c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
