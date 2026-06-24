@@ -743,3 +743,37 @@ Polished the Dashboard first viewport with calmer hero hierarchy, readiness surf
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: Central Skills interface polish
+
+**Date**: 2026-06-24
+**Task**: Central Skills interface polish
+**Branch**: `dev`
+
+### Summary
+
+Created the Central Skills polish task from screenshot audit, implemented frontend-only UI polish for header, filters, sidebar, and unified skill cards, verified focused tests/typecheck/lint/just ci, and archived the task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `97fabbd9` | (see git log) |
+| `8bc7e0bb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 20
+- **Total Sessions**: 21
 - **Last Active**: 2026-06-24
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~745 | Active |
+| `journal-1.md` | ~779 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 21 | 2026-06-24 | Central Skills interface polish | `97fabbd9`, `8bc7e0bb` | `dev` |
 | 20 | 2026-06-24 | Dashboard interface polish | `5316674d` | `dev` |
 | 19 | 2026-06-24 | 修复跨平台快捷键提示 | `42afa5e6`, `d1429dbb`, `1d297ca3` | `dev` |
 | 18 | 2026-06-19 | Target-aware Central state portability | `011dac1d`, `3a976b1a`, `c98283be` | `dev` |
