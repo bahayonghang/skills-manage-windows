@@ -710,3 +710,36 @@ Fixed Windows just shell execution, implemented target-aware Central state impor
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: Dashboard interface polish
+
+**Date**: 2026-06-24
+**Task**: Dashboard interface polish
+**Branch**: `dev`
+
+### Summary
+
+Polished the Dashboard first viewport with calmer hero hierarchy, readiness surfaces, explicit Dashboard-only control motion, visual screenshots, and full just ci validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5316674d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
