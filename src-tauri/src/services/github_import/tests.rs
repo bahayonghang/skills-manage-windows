@@ -328,6 +328,22 @@ metadata:
     }
 
     #[test]
+    fn parse_frontmatter_bom_result_matches_scanner_entry_point() {
+        // Both entry points share extract_frontmatter_block; a BOM-prefixed
+        // SKILL.md must parse identically via Discover and Marketplace import.
+        let content = "\u{feff}---\nname: bom-skill\ndescription: BOM guarded\n---\n# Body\n";
+
+        let imported = parse_frontmatter(content).expect("github_import entry");
+        let scanned =
+            crate::services::scanner::parse_skill_md_content(content).expect("scanner entry");
+
+        assert_eq!(imported.name, scanned.name);
+        assert_eq!(imported.description, scanned.description);
+        assert_eq!(scanned.name, "bom-skill");
+        assert_eq!(scanned.description.as_deref(), Some("BOM guarded"));
+    }
+
+    #[test]
     fn classify_github_rate_limit_denial_returns_actionable_message() {
         let denial = GitHubAccessDenial {
             kind: GitHubAccessDenialKind::RateLimited {

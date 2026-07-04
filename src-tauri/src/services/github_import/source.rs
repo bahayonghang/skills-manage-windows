@@ -660,23 +660,8 @@ pub(super) fn is_safe_repo_relative_path(path: &str) -> bool {
             .all(|component| matches!(component, Component::Normal(_)))
 }
 pub(crate) fn parse_frontmatter(content: &str) -> Option<SkillFrontmatter> {
-    let content = content.trim_start_matches('\u{feff}').trim_start();
-    let opening_end = content.find('\n')?;
-    let opening = &content[..opening_end];
-    if opening.trim() != "---" {
-        return None;
-    }
-
-    let rest = &content[opening_end + 1..];
-    let mut offset = 0;
-    for line in rest.split_inclusive('\n') {
-        if line.trim() == "---" {
-            return serde_norway::from_str::<SkillFrontmatter>(&rest[..offset]).ok();
-        }
-        offset += line.len();
-    }
-
-    None
+    let block = crate::services::scanner::extract_frontmatter_block(content)?;
+    serde_norway::from_str::<SkillFrontmatter>(block).ok()
 }
 
 pub(super) fn sanitize_skill_id(raw: &str) -> Result<String, GithubImportError> {

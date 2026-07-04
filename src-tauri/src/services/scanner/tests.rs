@@ -154,6 +154,18 @@ fn test_parse_skill_md_multiline_description() {
     assert!(info.description.is_some());
 }
 
+#[test]
+fn test_parse_skill_md_with_utf8_bom() {
+    let tmp = TempDir::new().unwrap();
+    let md_path = tmp.path().join("SKILL.md");
+    let content = format!("\u{feff}{}", valid_skill_md("Bom Skill", "Survives a BOM"));
+    fs::write(&md_path, content).unwrap();
+
+    let info = parse_skill_md(&md_path).expect("should parse BOM-prefixed SKILL.md");
+    assert_eq!(info.name, "Bom Skill");
+    assert_eq!(info.description.as_deref(), Some("Survives a BOM"));
+}
+
 // ── detect_link_type ──────────────────────────────────────────────────────
 
 #[test]
