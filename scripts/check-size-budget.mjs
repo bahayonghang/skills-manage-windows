@@ -8,7 +8,7 @@ const SOURCE_ROOTS = ["src", "src-tauri/src"];
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".rs"]);
 
 const BASELINE_ALLOWLIST = new Map([
-  ["src-tauri/src/commands/central_updates.rs", 1407],
+  ["src-tauri/src/services/central_updates/core.rs", 861],
   ["src-tauri/src/commands/collections.rs", 1033],
   ["src-tauri/src/db/seed.rs", 810],
   ["src/pages/CentralSkillsView.tsx", 865],
