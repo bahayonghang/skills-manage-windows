@@ -40,7 +40,7 @@ describe("runtimeLogger", () => {
         lineno: 10,
         colno: 2,
         error: new Error("Render exploded"),
-      })
+      }),
     );
 
     await vi.waitFor(() => {
@@ -64,6 +64,7 @@ describe("runtimeLogger", () => {
       message: "Manual diagnostic",
       details: {
         token: "secret-token",
+        passphrase: "pp-secret",
         nested: { apiKey: "sk-test", visible: "ok" },
       },
     });
@@ -75,6 +76,7 @@ describe("runtimeLogger", () => {
           source: "frontend.runtime",
           details: {
             token: "[REDACTED]",
+            passphrase: "[REDACTED]",
             nested: { apiKey: "[REDACTED]", visible: "ok" },
           },
         }),
@@ -91,7 +93,7 @@ describe("runtimeLogger", () => {
     recordIpcFailure(
       "set_ai_api_key",
       { apiKey: "sk-test", provider: "openai" },
-      new Error("Backend rejected key")
+      new Error("Backend rejected key"),
     );
 
     await vi.waitFor(() => {
@@ -113,12 +115,16 @@ describe("runtimeLogger", () => {
     enableTauriRuntime();
     installRuntimeLogger();
 
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
 
     console.error("console noise should stay local");
     await Promise.resolve();
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith("console noise should stay local");
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "console noise should stay local",
+    );
     expect(invokeRaw).not.toHaveBeenCalled();
   });
 });

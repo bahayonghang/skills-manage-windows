@@ -3,7 +3,8 @@ import { invokeRaw, registerIpcFailureRecorder } from "@/lib/tauri";
 
 type RuntimeLogLevel = NonNullable<FrontendRuntimeLogPayload["level"]>;
 
-type RuntimeLogEventDetail = FrontendRuntimeLogPayload | string | null | undefined;
+type RuntimeLogEventDetail =
+  FrontendRuntimeLogPayload | string | null | undefined;
 
 type TauriWindow = Window & {
   __TAURI__?: unknown;
@@ -15,7 +16,7 @@ const MAX_DETAIL_DEPTH = 4;
 const MAX_ARRAY_ITEMS = 20;
 const MAX_STRING_LENGTH = 1_000;
 const SENSITIVE_KEY_PATTERN =
-  /password|token|pat|api[-_]?key|apikey|secret|private[-_]?key|credential/i;
+  /password|passphrase|token|pat|api[-_]?key|apikey|secret|private[-_]?key|credential/i;
 
 let isInstalled = false;
 let isRecording = false;
@@ -50,11 +51,15 @@ function redactValue(value: unknown, depth = 0): unknown {
   }
   if (depth >= MAX_DETAIL_DEPTH) return "[MaxDepth]";
   if (Array.isArray(value)) {
-    return value.slice(0, MAX_ARRAY_ITEMS).map((item) => redactValue(item, depth + 1));
+    return value
+      .slice(0, MAX_ARRAY_ITEMS)
+      .map((item) => redactValue(item, depth + 1));
   }
   if (typeof value === "object") {
     const redacted: Record<string, unknown> = {};
-    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+    for (const [key, nestedValue] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
       redacted[key] = SENSITIVE_KEY_PATTERN.test(key)
         ? "[REDACTED]"
         : redactValue(nestedValue, depth + 1);
@@ -80,7 +85,9 @@ function errorToDetails(error: unknown): unknown {
   return { value: String(error) };
 }
 
-function normalizePayload(payload: FrontendRuntimeLogPayload): FrontendRuntimeLogPayload {
+function normalizePayload(
+  payload: FrontendRuntimeLogPayload,
+): FrontendRuntimeLogPayload {
   return {
     level: normalizeLevel(payload.level),
     source: payload.source?.trim() || "frontend.runtime",
@@ -89,7 +96,9 @@ function normalizePayload(payload: FrontendRuntimeLogPayload): FrontendRuntimeLo
   };
 }
 
-function payloadFromRuntimeEvent(detail: RuntimeLogEventDetail): FrontendRuntimeLogPayload {
+function payloadFromRuntimeEvent(
+  detail: RuntimeLogEventDetail,
+): FrontendRuntimeLogPayload {
   if (typeof detail === "string") {
     return {
       level: "info",
@@ -108,7 +117,7 @@ function payloadFromRuntimeEvent(detail: RuntimeLogEventDetail): FrontendRuntime
 }
 
 export async function recordFrontendRuntimeLog(
-  payload: FrontendRuntimeLogPayload
+  payload: FrontendRuntimeLogPayload,
 ): Promise<void> {
   if (!hasTauriRuntime() || isRecording) return;
 
@@ -124,12 +133,20 @@ export async function recordFrontendRuntimeLog(
   }
 }
 
-export function emitFrontendRuntimeLog(payload: FrontendRuntimeLogPayload): void {
+export function emitFrontendRuntimeLog(
+  payload: FrontendRuntimeLogPayload,
+): void {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(RUNTIME_EVENT_NAME, { detail: payload }));
+  window.dispatchEvent(
+    new CustomEvent(RUNTIME_EVENT_NAME, { detail: payload }),
+  );
 }
 
-export function recordIpcFailure(command: string, args: unknown, error: unknown): void {
+export function recordIpcFailure(
+  command: string,
+  args: unknown,
+  error: unknown,
+): void {
   void recordFrontendRuntimeLog({
     level: "error",
     source: "ipc.failure",
@@ -181,7 +198,11 @@ export function installRuntimeLogger(): void {
 
   cleanupHandlers = [
     () => window.removeEventListener("error", handleError),
-    () => window.removeEventListener("unhandledrejection", handleUnhandledRejection),
+    () =>
+      window.removeEventListener(
+        "unhandledrejection",
+        handleUnhandledRejection,
+      ),
     () => window.removeEventListener(RUNTIME_EVENT_NAME, handleRuntimeEvent),
     () => registerIpcFailureRecorder(null),
   ];
