@@ -25,10 +25,11 @@
 
 ## Acceptance Criteria
 
-- [ ] grep 验证：`setup_test_db` 类手写定义数从 24 降至个位数（目标值由 design 定）；`connect(":memory:")` 调用点收敛进 harness。
-- [ ] obsidian 域获得首批 service 层测试（≥5 条，覆盖扫描与导入主路径）。
-- [ ] `cd src-tauri && cargo test` 全绿，测试总数不低于基线 718。
-- [ ] `cargo clippy -- -D warnings` 通过。
+- [x] grep 验证：`setup_test_db` 类手写定义数从 24 降至个位数（目标值由 design 定）；`connect(":memory:")` 调用点收敛进 harness。
+      —— 实测：手抄池体定义 26 → **0**（剩 8 个薄壳，体内全部委托 harness）；`connect(":memory:")` 31 → harness 文件外 **4**（operation_log 无 schema 容错、db/projects/marketplace 三处 legacy-schema 迁移测试，均带豁免注释）+ 集成 crate `projects_e2e.rs` 1 处结构性豁免。
+- [x] obsidian 域获得首批 service 层测试（≥5 条，覆盖扫描与导入主路径）。—— 实测 **10 条**（导入 7 + 扫描 3）。
+- [x] `cd src-tauri && cargo test` 全绿，测试总数不低于基线 718。—— 实测 **733**（731 passed + 2 ignored；+5 harness 自测 +10 obsidian）。
+- [x] `cargo clippy -- -D warnings` 通过。—— 实测通过，且 `--all-targets` 下零新增 unused 告警。
 
 ## Notes
 

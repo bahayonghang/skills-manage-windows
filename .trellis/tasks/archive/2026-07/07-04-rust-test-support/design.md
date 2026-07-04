@@ -87,13 +87,13 @@ pub fn symlink_dir(target: &Path, link: &Path)            // cfg(unix)/cfg(windo
 
 ### D7 AC 数值定版（PRD 留白的目标值）
 
-| 指标 | 基线 | 目标 |
-| --- | --- | --- |
-| 手写池体（connect+init 直写在 setup/测试体内）定义数 | 26 | **src/ 内 0**；全仓 1（projects_e2e，结构性豁免） |
-| `connect(":memory:")` 出现次数 | 31 | **≤5**：harness 1 + 语义豁免 3（operation_log:382、db/tests、projects/tests，各带豁免注释）+ projects_e2e 1 |
-| 测试现场 `create_pool(` | 3 | 0（收敛进 `file_pool`） |
-| obsidian service 层测试 | 0 | ≥9（D5：导入 6 + 扫描 3） |
-| cargo test 总数 | 718 | ≥ 718 + 14（obsidian 9 + harness 5） |
+| 指标 | 基线 | 目标 | 实测（完成时） |
+| --- | --- | --- | --- |
+| 手写池体（connect+init 直写在 setup/测试体内）定义数 | 26 | **src/ 内 0**；全仓 1（projects_e2e，结构性豁免） | ✅ 0 / 1 |
+| `connect(":memory:")` 出现次数（harness 文件外） | 31 | **≤5**：语义豁免 + projects_e2e，各带豁免注释 | ✅ 4（op_log 1 + legacy 迁移 2）+ e2e 1；实施中新发现 marketplace legacy 迁移测试为第 4 处语义豁免（`create_pool` 裸文件池同理），已注释在案 |
+| 测试现场 setup 形态的 `create_pool(` | 3 | 0（收敛进 `file_pool`） | ✅ 0（marketplace 迁移测试 1 处豁免） |
+| obsidian service 层测试 | 0 | ≥9（D5：导入 6 + 扫描 3） | ✅ 10（导入 7 + 扫描 3） |
+| cargo test 总数 | 718 | ≥ 718 + 14（obsidian 9 + harness 5） | ✅ 733 |
 
 ## 3. 迁移映射表（23 文件 → 处置）
 
