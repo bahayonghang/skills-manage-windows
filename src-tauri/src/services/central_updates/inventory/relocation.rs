@@ -1,30 +1,30 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::commands::central_updates::{
-    self, state_from_relocated_source, RemoteSkillLoadError, SkillUpdateStatus,
-};
-use crate::services::central_updates::normalize_repo_path;
-use crate::commands::github_import;
 use crate::db::{DbPool, SkillRepository, SkillUpdateState};
+use crate::services::central_updates::{
+    normalize_repo_path, state_from_relocated_source, CentralRemoteAddedSkill, CentralUpdatesError,
+    PreparedSkillUpdate, RemoteSkillLoadError, SkillUpdateStatus,
+};
+use crate::services::github_import;
 use chrono::Utc;
 
 use super::{repository_id_for_state, FailedRepository, UpdatableSkill};
 
 pub(crate) struct RelocationContext<'a> {
     pub pool: &'a DbPool,
-    pub prepared_by_skill_id: &'a HashMap<String, central_updates::PreparedSkillUpdate>,
+    pub prepared_by_skill_id: &'a HashMap<String, PreparedSkillUpdate>,
     pub snapshots: &'a HashMap<String, github_import::GitHubRepoSnapshot>,
     pub repo_by_id: &'a HashMap<String, SkillRepository>,
     pub repo_ref_by_id: &'a HashMap<String, github_import::GitHubRepoRef>,
     pub remote_missing_states: &'a mut Vec<SkillUpdateState>,
-    pub remote_added_items: &'a mut Vec<central_updates::CentralRemoteAddedSkill>,
+    pub remote_added_items: &'a mut Vec<CentralRemoteAddedSkill>,
     pub updatable: &'a mut Vec<UpdatableSkill>,
     pub failed_repositories: &'a mut Vec<FailedRepository>,
 }
 
 pub(crate) async fn reconcile_relocated_remote_skills(
     ctx: &mut RelocationContext<'_>,
-) -> Result<(), String> {
+) -> Result<(), CentralUpdatesError> {
     let mut missing_by_key = HashMap::<(String, String), Vec<usize>>::new();
     let mut missing_old_path_by_index = HashMap::<usize, String>::new();
     for (index, state) in ctx.remote_missing_states.iter().enumerate() {
@@ -34,7 +34,7 @@ pub(crate) async fn reconcile_relocated_remote_skills(
         let Some(old_path) = state
             .source_path
             .as_deref()
-            .map(|path| normalize_repo_path(path).map_err(|e| e.to_string()))
+            .map(normalize_repo_path)
             .transpose()?
             .filter(|path| !path.is_empty())
         else {
@@ -50,8 +50,7 @@ pub(crate) async fn reconcile_relocated_remote_skills(
     let mut added_by_key = HashMap::<(String, String), Vec<usize>>::new();
     let mut added_new_path_by_index = HashMap::<usize, String>::new();
     for (index, item) in ctx.remote_added_items.iter().enumerate() {
-        let new_path =
-            normalize_repo_path(&item.preview.source_path).map_err(|e| e.to_string())?;
+        let new_path = normalize_repo_path(&item.preview.source_path)?;
         added_new_path_by_index.insert(index, new_path);
         added_by_key
             .entry((item.repository_id.clone(), item.preview.skill_id.clone()))
@@ -164,9 +163,9 @@ async fn persist_relocated_skill(
     skill_id: &str,
     source_path: &str,
     _state: &SkillUpdateState,
-) -> Result<(), String> {
+) -> Result<(), CentralUpdatesError> {
     let now = Utc::now().to_rfc3339();
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let mut tx = pool.begin().await?;
 
     sqlx::query(
         "INSERT INTO skill_repository_members
@@ -183,8 +182,7 @@ async fn persist_relocated_skill(
     .bind(&now)
     .bind(&now)
     .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query(
         "DELETE FROM skill_repository_pending_additions
@@ -193,8 +191,8 @@ async fn persist_relocated_skill(
     .bind(repository_id)
     .bind(source_path)
     .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
-    tx.commit().await.map_err(|e| e.to_string())
+    tx.commit().await?;
+    Ok(())
 }

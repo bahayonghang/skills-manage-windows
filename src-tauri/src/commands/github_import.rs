@@ -10,11 +10,6 @@ use crate::services::github_import;
 use crate::targets::ActiveTarget;
 use crate::AppState;
 
-pub(crate) use crate::services::github_import::{
-    github_client, github_direct_auth_from_secret_store,
-    import_github_repo_skills_remote_with_auth, import_github_repo_skills_with_auth,
-    resolve_repo_source, GitHubRepoSnapshot,
-};
 pub use crate::services::github_import::{
     DuplicateResolution, GitHubImportProgressPayload, GitHubImportProgressPhase, GitHubPatState,
     GitHubPatTestResult, GitHubRepoImportResult, GitHubRepoPreview, GitHubRepoRef,

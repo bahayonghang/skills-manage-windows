@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::db::{self, Agent, AgentSkillObservation, DbPool, SkillInstallation};
+use crate::services::central_updates::CentralUpdatesError;
 
 use super::{DeletedPlatformCopyGroup, PlatformDuplicateGroup};
 
@@ -9,14 +10,14 @@ use super::{DeletedPlatformCopyGroup, PlatformDuplicateGroup};
 pub(crate) async fn scan_platform_duplicate_skills_with_pool(
     pool: &DbPool,
     agent_ids: Option<Vec<String>>,
-) -> Result<Vec<PlatformDuplicateGroup>, String> {
+) -> Result<Vec<PlatformDuplicateGroup>, CentralUpdatesError> {
     /*
      * 步骤1：拿 agents
      * 步骤2：对每个 agent 拿 observations
      * 步骤3：同 skill_id 分组，分 writable / plugin readonly
      *        只保留两类都存在的组
      */
-    let agents = db::get_all_agents(pool).await.map_err(|e| e.to_string())?;
+    let agents = db::get_all_agents(pool).await?;
     let target_agent_ids: HashSet<String> = match agent_ids {
         Some(ids) => ids.into_iter().collect(),
         None => agents.iter().map(|a| a.id.clone()).collect(),
@@ -27,9 +28,7 @@ pub(crate) async fn scan_platform_duplicate_skills_with_pool(
         if !target_agent_ids.contains(&agent.id) {
             continue;
         }
-        let observations = db::get_agent_skill_observations(pool, &agent.id)
-            .await
-            .map_err(|e| e.to_string())?;
+        let observations = db::get_agent_skill_observations(pool, &agent.id).await?;
         groups.extend(group_platform_duplicate_skills(&agent.id, &observations));
     }
     // 稳定排序，便于前端展示
@@ -45,8 +44,8 @@ pub(crate) async fn scan_platform_duplicate_skills_with_pool(
 pub(crate) async fn scan_deleted_platform_copies_with_pool(
     pool: &DbPool,
     agent_ids: Option<Vec<String>>,
-) -> Result<Vec<DeletedPlatformCopyGroup>, String> {
-    let agents = db::get_all_agents(pool).await.map_err(|e| e.to_string())?;
+) -> Result<Vec<DeletedPlatformCopyGroup>, CentralUpdatesError> {
+    let agents = db::get_all_agents(pool).await?;
     let target_agent_ids: HashSet<String> = match agent_ids {
         Some(ids) => ids.into_iter().collect(),
         None => agents
@@ -56,8 +55,7 @@ pub(crate) async fn scan_deleted_platform_copies_with_pool(
             .collect(),
     };
     let central_skill_ids = db::get_central_skills(pool)
-        .await
-        .map_err(|e| e.to_string())?
+        .await?
         .into_iter()
         .map(|skill| skill.id)
         .collect::<HashSet<_>>();
@@ -68,9 +66,7 @@ pub(crate) async fn scan_deleted_platform_copies_with_pool(
             continue;
         }
 
-        let observations = db::get_agent_skill_observations(pool, &agent.id)
-            .await
-            .map_err(|e| e.to_string())?;
+        let observations = db::get_agent_skill_observations(pool, &agent.id).await?;
         for obs in observations {
             if !is_deleted_observation_candidate(&obs, &central_skill_ids) {
                 continue;
@@ -97,8 +93,7 @@ pub(crate) async fn scan_deleted_platform_copies_with_pool(
         )
         .bind(&agent.id)
         .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
         for installation in installations {
             if installation.link_type == "native" {
                 continue;
@@ -229,10 +224,12 @@ fn push_deleted_candidate(
     }
 }
 
-async fn deleted_installation_skill_name(pool: &DbPool, skill_id: &str) -> Result<String, String> {
+async fn deleted_installation_skill_name(
+    pool: &DbPool,
+    skill_id: &str,
+) -> Result<String, CentralUpdatesError> {
     Ok(db::get_skill_by_id(pool, skill_id)
-        .await
-        .map_err(|e| e.to_string())?
+        .await?
         .map(|skill| skill.name)
         .unwrap_or_else(|| skill_id.to_string()))
 }

@@ -11,27 +11,12 @@ use crate::db::SkillUpdateState;
 use crate::services::central_updates::{
     apply_central_repository_sync_impl, check_central_repository_sync_impl,
     check_central_skill_updates_impl, get_central_skill_update_states_impl,
-    update_central_skills_impl, CentralFs, CentralRepositorySyncApplyResult,
-    CentralRepositorySyncDecisions, CentralRepositorySyncPreview, CentralSkillUpdateResult,
+    keep_remote_missing_central_skills_impl, update_central_skills_impl, CentralFs,
+    CentralRepositorySyncApplyResult, CentralRepositorySyncDecisions, CentralRepositorySyncPreview,
+    CentralSkillUpdateResult,
 };
 use crate::services::github_import;
 use crate::AppState;
-
-// 迁移期桥接：skill_update_inventory 的命令模块仍经由本模块路径解析已下沉到
-// services 的内核与 repository_sync 类型；inventory 归位 services 后随之拆除。
-pub use crate::services::central_updates::{
-    CentralRemoteAddedSkill, CentralRepositoryAddedSkillSelection,
-    CentralRepositoryAdditionSkipRequest, CentralRepositoryAdditionUnskipRequest,
-    CentralRepositorySyncFailure,
-};
-pub(crate) use crate::services::central_updates::{
-    build_remote_missing_skills, collect_remote_added_skills, error_state_from_assignment,
-    keep_remote_missing_central_skills_impl, load_remote_skill_content, prepare_skill_updates,
-    prepare_snapshots_for_repo_refs_with_policy, remote_missing_state_from_assignment,
-    repo_cache_key, state_from_relocated_source, state_from_remote,
-    unsupported_state_from_assignment, update_one_skill, update_one_skill_with_options,
-    PreparedSkillUpdate, RemoteSkillLoadError, SkillUpdateStatus, SnapshotCachePolicy,
-};
 
 #[tauri::command]
 pub async fn get_central_skill_update_states(

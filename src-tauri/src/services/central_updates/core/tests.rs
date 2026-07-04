@@ -1,7 +1,8 @@
 use super::*;
-use crate::services::central_updates::{build_remote_missing_skills, collect_remote_added_skills};
 use crate::db::SkillRepository;
+use crate::services::central_updates::collect_remote_added_skills;
 use crate::services::central_updates::fs::RemoteSkillFile;
+use crate::services::central_updates::repository_sync::build_remote_missing_skills;
 use crate::test_support::mem_pool as setup_test_db;
 use chrono::Duration as ChronoDuration;
 use sqlx::SqlitePool;

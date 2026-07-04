@@ -2,20 +2,18 @@ use std::collections::HashMap;
 
 use tauri::AppHandle;
 
-use crate::commands::central_updates::{
-    self, load_remote_skill_content, prepare_skill_updates,
-    prepare_snapshots_for_repo_refs_with_policy, state_from_remote, RemoteSkillLoadError,
-    SkillUpdateStatus, SnapshotCachePolicy,
-};
-use crate::services::central_updates::CentralFs;
-use crate::commands::github_import;
 use crate::db::{self, DbPool};
 use crate::services::central_skills::{
     self, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult,
 };
+use crate::services::central_updates::{
+    collect_remote_added_skills, load_remote_skill_content, prepare_skill_updates,
+    prepare_snapshots_for_repo_refs_with_policy, repo_cache_key, state_from_remote,
+    update_one_skill, update_one_skill_with_options, CentralFs, CentralUpdateSnapshotCache,
+    CentralUpdatesError, RemoteSkillLoadError, SkillUpdateStatus, SnapshotCachePolicy,
+};
 use crate::services::github_import::{
-    self as github_import_service, DuplicateResolution, GitHubSkillImportSelection,
-    ImportedGitHubSkillSummary,
+    self, DuplicateResolution, GitHubSkillImportSelection, ImportedGitHubSkillSummary,
 };
 use crate::targets::ActiveTarget;
 
@@ -31,20 +29,16 @@ pub(crate) async fn force_update_central_skills_impl(
     fs: &CentralFs,
     auth_token: Option<&str>,
     client: &reqwest::Client,
-    snapshots_cache: &crate::CentralUpdateSnapshotCache,
+    snapshots_cache: &CentralUpdateSnapshotCache,
     cache_policy: SnapshotCachePolicy,
     request: ForceSkillUpdateRequest,
-) -> Result<ForceSkillUpdateResult, String> {
+) -> Result<ForceSkillUpdateResult, CentralUpdatesError> {
     let skill_ids = normalize_ids(request.skill_ids);
     if skill_ids.is_empty() {
-        return Err("Select at least one Central skill to force update.".to_string());
+        return Err(CentralUpdatesError::NoForceUpdateSelection);
     }
-    let skills = db::get_central_skills_by_ids(pool, &skill_ids)
-        .await
-        .map_err(|e| e.to_string())?;
-    let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false)
-        .await
-        .map_err(|e| e.to_string())?;
+    let skills = db::get_central_skills_by_ids(pool, &skill_ids).await?;
+    let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
     let snapshot_repos = prepared
         .iter()
         .filter_map(prepared_repo_ref)
@@ -56,8 +50,7 @@ pub(crate) async fn force_update_central_skills_impl(
         snapshots_cache,
         cache_policy,
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     let mut result = ForceSkillUpdateResult::default();
     for prepared_skill in prepared {
@@ -65,7 +58,7 @@ pub(crate) async fn force_update_central_skills_impl(
         match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) => {
                 let before = state_from_remote(skill, &remote, false);
-                match central_updates::update_one_skill_with_options(
+                match update_one_skill_with_options(
                     pool,
                     fs,
                     skill,
@@ -75,9 +68,7 @@ pub(crate) async fn force_update_central_skills_impl(
                 .await
                 {
                     Ok(state) => {
-                        db::upsert_skill_update_state(pool, &state)
-                            .await
-                            .map_err(|e| e.to_string())?;
+                        db::upsert_skill_update_state(pool, &state).await?;
                         result.overwritten.push(ForceSkillUpdateSuccess {
                             skill_id: skill.id.clone(),
                             repository_id: repository_id_for_state_from_db(pool, &before).await?,
@@ -122,9 +113,7 @@ pub(crate) async fn force_update_central_skills_impl(
         .iter()
         .map(|item| item.skill_id.clone())
         .collect::<Vec<_>>();
-    db::delete_skill_update_inventory_entries_for_skills(pool, &succeeded)
-        .await
-        .map_err(|e| e.to_string())?;
+    db::delete_skill_update_inventory_entries_for_skills(pool, &succeeded).await?;
     Ok(result)
 }
 
@@ -136,16 +125,16 @@ pub(crate) async fn force_mirror_central_repositories_impl(
     fs: &CentralFs,
     auth_token: Option<&str>,
     client: &reqwest::Client,
-    snapshots_cache: &crate::CentralUpdateSnapshotCache,
+    snapshots_cache: &CentralUpdateSnapshotCache,
     cache_policy: SnapshotCachePolicy,
     request: ForceRepositoryMirrorRequest,
-) -> Result<ForceRepositoryMirrorResult, String> {
+) -> Result<ForceRepositoryMirrorResult, CentralUpdatesError> {
     if !request.delete_missing && !request.import_added && !request.overwrite_tracked {
-        return Err("Select at least one force mirror operation.".to_string());
+        return Err(CentralUpdatesError::NoMirrorOperation);
     }
     let repository_ids = normalize_ids(request.repository_ids);
     if repository_ids.is_empty() {
-        return Err("Select at least one repository to force mirror.".to_string());
+        return Err(CentralUpdatesError::NoMirrorRepositorySelection);
     }
 
     let valid_repositories =
@@ -161,8 +150,7 @@ pub(crate) async fn force_mirror_central_repositories_impl(
         snapshots_cache,
         cache_policy,
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     let mut overwritten = Vec::new();
     let mut skipped = Vec::new();
@@ -171,32 +159,22 @@ pub(crate) async fn force_mirror_central_repositories_impl(
 
     let mut skill_ids = Vec::new();
     for repository_id in &repository_ids {
-        skill_ids.extend(
-            db::get_central_skill_ids_by_repository(pool, repository_id)
-                .await
-                .map_err(|e| e.to_string())?,
-        );
+        skill_ids.extend(db::get_central_skill_ids_by_repository(pool, repository_id).await?);
     }
     let skills = if skill_ids.is_empty() {
         Vec::new()
     } else {
-        db::get_central_skills_by_ids(pool, &normalize_ids(skill_ids))
-            .await
-            .map_err(|e| e.to_string())?
+        db::get_central_skills_by_ids(pool, &normalize_ids(skill_ids)).await?
     };
-    let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false)
-        .await
-        .map_err(|e| e.to_string())?;
+    let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
     for prepared_skill in prepared {
         let skill = &prepared_skill.skill;
         match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) if request.overwrite_tracked => {
                 let before = state_from_remote(skill, &remote, false);
-                match central_updates::update_one_skill(pool, fs, skill, remote).await {
+                match update_one_skill(pool, fs, skill, remote).await {
                     Ok(state) => {
-                        db::upsert_skill_update_state(pool, &state)
-                            .await
-                            .map_err(|e| e.to_string())?;
+                        db::upsert_skill_update_state(pool, &state).await?;
                         overwritten.push(ForceSkillUpdateSuccess {
                             skill_id: skill.id.clone(),
                             repository_id: repository_id_for_state_from_db(pool, &before).await?,
@@ -276,9 +254,7 @@ pub(crate) async fn force_mirror_central_repositories_impl(
         .collect::<Vec<_>>();
     affected.extend(imported.iter().map(|item| item.imported_skill_id.clone()));
     affected.extend(deleted.succeeded.iter().map(|item| item.skill_id.clone()));
-    db::delete_skill_update_inventory_entries_for_skills(pool, &normalize_ids(affected))
-        .await
-        .map_err(|e| e.to_string())?;
+    db::delete_skill_update_inventory_entries_for_skills(pool, &normalize_ids(affected)).await?;
 
     Ok(ForceRepositoryMirrorResult {
         overwritten,
@@ -293,10 +269,8 @@ pub(crate) async fn force_mirror_central_repositories_impl(
 async fn repository_id_for_state_from_db(
     pool: &DbPool,
     state: &db::SkillUpdateState,
-) -> Result<Option<String>, String> {
-    let repo_with_stats = db::get_skill_repositories_with_stats(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+) -> Result<Option<String>, CentralUpdatesError> {
+    let repo_with_stats = db::get_skill_repositories_with_stats(pool).await?;
     let repo_by_id = repo_with_stats
         .iter()
         .map(|r| (r.repository.id.clone(), r.repository.clone()))
@@ -311,24 +285,23 @@ async fn force_import_remote_added(
     auth_token: Option<&str>,
     repository_ids: &[String],
     valid_repositories: &[(db::SkillRepository, github_import::GitHubRepoRef)],
-    snapshots: &HashMap<String, crate::services::github_import::GitHubRepoSnapshot>,
+    snapshots: &HashMap<String, github_import::GitHubRepoSnapshot>,
 ) -> Result<
     (
         Vec<ImportedGitHubSkillSummary>,
         Vec<ForceSkillUpdateFailure>,
     ),
-    String,
+    CentralUpdatesError,
 > {
     let mut failed = Vec::new();
-    let collection = central_updates::collect_remote_added_skills(
+    let collection = collect_remote_added_skills(
         pool,
         repository_ids,
         valid_repositories,
         snapshots,
         &mut failed,
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
     let mut by_repository: HashMap<String, Vec<GitHubSkillImportSelection>> = HashMap::new();
     for item in collection
         .remote_added
@@ -356,10 +329,7 @@ async fn force_import_remote_added(
         })
         .collect::<Vec<_>>();
     for (repository_id, selections) in by_repository {
-        let Some(repository) = db::get_skill_repository_by_id(pool, &repository_id)
-            .await
-            .map_err(|e| e.to_string())?
-        else {
+        let Some(repository) = db::get_skill_repository_by_id(pool, &repository_id).await? else {
             continue;
         };
         let Some(repo_url) = repository_import_url(&repository) else {
@@ -374,8 +344,7 @@ async fn force_import_remote_added(
                 else {
                     continue;
                 };
-                let Some(snapshot) = snapshots.get(&central_updates::repo_cache_key(repo_ref))
-                else {
+                let Some(snapshot) = snapshots.get(&repo_cache_key(repo_ref)) else {
                     failed_items.push(ForceSkillUpdateFailure {
                         skill_id: repository_id.clone(),
                         repository_id: Some(repository_id.clone()),
@@ -384,33 +353,29 @@ async fn force_import_remote_added(
                     });
                     continue;
                 };
-                let inspected =
-                    github_import_service::inspect_repo_skill_candidates_from_snapshot_at_path(
-                        repo_ref, snapshot, None,
-                    )
-                    .map_err(|e| e.to_string())?;
-                let central_root = github_import_service::central_skills_root(pool)
-                    .await
-                    .map_err(|e| e.to_string())?;
+                let inspected = github_import::inspect_repo_skill_candidates_from_snapshot_at_path(
+                    repo_ref, snapshot, None,
+                )?;
+                let central_root = github_import::central_skills_root(pool).await?;
                 std::fs::create_dir_all(&central_root).map_err(|error| {
-                    format!(
-                        "Failed to create central skills directory '{}': {}",
-                        central_root.display(),
-                        error
+                    CentralUpdatesError::io(
+                        format!(
+                            "Failed to create central skills directory '{}'",
+                            central_root.display()
+                        ),
+                        error,
                     )
                 })?;
-                let partial =
-                    github_import_service::import_github_repo_skills_from_snapshot_partially(
-                        pool,
-                        repo_ref,
-                        snapshot,
-                        inspected,
-                        selections,
-                        &central_root,
-                        app,
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?;
+                let partial = github_import::import_github_repo_skills_from_snapshot_partially(
+                    pool,
+                    repo_ref,
+                    snapshot,
+                    inspected,
+                    selections,
+                    &central_root,
+                    app,
+                )
+                .await?;
                 failed_items.extend(partial.failed_skills.into_iter().map(|failure| {
                     ForceSkillUpdateFailure {
                         skill_id: failure.source_path.clone(),
@@ -419,7 +384,7 @@ async fn force_import_remote_added(
                         error: failure.error,
                     }
                 }));
-                crate::services::github_import::GitHubRepoImportResult {
+                github_import::GitHubRepoImportResult {
                     repo: partial.repo,
                     imported_skills: partial.imported_skills,
                     skipped_skills: partial.skipped_skills,
@@ -435,8 +400,7 @@ async fn force_import_remote_added(
                     app,
                     auth_token,
                 )
-                .await
-                .map_err(|e| e.to_string())?
+                .await?
             }
         };
         imported.extend(result.imported_skills);
@@ -449,16 +413,14 @@ async fn force_delete_remote_missing(
     active_target: &ActiveTarget,
     skill_ids: &[String],
     remove_copy_installations: bool,
-) -> Result<BatchDeleteCentralSkillResult, String> {
+) -> Result<BatchDeleteCentralSkillResult, CentralUpdatesError> {
     if skill_ids.is_empty() {
         return Ok(BatchDeleteCentralSkillResult {
             succeeded: Vec::new(),
             failed: Vec::new(),
         });
     }
-    let preview = central_skills::preview_delete_central_skills_impl(pool, skill_ids)
-        .await
-        .map_err(|e| e.to_string())?;
+    let preview = central_skills::preview_delete_central_skills_impl(pool, skill_ids).await?;
     let requests = preview
         .previews
         .into_iter()
@@ -475,11 +437,11 @@ async fn force_delete_remote_missing(
             },
         })
         .collect::<Vec<_>>();
-    match active_target {
-        ActiveTarget::Local => central_skills::delete_central_skills_impl(pool, &requests).await,
+    Ok(match active_target {
+        ActiveTarget::Local => central_skills::delete_central_skills_impl(pool, &requests).await?,
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-            central_skills::delete_central_skills_remote_impl(pool, active_target, &requests).await
+            central_skills::delete_central_skills_remote_impl(pool, active_target, &requests)
+                .await?
         }
-    }
-    .map_err(|e| e.to_string())
+    })
 }

@@ -124,6 +124,76 @@ pub enum CentralUpdatesError {
         label: &'static str,
         message: String,
     },
+
+    // ── Update inventory: force rescue actions ──────────────────────────────
+    #[error("Select at least one Central skill to force update.")]
+    NoForceUpdateSelection,
+
+    #[error("Select at least one force mirror operation.")]
+    NoMirrorOperation,
+
+    #[error("Select at least one repository to force mirror.")]
+    NoMirrorRepositorySelection,
+
+    /// Inventory payload (de)serialization failures, stringified at the call
+    /// site (serde_json::Error display).
+    #[error("{0}")]
+    Json(String),
+
+    // ── Update inventory: platform-copy removal safety rails ────────────────
+    #[error("Agent '{0}' not found")]
+    AgentNotFound(String),
+
+    #[error("Central agent entries cannot be removed as platform copies.")]
+    CentralAgentPlatformCopy,
+
+    #[error("Read-only plugin copies cannot be removed.")]
+    ReadOnlyPluginCopy,
+
+    #[error("Central skill '{0}' exists again; refusing to delete platform copy.")]
+    CentralSkillReappeared(String),
+
+    #[error(
+        "Refusing to delete '{path}' because it is not the managed install path for '{skill_id}' on '{agent_id}'."
+    )]
+    NotManagedInstallPath {
+        path: String,
+        skill_id: String,
+        agent_id: String,
+    },
+
+    #[error(
+        "Refusing to delete '{path}' because it is not the managed remote install path for '{skill_id}' on '{agent_id}'."
+    )]
+    NotManagedRemoteInstallPath {
+        path: String,
+        skill_id: String,
+        agent_id: String,
+    },
+
+    #[error("Refusing to delete the platform skills root for {0}")]
+    PlatformRootDeletion(String),
+
+    #[error("Path '{0}' has no parent")]
+    PathNoParent(String),
+
+    #[error("Refusing to delete '{child}' because it is outside platform skills root '{root}'")]
+    OutsidePlatformRoot { child: String, root: String },
+
+    #[error("Refusing to delete under remote root for {0}")]
+    RemoteRootDeletionScope(String),
+
+    #[error("Refusing to delete the remote root '{root}' for {label}")]
+    RemoteRootDeletion { root: String, label: String },
+
+    #[error("Refusing to delete '{child}' because it is outside remote root '{root}'")]
+    OutsideRemoteRoot { child: String, root: String },
+
+    #[error("Invalid remote path '{0}'")]
+    InvalidRemotePath(String),
+
+    #[error("Remote path '{0}' contains traversal")]
+    RemotePathTraversal(String),
 }
 
 impl CentralUpdatesError {

@@ -1,4 +1,5 @@
 use crate::db::{self, DbPool, SkillUpdateInventoryEntry};
+use crate::services::central_updates::CentralUpdatesError;
 
 use super::{
     normalize_ids, FailedRepository, RemoteMissingSkill, SkillRefreshCachePolicy, SkillRefreshMode,
@@ -43,7 +44,7 @@ pub(super) async fn persist_refresh_inventory(
     mode: SkillRefreshMode,
     cache_policy: SkillRefreshCachePolicy,
     inventory: &SkillUpdateInventory,
-) -> Result<(), String> {
+) -> Result<(), CentralUpdatesError> {
     let generated_at = inventory.generated_at.clone();
     let run = db::SkillUpdateInventoryRun {
         inventory_id: inventory_id_for_scope(Some(scope)),
@@ -105,9 +106,8 @@ pub(super) async fn persist_refresh_inventory(
         )?);
     }
 
-    db::replace_skill_update_inventory(pool, &run, &entries)
-        .await
-        .map_err(|e| e.to_string())
+    db::replace_skill_update_inventory(pool, &run, &entries).await?;
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -121,7 +121,7 @@ fn entry_from_state_payload<T: serde::Serialize>(
     payload: &T,
     error: Option<&str>,
     state: &db::SkillUpdateState,
-) -> Result<SkillUpdateInventoryEntry, String> {
+) -> Result<SkillUpdateInventoryEntry, CentralUpdatesError> {
     entry_from_payload(
         inventory_id,
         bucket,
@@ -162,7 +162,7 @@ fn entry_from_payload<T: serde::Serialize>(
     generated_at: &str,
     payload: &T,
     error: Option<&str>,
-) -> Result<SkillUpdateInventoryEntry, String> {
+) -> Result<SkillUpdateInventoryEntry, CentralUpdatesError> {
     Ok(SkillUpdateInventoryEntry {
         inventory_id: inventory_id.to_string(),
         bucket: bucket.to_string(),
@@ -184,7 +184,8 @@ fn entry_from_payload<T: serde::Serialize>(
         cache_hit,
         snapshot_fetched_at: None,
         generated_at: generated_at.to_string(),
-        payload_json: serde_json::to_string(payload).map_err(|e| e.to_string())?,
+        payload_json: serde_json::to_string(payload)
+            .map_err(|e| CentralUpdatesError::Json(e.to_string()))?,
         error: error.map(str::to_string),
     })
 }
@@ -198,7 +199,7 @@ type EntryInventory = (
 
 pub(super) fn inventory_from_entries(
     entries: Vec<SkillUpdateInventoryEntry>,
-) -> Result<EntryInventory, String> {
+) -> Result<EntryInventory, CentralUpdatesError> {
     let generated_at = entries.first().map(|entry| entry.generated_at.clone());
     let mut updatable = Vec::new();
     let mut remote_missing = Vec::new();
@@ -207,15 +208,15 @@ pub(super) fn inventory_from_entries(
         match entry.bucket.as_str() {
             "updatable" => updatable.push(
                 serde_json::from_str::<UpdatableSkill>(&entry.payload_json)
-                    .map_err(|e| e.to_string())?,
+                    .map_err(|e| CentralUpdatesError::Json(e.to_string()))?,
             ),
             "remote_missing" => remote_missing.push(
                 serde_json::from_str::<RemoteMissingSkill>(&entry.payload_json)
-                    .map_err(|e| e.to_string())?,
+                    .map_err(|e| CentralUpdatesError::Json(e.to_string()))?,
             ),
             "failed_repository" => failed_repositories.push(
                 serde_json::from_str::<FailedRepository>(&entry.payload_json)
-                    .map_err(|e| e.to_string())?,
+                    .map_err(|e| CentralUpdatesError::Json(e.to_string()))?,
             ),
             _ => {}
         }
@@ -243,13 +244,13 @@ pub(super) fn diagnostic_from_state(
     }
 }
 
-fn ids_json(ids: Option<Vec<String>>) -> Result<Option<String>, String> {
+fn ids_json(ids: Option<Vec<String>>) -> Result<Option<String>, CentralUpdatesError> {
     let Some(ids) = ids else {
         return Ok(None);
     };
     serde_json::to_string(&normalize_ids(ids))
         .map(Some)
-        .map_err(|e| e.to_string())
+        .map_err(|e| CentralUpdatesError::Json(e.to_string()))
 }
 
 fn scope_kind_name(kind: SkillRefreshScopeKind) -> &'static str {

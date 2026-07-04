@@ -1,11 +1,14 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use crate::commands::central_updates::{self, keep_remote_missing_central_skills_impl};
-use crate::services::central_updates::normalize_repo_path;
 use crate::db::{self, Agent, DbPool};
 use crate::services::central_skills::{
     self, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult,
+};
+use crate::services::central_updates::{
+    keep_remote_missing_central_skills_impl, normalize_repo_path,
+    CentralRepositoryAdditionSkipRequest, CentralRepositoryAdditionUnskipRequest,
+    CentralUpdatesError,
 };
 use crate::services::installation::uninstall_skill_from_agent_with_row_impl;
 use crate::targets::{connect_remote_target, ActiveTarget};
@@ -79,7 +82,7 @@ pub(crate) async fn apply_delete_missing_step(
 /// 步骤3a：skip_additions 解耦版。
 pub(crate) async fn apply_skip_addition_step(
     pool: &DbPool,
-    skip_additions: Vec<central_updates::CentralRepositoryAdditionSkipRequest>,
+    skip_additions: Vec<CentralRepositoryAdditionSkipRequest>,
     result: &mut SkillUpdateApplyResult,
 ) {
     for request in skip_additions {
@@ -123,7 +126,7 @@ pub(crate) async fn apply_skip_addition_step(
 /// 步骤3b：unskip_additions 解耦版。
 pub(crate) async fn apply_unskip_addition_step(
     pool: &DbPool,
-    unskip_additions: Vec<central_updates::CentralRepositoryAdditionUnskipRequest>,
+    unskip_additions: Vec<CentralRepositoryAdditionUnskipRequest>,
     result: &mut SkillUpdateApplyResult,
 ) {
     for request in unskip_additions {
@@ -240,7 +243,7 @@ pub(crate) async fn apply_remove_deleted_platform_copies_step(
                 Err(error) => result.failures.push(SkillUpdateApplyFailure {
                     step: "remove_deleted_platform_copy".to_string(),
                     identifier: format!("{}::{}::{}", removal.agent_id, removal.skill_id, path),
-                    error,
+                    error: error.to_string(),
                 }),
             }
         }
@@ -256,14 +259,13 @@ async fn remove_deleted_platform_copy(
     active_target: &ActiveTarget,
     removal: &DeletedPlatformCopyRemoval,
     path: &str,
-) -> Result<(), String> {
+) -> Result<(), CentralUpdatesError> {
     ensure_central_still_missing(pool, &removal.skill_id).await?;
     let agent = db::get_agent_by_id(pool, &removal.agent_id)
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("Agent '{}' not found", removal.agent_id))?;
+        .await?
+        .ok_or_else(|| CentralUpdatesError::AgentNotFound(removal.agent_id.clone()))?;
     if removal.agent_id == "central" {
-        return Err("Central agent entries cannot be removed as platform copies.".to_string());
+        return Err(CentralUpdatesError::CentralAgentPlatformCopy);
     }
 
     match active_target {
@@ -276,17 +278,18 @@ async fn remove_deleted_platform_copy(
     }
 }
 
-async fn ensure_central_still_missing(pool: &DbPool, skill_id: &str) -> Result<(), String> {
+async fn ensure_central_still_missing(
+    pool: &DbPool,
+    skill_id: &str,
+) -> Result<(), CentralUpdatesError> {
     if db::get_central_skills_by_ids(pool, &[skill_id.to_string()])
-        .await
-        .map_err(|e| e.to_string())?
+        .await?
         .is_empty()
     {
         Ok(())
     } else {
-        Err(format!(
-            "Central skill '{}' exists again; refusing to delete platform copy.",
-            skill_id
+        Err(CentralUpdatesError::CentralSkillReappeared(
+            skill_id.to_string(),
         ))
     }
 }
@@ -296,20 +299,18 @@ async fn remove_deleted_platform_copy_local(
     agent: &Agent,
     removal: &DeletedPlatformCopyRemoval,
     path: &str,
-) -> Result<(), String> {
+) -> Result<(), CentralUpdatesError> {
     let root = Path::new(&agent.global_skills_dir);
     let target = Path::new(path);
     ensure_local_child_path(root, target, &removal.agent_id)?;
 
     if removal.agent_id == "claude-code" {
-        let observations = db::get_agent_skill_observations(pool, &removal.agent_id)
-            .await
-            .map_err(|e| e.to_string())?;
+        let observations = db::get_agent_skill_observations(pool, &removal.agent_id).await?;
         if let Some(obs) = observations.iter().find(|obs| {
             obs.skill_id == removal.skill_id && paths_equivalent_str(&obs.dir_path, path)
         }) {
             if obs.is_read_only || obs.source_kind == "plugin" {
-                return Err("Read-only plugin copies cannot be removed.".to_string());
+                return Err(CentralUpdatesError::ReadOnlyPluginCopy);
             }
             uninstall_skill_from_agent_with_row_impl(
                 pool,
@@ -317,23 +318,23 @@ async fn remove_deleted_platform_copy_local(
                 &removal.agent_id,
                 Some(&obs.row_id),
             )
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
             return Ok(());
         }
     }
 
     let expected = root.join(&removal.skill_id);
     if !paths_equivalent_path(&expected, target) {
-        return Err(format!(
-            "Refusing to delete '{}' because it is not the managed install path for '{}' on '{}'.",
-            path, removal.skill_id, removal.agent_id
-        ));
+        return Err(CentralUpdatesError::NotManagedInstallPath {
+            path: path.to_string(),
+            skill_id: removal.skill_id.clone(),
+            agent_id: removal.agent_id.clone(),
+        });
     }
 
     uninstall_skill_from_agent_with_row_impl(pool, &removal.skill_id, &removal.agent_id, None)
-        .await
-        .map_err(|e| e.to_string())
+        .await?;
+    Ok(())
 }
 
 async fn remove_deleted_platform_copy_remote(
@@ -342,95 +343,100 @@ async fn remove_deleted_platform_copy_remote(
     agent: &Agent,
     removal: &DeletedPlatformCopyRemoval,
     path: &str,
-) -> Result<(), String> {
+) -> Result<(), CentralUpdatesError> {
     if path != crate::targets::remote_join(&agent.global_skills_dir, &removal.skill_id) {
-        return Err(format!(
-            "Refusing to delete '{}' because it is not the managed remote install path for '{}' on '{}'.",
-            path, removal.skill_id, removal.agent_id
-        ));
+        return Err(CentralUpdatesError::NotManagedRemoteInstallPath {
+            path: path.to_string(),
+            skill_id: removal.skill_id.clone(),
+            agent_id: removal.agent_id.clone(),
+        });
     }
     let path = ensure_remote_child_path(&agent.global_skills_dir, path, &removal.agent_id)?;
     let connection = connect_remote_target(active_target)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| CentralUpdatesError::Remote(e.to_string()))?;
     match connection.remove_tree(&path).await {
         Ok(()) => {
-            db::delete_skill_installation(pool, &removal.skill_id, &removal.agent_id)
-                .await
-                .map_err(|e| e.to_string())?;
+            db::delete_skill_installation(pool, &removal.skill_id, &removal.agent_id).await?;
             Ok(())
         }
-        Err(error) if error.to_string().to_ascii_lowercase().contains("no such file") => {
-            db::delete_skill_installation(pool, &removal.skill_id, &removal.agent_id)
-                .await
-                .map_err(|e| e.to_string())?;
+        Err(error)
+            if error
+                .to_string()
+                .to_ascii_lowercase()
+                .contains("no such file") =>
+        {
+            db::delete_skill_installation(pool, &removal.skill_id, &removal.agent_id).await?;
             Ok(())
         }
-        Err(error) => Err(error.to_string()),
+        Err(error) => Err(CentralUpdatesError::Remote(error.to_string())),
     }
 }
 
-fn ensure_local_child_path(root: &Path, child: &Path, label: &str) -> Result<(), String> {
+fn ensure_local_child_path(
+    root: &Path,
+    child: &Path,
+    label: &str,
+) -> Result<(), CentralUpdatesError> {
     if crate::paths::paths_equivalent(root, child) {
-        return Err(format!(
-            "Refusing to delete the platform skills root for {}",
-            label
-        ));
+        return Err(CentralUpdatesError::PlatformRootDeletion(label.to_string()));
     }
 
     let root_cmp = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let child_parent = child
         .parent()
-        .ok_or_else(|| format!("Path '{}' has no parent", child.display()))?;
+        .ok_or_else(|| CentralUpdatesError::PathNoParent(child.display().to_string()))?;
     let child_parent_cmp = child_parent
         .canonicalize()
         .unwrap_or_else(|_| child_parent.to_path_buf());
     if !child_parent_cmp.starts_with(&root_cmp) {
-        return Err(format!(
-            "Refusing to delete '{}' because it is outside platform skills root '{}'",
-            child.display(),
-            root.display()
-        ));
+        return Err(CentralUpdatesError::OutsidePlatformRoot {
+            child: child.display().to_string(),
+            root: root.display().to_string(),
+        });
     }
     Ok(())
 }
 
-fn ensure_remote_child_path(root: &str, child: &str, label: &str) -> Result<String, String> {
+fn ensure_remote_child_path(
+    root: &str,
+    child: &str,
+    label: &str,
+) -> Result<String, CentralUpdatesError> {
     let root_cmp = normalize_remote_path(root)?;
     let child_cmp = normalize_remote_path(child)?;
     if root_cmp == "/" {
-        return Err(format!(
-            "Refusing to delete under remote root for {}",
-            label
+        return Err(CentralUpdatesError::RemoteRootDeletionScope(
+            label.to_string(),
         ));
     }
     if root_cmp == child_cmp {
-        return Err(format!(
-            "Refusing to delete the remote root '{}' for {}",
-            root_cmp, label
-        ));
+        return Err(CentralUpdatesError::RemoteRootDeletion {
+            root: root_cmp,
+            label: label.to_string(),
+        });
     }
     let prefix = format!("{}/", root_cmp.trim_end_matches('/'));
     if !child_cmp.starts_with(&prefix) {
-        return Err(format!(
-            "Refusing to delete '{}' because it is outside remote root '{}'",
-            child, root
-        ));
+        return Err(CentralUpdatesError::OutsideRemoteRoot {
+            child: child.to_string(),
+            root: root.to_string(),
+        });
     }
     Ok(child_cmp)
 }
 
-fn normalize_remote_path(path: &str) -> Result<String, String> {
+fn normalize_remote_path(path: &str) -> Result<String, CentralUpdatesError> {
     let trimmed = path.trim();
     if trimmed.is_empty() || !trimmed.starts_with('/') || trimmed.contains('\0') {
-        return Err(format!("Invalid remote path '{}'", path));
+        return Err(CentralUpdatesError::InvalidRemotePath(path.to_string()));
     }
 
     let mut segments = Vec::new();
     for segment in trimmed.split('/') {
         match segment {
             "" | "." => {}
-            ".." => return Err(format!("Remote path '{}' contains traversal", path)),
+            ".." => return Err(CentralUpdatesError::RemotePathTraversal(path.to_string())),
             value => segments.push(value),
         }
     }

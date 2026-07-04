@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::db::{self, DbPool};
+use crate::services::central_updates::CentralUpdatesError;
 
 use super::{SkillRefreshScope, SkillRefreshScopeKind};
 
@@ -20,7 +21,7 @@ impl InventoryScopeFilter {
     pub(crate) async fn from_scope(
         _pool: &DbPool,
         scope: Option<SkillRefreshScope>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, CentralUpdatesError> {
         let Some(scope) = scope else {
             return Ok(Self {
                 agent_ids: None,
@@ -74,24 +75,20 @@ impl InventoryScopeFilter {
 pub(crate) async fn central_skill_ids_for_agents(
     pool: &DbPool,
     agent_ids: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, CentralUpdatesError> {
     if agent_ids.is_empty() {
         return Ok(Vec::new());
     }
 
     let central_skill_ids = db::get_central_skills(pool)
-        .await
-        .map_err(|e| e.to_string())?
+        .await?
         .into_iter()
         .map(|skill| skill.id)
         .collect::<HashSet<_>>();
     let mut ids = HashSet::new();
 
     for agent_id in agent_ids {
-        for observation in db::get_agent_skill_observations(pool, agent_id)
-            .await
-            .map_err(|e| e.to_string())?
-        {
+        for observation in db::get_agent_skill_observations(pool, agent_id).await? {
             if central_skill_ids.contains(&observation.skill_id) {
                 ids.insert(observation.skill_id);
             }
@@ -105,8 +102,7 @@ pub(crate) async fn central_skill_ids_for_agents(
         )
         .bind(agent_id)
         .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
         ids.extend(installed_skill_ids);
     }
 

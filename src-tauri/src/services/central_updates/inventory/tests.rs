@@ -11,12 +11,13 @@
 //! - D: scan_platform_duplicate_skills
 
 use super::*;
-use crate::commands::central_updates::repo_cache_key;
-use crate::services::central_updates::CentralFs;
-use crate::commands::github_import::GitHubRepoRef;
 use crate::db;
 use crate::db::{AgentSkillObservation, Skill, SkillInstallation, SkillUpdateState};
 use crate::services::central_skills::BatchDeleteCentralSkillRequest;
+use crate::services::central_updates;
+use crate::services::central_updates::repo_cache_key;
+use crate::services::central_updates::CentralFs;
+use crate::services::github_import::GitHubRepoRef;
 use crate::services::github_import::GitHubRepoSnapshot;
 use crate::targets::ActiveTarget;
 use crate::CentralUpdateSnapshotCache;

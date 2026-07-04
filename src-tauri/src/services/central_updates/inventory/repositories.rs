@@ -1,20 +1,18 @@
 use std::collections::HashMap;
 
-use crate::commands::central_updates;
-use crate::commands::github_import::{self, GitHubRepoRef};
 use crate::db::{self, DbPool, SkillRepository, SkillUpdateState};
+use crate::services::central_updates::{
+    CentralRemoteAddedSkill, CentralUpdatesError, PreparedSkillUpdate,
+};
+use crate::services::github_import::{self, GitHubRepoRef};
 
 use super::RemoteAddedSkill;
 
-pub(crate) fn prepared_repo_ref(
-    prepared: &central_updates::PreparedSkillUpdate,
-) -> Option<GitHubRepoRef> {
+pub(crate) fn prepared_repo_ref(prepared: &PreparedSkillUpdate) -> Option<GitHubRepoRef> {
     repo_ref_for_repository(&prepared.assignment.repository)
 }
 
-pub(crate) fn remote_added_from_item(
-    item: central_updates::CentralRemoteAddedSkill,
-) -> RemoteAddedSkill {
+pub(crate) fn remote_added_from_item(item: CentralRemoteAddedSkill) -> RemoteAddedSkill {
     let conflict_existing_skill_id = item
         .preview
         .conflict
@@ -78,13 +76,10 @@ pub(crate) async fn load_syncable_github_repositories(
     pool: &DbPool,
     repository_ids: &[String],
     auth_token: Option<&str>,
-) -> Result<Vec<(SkillRepository, GitHubRepoRef)>, String> {
+) -> Result<Vec<(SkillRepository, GitHubRepoRef)>, CentralUpdatesError> {
     let mut repositories = Vec::new();
     for repository_id in repository_ids {
-        let Some(repository) = db::get_skill_repository_by_id(pool, repository_id)
-            .await
-            .map_err(|e| e.to_string())?
-        else {
+        let Some(repository) = db::get_skill_repository_by_id(pool, repository_id).await? else {
             continue;
         };
         if repository.is_unknown || repository.source_type != "github" {
@@ -109,8 +104,7 @@ pub(crate) async fn load_syncable_github_repositories(
                 continue;
             };
             github_import::resolve_repo_source(&url, auth_token)
-                .await
-                .map_err(|e| e.to_string())?
+                .await?
                 .repo
         };
         repositories.push((repository, repo_ref));
