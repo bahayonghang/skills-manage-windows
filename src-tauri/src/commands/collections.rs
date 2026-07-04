@@ -317,16 +317,10 @@ pub async fn import_collection(
 mod tests {
     use super::*;
     use crate::db::{self, Skill};
+    use crate::test_support::mem_pool as setup_test_db;
     use chrono::Utc;
-    use sqlx::SqlitePool;
     use std::fs;
     use tempfile::TempDir;
-
-    async fn setup_test_db() -> SqlitePool {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
 
     fn make_skill(id: &str) -> Skill {
         Skill {

@@ -298,13 +298,7 @@ async fn get_dashboard_central_summary_impl(
 mod tests {
     use super::*;
     use crate::db::{self, Skill, SkillInstallation};
-    use sqlx::SqlitePool;
-
-    async fn setup_test_db() -> DbPool {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
+    use crate::test_support::mem_pool as setup_test_db;
 
     #[tokio::test]
     async fn test_get_skill_counts_summary_defaults_to_idle_without_settings() {

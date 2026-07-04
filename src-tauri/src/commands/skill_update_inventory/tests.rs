@@ -32,35 +32,19 @@ use tempfile::TempDir;
  * ========================================================================
  */
 
-async fn setup_test_db() -> SqlitePool {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database(&pool).await.unwrap();
-    pool
-}
+use crate::test_support::mem_pool as setup_test_db;
 
 /// 用 TempDir 当 `~`，central 目录就落在 `{home}/.skillsmanage/skills/`，
 /// 测试可以安全清理。delete_central_skill_impl 会去看这个目录是否合法。
 async fn setup_test_db_with_home(home: &Path) -> SqlitePool {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database_for_remote_home(&pool, &home.to_string_lossy())
-        .await
-        .unwrap();
-    pool
+    crate::test_support::mem_pool_with_home(&home.to_string_lossy()).await
 }
 
 fn make_central_skill(id: &str, dir: &Path) -> Skill {
     Skill {
-        id: id.to_string(),
-        name: id.to_string(),
         description: Some(format!("Desc for {id}")),
-        file_path: dir.join("SKILL.md").to_string_lossy().into_owned(),
-        canonical_path: Some(dir.to_string_lossy().into_owned()),
-        is_central: true,
         source: Some("github:owner/repo".to_string()),
-        content: None,
-        scanned_at: Utc::now().to_rfc3339(),
-        fs_created_at: None,
-        fs_updated_at: None,
+        ..crate::test_support::central_skill_row(id, dir)
     }
 }
 

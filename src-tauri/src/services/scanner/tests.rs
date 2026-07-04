@@ -369,22 +369,13 @@ fn test_scan_directory_nonexistent_dir_returns_empty() {
 
 // ── scan_all_skills_impl ──────────────────────────────────────────────────
 
-async fn setup_test_db() -> DbPool {
-    use crate::db;
-    use sqlx::SqlitePool;
-    let pool = SqlitePool::connect(":memory:").await.expect("in-memory DB");
-    db::init_database(&pool).await.expect("init");
-    pool
-}
+use crate::test_support::mem_pool as setup_test_db;
 
 #[tokio::test]
 async fn test_scan_all_skills_impl_empty_dirs() {
-    use sqlx::SqlitePool;
-
     // Build a pool with tables but no seeded agents so the test is
     // isolated from whatever the user has installed on their machine.
-    let pool = SqlitePool::connect(":memory:").await.expect("in-memory DB");
-    db::init_database(&pool).await.expect("init");
+    let pool = setup_test_db().await;
     // Remove all seeded agents so the test is isolated from whatever the
     // user has installed on their machine.
     sqlx::query("DELETE FROM agents")

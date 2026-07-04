@@ -15,20 +15,8 @@ use super::crud::{
     uninstall_skill_from_project_impl,
 };
 
-async fn setup_test_db() -> DbPool {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database(&pool).await.unwrap();
-    pool
-}
-
-fn write_skill_md(dir: &Path, name: &str, description: Option<&str>) {
-    std::fs::create_dir_all(dir).unwrap();
-    let body = match description {
-        Some(d) => format!("---\nname: {name}\ndescription: {d}\n---\n\n# {name}\n"),
-        None => format!("---\nname: {name}\n---\n\n# {name}\n"),
-    };
-    std::fs::write(dir.join("SKILL.md"), body).unwrap();
-}
+use crate::test_support::mem_pool as setup_test_db;
+use crate::test_support::write_skill_md;
 
 #[test]
 fn project_id_is_stable_for_same_path() {
@@ -258,6 +246,8 @@ async fn rescan_prefers_universal_agents_dir_over_legacy_member_paths() {
 
 #[tokio::test]
 async fn project_schema_migration_adds_metadata_columns_with_project_default() {
+    // 豁免 test_support::mem_pool：本测试手工搭建 legacy schema 验证迁移，
+    // 必须拿到未 init 的裸池。
     let pool = SqlitePool::connect(":memory:").await.unwrap();
     sqlx::query(
         "CREATE TABLE projects (
@@ -466,24 +456,7 @@ async fn rescan_detects_symlinked_skills() {
 
 /// 准备中央 skill：在指定 canonical_dir 写 SKILL.md，并 upsert 进 skills 表。
 async fn seed_central_skill(pool: &DbPool, canonical_dir: &Path, skill_id: &str) {
-    write_skill_md(canonical_dir, skill_id, Some("seed"));
-    let skill = Skill {
-        id: skill_id.to_string(),
-        name: skill_id.to_string(),
-        description: Some("seed".to_string()),
-        file_path: canonical_dir
-            .join("SKILL.md")
-            .to_string_lossy()
-            .into_owned(),
-        canonical_path: Some(canonical_dir.to_string_lossy().into_owned()),
-        is_central: true,
-        source: None,
-        content: None,
-        scanned_at: chrono::Utc::now().to_rfc3339(),
-        fs_created_at: None,
-        fs_updated_at: None,
-    };
-    db::upsert_skill(pool, &skill).await.unwrap();
+    crate::test_support::seed_central_skill(pool, canonical_dir, skill_id, "seed").await;
 }
 
 #[tokio::test]

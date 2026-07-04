@@ -516,26 +516,16 @@ fn stored_path_string(path: &Path) -> String {
 mod tests {
     use super::*;
     use crate::db::{self, Skill, SkillInstallation};
+    use crate::test_support::mem_pool as setup;
     use tempfile::TempDir;
 
-    async fn setup() -> DbPool {
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
-
     async fn set_central_root(pool: &DbPool, root: &Path) {
-        let path = root.to_string_lossy().into_owned();
-        sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
-            .bind(&path)
-            .execute(pool)
-            .await
-            .unwrap();
+        crate::test_support::set_agent_dir(pool, "central", root).await;
         sqlx::query(
             "INSERT OR IGNORE INTO scan_directories (path, label, is_active, is_builtin, added_at)
              VALUES (?, 'Central Skills', 1, 1, ?)",
         )
-        .bind(path)
+        .bind(root.to_string_lossy().into_owned())
         .bind(Utc::now().to_rfc3339())
         .execute(pool)
         .await

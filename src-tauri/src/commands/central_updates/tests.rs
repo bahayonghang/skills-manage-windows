@@ -1,35 +1,18 @@
 use super::*;
 use crate::db::SkillRepository;
+use crate::test_support::mem_pool as setup_test_db;
 use sqlx::SqlitePool;
 use tempfile::TempDir;
 
-async fn setup_test_db() -> SqlitePool {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database(&pool).await.unwrap();
-    pool
-}
-
 async fn setup_remote_test_db(remote_home: &Path) -> SqlitePool {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database_for_remote_home(&pool, &remote_home.to_string_lossy())
-        .await
-        .unwrap();
-    pool
+    crate::test_support::mem_pool_with_home(&remote_home.to_string_lossy()).await
 }
 
 fn make_central_skill(id: &str, dir: &Path) -> Skill {
     Skill {
-        id: id.to_string(),
-        name: id.to_string(),
         description: Some(format!("Desc for {id}")),
-        file_path: dir.join("SKILL.md").to_string_lossy().into_owned(),
-        canonical_path: Some(dir.to_string_lossy().into_owned()),
-        is_central: true,
         source: Some("github:owner/repo".to_string()),
-        content: None,
-        scanned_at: Utc::now().to_rfc3339(),
-        fs_created_at: None,
-        fs_updated_at: None,
+        ..crate::test_support::central_skill_row(id, dir)
     }
 }
 

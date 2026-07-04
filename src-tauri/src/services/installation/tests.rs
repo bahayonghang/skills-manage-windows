@@ -39,21 +39,9 @@ use super::types::{BatchInstallResult, FailedInstall, InstallOutcome};
 /// the central/claude-code agent directories redirected to `central_dir`
 /// and `agent_dir` respectively.
 async fn setup_db(central_dir: &Path, agent_dir: &Path) -> DbPool {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database(&pool).await.unwrap();
-
-    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
-        .bind(central_dir.to_str().unwrap())
-        .execute(&pool)
-        .await
-        .unwrap();
-
-    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'claude-code'")
-        .bind(agent_dir.to_str().unwrap())
-        .execute(&pool)
-        .await
-        .unwrap();
-
+    let pool = crate::test_support::mem_pool().await;
+    crate::test_support::set_agent_dir(&pool, "central", central_dir).await;
+    crate::test_support::set_agent_dir(&pool, "claude-code", agent_dir).await;
     pool
 }
 
@@ -63,54 +51,20 @@ async fn setup_db_with_codex(
     codex_agent_dir: &Path,
 ) -> DbPool {
     let pool = setup_db(central_dir, claude_agent_dir).await;
-
-    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'codex'")
-        .bind(codex_agent_dir.to_str().unwrap())
-        .execute(&pool)
-        .await
-        .unwrap();
-
+    crate::test_support::set_agent_dir(&pool, "codex", codex_agent_dir).await;
     pool
 }
 
 /// Create a minimal skill directory containing a valid `SKILL.md`.
 fn create_central_skill(central_dir: &Path, skill_id: &str) -> PathBuf {
-    let skill_dir = central_dir.join(skill_id);
-    fs::create_dir_all(&skill_dir).unwrap();
-    fs::write(
-        skill_dir.join("SKILL.md"),
-        format!(
-            "---\nname: {}\ndescription: Test skill\n---\n\n# {}\n",
-            skill_id, skill_id
-        ),
-    )
-    .unwrap();
-    skill_dir
+    crate::test_support::write_skill_md(&central_dir.join(skill_id), skill_id, Some("Test skill"))
 }
 
 fn create_user_skill(agent_dir: &Path, skill_id: &str) -> PathBuf {
-    let skill_dir = agent_dir.join(skill_id);
-    fs::create_dir_all(&skill_dir).unwrap();
-    fs::write(
-        skill_dir.join("SKILL.md"),
-        format!(
-            "---\nname: {}\ndescription: User skill\n---\n\n# {}\n",
-            skill_id, skill_id
-        ),
-    )
-    .unwrap();
-    skill_dir
+    crate::test_support::write_skill_md(&agent_dir.join(skill_id), skill_id, Some("User skill"))
 }
 
-#[cfg(unix)]
-fn create_symlink_for_test(target: &Path, link: &Path) {
-    std::os::unix::fs::symlink(target, link).unwrap();
-}
-
-#[cfg(windows)]
-fn create_symlink_for_test(target: &Path, link: &Path) {
-    std::os::windows::fs::symlink_dir(target, link).unwrap();
-}
+use crate::test_support::symlink_dir as create_symlink_for_test;
 
 fn claude_observation(
     agent_dir: &Path,

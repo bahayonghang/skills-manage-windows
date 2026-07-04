@@ -161,13 +161,7 @@ pub async fn reorder_saved_views(
 mod tests {
     use super::*;
     use crate::db;
-    use sqlx::SqlitePool;
-
-    async fn setup_test_db() -> SqlitePool {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
+    use crate::test_support::mem_pool as setup_test_db;
 
     fn make_input(name: &str, query: &str) -> CreateSavedViewInput {
         CreateSavedViewInput {
