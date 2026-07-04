@@ -7,3 +7,4 @@
 - [重 IO 的 spawn_blocking 约定](./spawn-blocking-io.md)
 - [域错误枚举约定（thiserror）](./domain-error-enums.md)
 - [Redaction Policy（敏感字段脱敏约定）](./redaction-policy.md)
+- [Rust 测试 fixture 约定（test_support）](./test-support.md)
