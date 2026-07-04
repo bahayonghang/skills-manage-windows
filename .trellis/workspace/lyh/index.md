@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 22
-- **Last Active**: 2026-06-24
+- **Total Sessions**: 23
+- **Last Active**: 2026-07-04
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~813 | Active |
+| `journal-1.md` | ~851 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 23 | 2026-07-04 | 架构评审 + 统一 Redaction policy 落地 | `225027a3`, `4855edd2`, `abc3f94e`, `3b4153f6`, `6d94c937`, `8328cd78` | `dev` |
 | 22 | 2026-06-24 | Central skill platform uninstall button | `a64cdce3`, `cf3a055c` | `dev` |
 | 21 | 2026-06-24 | Central Skills interface polish | `97fabbd9`, `8bc7e0bb` | `dev` |
 | 20 | 2026-06-24 | Dashboard interface polish | `5316674d` | `dev` |

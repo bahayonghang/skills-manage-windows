@@ -811,3 +811,41 @@ Added card-level Central skill platform uninstall action and recorded the Trelli
 ### Next Steps
 
 - None - task complete
+
+
+## Session 23: 架构评审 + 统一 Redaction policy 落地
+
+**Date**: 2026-07-04
+**Task**: 架构评审 + 统一 Redaction policy 落地
+**Branch**: `dev`
+
+### Summary
+
+运行 /improve-codebase-architecture 全仓走查（3 只读代理+人工复核），产出 9 个 deepening 候选并建 Trellis 父任务+9 子任务；完成子任务 1：新建 redaction.rs deep module（3 函数接口+parity 守卫测试），operation_log/logging 迁移到唯一策略点，闭合 passphrase 泄漏与 pat 子串误伤 path 的线上缺陷，前端词表同步；全量门禁绿（cargo test 716、pnpm test 1249、clippy/typecheck/lint 干净），新增 spec/backend/redaction-policy.md 契约。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `225027a3` | (see git log) |
+| `4855edd2` | (see git log) |
+| `abc3f94e` | (see git log) |
+| `3b4153f6` | (see git log) |
+| `6d94c937` | (see git log) |
+| `8328cd78` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
