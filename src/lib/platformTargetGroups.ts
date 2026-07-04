@@ -1,50 +1,17 @@
 import type { AgentWithStatus } from "@/types";
+import type { TFunction } from "i18next";
 import { getPlatformPathHint as formatPlatformPathHint } from "@/lib/path";
+import {
+  UNIVERSAL_AGENT_ID_ORDER,
+  UNIVERSAL_INSTALL_AGENT_ORDER,
+  UNIVERSAL_PROJECT_AGENT_ID_ORDER,
+} from "@/lib/platformRegistry";
 import {
   filterVisiblePlatformAgents,
   type PlatformCategoryVisibility,
 } from "@/lib/platformVisibility";
 
 export const UNIVERSAL_PLATFORM_TARGET_ID = "universal-agents";
-
-const UNIVERSAL_AGENT_ID_ORDER = [
-  "amp",
-  "cline",
-  "codex",
-  "cursor",
-  "deep-agents",
-  "firebender",
-  "copilot",
-  "kimi-code-cli",
-  "opencode",
-  "warp",
-] as const;
-
-const UNIVERSAL_PROJECT_AGENT_ID_ORDER = [
-  "amp",
-  "antigravity",
-  "antigravity-cli",
-  "cline",
-  "codex",
-  "cursor",
-  "deep-agents",
-  "firebender",
-  "gemini-cli",
-  "copilot",
-  "kimi-code-cli",
-  "opencode",
-  "warp",
-] as const;
-
-const UNIVERSAL_INSTALL_AGENT_ORDER = [
-  "codex",
-  "opencode",
-  "antigravity-cli",
-  "antigravity",
-  "gemini-cli",
-  "cursor",
-  "amp",
-] as const;
 
 export interface PlatformTargetGroup extends AgentWithStatus {
   is_virtual_group: true;
@@ -54,20 +21,21 @@ export interface PlatformTargetGroup extends AgentWithStatus {
 
 export type PlatformTarget = AgentWithStatus | PlatformTargetGroup;
 
-function universalAgentRank<const T extends readonly string[]>(
+function universalAgentRank(
   agent: AgentWithStatus,
-  order: T
+  order: readonly string[],
 ): number {
   const rank = order.findIndex((id) => id === agent.id);
   return rank === -1 ? Number.MAX_SAFE_INTEGER : rank;
 }
 
-function sortUniversalMembers<const T extends readonly string[]>(
+function sortUniversalMembers(
   agents: AgentWithStatus[],
-  order: T
+  order: readonly string[],
 ): AgentWithStatus[] {
   return [...agents].sort((left, right) => {
-    const rankDiff = universalAgentRank(left, order) - universalAgentRank(right, order);
+    const rankDiff =
+      universalAgentRank(left, order) - universalAgentRank(right, order);
     if (rankDiff !== 0) {
       return rankDiff;
     }
@@ -79,23 +47,21 @@ function sortUniversalMembers<const T extends readonly string[]>(
 }
 
 function isUniversalAgent(agent: AgentWithStatus): boolean {
-  return UNIVERSAL_AGENT_ID_ORDER.includes(
-    agent.id as (typeof UNIVERSAL_AGENT_ID_ORDER)[number]
-  );
+  return UNIVERSAL_AGENT_ID_ORDER.includes(agent.id);
 }
 
 function isUniversalProjectAgent(agent: AgentWithStatus): boolean {
-  return UNIVERSAL_PROJECT_AGENT_ID_ORDER.includes(
-    agent.id as (typeof UNIVERSAL_PROJECT_AGENT_ID_ORDER)[number]
-  );
+  return UNIVERSAL_PROJECT_AGENT_ID_ORDER.includes(agent.id);
 }
 
 function selectUniversalInstallAgent(
   visibleMembers: AgentWithStatus[],
-  allMembers: AgentWithStatus[]
+  allMembers: AgentWithStatus[],
 ): AgentWithStatus {
   for (const preferredId of UNIVERSAL_INSTALL_AGENT_ORDER) {
-    const visibleMatch = visibleMembers.find((agent) => agent.id === preferredId);
+    const visibleMatch = visibleMembers.find(
+      (agent) => agent.id === preferredId,
+    );
     if (visibleMatch) {
       return visibleMatch;
     }
@@ -110,7 +76,7 @@ function selectUniversalInstallAgent(
 }
 
 export function isUniversalPlatformTarget(
-  agent: PlatformTarget
+  agent: PlatformTarget,
 ): agent is PlatformTargetGroup {
   return (
     agent.id === UNIVERSAL_PLATFORM_TARGET_ID ||
@@ -119,20 +85,23 @@ export function isUniversalPlatformTarget(
 }
 
 export function getUniversalPlatformMembers(
-  agents: AgentWithStatus[]
+  agents: AgentWithStatus[],
 ): AgentWithStatus[] {
-  return sortUniversalMembers(agents.filter(isUniversalAgent), UNIVERSAL_AGENT_ID_ORDER);
+  return sortUniversalMembers(
+    agents.filter(isUniversalAgent),
+    UNIVERSAL_AGENT_ID_ORDER,
+  );
 }
 
 function createPlatformTargetGroupsForScope(
   visibleAgents: AgentWithStatus[],
   allAgents: AgentWithStatus[],
   isUniversalMember: (agent: AgentWithStatus) => boolean,
-  universalOrder: readonly string[]
+  universalOrder: readonly string[],
 ): PlatformTarget[] {
   const allUniversalMembers = sortUniversalMembers(
     allAgents.filter(isUniversalMember),
-    universalOrder
+    universalOrder,
   );
 
   if (allUniversalMembers.length === 0) {
@@ -140,9 +109,7 @@ function createPlatformTargetGroupsForScope(
   }
 
   const visibleMemberIds = new Set(
-    visibleAgents
-      .filter(isUniversalMember)
-      .map((agent) => agent.id)
+    visibleAgents.filter(isUniversalMember).map((agent) => agent.id),
   );
 
   if (visibleMemberIds.size === 0) {
@@ -150,14 +117,14 @@ function createPlatformTargetGroupsForScope(
   }
 
   const visibleMembers = allUniversalMembers.filter((agent) =>
-    visibleMemberIds.has(agent.id)
+    visibleMemberIds.has(agent.id),
   );
   const installAgent = selectUniversalInstallAgent(
     visibleMembers,
-    allUniversalMembers
+    allUniversalMembers,
   );
   const standaloneAgents = visibleAgents.filter(
-    (agent) => agent.id !== "central" && !visibleMemberIds.has(agent.id)
+    (agent) => agent.id !== "central" && !visibleMemberIds.has(agent.id),
   );
   const universalGroup: PlatformTargetGroup = {
     ...installAgent,
@@ -180,50 +147,50 @@ function createPlatformTargetGroupsForScope(
 
 export function createPlatformTargetGroups(
   visibleAgents: AgentWithStatus[],
-  allAgents: AgentWithStatus[] = visibleAgents
+  allAgents: AgentWithStatus[] = visibleAgents,
 ): PlatformTarget[] {
   return createPlatformTargetGroupsForScope(
     visibleAgents,
     allAgents,
     isUniversalAgent,
-    UNIVERSAL_AGENT_ID_ORDER
+    UNIVERSAL_AGENT_ID_ORDER,
   );
 }
 
 export function createProjectPlatformTargetGroups(
   visibleAgents: AgentWithStatus[],
-  allAgents: AgentWithStatus[] = visibleAgents
+  allAgents: AgentWithStatus[] = visibleAgents,
 ): PlatformTarget[] {
   return createPlatformTargetGroupsForScope(
     visibleAgents,
     allAgents,
     isUniversalProjectAgent,
-    UNIVERSAL_PROJECT_AGENT_ID_ORDER
+    UNIVERSAL_PROJECT_AGENT_ID_ORDER,
   );
 }
 
 export function getPlatformTargetGroups(
   agents: AgentWithStatus[],
-  categoryVisibility: PlatformCategoryVisibility
+  categoryVisibility: PlatformCategoryVisibility,
 ): PlatformTarget[] {
   return createPlatformTargetGroups(
     filterVisiblePlatformAgents(agents, categoryVisibility),
-    agents
+    agents,
   );
 }
 
 export function getProjectPlatformTargetGroups(
   agents: AgentWithStatus[],
-  categoryVisibility: PlatformCategoryVisibility
+  categoryVisibility: PlatformCategoryVisibility,
 ): PlatformTarget[] {
   return createProjectPlatformTargetGroups(
     filterVisiblePlatformAgents(agents, categoryVisibility),
-    agents
+    agents,
   );
 }
 
 export function flattenPlatformTargets(
-  targets: readonly PlatformTarget[]
+  targets: readonly PlatformTarget[],
 ): AgentWithStatus[] {
   const byId = new Map<string, AgentWithStatus>();
   for (const target of targets) {
@@ -239,9 +206,7 @@ export function flattenPlatformTargets(
   return Array.from(byId.values());
 }
 
-export function getPlatformTargetMemberIds(
-  agent: PlatformTarget
-): string[] {
+export function getPlatformTargetMemberIds(agent: PlatformTarget): string[] {
   if (!isUniversalPlatformTarget(agent)) {
     return [agent.id];
   }
@@ -250,7 +215,7 @@ export function getPlatformTargetMemberIds(
 }
 
 export function getPlatformTargetInstallAgentIds(
-  agent: PlatformTarget
+  agent: PlatformTarget,
 ): string[] {
   if (!isUniversalPlatformTarget(agent)) {
     return [agent.id];
@@ -273,12 +238,12 @@ export function hasProjectSkillPattern(agent: PlatformTarget): boolean {
   }
 
   const normalized = agent.global_skills_dir.replace(/\\/g, "/");
-  return normalized.startsWith("~/") || /\/\.[^/]+\/skills\/?$/.test(normalized);
+  return (
+    normalized.startsWith("~/") || /\/\.[^/]+\/skills\/?$/.test(normalized)
+  );
 }
 
-export function getPlatformTargetMemberNames(
-  agent: PlatformTarget
-): string[] {
+export function getPlatformTargetMemberNames(agent: PlatformTarget): string[] {
   if (!isUniversalPlatformTarget(agent)) {
     return [agent.display_name];
   }
@@ -286,8 +251,32 @@ export function getPlatformTargetMemberNames(
   return agent.member_agents.map((member) => member.display_name);
 }
 
-export function getPlatformTargetPathHint(
-  agent: PlatformTarget
-): string {
+export function getPlatformTargetPathHint(agent: PlatformTarget): string {
   return formatPlatformPathHint(agent.global_skills_dir);
+}
+
+export function getPlatformTargetLabel(
+  target: PlatformTarget,
+  t: TFunction,
+  variant: "full" | "short",
+): string {
+  if (!isUniversalPlatformTarget(target)) {
+    return target.display_name;
+  }
+
+  return variant === "short"
+    ? t("platformTargets.universalShortLabel")
+    : t("platformTargets.universalLabel");
+}
+
+export function getPlatformTargetTitleHint(target: PlatformTarget): string {
+  return isUniversalPlatformTarget(target)
+    ? getPlatformTargetMemberNames(target).join(", ")
+    : target.global_skills_dir;
+}
+
+export function getPlatformTargetCountAgentId(target: PlatformTarget): string {
+  return isUniversalPlatformTarget(target)
+    ? target.install_agent_id
+    : target.id;
 }
