@@ -893,3 +893,41 @@ Added card-level Central skill platform uninstall action and recorded the Trelli
 ### Next Steps
 
 - 架构深化专项 2/9 完成；按既定顺序下一个子任务为 unify-frontmatter-parsing（9 号候选，小改动）
+
+## Session 25: 统一 SKILL.md frontmatter 解析（架构深化 3/9）
+
+**Date**: 2026-07-04
+**Task**: 07-04-unify-frontmatter-parsing（收敛栅栏剥离为单一实现，闭合 BOM 分叉）
+**Branch**: `dev`
+
+### Summary
+
+新建 `services/scanner/frontmatter.rs` 的 `extract_frontmatter_block`（全仓唯一栅栏剥离：去 UTF-8 BOM、容前导空白、闭合栅栏须独立成行，采历史上更严谨的 github_import 语义），`scanner::parse_skill_md_content` 与 `github_import::parse_frontmatter` 迁移为调用方（各自保留 YAML→字段映射，字段语义零变化）。ssh_batch remote 路径实测本就走 Rust 侧解析，统一后自动继承（PRD 需求 4 免费达成）。Spec 契约登记 `spec/backend/skill-frontmatter-parsing.md`（禁手抄 + 巡检命令）。
+
+### Main Changes
+
+- 栅栏剥离手抄 2 处 → 0（巡检 `strip_prefix("---` / `find("\n---` 零命中）
+- 新增测试 8 条：frontmatter 单测 6 + scanner BOM 入口 1 + 双入口 BOM 一致性 1；scanner 45→52、github_import 61→62
+- cargo test 739 passed + 2 ignored 全绿；clippy -D warnings 干净（--all-targets 14 个报错均为 usage/secrets 存量，与本任务无关）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bc57d028` | refactor(scanner): 统一 SKILL.md frontmatter 栅栏剥离为单一实现 |
+| `92f16755` | docs(spec): 登记 SKILL.md frontmatter 解析契约 |
+| `f5d3e9cc` | chore(task): archive 07-04-unify-frontmatter-parsing |
+
+### Testing
+
+- [OK] cd src-tauri && cargo test：739 passed + 2 ignored
+- [OK] cargo clippy -- -D warnings：No issues found
+- [OK] 巡检：全仓无手抄栅栏剥离残留
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 架构深化专项 3/9 完成；剩余候选：central-updates-service-domain / frontend-platform-module / typed-ipc-adapter / transport-seam / path-policy-remote-half / skill-card-scenarios
