@@ -849,3 +849,47 @@ Added card-level Central skill platform uninstall action and recorded the Trelli
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: Rust test-support harness 落地（架构深化 2/9）
+
+**Date**: 2026-07-04
+**Task**: 07-04-rust-test-support（收敛 26 份手抄测试 setup + obsidian 域破零）
+**Branch**: `dev`
+
+### Summary
+
+新建 `src-tauri/src/test_support.rs`（#[cfg(test)] 单文件 harness：4 种池 fixture + set_agent_dir + write_skill_md/central_skill_row/seed_central_skill + symlink_dir，自带 5 条自测），分两批把 23 个文件的手抄 setup 迁成 use-alias/薄壳（断言与 fixture 字面量逐字保留），并用 harness 给 obsidian 域写下首批 10 条 service 测试（导入 7 + 扫描 3）。豁免清单落地：4 处语义豁免（无 schema 容错 / 3 处 legacy-schema 迁移测试）+ projects_e2e 结构性豁免，全部现场注释。新增 spec/backend/test-support.md 契约。
+
+### Main Changes
+
+- connect(":memory:") 31 → harness 外 4（全部豁免在案）；手抄池体定义 26 → 0（剩 8 个薄壳）
+- cargo test 718 → 733（+5 harness 自测 +10 obsidian），clippy -D warnings 干净，--all-targets 零新增 unused
+- 前端三件套（typecheck/lint/test 1249）全绿，零联动破坏
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `61006cc2` | docs(Trellis): 登记 rust-test-support 的 design/implement 并激活 |
+| `554935fc` | test(test-support): 新增共享测试 harness |
+| `8cefda34` | test(harness): 高频域测试 setup 迁移至 test_support（第一批） |
+| `82f6e707` | test(harness): 其余域测试 setup 迁移至 test_support（第二批） |
+| `2f6e0118` | test(obsidian): 基于 test_support 的首批 service 测试（0→10 条） |
+| `0788354a` | test(harness): marketplace legacy 迁移测试补豁免注释 |
+| `158865d7` | docs(spec): 登记 Rust 测试 fixture 契约（test_support） |
+| `5af857b7` | chore(task): archive 07-04-rust-test-support |
+
+### Testing
+
+- [OK] cd src-tauri && cargo test：731 passed + 2 ignored（总 733 ≥ 基线 718）
+- [OK] cargo clippy -- -D warnings：No issues found
+- [OK] pnpm typecheck / lint / test：1249 passed
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 架构深化专项 2/9 完成；按既定顺序下一个子任务为 unify-frontmatter-parsing（9 号候选，小改动）
