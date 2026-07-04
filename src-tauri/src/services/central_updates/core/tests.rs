@@ -1,5 +1,5 @@
 use super::*;
-use crate::commands::central_updates::{build_remote_missing_skills, collect_remote_added_skills};
+use crate::services::central_updates::{build_remote_missing_skills, collect_remote_added_skills};
 use crate::db::SkillRepository;
 use crate::services::central_updates::fs::RemoteSkillFile;
 use crate::test_support::mem_pool as setup_test_db;

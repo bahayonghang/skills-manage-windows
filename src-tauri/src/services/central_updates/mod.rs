@@ -9,10 +9,17 @@
 mod core;
 mod error;
 pub(crate) mod fs;
+mod repository_sync;
 mod snapshots;
 mod types;
 
 pub use error::CentralUpdatesError;
+pub use repository_sync::{
+    CentralRemoteAddedSkill, CentralRemoteMissingSkill, CentralRepositoryAddedSkillSelection,
+    CentralRepositoryAdditionSkipRequest, CentralRepositoryAdditionUnskipRequest,
+    CentralRepositorySyncApplyResult, CentralRepositorySyncDecisions, CentralRepositorySyncFailure,
+    CentralRepositorySyncPreview, CentralRepositorySyncSummary,
+};
 pub use snapshots::CentralUpdateSnapshotCache;
 pub use types::{
     CentralSkillUpdateFailure, CentralSkillUpdateProgressPayload, CentralSkillUpdateResult,
@@ -20,17 +27,16 @@ pub use types::{
 };
 
 pub(crate) use core::{
-    check_central_skill_updates_impl, emit_update_progress, error_state_from_assignment,
+    check_central_skill_updates_impl, error_state_from_assignment,
     get_central_skill_update_states_impl, keep_remote_missing_central_skills_impl,
-    load_remote_skill_content, load_selected_central_skills, prepare_skill_updates,
-    state_from_relocated_source, state_from_remote, remote_missing_state_from_assignment,
-    unsupported_state_from_assignment, update_central_skills_impl, update_counters_for_state,
-    update_one_skill, update_one_skill_with_options,
+    load_remote_skill_content, prepare_skill_updates, state_from_relocated_source,
+    state_from_remote, remote_missing_state_from_assignment, unsupported_state_from_assignment,
+    update_central_skills_impl, update_one_skill, update_one_skill_with_options,
 };
 pub(crate) use fs::{normalize_repo_path, CentralFs};
-pub(crate) use snapshots::{
-    prepare_snapshots_for_repo_refs, prepare_snapshots_for_repo_refs_with_policy, repo_cache_key,
+pub(crate) use repository_sync::{
+    apply_central_repository_sync_impl, build_remote_missing_skills,
+    check_central_repository_sync_impl, collect_remote_added_skills,
 };
-pub(crate) use types::{
-    PreparedSkillUpdate, RemoteSkillLoadError, SnapshotCachePolicy, UpdateCounters,
-};
+pub(crate) use snapshots::{prepare_snapshots_for_repo_refs_with_policy, repo_cache_key};
+pub(crate) use types::{PreparedSkillUpdate, RemoteSkillLoadError, SnapshotCachePolicy};

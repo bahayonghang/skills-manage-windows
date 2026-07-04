@@ -5,6 +5,7 @@
 //! toasts verbatim, and several of them are also persisted as
 //! `SkillUpdateState.error` reasons — keep every format string byte-identical.
 
+use crate::services::central_skills::CentralSkillsError;
 use crate::services::github_import::GithubImportError;
 use crate::services::installation::InstallationError;
 
@@ -32,6 +33,10 @@ pub enum CentralUpdatesError {
     /// Local copy refresh via the installation domain.
     #[error(transparent)]
     Installation(#[from] InstallationError),
+
+    /// Central skill batch deletes via the central_skills domain.
+    #[error(transparent)]
+    CentralSkills(#[from] CentralSkillsError),
 
     /// Remote-target transport failures (connect / script / list / read over
     /// the SSH or WSL channel), stringified at the call site.

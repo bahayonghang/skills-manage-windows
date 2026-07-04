@@ -289,7 +289,8 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
             &snapshots,
             &mut failed_collector,
         )
-        .await?;
+        .await
+        .map_err(|e| e.to_string())?;
 
         let mut remote_added_items = collection.remote_added;
         let mut relocation_ctx = RelocationContext {

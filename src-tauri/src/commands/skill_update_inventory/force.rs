@@ -327,7 +327,8 @@ async fn force_import_remote_added(
         snapshots,
         &mut failed,
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
     let mut by_repository: HashMap<String, Vec<GitHubSkillImportSelection>> = HashMap::new();
     for item in collection
         .remote_added
