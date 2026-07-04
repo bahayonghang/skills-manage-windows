@@ -91,8 +91,8 @@ import {
   platformInstalledFilterValue,
 } from "@/lib/centralInstalledFilters";
 import {
-  getPlatformTargetMemberNames,
-  isUniversalPlatformTarget,
+  getPlatformTargetLabel,
+  getPlatformTargetTitleHint,
   type PlatformTarget,
 } from "@/lib/platformTargetGroups";
 import type {
@@ -439,16 +439,11 @@ export function ToolbarViewMenu({
 }
 
 function resolvePlatformDisplay(agent: PlatformTarget, t: TFunction): string {
-  return isUniversalPlatformTarget(agent)
-    ? t("platformTargets.universalLabel")
-    : agent.display_name;
+  return getPlatformTargetLabel(agent, t, "full");
 }
 
 function resolvePlatformTitle(agent: PlatformTarget, t: TFunction): string {
-  if (isUniversalPlatformTarget(agent)) {
-    return getPlatformTargetMemberNames(agent).join(", ");
-  }
-  return agent.global_skills_dir || resolvePlatformDisplay(agent, t);
+  return getPlatformTargetTitleHint(agent) || resolvePlatformDisplay(agent, t);
 }
 
 function menuPopupClassName(extra?: string): string {

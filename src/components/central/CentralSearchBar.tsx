@@ -9,6 +9,7 @@ import {
   type InstalledSkillsFilterValue,
 } from "@/lib/centralInstalledFilters";
 import {
+  getPlatformTargetLabel,
   getPlatformTargetMemberNames,
   isUniversalPlatformTarget,
   type PlatformTarget,
@@ -255,9 +256,7 @@ function resolveInstalledChip(
   const agent = agents.find((a) => a.id === platformId);
   const displayName = !agent
     ? platformId
-    : isUniversalPlatformTarget(agent)
-      ? t("platformTargets.universalLabel")
-      : agent.display_name;
+    : getPlatformTargetLabel(agent, t, "full");
   const titleAttr =
     agent && isUniversalPlatformTarget(agent)
       ? getPlatformTargetMemberNames(agent).join(", ")

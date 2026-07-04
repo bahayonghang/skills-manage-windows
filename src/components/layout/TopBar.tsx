@@ -8,12 +8,11 @@ import { TargetQuickSwitcher } from "@/components/layout/TargetQuickSwitcher";
 import { Button } from "@/components/ui/button";
 import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { cn } from "@/lib/utils";
+import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import {
-  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-} from "@/lib/platformVisibility";
-import {
+  getPlatformTargetCountAgentId,
   getPlatformTargetGroups,
-  isUniversalPlatformTarget,
+  getPlatformTargetLabel,
 } from "@/lib/platformTargetGroups";
 
 interface TopBarProps {
@@ -40,7 +39,8 @@ export function TopBar({ onSearchClick }: TopBarProps) {
   const agents = usePlatformStore((s) => s.agents);
   const skillsByAgent = usePlatformStore((s) => s.skillsByAgent);
   const categoryVisibility =
-    usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+    usePlatformStore((s) => s.categoryVisibility) ??
+    DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const platformTargets = getPlatformTargetGroups(agents, categoryVisibility);
 
   const isLightFlavor = LIGHT_FLAVORS.includes(flavor);
@@ -59,13 +59,11 @@ export function TopBar({ onSearchClick }: TopBarProps) {
       const agent =
         platformTargets.find((a) => a.id === agentId) ??
         agents.find((a) => a.id === agentId);
-      const countAgentId =
-        agent && isUniversalPlatformTarget(agent) ? agent.install_agent_id : agentId;
+      const countAgentId = agent
+        ? getPlatformTargetCountAgentId(agent)
+        : agentId;
       return {
-        label:
-          agent && isUniversalPlatformTarget(agent)
-            ? t("platformTargets.universalShortLabel")
-            : agent?.display_name ?? agentId,
+        label: agent ? getPlatformTargetLabel(agent, t, "short") : agentId,
         count: skillsByAgent[countAgentId] ?? 0,
       };
     }
@@ -167,10 +165,14 @@ export function TopBar({ onSearchClick }: TopBarProps) {
           "text-muted-foreground hover:text-foreground hover:bg-muted/60",
         )}
         aria-label={
-          isLightFlavor ? t("topbar.themeToggleDark") : t("topbar.themeToggleLight")
+          isLightFlavor
+            ? t("topbar.themeToggleDark")
+            : t("topbar.themeToggleLight")
         }
         title={
-          isLightFlavor ? t("topbar.themeToggleDark") : t("topbar.themeToggleLight")
+          isLightFlavor
+            ? t("topbar.themeToggleDark")
+            : t("topbar.themeToggleLight")
         }
       >
         {isLightFlavor ? (

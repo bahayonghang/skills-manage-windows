@@ -4,8 +4,8 @@ import { Bot, Code, FileText, Lock } from "lucide-react";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { cn } from "@/lib/utils";
 import {
+  getPlatformTargetLabel,
   getPlatformTargetMemberNames,
-  isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
 import type { AgentWithStatus, ClaudeSourceKind } from "@/types";
 import type { PreviewTab } from "./skillDetailViewTypes";
@@ -102,9 +102,7 @@ export function PlatformToggleIcon({
   onToggle,
 }: PlatformToggleIconProps) {
   const { t } = useTranslation();
-  const displayName = isUniversalPlatformTarget(agent)
-    ? t("platformTargets.universalShortLabel")
-    : agent.display_name;
+  const displayName = getPlatformTargetLabel(agent, t, "short");
   const memberNames = getPlatformTargetMemberNames(agent).join(", ");
   const title = isLocked
     ? `${displayName} - ${t("platformTargets.alwaysIncluded")} - ${memberNames}`

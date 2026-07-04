@@ -22,10 +22,10 @@ import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummari
 import { formatPathForDisplay } from "@/lib/path";
 import { groupProjectSkillsByPlatform } from "@/lib/projectSkillPlatformGroups";
 import {
-  getPlatformTargetMemberNames,
+  getPlatformTargetLabel,
   getPlatformTargetMemberIds,
+  getPlatformTargetTitleHint,
   hasProjectSkillPattern,
-  isUniversalPlatformTarget,
   type PlatformTarget,
 } from "@/lib/platformTargetGroups";
 import { cn } from "@/lib/utils";
@@ -59,9 +59,7 @@ function getProjectPlatformDisplayName(
     return t("projects.otherPlatforms");
   }
 
-  return isUniversalPlatformTarget(target)
-    ? t("platformTargets.universalShortLabel")
-    : target.display_name;
+  return getPlatformTargetLabel(target, t, "short");
 }
 
 function getProjectPlatformTitle(
@@ -69,9 +67,7 @@ function getProjectPlatformTitle(
   fallback: string,
 ): string {
   if (!target) return fallback;
-  return isUniversalPlatformTarget(target)
-    ? getPlatformTargetMemberNames(target).join(", ")
-    : target.global_skills_dir;
+  return getPlatformTargetTitleHint(target);
 }
 
 interface ProjectCliSidebarItem {

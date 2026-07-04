@@ -34,6 +34,7 @@ import {
 import {
   getPlatformTargetMemberIds,
   getPlatformTargetGroups,
+  getPlatformTargetLabel,
   isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
 import {
@@ -121,9 +122,7 @@ export function PlatformView() {
       : agent.id
     : undefined;
   const platformDisplayName = agent
-    ? isUniversalPage
-      ? t("platformTargets.universalShortLabel")
-      : agent.display_name
+    ? getPlatformTargetLabel(agent, t, "short")
     : "";
   const isClaudePage = !isUniversalPage && agent?.id === "claude-code";
   const isCodingPlatformPage = agent?.category === "coding";

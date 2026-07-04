@@ -6,8 +6,9 @@ import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  getPlatformTargetCountAgentId,
+  getPlatformTargetLabel,
   getPlatformTargetPathHint,
-  isUniversalPlatformTarget,
   type PlatformTarget,
 } from "@/lib/platformTargetGroups";
 
@@ -53,13 +54,9 @@ export function AgentsPanel({
         {visiblePlatformTargets.length > 0 ? (
           <ul>
             {visiblePlatformTargets.slice(0, 7).map((agent) => {
-              const countAgentId = isUniversalPlatformTarget(agent)
-                ? agent.install_agent_id
-                : agent.id;
+              const countAgentId = getPlatformTargetCountAgentId(agent);
               const pathHint = getPlatformTargetPathHint(agent);
-              const label = isUniversalPlatformTarget(agent)
-                ? t("platformTargets.universalShortLabel")
-                : agent.display_name;
+              const label = getPlatformTargetLabel(agent, t, "short");
 
               return (
                 <li key={agent.id}>
@@ -67,7 +64,9 @@ export function AgentsPanel({
                     type="button"
                     onClick={() => onNavigate(`/platform/${agent.id}`)}
                     className={`grid w-full grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left first:border-t-0 hover:bg-muted/25 ${dashboardControlMotion}`}
-                    aria-label={t("dashboard.agents.openLabel", { name: label })}
+                    aria-label={t("dashboard.agents.openLabel", {
+                      name: label,
+                    })}
                   >
                     <span className="grid size-8 place-items-center rounded-xl border border-border/70 bg-card/70 text-primary-text">
                       <PlatformIcon agentId={agent.id} className="size-4" />

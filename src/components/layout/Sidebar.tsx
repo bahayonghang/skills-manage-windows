@@ -19,6 +19,7 @@ import { usePlatformStore } from "@/stores/platformStore";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import {
   getPlatformTargetGroups,
+  getPlatformTargetLabel,
   isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
 import { cn } from "@/lib/utils";
@@ -311,11 +312,7 @@ export function Sidebar() {
                 {lobsterAgents.map((agent) => (
                   <NavItem
                     key={agent.id}
-                    label={
-                      isUniversalPlatformTarget(agent)
-                        ? t("platformTargets.universalShortLabel")
-                        : agent.display_name
-                    }
+                    label={getPlatformTargetLabel(agent, t, "short")}
                     isActive={pathname === platformRoute(agent)}
                     onClick={() => navigate(platformRoute(agent))}
                     icon={
@@ -341,11 +338,7 @@ export function Sidebar() {
                 {codingAgents.map((agent) => (
                   <NavItem
                     key={agent.id}
-                    label={
-                      isUniversalPlatformTarget(agent)
-                        ? t("platformTargets.universalShortLabel")
-                        : agent.display_name
-                    }
+                    label={getPlatformTargetLabel(agent, t, "short")}
                     isActive={pathname === platformRoute(agent)}
                     onClick={() => navigate(platformRoute(agent))}
                     icon={
