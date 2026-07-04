@@ -13,18 +13,20 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
 import { ProjectPathPicker } from "@/components/central/ProjectPathPicker";
+import {
+  InstallFailureList,
+  PlatformMultiSelectGrid,
+  usePlatformTargetSelection,
+} from "@/components/platform/PlatformMultiSelect";
 import { AgentWithStatus, BatchInstallResult, SkillWithLinks } from "@/types";
 import { useTargetStore } from "@/stores/targetStore";
 import { isRemoteLikeTarget } from "@/lib/targetKind";
 import {
-  getPlatformTargetInstallAgentIds,
+  getPlatformTargetLabel,
   getPlatformTargetMemberIds,
-  getPlatformTargetMemberNames,
   hasProjectSkillPattern,
-  isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -78,26 +80,6 @@ export function InstallDialog({
     [sharedRootAgentIds],
   );
 
-  const selectedInstallAgentIds = () =>
-    Array.from(
-      new Set(
-        targetAgents
-          .filter((agent) => selectedAgentIds.has(agent.id))
-          .filter(
-            (agent) => targetMode !== "platform" || !isSharedRootTarget(agent),
-          )
-          .filter(
-            (agent) =>
-              targetMode !== "project" || hasProjectSkillPattern(agent),
-          )
-          .flatMap((agent) => getPlatformTargetInstallAgentIds(agent)),
-      ),
-    );
-
-  // Track which agents are selected for installation.
-  const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(
-    new Set(),
-  );
   const [targetMode, setTargetMode] = useState<TargetMode>("platform");
   const [installMethod, setInstallMethod] = useState<InstallMethod>("symlink");
   const [projectPath, setProjectPath] = useState("");
@@ -105,6 +87,23 @@ export function InstallDialog({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BatchInstallResult | null>(null);
   const skipped = result?.skipped ?? [];
+
+  const isProjectTargetDisabled = (agent: AgentWithStatus) =>
+    targetMode === "project" && !hasProjectSkillPattern(agent);
+
+  const isTargetDisabled = (agent: AgentWithStatus) =>
+    (targetMode === "platform" && isSharedRootTarget(agent)) ||
+    isProjectTargetDisabled(agent);
+
+  // Selection default: check all enabled and visible platform targets
+  // (shared-root targets in platform mode and pattern-less targets in project
+  // mode are disabled and therefore excluded).
+  const selection = usePlatformTargetSelection({
+    targets: targetAgents,
+    isTargetDisabled,
+  });
+  const selectedInstallAgentIds = selection.selectedInstallAgentIds;
+  const { reset: resetSelection } = selection;
 
   // When the dialog opens for a skill, pre-select currently unlinked agents.
   // Agents that already have this skill are checked by default too so the
@@ -114,22 +113,10 @@ export function InstallDialog({
       const effectiveTargetMode = canInstallToProject ? targetMode : "platform";
       if (effectiveTargetMode !== targetMode) {
         setTargetMode(effectiveTargetMode);
+        // The effect re-runs with the corrected mode and resets then.
+        return;
       }
-      // Default: check all enabled and visible platform targets.
-      const initialSelection = new Set<string>(
-        targetAgents
-          .filter(
-            (agent) =>
-              effectiveTargetMode !== "platform" || !isSharedRootTarget(agent),
-          )
-          .filter(
-            (agent) =>
-              effectiveTargetMode !== "project" ||
-              hasProjectSkillPattern(agent),
-          )
-          .map((agent) => agent.id),
-      );
-      setSelectedAgentIds(initialSelection);
+      resetSelection();
       setInstallMethod(
         effectiveTargetMode === "project" || !canUseSymlink
           ? "copy"
@@ -149,10 +136,8 @@ export function InstallDialog({
     skill,
     targetAgents,
     targetMode,
+    resetSelection,
   ]);
-
-  const isProjectTargetDisabled = (agent: AgentWithStatus) =>
-    targetMode === "project" && !hasProjectSkillPattern(agent);
 
   function handleModeChange(mode: TargetMode) {
     if (mode === "project" && !canInstallToProject) {
@@ -165,27 +150,6 @@ export function InstallDialog({
     }
     setError(null);
     setResult(null);
-  }
-
-  function handleCheckboxChange(agentId: string, checked: boolean) {
-    const target = targetAgents.find((agent) => agent.id === agentId);
-    if (
-      target &&
-      ((targetMode === "platform" && isSharedRootTarget(target)) ||
-        isProjectTargetDisabled(target))
-    ) {
-      return;
-    }
-
-    setSelectedAgentIds((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(agentId);
-      } else {
-        next.delete(agentId);
-      }
-      return next;
-    });
   }
 
   async function handleConfirm() {
@@ -294,99 +258,60 @@ export function InstallDialog({
           )}
 
           {/* Platform checkboxes */}
-          <div
-            className="grid grid-cols-2 gap-x-4 gap-y-2"
-            role="group"
-            aria-label={t("installDialog.selectPlatforms")}
-          >
-            {targetAgents.length === 0 ? (
-              <p className="col-span-2 text-sm text-muted-foreground">
-                {t("installDialog.noPlatforms")}
-              </p>
-            ) : (
-              targetAgents.map((agent) => {
-                const memberIds = getPlatformTargetMemberIds(agent);
-                const memberNames =
-                  getPlatformTargetMemberNames(agent).join(", ");
-                const isUniversal = isUniversalPlatformTarget(agent);
-                const displayName = isUniversal
-                  ? t("platformTargets.universalLabel")
-                  : agent.display_name;
-                const isLinked =
-                  targetMode === "platform" &&
-                  memberIds.some((agentId) =>
-                    skill.linked_agents.includes(agentId),
-                  );
-                const isSharedRoot =
-                  targetMode === "platform" && isSharedRootTarget(agent);
-                const isProjectDisabled = isProjectTargetDisabled(agent);
-                const isDisabled = isSharedRoot || isProjectDisabled;
-                const isChecked =
-                  (isSharedRoot || selectedAgentIds.has(agent.id)) &&
-                  !isProjectDisabled;
-
-                return (
-                  <div key={agent.id} className="flex items-center gap-2">
-                    <Checkbox
-                      checked={isChecked}
-                      disabled={isDisabled}
-                      onCheckedChange={(checked) =>
-                        handleCheckboxChange(agent.id, !!checked)
-                      }
-                      aria-label={displayName}
-                    />
-                    <div
-                      className={`min-w-0 flex-1 select-none ${
-                        isDisabled
-                          ? "text-muted-foreground cursor-default"
-                          : "text-foreground cursor-pointer"
-                      }`}
-                      title={
-                        isUniversal ? memberNames : agent.global_skills_dir
-                      }
-                      onClick={() =>
-                        !isDisabled &&
-                        handleCheckboxChange(agent.id, !isChecked)
-                      }
-                    >
-                      <div className="truncate text-sm">{displayName}</div>
-                      {isUniversal && (
-                        <div className="truncate text-[11px] text-muted-foreground">
-                          {memberNames}
-                        </div>
-                      )}
-                    </div>
-                    {isSharedRoot && (
-                      <span className="text-xs text-primary shrink-0">
-                        {t("platformTargets.alwaysIncluded")}
-                      </span>
-                    )}
-                    {isLinked && !isSharedRoot && (
-                      <span
-                        className="inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary"
-                        aria-label={t("installDialog.alreadyLinkedLabel", {
-                          platform: displayName,
-                        })}
-                        title={t("installDialog.alreadyLinked")}
-                      >
-                        <Link2 className="size-3" aria-hidden="true" />
-                      </span>
-                    )}
-                    {isProjectDisabled && (
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {t("central.batchInstallProjectUnsupported")}
-                      </span>
-                    )}
-                    {!agent.is_detected && (
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {t("installDialog.notDetected")}
-                      </span>
-                    )}
-                  </div>
+          <PlatformMultiSelectGrid
+            targets={targetAgents}
+            isSelected={(agent) =>
+              ((targetMode === "platform" && isSharedRootTarget(agent)) ||
+                selection.isSelected(agent)) &&
+              !isProjectTargetDisabled(agent)
+            }
+            isDisabled={isTargetDisabled}
+            onToggle={selection.toggle}
+            renderBadges={(agent) => {
+              const isSharedRoot =
+                targetMode === "platform" && isSharedRootTarget(agent);
+              const isLinked =
+                targetMode === "platform" &&
+                getPlatformTargetMemberIds(agent).some((agentId) =>
+                  skill.linked_agents.includes(agentId),
                 );
-              })
-            )}
-          </div>
+              const isProjectDisabled = isProjectTargetDisabled(agent);
+              const displayName = getPlatformTargetLabel(agent, t, "full");
+
+              return (
+                <>
+                  {isSharedRoot && (
+                    <span className="text-xs text-primary shrink-0">
+                      {t("platformTargets.alwaysIncluded")}
+                    </span>
+                  )}
+                  {isLinked && !isSharedRoot && (
+                    <span
+                      className="inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary"
+                      aria-label={t("installDialog.alreadyLinkedLabel", {
+                        platform: displayName,
+                      })}
+                      title={t("installDialog.alreadyLinked")}
+                    >
+                      <Link2 className="size-3" aria-hidden="true" />
+                    </span>
+                  )}
+                  {isProjectDisabled && (
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {t("central.batchInstallProjectUnsupported")}
+                    </span>
+                  )}
+                  {!agent.is_detected && (
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {t("installDialog.notDetected")}
+                    </span>
+                  )}
+                </>
+              );
+            }}
+            emptyMessage={t("installDialog.noPlatforms")}
+            ariaLabel={t("installDialog.selectPlatforms")}
+          />
 
           {/* Install method selector */}
           <div className="space-y-2">
@@ -428,13 +353,12 @@ export function InstallDialog({
                   failedCount: result.failed.length,
                 })}
               </p>
-              <ul className="max-h-32 space-y-0.5 overflow-auto text-xs text-destructive">
-                {result.failed.map((failure) => (
-                  <li key={failure.agent_id}>
-                    {failure.agent_id}: {failure.error}
-                  </li>
-                ))}
-              </ul>
+              <InstallFailureList
+                failures={result.failed.map((failure) => ({
+                  key: failure.agent_id,
+                  label: `${failure.agent_id}: ${failure.error}`,
+                }))}
+              />
             </div>
           )}
 
