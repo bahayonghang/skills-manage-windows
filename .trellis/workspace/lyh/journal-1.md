@@ -931,3 +931,38 @@ Added card-level Central skill platform uninstall action and recorded the Trelli
 ### Next Steps
 
 - 架构深化专项 3/9 完成；剩余候选：central-updates-service-domain / frontend-platform-module / typed-ipc-adapter / transport-seam / path-policy-remote-half / skill-card-scenarios
+
+
+## Session 24: Update Center 落 service 域：阶段 D inventory 归位 + 阶段 E 收尾
+
+**Date**: 2026-07-04
+**Task**: Update Center 落 service 域：阶段 D inventory 归位 + 阶段 E 收尾
+**Branch**: `dev`
+
+### Summary
+
+完成 07-04-central-updates-service-domain 收官：inventory 9 子模块迁入 services/central_updates/inventory 并全面 typed 化（CentralUpdatesError，serde 走 Json 变体、db/github_import #[from] 透传）；commands/skill_update_inventory.rs 收缩为 8 纯壳（IPC 名与载荷不变），B6/C 迁移桥全拆；49 条测试随迁。门禁 cargo test 739+2、clippy、just ci 全绿；sizecheck 基线豁免随代码迁移从老壳(1407)移至 core.rs(861 棘轮)；spec 域清单登记 central_store_location/central_updates 两域。备注：CentralSkillsView.github-import-* 两条前端测试为存量 flaky（复跑全过）。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `26bee16f` | (see git log) |
+| `ca5e4e56` | (see git log) |
+| `0907a5f3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
