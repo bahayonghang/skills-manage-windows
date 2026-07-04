@@ -132,7 +132,7 @@ commands/   —— IPC 壳层：171 个 #[tauri::command]（24 个文件），�
 ### 共享 UI 模式
 
 - **`UnifiedSkillCard`**（`src/components/skill/UnifiedSkillCard.tsx`）：**所有页面的技能卡片唯一实现**。通过 props 自适应 5 种场景（central/platform/project/marketplace/collection），不要在各页面重建内联卡片组件。统一样式：`rounded-xl` + `ring-1 ring-border` + `bg-card` + `shadow-sm`
-- **`InstallDialog`**（`src/components/central/InstallDialog.tsx`）：默认**勾选已链接平台**（反映当前状态），宽度 `sm:max-w-2xl`，平台列表两列网格。`CollectionInstallDialog` 同宽度布局但默认勾选所有 detected 平台（批量首装场景）
+- **`InstallDialog`**（`src/components/central/InstallDialog.tsx`）：默认**勾选全部 enabled/visible 平台目标**（排除 shared-root/项目不支持项；已链接平台仅显示徽标），宽度 `sm:max-w-2xl`，平台列表两列网格。`CollectionInstallDialog` 同宽度布局但默认勾选所有 detected 平台（批量首装场景）
 - **平台图标切换**：`UnifiedSkillCard` 的 `platformIcons` prop 分 LOBSTER/CODING 两行显示，点击图标即时切换安装/卸载（symlink 方式），走 `centralSkillsStore.togglePlatformLink`
 
 ## 代码约定
