@@ -3,7 +3,7 @@
   "name": "central-updates-service-domain",
   "title": "为 Update Center 落 service 域：业务从 commands 壳层归位",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
