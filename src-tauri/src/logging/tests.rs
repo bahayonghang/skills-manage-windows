@@ -150,7 +150,7 @@ fn export_runtime_log_file_redacts_sensitive_values() {
     let temp_dir = tempfile::tempdir().unwrap();
     fs::write(
         temp_dir.path().join("skillport-2026-06-03.log"),
-        "INFO token=abc {\"apiKey\":\"sk-test\"}\n",
+        "INFO token=abc {\"apiKey\":\"sk-test\"}\nWARN connect passphrase=pp-secret\n",
     )
     .unwrap();
 
@@ -159,7 +159,9 @@ fn export_runtime_log_file_redacts_sensitive_values() {
 
     assert!(exported.contains("token=[REDACTED]"));
     assert!(exported.contains("\"apiKey\":\"[REDACTED]\""));
+    assert!(exported.contains("passphrase=[REDACTED]"));
     assert!(!exported.contains("sk-test"));
+    assert!(!exported.contains("pp-secret"));
 }
 
 #[test]
