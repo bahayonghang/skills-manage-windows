@@ -1,1 +1,2 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/07-04-rust-test-support/design.md", "reason": "AC 数值定版 D7 与语义保真规则 D4 是检查基准"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "检查 obsidian 测试断言风格合规"}
