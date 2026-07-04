@@ -28,9 +28,17 @@
 
 ## Acceptance Criteria
 
-- [ ] scanner 与 github_import 的 frontmatter 剥离/解析指向同一实现（grep 验证仓库内栅栏剥离逻辑只此一处，ssh_batch shell 侧例外需注明）。
-- [ ] 新增 BOM 测试证明两条入口行为一致。
-- [ ] `cd src-tauri && cargo test` 全过（scanner 45 条 + github_import 61 条为重点回归面）；`cargo clippy -- -D warnings` 通过。
+- [x] scanner 与 github_import 的 frontmatter 剥离/解析指向同一实现（grep 验证仓库内栅栏剥离逻辑只此一处，ssh_batch shell 侧例外需注明）。
+- [x] 新增 BOM 测试证明两条入口行为一致。
+- [x] `cd src-tauri && cargo test` 全过（scanner 45 条 + github_import 61 条为重点回归面）；`cargo clippy -- -D warnings` 通过。
+
+## 实施记录（2026-07-04）
+
+- 归属裁决：新建 `services/scanner/frontmatter.rs`（scanner 域是 SKILL.md 解析的天然 owner；github_import 跨域 use 已有 resource_budget 先例）。`extract_frontmatter_block(content) -> Option<&str>` 只负责栅栏剥离，两个调用方各自保留 YAML→字段映射，字段语义零变化。
+- 统一语义采 github_import 版（更严谨）：去 BOM + 容前导空白 + 开/闭栅栏 trim 后须恰为 `---`（scanner 原 `find("\n---")` 宽松闭合会被行内 `---` 误伤，一并闭合）。
+- 需求 4（ssh_batch）实测为免费：shell 侧只 `cat` 内容，解析本就走 Rust 侧 `parse_skill_md_content`，统一后自动继承；`frontmatter.rs` 模块注释已注明。
+- 测试：frontmatter.rs 单测 6 条（BOM/前导空白/CRLF/EOF 闭栅栏/行内 `---` 不闭合/缺失或带缀栅栏拒绝）+ scanner BOM 入口 1 条 + github_import 双入口一致性 1 条。scanner 45→52、github_import 61→62，全量 739 passed + 2 ignored，clippy(lib) 干净；`--all-targets` 的 14 个报错均为 usage/secrets 等存量，与本任务无关。
+- Spec 契约登记：`.trellis/spec/backend/skill-frontmatter-parsing.md`（禁手抄栅栏剥离 + 巡检命令）。
 
 ## Notes
 
