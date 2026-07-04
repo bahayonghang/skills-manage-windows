@@ -11,6 +11,9 @@ pub mod services;
 pub mod skill_time;
 pub mod targets;
 
+#[cfg(test)]
+pub mod test_support;
+
 use db::DbPool;
 use serde::Serialize;
 use std::collections::HashMap;
