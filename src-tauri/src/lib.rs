@@ -5,6 +5,7 @@ pub mod fs_util;
 pub mod logging;
 pub mod operation_log;
 pub mod paths;
+pub mod redaction;
 pub mod secrets;
 pub mod services;
 pub mod skill_time;
