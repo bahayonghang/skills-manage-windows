@@ -9,7 +9,7 @@ use super::{
     skills_sh_file_entries_from_snapshot, source_to_github_url, sync_registry_impl,
     RegistryCacheMetadata, RegistrySyncStatus, SyncRegistryOptions,
 };
-use crate::commands::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
+use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
 use crate::db;
 use crate::secrets::MockSecretStore;
 use std::collections::HashMap;

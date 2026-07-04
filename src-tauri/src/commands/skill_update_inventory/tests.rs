@@ -12,7 +12,7 @@
 
 use super::*;
 use crate::commands::central_updates::repo_cache_key;
-use crate::commands::central_updates_fs::CentralFs;
+use crate::services::central_updates::CentralFs;
 use crate::commands::github_import::GitHubRepoRef;
 use crate::db;
 use crate::db::{AgentSkillObservation, Skill, SkillInstallation, SkillUpdateState};

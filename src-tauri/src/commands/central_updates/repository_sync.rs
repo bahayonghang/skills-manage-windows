@@ -5,7 +5,7 @@ use super::{
     state_from_remote, unsupported_state_from_assignment, update_counters_for_state,
     RemoteSkillLoadError, SkillUpdateStatus, UpdateCounters,
 };
-use crate::commands::central_updates_fs::{normalize_repo_path, CentralFs};
+use crate::services::central_updates::{normalize_repo_path, CentralFs};
 use crate::commands::github_import::{
     self, GitHubRepoImportResult, GitHubRepoRef, GitHubRepoSnapshot, GitHubSkillImportSelection,
     GitHubSkillPreview,
@@ -142,7 +142,9 @@ pub async fn check_central_repository_sync(
     skill_ids: Option<Vec<String>>,
 ) -> Result<CentralRepositorySyncPreview, String> {
     let pool = state.active_db().await?;
-    let fs = CentralFs::from_active_target(state.active_target().await?).await?;
+    let fs = CentralFs::from_active_target(state.active_target().await?)
+        .await
+        .map_err(|e| e.to_string())?;
     let repository_ids = unique_non_empty(repository_ids);
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
@@ -160,16 +162,28 @@ pub async fn check_central_repository_sync(
         .map(|(repository, _)| (repository.id.clone(), repository.clone()))
         .collect::<HashMap<_, _>>();
 
-    let skills = load_selected_central_skills(&pool, skill_ids.as_deref()).await?;
+    let skills = load_selected_central_skills(&pool, skill_ids.as_deref())
+        .await
+        .map_err(|e| e.to_string())?;
     let total = skills.len();
     let mut counters = UpdateCounters::default();
     let mut states = Vec::with_capacity(total);
     let mut failed_repositories = Vec::new();
 
     state.central_update_cancel.store(false, Ordering::SeqCst);
-    emit_update_progress(&app, "checking", "started", total, &counters, None, None);
+    emit_update_progress(
+        Some(&app),
+        "checking",
+        "started",
+        total,
+        &counters,
+        None,
+        None,
+    );
 
-    let prepared = prepare_skill_updates(&pool, &fs, skills, auth.as_deref(), false).await?;
+    let prepared = prepare_skill_updates(&pool, &fs, skills, auth.as_deref(), false)
+        .await
+        .map_err(|e| e.to_string())?;
     let mut snapshot_repos = prepared
         .iter()
         .filter_map(|prepared_skill| {
@@ -186,13 +200,14 @@ pub async fn check_central_repository_sync(
         &snapshot_repos,
         &state.central_update_snapshots,
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
 
     for prepared_skill in prepared {
         let skill = &prepared_skill.skill;
         if state.central_update_cancel.load(Ordering::SeqCst) {
             emit_update_progress(
-                &app,
+                Some(&app),
                 "checking",
                 SkillUpdateStatus::Cancelled.as_str(),
                 total,
@@ -204,7 +219,7 @@ pub async fn check_central_repository_sync(
         }
 
         emit_update_progress(
-            &app,
+            Some(&app),
             "checking",
             "running",
             total,
@@ -229,7 +244,7 @@ pub async fn check_central_repository_sync(
             .map_err(|e| e.to_string())?;
         update_counters_for_state(&mut counters, &state_result);
         emit_update_progress(
-            &app,
+            Some(&app),
             "checking",
             &state_result.status,
             total,
@@ -240,7 +255,15 @@ pub async fn check_central_repository_sync(
         states.push(state_result);
     }
 
-    emit_update_progress(&app, "checking", "completed", total, &counters, None, None);
+    emit_update_progress(
+        Some(&app),
+        "checking",
+        "completed",
+        total,
+        &counters,
+        None,
+        None,
+    );
 
     let remote_additions = collect_remote_added_skills(
         &pool,
@@ -290,8 +313,9 @@ pub async fn apply_central_repository_sync(
             .await
             .map_err(|e| e.to_string())?;
 
-    let kept_skill_ids =
-        keep_remote_missing_central_skills_impl(&pool, &decisions.keep_skill_ids).await?;
+    let kept_skill_ids = keep_remote_missing_central_skills_impl(&pool, &decisions.keep_skill_ids)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let delete_result = if decisions.delete_requests.is_empty() {
         BatchDeleteCentralSkillResult {
@@ -319,7 +343,8 @@ pub async fn apply_central_repository_sync(
 
     let mut skipped_additions = Vec::new();
     for request in decisions.skip_additions {
-        let source_path = normalize_repo_path(&request.source_path)?;
+        let source_path =
+            normalize_repo_path(&request.source_path).map_err(|e| e.to_string())?;
         let saved = db::upsert_skill_repository_sync_skip(
             &pool,
             &request.repository_id,
@@ -339,7 +364,8 @@ pub async fn apply_central_repository_sync(
 
     let mut unskipped_additions = Vec::new();
     for request in decisions.unskip_additions {
-        let source_path = normalize_repo_path(&request.source_path)?;
+        let source_path =
+            normalize_repo_path(&request.source_path).map_err(|e| e.to_string())?;
         if db::delete_skill_repository_sync_skip(&pool, &request.repository_id, &source_path)
             .await
             .map_err(|e| e.to_string())?
@@ -358,7 +384,8 @@ pub async fn apply_central_repository_sync(
         let mut import_selections = Vec::new();
         for selection in addition.selections {
             if selection.resolution == github_import::DuplicateResolution::Skip {
-                let source_path = normalize_repo_path(&selection.source_path)?;
+                let source_path =
+                    normalize_repo_path(&selection.source_path).map_err(|e| e.to_string())?;
                 let saved = db::upsert_skill_repository_sync_skip(
                     &pool,
                     &repository_id,
@@ -433,7 +460,8 @@ pub async fn apply_central_repository_sync(
         match result {
             Ok(result) => {
                 for imported in &result.imported_skills {
-                    let source_path = normalize_repo_path(&imported.source_path)?;
+                    let source_path =
+                        normalize_repo_path(&imported.source_path).map_err(|e| e.to_string())?;
                     db::delete_skill_repository_sync_skip(&pool, &repository_id, &source_path)
                         .await
                         .map_err(|e| e.to_string())?;
@@ -575,7 +603,7 @@ pub(crate) async fn collect_remote_added_skills(
         let Some(source_path) = member
             .source_path
             .as_deref()
-            .map(normalize_repo_path)
+            .map(|path| normalize_repo_path(path).map_err(|e| e.to_string()))
             .transpose()?
             .filter(|path| !path.is_empty())
         else {
@@ -591,7 +619,7 @@ pub(crate) async fn collect_remote_added_skills(
         .map_err(|e| e.to_string())?;
     let mut skipped_paths_by_repo = HashMap::<String, HashSet<String>>::new();
     for skip in skips {
-        let source_path = normalize_repo_path(&skip.source_path)?;
+        let source_path = normalize_repo_path(&skip.source_path).map_err(|e| e.to_string())?;
         skipped_paths_by_repo
             .entry(skip.repository_id)
             .or_default()
@@ -653,7 +681,8 @@ pub(crate) async fn collect_remote_added_skills(
             .cloned()
             .unwrap_or_default();
         for preview in previews {
-            let source_path = normalize_repo_path(&preview.source_path)?;
+            let source_path =
+                normalize_repo_path(&preview.source_path).map_err(|e| e.to_string())?;
             let item = CentralRemoteAddedSkill {
                 repository_id: repository.id.clone(),
                 repo: repo.clone(),

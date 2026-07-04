@@ -5,9 +5,7 @@
 //! must go through [`run_blocking_fs_with`] (typed domain errors) so the
 //! Tauri async runtime workers are never blocked by disk latency. Domain
 //! modules re-export or import this wrapper directly — do not introduce a
-//! second wrapping pattern. The commands layer keeps a thin string-error
-//! wrapper in `commands::central_updates_fs::run_blocking_fs` for IPC
-//! boundary glue.
+//! second wrapping pattern.
 
 /// Run a synchronous filesystem task on the blocking-thread pool, mapping a
 /// failed join into the caller's error type via `join_error`.

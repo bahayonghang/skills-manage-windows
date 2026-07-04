@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::commands::central_updates::{self, keep_remote_missing_central_skills_impl};
-use crate::commands::central_updates_fs::normalize_repo_path;
+use crate::services::central_updates::normalize_repo_path;
 use crate::db::{self, Agent, DbPool};
 use crate::services::central_skills::{
     self, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult,
@@ -30,7 +30,7 @@ pub(crate) async fn apply_keep_missing_step(
         Err(error) => result.failures.push(SkillUpdateApplyFailure {
             step: "keep_missing".to_string(),
             identifier: keep_missing.join(","),
-            error,
+            error: error.to_string(),
         }),
     }
 }
@@ -89,7 +89,7 @@ pub(crate) async fn apply_skip_addition_step(
                 result.failures.push(SkillUpdateApplyFailure {
                     step: "skip_addition".to_string(),
                     identifier: format!("{}::{}", request.repository_id, request.source_path),
-                    error,
+                    error: error.to_string(),
                 });
                 continue;
             }
@@ -133,7 +133,7 @@ pub(crate) async fn apply_unskip_addition_step(
                 result.failures.push(SkillUpdateApplyFailure {
                     step: "unskip_addition".to_string(),
                     identifier: format!("{}::{}", request.repository_id, request.source_path),
-                    error,
+                    error: error.to_string(),
                 });
                 continue;
             }

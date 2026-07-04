@@ -7,7 +7,7 @@ use crate::commands::central_updates::{
     prepare_snapshots_for_repo_refs_with_policy, state_from_remote, RemoteSkillLoadError,
     SkillUpdateStatus, SnapshotCachePolicy,
 };
-use crate::commands::central_updates_fs::CentralFs;
+use crate::services::central_updates::CentralFs;
 use crate::commands::github_import;
 use crate::db::{self, DbPool};
 use crate::services::central_skills::{
@@ -42,7 +42,9 @@ pub(crate) async fn force_update_central_skills_impl(
     let skills = db::get_central_skills_by_ids(pool, &skill_ids)
         .await
         .map_err(|e| e.to_string())?;
-    let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
+    let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false)
+        .await
+        .map_err(|e| e.to_string())?;
     let snapshot_repos = prepared
         .iter()
         .filter_map(prepared_repo_ref)
@@ -54,7 +56,8 @@ pub(crate) async fn force_update_central_skills_impl(
         snapshots_cache,
         cache_policy,
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
 
     let mut result = ForceSkillUpdateResult::default();
     for prepared_skill in prepared {
@@ -90,7 +93,7 @@ pub(crate) async fn force_update_central_skills_impl(
                         skill_id: skill.id.clone(),
                         repository_id: repository_id_for_state_from_db(pool, &before).await?,
                         source_path: before.source_path.clone(),
-                        error,
+                        error: error.to_string(),
                     }),
                 }
             }
@@ -158,7 +161,8 @@ pub(crate) async fn force_mirror_central_repositories_impl(
         snapshots_cache,
         cache_policy,
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
 
     let mut overwritten = Vec::new();
     let mut skipped = Vec::new();
@@ -180,7 +184,9 @@ pub(crate) async fn force_mirror_central_repositories_impl(
             .await
             .map_err(|e| e.to_string())?
     };
-    let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
+    let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false)
+        .await
+        .map_err(|e| e.to_string())?;
     for prepared_skill in prepared {
         let skill = &prepared_skill.skill;
         match load_remote_skill_content(&prepared_skill, &snapshots) {
@@ -206,7 +212,7 @@ pub(crate) async fn force_mirror_central_repositories_impl(
                         skill_id: skill.id.clone(),
                         repository_id: repository_id_for_state_from_db(pool, &before).await?,
                         source_path: before.source_path.clone(),
-                        error,
+                        error: error.to_string(),
                     }),
                 }
             }

@@ -83,69 +83,7 @@ impl AppState {
     }
 }
 
-#[derive(Default)]
-pub struct CentralUpdateSnapshotCache {
-    snapshots: Mutex<HashMap<String, CachedGitHubSnapshot>>,
-}
-
-#[derive(Clone)]
-struct CachedGitHubSnapshot {
-    snapshot: services::github_import::GitHubRepoSnapshot,
-    cached_at: chrono::DateTime<chrono::Utc>,
-}
-
-impl CentralUpdateSnapshotCache {
-    pub(crate) fn get_fresh(
-        &self,
-        key: &str,
-        max_age: chrono::Duration,
-    ) -> Option<services::github_import::GitHubRepoSnapshot> {
-        let now = chrono::Utc::now();
-        match self.snapshots.lock() {
-            Ok(snapshots) => snapshots.get(key).and_then(|cached| {
-                if now.signed_duration_since(cached.cached_at) <= max_age {
-                    Some(cached.snapshot.clone())
-                } else {
-                    None
-                }
-            }),
-            Err(error) => {
-                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during read");
-                None
-            }
-        }
-    }
-
-    pub(crate) fn insert(
-        &self,
-        key: String,
-        snapshot: services::github_import::GitHubRepoSnapshot,
-    ) {
-        match self.snapshots.lock() {
-            Ok(mut snapshots) => {
-                snapshots.insert(
-                    key,
-                    CachedGitHubSnapshot {
-                        snapshot,
-                        cached_at: chrono::Utc::now(),
-                    },
-                );
-            }
-            Err(error) => {
-                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during insert");
-            }
-        }
-    }
-
-    pub fn clear(&self) {
-        match self.snapshots.lock() {
-            Ok(mut snapshots) => snapshots.clear(),
-            Err(error) => {
-                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during clear");
-            }
-        }
-    }
-}
+pub use services::central_updates::CentralUpdateSnapshotCache;
 
 #[derive(Default)]
 pub struct AiTagJobRegistry {

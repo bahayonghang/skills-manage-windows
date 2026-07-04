@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::commands::central_updates::{
     self, state_from_relocated_source, RemoteSkillLoadError, SkillUpdateStatus,
 };
-use crate::commands::central_updates_fs::normalize_repo_path;
+use crate::services::central_updates::normalize_repo_path;
 use crate::commands::github_import;
 use crate::db::{DbPool, SkillRepository, SkillUpdateState};
 use chrono::Utc;
@@ -34,7 +34,7 @@ pub(crate) async fn reconcile_relocated_remote_skills(
         let Some(old_path) = state
             .source_path
             .as_deref()
-            .map(normalize_repo_path)
+            .map(|path| normalize_repo_path(path).map_err(|e| e.to_string()))
             .transpose()?
             .filter(|path| !path.is_empty())
         else {
@@ -50,7 +50,8 @@ pub(crate) async fn reconcile_relocated_remote_skills(
     let mut added_by_key = HashMap::<(String, String), Vec<usize>>::new();
     let mut added_new_path_by_index = HashMap::<usize, String>::new();
     for (index, item) in ctx.remote_added_items.iter().enumerate() {
-        let new_path = normalize_repo_path(&item.preview.source_path)?;
+        let new_path =
+            normalize_repo_path(&item.preview.source_path).map_err(|e| e.to_string())?;
         added_new_path_by_index.insert(index, new_path);
         added_by_key
             .entry((item.repository_id.clone(), item.preview.skill_id.clone()))

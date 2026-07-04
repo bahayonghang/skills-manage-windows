@@ -28,7 +28,7 @@ use crate::commands::central_updates::{
     state_from_remote, unsupported_state_from_assignment, RemoteSkillLoadError, SkillUpdateStatus,
     SnapshotCachePolicy,
 };
-use crate::commands::central_updates_fs::{normalize_repo_path, CentralFs};
+use crate::services::central_updates::{normalize_repo_path, CentralFs};
 use crate::commands::github_import;
 use crate::db::{self, DbPool, SkillRepositoryPendingAddition};
 use crate::targets::ActiveTarget;
@@ -66,7 +66,9 @@ pub async fn refresh_skill_update_inventory(
     scope: SkillRefreshScope,
 ) -> Result<SkillUpdateInventory, String> {
     let pool = state.active_db().await?;
-    let fs = CentralFs::from_active_target(state.active_target().await?).await?;
+    let fs = CentralFs::from_active_target(state.active_target().await?)
+        .await
+        .map_err(|e| e.to_string())?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
             .await
@@ -176,7 +178,9 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
     let valid_repositories =
         load_syncable_github_repositories(pool, &repository_ids, auth_token).await?;
 
-    let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
+    let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // 2.1 把 skill 携带的 repo refs 和 scope 指定的 repo refs 合并去快照
     let mut snapshot_repos = prepared
@@ -192,7 +196,8 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         snapshots_cache,
         snapshot_cache_policy(cache_policy),
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
 
     /*
      * ========================================================================
@@ -302,7 +307,8 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
 
         let now = Utc::now().to_rfc3339();
         for item in &remote_added_items {
-            let source_path = normalize_repo_path(&item.preview.source_path)?;
+            let source_path =
+                normalize_repo_path(&item.preview.source_path).map_err(|e| e.to_string())?;
             let addition = SkillRepositoryPendingAddition {
                 repository_id: item.repository_id.clone(),
                 source_path: source_path.clone(),
@@ -320,7 +326,8 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                 .map_err(|e| e.to_string())?;
         }
         for item in &collection.skipped_remote_added {
-            let source_path = normalize_repo_path(&item.preview.source_path)?;
+            let source_path =
+                normalize_repo_path(&item.preview.source_path).map_err(|e| e.to_string())?;
             db::delete_pending_addition(pool, &item.repository_id, &source_path)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -520,7 +527,8 @@ pub async fn apply_skill_update_decisions(
         match outcome {
             Ok(import_result) => {
                 for imported in &import_result.imported_skills {
-                    let source_path = normalize_repo_path(&imported.source_path)?;
+                    let source_path =
+                        normalize_repo_path(&imported.source_path).map_err(|e| e.to_string())?;
                     let _ =
                         db::delete_skill_repository_sync_skip(&pool, &repository_id, &source_path)
                             .await;
@@ -599,7 +607,9 @@ pub async fn force_update_central_skills(
     request: ForceSkillUpdateRequest,
 ) -> Result<ForceSkillUpdateResult, String> {
     let pool = state.active_db().await?;
-    let fs = CentralFs::from_active_target(state.active_target().await?).await?;
+    let fs = CentralFs::from_active_target(state.active_target().await?)
+        .await
+        .map_err(|e| e.to_string())?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
             .await
@@ -625,7 +635,9 @@ pub async fn force_mirror_central_repositories(
 ) -> Result<ForceRepositoryMirrorResult, String> {
     let pool = state.active_db().await?;
     let active_target = state.active_target().await?;
-    let fs = CentralFs::from_active_target(active_target.clone()).await?;
+    let fs = CentralFs::from_active_target(active_target.clone())
+        .await
+        .map_err(|e| e.to_string())?;
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
             .await
