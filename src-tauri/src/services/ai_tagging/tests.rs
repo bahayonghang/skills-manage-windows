@@ -6,7 +6,6 @@ use crate::db::{
     self, DbPool, Skill, SkillTag, ACADEMIC_RESEARCH_WRITING_TAG_ID, UNCATEGORIZED_TAG_ID,
 };
 use crate::secrets::{MockSecretStore, AI_API_KEY_SECRET_KEY};
-use sqlx::sqlite::SqlitePoolOptions;
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex,
@@ -57,15 +56,8 @@ fn make_skill(id: &str, name: &str) -> Skill {
     }
 }
 
-async fn setup_test_db() -> DbPool {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect(":memory:")
-        .await
-        .expect("db");
-    db::init_database(&pool).await.expect("init");
-    pool
-}
+use crate::test_support::mem_pool_single_conn as setup_test_db;
+
 fn test_ai_secret() -> MockSecretStore {
     MockSecretStore::with_value(AI_API_KEY_SECRET_KEY, "test-key")
 }

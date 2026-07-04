@@ -14,15 +14,10 @@ use super::reveal_ai_api_key_impl;
 use super::stream::get_fallback_endpoint;
 use crate::db;
 use crate::secrets::{MockSecretStore, SecretError, SecretStore, AI_API_KEY_SECRET_KEY};
-use tempfile::{tempdir, TempDir};
+use tempfile::TempDir;
 
 async fn setup_test_db() -> (crate::db::DbPool, TempDir) {
-    let dir = tempdir().expect("create tempdir");
-    let db_path = dir.path().join("ai-provider-cache.sqlite");
-    let db_path = db_path.to_string_lossy().into_owned();
-    let pool = db::create_pool(&db_path).await.expect("create pool");
-    db::init_database(&pool).await.expect("init db");
-    (pool, dir)
+    crate::test_support::file_pool().await
 }
 
 #[test]

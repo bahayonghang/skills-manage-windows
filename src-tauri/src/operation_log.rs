@@ -379,6 +379,7 @@ mod tests {
     async fn best_effort_logger_does_not_return_business_errors() {
         // Connecting to an empty in-memory pool means the operation_log table
         // does not exist. The recorder must still complete without panicking.
+        // （豁免 test_support::mem_pool：本测试需要未建 schema 的裸池。）
         let pool = SqlitePool::connect(":memory:").await.unwrap();
 
         record_operation_log_best_effort(
@@ -391,8 +392,7 @@ mod tests {
 
     #[tokio::test]
     async fn with_operation_log_records_success_and_preserves_result() {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        crate::db::init_database(&pool).await.unwrap();
+        let pool = crate::test_support::mem_pool().await;
         let app_state = test_app_state(pool);
 
         let result = with_operation_log(
@@ -435,8 +435,7 @@ mod tests {
 
     #[tokio::test]
     async fn with_operation_log_records_failure_and_preserves_error() {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        crate::db::init_database(&pool).await.unwrap();
+        let pool = crate::test_support::mem_pool().await;
         let app_state = test_app_state(pool);
 
         let result = with_operation_log(

@@ -2,15 +2,9 @@ use super::*;
 use crate::db::{self, Skill};
 use crate::services::github_import::DuplicateResolution;
 use crate::targets::{ActiveTarget, RemoteTargetConfig, SshAuthMethod, WslTargetConfig};
-use sqlx::SqlitePool;
+use crate::test_support::mem_pool as setup_test_db;
 use std::collections::{HashMap, HashSet};
 use std::sync::{atomic::AtomicBool, Arc};
-
-async fn setup_test_db() -> DbPool {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database(&pool).await.unwrap();
-    pool
-}
 
 fn github_source(path: &str) -> PortableCentralSkillSource {
     github_source_for_repo("openai", "skills", "main", path)

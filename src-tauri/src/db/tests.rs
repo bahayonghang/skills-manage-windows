@@ -14,16 +14,7 @@ use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::Path;
 
-/// Create an in-memory SQLite pool and initialize the schema.
-async fn setup_test_db() -> DbPool {
-    let pool = SqlitePool::connect(":memory:")
-        .await
-        .expect("Failed to create in-memory SQLite pool");
-    init_database(&pool)
-        .await
-        .expect("Failed to initialize test database");
-    pool
-}
+use crate::test_support::mem_pool as setup_test_db;
 
 // ── Init ──────────────────────────────────────────────────────────────────
 
@@ -2054,6 +2045,7 @@ async fn test_batch_settings_preserves_missing_keys() {
 #[tokio::test]
 async fn test_migration_adds_created_at_to_skill_installations() {
     // Create a fresh in-memory pool WITHOUT calling init_database first.
+    // （豁免 test_support::mem_pool：本测试手工搭建 legacy schema 验证迁移。）
     let pool = SqlitePool::connect(":memory:")
         .await
         .expect("Failed to create in-memory SQLite pool");

@@ -17,12 +17,7 @@ use std::path::Path;
 use tempfile::{tempdir, TempDir};
 
 async fn setup_test_db() -> (crate::db::DbPool, TempDir) {
-    let dir = tempdir().expect("create tempdir");
-    let db_path = dir.path().join("marketplace-cache.sqlite");
-    let db_path = db_path.to_string_lossy().into_owned();
-    let pool = db::create_pool(&db_path).await.expect("create pool");
-    db::init_database(&pool).await.expect("init db");
-    (pool, dir)
+    crate::test_support::file_pool().await
 }
 
 #[test]

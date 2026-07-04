@@ -12,12 +12,8 @@ pub(super) mod tests {
     use tempfile::tempdir;
 
     async fn setup_test_db() -> DbPool {
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("github-import.sqlite");
-        let pool = db::create_pool(db_path.to_str().unwrap())
-            .await
-            .expect("create db");
-        db::init_database(&pool).await.expect("init db");
+        let (pool, dir) = crate::test_support::file_pool().await;
+        // 历史行为：泄漏 TempDir 让 db 文件活过测试生命周期。
         std::mem::forget(dir);
         pool
     }

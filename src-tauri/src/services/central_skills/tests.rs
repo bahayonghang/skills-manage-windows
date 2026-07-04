@@ -10,18 +10,10 @@ use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
 
-async fn setup_test_db() -> SqlitePool {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database(&pool).await.unwrap();
-    pool
-}
+use crate::test_support::mem_pool as setup_test_db;
 
 async fn set_test_central_root(pool: &SqlitePool, root: &Path) {
-    sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = 'central'")
-        .bind(root.to_string_lossy().into_owned())
-        .execute(pool)
-        .await
-        .unwrap();
+    crate::test_support::set_agent_dir(pool, "central", root).await;
 }
 
 fn write_test_skill_dir(dir: &Path) {

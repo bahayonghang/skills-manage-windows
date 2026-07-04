@@ -100,12 +100,7 @@ fn normalize_provider_api_url(provider: &str, api_url: &str) -> String {
 mod tests {
     use super::*;
     use crate::db;
-
-    async fn setup_test_db() -> crate::db::DbPool {
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
+    use crate::test_support::mem_pool as setup_test_db;
 
     #[tokio::test]
     async fn resolver_falls_back_to_legacy_unsuffixed_settings() {

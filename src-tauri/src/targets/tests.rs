@@ -2,7 +2,6 @@ use super::*;
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
-    use sqlx::SqlitePool;
     use std::path::Path;
 
     #[derive(Default)]
@@ -66,11 +65,7 @@ pub(super) mod tests {
         }
     }
 
-    async fn memory_db() -> DbPool {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
+    use crate::test_support::mem_pool as memory_db;
 
     fn password_target() -> RemoteTargetConfig {
         RemoteTargetConfig {

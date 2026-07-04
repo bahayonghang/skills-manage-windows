@@ -460,7 +460,7 @@ pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[cfg(test)]
 mod refresh_tests {
     use super::*;
-    use sqlx::SqlitePool;
+    use crate::test_support::mem_pool as setup_pool;
     use tempfile::TempDir;
 
     struct FailingProvider;
@@ -482,12 +482,6 @@ mod refresh_tests {
         async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
             Err(UsageError::Remote("fixture failure".to_string()))
         }
-    }
-
-    async fn setup_pool() -> DbPool {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
     }
 
     fn write_claude_fixture(dir: &TempDir) {
