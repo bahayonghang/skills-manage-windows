@@ -246,6 +246,8 @@ async fn force_refresh_failure_preserves_last_good_cached_data() {
 
 #[tokio::test]
 async fn registry_cache_column_migration_is_idempotent() {
+    // 豁免 test_support::file_pool：本测试手工搭建 legacy schema 验证迁移，
+    // 必须拿到未 init 的裸文件池。
     let dir = tempdir().expect("create tempdir");
     let db_path = dir.path().join("migration.sqlite");
     let db_path = db_path.to_string_lossy().into_owned();
