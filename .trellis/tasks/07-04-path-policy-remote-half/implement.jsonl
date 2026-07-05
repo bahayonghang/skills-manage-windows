@@ -1,1 +1,2 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "targets/error.rs 的 #[error] 文案须逐字保留（~/.skillsmanage/skills 出现在 Display 文案中，属白名单不迁移）"}
+{"file": ".trellis/tasks/07-04-path-policy-remote-half/design.md", "reason": "迁移清单、grep 白名单与等价性验证方案"}

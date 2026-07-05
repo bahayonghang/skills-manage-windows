@@ -31,9 +31,9 @@
 
 ## Acceptance Criteria
 
-- [ ] grep 验证：`.skillsmanage` / `.agents` 目录名字面量在 `src-tauri/src/` 内仅存在于 `paths.rs`（种子数据、测试、文档除外，白名单由 design 列出）。
-- [ ] `paths.rs` 现有 26 条测试扩展覆盖 remote 构造（含上述各泄漏点迁移后的等价性用例）。
-- [ ] `cd src-tauri && cargo test` 全过；`cargo clippy -- -D warnings` 通过。
+- [x] grep 验证：`.skillsmanage` / `.agents` 目录名字面量在 `src-tauri/src/` 内仅存在于 `paths.rs`（种子数据、测试、文档除外，白名单由 design 列出）。
+- [x] `paths.rs` 现有 26 条测试扩展覆盖 remote 构造（含上述各泄漏点迁移后的等价性用例）。
+- [x] `cd src-tauri && cargo test` 全过；`cargo clippy -- -D warnings` 通过。
 
 ## Notes
 
