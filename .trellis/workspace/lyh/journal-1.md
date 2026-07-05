@@ -1044,3 +1044,35 @@ Added card-level Central skill platform uninstall action and recorded the Trelli
 ### Next Steps
 
 - None - task complete
+
+## Session 27: path-policy-remote-half：Path policy remote 半边收敛
+
+**Date**: 2026-07-05
+**Task**: 补完 Path policy 的 remote 半边
+**Branch**: `dev`
+
+### Summary
+
+完成 07-04-path-policy-remote-half：目录名常量单点化到 paths.rs（APP_DATA_DIR_NAME 转 pub + CENTRAL_SKILLS_REL_FROM_HOME / REMOTE_REPOS_REL_FROM_HOME / TARGETS_CACHE_DIR_NAME / UNIVERSAL_AGENTS_DIR_NAME / UNIVERSAL_SKILLS_REL）；remote_join 本体从 targets/exec.rs 迁入 paths.rs（targets pub use 保持约 25 处调用点零改动），新增 remote_central_skills_root / remote_repos_root helper；probe 脚本抽 remote_probe_script() 并补逐字节等价测试。迁移 9 处泄漏点（targets/exec、local_remote_sync ×3、db/types、db/seed remote 家目录改写、github_import/types、obsidian/query、claude_plugin）。纯收敛零行为变化。验收：cargo test 745 通过、clippy -D warnings 干净、grep 残留仅剩 design §4 白名单（paths.rs/测试/注释/用户可见文案）。产出 spec：.trellis/spec/backend/path-policy.md。父任务进度 7/9，剩 transport-seam、skill-card-scenarios。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e675ed6a` | refactor(paths): [AI] ♻️ remote 路径构造与目录名收敛到 path policy 单点 |
+| `ed1cb196` | docs(spec): [AI] 📝 Path policy 单点约定与任务工件落档 |
+| `599d6e53` | chore(task): archive 07-04-path-policy-remote-half |
+
+### Testing
+
+- [OK] cd src-tauri && cargo test：745 passed, 2 ignored
+- [OK] cargo clippy -- -D warnings：无告警
+- [OK] grep 白名单复核：生产代码字面量仅剩 paths.rs 与 design §4 白名单
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 下一子任务：07-04-skill-card-scenarios（PRD 建议顺序），transport-seam 收尾
