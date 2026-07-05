@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ScanDirectory } from "../types";
 
 // Mock Tauri core before importing the store
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   invoke: vi.fn(),
   isTauriRuntime: vi.fn(() => true),
 }));
 
-import { invoke } from "@/lib/tauri";
+import { invoke } from "@/lib/ipc";
 import {
   createSettingsStoreInitialState,
   useSettingsStore,

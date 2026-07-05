@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { SkillDetailModalShell } from "@/components/skill/SkillDetailModalShell";
 import { SkillDetailFileTree } from "@/components/skill/SkillDetailFileTree";
 import { Button } from "@/components/ui/button";
-import { isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/ipc";
 import { MarketplaceSkillDetailContent } from "./MarketplaceSkillDetailContent";
 import { MarketplaceSkillDetailSummary } from "./MarketplaceSkillDetailSummary";
 import type { MarketplaceSkillDetail } from "./marketplaceSkillDetailTypes";

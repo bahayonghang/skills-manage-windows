@@ -1,5 +1,5 @@
 import type { FrontendRuntimeLogPayload } from "@/types";
-import { invokeRaw, registerIpcFailureRecorder } from "@/lib/tauri";
+import { invokeRaw, registerIpcFailureRecorder } from "@/lib/ipc";
 
 type RuntimeLogLevel = NonNullable<FrontendRuntimeLogPayload["level"]>;
 

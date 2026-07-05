@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TargetSummary } from "@/types";
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   invoke: vi.fn(),
   isTauriRuntime: vi.fn(() => true),
 }));
 
-import { invoke } from "@/lib/tauri";
+import { invoke } from "@/lib/ipc";
 import { useTargetStore } from "@/stores/targetStore";
 
 const localTarget: TargetSummary = {

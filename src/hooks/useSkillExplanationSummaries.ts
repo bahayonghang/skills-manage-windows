@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import type { SkillExplanationSummaryMap } from "@/types/skillExplanation";
 
 function normalizeSkillIds(skillIds: readonly (string | null | undefined)[]): string[] {

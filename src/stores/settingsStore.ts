@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import {
   CENTRAL_UPDATE_CHECK_MODE_SETTING_KEY,
   DEFAULT_UPDATE_CHECK_MODE,

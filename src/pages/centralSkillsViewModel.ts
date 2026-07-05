@@ -17,7 +17,7 @@ import {
   getPlatformSkillFilePath,
 } from "@/lib/platformPathPolicy";
 import { normalizeSearchQuery } from "@/lib/search";
-import { isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/ipc";
 import { getVisibleSkillTags } from "@/lib/centralTags";
 import type {
   AgentWithStatus,

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   invokeRaw: vi.fn(),
   registerIpcFailureRecorder: vi.fn(),
 }));
 
-import { invokeRaw, registerIpcFailureRecorder } from "@/lib/tauri";
+import { invokeRaw, registerIpcFailureRecorder } from "@/lib/ipc";
 import {
   __resetRuntimeLoggerForTest,
   emitFrontendRuntimeLog,

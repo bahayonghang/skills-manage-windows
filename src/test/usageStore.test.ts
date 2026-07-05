@@ -13,13 +13,13 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   invoke: vi.fn(),
   listen: vi.fn(),
   isTauriRuntime: vi.fn(() => true),
 }));
 
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import { toast } from "sonner";
 
 const invokeMock = vi.mocked(invoke);

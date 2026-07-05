@@ -10,7 +10,7 @@
  */
 
 import { create } from "zustand";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import type { SavedView } from "@/types";
 
 export interface SavedViewCreateInput {

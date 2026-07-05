@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import * as tauriBridge from "@/lib/tauri";
+import * as tauriBridge from "@/lib/ipc";
 import {
   formatAppUpdateBytes,
   getAppUpdateProgressPercent,

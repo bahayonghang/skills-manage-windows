@@ -11,7 +11,7 @@ import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
-import { isTauriRuntime, listen, showMainWindowWhenReady } from "@/lib/tauri";
+import { isTauriRuntime, listen, showMainWindowWhenReady } from "@/lib/ipc";
 
 type MigrationProgressPayload =
   | { phase: "started" }

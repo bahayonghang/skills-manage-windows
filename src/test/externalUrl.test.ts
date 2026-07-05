@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
   open: mockShellOpen,
 }));
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   isTauriRuntime: mockIsTauriRuntime,
 }));
 

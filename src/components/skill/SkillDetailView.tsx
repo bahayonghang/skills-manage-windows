@@ -36,7 +36,7 @@ import {
   getPlatformTargetGroups,
   getPlatformTargetMemberIds,
 } from "@/lib/platformTargetGroups";
-import { isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { usePlatformStore } from "@/stores/platformStore";

@@ -9,7 +9,7 @@
  *   - 预设：`html[data-display-font='geist']` 切换 CSS 变量
  *   - 自定义：`html.style.setProperty('--font-display', "'My Font', fallback...")`
  */
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 
 export type DisplayFontKey =
   | "geist"

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ScannedSkill } from "../types";
-import * as tauriBridge from "@/lib/tauri";
+import * as tauriBridge from "@/lib/ipc";
 
 // Mock Tauri core before importing the store
 vi.mock("@tauri-apps/api/core", () => ({

@@ -19,7 +19,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/ipc";
 import { MarketplaceSkillDetailContent } from "./MarketplaceSkillDetailContent";
 import { MarketplaceSkillDetailSummary } from "./MarketplaceSkillDetailSummary";
 import type { MarketplaceSkillDetail } from "./marketplaceSkillDetailTypes";

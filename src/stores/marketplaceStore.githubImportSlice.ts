@@ -1,5 +1,5 @@
 import { setupExplanationStreamListeners } from "@/lib/explanationStream";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import {
   GitHubRepoImportResult,
   GitHubRepoPreview,

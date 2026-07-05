@@ -89,7 +89,7 @@ import { useCentralSkillsStore } from "../stores/centralSkillsStore";
 import { useSkillDetailStore } from "../stores/skillDetailStore";
 import { useUpdateCenterStore } from "../stores/updateCenterStore";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
-import * as tauriBridge from "@/lib/tauri";
+import * as tauriBridge from "@/lib/ipc";
 
 const userSourceText = /用户来源|User source/i;
 const pluginSourceText = /插件来源|Plugin source/i;

@@ -1,4 +1,4 @@
-import { invoke, isTauriRuntime, listen } from "@/lib/tauri";
+import { invoke, isTauriRuntime, listen } from "@/lib/ipc";
 import {
   AiTagProgressPayload,
   CentralSkillUpdateProgressPayload,

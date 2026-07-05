@@ -6,7 +6,7 @@
  */
 
 import { create } from "zustand";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import type { TagGroup } from "@/types";
 
 export interface TagGroupCreateInput {

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { toast } from "sonner";
-import { invoke, isTauriRuntime, listen } from "@/lib/tauri";
+import { invoke, isTauriRuntime, listen } from "@/lib/ipc";
 import i18n from "@/i18n";
 import { useTargetStore } from "@/stores/targetStore";
 import type {

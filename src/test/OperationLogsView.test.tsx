@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   invoke: vi.fn(),
   isTauriRuntime: vi.fn(() => true),
 }));
@@ -13,7 +13,7 @@ vi.mock("sonner", () => ({
   },
 }));
 
-import { invoke } from "@/lib/tauri";
+import { invoke } from "@/lib/ipc";
 import { OperationLogsView } from "@/pages/OperationLogsView";
 import { useOperationLogStore } from "@/stores/operationLogStore";
 import { OperationLogEntry, OperationLogPage, RuntimeLogReadResult } from "@/types";

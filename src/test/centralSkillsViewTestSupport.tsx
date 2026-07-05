@@ -272,7 +272,7 @@ import {
   createSettingsStoreInitialState,
   useSettingsStore,
 } from "@/stores/settingsStore";
-import * as tauriBridgeModule from "@/lib/tauri";
+import * as tauriBridgeModule from "@/lib/ipc";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

@@ -7,12 +7,12 @@ import {
 } from "../hooks/useSkillCallCounts";
 import { useTargetStore } from "../stores/targetStore";
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   invoke: vi.fn(),
   isTauriRuntime: vi.fn(() => true),
 }));
 
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 
 const invokeMock = vi.mocked(invoke);
 const runtimeMock = vi.mocked(isTauriRuntime);

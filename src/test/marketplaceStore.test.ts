@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   invoke: vi.fn(),
   listen: vi.fn(),
   isTauriRuntime: vi.fn(() => true),
 }));
 
-import { invoke, listen, isTauriRuntime } from "@/lib/tauri";
+import { invoke, listen, isTauriRuntime } from "@/lib/ipc";
 
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 

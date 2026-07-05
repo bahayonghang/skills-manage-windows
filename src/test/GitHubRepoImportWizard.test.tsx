@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { GitHubRepoImportWizard } from "@/components/marketplace/GitHubRepoImportWizard";
 import type { GitHubRepoPreview, GitHubSkillImportSelection } from "@/types";
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   isTauriRuntime: () => false,
   invoke: vi.fn(),
   listen: vi.fn(),

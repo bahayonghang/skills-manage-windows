@@ -1,5 +1,5 @@
 import { open as openShellPath } from "@tauri-apps/plugin-shell";
-import { isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/ipc";
 
 export async function openExternalUrl(rawUrl: string): Promise<void> {
   const url = new URL(rawUrl);

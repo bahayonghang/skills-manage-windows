@@ -1,4 +1,4 @@
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import {
   AgentWithStatus,
   CentralStoreLocationChangeResult,

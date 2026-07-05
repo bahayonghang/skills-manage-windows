@@ -1,4 +1,4 @@
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import { MarketplaceSkill, SkillRegistry } from "@/types";
 import { normalizeRegistryIdentity } from "./marketplaceStore.shared";
 import type { MarketplaceState, MarketplaceStoreContext } from "./marketplaceStore.types";

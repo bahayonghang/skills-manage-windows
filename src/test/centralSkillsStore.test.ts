@@ -4,7 +4,7 @@ import type {
   CentralRepositorySyncApplyResult,
   CentralRepositorySyncPreview,
 } from "@/types/centralRepositorySync";
-import * as tauriBridge from "@/lib/tauri";
+import * as tauriBridge from "@/lib/ipc";
 
 // Mock Tauri core before importing the store
 vi.mock("@tauri-apps/api/core", () => ({

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import { useTargetStore } from "@/stores/targetStore";
 
 /**
