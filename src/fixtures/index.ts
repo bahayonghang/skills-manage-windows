@@ -1,4 +1,5 @@
 import { registerMiscFixtures, registerSettingsFixtures } from "./settings";
+import { registerObsidianFixtures } from "./obsidian";
 import { registerOperationLogFixtures } from "./operationLogs";
 import { registerPlatformFixtures } from "./platform";
 import { registerRuntimeLogFixtures } from "./runtimeLogs";
@@ -19,6 +20,7 @@ export function installBrowserIpcFixtures(): void {
   registerMiscFixtures();
   registerPlatformFixtures();
   registerSkillsFixtures();
+  registerObsidianFixtures();
   registerUsageFixtures();
   registerTargetFixtures();
   registerOperationLogFixtures();

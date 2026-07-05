@@ -10,6 +10,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import { installBrowserIpcFixtures } from "@/fixtures";
 import { clearIpcFixturesForTest } from "@/lib/ipc";
+import { useObsidianStore } from "@/stores/obsidianStore";
 import { useOperationLogStore } from "@/stores/operationLogStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useRuntimeLogStore } from "@/stores/runtimeLogStore";
@@ -116,6 +117,16 @@ describe("browser fixtures drive real store loaders", () => {
 
     const state = useRuntimeLogStore.getState();
     expect(state.files.length).toBeGreaterThan(0);
+    expect(state.error).toBeNull();
+  });
+
+  it("obsidianStore loads fixture vaults and skills", async () => {
+    await useObsidianStore.getState().loadVaults();
+    await useObsidianStore.getState().getVaultSkills("fixture-vault");
+
+    const state = useObsidianStore.getState();
+    expect(state.vaults.length).toBeGreaterThan(0);
+    expect(state.skillsByVault["fixture-vault"]?.length).toBeGreaterThan(0);
     expect(state.error).toBeNull();
   });
 
