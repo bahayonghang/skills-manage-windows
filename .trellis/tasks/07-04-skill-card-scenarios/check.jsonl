@@ -1,1 +1,2 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/07-04-skill-card-scenarios/design.md", "reason": "§6 验收数值表是 check 的复核清单（grep 表 + 门禁命令）"}
+{"file": ".trellis/tasks/07-04-skill-card-scenarios/prd.md", "reason": "AC 五条：props 面缩小硬指标、负面 typecheck 用例、11 调用点迁移、测试全过、三门禁"}
