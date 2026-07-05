@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { invoke, isTauriRuntime } from "@/lib/ipc";
+import { invoke } from "@/lib/ipc";
 import { useTargetStore } from "@/stores/targetStore";
 
 /**
@@ -14,7 +14,7 @@ import { useTargetStore } from "@/stores/targetStore";
  * (activeTargetId, sortedNames, days) 重复调用直接命中，避免每次切换 Filter
  * 都打一次 IPC，同时确保 Local/SSH/WSL 之间不会复用徽章计数。
  *
- * 列表变化时自动重拉；isTauriRuntime=false 时直接返回空 map。
+ * 列表变化时自动重拉；浏览器演示态由 usage fixture 返回空 map。
  */
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -28,7 +28,7 @@ function cacheKey(targetId: string, names: string[], days: number): string {
 
 export function useSkillCallCounts(
   skillNames: string[],
-  days = 30
+  days = 30,
 ): Record<string, number> {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const activeTargetId = useTargetStore((s) => s.activeTarget.id);
@@ -50,11 +50,6 @@ export function useSkillCallCounts(
       return;
     }
 
-    if (!isTauriRuntime()) {
-      setCounts({});
-      return;
-    }
-
     // 缓存命中
     const hit = cache.get(cacheId);
     if (hit && Date.now() - hit.ts < CACHE_TTL_MS) {
@@ -64,7 +59,7 @@ export function useSkillCallCounts(
 
     void (async () => {
       try {
-        const data = await invoke<Record<string, number>>("usage_get_skill_counts", {
+        const data = await invoke("usage_get_skill_counts", {
           skills: requestSkillNames,
           days,
         });

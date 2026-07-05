@@ -10,7 +10,6 @@ import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { Input } from "@/components/ui/input";
 import { VirtualizedList } from "@/components/ui/virtualized-list";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
-import { invoke } from "@/lib/ipc";
 import { getPathBasename } from "@/lib/path";
 import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
@@ -24,7 +23,11 @@ import {
 } from "@/stores/obsidianStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useTargetStore } from "@/stores/targetStore";
-import type { BatchInstallResult, ObsidianSkill, SkillWithLinks } from "@/types";
+import type {
+  BatchInstallResult,
+  ObsidianSkill,
+  SkillWithLinks,
+} from "@/types";
 
 function EmptyState({ message }: { message: string }) {
   return (
@@ -49,23 +52,28 @@ export function ObsidianVaultView() {
   const vaults = useObsidianStore((state) => state.vaults);
   const skillsByVault = useObsidianStore((state) => state.skillsByVault);
   const isLoadingVaults = useObsidianStore((state) => state.isLoadingVaults);
-  const loadingSkillsByVault = useObsidianStore((state) => state.loadingSkillsByVault);
+  const loadingSkillsByVault = useObsidianStore(
+    (state) => state.loadingSkillsByVault,
+  );
   const loadVaults = useObsidianStore((state) => state.loadVaults);
   const getVaultSkills = useObsidianStore((state) => state.getVaultSkills);
 
   const agents = usePlatformStore((state) => state.agents);
   const categoryVisibility =
-    usePlatformStore((state) => state.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+    usePlatformStore((state) => state.categoryVisibility) ??
+    DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((state) => state.refreshCounts);
   const activeTarget = useTargetStore((state) => state.activeTarget);
   const isRemoteTarget = isRemoteLikeTarget(activeTarget);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [importingIds, setImportingIds] = useState<Set<string>>(new Set());
-  const [installTargetSkill, setInstallTargetSkill] = useState<ObsidianSkill | null>(null);
+  const [installTargetSkill, setInstallTargetSkill] =
+    useState<ObsidianSkill | null>(null);
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
-  const [drawerInstallTargetSkill, setDrawerInstallTargetSkill] = useState<ObsidianSkill | null>(null);
+  const [drawerInstallTargetSkill, setDrawerInstallTargetSkill] =
+    useState<ObsidianSkill | null>(null);
   const [drawerFilePath, setDrawerFilePath] = useState<string | null>(null);
   const [drawerSourceMeta, setDrawerSourceMeta] = useState<{
     name: string;
@@ -90,29 +98,35 @@ export function ObsidianVaultView() {
 
   useEffect(() => {
     if (!decodedVaultId && vaults.length > 0) {
-      navigate(`/obsidian/${encodeURIComponent(vaults[0].id)}`, { replace: true });
+      navigate(`/obsidian/${encodeURIComponent(vaults[0].id)}`, {
+        replace: true,
+      });
     }
   }, [decodedVaultId, navigate, vaults]);
 
   const selectedVault = useMemo(
     () => vaults.find((vault) => vault.id === decodedVaultId) ?? null,
-    [decodedVaultId, vaults]
+    [decodedVaultId, vaults],
   );
   const selectedSkills = useMemo(
     () => (decodedVaultId ? (skillsByVault[decodedVaultId] ?? []) : []),
-    [decodedVaultId, skillsByVault]
+    [decodedVaultId, skillsByVault],
   );
-  const isLoadingSkills = decodedVaultId ? (loadingSkillsByVault[decodedVaultId] ?? false) : false;
+  const isLoadingSkills = decodedVaultId
+    ? (loadingSkillsByVault[decodedVaultId] ?? false)
+    : false;
   const normalizedSearchQuery = useMemo(
     () => normalizeSearchQuery(searchQuery),
-    [searchQuery]
+    [searchQuery],
   );
   const filteredSkills = useMemo(() => {
     if (!normalizedSearchQuery) {
       return selectedSkills;
     }
     return selectedSkills.filter((skill) =>
-      buildSearchText([skill.name, skill.description]).includes(normalizedSearchQuery)
+      buildSearchText([skill.name, skill.description]).includes(
+        normalizedSearchQuery,
+      ),
     );
   }, [normalizedSearchQuery, selectedSkills]);
   const summarySkillIds = useMemo(
@@ -120,12 +134,12 @@ export function ObsidianVaultView() {
       filteredSkills
         .filter((skill) => skill.is_already_central)
         .map((skill) => getPathBasename(skill.dir_path) ?? skill.id),
-    [filteredSkills]
+    [filteredSkills],
   );
   const aiSummaries = useSkillExplanationSummaries(summarySkillIds, "zh");
   const platformAgents = useMemo(
     () => getPlatformTargetGroups(agents, categoryVisibility),
-    [agents, categoryVisibility]
+    [agents, categoryVisibility],
   );
 
   function setDetailButtonRef(skillId: string, node: HTMLButtonElement | null) {
@@ -158,7 +172,9 @@ export function ObsidianVaultView() {
   async function handleInstallToCentral(skillId: string) {
     const skill = selectedSkills.find((item) => item.id === skillId);
     if (!skill) {
-      toast.error(t("obsidian.importError", { error: `Skill '${skillId}' not found` }));
+      toast.error(
+        t("obsidian.importError", { error: `Skill '${skillId}' not found` }),
+      );
       return;
     }
     setImportingIds((current) => new Set(current).add(skillId));
@@ -180,7 +196,7 @@ export function ObsidianVaultView() {
   async function handleInstallFromDialog(
     _skillId: string,
     agentIds: string[],
-    method: "symlink" | "copy"
+    method: "symlink" | "copy",
   ): Promise<BatchInstallResult> {
     if (!installTargetSkill) {
       return { succeeded: [], failed: [] };
@@ -193,7 +209,11 @@ export function ObsidianVaultView() {
     try {
       for (const agentId of agentIds) {
         try {
-          await importObsidianSkillToPlatform(installTargetSkill, agentId, method);
+          await importObsidianSkillToPlatform(
+            installTargetSkill,
+            agentId,
+            method,
+          );
           succeeded.push(agentId);
         } catch (err) {
           failed.push({ agent_id: agentId, error: String(err) });
@@ -223,15 +243,14 @@ export function ObsidianVaultView() {
         toast.success(t("targets.pathCopied"));
         return;
       }
-      await invoke("open_obsidian_path", { path });
+      await useObsidianStore.getState().openObsidianPath(path);
     } catch (err) {
       toast.error(t("obsidian.openPathError", { error: String(err) }));
     }
   }
 
   const restorationState = location.state?.scrollRestoration as
-    | { scrollTop?: number }
-    | undefined;
+    { scrollTop?: number } | undefined;
 
   useEffect(() => {
     if (typeof restorationState?.scrollTop !== "number") {
@@ -249,7 +268,9 @@ export function ObsidianVaultView() {
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-6 py-4">
         <h1 className="text-xl font-semibold">{t("obsidian.title")}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("obsidian.desc")}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {t("obsidian.desc")}
+        </p>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -295,18 +316,29 @@ export function ObsidianVaultView() {
                     <button
                       key={vault.id}
                       type="button"
-                      onClick={() => navigate(`/obsidian/${encodeURIComponent(vault.id)}`)}
+                      onClick={() =>
+                        navigate(`/obsidian/${encodeURIComponent(vault.id)}`)
+                      }
                       className={cn(
                         "flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors",
                         isActive
                           ? "border-primary/60 bg-primary/10 text-foreground shadow-sm"
-                          : "border-border hover:bg-muted/40"
+                          : "border-border hover:bg-muted/40",
                       )}
                     >
-                      <Folder className={cn("size-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
+                      <Folder
+                        className={cn(
+                          "size-4 shrink-0",
+                          isActive ? "text-primary" : "text-muted-foreground",
+                        )}
+                      />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium">{vault.name}</div>
-                        <div className="truncate text-xs text-muted-foreground">{vault.skill_count}</div>
+                        <div className="truncate text-sm font-medium">
+                          {vault.name}
+                        </div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {vault.skill_count}
+                        </div>
                       </div>
                     </button>
                   );
@@ -321,7 +353,9 @@ export function ObsidianVaultView() {
             <>
               <div className="flex items-center gap-3 border-b border-border px-6 py-3">
                 <div className="min-w-0 flex-1">
-                  <h2 className="truncate text-sm font-semibold">{selectedVault.name}</h2>
+                  <h2 className="truncate text-sm font-semibold">
+                    {selectedVault.name}
+                  </h2>
                   <button
                     type="button"
                     onClick={() => void handleOpenVaultPath(selectedVault.path)}
@@ -361,20 +395,29 @@ export function ObsidianVaultView() {
                         description={skill.description}
                         aiSummary={
                           skill.is_already_central
-                            ? aiSummaries[getPathBasename(skill.dir_path) ?? skill.id]
+                            ? aiSummaries[
+                                getPathBasename(skill.dir_path) ?? skill.id
+                              ]
                             : undefined
                         }
                         isCentral={skill.is_already_central}
-                        platformBadge={{ id: skill.platform_id, name: skill.platform_name }}
+                        platformBadge={{
+                          id: skill.platform_id,
+                          name: skill.platform_name,
+                        }}
                         projectBadge={skill.project_name}
                         onDetail={() => openDrawerForSkill(skill)}
                         detailButtonRef={(node) =>
                           setDetailButtonRef(
-                            skill.is_already_central ? (getPathBasename(skill.dir_path) ?? skill.id) : skill.id,
-                            node
+                            skill.is_already_central
+                              ? (getPathBasename(skill.dir_path) ?? skill.id)
+                              : skill.id,
+                            node,
                           )
                         }
-                        onInstallToCentral={() => void handleInstallToCentral(skill.id)}
+                        onInstallToCentral={() =>
+                          void handleInstallToCentral(skill.id)
+                        }
                         onInstallToPlatform={() => {
                           setInstallTargetSkill(skill);
                           setIsInstallDialogOpen(true);
@@ -393,20 +436,29 @@ export function ObsidianVaultView() {
                         description={skill.description}
                         aiSummary={
                           skill.is_already_central
-                            ? aiSummaries[getPathBasename(skill.dir_path) ?? skill.id]
+                            ? aiSummaries[
+                                getPathBasename(skill.dir_path) ?? skill.id
+                              ]
                             : undefined
                         }
                         isCentral={skill.is_already_central}
-                        platformBadge={{ id: skill.platform_id, name: skill.platform_name }}
+                        platformBadge={{
+                          id: skill.platform_id,
+                          name: skill.platform_name,
+                        }}
                         projectBadge={skill.project_name}
                         onDetail={() => openDrawerForSkill(skill)}
                         detailButtonRef={(node) =>
                           setDetailButtonRef(
-                            skill.is_already_central ? (getPathBasename(skill.dir_path) ?? skill.id) : skill.id,
-                            node
+                            skill.is_already_central
+                              ? (getPathBasename(skill.dir_path) ?? skill.id)
+                              : skill.id,
+                            node,
                           )
                         }
-                        onInstallToCentral={() => void handleInstallToCentral(skill.id)}
+                        onInstallToCentral={() =>
+                          void handleInstallToCentral(skill.id)
+                        }
                         onInstallToPlatform={() => {
                           setInstallTargetSkill(skill);
                           setIsInstallDialogOpen(true);
@@ -433,16 +485,18 @@ export function ObsidianVaultView() {
               setInstallTargetSkill(null);
             }
           }}
-          skill={{
-            id: installTargetSkill.id,
-            name: installTargetSkill.name,
-            description: installTargetSkill.description,
-            file_path: installTargetSkill.file_path,
-            is_central: false,
-            linked_agents: [],
-            shared_root_agents: [],
-            scanned_at: new Date().toISOString(),
-          } as SkillWithLinks}
+          skill={
+            {
+              id: installTargetSkill.id,
+              name: installTargetSkill.name,
+              description: installTargetSkill.description,
+              file_path: installTargetSkill.file_path,
+              is_central: false,
+              linked_agents: [],
+              shared_root_agents: [],
+              scanned_at: new Date().toISOString(),
+            } as SkillWithLinks
+          }
           agents={platformAgents}
           onInstall={handleInstallFromDialog}
         />
@@ -465,8 +519,11 @@ export function ObsidianVaultView() {
         returnFocusRef={
           drawerSkillId || drawerFilePath
             ? {
-                current: detailButtonRefs.current[drawerSkillId ?? drawerFilePath ?? ""] ?? null,
-            }
+                current:
+                  detailButtonRefs.current[
+                    drawerSkillId ?? drawerFilePath ?? ""
+                  ] ?? null,
+              }
             : undefined
         }
         onInstallClick={

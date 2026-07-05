@@ -2,29 +2,19 @@
  * 字体偏好管理。
  *
  * Display 字体（标题）与 Body 字体（正文）独立持久化，缩放系数也单独保存。
- * Tauri 环境通过 `get_setting` / `set_setting` IPC 持久化；浏览器/测试环境
- * 跳过 IPC 仅操作 DOM，保证 vitest 与 SSR 不报错。
+ * 统一经 `get_setting` / `set_setting` IPC 持久化；浏览器演示态由 settings
+ * fixture 供数（get_setting→null 回落默认值，set_setting 静默成功）。
  *
  * DOM 落地形式：
  *   - 预设：`html[data-display-font='geist']` 切换 CSS 变量
  *   - 自定义：`html.style.setProperty('--font-display', "'My Font', fallback...")`
  */
-import { invoke, isTauriRuntime } from "@/lib/ipc";
+import { invoke } from "@/lib/ipc";
 
 export type DisplayFontKey =
-  | "geist"
-  | "jetbrains"
-  | "inter"
-  | "serif"
-  | "system"
-  | "custom";
+  "geist" | "jetbrains" | "inter" | "serif" | "system" | "custom";
 
-export type BodyFontKey =
-  | "jetbrains"
-  | "geist"
-  | "inter"
-  | "system"
-  | "custom";
+export type BodyFontKey = "jetbrains" | "geist" | "inter" | "system" | "custom";
 
 export interface DisplayFontOption {
   key: DisplayFontKey;
@@ -165,7 +155,10 @@ export function applyFontPreferences(prefs: FontPreferences) {
 }
 
 function coerceDisplay(value: unknown): DisplayFontKey {
-  if (typeof value === "string" && DISPLAY_FONT_KEYS.has(value as DisplayFontKey)) {
+  if (
+    typeof value === "string" &&
+    DISPLAY_FONT_KEYS.has(value as DisplayFontKey)
+  ) {
     return value as DisplayFontKey;
   }
   return DEFAULT_FONT_PREFERENCES.display;
@@ -187,17 +180,13 @@ function coerceScale(value: unknown): number {
 
 async function readSetting(key: string): Promise<string | null> {
   try {
-    return await invoke<string | null>("get_setting", { key });
+    return await invoke("get_setting", { key });
   } catch {
     return null;
   }
 }
 
 export async function loadFontPreferences(): Promise<FontPreferences> {
-  if (!isTauriRuntime()) {
-    return { ...DEFAULT_FONT_PREFERENCES };
-  }
-
   const [display, displayCustom, body, bodyCustom, scale] = await Promise.all([
     readSetting(STORAGE_KEYS.display),
     readSetting(STORAGE_KEYS.displayCustom),
@@ -216,7 +205,6 @@ export async function loadFontPreferences(): Promise<FontPreferences> {
 }
 
 async function writeSetting(key: string, value: string): Promise<void> {
-  if (!isTauriRuntime()) return;
   try {
     await invoke("set_setting", { key, value });
   } catch {

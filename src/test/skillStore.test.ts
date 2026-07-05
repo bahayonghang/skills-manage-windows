@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { ScannedSkill } from "../types";
-import * as tauriBridge from "@/lib/ipc";
 import { useSkillStore } from "../stores/skillStore";
 import {
   ipcInvokeCalls,
@@ -136,25 +135,6 @@ describe("skillStore", () => {
     const state = useSkillStore.getState();
     expect(state.skillsByAgent["claude-code"]).toEqual(mockSkills);
     expect(state.skillsByAgent["cursor"]).toEqual(cursorSkills);
-  });
-
-  it("returns deterministic browser fixture skills when Tauri runtime is unavailable", async () => {
-    const isTauriSpy = vi
-      .spyOn(tauriBridge, "isTauriRuntime")
-      .mockReturnValue(false);
-
-    await useSkillStore.getState().getSkillsByAgent("claude-code");
-
-    expect(ipcInvokeCalls()).toHaveLength(0);
-    expect(useSkillStore.getState().skillsByAgent["claude-code"]).toEqual([
-      expect.objectContaining({
-        id: "fixture-central-skill",
-        link_type: "symlink",
-        is_central: true,
-      }),
-    ]);
-
-    isTauriSpy.mockRestore();
   });
 
   // ── uninstallSkillFromAgent ──────────────────────────────────────────────
@@ -379,29 +359,5 @@ describe("skillStore", () => {
     await uninstallPromise;
 
     expect(useSkillStore.getState().pendingSkillActionKeys).toEqual({});
-  });
-
-  it("rejects batch uninstall outside the Tauri desktop runtime", async () => {
-    const isTauriSpy = vi
-      .spyOn(tauriBridge, "isTauriRuntime")
-      .mockReturnValue(false);
-
-    await expect(
-      useSkillStore
-        .getState()
-        .batchUninstallSkillsFromAgent("claude-code", [
-          { skill_id: "frontend-design" },
-        ]),
-    ).rejects.toThrow(
-      "Uninstalling skills requires the Tauri desktop runtime.",
-    );
-
-    expect(ipcInvokeCalls()).toHaveLength(0);
-    expect(useSkillStore.getState().error).toBe(
-      "Uninstalling skills requires the Tauri desktop runtime.",
-    );
-    expect(useSkillStore.getState().pendingSkillActionKeys).toEqual({});
-
-    isTauriSpy.mockRestore();
   });
 });

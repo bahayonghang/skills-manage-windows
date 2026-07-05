@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { invoke, isTauriRuntime } from "@/lib/ipc";
+import { invoke } from "@/lib/ipc";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
   ensureAtLeastOnePlatformCategoryVisible,
@@ -14,7 +14,6 @@ import {
   CustomAgentConfig,
   DashboardCentralSummary,
   PlatformPathMap,
-  ScanResult,
   ScanState,
   SkillCountsSummary,
   UpdateCustomAgentConfig,
@@ -22,132 +21,12 @@ import {
 import { markAppPerformance } from "@/lib/performance";
 import {
   applyPlatformPathsToAgents,
-  BROWSER_PLATFORM_PATHS,
   collectPlatformPathsFromAgents,
 } from "@/lib/platformPathPolicy";
 
-const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
-  {
-    id: "claude-code",
-    display_name: "Claude Code",
-    category: "coding",
-    global_skills_dir: "",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: true,
-  },
-  {
-    id: "codex",
-    display_name: "Codex CLI",
-    category: "coding",
-    global_skills_dir: "",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: true,
-  },
-  {
-    id: "grok",
-    display_name: "Grok",
-    category: "coding",
-    global_skills_dir: "",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: true,
-  },
-  {
-    id: "antigravity",
-    display_name: "Antigravity",
-    category: "coding",
-    global_skills_dir: "",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: true,
-  },
-  {
-    id: "antigravity-cli",
-    display_name: "Antigravity CLI",
-    category: "coding",
-    global_skills_dir: "",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: true,
-  },
-  {
-    id: "gemini-cli",
-    display_name: "Gemini CLI (legacy)",
-    category: "coding",
-    global_skills_dir: "",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: false,
-  },
-  {
-    id: "opencode",
-    display_name: "OpenCode",
-    category: "coding",
-    global_skills_dir: "",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: true,
-  },
-  {
-    id: "kiro",
-    display_name: "Kiro",
-    category: "coding",
-    global_skills_dir: "",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: true,
-  },
-  {
-    id: "cursor",
-    display_name: "Cursor",
-    category: "coding",
-    global_skills_dir: "",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: false,
-  },
-  {
-    id: "openclaw",
-    display_name: "OpenClaw",
-    category: "lobster",
-    global_skills_dir: "",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: false,
-  },
-  {
-    id: "central",
-    display_name: "Central Skills",
-    category: "central",
-    global_skills_dir: "",
-    is_detected: true,
-    is_builtin: true,
-    is_enabled: true,
-  },
-];
-
-const BROWSER_FIXTURE_COUNTS: ScanResult = {
-  total_skills: 6,
-  agents_scanned: 11,
-  skills_by_agent: {
-    "claude-code": 1,
-    codex: 1,
-    grok: 0,
-    antigravity: 1,
-    "antigravity-cli": 1,
-    "gemini-cli": 0,
-    opencode: 1,
-    kiro: 1,
-    cursor: 0,
-    openclaw: 0,
-    central: 5,
-  },
-};
-
-const BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY: DashboardCentralSummary = {
-  centralSkillCount: BROWSER_FIXTURE_COUNTS.skills_by_agent.central,
+/** 加载前/重置时的空 dashboard 概要（真实数据由 bootstrap 快照带回）。 */
+const DEFAULT_DASHBOARD_CENTRAL_SUMMARY: DashboardCentralSummary = {
+  centralSkillCount: 0,
   updatesAvailable: 0,
   aiReviewCount: 0,
   uncategorizedCount: 0,
@@ -169,7 +48,7 @@ let refreshRunId = 0;
 
 function buildAgentCounts(
   agents: AgentWithStatus[],
-  cachedCounts: Record<string, number>
+  cachedCounts: Record<string, number>,
 ): Record<string, number> {
   return agents.reduce<Record<string, number>>((acc, agent) => {
     acc[agent.id] = cachedCounts[agent.id] ?? 0;
@@ -179,7 +58,7 @@ function buildAgentCounts(
 
 function applyBootstrapSnapshot(
   snapshot: BootstrapSnapshot,
-  platformPaths: PlatformPathMap = {}
+  platformPaths: PlatformPathMap = {},
 ): Pick<
   PlatformState,
   | "agents"
@@ -192,11 +71,11 @@ function applyBootstrapSnapshot(
 > {
   const resolvedPlatformPaths = collectPlatformPathsFromAgents(
     snapshot.agents,
-    platformPaths
+    platformPaths,
   );
   const agents = applyPlatformPathsToAgents(
     snapshot.agents,
-    resolvedPlatformPaths
+    resolvedPlatformPaths,
   );
 
   return {
@@ -205,7 +84,7 @@ function applyBootstrapSnapshot(
     skillsByAgent: buildAgentCounts(agents, snapshot.cachedSkillCounts),
     collectionCount: snapshot.collectionCount,
     dashboardCentralSummary:
-      snapshot.dashboardCentralSummary ?? BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY,
+      snapshot.dashboardCentralSummary ?? DEFAULT_DASHBOARD_CENTRAL_SUMMARY,
     lastScanAt: snapshot.lastScanAt,
     scanState: snapshot.scanState,
   };
@@ -225,11 +104,11 @@ async function loadBootstrapState(): Promise<
   >
 > {
   const [snapshot, rawCategoryVisibility, platformPaths] = await Promise.all([
-    invoke<BootstrapSnapshot>("get_bootstrap_snapshot"),
-    invoke<string | null>("get_setting", {
+    invoke("get_bootstrap_snapshot"),
+    invoke("get_setting", {
       key: PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY,
     }),
-    invoke<PlatformPathMap>("list_platform_paths"),
+    invoke("list_platform_paths"),
   ]);
   const bootstrapState = applyBootstrapSnapshot(snapshot, platformPaths);
 
@@ -237,7 +116,7 @@ async function loadBootstrapState(): Promise<
     ...bootstrapState,
     categoryVisibility: resolvePlatformCategoryVisibility(
       rawCategoryVisibility,
-      bootstrapState.agents
+      bootstrapState.agents,
     ),
   };
 }
@@ -265,14 +144,17 @@ interface PlatformState {
   rescan: () => Promise<void>;
   refreshCounts: () => Promise<void>;
   resetForTargetChange: () => void;
-  setCategoryVisibility: (category: PlatformCategoryKey, visible: boolean) => Promise<void>;
+  setCategoryVisibility: (
+    category: PlatformCategoryKey,
+    visible: boolean,
+  ) => Promise<void>;
   setAgentEnabled: (agentId: string, enabled: boolean) => Promise<void>;
   applyScanSummary: (summary: SkillCountsSummary) => void;
   setCollectionCount: (count: number) => void;
   addCustomAgent: (config: CustomAgentConfig) => Promise<AgentWithStatus>;
   updateCustomAgent: (
     agentId: string,
-    config: UpdateCustomAgentConfig
+    config: UpdateCustomAgentConfig,
   ) => Promise<AgentWithStatus>;
   removeCustomAgent: (agentId: string) => Promise<void>;
 }
@@ -284,7 +166,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   platformPaths: {},
   skillsByAgent: {},
   collectionCount: 0,
-  dashboardCentralSummary: BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY,
+  dashboardCentralSummary: DEFAULT_DASHBOARD_CENTRAL_SUMMARY,
   categoryVisibility: DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
   lastScanAt: null,
   scanState: "idle",
@@ -296,25 +178,6 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   hydrateShell: async () => {
     const currentRefreshToken = refreshToken;
     set({ isLoading: true, error: null });
-
-    if (!isTauriRuntime()) {
-      set((state) => ({
-        agents: applyPlatformPathsToAgents(BROWSER_FIXTURE_AGENTS, BROWSER_PLATFORM_PATHS),
-        platformPaths: BROWSER_PLATFORM_PATHS,
-        skillsByAgent: BROWSER_FIXTURE_COUNTS.skills_by_agent,
-        collectionCount: 0,
-        dashboardCentralSummary: BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY,
-        categoryVisibility: resolvePlatformCategoryVisibility(
-          null,
-          applyPlatformPathsToAgents(BROWSER_FIXTURE_AGENTS, BROWSER_PLATFORM_PATHS)
-        ),
-        lastScanAt: "2026-04-23T00:00:00.000Z",
-        scanState: "idle",
-        isLoading: false,
-        scanGeneration: (state.scanGeneration ?? 0) + 1,
-      }));
-      return;
-    }
 
     try {
       const bootstrapState = await loadBootstrapState();
@@ -354,17 +217,6 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   },
 
   refreshScanInBackground: async () => {
-    if (!isTauriRuntime()) {
-      set((state) => ({
-        isRefreshing: false,
-        scanState: "idle",
-        error: null,
-        isLoading: state.isLoading,
-        scanGeneration: (state.scanGeneration ?? 0) + 1,
-      }));
-      return;
-    }
-
     if (backgroundRefreshPromise) {
       return backgroundRefreshPromise;
     }
@@ -375,10 +227,10 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
 
     const refreshPromise = (async () => {
       try {
-        await invoke<ScanResult>("scan_all_skills");
+        await invoke("scan_all_skills");
         const [snapshot, platformPaths] = await Promise.all([
-          invoke<BootstrapSnapshot>("get_bootstrap_snapshot"),
-          invoke<PlatformPathMap>("list_platform_paths"),
+          invoke("get_bootstrap_snapshot"),
+          invoke("list_platform_paths"),
         ]);
         if (currentRefreshToken === refreshToken) {
           set((state) => ({
@@ -390,9 +242,9 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         }
         markAppPerformance("scan_finished");
       } catch (err) {
-        let fallbackState:
-          | Awaited<ReturnType<typeof loadBootstrapState>>
-          | null = null;
+        let fallbackState: Awaited<
+          ReturnType<typeof loadBootstrapState>
+        > | null = null;
         try {
           fallbackState = await loadBootstrapState();
         } catch {
@@ -442,20 +294,8 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   refreshCounts: async () => {
     set({ isRefreshing: true, error: null });
 
-    if (!isTauriRuntime()) {
-      set((state) => ({
-        skillsByAgent: BROWSER_FIXTURE_COUNTS.skills_by_agent,
-        isRefreshing: false,
-        scanState: "idle",
-        collectionCount: state.collectionCount,
-        isLoading: state.isLoading,
-        scanGeneration: (state.scanGeneration ?? 0) + 1,
-      }));
-      return;
-    }
-
     try {
-      const summary = await invoke<SkillCountsSummary>("get_skill_counts_summary");
+      const summary = await invoke("get_skill_counts_summary");
       get().applyScanSummary(summary);
       set((state) => ({
         isRefreshing: false,
@@ -479,7 +319,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
       platformPaths: {},
       skillsByAgent: {},
       collectionCount: 0,
-      dashboardCentralSummary: BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY,
+      dashboardCentralSummary: DEFAULT_DASHBOARD_CENTRAL_SUMMARY,
       lastScanAt: null,
       scanState: "idle",
       isRefreshing: false,
@@ -498,14 +338,10 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     const guardedNext = ensureAtLeastOnePlatformCategoryVisible(
       next,
       previous,
-      get().agents
+      get().agents,
     );
 
     set({ categoryVisibility: guardedNext, error: null });
-
-    if (!isTauriRuntime()) {
-      return;
-    }
 
     try {
       await invoke("set_setting", {
@@ -521,23 +357,19 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   setAgentEnabled: async (agentId, enabled) => {
     const previousAgents = get().agents;
     const nextAgents = previousAgents.map((agent) =>
-      agent.id === agentId ? { ...agent, is_enabled: enabled } : agent
+      agent.id === agentId ? { ...agent, is_enabled: enabled } : agent,
     );
 
     set({ agents: nextAgents, error: null });
 
-    if (!isTauriRuntime()) {
-      return;
-    }
-
     try {
-      const updatedAgent = await invoke<AgentWithStatus>("set_agent_enabled", {
+      const updatedAgent = await invoke("set_agent_enabled", {
         agentId,
         isEnabled: enabled,
       });
       set((state) => ({
         agents: state.agents.map((agent) =>
-          agent.id === updatedAgent.id ? updatedAgent : agent
+          agent.id === updatedAgent.id ? updatedAgent : agent,
         ),
       }));
     } catch (err) {
@@ -559,7 +391,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   },
 
   addCustomAgent: async (config) => {
-    const created = await invoke<AgentWithStatus>("add_custom_agent", { config });
+    const created = await invoke("add_custom_agent", { config });
     set((state) => ({
       agents: [...state.agents, created],
       platformPaths: {
@@ -575,13 +407,13 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   },
 
   updateCustomAgent: async (agentId, config) => {
-    const updated = await invoke<AgentWithStatus>("update_custom_agent", {
+    const updated = await invoke("update_custom_agent", {
       agentId,
       config,
     });
     set((state) => ({
       agents: state.agents.map((agent) =>
-        agent.id === updated.id ? updated : agent
+        agent.id === updated.id ? updated : agent,
       ),
       platformPaths: {
         ...state.platformPaths,
@@ -595,7 +427,7 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   },
 
   removeCustomAgent: async (agentId) => {
-    await invoke<void>("remove_custom_agent", { agentId });
+    await invoke("remove_custom_agent", { agentId });
     set((state) => {
       const nextSkillsByAgent = { ...state.skillsByAgent };
       const nextPlatformPaths = { ...state.platformPaths };

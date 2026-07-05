@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 
 import {
@@ -6,93 +6,90 @@ import {
   clearSkillCallCountsCache,
 } from "../hooks/useSkillCallCounts";
 import { useTargetStore } from "../stores/targetStore";
-
-vi.mock("@/lib/ipc", () => ({
-  invoke: vi.fn(),
-  isTauriRuntime: vi.fn(() => true),
-}));
-
-import { invoke, isTauriRuntime } from "@/lib/ipc";
-
-const invokeMock = vi.mocked(invoke);
-const runtimeMock = vi.mocked(isTauriRuntime);
+import { ipcInvokeCalls, mockIpcCommand } from "./ipcMock";
 
 beforeEach(() => {
-  invokeMock.mockReset();
-  runtimeMock.mockReset();
-  runtimeMock.mockReturnValue(true);
   clearSkillCallCountsCache();
   useTargetStore.setState({
     targets: [{ id: "local", kind: "local", label: "Local", isActive: true }],
-    activeTarget: { id: "local", kind: "local", label: "Local", isActive: true },
+    activeTarget: {
+      id: "local",
+      kind: "local",
+      label: "Local",
+      isActive: true,
+    },
   });
 });
 
 describe("useSkillCallCounts", () => {
-  it("invokes usage_get_skill_counts with sorted skill names + days", async () => {
-    invokeMock.mockResolvedValue({ review: 5, "git-commit": 12 });
+  it("invokes usage_get_skill_counts with skill names + days", async () => {
+    mockIpcCommand("usage_get_skill_counts", { review: 5, "git-commit": 12 });
 
     const { result } = renderHook(() =>
-      useSkillCallCounts(["git-commit", "review"], 30)
+      useSkillCallCounts(["git-commit", "review"], 30),
     );
 
     await waitFor(() => {
       expect(result.current.review).toBe(5);
     });
-    expect(invokeMock).toHaveBeenCalledWith("usage_get_skill_counts", {
-      skills: ["git-commit", "review"],
-      days: 30,
-    });
-  });
-
-  it("returns empty map when not running in Tauri", () => {
-    runtimeMock.mockReturnValue(false);
-    const { result } = renderHook(() => useSkillCallCounts(["x"], 30));
-    expect(result.current).toEqual({});
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(ipcInvokeCalls("usage_get_skill_counts")).toEqual([
+      {
+        command: "usage_get_skill_counts",
+        args: { skills: ["git-commit", "review"], days: 30 },
+      },
+    ]);
   });
 
   it("dedupes via module-level cache when names list is identical", async () => {
-    invokeMock.mockResolvedValue({ review: 3 });
+    mockIpcCommand("usage_get_skill_counts", { review: 3 });
     const { result: r1 } = renderHook(() => useSkillCallCounts(["review"], 30));
     await waitFor(() => expect(r1.current.review).toBe(3));
 
-    invokeMock.mockClear();
     // Second hook with the same names should hit cache and not re-invoke
     const { result: r2 } = renderHook(() => useSkillCallCounts(["review"], 30));
     await waitFor(() => expect(r2.current.review).toBe(3));
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(ipcInvokeCalls("usage_get_skill_counts")).toHaveLength(1);
   });
 
   it("keeps cache entries isolated by active target id", async () => {
-    invokeMock.mockResolvedValueOnce({ review: 3 });
+    mockIpcCommand("usage_get_skill_counts", { review: 3 });
     const { result: localResult, unmount } = renderHook(() =>
-      useSkillCallCounts(["review"], 30)
+      useSkillCallCounts(["review"], 30),
     );
     await waitFor(() => expect(localResult.current.review).toBe(3));
     unmount();
 
-    invokeMock.mockClear();
-    invokeMock.mockResolvedValueOnce({ review: 9 });
+    mockIpcCommand("usage_get_skill_counts", { review: 9 });
     useTargetStore.setState({
       targets: [
         { id: "local", kind: "local", label: "Local", isActive: false },
         { id: "ssh-prod", kind: "ssh", label: "prod", isActive: true },
       ],
-      activeTarget: { id: "ssh-prod", kind: "ssh", label: "prod", isActive: true },
+      activeTarget: {
+        id: "ssh-prod",
+        kind: "ssh",
+        label: "prod",
+        isActive: true,
+      },
     });
 
     const { result: remoteResult } = renderHook(() =>
-      useSkillCallCounts(["review"], 30)
+      useSkillCallCounts(["review"], 30),
     );
     await waitFor(() => expect(remoteResult.current.review).toBe(9));
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    // 目标切换后缓存不复用 —— 第二次真实 invoke
+    expect(ipcInvokeCalls("usage_get_skill_counts")).toHaveLength(2);
   });
 
   it("returns empty map and silently swallows errors", async () => {
-    invokeMock.mockRejectedValue(new Error("io"));
+    mockIpcCommand("usage_get_skill_counts", () => {
+      throw new Error("io");
+    });
     const { result } = renderHook(() => useSkillCallCounts(["x"], 30));
-    // After mount, error path keeps state at {}
-    await waitFor(() => expect(result.current).toEqual({}));
+    await waitFor(() =>
+      expect(ipcInvokeCalls("usage_get_skill_counts")).toHaveLength(1),
+    );
+    // 错误被吞掉，state 维持空 map
+    expect(result.current).toEqual({});
   });
 });

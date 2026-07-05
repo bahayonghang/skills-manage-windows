@@ -37,6 +37,7 @@ interface ObsidianState {
   error: string | null;
   loadVaults: () => Promise<void>;
   getVaultSkills: (vaultId: string) => Promise<void>;
+  openObsidianPath: (path: string) => Promise<void>;
   resetForTargetChange: () => void;
 }
 
@@ -49,7 +50,7 @@ async function importObsidianSkillToCentral(skill: ObsidianSkill) {
 async function importObsidianSkillToPlatform(
   skill: ObsidianSkill,
   agentId: string,
-  method?: "symlink" | "copy"
+  method?: "symlink" | "copy",
 ) {
   return invoke("import_obsidian_skill_to_platform", {
     dirPath: skill.dir_path,
@@ -124,6 +125,10 @@ export const useObsidianStore = create<ObsidianState>((set) => ({
         },
       }));
     }
+  },
+
+  openObsidianPath: async (path) => {
+    await invoke("open_obsidian_path", { path });
   },
 
   resetForTargetChange: () => {

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { toast } from "sonner";
-import { invoke, isTauriRuntime, listen } from "@/lib/ipc";
+import { invoke, listen } from "@/lib/ipc";
 import i18n from "@/i18n";
 import { useTargetStore } from "@/stores/targetStore";
 import type {
@@ -56,41 +56,6 @@ interface UsageState {
   /** 注册监听 active target 切换事件；返回 unlisten。Tauri-only。 */
   subscribeTargetChanged: () => Promise<() => void>;
 }
-
-const BROWSER_FIXTURE_OVERVIEW: UsageOverview = {
-  kpis: {
-    totalCalls: 0,
-    uniqueSkills: 0,
-    uniqueProjects: 0,
-    uniqueSources: 0,
-    uniqueSessions: 0,
-  },
-  topSkills: [],
-  heatmap: Array.from({ length: 16 * 7 }, (_, i) => ({
-    date: new Date(Date.now() - (16 * 7 - 1 - i) * 86_400_000)
-      .toISOString()
-      .slice(0, 10),
-    count: 0,
-  })),
-  lastScanMs: null,
-};
-
-const BROWSER_FIXTURE_PROVIDERS: ProviderHealth[] = [
-  "claude-code",
-  "codex",
-  "droid",
-  "opencode",
-  "grok",
-  "antigravity",
-  "kiro",
-  "zed",
-].map((id) => ({
-  providerId: id,
-  displayName: id,
-  available: false,
-  callCount: 0,
-  scannedAtMs: 0,
-}));
 
 let inFlightRefresh: {
   targetId: string;
@@ -167,33 +132,9 @@ export const useUsageStore = create<UsageState>((set, get) => ({
         set({ refreshing: false, error: message });
       };
 
-      if (!isTauriRuntime()) {
-        const result: UsageRefreshResult = {
-          summary: {
-            cached: false,
-            callsWritten: 0,
-            providersAvailable: 0,
-            scannedAtMs: Date.now(),
-          },
-          overview: BROWSER_FIXTURE_OVERVIEW,
-          recent: [],
-          providers: BROWSER_FIXTURE_PROVIDERS,
-          scope: {
-            targetId: "local",
-            label: "Local",
-            isRemote: false,
-            remoteReachable: false,
-          },
-          usedCachedData: false,
-          refreshError: null,
-        };
-        applyRefreshResult(result);
-        return result;
-      }
-
       set({ refreshing: true, error: null });
       try {
-        const result = await invoke<UsageRefreshResult>("usage_refresh", {
+        const result = await invoke("usage_refresh", {
           force,
         });
         applyRefreshResult(result);
@@ -224,13 +165,9 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   },
 
   async loadOverview(topSkillsLimit = 50, source = null) {
-    if (!isTauriRuntime()) {
-      set({ overview: BROWSER_FIXTURE_OVERVIEW });
-      return;
-    }
     set({ loading: true, error: null });
     try {
-      const overview = await invoke<UsageOverview>("usage_get_overview", {
+      const overview = await invoke("usage_get_overview", {
         topSkillsLimit,
         source,
       });
@@ -241,12 +178,8 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   },
 
   async loadRecent(limit = 20, source = null) {
-    if (!isTauriRuntime()) {
-      set({ recent: [] });
-      return;
-    }
     try {
-      const recent = await invoke<SkillCall[]>("usage_get_recent", {
+      const recent = await invoke("usage_get_recent", {
         limit,
         source,
       });
@@ -257,12 +190,8 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   },
 
   async loadProviders() {
-    if (!isTauriRuntime()) {
-      set({ providers: BROWSER_FIXTURE_PROVIDERS });
-      return;
-    }
     try {
-      const providers = await invoke<ProviderHealth[]>("usage_get_providers");
+      const providers = await invoke("usage_get_providers");
       set({ providers });
     } catch (e) {
       set({ error: errorMessage(e) });
@@ -270,12 +199,8 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   },
 
   async loadDetail(skill) {
-    if (!isTauriRuntime()) {
-      set({ detail: null });
-      return;
-    }
     try {
-      const detail = await invoke<SkillUsageDetail>("usage_get_skill_detail", {
+      const detail = await invoke("usage_get_skill_detail", {
         skill,
       });
       set({ detail });
@@ -289,20 +214,8 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   },
 
   async loadScope() {
-    if (!isTauriRuntime()) {
-      const scope = {
-        targetId: "local",
-        label: "Local",
-        isRemote: false,
-        remoteReachable: false,
-      };
-      set({
-        scope,
-      });
-      return scope;
-    }
     try {
-      const scope = await invoke<UsageScopeInfo>("usage_get_scope_info");
+      const scope = await invoke("usage_get_scope_info");
       set({ scope });
       return scope;
     } catch {
@@ -312,9 +225,6 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   },
 
   async subscribeTargetChanged() {
-    if (!isTauriRuntime()) {
-      return () => undefined;
-    }
     try {
       const unlisten = await listen<string>("usage://target-changed", () => {
         // 切换 target 后保留旧数据直到新 refresh 完成，但立刻清空 target-bound
@@ -346,11 +256,8 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   },
 
   async resolveSkillId(skillName) {
-    if (!isTauriRuntime()) {
-      return null;
-    }
     try {
-      const id = await invoke<string | null>("usage_resolve_skill_id", {
+      const id = await invoke("usage_resolve_skill_id", {
         skillName,
       });
       return id ?? null;
