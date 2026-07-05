@@ -1,5 +1,4 @@
-import { invoke, isTauriRuntime } from "@/lib/tauri";
-import { invokeCommand } from "@/lib/ipc";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import {
   BatchDeleteCentralSkillPreviewResult,
   BatchDeleteCentralSkillResult,
@@ -119,7 +118,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
       throw new Error("Desktop-only feature: Central skill deletion is available in the Tauri app.");
     }
 
-    return invokeCommand("get_skill_detail", { skillId });
+    return invoke("get_skill_detail", { skillId });
   },
 
   loadBatchDeletePreview: async (skillIds) => {

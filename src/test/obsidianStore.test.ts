@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import * as tauriBridge from "@/lib/tauri";
+import * as tauriBridge from "@/lib/ipc";
 import { useObsidianStore } from "../stores/obsidianStore";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -64,8 +64,12 @@ describe("obsidianStore", () => {
     expect(invoke).toHaveBeenCalledWith("get_obsidian_vault_skills", {
       vaultId: "vault-1",
     });
-    expect(useObsidianStore.getState().skillsByVault["vault-1"]).toEqual(mockSkills);
-    expect(useObsidianStore.getState().loadingSkillsByVault["vault-1"]).toBe(false);
+    expect(useObsidianStore.getState().skillsByVault["vault-1"]).toEqual(
+      mockSkills,
+    );
+    expect(useObsidianStore.getState().loadingSkillsByVault["vault-1"]).toBe(
+      false,
+    );
   });
 
   it("uses browser fixtures when Tauri runtime is unavailable", async () => {
@@ -76,7 +80,9 @@ describe("obsidianStore", () => {
 
     expect(invoke).not.toHaveBeenCalled();
     expect(useObsidianStore.getState().vaults).toHaveLength(1);
-    expect(useObsidianStore.getState().skillsByVault["fixture-vault"]).toHaveLength(1);
+    expect(
+      useObsidianStore.getState().skillsByVault["fixture-vault"],
+    ).toHaveLength(1);
   });
 
   it("resets all cached state on target change", () => {
