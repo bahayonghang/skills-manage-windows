@@ -33,7 +33,7 @@ pub const UNIVERSAL_AGENT_IDS: [&str; 10] = [
 ];
 
 /// Universal agents share one project-level skills directory.
-pub const UNIVERSAL_PROJECT_SKILLS_DIR: &str = ".agents/skills";
+pub const UNIVERSAL_PROJECT_SKILLS_DIR: &str = crate::paths::UNIVERSAL_SKILLS_REL;
 
 /// Workspace-level Universal Agents targets share `<workspace>/.agents/skills`.
 pub const UNIVERSAL_PROJECT_AGENT_IDS: [&str; 13] = [

@@ -243,6 +243,16 @@ pub(super) mod tests {
     }
 
     #[test]
+    fn remote_probe_script_matches_historical_literal_byte_for_byte() {
+        assert_eq!(
+            remote_probe_script(),
+            r#"printf 'HOME\t%s\n' "$HOME"
+printf 'OS\t%s\n' "$(uname -s 2>/dev/null || printf '%s' unknown)"
+mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#
+        );
+    }
+
+    #[test]
     fn remote_script_command_runs_script_via_stdin_with_quoted_args() {
         let command = remote_script_command(&["/tmp/demo path", "plain"]);
 

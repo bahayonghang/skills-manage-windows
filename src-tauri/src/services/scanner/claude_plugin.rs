@@ -159,7 +159,9 @@ pub(super) fn claude_plugin_roots(global_skills_dir: &Path) -> Vec<AgentScanRoot
 fn home_from_platform_skills_dir(global_skills_dir: &Path) -> Option<PathBuf> {
     let parent = global_skills_dir.parent()?;
     let parent_name = parent.file_name()?.to_string_lossy();
-    if parent_name.eq_ignore_ascii_case(".agents") || parent_name.eq_ignore_ascii_case(".codex") {
+    if parent_name.eq_ignore_ascii_case(crate::paths::UNIVERSAL_AGENTS_DIR_NAME)
+        || parent_name.eq_ignore_ascii_case(".codex")
+    {
         return parent.parent().map(Path::to_path_buf);
     }
 

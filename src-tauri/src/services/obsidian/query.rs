@@ -184,7 +184,7 @@ fn scan_obsidian_vault(vault_dir: &Path, central_dir: &Path) -> Vec<ObsidianSkil
 
     for rel_source in [
         PathBuf::from(".skills"),
-        PathBuf::from(".agents/skills"),
+        PathBuf::from(crate::paths::UNIVERSAL_SKILLS_REL),
         PathBuf::from(".claude/skills"),
     ] {
         let source_dir = vault_dir.join(rel_source);

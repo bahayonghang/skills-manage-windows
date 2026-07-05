@@ -29,16 +29,18 @@ pub fn maybe_run_ssh_askpass_helper() -> bool {
     true
 }
 
+pub(super) fn remote_probe_script() -> String {
+    format!(
+        r#"printf 'HOME\t%s\n' "$HOME"
+printf 'OS\t%s\n' "$(uname -s 2>/dev/null || printf '%s' unknown)"
+mkdir -p -- "$HOME/{central_skills}" && printf 'MKDIR_OK\n'"#,
+        central_skills = crate::paths::CENTRAL_SKILLS_REL_FROM_HOME
+    )
+}
+
 pub(super) async fn probe_ssh_target(target: &RemoteTargetConfig) -> Result<SshProbe, TargetsError> {
     let connection = connect_ssh_target(target).await?;
-    let output = connection
-        .run_script(
-            r#"printf 'HOME\t%s\n' "$HOME"
-printf 'OS\t%s\n' "$(uname -s 2>/dev/null || printf '%s' unknown)"
-mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#,
-            &[],
-        )
-        .await?;
+    let output = connection.run_script(&remote_probe_script(), &[]).await?;
     let probe = parse_ssh_probe_output(&output)?;
 
     Ok(probe)
@@ -46,14 +48,7 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#,
 
 pub(super) async fn probe_wsl_target(target: &WslTargetConfig) -> Result<SshProbe, TargetsError> {
     let connection = connect_wsl_target(target).await?;
-    let output = connection
-        .run_script(
-            r#"printf 'HOME\t%s\n' "$HOME"
-printf 'OS\t%s\n' "$(uname -s 2>/dev/null || printf '%s' unknown)"
-mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#,
-            &[],
-        )
-        .await?;
+    let output = connection.run_script(&remote_probe_script(), &[]).await?;
     parse_ssh_probe_output(&output)
 }
 
@@ -695,17 +690,7 @@ pub(super) fn remote_script_command(args: &[&str]) -> String {
     command
 }
 
-pub fn remote_join(parent: &str, child: &str) -> String {
-    let parent = parent.trim_end_matches('/');
-    let child = child.trim_start_matches('/');
-    if parent.is_empty() || parent == "/" {
-        format!("/{}", child)
-    } else if child.is_empty() {
-        parent.to_string()
-    } else {
-        format!("{}/{}", parent, child)
-    }
-}
+pub use crate::paths::remote_join;
 
 pub fn remote_parent(path: &str) -> Option<String> {
     let trimmed = path.trim_end_matches('/');

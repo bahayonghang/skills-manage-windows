@@ -234,11 +234,8 @@ async fn build_sync_plan(
         .await
         .map_err(|e| LocalRemoteSyncError::Remote(e.to_string()))?;
     let remote_home = connection.remote_home().trim_end_matches('/').to_string();
-    let repo_remote_root = remote_join(
-        &remote_join(&remote_home, ".skillsmanage/repos"),
-        &repo_snapshot.id,
-    );
-    let skills_remote_root = remote_join(&remote_home, ".skillsmanage/skills");
+    let repo_remote_root = remote_join(&paths::remote_repos_root(&remote_home), &repo_snapshot.id);
+    let skills_remote_root = paths::remote_central_skills_root(&remote_home);
 
     let repo_remote_hash = remote_snapshot_hash(&connection, &repo_remote_root, &repo_snapshot)
         .map_err(|error| LocalRemoteSyncError::RepoRemoteInspect(error.to_string()))?;
@@ -545,10 +542,9 @@ fn should_exclude_repo_dir(root: &Path, path: &Path) -> Result<bool, LocalRemote
         })
         .collect::<Vec<_>>();
 
-    if components
-        .windows(2)
-        .any(|pair| pair[0] == ".skillsmanage" && pair[1] == "targets")
-    {
+    if components.windows(2).any(|pair| {
+        pair[0] == paths::APP_DATA_DIR_NAME && pair[1] == paths::TARGETS_CACHE_DIR_NAME
+    }) {
         return Ok(true);
     }
 
