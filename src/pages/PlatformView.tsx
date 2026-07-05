@@ -494,6 +494,7 @@ export function PlatformView() {
 
   const renderSkillCard = (skill: ScannedSkill, className?: string) => (
     <UnifiedSkillCard
+      variant="platform"
       key={getPlatformSkillRowKey(skill)}
       name={skill.name}
       description={skill.description}

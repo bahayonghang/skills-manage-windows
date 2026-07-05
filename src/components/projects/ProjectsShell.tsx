@@ -518,6 +518,7 @@ function SkillPanel({
                       const badgeId = group.target?.id ?? skill.agentId;
                       return (
                         <UnifiedSkillCard
+                          variant="project"
                           key={key}
                           name={skill.name}
                           description={skill.description ?? undefined}

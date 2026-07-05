@@ -255,6 +255,7 @@ export function MarketplaceShell({
                   const downloadUrl = `https://raw.githubusercontent.com/${skill.repoFullName}/main/${skill.name}/SKILL.md`;
                   return (
                     <UnifiedSkillCard
+                      variant="marketplace"
                       key={skill.name}
                       name={skill.name}
                       description={skill.description}
@@ -558,6 +559,7 @@ export function MarketplaceShell({
                   const installKey = `skills.sh:${skill.source}:${skill.skill_id}`;
                   return (
                     <UnifiedSkillCard
+                      variant="marketplace"
                       key={installKey}
                       name={skill.name}
                       description={detailSkill.description}

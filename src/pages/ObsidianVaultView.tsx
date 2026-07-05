@@ -390,6 +390,7 @@ export function ObsidianVaultView() {
                     itemKey={(skill) => skill.id}
                     renderItem={(skill) => (
                       <UnifiedSkillCard
+                        variant="import"
                         key={skill.id}
                         name={skill.name}
                         description={skill.description}
@@ -431,6 +432,7 @@ export function ObsidianVaultView() {
                   <div className="space-y-2">
                     {filteredSkills.map((skill) => (
                       <UnifiedSkillCard
+                        variant="import"
                         key={skill.id}
                         name={skill.name}
                         description={skill.description}

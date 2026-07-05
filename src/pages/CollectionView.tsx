@@ -28,9 +28,7 @@ import {
   consumeScrollPosition,
   createScrollRestorationState,
 } from "@/lib/scrollRestoration";
-import {
-  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-} from "@/lib/platformVisibility";
+import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 
 // Scroll-restoration key shared with `CollectionsListView` so list-level and
@@ -50,15 +48,25 @@ export function CollectionView() {
   const currentDetail = useCollectionStore((s) => s.currentDetail);
   const isLoadingDetail = useCollectionStore((s) => s.isLoadingDetail);
   const error = useCollectionStore((s) => s.error);
-  const loadCollectionDetail = useCollectionStore((s) => s.loadCollectionDetail);
-  const removeSkillFromCollection = useCollectionStore((s) => s.removeSkillFromCollection);
+  const loadCollectionDetail = useCollectionStore(
+    (s) => s.loadCollectionDetail,
+  );
+  const removeSkillFromCollection = useCollectionStore(
+    (s) => s.removeSkillFromCollection,
+  );
   const deleteCollection = useCollectionStore((s) => s.deleteCollection);
-  const batchInstallCollection = useCollectionStore((s) => s.batchInstallCollection);
+  const batchInstallCollection = useCollectionStore(
+    (s) => s.batchInstallCollection,
+  );
   const exportCollection = useCollectionStore((s) => s.exportCollection);
-  const addSkillToCollection = useCollectionStore((s) => s.addSkillToCollection);
+  const addSkillToCollection = useCollectionStore(
+    (s) => s.addSkillToCollection,
+  );
 
   const agents = usePlatformStore((s) => s.agents);
-  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+  const categoryVisibility =
+    usePlatformStore((s) => s.categoryVisibility) ??
+    DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((s) => s.refreshCounts);
 
   const centralSkills = useCentralSkillsStore((s) => s.skills);
@@ -66,11 +74,11 @@ export function CollectionView() {
   const installCentralSkill = useCentralSkillsStore((s) => s.installSkill);
   const visibleCollectionAgents = useMemo(
     () => getPlatformTargetGroups(agents, categoryVisibility),
-    [agents, categoryVisibility]
+    [agents, categoryVisibility],
   );
   const visibleCentralAgents = useMemo(
     () => getPlatformTargetGroups(agents, categoryVisibility),
-    [agents, categoryVisibility]
+    [agents, categoryVisibility],
   );
 
   const importCollection = useCollectionStore((s) => s.importCollection);
@@ -82,7 +90,8 @@ export function CollectionView() {
   const [isInstallOpen, setIsInstallOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [installTargetSkill, setInstallTargetSkill] = useState<SkillWithLinks | null>(null);
+  const [installTargetSkill, setInstallTargetSkill] =
+    useState<SkillWithLinks | null>(null);
   const [isSingleInstallOpen, setIsSingleInstallOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const skillsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -97,8 +106,7 @@ export function CollectionView() {
   // back-navigation we also rely on the in-memory scroll map, synthesising a
   // restoration entry keyed on the current collectionId.
   const locationRestorationState = location.state?.scrollRestoration as
-    | { key?: string; scrollTop?: number }
-    | undefined;
+    { key?: string; scrollTop?: number } | undefined;
   const restorationState: { key?: string; scrollTop?: number } | undefined =
     locationRestorationState ??
     (collectionId ? { key: collectionScrollKey(collectionId) } : undefined);
@@ -132,7 +140,7 @@ export function CollectionView() {
   }, [centralSkills.length, loadCentralSkills]);
   const collectionSkillIds = useMemo(
     () => currentDetail?.skills.map((skill) => skill.id) ?? [],
-    [currentDetail?.skills]
+    [currentDetail?.skills],
   );
   const aiSummaries = useSkillExplanationSummaries(collectionSkillIds, "zh");
 
@@ -182,16 +190,23 @@ export function CollectionView() {
     skillId: string,
     agentIds: string[],
     method: string,
-    projectPath?: string | null
+    projectPath?: string | null,
   ) {
     try {
-      const result = await installCentralSkill(skillId, agentIds, method, projectPath);
+      const result = await installCentralSkill(
+        skillId,
+        agentIds,
+        method,
+        projectPath,
+      );
       await refreshCounts();
       if (result.failed.length > 0) {
         const failedNames = result.failed
           .map((failure) => `${failure.agent_id}: ${failure.error}`)
           .join("; ");
-        toast.error(t("central.installPartialFail", { platforms: failedNames }));
+        toast.error(
+          t("central.installPartialFail", { platforms: failedNames }),
+        );
       }
       return result;
     } catch (err) {
@@ -211,7 +226,11 @@ export function CollectionView() {
 
   async function handleDelete() {
     if (!collectionId || !currentDetail) return;
-    if (!window.confirm(t("collection.deleteConfirm", { name: currentDetail.name }))) {
+    if (
+      !window.confirm(
+        t("collection.deleteConfirm", { name: currentDetail.name }),
+      )
+    ) {
       return;
     }
     setIsDeleting(true);
@@ -294,7 +313,9 @@ export function CollectionView() {
       <div className="border-b border-border px-6 py-4">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-semibold truncate">{currentDetail.name}</h1>
+            <h1 className="text-xl font-semibold truncate">
+              {currentDetail.name}
+            </h1>
             {currentDetail.description && (
               <p className="text-sm text-muted-foreground mt-0.5">
                 {currentDetail.description}
@@ -400,8 +421,12 @@ export function CollectionView() {
               <BookOpen className="size-12 text-muted-foreground opacity-60" />
             </div>
             <div className="text-center space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">{t("collection.noSkillsTitle")}</p>
-              <p className="text-xs text-muted-foreground/70">{t("collection.noSkillsDesc")}</p>
+              <p className="text-sm font-medium text-muted-foreground">
+                {t("collection.noSkillsTitle")}
+              </p>
+              <p className="text-xs text-muted-foreground/70">
+                {t("collection.noSkillsDesc")}
+              </p>
             </div>
             <Button
               variant="default"
@@ -416,6 +441,7 @@ export function CollectionView() {
           <div className="mx-6 my-3 grid grid-cols-2 gap-4">
             {currentDetail.skills.map((skill) => (
               <UnifiedSkillCard
+                variant="collection"
                 key={skill.id}
                 name={skill.name}
                 description={skill.description}
@@ -428,7 +454,7 @@ export function CollectionView() {
                       },
                       scrollRestoration: createScrollRestorationState(
                         collectionScrollKey(currentDetail.id),
-                        skillsContainerRef.current?.scrollTop ?? 0
+                        skillsContainerRef.current?.scrollTop ?? 0,
                       ),
                     },
                   })
@@ -481,7 +507,9 @@ export function CollectionView() {
         collectionName={currentDetail.name}
         skillCount={currentDetail.skills.length}
         agents={visibleCollectionAgents}
-        onInstall={(agentIds) => batchInstallCollection(currentDetail.id, agentIds)}
+        onInstall={(agentIds) =>
+          batchInstallCollection(currentDetail.id, agentIds)
+        }
       />
 
       <InstallDialog

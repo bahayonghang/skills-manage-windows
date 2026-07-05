@@ -1,11 +1,9 @@
 import {
   PackagePlus,
-  Check,
   Link2,
   Unlink,
   ArrowUpRight,
   Plus,
-  ChevronRight,
   X,
   Loader2,
   Trash2,
@@ -22,7 +20,6 @@ import {
 } from "@/components/skill/UnifiedSkillCardFooter";
 import { CardTagEditor } from "@/components/skill/CardTagEditor";
 import { SkillCardMeta } from "@/components/skill/SkillCardMeta";
-import { SourceIndicator } from "@/components/skill/SkillCardBadges";
 import { useTextTruncation } from "@/hooks/useTextTruncation";
 import type { AgentWithStatus, CentralSkillUpdateState, ClaudeSourceKind } from "@/types";
 import { cn } from "@/lib/utils";
@@ -45,58 +42,178 @@ import {
  */
 export type SkillCardDensity = "comfortable" | "compact" | "default";
 
-export interface UnifiedSkillCardProps {
-  /** Core data — always required. */
+export interface SkillCardCheckbox {
+  checked: boolean;
+  onChange: () => void;
+}
+
+export interface SkillCardPlatformIcons {
+  agents: AgentWithStatus[];
+  linkedAgents: string[];
+  lockedAgentIds?: string[];
+  skillId: string;
+  onToggle: (skillId: string, agentId: string) => void;
+  togglingAgentId: string | null;
+}
+
+/**
+ * 可编辑标签行（central 专用）。
+ * - tags：已赋标签（含可选 color）
+ * - allTags：可选已存在标签（供 + 添加选择）
+ * - onAdd：选中一个已存在 tag
+ * - onCreate：输入新名创建并赋值
+ * - onRemove：移除一个 tag
+ */
+export interface SkillCardEditableTags {
+  tags: { id: string; name: string; color?: string | null }[];
+  allTags: { id: string; name: string; color?: string | null }[];
+  onAdd: (tagId: string) => void;
+  onCreate: (name: string) => void;
+  onRemove: (tagId: string) => void;
+}
+
+/** footer 分隔区（central 专用）：左 = repo 色块+名 + usage；右 = 平台点。 */
+export interface SkillCardFooter {
+  repoName?: string;
+  repoColor?: string;
+}
+
+/** 所有场景共享的核心数据。 */
+interface SkillCardCoreProps {
   name: string;
   description?: string;
   aiSummary?: string | null;
-  summaryLabel?: string;
   className?: string;
+}
 
+/** 中央技能库卡片：全功能管理面（列表/网格两种模式，网格附 platformIcons + footer）。 */
+export interface CentralSkillCardProps extends SkillCardCoreProps {
+  variant: "central";
   /**
-   * 当前 skill 在中央库中的 id。设置后会从 `useUpdateCenterStore` 查询 inventory
-   * 派生 badge（platform duplicate / orphan）。central / project 卡片应传入。
+   * 中央库 skill id。设置后从 `useUpdateCenterStore` 查询 inventory 派生 badge
+   * （platform duplicate / orphan）；网格模式下 `platformIcons.skillId` 兜底。
    */
   skillId?: string;
+  checkbox: SkillCardCheckbox;
+  /** 左侧状态竖条强度：amber=可更新，red=源缺失/错误；不传=无竖条。 */
+  statusAccent?: "amber" | "red";
+  /** 行 1 名称右侧的状态 chip 文案（如“可更新”/“源缺失”）；不传=不显示。 */
+  statusChipLabel?: string;
+  /** 只读 tags（无 editableTags 时由 SkillCardMeta 渲染）。 */
+  tags?: { key: string; label: string }[];
+  publisher?: string;
+  /** 「近 30 天调用 N 次」徽章；仅当数值 > 0 时渲染。 */
+  usageBadge?: number;
+  updateStatus?: CentralSkillUpdateState & { isUpdating?: boolean };
+  onDetail: MouseEventHandler<HTMLButtonElement>;
+  onInstallTo: () => void;
+  onUninstallFromPlatforms: () => void;
+  onUpdateCentral: () => void;
+  onDeleteFromCentral: () => void;
+  detailButtonRef?: Ref<HTMLButtonElement>;
+  editableTags?: SkillCardEditableTags;
+  density?: SkillCardDensity;
+  platformIcons?: SkillCardPlatformIcons;
+  footer?: SkillCardFooter;
+}
 
-  /** Click the card itself (platform variant navigates to detail). */
-  onClick?: () => void;
+/** 平台技能视图卡片：某平台已安装技能（来源类型 + 装/卸该平台）。 */
+export interface PlatformSkillCardProps extends SkillCardCoreProps {
+  variant: "platform";
+  sourceType: "symlink" | "copy" | "native";
+  originKind: ClaudeSourceKind | null;
+  isReadOnly: boolean;
+  publisher?: string;
+  /** 「近 30 天调用 N 次」徽章；仅当数值 > 0 时渲染。 */
+  usageBadge?: number;
+  /** 只读行（native 等）不出现多选框。 */
+  checkbox?: SkillCardCheckbox;
+  isLoading?: boolean;
+  onDetail: MouseEventHandler<HTMLButtonElement>;
+  onInstallTo?: () => void;
+  onUninstallFromPlatform?: () => void;
+  uninstallFromLabel: string;
+  detailButtonRef?: Ref<HTMLButtonElement>;
+}
 
-  // ── discover variant ──
-  checkbox?: { checked: boolean; onChange: () => void };
+/** 项目技能卡片：项目目录内已启用 agent 的技能（来源徽章 + 卸载）。 */
+export interface ProjectSkillCardProps extends SkillCardCoreProps {
+  variant: "project";
+  sourceType?: "symlink" | "copy" | "native";
+  originBadge: { kind: string; label: string };
+  platformBadge: { id: string; name: string };
+  onUninstallFromPlatform: () => void;
+  uninstallFromLabel: string;
+  isLoading?: boolean;
+}
+
+/** 导入候选卡片：Obsidian vault 导入场景（原 discover 场景簇）。 */
+export interface ImportSkillCardProps extends SkillCardCoreProps {
+  variant: "import";
+  isCentral: boolean;
+  platformBadge: { id: string; name: string };
+  projectBadge?: string;
+  onDetail: MouseEventHandler<HTMLButtonElement>;
+  detailButtonRef?: Ref<HTMLButtonElement>;
+  onInstallToCentral: () => void;
+  onInstallToPlatform: () => void;
+  isLoading?: boolean;
+}
+
+/** 技能市场卡片：远程技能浏览与安装（推荐 Tab 无安装动作）。 */
+export interface MarketplaceSkillCardProps extends SkillCardCoreProps {
+  variant: "marketplace";
+  publisher?: string;
+  tags?: { key: string; label: string }[];
+  onDetail: MouseEventHandler<HTMLButtonElement>;
+  onInstall?: () => void;
+  installLabel?: string;
+  isLoading?: boolean;
+}
+
+/** 集合成员卡片：集合内技能（详情 / 安装到平台 / 移出集合）。 */
+export interface CollectionSkillCardProps extends SkillCardCoreProps {
+  variant: "collection";
+  onDetail: MouseEventHandler<HTMLButtonElement>;
+  detailButtonRef?: Ref<HTMLButtonElement>;
+  onInstallTo: () => void;
+  onRemove: () => void;
+}
+
+/**
+ * 唯一技能卡片实现的显式场景 interface：调用方声明 `variant` + 该场景的窄 props，
+ * 场景间互斥的 props 在编译期被拒绝（判别联合 + excess property check）。
+ */
+export type UnifiedSkillCardProps =
+  | CentralSkillCardProps
+  | PlatformSkillCardProps
+  | ProjectSkillCardProps
+  | ImportSkillCardProps
+  | MarketplaceSkillCardProps
+  | CollectionSkillCardProps;
+
+// ─── Internal render model ────────────────────────────────────────────────────
+
+/** 模块私有渲染模型：各场景归一化后的扁平字段，渲染代码只面向它。 */
+interface SkillCardModel {
+  name: string;
+  description?: string;
+  aiSummary?: string | null;
+  className?: string;
+  skillId?: string;
+  checkbox?: SkillCardCheckbox;
   isCentral?: boolean;
   platformBadge?: { id: string; name: string };
   projectBadge?: string;
   originBadge?: { kind: "central" | "project" | string; label: string };
-
-  // ── central variant ──
-  platformIcons?: {
-    agents: AgentWithStatus[];
-    linkedAgents: string[];
-    lockedAgentIds?: string[];
-    skillId: string;
-    onToggle: (skillId: string, agentId: string) => void;
-    togglingAgentId: string | null;
-  };
-
-  // ── platform variant ──
+  platformIcons?: SkillCardPlatformIcons;
   sourceType?: "symlink" | "copy" | "native";
   originKind?: ClaudeSourceKind | null;
   isReadOnly?: boolean;
-
-  // ── marketplace variant ──
-  isInstalled?: boolean;
   tags?: { key: string; label: string }[];
   publisher?: string;
   installLabel?: string;
-
-  /**
-   * 「近 30 天调用 N 次」徽章 —— 由 useSkillCallCounts 注入。
-   * 仅当数值 > 0 时渲染；undefined 或 0 完全不出现，避免误导。
-   */
   usageBadge?: number;
-
-  // ── actions ──
   onDetail?: MouseEventHandler<HTMLButtonElement>;
   onInstallTo?: () => void;
   onUninstallFromPlatforms?: () => void;
@@ -112,36 +229,100 @@ export interface UnifiedSkillCardProps {
   isLoading?: boolean;
   detailButtonRef?: Ref<HTMLButtonElement>;
   density?: SkillCardDensity;
-
-  // ── central 重设计（方案 C）— 全部 prop 门控，其它 variant 不传则零回归 ──
-  /** 左侧状态竖条强度：amber=可更新，red=源缺失/错误；不传=无竖条。central 列表计算后传入。 */
   statusAccent?: "amber" | "red";
-  /** 行 1 名称右侧的状态 chip 文案（如“可更新”/“源缺失”）；不传=不显示。 */
   statusChipLabel?: string;
-  /**
-   * 可编辑标签行（central 专用）。不传 → 不渲染该行（其它 variant 仍用 SkillCardMeta 里的只读 tags）。
-   * - tags：已赋标签（含可选 color）
-   * - allTags：可选已存在标签（供 + 添加选择）
-   * - onAdd：选中一个已存在 tag
-   * - onCreate：输入新名创建并赋值
-   * - onRemove：移除一个 tag
-   */
-  editableTags?: {
-    tags: { id: string; name: string; color?: string | null }[];
-    allTags: { id: string; name: string; color?: string | null }[];
-    onAdd: (tagId: string) => void;
-    onCreate: (name: string) => void;
-    onRemove: (tagId: string) => void;
+  editableTags?: SkillCardEditableTags;
+  footer?: SkillCardFooter;
+}
+
+/** 场景 → 渲染模型的唯一映射点：每分支只拷贝该场景合法字段。 */
+function toModel(props: UnifiedSkillCardProps): SkillCardModel {
+  const core = {
+    name: props.name,
+    description: props.description,
+    aiSummary: props.aiSummary,
+    className: props.className,
   };
-  /**
-   * footer 分隔区（central 专用）。传入时：底部出现 border-t footer，
-   * 左 = repo 色块+名 + usage；右 = 平台点（由现有 platformIcons 渲染）。
-   * 同时 SkillCardMeta 不再重复渲染 publisher / usageBadge。
-   */
-  footer?: {
-    repoName?: string;
-    repoColor?: string;
-  };
+  switch (props.variant) {
+    case "central":
+      return {
+        ...core,
+        skillId: props.skillId,
+        checkbox: props.checkbox,
+        statusAccent: props.statusAccent,
+        statusChipLabel: props.statusChipLabel,
+        tags: props.tags,
+        publisher: props.publisher,
+        usageBadge: props.usageBadge,
+        updateStatus: props.updateStatus,
+        onDetail: props.onDetail,
+        onInstallTo: props.onInstallTo,
+        onUninstallFromPlatforms: props.onUninstallFromPlatforms,
+        onUpdateCentral: props.onUpdateCentral,
+        onDeleteFromCentral: props.onDeleteFromCentral,
+        detailButtonRef: props.detailButtonRef,
+        editableTags: props.editableTags,
+        density: props.density,
+        platformIcons: props.platformIcons,
+        footer: props.footer,
+      };
+    case "platform":
+      return {
+        ...core,
+        sourceType: props.sourceType,
+        originKind: props.originKind,
+        isReadOnly: props.isReadOnly,
+        publisher: props.publisher,
+        usageBadge: props.usageBadge,
+        checkbox: props.checkbox,
+        isLoading: props.isLoading,
+        onDetail: props.onDetail,
+        onInstallTo: props.onInstallTo,
+        onUninstallFromPlatform: props.onUninstallFromPlatform,
+        uninstallFromLabel: props.uninstallFromLabel,
+        detailButtonRef: props.detailButtonRef,
+      };
+    case "project":
+      return {
+        ...core,
+        sourceType: props.sourceType,
+        originBadge: props.originBadge,
+        platformBadge: props.platformBadge,
+        onUninstallFromPlatform: props.onUninstallFromPlatform,
+        uninstallFromLabel: props.uninstallFromLabel,
+        isLoading: props.isLoading,
+      };
+    case "import":
+      return {
+        ...core,
+        isCentral: props.isCentral,
+        platformBadge: props.platformBadge,
+        projectBadge: props.projectBadge,
+        onDetail: props.onDetail,
+        detailButtonRef: props.detailButtonRef,
+        onInstallToCentral: props.onInstallToCentral,
+        onInstallToPlatform: props.onInstallToPlatform,
+        isLoading: props.isLoading,
+      };
+    case "marketplace":
+      return {
+        ...core,
+        publisher: props.publisher,
+        tags: props.tags,
+        onDetail: props.onDetail,
+        onInstall: props.onInstall,
+        installLabel: props.installLabel,
+        isLoading: props.isLoading,
+      };
+    case "collection":
+      return {
+        ...core,
+        onDetail: props.onDetail,
+        detailButtonRef: props.detailButtonRef,
+        onInstallTo: props.onInstallTo,
+        onRemove: props.onRemove,
+      };
+  }
 }
 
 // ─── UnifiedSkillCard ─────────────────────────────────────────────────────────
@@ -152,10 +333,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     name,
     description,
     aiSummary,
-    summaryLabel,
     className,
     skillId,
-    onClick,
     checkbox,
     isCentral,
     platformBadge,
@@ -165,7 +344,6 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     sourceType,
     originKind,
     isReadOnly,
-    isInstalled,
     tags,
     publisher,
     installLabel,
@@ -189,7 +367,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
     statusChipLabel,
     editableTags,
     footer,
-  } = props;
+  } = toModel(props);
 
   // "default" 是旧别名，归一化为 "comfortable"
   const density: Exclude<SkillCardDensity, "default"> =
@@ -226,7 +404,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   const trimmedAiSummary = aiSummary?.trim() ?? "";
   const hasAiSummary = trimmedAiSummary.length > 0;
   const summaryText = hasAiSummary ? trimmedAiSummary : description;
-  const resolvedSummaryLabel = summaryLabel ?? t("common.aiSummaryLabel");
+  const resolvedSummaryLabel = t("common.aiSummaryLabel");
   const canUpdateCentral = updateStatus?.status === "update_available";
 
   const targetAgents = useMemo(
@@ -252,45 +430,6 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
   );
   const compactMoreMenuItems = isCompact && onDeleteFromCentral ? { onDeleteFromCentral } : null;
 
-  // ── Platform variant: clickable card style ──
-  if (onClick && !hasActions && !hasCheckbox && !hasPlatformIcons) {
-    return (
-      <button
-        role="button"
-        onClick={onClick}
-        className={cn(
-          "group/skill-card h-full w-full rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          className
-        )}
-        aria-label={t("platform.searchSkillLabel", { name })}
-      >
-        <div className={cn(cardShellClass(false), "cursor-pointer gap-2 p-3.5")}>
-          <div className="flex flex-1 items-start justify-between gap-3 min-w-0">
-            <div className="min-w-0 flex-1 flex flex-col gap-2">
-              <div className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground transition-colors group-hover/skill-card:text-primary">
-                {name}
-              </div>
-              {summaryText && (
-                <SkillCardSummary
-                  text={summaryText}
-                  label={hasAiSummary ? resolvedSummaryLabel : undefined}
-                  lineClamp={summaryLineClamp}
-                />
-              )}
-              {sourceType && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <SourceIndicator sourceType={sourceType} />
-                </div>
-              )}
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground shrink-0 mt-0.5" />
-          </div>
-        </div>
-      </button>
-    );
-  }
-
-  // ── Default card style (central, discover, marketplace, collection) ──
   return (
     <div
       className={cn(
@@ -302,7 +441,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
       )}
     >
       <div className="flex min-h-0 flex-1 items-start gap-2.5">
-        {/* Optional checkbox (discover) */}
+        {/* Optional checkbox (central / platform) */}
         {hasCheckbox && checkbox && (
           <div className="pt-0.5">
             <Checkbox
@@ -457,29 +596,14 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
 
                 {onInstall && (
                   <button
-                    onClick={isInstalled ? undefined : onInstall}
-                    disabled={isInstalled || isLoading}
-                    title={
-                      isInstalled
-                        ? t("marketplace.installed")
-                        : installLabel ?? t("marketplace.install")
-                    }
-                    aria-label={
-                      isInstalled
-                        ? t("marketplace.installed")
-                        : installLabel ?? t("marketplace.install")
-                    }
-                    className={cn(
-                      "inline-flex h-8 w-8 items-center justify-center rounded-lg transition-[scale,background-color,color] active:not-disabled:scale-[0.96]",
-                      isInstalled
-                        ? "text-primary cursor-default"
-                        : "text-muted-foreground hover:bg-accent/40 hover:text-primary disabled:opacity-50 disabled:cursor-default"
-                    )}
+                    onClick={onInstall}
+                    disabled={isLoading}
+                    title={installLabel ?? t("marketplace.install")}
+                    aria-label={installLabel ?? t("marketplace.install")}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg transition-[scale,background-color,color] active:not-disabled:scale-[0.96] text-muted-foreground hover:bg-accent/40 hover:text-primary disabled:opacity-50 disabled:cursor-default"
                   >
                     {isLoading ? (
                       <Loader2 className="size-4 animate-spin" />
-                    ) : isInstalled ? (
-                      <Check className="size-4" />
                     ) : (
                       <Download className="size-4" />
                     )}
