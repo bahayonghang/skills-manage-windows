@@ -1003,3 +1003,44 @@ Added card-level Central skill platform uninstall action and recorded the Trelli
 ### Next Steps
 
 - None - task complete
+
+
+## Session 26: typed-ipc-adapter：类型化 IPC adapter 与 fixture seam 全程落地
+
+**Date**: 2026-07-05
+**Task**: typed-ipc-adapter：类型化 IPC adapter 与 fixture seam 全程落地
+**Branch**: `dev`
+
+### Summary
+
+完成 07-04-typed-ipc-adapter 七步实施：新建 src/lib/ipc/ 目录 adapter（双 overload 按命令名类型化 invoke + fixture 注册表 + 浏览器安全 listen），全仓 63 文件 flip 到唯一入口并删除 lib/tauri.ts；setup.ts 换命令路由 mock dispatcher；批次 1 的 9 个 store + 2 hook + displayFont + ObsidianVaultView 剥 isTauriRuntime guard，浏览器演示态改为 src/fixtures/ 命令级响应驱动真实 store 逻辑；UNTYPED_IPC_COMMANDS 登记 104 存量命令并以 ipcCommandCoverage ratchet 锁死只减不增。验收：isTauriRuntime() 调用点 154→100（≤100 达标）、IPC map 60 命令（≥40）、必迁测试 0 顺序桩、browserFixtures 安全网 10 例常驻、just ci 全绿。产出 spec：.trellis/spec/frontend/ipc-adapter.md（五条约定）；批次 2/3 遗留登记父任务 notes。父任务进度 6/9。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c17f608e` | (see git log) |
+| `dd9bfbce` | (see git log) |
+| `9da9b492` | (see git log) |
+| `95c8cd1c` | (see git log) |
+| `4767cad8` | (see git log) |
+| `624c09c4` | (see git log) |
+| `d9ada6b3` | (see git log) |
+| `34ff4aa0` | (see git log) |
+| `a01c428d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
