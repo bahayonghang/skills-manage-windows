@@ -31,6 +31,6 @@
   ],
   "parent": null,
   "relatedFiles": [],
-  "notes": "",
+  "notes": "typed-ipc-adapter 批次 2/3 遗留（follow-up 候选，来自其 design §7，obsidianStore 已在 Step 6 完成）：settingsStore(+aiSlice)(17)、skillDetailStore(12)、projectsStore(11)、centralSkillsStore 4 slices(20)、marketplaceStore 4 slices(12)、collectionStore(3)、appUpdateStore(2)、localRemoteSyncStore(1)、updateCenterStore(8)、组件/viewmodel 层 guard(约 10)、剩余测试文件顺序桩退役、IPC map 从 60 补全至 171。迁移模式与硬约束见 .trellis/spec/frontend/ipc-adapter.md（fixture 注册 → 剥 guard → 测试迁命令路由；ipcCommandCoverage ratchet 保证清单只减不增）。",
   "meta": {}
 }
