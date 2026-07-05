@@ -110,9 +110,36 @@ pub(super) fn wsl_program() -> std::ffi::OsString {
     "wsl".into()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ConnectedWslTarget {
     pub(super) target: WslTargetConfig,
+    pub(super) runner: Arc<dyn CommandRunner>,
+}
+
+impl std::fmt::Debug for ConnectedWslTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConnectedWslTarget")
+            .field("target", &self.target)
+            .finish_non_exhaustive()
+    }
+}
+
+fn ssh_runner_error(error: RunnerError) -> TargetsError {
+    let context = match error.phase {
+        RunnerPhase::Start => "Failed to start ssh",
+        RunnerPhase::WriteStdin => "Failed to write ssh stdin",
+        RunnerPhase::Wait => "Failed to wait for ssh",
+    };
+    TargetsError::io(context, error.source)
+}
+
+fn wsl_runner_error(error: RunnerError) -> TargetsError {
+    let context = match error.phase {
+        RunnerPhase::Start => "Failed to start wsl.exe",
+        RunnerPhase::WriteStdin => "Failed to write wsl.exe stdin",
+        RunnerPhase::Wait => "Failed to wait for wsl.exe",
+    };
+    TargetsError::io(context, error.source)
 }
 
 pub async fn connect_wsl_target(
@@ -128,6 +155,7 @@ pub async fn connect_wsl_target(
     {
         let connection = ConnectedWslTarget {
             target: target.clone(),
+            runner: Arc::new(ProcessRunner),
         };
         connection
             .run_command("printf '%s' connected >/dev/null")
@@ -264,12 +292,12 @@ impl ConnectedSshTarget {
     }
 
     pub async fn run_command(&self, command: &str) -> Result<String, TargetsError> {
+        let mut process = self.base_command();
+        process.arg(command);
         let output = self
-            .base_command()
-            .arg(command)
-            .stdin(Stdio::null())
-            .output()
-            .map_err(|e| TargetsError::io("Failed to start ssh", e))?;
+            .runner
+            .run(process, None)
+            .map_err(ssh_runner_error)?;
         if output.status.success() {
             String::from_utf8(output.stdout).map_err(TargetsError::RemoteStdoutNotUtf8)
         } else {
@@ -278,24 +306,12 @@ impl ConnectedSshTarget {
     }
 
     fn run_command_with_stdin(&self, command: &str, stdin: &[u8]) -> Result<Vec<u8>, TargetsError> {
-        let mut child = self
-            .base_command()
-            .arg(command)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| TargetsError::io("Failed to start ssh", e))?;
-
-        if let Some(mut child_stdin) = child.stdin.take() {
-            child_stdin
-                .write_all(stdin)
-                .map_err(|e| TargetsError::io("Failed to write ssh stdin", e))?;
-        }
-
-        let output = child
-            .wait_with_output()
-            .map_err(|e| TargetsError::io("Failed to wait for ssh", e))?;
+        let mut process = self.base_command();
+        process.arg(command);
+        let output = self
+            .runner
+            .run(process, Some(stdin))
+            .map_err(ssh_runner_error)?;
         if output.status.success() {
             Ok(output.stdout)
         } else {
@@ -304,12 +320,12 @@ impl ConnectedSshTarget {
     }
 
     fn run_command_bytes(&self, command: &str) -> Result<Vec<u8>, TargetsError> {
+        let mut process = self.base_command();
+        process.arg(command);
         let output = self
-            .base_command()
-            .arg(command)
-            .stdin(Stdio::null())
-            .output()
-            .map_err(|e| TargetsError::io("Failed to start ssh", e))?;
+            .runner
+            .run(process, None)
+            .map_err(ssh_runner_error)?;
         if output.status.success() {
             Ok(output.stdout)
         } else {
@@ -326,12 +342,12 @@ impl ConnectedSshTarget {
 
     pub async fn exists(&self, path: &str) -> Result<bool, TargetsError> {
         let command = format!("test -e {}", shell_quote(path));
+        let mut process = self.base_command();
+        process.arg(command);
         let output = self
-            .base_command()
-            .arg(command)
-            .stdin(Stdio::null())
-            .output()
-            .map_err(|e| TargetsError::io("Failed to start ssh", e))?;
+            .runner
+            .run(process, None)
+            .map_err(ssh_runner_error)?;
         match output.status.code() {
             Some(0) => Ok(true),
             Some(1) => Ok(false),
@@ -347,12 +363,12 @@ impl ConnectedSshTarget {
             r#"p={path}; if [ -L "$p" ]; then printf 'symlink\t%s\n' "$(readlink "$p" || true)"; elif [ -d "$p" ]; then printf 'dir\t\n'; elif [ -f "$p" ]; then printf 'file\t\n'; elif [ -e "$p" ]; then printf 'other\t\n'; else exit 1; fi"#,
             path = shell_quote(path)
         );
+        let mut process = self.base_command();
+        process.arg(command);
         let output = self
-            .base_command()
-            .arg(command)
-            .stdin(Stdio::null())
-            .output()
-            .map_err(|e| TargetsError::io("Failed to start ssh", e))?;
+            .runner
+            .run(process, None)
+            .map_err(ssh_runner_error)?;
         match output.status.code() {
             Some(0) => {
                 let stdout = String::from_utf8(output.stdout)
@@ -493,14 +509,12 @@ impl ConnectedWslTarget {
     }
 
     pub async fn run_command(&self, command: &str) -> Result<String, TargetsError> {
+        let mut process = self.base_command();
+        process.arg("sh").arg("-lc").arg(command);
         let output = self
-            .base_command()
-            .arg("sh")
-            .arg("-lc")
-            .arg(command)
-            .stdin(Stdio::null())
-            .output()
-            .map_err(|e| TargetsError::io("Failed to start wsl.exe", e))?;
+            .runner
+            .run(process, None)
+            .map_err(wsl_runner_error)?;
         if output.status.success() {
             String::from_utf8(output.stdout).map_err(TargetsError::WslStdoutNotUtf8)
         } else {
@@ -510,25 +524,13 @@ impl ConnectedWslTarget {
 
     fn run_command_process_with_stdin(
         &self,
-        mut command: Command,
+        command: Command,
         stdin: &[u8],
     ) -> Result<Vec<u8>, TargetsError> {
-        let mut child = command
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| TargetsError::io("Failed to start wsl.exe", e))?;
-
-        if let Some(mut child_stdin) = child.stdin.take() {
-            child_stdin
-                .write_all(stdin)
-                .map_err(|e| TargetsError::io("Failed to write wsl.exe stdin", e))?;
-        }
-
-        let output = child
-            .wait_with_output()
-            .map_err(|e| TargetsError::io("Failed to wait for wsl.exe", e))?;
+        let output = self
+            .runner
+            .run(command, Some(stdin))
+            .map_err(wsl_runner_error)?;
         if output.status.success() {
             Ok(output.stdout)
         } else {
@@ -537,14 +539,12 @@ impl ConnectedWslTarget {
     }
 
     fn run_command_bytes(&self, command: &str) -> Result<Vec<u8>, TargetsError> {
+        let mut process = self.base_command();
+        process.arg("sh").arg("-lc").arg(command);
         let output = self
-            .base_command()
-            .arg("sh")
-            .arg("-lc")
-            .arg(command)
-            .stdin(Stdio::null())
-            .output()
-            .map_err(|e| TargetsError::io("Failed to start wsl.exe", e))?;
+            .runner
+            .run(process, None)
+            .map_err(wsl_runner_error)?;
         if output.status.success() {
             Ok(output.stdout)
         } else {
@@ -561,14 +561,12 @@ impl ConnectedWslTarget {
 
     pub async fn exists(&self, path: &str) -> Result<bool, TargetsError> {
         let command = format!("test -e {}", shell_quote(path));
+        let mut process = self.base_command();
+        process.arg("sh").arg("-lc").arg(command);
         let output = self
-            .base_command()
-            .arg("sh")
-            .arg("-lc")
-            .arg(command)
-            .stdin(Stdio::null())
-            .output()
-            .map_err(|e| TargetsError::io("Failed to start wsl.exe", e))?;
+            .runner
+            .run(process, None)
+            .map_err(wsl_runner_error)?;
         match output.status.code() {
             Some(0) => Ok(true),
             Some(1) => Ok(false),
@@ -584,14 +582,12 @@ impl ConnectedWslTarget {
             r#"p={path}; if [ -L "$p" ]; then printf 'symlink\t%s\n' "$(readlink "$p" || true)"; elif [ -d "$p" ]; then printf 'dir\t\n'; elif [ -f "$p" ]; then printf 'file\t\n'; elif [ -e "$p" ]; then printf 'other\t\n'; else exit 1; fi"#,
             path = shell_quote(path)
         );
+        let mut process = self.base_command();
+        process.arg("sh").arg("-lc").arg(command);
         let output = self
-            .base_command()
-            .arg("sh")
-            .arg("-lc")
-            .arg(command)
-            .stdin(Stdio::null())
-            .output()
-            .map_err(|e| TargetsError::io("Failed to start wsl.exe", e))?;
+            .runner
+            .run(process, None)
+            .map_err(wsl_runner_error)?;
         match output.status.code() {
             Some(0) => {
                 let stdout =

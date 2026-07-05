@@ -3,6 +3,23 @@ pub struct ConnectedSshTarget {
     pub(super) target: RemoteTargetConfig,
     pub(super) password: Option<String>,
     pub(super) askpass_helper: Option<AskpassHelper>,
+    pub(super) runner: Arc<dyn CommandRunner>,
+}
+
+#[cfg(test)]
+impl ConnectedSshTarget {
+    /// Test-only constructor: no live connection probe, injectable runner.
+    pub(crate) fn for_tests_with_runner(
+        target: RemoteTargetConfig,
+        runner: Arc<dyn CommandRunner>,
+    ) -> Self {
+        Self {
+            target,
+            password: None,
+            askpass_helper: None,
+            runner,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -32,6 +49,7 @@ pub async fn connect_ssh_target(
         target: target.clone(),
         password,
         askpass_helper,
+        runner: Arc::new(ProcessRunner),
     };
     connection
         .run_command("printf '%s' connected >/dev/null")

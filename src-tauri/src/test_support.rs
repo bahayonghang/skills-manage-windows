@@ -142,6 +142,107 @@ pub fn symlink_dir(target: &Path, link: &Path) {
     std::os::windows::fs::symlink_dir(target, link).expect("create test symlink");
 }
 
+// ─── Fake command runner（targets 执行层注入桩）──────────────────────────────
+
+/// One recorded [`crate::targets::CommandRunner::run`] invocation.
+pub struct RecordedCommand {
+    pub program: String,
+    pub args: Vec<String>,
+    pub stdin: Option<Vec<u8>>,
+}
+
+/// In-memory [`crate::targets::CommandRunner`]: records every command and
+/// pops queued responses in FIFO order. Panics when invoked with an empty
+/// queue — that is a test-authoring bug, not a runtime condition.
+#[derive(Default)]
+pub struct FakeRunner {
+    calls: std::sync::Mutex<Vec<RecordedCommand>>,
+    responses: std::sync::Mutex<std::collections::VecDeque<FakeResponse>>,
+}
+
+enum FakeResponse {
+    Output(std::process::Output),
+    Error(crate::targets::RunnerError),
+}
+
+/// Platform-correct `ExitStatus` from a raw exit code.
+pub fn exit_status(code: i32) -> std::process::ExitStatus {
+    #[cfg(windows)]
+    {
+        std::os::windows::process::ExitStatusExt::from_raw(code as u32)
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::process::ExitStatusExt::from_raw(code << 8)
+    }
+}
+
+impl FakeRunner {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Queue a successful (exit 0) response with the given stdout.
+    pub fn push_success(&self, stdout: &str) {
+        self.push_output(0, stdout, "");
+    }
+
+    /// Queue a response with an explicit exit code, stdout and stderr.
+    pub fn push_output(&self, code: i32, stdout: &str, stderr: &str) {
+        self.responses
+            .lock()
+            .unwrap()
+            .push_back(FakeResponse::Output(std::process::Output {
+                status: exit_status(code),
+                stdout: stdout.as_bytes().to_vec(),
+                stderr: stderr.as_bytes().to_vec(),
+            }));
+    }
+
+    /// Queue a process-launch failure for the given phase.
+    pub(crate) fn push_error(&self, phase: crate::targets::RunnerPhase, message: &str) {
+        self.responses
+            .lock()
+            .unwrap()
+            .push_back(FakeResponse::Error(crate::targets::RunnerError {
+                phase,
+                source: std::io::Error::other(message.to_string()),
+            }));
+    }
+
+    /// All commands run so far, in invocation order.
+    pub fn calls(&self) -> std::sync::MutexGuard<'_, Vec<RecordedCommand>> {
+        self.calls.lock().unwrap()
+    }
+}
+
+impl crate::targets::CommandRunner for FakeRunner {
+    fn run(
+        &self,
+        command: std::process::Command,
+        stdin: Option<&[u8]>,
+    ) -> Result<std::process::Output, crate::targets::RunnerError> {
+        self.calls.lock().unwrap().push(RecordedCommand {
+            program: command.get_program().to_string_lossy().into_owned(),
+            args: command
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect(),
+            stdin: stdin.map(<[u8]>::to_vec),
+        });
+        match self
+            .responses
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("FakeRunner invoked with no queued response")
+        {
+            FakeResponse::Output(output) => Ok(output),
+            FakeResponse::Error(error) => Err(error),
+        }
+    }
+}
+
 // ─── harness 自测 ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
