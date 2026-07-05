@@ -1076,3 +1076,36 @@ Added card-level Central skill platform uninstall action and recorded the Trelli
 ### Next Steps
 
 - 下一子任务：07-04-skill-card-scenarios（PRD 建议顺序），transport-seam 收尾
+
+## Session 28: skill-card-scenarios：UnifiedSkillCard 显式场景 interface
+
+**Date**: 2026-07-05
+**Task**: UnifiedSkillCard 显式场景 interface
+**Branch**: `dev`
+
+### Summary
+
+完成 07-04-skill-card-scenarios：UnifiedSkillCard 约 40 个扁平可选 props 收窄为 6 个命名场景判别联合（central/platform/project/import/marketplace/collection，import 为 design 阶段据实新增的 Obsidian 簇），跨场景 props 编译期拒绝（unifiedSkillCardVariants.test.tsx 持 6 正例 + 5 组对象字面量负例 + 1 组 JSX 负例，@ts-expect-error 由 typecheck 双向强制）。内部 toModel 归一化到模块私有 SkillCardModel，渲染树零改动实现视觉零回归。删除实测无人使用死面：可点击分支与 onClick、summaryLabel、isInstalled、zh/en platform.searchSkillLabel。11 处调用点全迁移（central 3 处经 buildCentralSkillCardProps 注入）。单场景可见 props 收敛到 9–23（原 40）。产出 spec：.trellis/spec/frontend/skill-card-scenarios.md；CLAUDE.md 卡片描述行同步（只暂存自己的 hunk，避开另一窗口的 issue-tracker 改动——RTK hook 会把 git diff 改写成非法 unified diff，需 rtk proxy 取原始输出再过滤）。父任务进度 8/9，仅剩 transport-seam。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b128671e` | refactor(skill-card): [AI] ♻️ UnifiedSkillCard 收敛为显式场景判别联合 |
+| `ad1ec19e` | docs(spec): [AI] 📝 技能卡片显式场景 interface 约定与任务工件落档 |
+| `84104d06` | chore(task): archive 07-04-skill-card-scenarios |
+
+### Testing
+
+- [OK] pnpm test：120 文件 / 1296 通过（1 skipped 为存量）
+- [OK] pnpm typecheck：绿，6 条 @ts-expect-error 互斥负例无一 Unused
+- [OK] pnpm lint：No issues found
+- [OK] grep 复核：组件内 onClick/summaryLabel/isInstalled 死 prop 零残留、searchSkillLabel 全仓清零、variant 覆盖 11 调用点
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 最后子任务：07-04-transport-seam（硬前置 update-center 已完成）；父任务收尾时刷新 CONTEXT.md 清单
