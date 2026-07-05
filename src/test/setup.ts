@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom";
 import zh from "../i18n/locales/zh.json";
+import { __dispatchMockIpc, resetIpcMock } from "./ipcMock";
 
 // ─── react-i18next mock ───────────────────────────────────────────────────────
 // Resolves translation keys against zh.json so existing assertions on Chinese
@@ -7,9 +8,15 @@ import zh from "../i18n/locales/zh.json";
 
 type TranslationObj = { [key: string]: TranslationObj | string };
 
-function resolveKey(obj: TranslationObj, key: string, options?: Record<string, unknown>): string {
+function resolveKey(
+  obj: TranslationObj,
+  key: string,
+  options?: Record<string, unknown>,
+): string {
   const defaultValue =
-    typeof options?.defaultValue === "string" ? options.defaultValue : undefined;
+    typeof options?.defaultValue === "string"
+      ? options.defaultValue
+      : undefined;
   const parts = key.split(".");
   let result: TranslationObj | string = obj;
   for (const part of parts) {
@@ -167,10 +174,17 @@ Object.defineProperty(window, "__TAURI__", {
 
 Object.defineProperty(window, "__TAURI_INTERNALS__", {
   value: {
-    invoke: vi.fn(),
+    // 命令路由 dispatcher（普通函数而非 vi.fn，免疫 vi.resetAllMocks）：
+    // 语义见 src/test/ipcMock.ts —— 宽松模式兼容存量测试，注册后按命令名严格路由
+    invoke: (command: string, args?: unknown) =>
+      __dispatchMockIpc(command, args),
     transformCallback: vi.fn(),
     postMessage: vi.fn(),
   },
   configurable: true,
   writable: true,
+});
+
+afterEach(() => {
+  resetIpcMock();
 });

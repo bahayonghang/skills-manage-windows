@@ -45,7 +45,12 @@ export function dispatchIpcFixture<T>(
   if (!handler) {
     return Promise.reject(new IpcFixtureMissingError(command));
   }
-  return Promise.resolve().then(() => handler(args)) as Promise<T>;
+  // 同步调用（与真实 tauriInvoke 一致：调用即开始工作）；同步抛错转 rejection
+  try {
+    return Promise.resolve(handler(args)) as Promise<T>;
+  } catch (error) {
+    return Promise.reject(error);
+  }
 }
 
 export function clearIpcFixturesForTest(): void {

@@ -1,14 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ScannedSkill } from "../types";
 import * as tauriBridge from "@/lib/ipc";
-
-// Mock Tauri core before importing the store
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
-}));
-
-import { invoke } from "@tauri-apps/api/core";
 import { useSkillStore } from "../stores/skillStore";
+import {
+  ipcInvokeCalls,
+  ipcInvokedCommands,
+  mockIpcCommand,
+  mockIpcCommands,
+} from "./ipcMock";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -26,7 +25,8 @@ const mockSkills: ScannedSkill[] = [
   {
     id: "code-reviewer",
     name: "code-reviewer",
-    description: "Review code changes and identify high-confidence, actionable bugs",
+    description:
+      "Review code changes and identify high-confidence, actionable bugs",
     file_path: "~/.claude/skills/code-reviewer/SKILL.md",
     dir_path: "~/.claude/skills/code-reviewer",
     link_type: "copy",
@@ -45,7 +45,6 @@ describe("skillStore", () => {
       pendingSkillActionKeys: {},
       error: null,
     });
-    vi.clearAllMocks();
   });
 
   // ── Initial State ─────────────────────────────────────────────────────────
@@ -61,17 +60,17 @@ describe("skillStore", () => {
   // ── getSkillsByAgent ──────────────────────────────────────────────────────
 
   it("calls invoke('get_skills_by_agent') with agentId (camelCase)", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(mockSkills);
+    mockIpcCommand("get_skills_by_agent", mockSkills);
 
     await useSkillStore.getState().getSkillsByAgent("claude-code");
 
-    expect(invoke).toHaveBeenCalledWith("get_skills_by_agent", {
+    expect(ipcInvokeCalls("get_skills_by_agent")[0].args).toEqual({
       agentId: "claude-code",
     });
   });
 
   it("populates skillsByAgent after successful fetch", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(mockSkills);
+    mockIpcCommand("get_skills_by_agent", mockSkills);
 
     await useSkillStore.getState().getSkillsByAgent("claude-code");
 
@@ -83,11 +82,14 @@ describe("skillStore", () => {
 
   it("sets loading to true while fetching", async () => {
     let resolveSkills!: (value: ScannedSkill[]) => void;
-    vi.mocked(invoke).mockReturnValueOnce(
-      new Promise<ScannedSkill[]>((r) => (resolveSkills = r))
+    mockIpcCommand(
+      "get_skills_by_agent",
+      () => new Promise<ScannedSkill[]>((r) => (resolveSkills = r)),
     );
 
-    const fetchPromise = useSkillStore.getState().getSkillsByAgent("claude-code");
+    const fetchPromise = useSkillStore
+      .getState()
+      .getSkillsByAgent("claude-code");
 
     // Loading should be true while the call is pending
     expect(useSkillStore.getState().loadingByAgent["claude-code"]).toBe(true);
@@ -99,7 +101,9 @@ describe("skillStore", () => {
   });
 
   it("sets error and clears loading when fetch fails", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("Agent not found"));
+    mockIpcCommand("get_skills_by_agent", () =>
+      Promise.reject(new Error("Agent not found")),
+    );
 
     await useSkillStore.getState().getSkillsByAgent("claude-code");
 
@@ -122,9 +126,9 @@ describe("skillStore", () => {
       },
     ];
 
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(mockSkills)
-      .mockResolvedValueOnce(cursorSkills);
+    mockIpcCommand("get_skills_by_agent", ({ agentId }: { agentId: string }) =>
+      agentId === "cursor" ? cursorSkills : mockSkills,
+    );
 
     await useSkillStore.getState().getSkillsByAgent("claude-code");
     await useSkillStore.getState().getSkillsByAgent("cursor");
@@ -135,11 +139,13 @@ describe("skillStore", () => {
   });
 
   it("returns deterministic browser fixture skills when Tauri runtime is unavailable", async () => {
-    const isTauriSpy = vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(false);
+    const isTauriSpy = vi
+      .spyOn(tauriBridge, "isTauriRuntime")
+      .mockReturnValue(false);
 
     await useSkillStore.getState().getSkillsByAgent("claude-code");
 
-    expect(invoke).not.toHaveBeenCalled();
+    expect(ipcInvokeCalls()).toHaveLength(0);
     expect(useSkillStore.getState().skillsByAgent["claude-code"]).toEqual([
       expect.objectContaining({
         id: "fixture-central-skill",
@@ -162,23 +168,28 @@ describe("skillStore", () => {
     });
 
     const remainingSkills = [mockSkills[1]];
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(remainingSkills);
+    mockIpcCommands({
+      uninstall_skill_from_agent: undefined,
+      get_skills_by_agent: remainingSkills,
+    });
 
     await useSkillStore
       .getState()
       .uninstallSkillFromAgent("frontend-design", "claude-code");
 
-    expect(invoke).toHaveBeenNthCalledWith(1, "uninstall_skill_from_agent", {
+    expect(ipcInvokedCommands()).toEqual([
+      "uninstall_skill_from_agent",
+      "get_skills_by_agent",
+    ]);
+    expect(ipcInvokeCalls("uninstall_skill_from_agent")[0].args).toEqual({
       skillId: "frontend-design",
       agentId: "claude-code",
     });
-    expect(invoke).toHaveBeenNthCalledWith(2, "get_skills_by_agent", {
+    expect(ipcInvokeCalls("get_skills_by_agent")[0].args).toEqual({
       agentId: "claude-code",
     });
     expect(useSkillStore.getState().skillsByAgent["claude-code"]).toEqual(
-      remainingSkills
+      remainingSkills,
     );
     expect(useSkillStore.getState().pendingSkillActionKeys).toEqual({});
     expect(useSkillStore.getState().error).toBeNull();
@@ -186,87 +197,101 @@ describe("skillStore", () => {
 
   it("passes rowId and tracks pending state by Claude row identity", async () => {
     let resolveUninstall!: () => void;
-    vi.mocked(invoke)
-      .mockReturnValueOnce(
+    mockIpcCommands({
+      uninstall_skill_from_agent: () =>
         new Promise<void>((resolve) => {
           resolveUninstall = resolve;
-        })
-      )
-      .mockResolvedValueOnce([]);
+        }),
+      get_skills_by_agent: [],
+    });
 
     const uninstallPromise = useSkillStore
       .getState()
       .uninstallSkillFromAgent(
         "shared-skill",
         "claude-code",
-        "claude-code::user::shared-skill"
+        "claude-code::user::shared-skill",
       );
 
     expect(
-      useSkillStore.getState().pendingSkillActionKeys["claude-code::user::shared-skill"]
+      useSkillStore.getState().pendingSkillActionKeys[
+        "claude-code::user::shared-skill"
+      ],
     ).toBe(true);
     expect(
-      useSkillStore.getState().pendingSkillActionKeys["claude-code::shared-skill"]
+      useSkillStore.getState().pendingSkillActionKeys[
+        "claude-code::shared-skill"
+      ],
     ).toBeUndefined();
 
     resolveUninstall();
     await uninstallPromise;
 
-    expect(invoke).toHaveBeenNthCalledWith(1, "uninstall_skill_from_agent", {
+    expect(ipcInvokeCalls("uninstall_skill_from_agent")[0].args).toEqual({
       skillId: "shared-skill",
       agentId: "claude-code",
       rowId: "claude-code::user::shared-skill",
     });
     expect(
-      useSkillStore.getState().pendingSkillActionKeys["claude-code::user::shared-skill"]
+      useSkillStore.getState().pendingSkillActionKeys[
+        "claude-code::user::shared-skill"
+      ],
     ).toBeUndefined();
   });
 
   it("tracks in-flight uninstall mutations by agent and skill", async () => {
     let resolveUninstall!: () => void;
-    vi.mocked(invoke)
-      .mockReturnValueOnce(
+    mockIpcCommands({
+      uninstall_skill_from_agent: () =>
         new Promise<void>((resolve) => {
           resolveUninstall = resolve;
-        })
-      )
-      .mockResolvedValueOnce([]);
+        }),
+      get_skills_by_agent: [],
+    });
 
     const uninstallPromise = useSkillStore
       .getState()
       .uninstallSkillFromAgent("frontend-design", "claude-code");
 
     expect(
-      useSkillStore.getState().pendingSkillActionKeys["claude-code::frontend-design"]
+      useSkillStore.getState().pendingSkillActionKeys[
+        "claude-code::frontend-design"
+      ],
     ).toBe(true);
 
     resolveUninstall();
     await uninstallPromise;
 
     expect(
-      useSkillStore.getState().pendingSkillActionKeys["claude-code::frontend-design"]
+      useSkillStore.getState().pendingSkillActionKeys[
+        "claude-code::frontend-design"
+      ],
     ).toBeUndefined();
   });
 
   it("sets error and clears pending uninstall state when uninstall fails", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("Permission denied"));
+    mockIpcCommand("uninstall_skill_from_agent", () =>
+      Promise.reject(new Error("Permission denied")),
+    );
 
     await expect(
       useSkillStore
         .getState()
-        .uninstallSkillFromAgent("frontend-design", "claude-code")
+        .uninstallSkillFromAgent("frontend-design", "claude-code"),
     ).rejects.toThrow("Permission denied");
 
     expect(useSkillStore.getState().error).toContain("Permission denied");
     expect(
-      useSkillStore.getState().pendingSkillActionKeys["claude-code::frontend-design"]
+      useSkillStore.getState().pendingSkillActionKeys[
+        "claude-code::frontend-design"
+      ],
     ).toBeUndefined();
   });
 
   it("batch uninstalls skills with row-aware IPC payload and refreshes the agent list", async () => {
     const remainingSkills = [mockSkills[1]];
-    vi.mocked(invoke)
-      .mockResolvedValueOnce({
+    mockIpcCommands({
+      batch_uninstall_skills_from_agent: {
         succeeded: [
           {
             skill_id: "frontend-design",
@@ -277,8 +302,9 @@ describe("skillStore", () => {
           },
         ],
         failed: [],
-      })
-      .mockResolvedValueOnce(remainingSkills);
+      },
+      get_skills_by_agent: remainingSkills,
+    });
 
     const result = await useSkillStore
       .getState()
@@ -287,18 +313,29 @@ describe("skillStore", () => {
         { skill_id: "shared-skill", row_id: "claude-code::user::shared-skill" },
       ]);
 
-    expect(invoke).toHaveBeenNthCalledWith(1, "batch_uninstall_skills_from_agent", {
-      agentId: "claude-code",
-      requests: [
-        { skill_id: "frontend-design" },
-        { skill_id: "shared-skill", row_id: "claude-code::user::shared-skill" },
-      ],
-    });
-    expect(invoke).toHaveBeenNthCalledWith(2, "get_skills_by_agent", {
+    expect(ipcInvokedCommands()).toEqual([
+      "batch_uninstall_skills_from_agent",
+      "get_skills_by_agent",
+    ]);
+    expect(ipcInvokeCalls("batch_uninstall_skills_from_agent")[0].args).toEqual(
+      {
+        agentId: "claude-code",
+        requests: [
+          { skill_id: "frontend-design" },
+          {
+            skill_id: "shared-skill",
+            row_id: "claude-code::user::shared-skill",
+          },
+        ],
+      },
+    );
+    expect(ipcInvokeCalls("get_skills_by_agent")[0].args).toEqual({
       agentId: "claude-code",
     });
     expect(result.failed).toEqual([]);
-    expect(useSkillStore.getState().skillsByAgent["claude-code"]).toEqual(remainingSkills);
+    expect(useSkillStore.getState().skillsByAgent["claude-code"]).toEqual(
+      remainingSkills,
+    );
   });
 
   it("tracks batch uninstall pending state by row-level action keys", async () => {
@@ -306,13 +343,13 @@ describe("skillStore", () => {
       succeeded: Array<{ skill_id: string; row_id?: string }>;
       failed: never[];
     }) => void;
-    vi.mocked(invoke)
-      .mockReturnValueOnce(
+    mockIpcCommands({
+      batch_uninstall_skills_from_agent: () =>
         new Promise((resolve) => {
           resolveBatch = resolve;
-        })
-      )
-      .mockResolvedValueOnce([]);
+        }),
+      get_skills_by_agent: [],
+    });
 
     const uninstallPromise = useSkillStore
       .getState()
@@ -322,10 +359,14 @@ describe("skillStore", () => {
       ]);
 
     expect(
-      useSkillStore.getState().pendingSkillActionKeys["claude-code::frontend-design"]
+      useSkillStore.getState().pendingSkillActionKeys[
+        "claude-code::frontend-design"
+      ],
     ).toBe(true);
     expect(
-      useSkillStore.getState().pendingSkillActionKeys["claude-code::user::shared-skill"]
+      useSkillStore.getState().pendingSkillActionKeys[
+        "claude-code::user::shared-skill"
+      ],
     ).toBe(true);
 
     resolveBatch({
@@ -341,17 +382,23 @@ describe("skillStore", () => {
   });
 
   it("rejects batch uninstall outside the Tauri desktop runtime", async () => {
-    const isTauriSpy = vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(false);
+    const isTauriSpy = vi
+      .spyOn(tauriBridge, "isTauriRuntime")
+      .mockReturnValue(false);
 
     await expect(
       useSkillStore
         .getState()
-        .batchUninstallSkillsFromAgent("claude-code", [{ skill_id: "frontend-design" }])
-    ).rejects.toThrow("Uninstalling skills requires the Tauri desktop runtime.");
+        .batchUninstallSkillsFromAgent("claude-code", [
+          { skill_id: "frontend-design" },
+        ]),
+    ).rejects.toThrow(
+      "Uninstalling skills requires the Tauri desktop runtime.",
+    );
 
-    expect(invoke).not.toHaveBeenCalled();
+    expect(ipcInvokeCalls()).toHaveLength(0);
     expect(useSkillStore.getState().error).toBe(
-      "Uninstalling skills requires the Tauri desktop runtime."
+      "Uninstalling skills requires the Tauri desktop runtime.",
     );
     expect(useSkillStore.getState().pendingSkillActionKeys).toEqual({});
 
