@@ -966,3 +966,40 @@ Added card-level Central skill platform uninstall action and recorded the Trelli
 ### Next Steps
 
 - None - task complete
+
+
+## Session 25: Platform management module：registry 登记点 + 共享多选 + 展示分支收敛
+
+**Date**: 2026-07-05
+**Task**: Platform management module：registry 登记点 + 共享多选 + 展示分支收敛
+**Branch**: `dev`
+
+### Summary
+
+实施架构深化子任务 5/9 frontend-platform-module：新建 platformRegistry.ts 唯一登记表（三份 UNIVERSAL_*_ORDER + DEFAULT_ENABLED_PLATFORM_IDS 全部表推导，行为锁测试），新建 PlatformMultiSelect 共享模块（hook+网格+失败列表）薄化 4 个安装对话框（行为锁断言零改动），11 个组件文件展示三元收敛到 label/title/count 三 helper；CLAUDE.md InstallDialog 描述勘误；沉淀 .trellis/spec/frontend/platform-grouping.md 三条约定。门禁 pnpm test 1276 过 + typecheck/lint 干净。过程记录：清理了 07-04 21:03 残留的陈旧 .git/index.lock；CLAUDE.md 按 hunk 拆分提交（issue-tracker 行改动留给另一窗口）。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1dfa9ca9` | (see git log) |
+| `6d59e707` | (see git log) |
+| `2407fd3c` | (see git log) |
+| `ec7a7bd2` | (see git log) |
+| `4419a074` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
