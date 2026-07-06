@@ -22,7 +22,9 @@ vi.mock("@/components/ui/button", () => ({
     children: ReactNode;
     size?: string;
     variant?: string;
-  } & ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props}>{children}</button>,
+  } & ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button {...props}>{children}</button>
+  ),
 }));
 
 vi.mock("@/stores/platformStore", () => ({
@@ -46,7 +48,7 @@ function setPlatform(platform: string) {
 function renderTopBar() {
   render(
     <MemoryRouter initialEntries={["/central"]}>
-      <TopBar onSearchClick={vi.fn()} />
+      <TopBar onSearchClick={vi.fn()} onShortcutsClick={vi.fn()} />
     </MemoryRouter>,
   );
 }

@@ -2030,6 +2030,34 @@
     "actionDiscover": "打开发现扫描",
     "skillDetail": "技能详情"
   },
+  "shortcuts": {
+    "title": "键盘快捷键",
+    "description": "应用内可用的快捷键一览。",
+    "openButton": "查看键盘快捷键",
+    "or": "或",
+    "groups": {
+      "global": "全局",
+      "central": "中央技能库",
+      "logs": "操作日志",
+      "targets": "目标快切"
+    },
+    "entries": {
+      "globalSearch": "打开/关闭全局搜索",
+      "shortcutsSheet": "打开/关闭快捷键速查",
+      "commandPalette": "打开/关闭命令面板",
+      "logsFocusSearch": "聚焦日志搜索框",
+      "logsRefresh": "刷新日志",
+      "logsExport": "导出日志",
+      "logsMoveFocus": "在日志行间移动焦点",
+      "targetsCloseMenu": "关闭目标切换菜单"
+    },
+    "scopes": {
+      "questionNotWhileTyping": "? 键在输入焦点下不触发",
+      "notWhileTyping": "输入焦点下不触发",
+      "sharedWithGlobalSearch": "仅中央技能库页，与全局搜索同键",
+      "menuOpen": "菜单打开时"
+    }
+  },
   "projects": {
     "title": "项目",
     "subtitle": "管理你手动添加的项目本地技能",

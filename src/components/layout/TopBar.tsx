@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Blocks, Moon, Plus, Search, Sun } from "lucide-react";
+import { Blocks, Keyboard, Moon, Plus, Search, Sun } from "lucide-react";
 
 import { usePlatformStore } from "@/stores/platformStore";
 import { useThemeStore, type ThemeFlavor } from "@/stores/themeStore";
@@ -17,6 +17,7 @@ import {
 
 interface TopBarProps {
   onSearchClick: () => void;
+  onShortcutsClick: () => void;
 }
 
 const LIGHT_FLAVORS: ThemeFlavor[] = ["latte", "claude-light"];
@@ -29,7 +30,7 @@ const FLAVOR_TOGGLE_MAP: Record<ThemeFlavor, ThemeFlavor> = {
   "claude-light": "claude-dark",
 };
 
-export function TopBar({ onSearchClick }: TopBarProps) {
+export function TopBar({ onSearchClick, onShortcutsClick }: TopBarProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -119,7 +120,7 @@ export function TopBar({ onSearchClick }: TopBarProps) {
             </span>
             <ShortcutHint
               shortcut="mod+k"
-              className="hidden rounded border border-border/50 px-1 py-0.5 text-[10px] text-muted-foreground/60 sm:inline-flex"
+              className="hidden rounded border border-border/50 px-1 py-0.5 text-[11px] text-muted-foreground/60 sm:inline-flex"
             />
           </button>
         </div>
@@ -157,6 +158,18 @@ export function TopBar({ onSearchClick }: TopBarProps) {
       </Button>
 
       <TargetQuickSwitcher />
+
+      <button
+        onClick={onShortcutsClick}
+        className={cn(
+          "z-10 p-1.5 rounded-md transition-colors cursor-pointer shrink-0 focus-ring",
+          "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+        )}
+        aria-label={t("shortcuts.openButton")}
+        title={t("shortcuts.openButton")}
+      >
+        <Keyboard className="size-4" />
+      </button>
 
       <button
         onClick={handleToggleTheme}

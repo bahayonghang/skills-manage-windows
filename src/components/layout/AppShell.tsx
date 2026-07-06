@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { GlobalSearchDialog } from "./GlobalSearchDialog";
+import { ShortcutsSheet } from "./ShortcutsSheet";
 import { UpdateCenterDialog } from "@/components/central/UpdateCenterDialog";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
@@ -32,17 +33,26 @@ function disposeListener(unlisten?: (() => void | Promise<void>) | null) {
  */
 export function AppShell() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
   const { pathname } = useLocation();
   const { t } = useTranslation();
 
   const initialize = usePlatformStore((s) => s.initialize);
   const rescan = usePlatformStore((s) => s.rescan);
-  const resetPlatformForTargetChange = usePlatformStore((s) => s.resetForTargetChange);
+  const resetPlatformForTargetChange = usePlatformStore(
+    (s) => s.resetForTargetChange,
+  );
   const loadCentralSkills = useCentralSkillsStore((s) => s.loadCentralSkills);
-  const resetCentralForTargetChange = useCentralSkillsStore((s) => s.resetForTargetChange);
-  const resetSkillsForTargetChange = useSkillStore((s) => s.resetForTargetChange);
-  const resetMarketplaceForTargetChange = useMarketplaceStore((s) => s.resetForTargetChange);
+  const resetCentralForTargetChange = useCentralSkillsStore(
+    (s) => s.resetForTargetChange,
+  );
+  const resetSkillsForTargetChange = useSkillStore(
+    (s) => s.resetForTargetChange,
+  );
+  const resetMarketplaceForTargetChange = useMarketplaceStore(
+    (s) => s.resetForTargetChange,
+  );
   const loadTargets = useTargetStore((s) => s.loadTargets);
   const activeTargetId = useTargetStore((s) => s.activeTarget.id);
   const [hasLoadedTargets, setHasLoadedTargets] = useState(false);
@@ -120,34 +130,39 @@ export function AppShell() {
     let disposed = false;
     let unlisten: (() => void | Promise<void>) | undefined;
 
-    void listen<MigrationProgressPayload>("system://migration-progress", (event) => {
-      if (disposed) return;
-      const payload = event.payload;
-      switch (payload.phase) {
-        case "completed":
-          if (payload.copied > 0 || payload.failed > 0) {
-            toast.success(
-              t("central.migrationCompleted", {
-                copied: payload.copied,
-                skipped: payload.skipped,
-                failed: payload.failed,
-              })
-            );
-          }
-          break;
-        case "failed":
-          toast.error(t("central.migrationFailed", { error: payload.error }));
-          break;
-        default:
-          break;
-      }
-    }).then((cleanup) => {
-      if (disposed) {
-        disposeListener(cleanup);
-        return;
-      }
-      unlisten = cleanup;
-    }).catch(() => undefined);
+    void listen<MigrationProgressPayload>(
+      "system://migration-progress",
+      (event) => {
+        if (disposed) return;
+        const payload = event.payload;
+        switch (payload.phase) {
+          case "completed":
+            if (payload.copied > 0 || payload.failed > 0) {
+              toast.success(
+                t("central.migrationCompleted", {
+                  copied: payload.copied,
+                  skipped: payload.skipped,
+                  failed: payload.failed,
+                }),
+              );
+            }
+            break;
+          case "failed":
+            toast.error(t("central.migrationFailed", { error: payload.error }));
+            break;
+          default:
+            break;
+        }
+      },
+    )
+      .then((cleanup) => {
+        if (disposed) {
+          disposeListener(cleanup);
+          return;
+        }
+        unlisten = cleanup;
+      })
+      .catch(() => undefined);
 
     return () => {
       disposed = true;
@@ -165,7 +180,10 @@ export function AppShell() {
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
-      <TopBar onSearchClick={() => setIsSearchOpen(true)} />
+      <TopBar
+        onSearchClick={() => setIsSearchOpen(true)}
+        onShortcutsClick={() => setIsShortcutsOpen(true)}
+      />
       <div className="flex flex-1 min-h-0">
         <Sidebar />
         <main ref={mainRef} className="flex-1 min-h-0 min-w-0 overflow-hidden">
@@ -176,6 +194,10 @@ export function AppShell() {
         open={isSearchOpen}
         onOpenChange={setIsSearchOpen}
         onAction={handleAction}
+      />
+      <ShortcutsSheet
+        open={isShortcutsOpen}
+        onOpenChange={setIsShortcutsOpen}
       />
       <UpdateCenterDialog />
     </div>

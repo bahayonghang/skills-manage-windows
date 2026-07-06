@@ -2030,6 +2030,34 @@
     "actionDiscover": "Open Discover scan",
     "skillDetail": "Skill Detail"
   },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "description": "All shortcuts available in the app.",
+    "openButton": "View keyboard shortcuts",
+    "or": "or",
+    "groups": {
+      "global": "Global",
+      "central": "Central Skills",
+      "logs": "Operation Logs",
+      "targets": "Target Switcher"
+    },
+    "entries": {
+      "globalSearch": "Open or close global search",
+      "shortcutsSheet": "Open or close this shortcuts overview",
+      "commandPalette": "Open or close the command palette",
+      "logsFocusSearch": "Focus the log search box",
+      "logsRefresh": "Refresh logs",
+      "logsExport": "Export logs",
+      "logsMoveFocus": "Move focus between log rows",
+      "targetsCloseMenu": "Close the target switcher menu"
+    },
+    "scopes": {
+      "questionNotWhileTyping": "? does not fire while typing",
+      "notWhileTyping": "Not while typing",
+      "sharedWithGlobalSearch": "Central Skills page only, same key as global search",
+      "menuOpen": "While the menu is open"
+    }
+  },
   "projects": {
     "title": "Projects",
     "subtitle": "Manage project-local skills for each project you add",
