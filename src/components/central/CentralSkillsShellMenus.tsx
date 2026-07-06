@@ -160,7 +160,7 @@ export function ToolbarSortMenu({
                     className={menuItemClassName(active && "bg-accent/60 text-accent-foreground")}
                   >
                     <span>{field.label}</span>
-                    <span className="ml-auto text-[10px] text-muted-foreground">{dir.label}</span>
+                    <span className="ml-auto text-[11px] text-muted-foreground">{dir.label}</span>
                     {active && <Check className="size-3" aria-hidden />}
                   </MenuPrimitive.Item>
                 );
@@ -464,5 +464,5 @@ function menuItemClassName(extra?: string | false): string {
 }
 
 function menuLabelClassName(): string {
-  return "px-2 pt-1 pb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground/80";
+  return "px-2 pt-1 pb-0.5 text-[11px] uppercase tracking-wide text-muted-foreground/80";
 }

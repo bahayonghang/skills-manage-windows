@@ -79,7 +79,7 @@ export function RecentCallsFeed({
           <span
             className={cn(
               "justify-self-end rounded-full border border-border bg-muted/40 px-2 py-0.5",
-              "text-[10px] uppercase tracking-wide text-muted-foreground"
+              "text-[11px] uppercase tracking-wide text-muted-foreground"
             )}
           >
             {c.source}

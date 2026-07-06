@@ -63,7 +63,7 @@ export function ActivityHeatmap({ days, className }: ActivityHeatmapProps) {
       )}
     >
       {/* Weekday labels (sparse) */}
-      <div className="grid h-full min-h-[12rem] grid-rows-7 items-center py-1 text-[10px] text-muted-foreground">
+      <div className="grid h-full min-h-[12rem] grid-rows-7 items-center py-1 text-[11px] text-muted-foreground">
         {weekdayLabels.map((d, index) => (
           <span key={`${d}-${index}`}>{d}</span>
         ))}

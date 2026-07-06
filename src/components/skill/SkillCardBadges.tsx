@@ -6,7 +6,7 @@ import type { ClaudeSourceKind } from "@/types";
 
 export function SourceChip({ label }: { label: string }) {
   return (
-    <span className="inline-flex max-w-full items-center rounded-md border border-border/60 bg-muted/35 px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground/80">
+    <span className="inline-flex max-w-full items-center rounded-md border border-border/60 bg-muted/35 px-1.5 py-0.5 font-mono text-[11px] leading-none text-muted-foreground/80">
       <span className="truncate">{label}</span>
     </span>
   );
@@ -63,7 +63,7 @@ export function SourceOriginBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
         isPlugin
           ? "bg-warning/10 text-warning-foreground ring-warning/20"
           : "bg-info/10 text-info-foreground ring-info/20",
@@ -88,7 +88,7 @@ export function ReadOnlyBadge() {
   const { t, i18n } = useTranslation();
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70">
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border/70">
       <Lock className="size-3 shrink-0" />
       {t("platform.readOnly", {
         defaultValue: i18n.language.startsWith("zh") ? "只读" : "Read-only",
@@ -107,7 +107,7 @@ export function ProjectSourceBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
         isCentral
           ? "bg-info/10 text-info-foreground ring-info/20"
           : "bg-muted text-muted-foreground ring-border/70",

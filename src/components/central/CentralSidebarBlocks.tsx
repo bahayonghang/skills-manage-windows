@@ -429,7 +429,7 @@ export function SidebarTagRow({
         )
       }
       onClick={(e) => e.stopPropagation()}
-      className="ml-1 rounded-md border border-border/60 bg-background px-1 py-0.5 text-[10px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+      className="ml-1 rounded-md border border-border/60 bg-background px-1 py-0.5 text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
     >
       <option value="">
         {t ? t("central.v2.tagGroupsAssignNone") : "None"}

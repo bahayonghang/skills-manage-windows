@@ -219,13 +219,13 @@ export function ProjectInstallDialog({
                   ? existingForTarget(selectedSkillId, target)
                   : undefined;
                 return exists ? (
-                  <span className="text-[10px] text-warning-foreground shrink-0">
+                  <span className="text-[11px] text-warning-foreground shrink-0">
                     {t("projectInstall.willReplace", {
                       type: exists.linkType,
                     })}
                   </span>
                 ) : (
-                  <span className="text-[10px] text-muted-foreground shrink-0">
+                  <span className="text-[11px] text-muted-foreground shrink-0">
                     {t("projectInstall.willCreate")}
                   </span>
                 );

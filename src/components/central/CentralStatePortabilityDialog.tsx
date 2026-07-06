@@ -420,7 +420,7 @@ export function CentralStatePortabilityDialog({
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-background">
                 <div
-                  className="h-full rounded-full bg-primary transition-all"
+                  className="h-full rounded-full bg-primary transition-[width]"
                   style={{ width: `${Math.round(jobRatio * 100)}%` }}
                 />
               </div>
@@ -593,9 +593,12 @@ export function CentralStatePortabilityDialog({
                             className="text-xs text-muted-foreground"
                           >
                             <span>
-                              {t(`central.portabilityReason.${warning.reason}`, {
-                                defaultValue: warning.reason,
-                              })}
+                              {t(
+                                `central.portabilityReason.${warning.reason}`,
+                                {
+                                  defaultValue: warning.reason,
+                                },
+                              )}
                             </span>
                             {warning.repoUrl ? (
                               <span>{` · ${warning.repoUrl}`}</span>

@@ -84,7 +84,7 @@ export function SkillDetailFileTree({
 
   return (
     <section aria-label={t("detail.fileTreeTitle")}>
-      <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground/70">
+      <div className="mb-2 text-[11px] uppercase tracking-wider text-muted-foreground/70">
         {t("detail.fileTreeTitle")}
       </div>
       <div

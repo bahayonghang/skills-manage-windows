@@ -51,7 +51,7 @@ export function CardTagEditor({
             key={tag.id}
             style={color.style}
             className={cn(
-              "group/tag inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+              "group/tag inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-medium",
               color.className,
             )}
           >

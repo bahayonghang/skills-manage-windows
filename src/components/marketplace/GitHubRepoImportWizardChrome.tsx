@@ -280,14 +280,14 @@ function GitHubRepoImportPreviewToolbar({
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
         <div className="min-w-0 space-y-1.5">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
               {t("marketplace.githubImportToolbarLabel")}
             </span>
             <span className="truncate text-sm font-semibold">
               {preview.repo.owner}/{preview.repo.repo}
             </span>
             {preview.repo.branch ? (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                 {preview.repo.branch}
               </span>
             ) : null}

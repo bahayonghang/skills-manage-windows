@@ -126,7 +126,9 @@ export function GlobalSearchDialog({
         description: skill.description,
         groupKey: "central",
         groupLabel: t("globalSearch.centralSkills"),
-        icon: <Blocks className="size-4 shrink-0 text-primary/70" />,
+        icon: (
+          <Blocks className="size-4 shrink-0 text-muted-foreground group-data-selected/command-item:text-primary" />
+        ),
         searchText: buildSearchText([skill.name, skill.description]),
         labelText,
         descriptionText,
@@ -145,7 +147,9 @@ export function GlobalSearchDialog({
         description: col.description,
         groupKey: "collections",
         groupLabel: t("globalSearch.collections"),
-        icon: <Layers className="size-4 shrink-0 text-primary/70" />,
+        icon: (
+          <Layers className="size-4 shrink-0 text-muted-foreground group-data-selected/command-item:text-primary" />
+        ),
         searchText: buildSearchText([col.name, col.description]),
         labelText: col.name.toLowerCase(),
         descriptionText: (col.description ?? "").toLowerCase(),
@@ -169,7 +173,10 @@ export function GlobalSearchDialog({
         groupKey: "platforms",
         groupLabel: t("globalSearch.platforms"),
         icon: (
-          <PlatformIcon agentId={agent.id} className="size-4 text-primary/70" />
+          <PlatformIcon
+            agentId={agent.id}
+            className="size-4 text-muted-foreground group-data-selected/command-item:text-primary"
+          />
         ),
         searchText: buildSearchText([
           label,
@@ -192,7 +199,9 @@ export function GlobalSearchDialog({
         label: t("globalSearch.actionDashboard"),
         groupKey: "actions",
         groupLabel: t("globalSearch.actions"),
-        icon: <LayoutDashboard className="size-4 shrink-0 text-primary/70" />,
+        icon: (
+          <LayoutDashboard className="size-4 shrink-0 text-muted-foreground group-data-selected/command-item:text-primary" />
+        ),
         searchText: buildSearchText([
           t("globalSearch.actionDashboard"),
           t("sidebar.dashboard"),
@@ -209,7 +218,9 @@ export function GlobalSearchDialog({
         label: t("globalSearch.actionRescan"),
         groupKey: "actions",
         groupLabel: t("globalSearch.actions"),
-        icon: <RefreshCw className="size-4 shrink-0 text-primary/70" />,
+        icon: (
+          <RefreshCw className="size-4 shrink-0 text-muted-foreground group-data-selected/command-item:text-primary" />
+        ),
         searchText: buildSearchText([t("globalSearch.actionRescan")]),
         labelText: t("globalSearch.actionRescan").toLowerCase(),
         descriptionText: "",
@@ -223,7 +234,9 @@ export function GlobalSearchDialog({
         label: t("globalSearch.actionNewCollection"),
         groupKey: "actions",
         groupLabel: t("globalSearch.actions"),
-        icon: <Plus className="size-4 shrink-0 text-primary/70" />,
+        icon: (
+          <Plus className="size-4 shrink-0 text-muted-foreground group-data-selected/command-item:text-primary" />
+        ),
         searchText: buildSearchText([t("globalSearch.actionNewCollection")]),
         labelText: t("globalSearch.actionNewCollection").toLowerCase(),
         descriptionText: "",
