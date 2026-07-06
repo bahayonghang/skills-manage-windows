@@ -198,7 +198,7 @@ Skills 位于 `.claude/skills/` 目录，每个 skill 有独立的 `SKILL.md` �
 
 ### Issue tracker
 
-Issues for this repo live in GitHub Issues and should be managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues for this repo live in GitHub Issues and should be managed with the `gh` CLI; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
