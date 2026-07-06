@@ -12,6 +12,7 @@ colors:
   surface-mute: "#45475a"
   surface-raise: "#585b70"
   catppuccin-red: "#f38ba8"
+  catppuccin-blue: "#89b4fa"
   claude-coral: "#cc785c"
 typography:
   display:
@@ -114,6 +115,8 @@ SkillPort 是一个冷静、密集的指挥中心。重度用户每天住在这�
 - 分层玻璃：玻璃面板 + 径向光晕营造控制室纵深
 - 本地优先的诚实：界面状态如实映射文件系统真相
 
+**Dashboard 密度定位（产品决策 2026-07-06）.** Dashboard 单屏多区的高密度是有意的调度台张力，不是待修的缺陷：Hero、就绪度、工作队列、平台、进度、活动、日志多区并置，让重度用户一屏扫完全局再决定跳往哪里。密度类反馈以此为基准判断——不因「超出单一焦点」而重排或删区；要动的是层级与可读性，不是信息量。
+
 ## 2. Colors
 
 调色板是 Catppuccin 的深色 surface 阶梯 + 一个可切换的高饱和 accent；克制、低噪、可换肤。下列十六进制为**默认主题 Mocha + 默认 accent Lavender** 的取值，是 frontmatter 的 canonical 来源；其余 5 套主题与 14 种 accent 通过 `[data-theme]` / `[data-accent]` 切换同名语义 token。
@@ -133,6 +136,7 @@ SkillPort 是一个冷静、密集的指挥中心。重度用户每天住在这�
 
 ### Tertiary
 - **Catppuccin Red** (`#f38ba8`)：唯一的 destructive 语义色（`--destructive`），以**低饱和着色**形式出现（红/10 底 + 红字），而非满涂实心红块。图表 5 色（chart-1..5）映射 green/blue/mauve/yellow/red，仅用于数据可视化。
+- **Catppuccin Blue** (`#89b4fa`)：仅出现在启动闪屏的 logo 渐变（`#b4befe → #89b4fa`）。闪屏在 React 与主题变量加载之前渲染，故以字面值写死为 Catppuccin Mocha 标准蓝；产品 UI 内禁止直接使用该字面值，一律走语义 token。
 
 ### Named Rules
 **The Theme-Is-Identity Rule.** 个性只允许通过主题与 accent 表达。任何「为了好玩」临时加的气泡化、玩具化装饰一律禁止。换肤是卖点；廉价点缀是噪音。
@@ -174,12 +178,13 @@ SkillPort 是一个冷静、密集的指挥中心。重度用户每天住在这�
 ### Named Rules
 **The Flat-By-Default Rule.** 表面静止时扁平，深度靠中性分层（base → mantle → crust）传达。阴影/发光只作为状态响应出现，不作静态装饰。
 
-**The Glass-Is-Earned Rule.** 玻璃态是营造点，不是默认皮肤。普通密集列表禁止铺满 `backdrop-filter`；玻璃只用在 dashboard 等少数控制室界面。
+**The Glass-Is-Earned Rule.** 玻璃态是营造点，不是默认皮肤。普通密集列表禁止铺满 `backdrop-filter`；玻璃只用在 dashboard 等少数控制室界面，外加一个登记例外——悬浮于滚动内容之上的浮动操作条 overlay（见 Cards / Containers 的 Corner Exceptions）。
 
 ## 5. Components
 
 ### Buttons
 - **Shape:** `rounded-lg`（10px），高 32px（`h-8`），内距 `0 10px`，`transition-colors` 150ms，`active:translate-y-px` 轻微下压。
+- **Press Feedback（双轨规则）:** 按压反馈只允许两种语言，按控件类型分轨——表单/主操作按钮（`ui/Button` 体系）统一 `active:translate-y-px` 下沉；手写的图标格/磁贴/pill 类交互件统一 `active:scale-[0.96]` 缩放。缩放基准值只有 0.96 一档，禁止 0.95/0.98/0.99 等漂移；过渡一律指定属性（scale 走 `transition-[scale,…]`），禁止 `transition-all`。
 - **Primary:** `bg-primary`（Lavender Signal）+ `text-primary-foreground`（Mantle）。
 - **Outline / Secondary / Ghost:** outline = base 底 + border 描边 + hover muted；secondary = Surface Stroke 底；ghost = 透明 + hover muted。
 - **Destructive（独特）:** 不是实心红块，而是**低饱和着色**——`bg-destructive/10` + `text-destructive`，hover 加深到 /20。
@@ -191,6 +196,12 @@ SkillPort 是一个冷静、密集的指挥中心。重度用户每天住在这�
 - **Shadow Strategy:** `shadow-sm` 静止 → `hover:shadow-md`（见 Elevation）。
 - **Border:** **`ring-1 ring-border` 而非 border**——这是全应用卡片的统一签名样式。
 - **Internal Padding:** 16px（`py-4` + `px-4`）；footer 用 `border-t bg-muted/50`。
+- **Corner Exceptions（登记制，仅限下列场景）：**
+  1. **Dashboard 玻璃面板** —— dashboard 的七块 `.surface-glass` 控制室面板（Hero / 就绪度 / 队列 / 平台 / 进度 / 活动 / 日志）用 `rounded-2xl`（18px）区分「控制室营造点」与普通卡片；内层圆角严格递减（2xl → xl → lg）。
+  2. **Settings「关于」页外层容器** —— About 页的顶层 cockpit 容器同样按外层容器级取 `rounded-2xl`，内部两级依次 `rounded-xl` → `rounded-lg`。
+  3. **浮动操作条 overlay** —— 中央库 `BulkActionBar` 悬浮于滚动内容之上，保留 `rounded-2xl` + `backdrop-blur` 玻璃底以保证叠加任意内容时的可读性；这是 dashboard 之外唯一合法的玻璃 overlay。
+  4. **启动闪屏** —— `.startup-card` 在 React 与主题 token 加载前由 index.html 静态渲染，`border-radius: 1.125rem`（= 2xl 阶）与配色均为字面值（见 Colors 的 Catppuccin Blue 条目）。
+  未登记的 `rounded-2xl` 及以上圆角一律视为越界，先登记再使用。
 
 ### Inputs / Fields
 - **Style:** `bg-transparent` + `border-input` 描边 + `rounded-lg`（10px），高 32px。
@@ -223,7 +234,7 @@ SkillPort 是一个冷静、密集的指挥中心。重度用户每天住在这�
 ### Don't:
 - **Don't** 做成千篇一律的 SaaS 仪表盘：禁止渐变大数字、hero-metric 模板、无差别的图标+标题+文字卡片网格。
 - **Don't** 做成臃肿的企业级后台：禁止工具栏塞满、层级混乱、信息无优先级。
-- **Don't** 做成玩具感消费应用：卡片圆角封顶 14px（`rounded-xl`），禁止 24/28/32px+ 的过度圆角与气泡化。
+- **Don't** 做成玩具感消费应用：卡片圆角封顶 14px（`rounded-xl`），禁止 24/28/32px+ 的过度圆角与气泡化；`rounded-2xl`（18px）仅限已登记例外（见 Cards / Containers 的 Corner Exceptions）。
 - **Don't** 露出 AI 生成的通用感：不套通用模板，个性只走主题/accent。
 - **Don't** 用 `border-left/right > 1px` 的彩色侧边条作为卡片/列表/告警装饰（侧栏 active 的 3px 指示条是状态指示，例外且合法）。
 - **Don't** 用渐变文字（`background-clip:text`）、把玻璃态当默认皮肤、或给密集列表铺满 `backdrop-filter`。
