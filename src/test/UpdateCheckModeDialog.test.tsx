@@ -104,4 +104,13 @@ describe("UpdateCheckModeDialog", () => {
 
     expect(onConfirm).toHaveBeenCalledWith("regular");
   });
+
+  it("shows an inline check failure", () => {
+    renderDialog({ error: "检查更新失败: network unavailable" });
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "检查更新失败: network unavailable",
+    );
+  });
 });

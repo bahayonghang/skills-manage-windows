@@ -1,0 +1,59 @@
+# 前端异步动作失败反馈约定
+
+## Scope / Trigger
+
+当页面、controller 或 dialog 触发 store async action，且成功后才会打开目标面板/抽屉/对话框时，调用方必须负责当前可见界面的失败反馈。
+
+典型场景：模式确认弹窗先执行 refresh，成功后才打开结果中心；如果 refresh 失败，目标中心不会打开，单纯写 store `error` 不会被用户看到。
+
+## Contract
+
+- Store action 仍负责业务状态：`isLoading/isRefreshing`、`error`、rethrow。
+- 可见 UI 调用方负责交互反馈：捕获错误、显示当前界面内联错误，并发出 toast。
+- 新一轮提交或关闭弹窗时必须清除上一次内联错误。
+- 成功路径不得因为失败处理改变原有导航/打开面板参数。
+
+## Validation & Error Matrix
+
+| Condition | Required UI behavior |
+| --- | --- |
+| Store action resolves | Continue existing success flow and clear local error |
+| Store action rejects before target panel opens | Keep current dialog/view open, show inline error, show toast, re-enable submit |
+| User retries after failure | Clear stale inline error before the new request starts |
+| User closes the dialog/view | Clear dialog-local error |
+
+## Tests Required
+
+- Component-level test for the presentational inline error state.
+- View/controller test proving rejected store action shows toast + inline error and does not open the success-only panel.
+- Retry coverage proving stale inline error is cleared before the next request.
+
+## Wrong vs Correct
+
+### Wrong
+
+```tsx
+try {
+  const result = await store.refresh(scope);
+  openResultDialog(result);
+} finally {
+  setIsSubmitting(false);
+}
+```
+
+### Correct
+
+```tsx
+setSubmitError(null);
+setIsSubmitting(true);
+try {
+  const result = await store.refresh(scope);
+  openResultDialog(result);
+} catch (err) {
+  const message = t("central.updateCheckError", { error: String(err) });
+  setSubmitError(message);
+  toast.error(message);
+} finally {
+  setIsSubmitting(false);
+}
+```

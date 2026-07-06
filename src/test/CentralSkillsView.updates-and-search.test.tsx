@@ -617,6 +617,34 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     expect(mockCheckRepositorySync).not.toHaveBeenCalled();
   });
 
+  it("surfaces Update Center refresh failures from the mode dialog", async () => {
+    mockRefreshUpdateInventory
+      .mockRejectedValueOnce("network unavailable")
+      .mockImplementationOnce(() => new Promise(() => {}));
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByTestId("central-check-updates"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "检查更新失败: network unavailable",
+      );
+    });
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "检查更新失败: network unavailable",
+    );
+    expect(within(dialog).getByTestId("confirm-update-check-mode")).not.toBeDisabled();
+    expect(mockOpenUpdateCenterDialog).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
+
+    await waitFor(() => {
+      expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
   it("persists the visible update mode selector preference", async () => {
     renderCentralSkillsView();
 
