@@ -1109,3 +1109,37 @@ Added card-level Central skill platform uninstall action and recorded the Trelli
 ### Next Steps
 
 - 最后子任务：07-04-transport-seam（硬前置 update-center 已完成）；父任务收尾时刷新 CONTEXT.md 清单
+
+---
+
+## 收拢 Local/SSH/WSL transport seam：一份操作实现三个 adapter
+
+**Date**: 2026-07-06
+**Task**: 07-04-transport-seam
+**Branch**: `dev`
+
+### Summary
+
+完成 07-04-transport-seam（架构深化 9/9，父任务全部子任务完结）。两段式落地：① targets 层新增 CommandRunner 可注入执行缝（trait + ProcessRunner 默认实现，SSH/WSL 10 个 spawn 现场改走 runner，base_command 纯构建器不动），test_support 增 FakeRunner，targets 层 8 个执行半边单测；② installation 域新增 InstallTransport { Local, Remote(Box<ConnectedRemoteTarget>) } 操作级缝 + install.rs 单份编排，native.rs/remote.rs 收敛为各自 transport 执行半边，7 处语义不对称（本地 skip 检测/auto 回退 vs 远程单脚本原子回合等）逐字保留，REMOTE_CENTRAL_INSTALL_SCRIPT 字节不动。调用面迁移：linker.rs 5 命令、collections.rs、batch.rs、central_updates apply_steps 全走 for_target + 编排；删除 installation 域 2 个死 _ssh_impl；batch_uninstall 空 skill_id 守卫补齐远程侧（消除 agent 目录整树 rm -rf 隐患）。新增 4 个 FakeRunner 假连接远程路径测试（脚本六参、RemoteSymlinkDisabled、同根 native 捷径、远程卸载）。design §4 四项指标复核达成：install 家族 1 份编排、linker/collections 命令层分发归零、linker 无 connect_remote_target、死 _ssh_impl=0。试点结论写回本任务 notes.md 与父任务 prd.md（central_skills delete/preview 族值得收，scanner/agents/github_import/usage 观望，local_remote_sync/obsidian 不收）；产出 spec：.trellis/spec/backend/transport-seam.md。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `571b1c9c` | refactor(targets): [AI] ♻️ 引入可注入 CommandRunner 执行缝 |
+| `bc8a2907` | refactor(installation): [AI] ♻️ 收拢安装域到 InstallTransport 缝 |
+
+### Testing
+
+- [OK] cd src-tauri && cargo test：757 通过（2 ignored 为存量）
+- [OK] cargo clippy -- -D warnings：干净（新代码触发的 large_enum_variant×2 / too_many_arguments 已以 Box + 去冗余参数消除）
+- [OK] pnpm typecheck：绿（前端零改动）
+- [OK] grep 复核 design §4 四项量化指标全部达标
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 父任务 07-04-architecture-deepening 收尾：刷新 CONTEXT.md deepening 清单、集成审查（redaction/path/frontmatter 各 grep 一次）、just ci 全门禁
