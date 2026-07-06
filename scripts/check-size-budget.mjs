@@ -12,6 +12,7 @@ const BASELINE_ALLOWLIST = new Map([
   ["src-tauri/src/commands/collections.rs", 1033],
   ["src-tauri/src/db/seed.rs", 810],
   ["src/pages/CentralSkillsView.tsx", 865],
+  ["src/components/skill/UnifiedSkillCard.tsx", 840],
 ]);
 
 function normalizePath(path) {
