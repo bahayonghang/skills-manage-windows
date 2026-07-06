@@ -10,3 +10,4 @@
 - [Rust 测试 fixture 约定（test_support）](./test-support.md)
 - [SKILL.md frontmatter 解析约定](./skill-frontmatter-parsing.md)
 - [Path Policy（路径语义单点约定）](./path-policy.md)
+- [Transport Seam（Local/SSH/WSL 操作级传输缝）](./transport-seam.md)

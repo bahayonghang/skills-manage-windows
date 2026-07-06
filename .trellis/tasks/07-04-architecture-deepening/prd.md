@@ -49,3 +49,9 @@
 
 - 本任务是父任务，正常情况下不应成为 `task.py start` 的实现目标；实现发生在子任务里。
 - 评审对文档的两处勘误已分派：CLAUDE.md 的 InstallDialog 默认勾选描述修正归子任务 3；obsidian 域 0 测试的补齐演示归子任务 7。
+
+## transport-seam 试点结论（子 5 写回，详见其 notes.md）
+
+- 操作级 seam（`InstallTransport` 枚举入口 + plan/execute 复合 hook）验证成立：一份编排服务 Local/SSH/WSL，远程单脚本原子回合保留；`CommandRunner` 缝使 SSH/WSL 执行半边可无进程单测。
+- 推广建议：**值得收** central_skills delete×3 族（收敛后顺删该域 3 个死 `_ssh_impl`）、preview×2 族（先统一 `_ssh_impl` 命名）；**观望** scanner/agents/github_import/usage（fork 密度低，等新操作需求顺势收）；**不收** local_remote_sync（remote-only）、obsidian（守卫非分发）。
+- 登记在案的既有债：`InstallationError::Remote(String)` 类型化可延后（已收敛到 `transport_error` 单点）；exec.rs 同步进程调用无 `spawn_blocking` 的债若修应做在 runner 边界。

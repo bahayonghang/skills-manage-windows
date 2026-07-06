@@ -3,7 +3,7 @@
   "name": "transport-seam",
   "title": "收拢 Local/SSH/WSL transport seam：一份操作实现三个 adapter",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
