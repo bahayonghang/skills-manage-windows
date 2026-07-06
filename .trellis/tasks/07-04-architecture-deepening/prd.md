@@ -40,10 +40,10 @@
 
 ## Acceptance Criteria（父任务完成定义）
 
-- [ ] 9 个子任务全部完成归档，或对放弃者记录了可复核的放弃理由（必要时按 `/improve-codebase-architecture` 的约定沉淀为「不要重复建议」条目）。
-- [ ] `CONTEXT.md`「当前优先 deepening opportunities」清单按实际结果刷新：移除已落地项（含评审确认的 #5 central_skills 已拆分、#6 Settings store 证据不支持），登记新格局。
-- [ ] 集成审查：抽查各新 seam 无跨域 reach-in、无第二套平行实现复活（redaction / path / frontmatter 各 grep 一次）。
-- [ ] 全量门禁通过：`just ci`（Web + Rust 检查链）。
+- [x] 9 个子任务全部完成归档，或对放弃者记录了可复核的放弃理由（必要时按 `/improve-codebase-architecture` 的约定沉淀为「不要重复建议」条目）。
+- [x] `CONTEXT.md`「当前优先 deepening opportunities」清单按实际结果刷新：移除已落地项（含评审确认的 #5 central_skills 已拆分、#6 Settings store 证据不支持），登记新格局。
+- [x] 集成审查：抽查各新 seam 无跨域 reach-in、无第二套平行实现复活（redaction / path / frontmatter 各 grep 一次）。
+- [x] 全量门禁通过：`just ci`（Web + Rust 检查链）。
 
 ## Notes
 

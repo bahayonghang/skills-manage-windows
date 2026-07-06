@@ -131,9 +131,12 @@ SkillPort 默认本地优先。元数据、集合、扫描结果、设置和 AI 
 
 ## 当前优先 deepening opportunities
 
-1. 统一 Path policy Module。
-2. 提取 Platform management Module。
-3. 加深 Operation Log Module。
-4. 拆出 Discover scan core。
-5. 收窄 Central Skills workflow Modules。
-6. 条件拆分 Settings store behavior slices。
+2026-07 架构深化专项（9 个子任务）已全部落地：Path policy（含 remote 半边）、Platform management Module、Redaction policy 统一、typed IPC adapter、Rust test-support harness、UnifiedSkillCard 显式场景、frontmatter 解析统一、Update Center service 域归位、Local/SSH/WSL transport seam 试点（install/uninstall）。旧清单中「收窄 Central Skills workflow Modules」评审确认已拆分、「Settings store behavior slices」证据不支持、「Discover scan core」随 Discover 页面废弃（重定向 `/projects`）而失效，均不再保留。
+
+当前登记（依据 transport seam 试点结论，见 `.trellis/spec/backend/transport-seam.md`）：
+
+1. Transport seam 扩展到 central_skills：delete×3 族收进 `InstallTransport` 编排（顺删该域 3 个死 `_ssh_impl`）；preview×2 族先统一 `_ssh_impl` 命名再评估收敛。
+2. exec.rs 远程执行的 spawn_blocking 债：同步 `std::process` 在 async 上下文直跑；若补应做在 `CommandRunner` runner 边界单点，不是 10 个调用点。
+3. `InstallationError::Remote(String)` 类型化：拍平边界已收敛到 `transport_error` 单点，出现按错误类别分支的需求时再类型化。
+
+低 fork 密度域（scanner / agents / github_import / usage）观望：等该域出现新操作需求时顺势收进 seam，不单独立项；local_remote_sync（remote-only 语义）与 obsidian（守卫非分发）不收。
