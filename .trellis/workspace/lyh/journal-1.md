@@ -1209,3 +1209,43 @@ Created and completed Trellis task 07-06-update-check-failure-feedback. Added vi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 28: UI 设计审计落地:六子任务全量实施
+
+**Date**: 2026-07-06
+**Task**: UI 设计审计落地:六子任务全量实施
+**Branch**: `dev`
+
+### Summary
+
+实施 07-06-ui-design-audit 全部 6 个子任务(trellis-implement/check 双代理流程,全部 PASS,just ci 两轮全绿):P1 语义状态色收敛 statusTone(statusAccent 改名 warning/error,tagColor 身份色板豁免入 PRD);P1 键盘焦点 a11y(focus-ring @utility 覆盖手写按钮,toggle 非颜色状态编码,dialog Close i18n,InlineConfirm Esc 撤退);P2 表面语言收敛(rounded-3xl/任意值圆角归阶梯,border 惯用法统一 ring,DESIGN.md 落 Corner Exceptions/密度定位/#89b4fa/按压双轨);P2 快捷键速查浮层(? 与 mod+/ 唤起,shortcutRegistry 集中清单逐条核实,登记 mod+k 双浮层存量怪癖);P3 微交互(scale 全归 0.96,transition-all 清零,信息标签托底 11px);P3 MetricStrip 单行统计条(删孤儿 StatButton)。8 笔中文拆分提交,按文件边界归属主导任务。遗留:中央库页 mod+k 双浮层互斥可开后续任务;Appearance StatusChip/SpecimenStrip 存量 0.6rem 标签低于 11px 托底。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `425143de` | (see git log) |
+| `7be2c021` | (see git log) |
+| `4462e352` | (see git log) |
+| `b3c8e07b` | (see git log) |
+| `2532f068` | (see git log) |
+| `47659e35` | (see git log) |
+| `da3e428d` | (see git log) |
+| `c78c3b67` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
