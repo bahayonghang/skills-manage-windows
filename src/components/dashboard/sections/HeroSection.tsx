@@ -31,7 +31,7 @@ export function HeroSection({
         : "border-success/35 bg-success/10 text-success-foreground";
 
   return (
-    <section className="surface-glass relative overflow-hidden rounded-3xl px-6 py-6 sm:px-8 sm:py-8">
+    <section className="surface-glass relative overflow-hidden rounded-2xl px-6 py-6 sm:px-8 sm:py-8">
       <span
         aria-hidden="true"
         className="dashboard-hero-glow pointer-events-none absolute -right-24 -top-16 h-56 w-56 rounded-full opacity-45 blur-3xl"
@@ -40,7 +40,7 @@ export function HeroSection({
         <div className="inline-flex items-center gap-2 self-start rounded-full border border-border/70 bg-card/60 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide",
+              "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-wide",
               pillTone,
             )}
           >

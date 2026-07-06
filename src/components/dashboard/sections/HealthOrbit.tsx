@@ -61,7 +61,7 @@ function MiniStat({ label, value, testId }: MiniProps) {
       data-testid={testId}
       className="rounded-xl border border-border/65 bg-card/45 px-3 py-2.5 shadow-[0_0_0_1px_color-mix(in_oklch,var(--border)_54%,transparent)]"
     >
-      <div className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
       <div className="mt-1 font-display text-xl font-semibold tabular-nums">
@@ -132,17 +132,17 @@ export function HealthOrbit({
 
   return (
     <section
-      className="readiness-card surface-glass rounded-3xl p-5"
+      className="readiness-card surface-glass rounded-2xl p-5"
       aria-label={t("dashboard.readiness.label")}
     >
       <div className="relative z-10 flex h-full flex-col gap-4">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {t("dashboard.readiness.label")}
             </div>
             <div
-              className="readiness-score-plaque mt-3 inline-flex items-end gap-2 rounded-2xl px-4 py-3"
+              className="readiness-score-plaque mt-3 inline-flex items-end gap-2 rounded-xl px-4 py-3"
               aria-label={t("dashboard.readiness.ariaLabel", { score })}
               role="img"
               style={
@@ -154,7 +154,7 @@ export function HealthOrbit({
               <span className="font-display text-[3.35rem] font-semibold leading-none tabular-nums">
                 {score}
               </span>
-              <span className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              <span className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t("dashboard.readiness.scoreUnit")}
               </span>
             </div>

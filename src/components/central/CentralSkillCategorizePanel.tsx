@@ -157,7 +157,7 @@ export function CentralSkillCategorizePanel({
         <div
           role="tablist"
           aria-label={t("central.categorizeIntent")}
-          className="mb-4 grid grid-cols-3 gap-1 rounded-2xl border border-border/80 bg-muted/20 p-1.5 shadow-inner"
+          className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-muted/20 p-1.5 shadow-inner ring-1 ring-border/80"
         >
           {(["manual", "ai", "review"] as const).map((tab) => (
             <button
@@ -167,7 +167,7 @@ export function CentralSkillCategorizePanel({
               aria-selected={categorizeTab === tab}
               onClick={() => onSetCategorizeTab(tab)}
               className={cn(
-                "flex h-9 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-colors",
+                "flex h-9 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
                 categorizeTab === tab
                   ? "border-primary/35 bg-background text-primary shadow-sm ring-1 ring-primary/15"
@@ -200,7 +200,7 @@ export function CentralSkillCategorizePanel({
                 {t("central.createTagInline", { name: manualTagQuery.trim() })}
               </Button>
             )}
-            <div className="flex max-h-72 flex-wrap gap-2 overflow-auto rounded-2xl border border-border/90 bg-muted/10 p-3 text-foreground">
+            <div className="flex max-h-72 flex-wrap gap-2 overflow-auto rounded-xl bg-muted/10 p-3 text-foreground ring-1 ring-border/90">
               {filteredManualTags.map((tag) => {
                 const selected = manualSelectedTagIds.includes(tag.id);
                 return (
@@ -243,19 +243,19 @@ export function CentralSkillCategorizePanel({
         {categorizeTab === "review" && (
           <div className="space-y-3">
             {aiTagReviews.length > 0 && manualSelectedTagIds.length === 0 && (
-              <div className="rounded-2xl border border-border/90 bg-muted/20 p-3 text-xs text-foreground/75">
+              <div className="rounded-xl bg-muted/20 p-3 text-xs text-foreground/75 ring-1 ring-border/90">
                 {t("central.reviewReplaceNeedsTags")}
               </div>
             )}
             {aiTagReviews.length === 0 ? (
-              <div className="rounded-2xl border border-border/90 bg-muted/20 p-4 text-center text-xs text-foreground/70">
+              <div className="rounded-xl bg-muted/20 p-4 text-center text-xs text-foreground/70 ring-1 ring-border/90">
                 {t("central.reviewEmpty")}
               </div>
             ) : (
               aiTagReviews.map((review) => (
                 <div
                   key={`${review.skill_id}:${review.tag.id}`}
-                  className="rounded-2xl border border-border/90 bg-background p-3 shadow-sm"
+                  className="rounded-xl bg-background p-3 shadow-sm ring-1 ring-border/90"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">

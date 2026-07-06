@@ -123,7 +123,7 @@ export function SettingsView() {
   const customAgents = useMemo(() => getCustomAgents(agents), [agents]);
   const dbPathDisplay = useMemo(
     () => resolveSettingsDbPath(agents, scanDirectories),
-    [agents, scanDirectories]
+    [agents, scanDirectories],
   );
 
   const [platformVisibilityQuery, setPlatformVisibilityQuery] = useState("");
@@ -131,7 +131,8 @@ export function SettingsView() {
   const [isAddDirOpen, setIsAddDirOpen] = useState(false);
   const [showBuiltinDirs, setShowBuiltinDirs] = useState(false);
   const [isPlatformDialogOpen, setIsPlatformDialogOpen] = useState(false);
-  const [editingPlatform, setEditingPlatform] = useState<AgentWithStatus | null>(null);
+  const [editingPlatform, setEditingPlatform] =
+    useState<AgentWithStatus | null>(null);
   const [removingDir, setRemovingDir] = useState<string | null>(null);
   const [removingAgent, setRemovingAgent] = useState<string | null>(null);
   const [scanDirError, setScanDirError] = useState<string | null>(null);
@@ -142,10 +143,12 @@ export function SettingsView() {
     text: string;
     detail?: string | null;
   } | null>(null);
-  const [sshTargetForm, setSshTargetForm] =
-    useState<SshTargetFormState>(EMPTY_SSH_TARGET_FORM);
-  const [wslTargetForm, setWslTargetForm] =
-    useState<WslTargetFormState>(EMPTY_WSL_TARGET_FORM);
+  const [sshTargetForm, setSshTargetForm] = useState<SshTargetFormState>(
+    EMPTY_SSH_TARGET_FORM,
+  );
+  const [wslTargetForm, setWslTargetForm] = useState<WslTargetFormState>(
+    EMPTY_WSL_TARGET_FORM,
+  );
   const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
   const [sshTargetEditForm, setSshTargetEditForm] =
     useState<SshTargetFormState>(EMPTY_SSH_TARGET_FORM);
@@ -158,17 +161,29 @@ export function SettingsView() {
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [localRemoteSyncTargetId, setLocalRemoteSyncTargetId] = useState<string | null>(null);
+  const [localRemoteSyncTargetId, setLocalRemoteSyncTargetId] = useState<
+    string | null
+  >(null);
   const consumedSettingsActionRef = useRef<string | null>(null);
-  const localRemoteSyncPreview = useLocalRemoteSyncStore((state) => state.preview);
-  const localRemoteSyncResult = useLocalRemoteSyncStore((state) => state.result);
-  const isLocalRemoteSyncPreviewing = useLocalRemoteSyncStore(
-    (state) => state.isPreviewing
+  const localRemoteSyncPreview = useLocalRemoteSyncStore(
+    (state) => state.preview,
   );
-  const isLocalRemoteSyncApplying = useLocalRemoteSyncStore((state) => state.isApplying);
+  const localRemoteSyncResult = useLocalRemoteSyncStore(
+    (state) => state.result,
+  );
+  const isLocalRemoteSyncPreviewing = useLocalRemoteSyncStore(
+    (state) => state.isPreviewing,
+  );
+  const isLocalRemoteSyncApplying = useLocalRemoteSyncStore(
+    (state) => state.isApplying,
+  );
   const localRemoteSyncError = useLocalRemoteSyncStore((state) => state.error);
-  const previewLocalRemoteSync = useLocalRemoteSyncStore((state) => state.previewSync);
-  const applyLocalRemoteSync = useLocalRemoteSyncStore((state) => state.applySync);
+  const previewLocalRemoteSync = useLocalRemoteSyncStore(
+    (state) => state.previewSync,
+  );
+  const applyLocalRemoteSync = useLocalRemoteSyncStore(
+    (state) => state.applySync,
+  );
   const resetLocalRemoteSync = useLocalRemoteSyncStore((state) => state.reset);
 
   const activePageId = useMemo(
@@ -178,15 +193,16 @@ export function SettingsView() {
         search: location.search,
         hash: location.hash,
       }),
-    [location.hash, location.pathname, location.search]
+    [location.hash, location.pathname, location.search],
   );
   const activePage = getSettingsPageById(activePageId);
   const settingsSubpath = normalizeSettingsSubpath(location.pathname);
-  const isKnownSettingsSubpath = !settingsSubpath || isSettingsPageId(settingsSubpath);
+  const isKnownSettingsSubpath =
+    !settingsSubpath || isSettingsPageId(settingsSubpath);
 
   const { resolvedUrl } = useMemo(
     () => getAiProviderViewModel(aiSettings, AI_PROVIDERS),
-    [aiSettings]
+    [aiSettings],
   );
   const lang = i18n.language;
 
@@ -236,17 +252,25 @@ export function SettingsView() {
   useEffect(() => {
     const nextPath = getCanonicalSettingsPagePath(activePageId);
     if (location.pathname !== nextPath) {
-      navigate(`${nextPath}${location.search}${location.hash}`, { replace: true });
+      navigate(`${nextPath}${location.search}${location.hash}`, {
+        replace: true,
+      });
     }
-  }, [activePageId, location.hash, location.pathname, location.search, navigate]);
+  }, [
+    activePageId,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   const normalizedPlatformVisibilityQuery = useMemo(
     () => getNormalizedPlatformVisibilityQuery(platformVisibilityQuery),
-    [platformVisibilityQuery]
+    [platformVisibilityQuery],
   );
   const platformVisibilitySearchActive = useMemo(
     () => isPlatformVisibilitySearchActive(normalizedPlatformVisibilityQuery),
-    [normalizedPlatformVisibilityQuery]
+    [normalizedPlatformVisibilityQuery],
   );
   const platformVisibilityGroups = useMemo(
     () =>
@@ -256,7 +280,7 @@ export function SettingsView() {
         normalizedQuery: normalizedPlatformVisibilityQuery,
         t,
       }),
-    [agents, categoryVisibility, normalizedPlatformVisibilityQuery, t]
+    [agents, categoryVisibility, normalizedPlatformVisibilityQuery, t],
   );
 
   function handleProviderChange(id: string) {
@@ -349,7 +373,7 @@ export function SettingsView() {
   const resolvedActiveTarget = activeTarget ?? targets[0]!;
   const firstRemoteTarget = targets.find(isRemoteLikeTarget);
   const localRemoteSyncTarget = targets.find(
-    (target) => target.id === localRemoteSyncTargetId
+    (target) => target.id === localRemoteSyncTargetId,
   );
 
   useEffect(() => {
@@ -364,9 +388,7 @@ export function SettingsView() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (
-      params.get("action") !== "local-remote-sync"
-    ) {
+    if (params.get("action") !== "local-remote-sync") {
       return;
     }
 
@@ -426,7 +448,9 @@ export function SettingsView() {
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
           {t("settings.pages.eyebrow")}
         </p>
-        <h1 className="mt-1 font-heading text-xl font-semibold">{t("settings.title")}</h1>
+        <h1 className="mt-1 font-heading text-xl font-semibold">
+          {t("settings.title")}
+        </h1>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -435,7 +459,7 @@ export function SettingsView() {
           <div className="mx-auto w-full max-w-7xl space-y-6">
             <header className="border-b border-border/80 pb-5">
               <div className="flex items-start gap-3">
-                <span className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-2xl border border-border bg-card text-primary shadow-sm">
+                <span className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-card text-primary shadow-sm">
                   <PageIcon className="size-5" aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
@@ -493,7 +517,9 @@ export function SettingsView() {
               localRemoteSyncPreview={localRemoteSyncPreview}
               localRemoteSyncResult={localRemoteSyncResult}
               localRemoteSyncTarget={localRemoteSyncTarget}
-              normalizedPlatformVisibilityQuery={normalizedPlatformVisibilityQuery}
+              normalizedPlatformVisibilityQuery={
+                normalizedPlatformVisibilityQuery
+              }
               page={activePage}
               platformError={platformError}
               platformVisibilityGroups={platformVisibilityGroups}

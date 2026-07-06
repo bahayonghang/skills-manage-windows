@@ -31,7 +31,7 @@ export function AgentsPanel({
   const { t } = useTranslation();
 
   return (
-    <Card className="surface-glass overflow-hidden rounded-3xl border-0 bg-transparent p-0 shadow-none">
+    <Card className="surface-glass overflow-hidden rounded-2xl border-0 bg-transparent p-0 shadow-none">
       <PanelHeader
         title={t("dashboard.agents.title", {
           enabled: enabledTargetsCount,
@@ -63,7 +63,7 @@ export function AgentsPanel({
                   <button
                     type="button"
                     onClick={() => onNavigate(`/platform/${agent.id}`)}
-                    className={`grid w-full grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left first:border-t-0 hover:bg-muted/25 ${dashboardControlMotion}`}
+                    className={`focus-ring grid w-full grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left first:border-t-0 hover:bg-muted/25 ${dashboardControlMotion}`}
                     aria-label={t("dashboard.agents.openLabel", {
                       name: label,
                     })}
@@ -76,7 +76,7 @@ export function AgentsPanel({
                         <span className="truncate text-sm font-medium">
                           {label}
                         </span>
-                        <span className="hidden rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
+                        <span className="hidden rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
                           {agent.is_enabled
                             ? t("dashboard.agents.enabled")
                             : t("dashboard.agents.hidden")}

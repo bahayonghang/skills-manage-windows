@@ -54,7 +54,7 @@ export function WorkQueuePanel({
   }, [queueItems, filter]);
 
   return (
-    <Card className="surface-glass overflow-hidden rounded-3xl border-0 bg-transparent p-0 shadow-none">
+    <Card className="surface-glass overflow-hidden rounded-2xl border-0 bg-transparent p-0 shadow-none">
       <PanelHeader
         title={t("dashboard.workQueues", { count: visible.length })}
         description={t("dashboard.workQueuesDesc")}
@@ -74,7 +74,7 @@ export function WorkQueuePanel({
                   aria-selected={active}
                   onClick={() => setFilter(option.key)}
                   className={cn(
-                    "min-h-10 rounded-full px-3 py-1 text-[0.7rem] font-medium",
+                    "focus-ring min-h-10 rounded-full px-3 py-1 text-[0.7rem] font-medium",
                     dashboardControlMotion,
                     active
                       ? "bg-primary/15 text-primary-text"
@@ -97,7 +97,7 @@ export function WorkQueuePanel({
                   type="button"
                   onClick={() => onNavigate(queueDestination(item.key))}
                   className={cn(
-                    "grid w-full grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left hover:bg-muted/25",
+                    "focus-ring grid w-full grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left hover:bg-muted/25",
                     dashboardControlMotion,
                   )}
                 >
