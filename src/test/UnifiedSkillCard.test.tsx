@@ -166,7 +166,7 @@ describe("UnifiedSkillCard", () => {
     render(
       <UnifiedSkillCard
         {...centralBaseProps}
-        statusAccent="amber"
+        statusAccent="warning"
         statusChipLabel="可更新"
       />,
     );

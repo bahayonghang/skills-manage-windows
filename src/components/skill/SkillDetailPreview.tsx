@@ -1,10 +1,17 @@
 import type { Ref } from "react";
 import { useTranslation } from "react-i18next";
-import { Bot, ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
+import {
+  Bot,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SkillFrontmatterCard } from "@/components/skill/SkillFrontmatterCard";
 import { SkillMarkdownRenderer } from "@/components/skill/SkillMarkdownRenderer";
 import { formatBackendError } from "@/lib/backendError";
+import { statusChipClass } from "@/lib/statusTone";
 import type { FrontmatterValue } from "@/lib/frontmatter";
 import type { ExplanationErrorInfo } from "@/lib/explanationStream";
 import type { PreviewTab } from "./skillDetailViewTypes";
@@ -48,7 +55,10 @@ export function SkillDetailPreview({
 }: SkillDetailPreviewProps) {
   const { t } = useTranslation();
   const explanationErrorMessage = explanationErrorInfo?.code
-    ? formatBackendError(`${explanationErrorInfo.code}:${explanationErrorInfo.message}`, t)
+    ? formatBackendError(
+        `${explanationErrorInfo.code}:${explanationErrorInfo.message}`,
+        t,
+      )
     : explanationErrorInfo?.message || explanationError;
 
   return (
@@ -57,13 +67,22 @@ export function SkillDetailPreview({
       className="scrollbar-subtle min-w-0 flex-1 overflow-auto"
     >
       {activeTab === "markdown" ? (
-        <div className="space-y-4 p-6" role="tabpanel" aria-label={t("detail.markdown")}>
+        <div
+          className="space-y-4 p-6"
+          role="tabpanel"
+          aria-label={t("detail.markdown")}
+        >
           <div className={previewStackClassName}>
             <SkillFrontmatterCard data={frontmatterData} raw={frontmatterRaw} />
             {content ? (
-              <SkillMarkdownRenderer content={markdownContent} variant="detail" />
+              <SkillMarkdownRenderer
+                content={markdownContent}
+                variant="detail"
+              />
             ) : (
-              <p className="text-sm italic text-muted-foreground">{t("detail.noContent")}</p>
+              <p className="text-sm italic text-muted-foreground">
+                {t("detail.noContent")}
+              </p>
             )}
           </div>
         </div>
@@ -76,7 +95,11 @@ export function SkillDetailPreview({
           {content ?? t("detail.noContent")}
         </pre>
       ) : (
-        <div className="space-y-4 p-6" role="tabpanel" aria-label={t("detail.aiExplanation")}>
+        <div
+          className="space-y-4 p-6"
+          role="tabpanel"
+          aria-label={t("detail.aiExplanation")}
+        >
           <div className={previewStackClassName}>
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -84,13 +107,19 @@ export function SkillDetailPreview({
                   <Bot className="size-4 text-primary" />
                   {t("detail.aiExplanation")}
                 </h2>
-                <p className="mt-1 text-xs text-muted-foreground">{t("detail.aiExplanationDesc")}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("detail.aiExplanationDesc")}
+                </p>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={explanation ? onRefreshExplanation : onGenerateExplanation}
-                disabled={!content || isExplanationLoading || isExplanationStreaming}
+                onClick={
+                  explanation ? onRefreshExplanation : onGenerateExplanation
+                }
+                disabled={
+                  !content || isExplanationLoading || isExplanationStreaming
+                }
                 className="gap-1.5"
               >
                 {isExplanationLoading || isExplanationStreaming ? (
@@ -100,20 +129,29 @@ export function SkillDetailPreview({
                 ) : (
                   <Bot className="size-3.5" />
                 )}
-                {explanation ? t("detail.regenerateExplanation") : t("detail.generateExplanation")}
+                {explanation
+                  ? t("detail.regenerateExplanation")
+                  : t("detail.generateExplanation")}
               </Button>
             </div>
 
             {explanationError && (
-              <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                <p className="text-sm text-destructive">{explanationErrorMessage}</p>
-                {(explanationErrorInfo?.details || explanationError !== explanationErrorMessage) && (
+              <div
+                className={`space-y-2 rounded-md border p-3 ${statusChipClass.error}`}
+              >
+                <p className="text-sm">{explanationErrorMessage}</p>
+                {(explanationErrorInfo?.details ||
+                  explanationError !== explanationErrorMessage) && (
                   <div>
                     <button
                       className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
                       onClick={onToggleErrorDetails}
                     >
-                      {showErrorDetails ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                      {showErrorDetails ? (
+                        <ChevronDown className="size-3" />
+                      ) : (
+                        <ChevronRight className="size-3" />
+                      )}
                       {t("detail.showDetails")}
                     </button>
                     {showErrorDetails && (
@@ -124,7 +162,9 @@ export function SkillDetailPreview({
                   </div>
                 )}
                 {explanationErrorInfo?.fallbackTried && (
-                  <p className="text-xs text-muted-foreground">{t("detail.fallbackTried")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("detail.fallbackTried")}
+                  </p>
                 )}
               </div>
             )}
@@ -136,7 +176,10 @@ export function SkillDetailPreview({
               </div>
             ) : explanation ? (
               <div className="space-y-3">
-                <SkillMarkdownRenderer content={explanation} variant="compact" />
+                <SkillMarkdownRenderer
+                  content={explanation}
+                  variant="compact"
+                />
                 {isExplanationStreaming && (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Loader2 className="size-3.5 animate-spin" />
@@ -148,13 +191,19 @@ export function SkillDetailPreview({
               <div className="space-y-3 rounded-lg border border-dashed border-border p-8 text-center">
                 <Bot className="mx-auto size-8 text-muted-foreground/60" />
                 <div>
-                  <p className="text-sm font-medium">{t("detail.noExplanationTitle")}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{t("detail.noExplanationDesc")}</p>
+                  <p className="text-sm font-medium">
+                    {t("detail.noExplanationTitle")}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("detail.noExplanationDesc")}
+                  </p>
                 </div>
                 <Button
                   size="sm"
                   onClick={onGenerateExplanation}
-                  disabled={!content || isExplanationLoading || isExplanationStreaming}
+                  disabled={
+                    !content || isExplanationLoading || isExplanationStreaming
+                  }
                   className="gap-1.5"
                 >
                   <Bot className="size-3.5" />

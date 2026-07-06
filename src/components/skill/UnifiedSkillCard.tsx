@@ -95,8 +95,8 @@ export interface CentralSkillCardProps extends SkillCardCoreProps {
    */
   skillId?: string;
   checkbox: SkillCardCheckbox;
-  /** 左侧状态竖条强度：amber=可更新，red=源缺失/错误；不传=无竖条。 */
-  statusAccent?: "amber" | "red";
+  /** 左侧状态竖条强度：warning=可更新，error=源缺失/错误；不传=无竖条。 */
+  statusAccent?: "warning" | "error";
   /** 行 1 名称右侧的状态 chip 文案（如“可更新”/“源缺失”）；不传=不显示。 */
   statusChipLabel?: string;
   /** 只读 tags（无 editableTags 时由 SkillCardMeta 渲染）。 */
@@ -229,7 +229,7 @@ interface SkillCardModel {
   isLoading?: boolean;
   detailButtonRef?: Ref<HTMLButtonElement>;
   density?: SkillCardDensity;
-  statusAccent?: "amber" | "red";
+  statusAccent?: "warning" | "error";
   statusChipLabel?: string;
   editableTags?: SkillCardEditableTags;
   footer?: SkillCardFooter;
@@ -475,8 +475,8 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             {statusChipLabel && (
               <span
                 className={cn(
-                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
-                  statusAccent === "red"
+                  "shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium ring-1",
+                  statusAccent === "error"
                     ? "bg-destructive/10 text-destructive ring-destructive/30"
                     : "bg-warning/10 text-warning-foreground ring-warning/30"
                 )}
@@ -600,7 +600,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                     disabled={isLoading}
                     title={installLabel ?? t("marketplace.install")}
                     aria-label={installLabel ?? t("marketplace.install")}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg transition-[scale,background-color,color] active:not-disabled:scale-[0.96] text-muted-foreground hover:bg-accent/40 hover:text-primary disabled:opacity-50 disabled:cursor-default"
+                    className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-lg transition-[scale,background-color,color] active:not-disabled:scale-[0.96] text-muted-foreground hover:bg-accent/40 hover:text-primary disabled:opacity-50 disabled:cursor-default"
                   >
                     {isLoading ? (
                       <Loader2 className="size-4 animate-spin" />
@@ -688,7 +688,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   <span
                     data-testid={`skill-card-linked-summary-${platformIcons.skillId}`}
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground",
+                      "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground",
                       "group-hover/skill-card:hidden group-focus-within/skill-card:hidden",
                     )}
                   >
@@ -783,7 +783,7 @@ function CardActionButton({
       aria-label={ariaLabel}
       data-testid={testId}
       className={cn(
-        "inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-[scale,background-color,color] active:not-disabled:scale-[0.96] disabled:cursor-default disabled:opacity-50",
+        "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-[scale,background-color,color] active:not-disabled:scale-[0.96] disabled:cursor-default disabled:opacity-50",
         danger
           ? "hover:bg-destructive/10 hover:text-destructive"
           : "hover:bg-accent/40 hover:text-primary",
@@ -809,7 +809,7 @@ function SkillCardSummary({
   return (
     <div className="relative">
       {label && (
-        <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary/85">
+        <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-[11px] font-medium leading-none text-primary/85">
           {label}
         </span>
       )}
