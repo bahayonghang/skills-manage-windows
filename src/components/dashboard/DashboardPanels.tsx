@@ -2,11 +2,7 @@ import type { ReactNode } from "react";
 
 import { ChevronRight } from "lucide-react";
 
-import {
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { OperationLogEntry } from "@/types";
 
@@ -157,54 +153,6 @@ export function ProgressRow({
   );
 }
 
-export function StatButton({
-  icon,
-  label,
-  value,
-  description,
-  onClick,
-  testId,
-  emphasized = false,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: number | string;
-  description: string;
-  onClick: () => void;
-  testId?: string;
-  emphasized?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      data-testid={testId}
-      onClick={onClick}
-      className={cn(
-        "flex min-h-[6.75rem] min-w-0 flex-col rounded-2xl border px-3.5 py-3 text-left shadow-[0_0_0_1px_color-mix(in_oklch,var(--border)_72%,transparent)]",
-        dashboardControlMotion,
-        emphasized
-          ? "border-primary/30 bg-primary/10 hover:border-primary/50 hover:shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary)_36%,transparent),0_10px_24px_color-mix(in_oklch,var(--primary)_10%,transparent)]"
-          : "border-border/70 bg-card/55 hover:border-primary/35 hover:bg-muted/25 hover:shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary)_24%,transparent)]"
-      )}
-    >
-      <span className="flex items-center justify-between gap-2 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
-        <span className={cn("truncate", emphasized && "text-primary-text")}>
-          {label}
-        </span>
-        <span className={cn("shrink-0", emphasized && "text-primary-text")}>
-          {icon}
-        </span>
-      </span>
-      <span className="mt-2 text-2xl font-semibold tabular-nums">
-        {value}
-      </span>
-      <span className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-        {description}
-      </span>
-    </button>
-  );
-}
-
 export function QueueRow({
   label,
   count,
@@ -221,7 +169,7 @@ export function QueueRow({
       type="button"
       onClick={onClick}
       className={cn(
-        "grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left first:border-t-0 hover:bg-muted/25",
+        "focus-ring grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left first:border-t-0 hover:bg-muted/25",
         dashboardControlMotion,
       )}
     >
@@ -253,7 +201,7 @@ export function LogRow({
       <span
         className={cn(
           "mt-1.5 size-2 rounded-full ring-4 ring-muted/35",
-          logDotClass(entry.status)
+          logDotClass(entry.status),
         )}
       />
       <div className="min-w-0">
@@ -268,7 +216,7 @@ export function LogRow({
         <span
           className={cn(
             "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium",
-            logStatusClass(entry.status)
+            logStatusClass(entry.status),
           )}
         >
           {statusLabel}
