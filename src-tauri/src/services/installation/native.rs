@@ -1,27 +1,30 @@
-//! Local install/uninstall orchestration: symlink, copy, auto fallback,
-//! and same-root native records.
+//! Local execution half of skill install / uninstall: symlink, copy, auto
+//! fallback, native records, and Claude observation-row uninstall. The
+//! business orchestration lives in `install.rs`; this module only implements
+//! the Local arms of the [`super::transport::InstallTransport`] hooks.
 
 use std::path::{Path, PathBuf};
 
-use crate::db::{self, AgentSkillObservation, DbPool, SkillInstallation};
+use crate::db::{self, AgentSkillObservation, DbPool};
 
-use super::centralize::{agents_share_skills_dir, ensure_centralized, ensure_replaceable_target};
+use super::centralize::{ensure_centralized, ensure_replaceable_target};
 use super::error::InstallationError;
 use super::fs_util::{
     copy_dir_all_blocking, create_symlink, remove_symlink_path, run_blocking_fs,
     symlink_target_path,
 };
-use super::skip::detect_existing_agent_install;
-use super::types::{InstallOutcome, InstallResult};
+use super::transport::{Placement, ResolvedMethod};
 
-/// Record a native installation: the agent's `global_skills_dir` is the same
-/// canonical root as Central, so no symlink/copy is needed — only a DB row.
-pub(crate) async fn record_native_installation(
+/// Shared-root Local arm: centralize, then verify the canonical skill is
+/// really present before the caller records a native installation.
+pub(crate) async fn centralize_shared_root_local(
     pool: &DbPool,
     skill_id: &str,
-    agent_id: &str,
-    canonical_dir: &Path,
-) -> Result<InstallResult, InstallationError> {
+    central: &db::Agent,
+) -> Result<String, InstallationError> {
+    let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
+    ensure_centralized(pool, skill_id, &canonical_dir).await?;
+
     let skill_md = canonical_dir.join("SKILL.md");
     if !skill_md.exists() {
         return Err(InstallationError::CanonicalSkillMissing(
@@ -29,147 +32,96 @@ pub(crate) async fn record_native_installation(
         ));
     }
 
-    let installed_path = canonical_dir.to_string_lossy().into_owned();
-    let installation = SkillInstallation {
-        skill_id: skill_id.to_string(),
-        agent_id: agent_id.to_string(),
-        installed_path: installed_path.clone(),
-        link_type: "native".to_string(),
-        symlink_target: None,
-        created_at: chrono::Utc::now().to_rfc3339(),
-    };
-    db::upsert_skill_installation(pool, &installation).await?;
-
-    Ok(InstallResult {
-        symlink_path: installed_path,
-    })
+    Ok(canonical_dir.to_string_lossy().into_owned())
 }
 
-/// Core install logic, separated from the Tauri layer for testability.
-///
-/// Creates a relative symlink at `agent.global_skills_dir/<skill_id>` that
-/// points to the canonical skill directory `central.global_skills_dir/<skill_id>`.
-///
-/// Returns an error if:
-/// - The agent or central agent is not found in the database.
-/// - The canonical skill does not exist (no SKILL.md).
-/// - A real (non-symlink) directory already exists at the target path.
-/// - `agent_id` is "central" (would create a self-referencing symlink).
-pub async fn install_skill_to_agent_impl(
+/// Non-shared-root Local arm: centralize eagerly, then make sure the agent
+/// skills directory exists (both must precede skip detection, which compares
+/// target contents against the canonical directory).
+pub(crate) async fn prepare_target_local(
     pool: &DbPool,
     skill_id: &str,
-    agent_id: &str,
-) -> Result<InstallResult, InstallationError> {
-    install_skill_to_agent_outcome_impl(pool, skill_id, agent_id)
-        .await
-        .map(InstallOutcome::into_install_result)
-}
-
-pub(crate) async fn install_skill_to_agent_outcome_impl(
-    pool: &DbPool,
-    skill_id: &str,
-    agent_id: &str,
-) -> Result<InstallOutcome, InstallationError> {
-    // Guard: cannot install to the central agent itself.
-    if agent_id == "central" {
-        return Err(InstallationError::CentralAgentTarget);
-    }
-
-    // 1. Look up the target agent.
-    let agent = db::get_agent_by_id(pool, agent_id)
-        .await?
-        .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
-
-    // 2. Look up the central agent to determine the canonical root.
-    let central = db::get_agent_by_id(pool, "central")
-        .await?
-        .ok_or(InstallationError::CentralAgentMissing)?;
-
+    agent: &db::Agent,
+    central: &db::Agent,
+) -> Result<(), InstallationError> {
     let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
-
-    // 3. Ensure the skill exists in central (auto-centralize if needed).
     ensure_centralized(pool, skill_id, &canonical_dir).await?;
 
-    if agents_share_skills_dir(&agent, &central) {
-        return record_native_installation(pool, skill_id, agent_id, &canonical_dir)
-            .await
-            .map(InstallOutcome::Installed);
-    }
-
-    // 4. Compute symlink location.
     let agent_dir = PathBuf::from(&agent.global_skills_dir);
-    let symlink_path = agent_dir.join(skill_id);
-
-    // 5. Ensure the agent's skills directory exists.
-    let agent_dir_for_create = agent_dir.clone();
     run_blocking_fs("agent skills directory creation", move || {
-        std::fs::create_dir_all(&agent_dir_for_create)
+        std::fs::create_dir_all(&agent_dir)
             .map_err(|e| InstallationError::io("Failed to create agent skills directory", e))
     })
-    .await?;
+    .await
+}
 
-    if let Some(skipped) =
-        detect_existing_agent_install(pool, skill_id, agent_id, &symlink_path, &canonical_dir)
-            .await?
-    {
-        return Ok(InstallOutcome::Skipped(skipped));
+/// Placement Local arm: clear the install slot, then lay down a relative
+/// symlink or a recursive copy. `Auto` retries the placement step as a copy
+/// when symlink creation fails on Windows.
+pub(crate) async fn place_install_local(
+    agent: &db::Agent,
+    central: &db::Agent,
+    skill_id: &str,
+    method: ResolvedMethod,
+) -> Result<Placement, InstallationError> {
+    let agent_dir = PathBuf::from(&agent.global_skills_dir);
+    let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
+    let target_path = agent_dir.join(skill_id);
+
+    ensure_replaceable_target(&target_path).await?;
+
+    match method {
+        ResolvedMethod::Copy => place_copy_local(&canonical_dir, &target_path).await,
+        ResolvedMethod::Symlink => {
+            place_symlink_local(&agent_dir, &canonical_dir, &target_path).await
+        }
+        ResolvedMethod::Auto => {
+            match place_symlink_local(&agent_dir, &canonical_dir, &target_path).await {
+                Ok(placement) => Ok(placement),
+                Err(error) if should_fallback_to_copy(&error) => {
+                    ensure_replaceable_target(&target_path).await?;
+                    place_copy_local(&canonical_dir, &target_path).await
+                }
+                Err(error) => Err(error),
+            }
+        }
     }
+}
 
-    // 6. Handle any existing entry at the symlink path.
-    ensure_replaceable_target(&symlink_path).await?;
-
-    // 7. Compute the relative path from the agent directory to the canonical dir.
-    let relative_target = symlink_target_path(&agent_dir, &canonical_dir);
-
-    // 8. Create the symlink.
-    let symlink_path_for_create = symlink_path.clone();
+async fn place_symlink_local(
+    agent_dir: &Path,
+    canonical_dir: &Path,
+    target_path: &Path,
+) -> Result<Placement, InstallationError> {
+    let relative_target = symlink_target_path(agent_dir, canonical_dir);
+    let target_path_for_create = target_path.to_path_buf();
     run_blocking_fs("skill symlink creation", move || {
-        create_symlink(&relative_target, &symlink_path_for_create)
+        create_symlink(&relative_target, &target_path_for_create)
     })
     .await?;
 
-    // 9. Persist the installation record.
-    let installation = SkillInstallation {
-        skill_id: skill_id.to_string(),
-        agent_id: agent_id.to_string(),
-        installed_path: symlink_path.to_string_lossy().into_owned(),
-        link_type: "symlink".to_string(),
+    Ok(Placement {
+        installed_path: target_path.to_string_lossy().into_owned(),
+        link_type: "symlink",
         symlink_target: Some(canonical_dir.to_string_lossy().into_owned()),
-        created_at: chrono::Utc::now().to_rfc3339(),
-    };
-    db::upsert_skill_installation(pool, &installation).await?;
+    })
+}
 
-    Ok(InstallOutcome::Installed(InstallResult {
-        symlink_path: symlink_path.to_string_lossy().into_owned(),
-    }))
+async fn place_copy_local(
+    canonical_dir: &Path,
+    target_path: &Path,
+) -> Result<Placement, InstallationError> {
+    copy_dir_all_blocking(canonical_dir, target_path).await?;
+
+    Ok(Placement {
+        installed_path: target_path.to_string_lossy().into_owned(),
+        link_type: "copy",
+        symlink_target: None,
+    })
 }
 
 /// Try the symlink path; on Windows fall back to copy when the symlink call
 /// fails (typically due to missing privileges or non-NTFS targets).
-pub async fn install_skill_to_agent_auto_impl(
-    pool: &DbPool,
-    skill_id: &str,
-    agent_id: &str,
-) -> Result<InstallResult, InstallationError> {
-    install_skill_to_agent_auto_outcome_impl(pool, skill_id, agent_id)
-        .await
-        .map(InstallOutcome::into_install_result)
-}
-
-pub(crate) async fn install_skill_to_agent_auto_outcome_impl(
-    pool: &DbPool,
-    skill_id: &str,
-    agent_id: &str,
-) -> Result<InstallOutcome, InstallationError> {
-    match install_skill_to_agent_outcome_impl(pool, skill_id, agent_id).await {
-        Ok(result) => Ok(result),
-        Err(error) if should_fallback_to_copy(&error) => {
-            install_skill_to_agent_copy_outcome_impl(pool, skill_id, agent_id).await
-        }
-        Err(error) => Err(error),
-    }
-}
-
 #[cfg(windows)]
 pub(crate) fn should_fallback_to_copy(error: &InstallationError) -> bool {
     matches!(error, InstallationError::SymlinkCreate(_))
@@ -180,105 +132,30 @@ pub(crate) fn should_fallback_to_copy(_error: &InstallationError) -> bool {
     false
 }
 
-/// Core copy-install logic — copies the skill directory instead of symlinking.
+/// Removal Local arm: classify the entry by its recorded link type.
 ///
-/// Copies `central.global_skills_dir/<skill_id>` recursively into
-/// `agent.global_skills_dir/<skill_id>`. Existing symlinks at the target are
-/// replaced; existing real directories cause an error.
-pub async fn install_skill_to_agent_copy_impl(
+/// For symlinked skills: removes the symlink.
+/// For copied skills: removes the copied directory (tracked as link_type='copy').
+/// Refuses to delete real directories not tracked as copies in the DB.
+pub(crate) async fn remove_install_local(
     pool: &DbPool,
+    agent: &db::Agent,
     skill_id: &str,
-    agent_id: &str,
-) -> Result<InstallResult, InstallationError> {
-    install_skill_to_agent_copy_outcome_impl(pool, skill_id, agent_id)
-        .await
-        .map(InstallOutcome::into_install_result)
-}
+) -> Result<(), InstallationError> {
+    let install_path = PathBuf::from(&agent.global_skills_dir).join(skill_id);
 
-pub(crate) async fn install_skill_to_agent_copy_outcome_impl(
-    pool: &DbPool,
-    skill_id: &str,
-    agent_id: &str,
-) -> Result<InstallOutcome, InstallationError> {
-    // Guard: cannot install to the central agent itself.
-    if agent_id == "central" {
-        return Err(InstallationError::CentralAgentTarget);
-    }
+    let installations = db::get_skill_installations(pool, skill_id).await?;
+    let record = installations
+        .iter()
+        .find(|record| record.agent_id == agent.id);
+    let link_type = record
+        .map(|record| record.link_type.clone())
+        .unwrap_or_else(|| "symlink".to_string());
 
-    // 1. Look up the target agent.
-    let agent = db::get_agent_by_id(pool, agent_id)
-        .await?
-        .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
-
-    // 2. Look up the central agent to determine the canonical root.
-    let central = db::get_agent_by_id(pool, "central")
-        .await?
-        .ok_or(InstallationError::CentralAgentMissing)?;
-
-    let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);
-
-    // 3. Ensure the skill exists in central (auto-centralize if needed).
-    ensure_centralized(pool, skill_id, &canonical_dir).await?;
-
-    if agents_share_skills_dir(&agent, &central) {
-        return record_native_installation(pool, skill_id, agent_id, &canonical_dir)
-            .await
-            .map(InstallOutcome::Installed);
-    }
-
-    // 4. Compute target location.
-    let agent_dir = PathBuf::from(&agent.global_skills_dir);
-    let target_path = agent_dir.join(skill_id);
-
-    // 5. Ensure the agent's skills directory exists.
-    let agent_dir_for_create = agent_dir.clone();
-    run_blocking_fs("agent skills directory creation", move || {
-        std::fs::create_dir_all(&agent_dir_for_create)
-            .map_err(|e| InstallationError::io("Failed to create agent skills directory", e))
+    run_blocking_fs("skill uninstall", move || {
+        remove_install_path(&install_path, &link_type, false)
     })
-    .await?;
-
-    if let Some(skipped) =
-        detect_existing_agent_install(pool, skill_id, agent_id, &target_path, &canonical_dir)
-            .await?
-    {
-        return Ok(InstallOutcome::Skipped(skipped));
-    }
-
-    // 6. Handle any existing entry at the target path.
-    ensure_replaceable_target(&target_path).await?;
-
-    // 7. Recursively copy the canonical skill directory.
-    copy_dir_all_blocking(&canonical_dir, &target_path).await?;
-
-    // 8. Persist the installation record.
-    let installation = SkillInstallation {
-        skill_id: skill_id.to_string(),
-        agent_id: agent_id.to_string(),
-        installed_path: target_path.to_string_lossy().into_owned(),
-        link_type: "copy".to_string(),
-        symlink_target: None,
-        created_at: chrono::Utc::now().to_rfc3339(),
-    };
-    db::upsert_skill_installation(pool, &installation).await?;
-
-    Ok(InstallOutcome::Installed(InstallResult {
-        symlink_path: target_path.to_string_lossy().into_owned(),
-    }))
-}
-
-/// Dispatch by method string. Used by single-agent and batch IPC paths.
-pub(crate) async fn install_central_skill_to_agent_outcome_by_method(
-    pool: &DbPool,
-    skill_id: &str,
-    agent_id: &str,
-    method: &str,
-) -> Result<InstallOutcome, InstallationError> {
-    match method {
-        "copy" => install_skill_to_agent_copy_outcome_impl(pool, skill_id, agent_id).await,
-        "symlink" => install_skill_to_agent_outcome_impl(pool, skill_id, agent_id).await,
-        _ => install_skill_to_agent_auto_outcome_impl(pool, skill_id, agent_id).await,
-    }
+    .await
 }
 
 fn remove_install_path(
@@ -372,7 +249,7 @@ fn ensure_child_path(root: &Path, child: &Path) -> Result<(), InstallationError>
     Ok(())
 }
 
-async fn uninstall_claude_observation_from_agent_impl(
+pub(crate) async fn uninstall_claude_observation_from_agent_impl(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
@@ -401,70 +278,6 @@ async fn uninstall_claude_observation_from_agent_impl(
     })
     .await?;
     db::delete_agent_skill_observation(pool, row_id).await?;
-    db::delete_skill_installation(pool, skill_id, agent_id).await?;
-
-    Ok(())
-}
-
-pub async fn uninstall_skill_from_agent_with_row_impl(
-    pool: &DbPool,
-    skill_id: &str,
-    agent_id: &str,
-    row_id: Option<&str>,
-) -> Result<(), InstallationError> {
-    if let Some(row_id) = row_id {
-        return uninstall_claude_observation_from_agent_impl(pool, skill_id, agent_id, row_id)
-            .await;
-    }
-
-    uninstall_skill_from_agent_impl(pool, skill_id, agent_id).await
-}
-
-/// Core uninstall logic, separated from the Tauri layer for testability.
-///
-/// Removes the symlink at `agent.global_skills_dir/<skill_id>` and deletes the
-/// corresponding `skill_installations` record.
-///
-/// For symlinked skills: removes the symlink.
-/// For copied skills: removes the copied directory (tracked in the DB as link_type='copy').
-/// Refuses to delete real directories not tracked as copies in the DB.
-pub async fn uninstall_skill_from_agent_impl(
-    pool: &DbPool,
-    skill_id: &str,
-    agent_id: &str,
-) -> Result<(), InstallationError> {
-    // 1. Look up the agent.
-    let agent = db::get_agent_by_id(pool, agent_id)
-        .await?
-        .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
-
-    let central = db::get_agent_by_id(pool, "central")
-        .await?
-        .ok_or(InstallationError::CentralAgentMissing)?;
-
-    if agent_id == "central" || agents_share_skills_dir(&agent, &central) {
-        return Err(InstallationError::SharedCentralUninstall {
-            display_name: agent.display_name,
-        });
-    }
-
-    // 2. Compute the expected install location.
-    let install_path = PathBuf::from(&agent.global_skills_dir).join(skill_id);
-
-    // 3. Look up the installation record to determine how it was installed.
-    let installations = db::get_skill_installations(pool, skill_id).await?;
-    let record = installations.iter().find(|r| r.agent_id == agent_id);
-    let link_type = record.map(|r| r.link_type.as_str()).unwrap_or("symlink");
-
-    // 4. Inspect the entry at that path and remove it appropriately.
-    let install_path_for_remove = install_path.clone();
-    let link_type = link_type.to_string();
-    run_blocking_fs("skill uninstall", move || {
-        remove_install_path(&install_path_for_remove, &link_type, false)
-    })
-    .await?;
-
-    // 5. Remove the installation record from the database.
     db::delete_skill_installation(pool, skill_id, agent_id).await?;
 
     Ok(())

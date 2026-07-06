@@ -1,14 +1,15 @@
 //! Batch install orchestration: cartesian product of skill_ids x agent_ids,
 //! dispatched to the platform install path or to project install when a
-//! `project_path` is given.
+//! `project_path` is given. Transport-agnostic: callers hand in the resolved
+//! [`InstallTransport`] once and the same loop serves Local and SSH/WSL.
 
 use std::collections::HashSet;
-use std::path::Path;
 
 use crate::db::DbPool;
 
-use super::native::install_central_skill_to_agent_outcome_by_method;
-use super::project::install_central_skill_to_project_outcome_impl;
+use super::install::{install_skill, uninstall_skill};
+use super::project::install_central_skill_to_project;
+use super::transport::InstallTransport;
 use super::types::{
     BatchUninstallSkillFailure, BatchUninstallSkillRequest, BatchUninstallSkillResult,
     BatchUninstallSkillSuccess, CentralBatchInstallFailure, CentralBatchInstallResult,
@@ -47,10 +48,11 @@ pub(crate) fn batch_operation_status(
 
 pub async fn batch_install_central_skills_impl(
     pool: &DbPool,
+    transport: &InstallTransport,
     skill_ids: Vec<String>,
     agent_ids: Vec<String>,
     method: &str,
-    project_path: Option<&Path>,
+    project_path: Option<&str>,
 ) -> CentralBatchInstallResult {
     let skill_ids = dedupe_ordered(skill_ids);
     let agent_ids = dedupe_ordered(agent_ids);
@@ -61,8 +63,9 @@ pub async fn batch_install_central_skills_impl(
     for skill_id in &skill_ids {
         for agent_id in &agent_ids {
             let install_result = if let Some(project_path) = project_path {
-                install_central_skill_to_project_outcome_impl(
+                install_central_skill_to_project(
                     pool,
+                    transport,
                     skill_id,
                     agent_id,
                     project_path,
@@ -70,8 +73,7 @@ pub async fn batch_install_central_skills_impl(
                 )
                 .await
             } else {
-                install_central_skill_to_agent_outcome_by_method(pool, skill_id, agent_id, method)
-                    .await
+                install_skill(pool, transport, skill_id, agent_id, method).await
             };
 
             match install_result {
@@ -106,6 +108,7 @@ pub async fn batch_install_central_skills_impl(
 
 pub async fn batch_uninstall_skills_from_agent_impl(
     pool: &DbPool,
+    transport: &InstallTransport,
     agent_id: &str,
     requests: Vec<BatchUninstallSkillRequest>,
 ) -> BatchUninstallSkillResult {
@@ -122,8 +125,9 @@ pub async fn batch_uninstall_skills_from_agent_impl(
             continue;
         }
 
-        match super::native::uninstall_skill_from_agent_with_row_impl(
+        match uninstall_skill(
             pool,
+            transport,
             &request.skill_id,
             agent_id,
             request.row_id.as_deref(),

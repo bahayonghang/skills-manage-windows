@@ -18,20 +18,66 @@ use crate::db::{self, AgentSkillObservation, DbPool, SkillInstallation};
 use crate::targets::RemotePathInfo;
 
 use super::batch::batch_install_central_skills_impl;
+use super::error::InstallationError;
 use super::fs_util::make_relative_path;
-use super::native::{
-    install_central_skill_to_agent_outcome_by_method, install_skill_to_agent_copy_impl,
-    install_skill_to_agent_impl, uninstall_skill_from_agent_impl,
-    uninstall_skill_from_agent_with_row_impl,
-};
+use super::install::{install_skill, uninstall_skill};
 use super::project::{
     classify_remote_project_existing_target, install_central_skill_to_project_outcome_impl,
     normalize_remote_project_path, remote_project_install_paths, remote_project_method,
     remote_project_relative_skills_dir, RemoteProjectExistingTargetAction,
 };
 use super::remote::{classify_remote_existing_install_target, RemoteExistingInstallAction};
+use super::transport::InstallTransport;
 use super::types::BatchUninstallSkillRequest;
-use super::types::{BatchInstallResult, FailedInstall, InstallOutcome};
+use super::types::{BatchInstallResult, FailedInstall, InstallOutcome, InstallResult};
+
+// ── Local-transport wrappers (keep test bodies close to the old impl API) ──
+
+async fn install_symlink_local(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+) -> Result<InstallResult, InstallationError> {
+    install_skill(pool, &InstallTransport::Local, skill_id, agent_id, "symlink")
+        .await
+        .map(InstallOutcome::into_install_result)
+}
+
+async fn install_copy_local(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+) -> Result<InstallResult, InstallationError> {
+    install_skill(pool, &InstallTransport::Local, skill_id, agent_id, "copy")
+        .await
+        .map(InstallOutcome::into_install_result)
+}
+
+async fn install_local_by_method(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+    method: &str,
+) -> Result<InstallOutcome, InstallationError> {
+    install_skill(pool, &InstallTransport::Local, skill_id, agent_id, method).await
+}
+
+async fn uninstall_local(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+) -> Result<(), InstallationError> {
+    uninstall_skill(pool, &InstallTransport::Local, skill_id, agent_id, None).await
+}
+
+async fn uninstall_local_with_row(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+    row_id: Option<&str>,
+) -> Result<(), InstallationError> {
+    uninstall_skill(pool, &InstallTransport::Local, skill_id, agent_id, row_id).await
+}
 
 // ── Test helpers ──────────────────────────────────────────────────────────
 
@@ -371,7 +417,7 @@ async fn test_install_creates_symlink() {
 
     create_central_skill(&central_dir, "my-skill");
 
-    let result = install_skill_to_agent_impl(&pool, "my-skill", "claude-code").await;
+    let result = install_symlink_local(&pool, "my-skill", "claude-code").await;
     assert!(result.is_ok(), "install should succeed: {:?}", result);
 
     let symlink_path = agent_dir.join("my-skill");
@@ -389,7 +435,7 @@ async fn test_install_symlink_is_relative() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "rel-skill");
 
-    install_skill_to_agent_impl(&pool, "rel-skill", "claude-code")
+    install_symlink_local(&pool, "rel-skill", "claude-code")
         .await
         .unwrap();
 
@@ -412,7 +458,7 @@ async fn test_install_symlink_resolves_correctly() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "resolve-skill");
 
-    install_skill_to_agent_impl(&pool, "resolve-skill", "claude-code")
+    install_symlink_local(&pool, "resolve-skill", "claude-code")
         .await
         .unwrap();
 
@@ -436,7 +482,7 @@ async fn test_install_creates_agent_dir_if_missing() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "dir-skill");
 
-    let result = install_skill_to_agent_impl(&pool, "dir-skill", "claude-code").await;
+    let result = install_symlink_local(&pool, "dir-skill", "claude-code").await;
     assert!(result.is_ok(), "install should create missing agent dir");
     assert!(agent_dir.exists(), "agent dir should have been created");
 }
@@ -451,7 +497,7 @@ async fn test_install_updates_db_record() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "db-skill");
 
-    install_skill_to_agent_impl(&pool, "db-skill", "claude-code")
+    install_symlink_local(&pool, "db-skill", "claude-code")
         .await
         .unwrap();
 
@@ -474,7 +520,7 @@ async fn test_install_same_root_agent_records_native_without_symlink() {
     point_codex_to_dir(&pool, &central_dir).await;
     let skill_dir = create_central_skill(&central_dir, "shared-root-skill");
 
-    let result = install_skill_to_agent_impl(&pool, "shared-root-skill", "codex").await;
+    let result = install_symlink_local(&pool, "shared-root-skill", "codex").await;
     assert!(
         result.is_ok(),
         "same-root install should succeed: {:?}",
@@ -510,7 +556,7 @@ async fn test_install_fails_when_canonical_missing() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     // Do NOT create the skill in central_dir.
 
-    let result = install_skill_to_agent_impl(&pool, "nonexistent-skill", "claude-code").await;
+    let result = install_symlink_local(&pool, "nonexistent-skill", "claude-code").await;
     assert!(
         result.is_err(),
         "install should fail if canonical skill missing"
@@ -527,7 +573,7 @@ async fn test_install_fails_for_unknown_agent() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "some-skill");
 
-    let result = install_skill_to_agent_impl(&pool, "some-skill", "nonexistent-agent").await;
+    let result = install_symlink_local(&pool, "some-skill", "nonexistent-agent").await;
     assert!(result.is_err(), "install should fail for unknown agent");
 }
 
@@ -540,7 +586,7 @@ async fn test_install_to_central_agent_is_rejected() {
     let pool = setup_db(&central_dir, &tmp.path().join("claude")).await;
     create_central_skill(&central_dir, "self-skill");
 
-    let result = install_skill_to_agent_impl(&pool, "self-skill", "central").await;
+    let result = install_symlink_local(&pool, "self-skill", "central").await;
     assert!(
         result.is_err(),
         "installing to 'central' should be rejected"
@@ -559,12 +605,12 @@ async fn test_install_replaces_existing_symlink() {
     create_central_skill(&central_dir, "re-link-skill");
 
     // Install once.
-    install_skill_to_agent_impl(&pool, "re-link-skill", "claude-code")
+    install_symlink_local(&pool, "re-link-skill", "claude-code")
         .await
         .unwrap();
 
     // Install again — should replace the existing symlink without error.
-    let result = install_skill_to_agent_impl(&pool, "re-link-skill", "claude-code").await;
+    let result = install_symlink_local(&pool, "re-link-skill", "claude-code").await;
     assert!(result.is_ok(), "re-install should succeed: {:?}", result);
 }
 
@@ -582,7 +628,7 @@ async fn test_install_refuses_to_overwrite_real_dir() {
     // Create a real (non-symlink) directory at the install location.
     fs::create_dir_all(agent_dir.join("real-dir-skill")).unwrap();
 
-    let result = install_skill_to_agent_impl(&pool, "real-dir-skill", "claude-code").await;
+    let result = install_symlink_local(&pool, "real-dir-skill", "claude-code").await;
     assert!(
         result.is_err(),
         "install should refuse to overwrite a real directory"
@@ -601,14 +647,14 @@ async fn test_uninstall_removes_symlink() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "uninstall-skill");
 
-    install_skill_to_agent_impl(&pool, "uninstall-skill", "claude-code")
+    install_symlink_local(&pool, "uninstall-skill", "claude-code")
         .await
         .unwrap();
 
     let symlink_path = agent_dir.join("uninstall-skill");
     assert!(symlink_path.exists() || fs::symlink_metadata(&symlink_path).is_ok());
 
-    uninstall_skill_from_agent_impl(&pool, "uninstall-skill", "claude-code")
+    uninstall_local(&pool, "uninstall-skill", "claude-code")
         .await
         .unwrap();
 
@@ -628,11 +674,11 @@ async fn test_uninstall_removes_db_record() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "db-uninstall-skill");
 
-    install_skill_to_agent_impl(&pool, "db-uninstall-skill", "claude-code")
+    install_symlink_local(&pool, "db-uninstall-skill", "claude-code")
         .await
         .unwrap();
 
-    uninstall_skill_from_agent_impl(&pool, "db-uninstall-skill", "claude-code")
+    uninstall_local(&pool, "db-uninstall-skill", "claude-code")
         .await
         .unwrap();
 
@@ -655,7 +701,7 @@ async fn test_uninstall_refuses_real_dir() {
     // Place a real directory where the symlink would be.
     fs::create_dir_all(agent_dir.join("protected-skill")).unwrap();
 
-    let result = uninstall_skill_from_agent_impl(&pool, "protected-skill", "claude-code").await;
+    let result = uninstall_local(&pool, "protected-skill", "claude-code").await;
     assert!(
         result.is_err(),
         "uninstall should refuse to delete a real directory"
@@ -691,7 +737,7 @@ async fn test_uninstall_nonexistent_path_still_cleans_db() {
         .await
         .unwrap();
 
-    let result = uninstall_skill_from_agent_impl(&pool, "ghost-skill", "claude-code").await;
+    let result = uninstall_local(&pool, "ghost-skill", "claude-code").await;
     assert!(result.is_ok(), "uninstall of missing path should succeed");
 
     let installations = db::get_skill_installations(&pool, "ghost-skill")
@@ -711,12 +757,12 @@ async fn test_uninstall_same_root_agent_is_rejected_without_deleting_central_dir
     point_codex_to_dir(&pool, &central_dir).await;
     let skill_dir = create_central_skill(&central_dir, "shared-root-uninstall-skill");
 
-    install_skill_to_agent_impl(&pool, "shared-root-uninstall-skill", "codex")
+    install_symlink_local(&pool, "shared-root-uninstall-skill", "codex")
         .await
         .unwrap();
 
     let result =
-        uninstall_skill_from_agent_impl(&pool, "shared-root-uninstall-skill", "codex").await;
+        uninstall_local(&pool, "shared-root-uninstall-skill", "codex").await;
     assert!(
         result.as_ref().is_err_and(|error| error
             .to_string()
@@ -766,7 +812,7 @@ async fn test_uninstall_claude_user_row_removes_observed_dir_and_observation() {
     .await
     .unwrap();
 
-    uninstall_skill_from_agent_with_row_impl(
+    uninstall_local_with_row(
         &pool,
         "observed-user-skill",
         "claude-code",
@@ -821,7 +867,7 @@ async fn test_uninstall_claude_plugin_row_is_rejected_without_deleting_path() {
         .await
         .unwrap();
 
-    let result = uninstall_skill_from_agent_with_row_impl(
+    let result = uninstall_local_with_row(
         &pool,
         "plugin-skill",
         "claude-code",
@@ -858,7 +904,7 @@ async fn test_uninstall_claude_row_rejects_skill_id_mismatch() {
         .await
         .unwrap();
 
-    let result = uninstall_skill_from_agent_with_row_impl(
+    let result = uninstall_local_with_row(
         &pool,
         "other-skill",
         "claude-code",
@@ -888,13 +934,14 @@ async fn test_batch_uninstall_skills_from_agent_reports_partial_failure() {
 
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "batch-remove-ok");
-    install_skill_to_agent_impl(&pool, "batch-remove-ok", "claude-code")
+    install_symlink_local(&pool, "batch-remove-ok", "claude-code")
         .await
         .unwrap();
     fs::create_dir_all(agent_dir.join("protected-batch-dir")).unwrap();
 
     let result = super::batch::batch_uninstall_skills_from_agent_impl(
         &pool,
+        &InstallTransport::Local,
         "claude-code",
         vec![
             BatchUninstallSkillRequest {
@@ -944,6 +991,7 @@ async fn test_batch_uninstall_claude_user_rows_keep_row_identity() {
 
     let result = super::batch::batch_uninstall_skills_from_agent_impl(
         &pool,
+        &InstallTransport::Local,
         "claude-code",
         vec![BatchUninstallSkillRequest {
             skill_id: "same-skill".to_string(),
@@ -1003,12 +1051,13 @@ async fn test_batch_uninstall_rejects_read_only_and_shared_root_rows() {
         .unwrap();
     point_codex_to_dir(&pool, &central_dir).await;
     create_central_skill(&central_dir, "shared-root-batch-skill");
-    install_skill_to_agent_impl(&pool, "shared-root-batch-skill", "codex")
+    install_symlink_local(&pool, "shared-root-batch-skill", "codex")
         .await
         .unwrap();
 
     let plugin_result = super::batch::batch_uninstall_skills_from_agent_impl(
         &pool,
+        &InstallTransport::Local,
         "claude-code",
         vec![BatchUninstallSkillRequest {
             skill_id: "plugin-batch-skill".to_string(),
@@ -1018,6 +1067,7 @@ async fn test_batch_uninstall_rejects_read_only_and_shared_root_rows() {
     .await;
     let shared_result = super::batch::batch_uninstall_skills_from_agent_impl(
         &pool,
+        &InstallTransport::Local,
         "codex",
         vec![BatchUninstallSkillRequest {
             skill_id: "shared-root-batch-skill".to_string(),
@@ -1154,6 +1204,7 @@ async fn test_central_batch_install_multiple_skills_to_multiple_agents() {
 
     let result = batch_install_central_skills_impl(
         &pool,
+        &InstallTransport::Local,
         vec!["batch-one".to_string(), "batch-two".to_string()],
         vec!["claude-code".to_string(), "cursor".to_string()],
         "copy",
@@ -1196,6 +1247,7 @@ async fn test_central_batch_install_skips_existing_db_copy_record() {
 
     let result = batch_install_central_skills_impl(
         &pool,
+        &InstallTransport::Local,
         vec!["existing-copy-skill".to_string()],
         vec!["claude-code".to_string()],
         "symlink",
@@ -1244,6 +1296,7 @@ async fn test_central_batch_install_skips_shared_target_record_and_adds_agent_re
 
     let result = batch_install_central_skills_impl(
         &pool,
+        &InstallTransport::Local,
         vec!["shared-universal-skill".to_string()],
         vec!["codex".to_string()],
         "symlink",
@@ -1288,6 +1341,7 @@ async fn test_central_batch_install_refuses_different_existing_real_dir() {
 
     let result = batch_install_central_skills_impl(
         &pool,
+        &InstallTransport::Local,
         vec!["different-real-dir".to_string()],
         vec!["claude-code".to_string()],
         "copy",
@@ -1582,10 +1636,11 @@ async fn test_project_install_skips_existing_central_symlink() {
 
     let result = batch_install_central_skills_impl(
         &pool,
+        &InstallTransport::Local,
         vec!["project-symlink-skill".to_string()],
         vec!["claude-code".to_string()],
         "symlink",
-        Some(&project_dir),
+        Some(project_dir.to_str().unwrap()),
     )
     .await;
 
@@ -1616,10 +1671,11 @@ async fn test_project_install_skips_existing_matching_copy() {
 
     let result = batch_install_central_skills_impl(
         &pool,
+        &InstallTransport::Local,
         vec!["project-copy-skill".to_string()],
         vec!["claude-code".to_string()],
         "copy",
-        Some(&project_dir),
+        Some(project_dir.to_str().unwrap()),
     )
     .await;
 
@@ -1654,10 +1710,11 @@ async fn test_project_install_refuses_existing_different_copy() {
 
     let result = batch_install_central_skills_impl(
         &pool,
+        &InstallTransport::Local,
         vec!["project-different-skill".to_string()],
         vec!["claude-code".to_string()],
         "copy",
-        Some(&project_dir),
+        Some(project_dir.to_str().unwrap()),
     )
     .await;
 
@@ -1727,7 +1784,7 @@ async fn batch_install_impl(
     let mut failed = Vec::new();
 
     for agent_id in agent_ids {
-        match install_central_skill_to_agent_outcome_by_method(pool, skill_id, agent_id, "symlink")
+        match install_local_by_method(pool, skill_id, agent_id, "symlink")
             .await
         {
             Ok(InstallOutcome::Installed(_)) => succeeded.push(agent_id.clone()),
@@ -1758,7 +1815,7 @@ async fn test_copy_install_creates_real_directory() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "copy-skill");
 
-    let result = install_skill_to_agent_copy_impl(&pool, "copy-skill", "claude-code").await;
+    let result = install_copy_local(&pool, "copy-skill", "claude-code").await;
     assert!(result.is_ok(), "copy install should succeed: {:?}", result);
 
     let target = agent_dir.join("copy-skill");
@@ -1789,7 +1846,7 @@ async fn test_copy_install_files_are_copied() {
     .unwrap();
     fs::write(skill_dir.join("extra.txt"), "extra content").unwrap();
 
-    install_skill_to_agent_copy_impl(&pool, "multi-file-skill", "claude-code")
+    install_copy_local(&pool, "multi-file-skill", "claude-code")
         .await
         .unwrap();
 
@@ -1826,7 +1883,7 @@ async fn test_copy_install_updates_db_with_copy_type() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "db-copy-skill");
 
-    install_skill_to_agent_copy_impl(&pool, "db-copy-skill", "claude-code")
+    install_copy_local(&pool, "db-copy-skill", "claude-code")
         .await
         .unwrap();
 
@@ -1852,7 +1909,7 @@ async fn test_copy_install_same_root_agent_records_native_without_copying() {
     point_codex_to_dir(&pool, &central_dir).await;
     let skill_dir = create_central_skill(&central_dir, "shared-root-copy-skill");
 
-    let result = install_skill_to_agent_copy_impl(&pool, "shared-root-copy-skill", "codex").await;
+    let result = install_copy_local(&pool, "shared-root-copy-skill", "codex").await;
     assert!(
         result.is_ok(),
         "same-root copy install should succeed: {:?}",
@@ -1883,7 +1940,7 @@ async fn test_copy_install_to_central_is_rejected() {
     let pool = setup_db(&central_dir, &tmp.path().join("claude")).await;
     create_central_skill(&central_dir, "self-copy-skill");
 
-    let result = install_skill_to_agent_copy_impl(&pool, "self-copy-skill", "central").await;
+    let result = install_copy_local(&pool, "self-copy-skill", "central").await;
     assert!(
         result.is_err(),
         "copy install to 'central' should be rejected"
@@ -1900,7 +1957,7 @@ async fn test_copy_install_fails_when_canonical_missing() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     // Deliberately do NOT create the skill in central_dir.
 
-    let result = install_skill_to_agent_copy_impl(&pool, "missing-skill", "claude-code").await;
+    let result = install_copy_local(&pool, "missing-skill", "claude-code").await;
     assert!(
         result.is_err(),
         "copy install should fail when canonical skill is missing"
@@ -1921,7 +1978,7 @@ async fn test_copy_install_refuses_to_overwrite_real_dir() {
     // Create a real directory at the target location.
     fs::create_dir_all(agent_dir.join("existing-dir-skill")).unwrap();
 
-    let result = install_skill_to_agent_copy_impl(&pool, "existing-dir-skill", "claude-code").await;
+    let result = install_copy_local(&pool, "existing-dir-skill", "claude-code").await;
     assert!(
         result.is_err(),
         "copy install should refuse to overwrite an existing real directory"
@@ -1941,7 +1998,7 @@ async fn test_uninstall_removes_copied_directory() {
     create_central_skill(&central_dir, "uninstall-copy-skill");
 
     // First, install via copy.
-    install_skill_to_agent_copy_impl(&pool, "uninstall-copy-skill", "claude-code")
+    install_copy_local(&pool, "uninstall-copy-skill", "claude-code")
         .await
         .unwrap();
 
@@ -1952,7 +2009,7 @@ async fn test_uninstall_removes_copied_directory() {
     );
 
     // Now uninstall.
-    uninstall_skill_from_agent_impl(&pool, "uninstall-copy-skill", "claude-code")
+    uninstall_local(&pool, "uninstall-copy-skill", "claude-code")
         .await
         .unwrap();
 
@@ -1972,11 +2029,11 @@ async fn test_uninstall_copy_removes_db_record() {
     let pool = setup_db(&central_dir, &agent_dir).await;
     create_central_skill(&central_dir, "db-copy-uninstall-skill");
 
-    install_skill_to_agent_copy_impl(&pool, "db-copy-uninstall-skill", "claude-code")
+    install_copy_local(&pool, "db-copy-uninstall-skill", "claude-code")
         .await
         .unwrap();
 
-    uninstall_skill_from_agent_impl(&pool, "db-copy-uninstall-skill", "claude-code")
+    uninstall_local(&pool, "db-copy-uninstall-skill", "claude-code")
         .await
         .unwrap();
 
@@ -2002,7 +2059,7 @@ async fn test_uninstall_refuses_real_dir_without_copy_record() {
     // Place a real directory with NO DB record as 'copy' type.
     fs::create_dir_all(agent_dir.join("protected-skill")).unwrap();
 
-    let result = uninstall_skill_from_agent_impl(&pool, "protected-skill", "claude-code").await;
+    let result = uninstall_local(&pool, "protected-skill", "claude-code").await;
     assert!(
         result.is_err(),
         "uninstall should refuse to delete a real directory without a copy record"
@@ -2028,7 +2085,7 @@ async fn test_batch_install_uses_copy_method() {
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
     for agent_id in &["claude-code".to_string()] {
-        match install_skill_to_agent_copy_impl(&pool, "batch-copy-skill", agent_id).await {
+        match install_copy_local(&pool, "batch-copy-skill", agent_id).await {
             Ok(_) => succeeded.push(agent_id.clone()),
             Err(e) => failed.push(FailedInstall {
                 agent_id: agent_id.clone(),
@@ -2047,4 +2104,207 @@ async fn test_batch_install_uses_copy_method() {
         !meta.file_type().is_symlink(),
         "batch copy install should create a real directory"
     );
+}
+
+// ── Remote-transport execution path (FakeRunner-backed SSH connection) ──────
+
+use std::sync::Arc;
+
+use crate::test_support::{mem_pool_with_home, FakeRunner};
+use crate::targets::{
+    ConnectedRemoteTarget, ConnectedSshTarget, RemoteTargetConfig, SshAuthMethod,
+};
+
+fn fake_ssh_transport(
+    remote_os: &str,
+    symlink_enabled: bool,
+) -> (Arc<FakeRunner>, InstallTransport) {
+    let runner = Arc::new(FakeRunner::new());
+    let target = RemoteTargetConfig {
+        id: "ssh-demo".to_string(),
+        label: "Lab".to_string(),
+        host: "lab.local".to_string(),
+        username: "alice".to_string(),
+        port: 22,
+        auth_method: SshAuthMethod::Key,
+        key_path: "~/.ssh/id_ed25519".to_string(),
+        credential_key: None,
+        protected_password: None,
+        password: None,
+        remote_home: "/home/alice".to_string(),
+        remote_os: remote_os.to_string(),
+        symlink_enabled,
+    };
+    let connection = ConnectedSshTarget::for_tests_with_runner(target, runner.clone());
+    (
+        runner,
+        InstallTransport::Remote(Box::new(ConnectedRemoteTarget::Ssh(connection))),
+    )
+}
+
+async fn seed_remote_source_skill(pool: &DbPool, skill_id: &str, source_dir: &str) {
+    let skill = db::Skill {
+        id: skill_id.to_string(),
+        name: skill_id.to_string(),
+        description: None,
+        file_path: format!("{source_dir}/SKILL.md"),
+        canonical_path: None,
+        is_central: false,
+        source: None,
+        content: None,
+        scanned_at: chrono::Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
+    };
+    db::upsert_skill(pool, &skill).await.unwrap();
+}
+
+#[tokio::test]
+async fn test_remote_install_runs_central_install_script_with_six_args() {
+    let pool = mem_pool_with_home("/home/alice").await;
+    seed_remote_source_skill(&pool, "demo", "/home/alice/src/demo").await;
+    let (runner, transport) = fake_ssh_transport("Linux", false);
+    runner.push_success("");
+
+    let outcome = install_skill(&pool, &transport, "demo", "claude-code", "auto")
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome.into_install_result().symlink_path,
+        "/home/alice/.claude/skills/demo"
+    );
+
+    {
+        let calls = runner.calls();
+        assert_eq!(calls.len(), 1, "one atomic script round trip");
+        // Remote `auto` coerces to copy; six positional args in script order:
+        // canonical, source, target, agent_dir, method, managed_copy.
+        assert_eq!(
+            calls[0].args.last().map(String::as_str),
+            Some(
+                "sh -s -- '/home/alice/.skillsmanage/skills/demo' '/home/alice/src/demo' \
+                 '/home/alice/.claude/skills/demo' '/home/alice/.claude/skills' 'copy' '0'"
+            )
+        );
+        assert_eq!(
+            calls[0].stdin.as_deref(),
+            Some(super::remote::REMOTE_CENTRAL_INSTALL_SCRIPT.as_bytes())
+        );
+    }
+
+    let skill = db::get_skill_by_id(&pool, "demo").await.unwrap().unwrap();
+    assert!(skill.is_central, "skill should be marked centralized");
+    assert_eq!(
+        skill.canonical_path.as_deref(),
+        Some("/home/alice/.skillsmanage/skills/demo")
+    );
+    assert_eq!(
+        skill.file_path,
+        "/home/alice/.skillsmanage/skills/demo/SKILL.md"
+    );
+
+    let installs = db::get_skill_installations(&pool, "demo").await.unwrap();
+    assert_eq!(installs.len(), 1);
+    assert_eq!(installs[0].agent_id, "claude-code");
+    assert_eq!(installs[0].link_type, "copy");
+    assert_eq!(installs[0].installed_path, "/home/alice/.claude/skills/demo");
+    assert_eq!(installs[0].symlink_target, None);
+}
+
+#[tokio::test]
+async fn test_remote_symlink_method_rejected_when_target_disables_symlink() {
+    let pool = mem_pool_with_home("/home/alice").await;
+    seed_remote_source_skill(&pool, "demo", "/home/alice/src/demo").await;
+    let (runner, transport) = fake_ssh_transport("Windows", false);
+
+    let error = install_skill(&pool, &transport, "demo", "claude-code", "symlink")
+        .await
+        .unwrap_err();
+    assert!(matches!(error, InstallationError::RemoteSymlinkDisabled));
+    assert!(
+        runner.calls().is_empty(),
+        "gate must fire before any remote command"
+    );
+    assert!(db::get_skill_installations(&pool, "demo")
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn test_remote_shared_root_install_records_native_without_script() {
+    let pool = mem_pool_with_home("/home/alice").await;
+    seed_remote_source_skill(&pool, "demo", "/home/alice/src/demo").await;
+    sqlx::query(
+        "UPDATE agents SET global_skills_dir = \
+         (SELECT global_skills_dir FROM agents WHERE id = 'central') \
+         WHERE id = 'claude-code'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (runner, transport) = fake_ssh_transport("Linux", false);
+    // `test -e` on canonical SKILL.md exits 0 → already centralized.
+    runner.push_output(0, "", "");
+
+    let outcome = install_skill(&pool, &transport, "demo", "claude-code", "copy")
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome.into_install_result().symlink_path,
+        "/home/alice/.skillsmanage/skills/demo"
+    );
+
+    {
+        let calls = runner.calls();
+        assert_eq!(calls.len(), 1, "existence probe only, no install script");
+        assert_eq!(
+            calls[0].args.last().map(String::as_str),
+            Some("test -e '/home/alice/.skillsmanage/skills/demo/SKILL.md'")
+        );
+    }
+
+    let installs = db::get_skill_installations(&pool, "demo").await.unwrap();
+    assert_eq!(installs.len(), 1);
+    assert_eq!(installs[0].link_type, "native");
+    assert_eq!(
+        installs[0].installed_path,
+        "/home/alice/.skillsmanage/skills/demo"
+    );
+}
+
+#[tokio::test]
+async fn test_remote_uninstall_removes_tree_and_deletes_record() {
+    let pool = mem_pool_with_home("/home/alice").await;
+    seed_remote_source_skill(&pool, "demo", "/home/alice/src/demo").await;
+    super::skip::record_installation(
+        &pool,
+        "demo",
+        "claude-code",
+        Path::new("/home/alice/.claude/skills/demo"),
+        "copy",
+        None,
+    )
+    .await
+    .unwrap();
+    let (runner, transport) = fake_ssh_transport("Linux", false);
+    runner.push_success("");
+
+    uninstall_skill(&pool, &transport, "demo", "claude-code", None)
+        .await
+        .unwrap();
+
+    {
+        let calls = runner.calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(
+            calls[0].args.last().map(String::as_str),
+            Some("rm -rf -- '/home/alice/.claude/skills/demo'")
+        );
+        assert!(calls[0].stdin.is_none());
+    }
+    assert!(db::get_skill_installations(&pool, "demo")
+        .await
+        .unwrap()
+        .is_empty());
 }

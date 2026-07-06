@@ -94,13 +94,13 @@ pub struct CentralBatchInstallResult {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum InstallOutcome {
+pub enum InstallOutcome {
     Installed(InstallResult),
     Skipped(SkippedInstall),
 }
 
 impl InstallOutcome {
-    pub(crate) fn into_install_result(self) -> InstallResult {
+    pub fn into_install_result(self) -> InstallResult {
         match self {
             InstallOutcome::Installed(result) => result,
             InstallOutcome::Skipped(skipped) => InstallResult {

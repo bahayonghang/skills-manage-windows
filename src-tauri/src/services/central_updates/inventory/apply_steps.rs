@@ -10,7 +10,7 @@ use crate::services::central_updates::{
     CentralRepositoryAdditionSkipRequest, CentralRepositoryAdditionUnskipRequest,
     CentralUpdatesError,
 };
-use crate::services::installation::uninstall_skill_from_agent_with_row_impl;
+use crate::services::installation::{uninstall_skill, InstallTransport};
 use crate::targets::{connect_remote_target, ActiveTarget};
 
 use super::{
@@ -196,8 +196,9 @@ pub(crate) async fn apply_remove_platform_duplicates_step(
             let row_id = (removal.agent_id == "claude-code")
                 .then(|| obs_by_path.get(&path).map(|o| o.row_id.clone()))
                 .flatten();
-            match uninstall_skill_from_agent_with_row_impl(
+            match uninstall_skill(
                 pool,
+                &InstallTransport::Local,
                 &removal.skill_id,
                 &removal.agent_id,
                 row_id.as_deref(),
@@ -312,8 +313,9 @@ async fn remove_deleted_platform_copy_local(
             if obs.is_read_only || obs.source_kind == "plugin" {
                 return Err(CentralUpdatesError::ReadOnlyPluginCopy);
             }
-            uninstall_skill_from_agent_with_row_impl(
+            uninstall_skill(
                 pool,
+                &InstallTransport::Local,
                 &removal.skill_id,
                 &removal.agent_id,
                 Some(&obs.row_id),
@@ -332,8 +334,14 @@ async fn remove_deleted_platform_copy_local(
         });
     }
 
-    uninstall_skill_from_agent_with_row_impl(pool, &removal.skill_id, &removal.agent_id, None)
-        .await?;
+    uninstall_skill(
+        pool,
+        &InstallTransport::Local,
+        &removal.skill_id,
+        &removal.agent_id,
+        None,
+    )
+    .await?;
     Ok(())
 }
 
