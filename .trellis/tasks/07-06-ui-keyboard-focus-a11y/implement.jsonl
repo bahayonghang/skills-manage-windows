@@ -1,0 +1,3 @@
+{"file": "DESIGN.md", "reason": "设计系统总纲：Color-Is-Never-Alone 原则与焦点可见性要求"}
+{"file": "src/components/ui/button-variants.ts", "reason": "ui/Button 原语现有 focus-visible 环实现，共享 focus ring 工具类需与其视觉相容"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "InlineConfirm 交互变更需符合异步动作反馈约定"}

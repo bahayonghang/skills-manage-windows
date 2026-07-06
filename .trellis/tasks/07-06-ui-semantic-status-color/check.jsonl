@@ -1,0 +1,2 @@
+{"file": "src/lib/statusTone.ts", "reason": "验收基准：所有状态色必须走此工具类，无原生调色板/dark: 二元适配残留"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "检查 statusAccent 类型变更未破坏卡片场景 props 契约"}

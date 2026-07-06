@@ -1,0 +1,2 @@
+{"file": "DESIGN.md", "reason": "设计总纲：卡片签名、反面清单（无差别 SaaS metric 网格）、本日新增 Press Feedback 双轨与 Corner Exceptions；统计条须遵守"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "无直接关系但确认统计条不复用技能卡片体系（MetricStrip 是 dashboard 专属）"}

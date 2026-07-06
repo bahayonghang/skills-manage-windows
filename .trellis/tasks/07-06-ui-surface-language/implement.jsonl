@@ -1,0 +1,2 @@
+{"file": "DESIGN.md", "reason": "设计系统总纲：卡片签名（rounded-xl + ring-1 ring-border + bg-card + shadow-sm）、圆角阶梯、Glass-Is-Earned 原则；本任务需在此登记例外条目与 Dashboard 密度定位"}
+{"file": "src/components/ui/card.tsx", "reason": "卡片表面语言标准答案（:15），收敛目标基准"}

@@ -1,0 +1,3 @@
+{"file": "DESIGN.md", "reason": "设计系统总纲：语义状态色与 token 纪律的顶层约束（Color-Is-Never-Alone 等原则）"}
+{"file": "src/lib/statusTone.ts", "reason": "语义色契约本体：success/warning/info/error 的 token 类名工具与禁令注释，是本任务的收敛目标"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "UnifiedSkillCard 判别联合 props 约定；statusAccent 改名需遵守场景窄 props 契约"}

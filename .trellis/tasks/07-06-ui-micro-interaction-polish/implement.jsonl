@@ -1,0 +1,2 @@
+{"file": "DESIGN.md", "reason": "设计总纲：Label 规格、Accent-Is-Rare、transition 纪律；本任务需写入按压语言双轨规则，注意本日已新增 Corner Exceptions 等条目的行文风格"}
+{"file": "src/components/ui/button-variants.ts", "reason": "ui/Button 按压语言（active:translate-y-px）现状基准，本任务维持不动并登记"}
