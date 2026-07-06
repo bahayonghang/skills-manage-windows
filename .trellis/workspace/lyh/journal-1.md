@@ -1176,3 +1176,36 @@ Added card-level Central skill platform uninstall action and recorded the Trelli
 
 - 后续 deepening 以 CONTEXT.md 新登记清单为准；transport seam 扩展到 central_skills 时先读 .trellis/spec/backend/transport-seam.md 与归档任务 notes
 - UnifiedSkillCard 后续重构时回落 840 行冻结基线
+
+
+## Session 27: Update check failure feedback
+
+**Date**: 2026-07-06
+**Task**: Update check failure feedback
+**Branch**: `dev`
+
+### Summary
+
+Created and completed Trellis task 07-06-update-check-failure-feedback. Added visible inline and toast feedback for failed Central update checks from the mode dialog, preserved successful Update Center opening behavior, added regression coverage, and documented the frontend async error-feedback convention. Verified with focused Vitest coverage, pnpm typecheck, pnpm lint, and just ci.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5ba049db` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

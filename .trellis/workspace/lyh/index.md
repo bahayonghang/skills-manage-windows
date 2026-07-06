@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 26
-- **Last Active**: 2026-07-05
+- **Total Sessions**: 27
+- **Last Active**: 2026-07-06
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1046 | Active |
+| `journal-1.md` | ~1211 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 27 | 2026-07-06 | Update check failure feedback | `5ba049db` | `dev` |
 | 26 | 2026-07-05 | typed-ipc-adapter：类型化 IPC adapter 与 fixture seam 全程落地 | `c17f608e`, `dd9bfbce`, `9da9b492`, `95c8cd1c`, `4767cad8`, `624c09c4`, `d9ada6b3`, `34ff4aa0`, `a01c428d` | `dev` |
 | 25 | 2026-07-05 | Platform management module：registry 登记点 + 共享多选 + 展示分支收敛 | `1dfa9ca9`, `6d59e707`, `2407fd3c`, `ec7a7bd2`, `4419a074` | `dev` |
 | 24 | 2026-07-04 | Update Center 落 service 域：阶段 D inventory 归位 + 阶段 E 收尾 | `26bee16f`, `ca5e4e56`, `0907a5f3` | `dev` |
