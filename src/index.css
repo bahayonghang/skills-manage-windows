@@ -8,6 +8,15 @@
 
 @custom-variant dark (&:is([data-theme='mocha'] *, [data-theme='macchiato'] *, [data-theme='frappe'] *, [data-theme='claude-dark'] *));
 
+/* Shared keyboard focus ring for hand-written buttons/controls (a11y).
+   Equivalent to: focus-visible:outline-none focus-visible:ring-2
+   focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card */
+@utility focus-ring {
+  &:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-1 ring-offset-card;
+  }
+}
+
 /* ─── Global hover color variable ─────────────────────────────────────────── */
 :root {
   --hover-bg: var(--primary);
@@ -56,7 +65,7 @@
   gap: 1.25rem;
   justify-items: center;
   border: 1px solid rgba(180, 190, 254, 0.18);
-  border-radius: 1.5rem;
+  border-radius: 1.125rem;
   background: rgba(24, 24, 37, 0.76);
   padding: 2rem;
   box-shadow:
@@ -1064,7 +1073,7 @@
   background: color-mix(in srgb, var(--muted) 70%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   padding: 0.12rem 0.34rem;
-  border-radius: 0.45rem;
+  border-radius: 0.5rem;
 }
 
 .skill-markdown pre {

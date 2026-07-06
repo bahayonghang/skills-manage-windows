@@ -78,7 +78,7 @@ export function CentralTopFilters({
               data-active={active}
               onClick={() => onToggleSource(pill.value)}
               className={cn(
-                "h-7 rounded-full border px-2.5 text-xs font-medium transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]",
+                "focus-ring h-7 rounded-full border px-2.5 text-xs font-medium transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]",
                 active
                   ? "border-primary/40 bg-primary/10 text-primary"
                   : "border-border/70 text-muted-foreground hover:border-primary/30 hover:text-foreground",
@@ -114,7 +114,7 @@ export function CentralTopFilters({
                   onClick={() => onToggleTag(tag.id)}
                   style={color.style}
                   className={cn(
-                    "inline-flex h-7 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-medium transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]",
+                    "focus-ring inline-flex h-7 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-medium transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]",
                     color.className,
                     active && "ring-2 ring-primary/40",
                   )}
@@ -137,7 +137,7 @@ export function CentralTopFilters({
             type="button"
             data-testid="top-filter-more"
             onClick={() => setMoreOpen((v) => !v)}
-            className="flex h-7 items-center gap-1 rounded-full border border-border/70 px-2.5 text-xs font-medium text-muted-foreground transition-[scale,border-color,background-color,color] hover:border-primary/30 hover:text-foreground active:scale-[0.96]"
+            className="focus-ring flex h-7 items-center gap-1 rounded-full border border-border/70 px-2.5 text-xs font-medium text-muted-foreground transition-[scale,border-color,background-color,color] hover:border-primary/30 hover:text-foreground active:scale-[0.96]"
           >
             {t("central.topFilterMore")}
             <ChevronDown className="size-3" />

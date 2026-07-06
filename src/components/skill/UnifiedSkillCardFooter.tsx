@@ -37,12 +37,12 @@ export const PlatformToggleIcon = memo(function PlatformToggleIcon({
   return (
     <button
       className={cn(
-        "grid size-8 place-items-center rounded-lg transition-[scale,background-color,color] active:not-disabled:scale-[0.96]",
+        "focus-ring grid size-8 place-items-center rounded-lg transition-[scale,background-color,color] active:not-disabled:scale-[0.96]",
         isLocked
-          ? "text-primary cursor-default"
+          ? "text-primary cursor-default ring-1 ring-primary/30"
           : isLinked
-            ? "text-primary hover:bg-primary/15"
-            : "text-muted-foreground/40 hover:bg-muted/60 hover:text-muted-foreground",
+            ? "text-primary ring-1 ring-primary/30 hover:bg-primary/15"
+            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         isToggling && "animate-pulse pointer-events-none",
       )}
       title={title}
@@ -101,7 +101,7 @@ export const UnifiedSkillCardFooter = memo(function UnifiedSkillCardFooter({
       data-testid="card-footer"
       className="mt-auto flex items-center justify-between gap-2 border-t border-border/50 pt-2"
     >
-      <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
         {repoName && (
           <span className="flex min-w-0 items-center gap-1">
             <span

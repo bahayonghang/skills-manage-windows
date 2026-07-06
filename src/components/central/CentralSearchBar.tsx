@@ -122,7 +122,7 @@ export function CentralSearchBar({
               type="button"
               onClick={onClear}
               aria-label={t("central.v2.selectionClear")}
-              className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-[scale,background-color,color] hover:bg-muted/60 hover:text-foreground active:scale-[0.96]"
+              className="focus-ring grid size-8 place-items-center rounded-lg text-muted-foreground transition-[scale,background-color,color] hover:bg-muted/60 hover:text-foreground active:scale-[0.96]"
             >
               <X className="size-4" />
             </button>
@@ -133,7 +133,7 @@ export function CentralSearchBar({
               data-testid="central-open-palette"
               onClick={onOpenPalette}
               aria-label={t("central.v2.commandPaletteOpen")}
-              className="inline-flex h-7 items-center gap-1 rounded-lg border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition-[scale,background-color,border-color,color] hover:border-border hover:bg-muted/40 hover:text-foreground active:scale-[0.96]"
+              className="focus-ring inline-flex h-7 items-center gap-1 rounded-lg border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground transition-[scale,background-color,border-color,color] hover:border-border hover:bg-muted/40 hover:text-foreground active:scale-[0.96]"
             >
               <ShortcutHint shortcut="mod+k" />
             </button>
@@ -295,7 +295,7 @@ function FilterChip({
         type="button"
         onClick={onRemove}
         aria-label={t("central.v2.filtersRemove", { key: filter.kind, value })}
-        className="grid size-5 place-items-center rounded-md transition-[scale,background-color] hover:bg-foreground/10 active:scale-[0.96]"
+        className="focus-ring grid size-5 place-items-center rounded-md transition-[scale,background-color] hover:bg-foreground/10 active:scale-[0.96]"
       >
         <X className="size-2.5" />
       </button>
@@ -334,7 +334,7 @@ function SimpleChip({
           type="button"
           onClick={onRemove}
           aria-label={ariaLabel}
-          className="grid size-5 place-items-center rounded-md transition-[scale,background-color] hover:bg-foreground/10 active:scale-[0.96]"
+          className="focus-ring grid size-5 place-items-center rounded-md transition-[scale,background-color] hover:bg-foreground/10 active:scale-[0.96]"
         >
           <X className="size-2.5" />
         </button>
