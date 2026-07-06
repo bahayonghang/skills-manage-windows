@@ -1143,3 +1143,36 @@ Added card-level Central skill platform uninstall action and recorded the Trelli
 ### Next Steps
 
 - 父任务 07-04-architecture-deepening 收尾：刷新 CONTEXT.md deepening 清单、集成审查（redaction/path/frontmatter 各 grep 一次）、just ci 全门禁
+
+---
+
+## 架构深化专项父任务收尾（9/9 完结归档）
+
+**Date**: 2026-07-06
+**Task**: 07-04-architecture-deepening
+**Branch**: `dev`
+
+### Summary
+
+父任务收尾三件套完成：① CONTEXT.md「当前优先 deepening opportunities」按实际落地结果重写——旧 6 项全部处理（Path policy/Platform module/Operation Log redaction 已落地移除；central_skills 已拆分、Settings store 证据不支持按评审结论移除；Discover scan core 随页面废弃失效），登记新格局三项（transport seam 扩展 central_skills delete/preview 族、exec.rs spawn_blocking 债、Remote(String) 类型化）+ 观望/不收清单。② 集成审查 grep 三项全过：redaction.rs 外无第二份 redact 实现、.skillsmanage 硬编码仅存于测试断言、frontmatter 栅栏剥离手抄零残留。③ just ci 全绿——首跑暴露 web:sizecheck 失败（UnifiedSkillCard.tsx 840 行超 800 预算，系上一子任务 b128671e 判别联合重构遗留、当时未跑 sizecheck），按脚本既有冻结基线机制登记 840 行上限后复跑全绿。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0cd449a0` | chore(sizecheck): [AI] 🔧 UnifiedSkillCard 冻结基线 840 行 |
+| `24c75ee5` | docs(context): [AI] 📝 刷新 deepening 清单并勾结父任务 AC |
+
+### Testing
+
+- [OK] just ci：Web（typecheck/lint/test/sizecheck）+ Rust（test/clippy）双链全绿
+- [OK] 集成审查 grep×3：redaction / path / frontmatter 无平行实现复活
+
+### Status
+
+[OK] **Completed**（架构深化专项 2026-07-04 → 2026-07-06 全部完结）
+
+### Next Steps
+
+- 后续 deepening 以 CONTEXT.md 新登记清单为准；transport seam 扩展到 central_skills 时先读 .trellis/spec/backend/transport-seam.md 与归档任务 notes
+- UnifiedSkillCard 后续重构时回落 840 行冻结基线
