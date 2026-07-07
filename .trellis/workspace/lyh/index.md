@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 28
-- **Last Active**: 2026-07-06
+- **Total Sessions**: 29
+- **Last Active**: 2026-07-07
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1251 | Active |
+| `journal-1.md` | ~1286 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 29 | 2026-07-07 | 平台视图安装来源快速导航栏（07-07-ui-platform-origin-nav） | `6a62e259`, `ee60e3be`, `b3a4cb76` | `dev` |
 | 28 | 2026-07-06 | UI 设计审计落地:六子任务全量实施 | `425143de`, `7be2c021`, `4462e352`, `b3c8e07b`, `2532f068`, `47659e35`, `da3e428d`, `c78c3b67` | `dev` |
 | 27 | 2026-07-06 | Update check failure feedback | `5ba049db` | `dev` |
 | 26 | 2026-07-05 | typed-ipc-adapter：类型化 IPC adapter 与 fixture seam 全程落地 | `c17f608e`, `dd9bfbce`, `9da9b492`, `95c8cd1c`, `4767cad8`, `624c09c4`, `d9ada6b3`, `34ff4aa0`, `a01c428d` | `dev` |

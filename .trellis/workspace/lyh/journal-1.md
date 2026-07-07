@@ -1249,3 +1249,38 @@ Created and completed Trellis task 07-06-update-check-failure-feedback. Added vi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 29: 平台视图安装来源快速导航栏（07-07-ui-platform-origin-nav）
+
+**Date**: 2026-07-07
+**Task**: 平台视图安装来源快速导航栏（07-07-ui-platform-origin-nav）
+**Branch**: `dev`
+
+### Summary
+
+为 /platform/:agentId 新增左侧安装来源导航（全部/SkillPort 安装按仓库细分/独立安装），分类唯一信号 link_type===symlink，与卡片 SourceIndicator 同语义。关键教训已沉淀 spec：installed_at 是首次扫描时间而非安装标记（扫描器对手放技能也 upsert skill_installations）。just ci 首轮失败为既有 flaky 用例 CentralSkillsView.github-import-preview（并行超时），单跑通过，待后续调超时余量。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6a62e259` | (see git log) |
+| `ee60e3be` | (see git log) |
+| `b3a4cb76` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
