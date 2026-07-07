@@ -99,6 +99,9 @@ const claudeTabName = (label: string, count?: number) =>
   count == null
     ? new RegExp(`^${label}(?:\\s*\\(\\d+\\))?$`)
     : new RegExp(`^${label}\\s*\\(${count}\\)$`);
+const originNavLabel = "安装来源导航";
+const originNavItemName = (label: string, count: number) =>
+  new RegExp(`^${label}\\s*${count}$`);
 const getCardBadgeMatches = (matcher: RegExp) =>
   screen
     .queryAllByText(matcher, badgeQueryOptions)
@@ -2193,5 +2196,196 @@ describe("PlatformView", () => {
     await waitFor(() => {
       expect((scroller as HTMLDivElement).scrollTop).toBe(0);
     });
+  });
+
+  // ── Origin Nav ────────────────────────────────────────────────────────────
+
+  it("renders the install origin nav with conserved section counts", () => {
+    renderPlatformView();
+
+    const nav = screen.getByRole("navigation", { name: originNavLabel });
+    expect(
+      within(nav).getByRole("button", { name: originNavItemName("全部", 2) })
+    ).toHaveAttribute("aria-current", "true");
+    expect(
+      within(nav).getByRole("button", { name: originNavItemName("SkillPort 安装", 1) })
+    ).toBeInTheDocument();
+    expect(
+      within(nav).getByRole("button", { name: originNavItemName("未指派来源", 1) })
+    ).toBeInTheDocument();
+    expect(
+      within(nav).getByRole("button", { name: originNavItemName("独立安装", 1) })
+    ).toBeInTheDocument();
+  });
+
+  it("filters the card list by repo child item, standalone, and back to all", async () => {
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { "claude-code": mockSortablePlatformSkills },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView();
+
+    const nav = screen.getByRole("navigation", { name: originNavLabel });
+    expect(
+      within(nav).queryByRole("button", { name: /未指派来源/ })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      within(nav).getByRole("button", { name: originNavItemName("owner/beta", 1) })
+    );
+    await waitFor(() => {
+      expect(visibleSkillNames()).toEqual(["Beta Skill"]);
+    });
+
+    fireEvent.click(
+      within(nav).getByRole("button", { name: originNavItemName("独立安装", 2) })
+    );
+    await waitFor(() => {
+      expect(visibleSkillNames()).toEqual(["Alpha Skill", "Gamma Skill"]);
+    });
+
+    fireEvent.click(
+      within(nav).getByRole("button", { name: originNavItemName("全部", 3) })
+    );
+    await waitFor(() => {
+      expect(visibleSkillNames()).toEqual(["Alpha Skill", "Beta Skill", "Gamma Skill"]);
+    });
+  });
+
+  it("keeps origin nav counts independent of the search query", async () => {
+    renderPlatformView();
+
+    fireEvent.change(screen.getByPlaceholderText(/搜索技能/), {
+      target: { value: "frontend" },
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("code-reviewer")).not.toBeInTheDocument();
+    });
+
+    const nav = screen.getByRole("navigation", { name: originNavLabel });
+    expect(
+      within(nav).getByRole("button", { name: originNavItemName("全部", 2) })
+    ).toBeInTheDocument();
+    expect(
+      within(nav).getByRole("button", { name: originNavItemName("独立安装", 1) })
+    ).toBeInTheDocument();
+  });
+
+  it("resets the origin nav selection to 全部 when navigating to another platform", async () => {
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockCursorAgent],
+        skillsByAgent: {
+          "claude-code": mockSkills.length,
+          cursor: mockCursorSkills.length,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: {
+          "claude-code": mockSkills,
+          cursor: mockCursorSkills,
+        },
+        loadingByAgent: {
+          "claude-code": false,
+          cursor: false,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/platform/claude-code"]}>
+        <NavigationHarness />
+        <Routes>
+          <Route path="/platform/:agentId" element={<PlatformView />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const nav = screen.getByRole("navigation", { name: originNavLabel });
+    fireEvent.click(
+      within(nav).getByRole("button", { name: originNavItemName("独立安装", 1) })
+    );
+    await waitFor(() => {
+      expect(
+        within(nav).getByRole("button", { name: originNavItemName("独立安装", 1) })
+      ).toHaveAttribute("aria-current", "true");
+    });
+
+    await act(async () => {
+      testNavigate?.("/platform/cursor");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Cursor")).toBeInTheDocument();
+    });
+
+    const cursorNav = screen.getByRole("navigation", { name: originNavLabel });
+    expect(
+      within(cursorNav).getByRole("button", { name: originNavItemName("全部", 1) })
+    ).toHaveAttribute("aria-current", "true");
+    expect(
+      within(cursorNav).getByRole("button", { name: originNavItemName("独立安装", 0) })
+    ).not.toHaveAttribute("aria-current");
+  });
+
+  it("shows the origin-filtered empty state and restores the list after clearing", async () => {
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockCursorAgent],
+        skillsByAgent: {
+          "claude-code": mockSkills.length,
+          cursor: mockCursorSkills.length,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: {
+          "claude-code": mockSkills,
+          cursor: mockCursorSkills,
+        },
+        loadingByAgent: {
+          "claude-code": false,
+          cursor: false,
+        },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView("cursor");
+
+    const nav = screen.getByRole("navigation", { name: originNavLabel });
+    fireEvent.click(
+      within(nav).getByRole("button", { name: originNavItemName("独立安装", 0) })
+    );
+
+    expect(await screen.findByText("该来源下暂无技能")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /查看 cursor-helper 的详情/i })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "清除筛选" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /查看 cursor-helper 的详情/i })
+      ).toBeInTheDocument();
+    });
+    expect(
+      within(nav).getByRole("button", { name: originNavItemName("全部", 1) })
+    ).toHaveAttribute("aria-current", "true");
   });
 });

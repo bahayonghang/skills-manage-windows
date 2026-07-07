@@ -546,6 +546,15 @@
     "originPlugin": "Plugin source",
     "readOnly": "Read-only",
     "noSourceSkills": "No {{source}} skills installed for {{name}}",
+    "originNav": {
+      "label": "Install origin navigation",
+      "all": "All",
+      "central": "Installed via SkillPort",
+      "standalone": "Standalone",
+      "unassigned": "Unassigned source",
+      "emptyFiltered": "No skills for this origin",
+      "clearFilter": "Clear filter"
+    },
     "uninstallFromLabel": "Uninstall {{skill}} from {{platform}}",
     "scanDuplicates": "Scan duplicates",
     "scanDuplicatesLabel": "Scan duplicate skills in {{platform}}",

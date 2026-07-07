@@ -546,6 +546,15 @@
     "originPlugin": "插件来源",
     "readOnly": "只读",
     "noSourceSkills": "{{name}} 下暂无{{source}}技能",
+    "originNav": {
+      "label": "安装来源导航",
+      "all": "全部",
+      "central": "SkillPort 安装",
+      "standalone": "独立安装",
+      "unassigned": "未指派来源",
+      "emptyFiltered": "该来源下暂无技能",
+      "clearFilter": "清除筛选"
+    },
     "uninstallFromLabel": "从 {{platform}} 卸载 {{skill}}",
     "scanDuplicates": "扫描重复",
     "scanDuplicatesLabel": "扫描 {{platform}} 的重复技能",

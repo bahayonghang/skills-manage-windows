@@ -2,12 +2,12 @@ import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 import type { ScannedSkill } from "@/types";
 
 export type PlatformSourceFilter = "all" | "user" | "plugin";
+export type PlatformOriginFilter =
+  | { kind: "all" }
+  | { kind: "standalone" }
+  | { kind: "central"; repoKey?: string };
 export type PlatformSortField =
-  | "repository"
-  | "name"
-  | "installedAt"
-  | "updatedAt"
-  | "callCount";
+  "repository" | "name" | "installedAt" | "updatedAt" | "callCount";
 export type PlatformSortDirection = "asc" | "desc";
 export type PlatformGroupBy = "none" | "repository";
 
@@ -34,6 +34,7 @@ export interface DerivePlatformSkillRowsInput {
   skills: readonly ScannedSkill[];
   searchQuery: string;
   sourceFilter: PlatformSourceFilter;
+  originFilter: PlatformOriginFilter;
   sort: PlatformSortState;
   groupBy: PlatformGroupBy;
   labels: PlatformSkillGroupLabels;
@@ -42,6 +43,7 @@ export interface DerivePlatformSkillRowsInput {
 
 export interface DerivePlatformSkillRowsOutput {
   sourceFilteredSkills: ScannedSkill[];
+  originFilteredSkills: ScannedSkill[];
   filteredSkills: ScannedSkill[];
   sortedSkills: ScannedSkill[];
   groups: PlatformSkillGroup[];
@@ -68,7 +70,7 @@ function compareSkillNames(a: ScannedSkill, b: ScannedSkill): number {
 
 function getInstalledSortTimestamp(skill: ScannedSkill): number {
   return parseSortableTimestamp(
-    skill.installed_at ?? skill.created_at ?? skill.scanned_at
+    skill.installed_at ?? skill.created_at ?? skill.scanned_at,
   );
 }
 
@@ -78,7 +80,7 @@ function getUpdatedSortTimestamp(skill: ScannedSkill): number {
 
 function getSkillCallCount(
   skill: ScannedSkill,
-  usageCounts?: Record<string, number>
+  usageCounts?: Record<string, number>,
 ): number {
   const count = usageCounts?.[skill.name] ?? 0;
   return Number.isFinite(count) ? count : 0;
@@ -88,7 +90,7 @@ function compareTimestamps(
   a: ScannedSkill,
   b: ScannedSkill,
   direction: PlatformSortDirection,
-  resolveTimestamp: (skill: ScannedSkill) => number
+  resolveTimestamp: (skill: ScannedSkill) => number,
 ): number {
   const dir = direction === "asc" ? 1 : -1;
   const timeComparison = resolveTimestamp(a) - resolveTimestamp(b);
@@ -106,7 +108,8 @@ function sourceRootLabel(sourceRoot?: string | null): string | null {
   if (parts.length === 0) return null;
 
   const cacheIndex = parts.findIndex(
-    (part, index) => part === "cache" && index > 0 && parts[index - 1] === "plugins"
+    (part, index) =>
+      part === "cache" && index > 0 && parts[index - 1] === "plugins",
   );
   if (cacheIndex >= 0) {
     const publisher = parts[cacheIndex + 1];
@@ -130,7 +133,7 @@ function keySegment(value: string): string {
 
 export function getPlatformRepositoryGroupInfo(
   skill: ScannedSkill,
-  labels: PlatformSkillGroupLabels
+  labels: PlatformSkillGroupLabels,
 ): RepositoryGroupInfo {
   const repository = skill.repository ?? null;
   if (repository && !repository.is_unknown) {
@@ -169,12 +172,102 @@ export function getPlatformRepositoryGroupInfo(
   };
 }
 
+/** 与 SkillCardBadges.SourceIndicator 同语义：symlink 即中央链接，其余归独立安装 */
+export function getPlatformSkillOrigin(
+  skill: ScannedSkill,
+): "central" | "standalone" {
+  return skill.link_type === "symlink" ? "central" : "standalone";
+}
+
+export const PLATFORM_ORIGIN_UNASSIGNED_REPO_KEY = "unassigned";
+
+/** central 组内的仓库桶 key：仓库已指派 → `repo:<id>`；否则 "unassigned" */
+export function getPlatformOriginRepoKey(skill: ScannedSkill): string {
+  const repository = skill.repository ?? null;
+  if (repository && !repository.is_unknown) return `repo:${repository.id}`;
+  return PLATFORM_ORIGIN_UNASSIGNED_REPO_KEY;
+}
+
+export interface PlatformOriginNavModel {
+  total: number;
+  centralCount: number;
+  standaloneCount: number;
+  /** 仅统计 origin=central 且仓库已指派的行；按 label 排序 */
+  repos: Array<{ key: string; label: string; count: number }>;
+  /** symlink 且仓库未指派（缺失或 is_unknown）的行数 */
+  unassignedCentralCount: number;
+}
+
+export function derivePlatformOriginNav(
+  skills: readonly ScannedSkill[],
+): PlatformOriginNavModel {
+  let centralCount = 0;
+  let standaloneCount = 0;
+  let unassignedCentralCount = 0;
+  const repoBuckets = new Map<
+    string,
+    { key: string; label: string; count: number }
+  >();
+
+  for (const skill of skills) {
+    if (getPlatformSkillOrigin(skill) === "standalone") {
+      standaloneCount += 1;
+      continue;
+    }
+    centralCount += 1;
+    const repoKey = getPlatformOriginRepoKey(skill);
+    if (repoKey === PLATFORM_ORIGIN_UNASSIGNED_REPO_KEY || !skill.repository) {
+      unassignedCentralCount += 1;
+      continue;
+    }
+    const bucket = repoBuckets.get(repoKey);
+    if (bucket) {
+      bucket.count += 1;
+      continue;
+    }
+    // label 回退顺序与 getPlatformRepositoryGroupInfo 一致：name → owner/repo → id
+    const repository = skill.repository;
+    const label =
+      repository.name ||
+      [repository.owner, repository.repo].filter(Boolean).join("/") ||
+      repository.id;
+    repoBuckets.set(repoKey, { key: repoKey, label, count: 1 });
+  }
+
+  const repos = Array.from(repoBuckets.values()).sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    }),
+  );
+
+  return {
+    total: skills.length,
+    centralCount,
+    standaloneCount,
+    repos,
+    unassignedCentralCount,
+  };
+}
+
+function matchesOriginFilter(
+  skill: ScannedSkill,
+  filter: PlatformOriginFilter,
+): boolean {
+  if (filter.kind === "all") return true;
+  const origin = getPlatformSkillOrigin(skill);
+  if (filter.kind === "standalone") return origin === "standalone";
+  if (origin !== "central") return false;
+  if (filter.repoKey === undefined) return true;
+  return getPlatformOriginRepoKey(skill) === filter.repoKey;
+}
+
 export function comparePlatformSkills(
   a: ScannedSkill,
   b: ScannedSkill,
   sort: PlatformSortState,
   labels: PlatformSkillGroupLabels,
-  usageCounts?: Record<string, number>
+  usageCounts?: Record<string, number>,
 ): number {
   const dir = sort.direction === "asc" ? 1 : -1;
 
@@ -199,7 +292,8 @@ export function comparePlatformSkills(
 
   const aGroup = getPlatformRepositoryGroupInfo(a, labels);
   const bGroup = getPlatformRepositoryGroupInfo(b, labels);
-  if (aGroup.weight !== bGroup.weight) return (aGroup.weight - bGroup.weight) * dir;
+  if (aGroup.weight !== bGroup.weight)
+    return (aGroup.weight - bGroup.weight) * dir;
   const labelComparison = aGroup.label.localeCompare(bGroup.label, undefined, {
     numeric: true,
     sensitivity: "base",
@@ -235,7 +329,7 @@ function matchesSearch(skill: ScannedSkill, query: string): boolean {
 function groupPlatformSkills(
   skills: ScannedSkill[],
   groupBy: PlatformGroupBy,
-  labels: PlatformSkillGroupLabels
+  labels: PlatformSkillGroupLabels,
 ): PlatformSkillGroup[] {
   if (groupBy === "none") {
     return [{ key: "__all__", label: labels.all, skills, weight: 0 }];
@@ -262,23 +356,27 @@ function groupPlatformSkills(
 }
 
 export function derivePlatformSkillRows(
-  input: DerivePlatformSkillRowsInput
+  input: DerivePlatformSkillRowsInput,
 ): DerivePlatformSkillRowsOutput {
   const sourceFilteredSkills = input.skills.filter((skill) => {
     if (input.sourceFilter === "all") return true;
     return skill.source_kind === input.sourceFilter;
   });
+  const originFilteredSkills = sourceFilteredSkills.filter((skill) =>
+    matchesOriginFilter(skill, input.originFilter),
+  );
   const query = normalizeSearchQuery(input.searchQuery);
-  const filteredSkills = sourceFilteredSkills.filter((skill) =>
-    matchesSearch(skill, query)
+  const filteredSkills = originFilteredSkills.filter((skill) =>
+    matchesSearch(skill, query),
   );
   const sortedSkills = [...filteredSkills].sort((a, b) =>
-    comparePlatformSkills(a, b, input.sort, input.labels, input.usageCounts)
+    comparePlatformSkills(a, b, input.sort, input.labels, input.usageCounts),
   );
   const groups = groupPlatformSkills(sortedSkills, input.groupBy, input.labels);
 
   return {
     sourceFilteredSkills,
+    originFilteredSkills,
     filteredSkills,
     sortedSkills,
     groups,

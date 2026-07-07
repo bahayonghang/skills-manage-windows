@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { Blocks, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -8,12 +8,14 @@ import { useSkillStore } from "@/stores/skillStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { SkillDetailDrawer } from "@/components/skill/SkillDetailDrawer";
 import { BatchDeletePlatformSkillsDialog } from "@/components/platform/BatchDeletePlatformSkillsDialog";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { PlatformCleanupScanButtons } from "@/components/platform/PlatformCleanupScanButtons";
 import { PlatformGroupedSkillList } from "@/components/platform/PlatformGroupedSkillList";
+import { PlatformOriginNav } from "@/components/platform/PlatformOriginNav";
 import { PlatformTransferActionBar, PlatformTransferRail } from "@/components/platform/PlatformTransferRail";
 import { PlatformSkillSortMenu, PlatformSkillViewMenu } from "@/components/platform/PlatformSkillToolbarMenus";
 import { InstallDialog, type InstallMethod } from "@/components/central/InstallDialog";
@@ -38,21 +40,24 @@ import {
   isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
 import {
+  derivePlatformOriginNav,
   derivePlatformSkillRows,
   type PlatformGroupBy,
+  type PlatformOriginFilter,
   type PlatformSortDirection,
   type PlatformSortField,
 } from "@/lib/platformSkillViewModel";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
-function EmptyState({ message }: { message: string }) {
+function EmptyState({ message, action }: { message: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-4 py-20">
       <div className="p-4 rounded-full bg-muted/60">
         <Blocks className="size-12 text-muted-foreground opacity-60" />
       </div>
       <p className="text-sm text-muted-foreground font-medium">{message}</p>
+      {action}
     </div>
   );
 }
@@ -88,6 +93,9 @@ export function PlatformView() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<ClaudeSourceFilter>("all");
+  const [originFilter, setOriginFilter] = useState<PlatformOriginFilter>({
+    kind: "all",
+  });
   const [sortField, setSortField] = useState<PlatformSortField>("name");
   const [sortDirection, setSortDirection] = useState<PlatformSortDirection>("asc");
   const [groupBy, setGroupBy] = useState<PlatformGroupBy>("none");
@@ -155,6 +163,7 @@ export function PlatformView() {
 
   useEffect(() => {
     setSourceFilter("all");
+    setOriginFilter({ kind: "all" });
   }, [agentId]);
 
   async function handleInstallClick(skillId: string) {
@@ -263,6 +272,7 @@ export function PlatformView() {
         skills,
         searchQuery,
         sourceFilter: isClaudePage ? sourceFilter : "all",
+        originFilter,
         sort: { field: sortField, direction: sortDirection },
         groupBy,
         labels: platformGroupLabels,
@@ -271,6 +281,7 @@ export function PlatformView() {
     [
       groupBy,
       isClaudePage,
+      originFilter,
       platformGroupLabels,
       searchQuery,
       skills,
@@ -281,7 +292,12 @@ export function PlatformView() {
     ]
   );
   const sourceFilteredSkills = platformRows.sourceFilteredSkills;
+  const originFilteredSkills = platformRows.originFilteredSkills;
   const filteredSkills = platformRows.sortedSkills;
+  const originNavModel = useMemo(
+    () => derivePlatformOriginNav(platformRows.sourceFilteredSkills),
+    [platformRows.sourceFilteredSkills]
+  );
   const summarySkillIds = useMemo(
     () => filteredSkills.flatMap((skill) => getPlatformSkillSummaryKeys(skill)),
     [filteredSkills]
@@ -644,50 +660,71 @@ export function PlatformView() {
       />
 
       {/* Content */}
-      <div ref={contentRef} className="flex-1 overflow-auto p-6">
-        {isLoading ? (
-          <EmptyState message={t("platform.loading")} />
-        ) : skills.length === 0 ? (
-          <EmptyState
-            message={t("platform.noSkills", { name: platformDisplayName })}
-          />
-        ) : sourceFilteredSkills.length === 0 ? (
-          <EmptyState
-            message={t("platform.noSourceSkills", {
-              name: platformDisplayName,
-              source: activeSourceLabel,
-              defaultValue: i18n.language.startsWith("zh")
-                ? `${platformDisplayName} 下暂无${activeSourceLabel}技能`
-                : `No ${activeSourceLabel} skills installed for ${platformDisplayName}`,
-            })}
-          />
-        ) : filteredSkills.length === 0 ? (
-          <EmptyState
-            message={t("platform.noMatch", { query: searchQuery })}
-          />
-        ) : groupBy === "repository" ? (
-          <PlatformGroupedSkillList
-            groups={platformRows.groups}
-            renderSkillCard={(skill) => renderSkillCard(skill)}
-          />
-        ) : filteredSkills.length > 40 ? (
-          <VirtualizedGrid
-            items={filteredSkills}
-            itemHeight={196}
-            rowGap={16}
-            columnGap={16}
-            overscanRows={3}
-            minColumnWidth={420}
-            maxColumns={2}
-            scrollContainerRef={contentRef}
-            itemKey={(skill) => getPlatformSkillRowKey(skill)}
-            renderItem={(skill) => renderSkillCard(skill)}
-          />
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {filteredSkills.map((skill) => renderSkillCard(skill))}
-          </div>
-        )}
+      <div className="flex flex-1 min-h-0">
+        <PlatformOriginNav
+          className="w-56 shrink-0 border-r border-border overflow-y-auto p-3"
+          model={originNavModel}
+          value={originFilter}
+          onChange={setOriginFilter}
+        />
+        <div ref={contentRef} className="flex-1 overflow-auto p-6">
+          {isLoading ? (
+            <EmptyState message={t("platform.loading")} />
+          ) : skills.length === 0 ? (
+            <EmptyState
+              message={t("platform.noSkills", { name: platformDisplayName })}
+            />
+          ) : sourceFilteredSkills.length === 0 ? (
+            <EmptyState
+              message={t("platform.noSourceSkills", {
+                name: platformDisplayName,
+                source: activeSourceLabel,
+                defaultValue: i18n.language.startsWith("zh")
+                  ? `${platformDisplayName} 下暂无${activeSourceLabel}技能`
+                  : `No ${activeSourceLabel} skills installed for ${platformDisplayName}`,
+              })}
+            />
+          ) : originFilteredSkills.length === 0 ? (
+            <EmptyState
+              message={t("platform.originNav.emptyFiltered")}
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setOriginFilter({ kind: "all" })}
+                >
+                  {t("platform.originNav.clearFilter")}
+                </Button>
+              }
+            />
+          ) : filteredSkills.length === 0 ? (
+            <EmptyState
+              message={t("platform.noMatch", { query: searchQuery })}
+            />
+          ) : groupBy === "repository" ? (
+            <PlatformGroupedSkillList
+              groups={platformRows.groups}
+              renderSkillCard={(skill) => renderSkillCard(skill)}
+            />
+          ) : filteredSkills.length > 40 ? (
+            <VirtualizedGrid
+              items={filteredSkills}
+              itemHeight={196}
+              rowGap={16}
+              columnGap={16}
+              overscanRows={3}
+              minColumnWidth={420}
+              maxColumns={2}
+              scrollContainerRef={contentRef}
+              itemKey={(skill) => getPlatformSkillRowKey(skill)}
+              renderItem={(skill) => renderSkillCard(skill)}
+            />
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {filteredSkills.map((skill) => renderSkillCard(skill))}
+            </div>
+          )}
+        </div>
       </div>
 
       <PlatformTransferActionBar
