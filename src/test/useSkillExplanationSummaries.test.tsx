@@ -1,56 +1,44 @@
 import { renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-vi.mock("@/lib/tauri", () => ({
-  invoke: vi.fn(),
-  isTauriRuntime: vi.fn(),
-}));
-
-import { invoke, isTauriRuntime } from "@/lib/tauri";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 
-const mockInvoke = vi.mocked(invoke);
-const mockIsTauriRuntime = vi.mocked(isTauriRuntime);
+import { ipcInvokeCalls, ipcInvokedCommands, mockIpcCommand } from "./ipcMock";
 
 describe("useSkillExplanationSummaries", () => {
-  beforeEach(() => {
-    mockInvoke.mockReset();
-    mockIsTauriRuntime.mockReset();
-    mockIsTauriRuntime.mockReturnValue(true);
-  });
-
   it("loads cached summaries in one deduplicated batch without generation commands", async () => {
-    mockInvoke.mockResolvedValue({ alpha: "中文总结" });
+    mockIpcCommand("get_skill_explanation_summaries", { alpha: "中文总结" });
 
     const { result } = renderHook(() =>
-      useSkillExplanationSummaries(["alpha", "beta", "alpha", "", null], "zh")
+      useSkillExplanationSummaries(["alpha", "beta", "alpha", "", null], "zh"),
     );
 
     await waitFor(() => {
       expect(result.current).toEqual({ alpha: "中文总结" });
     });
 
-    expect(mockInvoke).toHaveBeenCalledTimes(1);
-    expect(mockInvoke).toHaveBeenCalledWith("get_skill_explanation_summaries", {
-      skillIds: ["alpha", "beta"],
-      lang: "zh",
-    });
-    expect(mockInvoke).not.toHaveBeenCalledWith(
-      "explain_skill_stream",
-      expect.anything()
-    );
-    expect(mockInvoke).not.toHaveBeenCalledWith(
-      "refresh_skill_explanation",
-      expect.anything()
-    );
+    expect(ipcInvokeCalls("get_skill_explanation_summaries")).toEqual([
+      {
+        command: "get_skill_explanation_summaries",
+        args: { skillIds: ["alpha", "beta"], lang: "zh" },
+      },
+    ]);
+    // 只发一次批量查询，不触发任何生成类命令（explain_skill_stream 等）
+    expect(ipcInvokedCommands()).toEqual(["get_skill_explanation_summaries"]);
   });
 
-  it("does not call IPC outside the Tauri runtime", () => {
-    mockIsTauriRuntime.mockReturnValue(false);
+  it("returns empty map and swallows command errors", async () => {
+    mockIpcCommand("get_skill_explanation_summaries", () => {
+      throw new Error("io");
+    });
 
-    const { result } = renderHook(() => useSkillExplanationSummaries(["alpha"], "zh"));
+    const { result } = renderHook(() =>
+      useSkillExplanationSummaries(["alpha"], "zh"),
+    );
 
+    await waitFor(() =>
+      expect(ipcInvokeCalls("get_skill_explanation_summaries")).toHaveLength(1),
+    );
     expect(result.current).toEqual({});
-    expect(mockInvoke).not.toHaveBeenCalled();
   });
 });

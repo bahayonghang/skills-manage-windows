@@ -2,7 +2,12 @@ import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
-import { getPlatformTargetInstallAgentIds, getPlatformTargetMemberIds, getPlatformTargetMemberNames, isUniversalPlatformTarget } from "@/lib/platformTargetGroups";
+import {
+  getPlatformTargetInstallAgentIds,
+  getPlatformTargetLabel,
+  getPlatformTargetMemberIds,
+  getPlatformTargetMemberNames,
+} from "@/lib/platformTargetGroups";
 import { cn } from "@/lib/utils";
 import type { AgentWithStatus } from "@/types";
 
@@ -23,9 +28,7 @@ export const PlatformToggleIcon = memo(function PlatformToggleIcon({
 }) {
   const { t } = useTranslation();
   const memberNames = getPlatformTargetMemberNames(agent).join(", ");
-  const displayName = isUniversalPlatformTarget(agent)
-    ? t("platformTargets.universalShortLabel")
-    : agent.display_name;
+  const displayName = getPlatformTargetLabel(agent, t, "short");
   const isDisabled = isToggling || isLocked;
   const title = isLocked
     ? `${displayName} - ${t("platformTargets.alwaysIncluded")} - ${memberNames}`
@@ -34,19 +37,22 @@ export const PlatformToggleIcon = memo(function PlatformToggleIcon({
   return (
     <button
       className={cn(
-        "p-1 rounded-md transition-colors cursor-pointer",
+        "focus-ring grid size-8 place-items-center rounded-lg transition-[scale,background-color,color] active:not-disabled:scale-[0.96]",
         isLocked
-          ? "text-primary cursor-default"
+          ? "text-primary cursor-default ring-1 ring-primary/30"
           : isLinked
-            ? "text-primary hover:bg-primary/15"
-            : "text-muted-foreground/40 hover:bg-muted/60 hover:text-muted-foreground",
+            ? "text-primary ring-1 ring-primary/30 hover:bg-primary/15"
+            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         isToggling && "animate-pulse pointer-events-none",
       )}
       title={title}
       aria-label={
         isLocked
           ? title
-          : t("central.toggleInstallLabel", { platform: displayName, skill: skillName })
+          : t("central.toggleInstallLabel", {
+              platform: displayName,
+              skill: skillName,
+            })
       }
       disabled={isDisabled}
       onClick={onToggle}
@@ -80,23 +86,42 @@ export const UnifiedSkillCardFooter = memo(function UnifiedSkillCardFooter({
   onToggle?: (skillId: string, agentId: string) => void;
 }) {
   const { t } = useTranslation();
-  const targetAgents = useMemo(() => agents.filter((agent) => agent.id !== "central"), [agents]);
+  const targetAgents = useMemo(
+    () => agents.filter((agent) => agent.id !== "central"),
+    [agents],
+  );
   const linkedAgentSet = useMemo(() => new Set(linkedAgents), [linkedAgents]);
-  const lockedAgentSet = useMemo(() => new Set(lockedAgentIds ?? []), [lockedAgentIds]);
+  const lockedAgentSet = useMemo(
+    () => new Set(lockedAgentIds ?? []),
+    [lockedAgentIds],
+  );
 
   return (
-    <div data-testid="card-footer" className="mt-auto flex items-center justify-between gap-2 border-t border-border/70 pt-2">
-      <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+    <div
+      data-testid="card-footer"
+      className="mt-auto flex items-center justify-between gap-2 border-t border-border/50 pt-2"
+    >
+      <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
         {repoName && (
           <span className="flex min-w-0 items-center gap-1">
-            <span aria-hidden className="size-2 shrink-0 rounded-sm" style={{ backgroundColor: repoColor ?? "var(--muted-foreground)" }} />
+            <span
+              aria-hidden
+              className="size-2 shrink-0 rounded-sm"
+              style={{
+                backgroundColor: repoColor ?? "var(--muted-foreground)",
+              }}
+            />
             <span className="truncate">{repoName}</span>
           </span>
         )}
         {typeof usageBadge === "number" && usageBadge > 0 && (
           <>
-            <span aria-hidden className="text-muted-foreground/40">·</span>
-            <span className="shrink-0 tabular-nums">{t("skillUsage.badge.countShort", { count: usageBadge })}</span>
+            <span aria-hidden className="text-muted-foreground/40">
+              ·
+            </span>
+            <span className="shrink-0 tabular-nums">
+              {t("skillUsage.badge.countShort", { count: usageBadge })}
+            </span>
           </>
         )}
       </div>
@@ -107,9 +132,15 @@ export const UnifiedSkillCardFooter = memo(function UnifiedSkillCardFooter({
               key={agent.id}
               agent={agent}
               skillName={skillName}
-              isLinked={getPlatformTargetMemberIds(agent).some((agentId) => linkedAgentSet.has(agentId))}
-              isToggling={getPlatformTargetMemberIds(agent).some((agentId) => togglingAgentId === agentId)}
-              isLocked={getPlatformTargetMemberIds(agent).some((agentId) => lockedAgentSet.has(agentId))}
+              isLinked={getPlatformTargetMemberIds(agent).some((agentId) =>
+                linkedAgentSet.has(agentId),
+              )}
+              isToggling={getPlatformTargetMemberIds(agent).some(
+                (agentId) => togglingAgentId === agentId,
+              )}
+              isLocked={getPlatformTargetMemberIds(agent).some((agentId) =>
+                lockedAgentSet.has(agentId),
+              )}
               onToggle={() => {
                 const [agentId] = getPlatformTargetInstallAgentIds(agent);
                 if (agentId) onToggle(skillId, agentId);

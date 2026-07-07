@@ -102,7 +102,7 @@ export function RepositorySyncSummary({
   ];
 
   return (
-    <section className="rounded-2xl border border-border bg-muted/20 p-4">
+    <section className="rounded-xl bg-muted/20 p-4 ring-1 ring-border">
       <p className="text-sm text-muted-foreground">
         {t("central.repositorySyncDesc", {
           added: remoteAddedCount,
@@ -114,7 +114,7 @@ export function RepositorySyncSummary({
         {cards.map((card) => (
           <div
             key={card.key}
-            className={`rounded-xl border px-3 py-2 ${card.className}`}
+            className={`rounded-lg border px-3 py-2 ${card.className}`}
           >
             <div className="text-lg font-semibold leading-none">
               {card.value}

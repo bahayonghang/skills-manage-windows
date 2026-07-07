@@ -9,13 +9,14 @@ use super::error::PortableStateError;
 use super::progress::{check_cancel, emit_portability_step};
 use super::types::{
     CancelFlag, ExportedFrom, PortableCentralSkill, PortableCentralSkillSource,
-    PortableGithubSource, PortableSkillTag, PortableUnrestorableSkill, SkillportStateManifest,
-    SkillportStatePortabilityPhase, EXPORT_KIND, EXPORT_VERSION,
+    PortableGithubSource, PortableSkillTag, PortableStateTargetContext, PortableUnrestorableSkill,
+    SkillportStateManifest, SkillportStatePortabilityPhase, EXPORT_KIND, EXPORT_VERSION,
 };
 use super::{export_source_path, normalize_registry_identity};
 
 pub(crate) async fn export_skillport_state_impl(
     pool: &DbPool,
+    target: Option<&PortableStateTargetContext>,
     app: Option<&AppHandle>,
     cancel: Option<&CancelFlag>,
 ) -> Result<String, PortableStateError> {
@@ -101,6 +102,7 @@ pub(crate) async fn export_skillport_state_impl(
         exported_at: Utc::now().to_rfc3339(),
         exported_from: ExportedFrom {
             app: "SkillPort".to_string(),
+            target: target.map(Into::into),
         },
         github_sources,
         central_skills,

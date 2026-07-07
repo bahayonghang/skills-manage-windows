@@ -22,7 +22,7 @@ export function LogsPanel({
   const { t } = useTranslation();
 
   return (
-    <Card className="surface-glass overflow-hidden rounded-3xl border-0 bg-transparent p-0 shadow-none">
+    <Card className="surface-glass overflow-hidden rounded-2xl border-0 bg-transparent p-0 shadow-none">
       <PanelHeader
         title={t("dashboard.recentLogs")}
         description={t("dashboard.recentLogsDesc", { count: logTotal })}

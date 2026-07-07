@@ -35,6 +35,7 @@ export function ToolbarMoreMenu({
           <Button
             variant="outline"
             size="icon"
+            className="h-9 w-9 rounded-xl transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
             aria-label={t("central.toolbarMoreAriaLabel")}
             data-testid="central-toolbar-more"
           >
@@ -90,8 +91,8 @@ import {
   platformInstalledFilterValue,
 } from "@/lib/centralInstalledFilters";
 import {
-  getPlatformTargetMemberNames,
-  isUniversalPlatformTarget,
+  getPlatformTargetLabel,
+  getPlatformTargetTitleHint,
   type PlatformTarget,
 } from "@/lib/platformTargetGroups";
 import type {
@@ -129,7 +130,7 @@ export function ToolbarSortMenu({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 shrink-0"
+            className="h-9 shrink-0 rounded-xl pl-3 pr-3.5 transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
             data-testid="central-toolbar-sort"
             aria-label={t("central.toolbarSortAriaLabel")}
             title={t("central.toolbarSortCurrent", {
@@ -159,7 +160,7 @@ export function ToolbarSortMenu({
                     className={menuItemClassName(active && "bg-accent/60 text-accent-foreground")}
                   >
                     <span>{field.label}</span>
-                    <span className="ml-auto text-[10px] text-muted-foreground">{dir.label}</span>
+                    <span className="ml-auto text-[11px] text-muted-foreground">{dir.label}</span>
                     {active && <Check className="size-3" aria-hidden />}
                   </MenuPrimitive.Item>
                 );
@@ -229,7 +230,7 @@ export function ToolbarViewMenu({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 shrink-0"
+            className="h-9 shrink-0 rounded-xl pl-3 pr-3.5 transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
             data-testid="central-toolbar-view"
             aria-label={t("central.toolbarViewAriaLabel")}
           >
@@ -438,21 +439,16 @@ export function ToolbarViewMenu({
 }
 
 function resolvePlatformDisplay(agent: PlatformTarget, t: TFunction): string {
-  return isUniversalPlatformTarget(agent)
-    ? t("platformTargets.universalLabel")
-    : agent.display_name;
+  return getPlatformTargetLabel(agent, t, "full");
 }
 
 function resolvePlatformTitle(agent: PlatformTarget, t: TFunction): string {
-  if (isUniversalPlatformTarget(agent)) {
-    return getPlatformTargetMemberNames(agent).join(", ");
-  }
-  return agent.global_skills_dir || resolvePlatformDisplay(agent, t);
+  return getPlatformTargetTitleHint(agent) || resolvePlatformDisplay(agent, t);
 }
 
 function menuPopupClassName(extra?: string): string {
   return cn(
-    "min-w-[200px] rounded-lg bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none",
+    "min-w-[200px] rounded-xl bg-popover p-1 text-sm text-popover-foreground shadow-[0_0_0_1px_color-mix(in_srgb,var(--foreground)_10%,transparent),0_16px_40px_-18px_color-mix(in_srgb,var(--background)_85%,transparent)] outline-none",
     "data-[starting-style]:animate-in data-[starting-style]:fade-in-0 data-[starting-style]:zoom-in-95",
     "data-[ending-style]:animate-out data-[ending-style]:fade-out-0 data-[ending-style]:zoom-out-95",
     "animation-duration-100",
@@ -462,11 +458,11 @@ function menuPopupClassName(extra?: string): string {
 
 function menuItemClassName(extra?: string | false): string {
   return cn(
-    "flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
+    "flex min-h-8 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 outline-none transition-[background-color,color] data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
     extra
   );
 }
 
 function menuLabelClassName(): string {
-  return "px-2 pt-1 pb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground/80";
+  return "px-2 pt-1 pb-0.5 text-[11px] uppercase tracking-wide text-muted-foreground/80";
 }

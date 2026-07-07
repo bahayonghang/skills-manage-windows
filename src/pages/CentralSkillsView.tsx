@@ -55,7 +55,7 @@ export function CentralSkillsView() {
     aiTagJob,
     updateStatuses,
     updateJob,
-    portabilityJob,
+    portabilityJob, activeTarget,
     aiTaggingAvailable,
     isRemoteTarget,
     centralSkillsDir,
@@ -372,7 +372,6 @@ export function CentralSkillsView() {
     onSaveCurrentView: savedViewsBridge.handleSaveCurrentView,
     onCreateTagGroup: tagGroupsBridge.handleCreateTagGroup,
   });
-
   const installableImportedSkills = useMemo(() => {
     if (!githubImport.importResult) return [];
     const importedIds = new Set(
@@ -507,7 +506,7 @@ export function CentralSkillsView() {
 
   // ─── 共享 props ────────────────────────────────────────────────
   const dialogsProps = {
-    agents,
+    agents, activeTarget,
     availableInstallAgents,
     batchDeletePreview,
     batchDeletePreviewError,
@@ -616,8 +615,8 @@ export function CentralSkillsView() {
     onDelete: (skill: SkillWithLinks) => {
       void handleDeleteClick(skill);
     },
-    onDetail: handleOpenDrawer,
-    onInstallTo: handleInstallClick,
+    onDetail: handleOpenDrawer, onInstallTo: handleInstallClick,
+    onUninstallFromPlatforms: (skill: SkillWithLinks) => batchUninstall.openForSkill(skill.id),
     onTogglePlatform: handleTogglePlatform,
     onToggleSelection: handleToggleSelectionPreservingScroll,
     onUpdateCentral: (skillIds: string[]) => {
@@ -651,7 +650,8 @@ export function CentralSkillsView() {
         : t("central.updateAvailable", { count: updateTargetSkillIds.length }),
     targetSkillIds: updateTargetSkillIds,
   };
-  const { aiTagProgressItems, aiTagRateProfile } = useCentralAiTagDashboardView({ aiTagJob, skills });
+  const { aiTagProgressItems, aiTagRateProfile } =
+    useCentralAiTagDashboardView({ aiTagJob, skills });
 
   const handleViewAiReviews = useCallback(() => {
     setIsTaskCenterOpen(false);

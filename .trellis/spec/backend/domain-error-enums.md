@@ -1,6 +1,6 @@
 # 域错误枚举约定（thiserror）
 
-> 来源：06-11-analysis-driven-fixes 父任务 C1/C2/C3 批次落地。全部服务域已迁移（installation、scanner、central_skills、github_import、projects、marketplace、local_remote_sync、usage、obsidian、ai_provider、ai_tagging、portable_state），db/repos 透传统一，散点模块（targets、logging、central_migration、operation_log、resource_budget、paths、fs_util 等）同步收口。
+> 来源：06-11-analysis-driven-fixes 父任务 C1/C2/C3 批次落地；07-04-central-updates-service-domain 补齐 Update Center 两域。全部服务域已迁移（installation、scanner、central_skills、github_import、projects、marketplace、local_remote_sync、usage、obsidian、ai_provider、ai_tagging、portable_state、central_store_location、central_updates），db/repos 透传统一，散点模块（targets、logging、central_migration、operation_log、resource_budget、paths、fs_util 等）同步收口。
 
 ## 1. Scope / Trigger
 

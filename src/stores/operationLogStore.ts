@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke } from "@/lib/ipc";
 import {
   OperationLogEntry,
   OperationLogFilter,
@@ -7,44 +7,6 @@ import {
 } from "@/types";
 
 const DEFAULT_LIMIT = 100;
-
-const fixtureLogEntries: OperationLogEntry[] = [
-  {
-    id: "fixture-log-scan",
-    createdAt: "2026-04-27T10:00:00Z",
-    level: "info",
-    targetKind: "local",
-    targetId: "local",
-    targetLabel: "Local",
-    category: "scan",
-    action: "scan.all",
-    status: "succeeded",
-    subjectType: "scan_root",
-    subjectId: "all",
-    subjectLabel: "All scan directories",
-    summary: "Scanned 12 skills across 5 agents",
-    detailsJson: JSON.stringify({ totalSkills: 12, agentsScanned: 5 }, null, 2),
-    durationMs: 240,
-  },
-  {
-    id: "fixture-log-import",
-    createdAt: "2026-04-27T09:30:00Z",
-    level: "warn",
-    targetKind: "ssh",
-    targetId: "ssh-demo",
-    targetLabel: "Remote Demo",
-    category: "install",
-    action: "central.batch_install",
-    status: "partial",
-    subjectType: "batch",
-    subjectId: "central.batch_install",
-    subjectLabel: "Central batch install",
-    summary: "Installed 3 Central skill target(s), 1 failed",
-    errorSummary: "One target platform was unavailable.",
-    detailsJson: JSON.stringify({ succeeded: 3, failed: 1 }, null, 2),
-    durationMs: 1080,
-  },
-];
 
 interface OperationLogState {
   entries: OperationLogEntry[];
@@ -57,7 +19,10 @@ interface OperationLogState {
   isExporting: boolean;
   error: string | null;
 
-  loadLogs: (filter?: OperationLogFilter, reset?: boolean) => Promise<OperationLogPage>;
+  loadLogs: (
+    filter?: OperationLogFilter,
+    reset?: boolean,
+  ) => Promise<OperationLogPage>;
   loadMore: () => Promise<OperationLogPage | null>;
   loadLogDetail: (logId: string) => Promise<OperationLogEntry | null>;
   setFilter: (partial: Partial<OperationLogFilter>) => void;
@@ -92,46 +57,6 @@ function normalizeFilter(filter: OperationLogFilter): OperationLogFilter {
   };
 }
 
-function matchesFixture(entry: OperationLogEntry, filter: OperationLogFilter): boolean {
-  const query = filter.query?.toLowerCase();
-  if (query) {
-    const haystack = [
-      entry.summary,
-      entry.errorSummary,
-      entry.subjectId,
-      entry.subjectLabel,
-      entry.action,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    if (!haystack.includes(query)) return false;
-  }
-  if (filter.targetKind && entry.targetKind !== filter.targetKind) return false;
-  if (filter.targetId && entry.targetId !== filter.targetId) return false;
-  if (filter.level && entry.level !== filter.level) return false;
-  if (filter.status && entry.status !== filter.status) return false;
-  if (filter.category && entry.category !== filter.category) return false;
-  if (filter.action && entry.action !== filter.action) return false;
-  if (filter.createdAfter && entry.createdAt < filter.createdAfter) return false;
-  if (filter.createdBefore && entry.createdAt > filter.createdBefore) return false;
-  return true;
-}
-
-function fixturePage(filter: OperationLogFilter): OperationLogPage {
-  const normalized = normalizeFilter(filter);
-  const matched = fixtureLogEntries.filter((entry) => matchesFixture(entry, normalized));
-  const offset = normalized.offset ?? 0;
-  const limit = normalized.limit ?? DEFAULT_LIMIT;
-
-  return {
-    entries: matched.slice(offset, offset + limit),
-    total: matched.length,
-    limit,
-    offset,
-  };
-}
-
 export const useOperationLogStore = create<OperationLogState>((set, get) => ({
   entries: [],
   total: 0,
@@ -150,14 +75,14 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
     const nextFilter = normalizeFilter({
       ...get().filter,
       ...filter,
-      offset: reset ? 0 : filter?.offset ?? get().filter.offset,
+      offset: reset ? 0 : (filter?.offset ?? get().filter.offset),
     });
 
     set({ isLoading: true, error: null, filter: nextFilter });
     try {
-      const page = isTauriRuntime()
-        ? await invoke<OperationLogPage>("list_operation_logs", { filter: nextFilter })
-        : fixturePage(nextFilter);
+      const page = await invoke("list_operation_logs", {
+        filter: nextFilter,
+      });
       set({
         entries: reset ? page.entries : [...get().entries, ...page.entries],
         total: page.total,
@@ -185,9 +110,7 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
   loadLogDetail: async (logId) => {
     set({ isLoadingDetail: true, error: null });
     try {
-      const entry = isTauriRuntime()
-        ? await invoke<OperationLogEntry | null>("get_operation_log", { logId })
-        : fixtureLogEntries.find((item) => item.id === logId) ?? null;
+      const entry = await invoke("get_operation_log", { logId });
       set({ selectedEntry: entry, isLoadingDetail: false });
       return entry;
     } catch (err) {
@@ -219,17 +142,10 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
     const targetFilter = normalizeFilter(filter ?? get().filter);
     set({ isClearing: true, error: null });
     try {
-      const deleted = isTauriRuntime()
-        ? await invoke<number>("clear_operation_logs", { filter: targetFilter })
-        : fixtureLogEntries.filter((entry) => matchesFixture(entry, targetFilter)).length;
-      if (isTauriRuntime()) {
-        await get().loadLogs({ ...get().filter, offset: 0 });
-      } else {
-        set({
-          entries: fixturePage(get().filter).entries,
-          total: fixturePage(get().filter).total,
-        });
-      }
+      const deleted = await invoke("clear_operation_logs", {
+        filter: targetFilter,
+      });
+      await get().loadLogs({ ...get().filter, offset: 0 });
       set({ isClearing: false });
       return deleted;
     } catch (err) {
@@ -242,18 +158,9 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
     const targetFilter = normalizeFilter(filter ?? get().filter);
     set({ isExporting: true, error: null });
     try {
-      const payload = isTauriRuntime()
-        ? await invoke<string>("export_operation_logs", { filter: targetFilter })
-        : JSON.stringify(
-            {
-              exportedAt: new Date().toISOString(),
-              filter: targetFilter,
-              total: fixturePage(targetFilter).total,
-              entries: fixturePage(targetFilter).entries,
-            },
-            null,
-            2
-          );
+      const payload = await invoke("export_operation_logs", {
+        filter: targetFilter,
+      });
       set({ isExporting: false });
       return payload;
     } catch (err) {

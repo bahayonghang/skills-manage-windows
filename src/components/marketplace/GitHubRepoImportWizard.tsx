@@ -14,7 +14,7 @@ import {
   GitHubRepoImportResultHub,
 } from "@/components/marketplace/GitHubRepoImportWizardBody";
 import { GitHubRepoImportPreviewWorkspace } from "@/components/marketplace/GitHubRepoImportWizardPreview";
-import { isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/ipc";
 import {
   buildInitialSelections,
   type DetailTab,

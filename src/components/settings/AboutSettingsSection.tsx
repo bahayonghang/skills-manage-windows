@@ -90,7 +90,7 @@ export function AboutSettingsSection({
   const hasUpdate = Boolean(latestVersion);
 
   return (
-    <div className="relative overflow-hidden rounded-[2rem] border border-border bg-card p-4 text-foreground shadow-sm sm:p-6">
+    <div className="relative overflow-hidden rounded-2xl bg-card p-4 text-foreground shadow-sm ring-1 ring-border sm:p-6">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 opacity-50 [background-image:linear-gradient(color-mix(in_srgb,var(--foreground)_6%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_srgb,var(--foreground)_6%,transparent)_1px,transparent_1px)] [background-size:24px_24px]"
@@ -100,7 +100,7 @@ export function AboutSettingsSection({
         className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full bg-primary/15 blur-3xl"
       />
       <div className="relative space-y-5">
-        <section className="rounded-[1.5rem] border border-border bg-muted/40 p-5">
+        <section className="rounded-xl bg-muted/40 p-5 ring-1 ring-border">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl space-y-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -154,7 +154,7 @@ export function AboutSettingsSection({
                 href={repoUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="group col-span-full flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-border bg-background px-4 py-3 text-sm text-muted-foreground transition hover:border-primary/50 hover:bg-primary/10 hover:text-foreground"
+                className="group col-span-full flex min-w-0 items-center justify-between gap-3 rounded-lg bg-background px-4 py-3 text-sm text-muted-foreground ring-1 ring-border transition hover:bg-primary/10 hover:text-foreground hover:ring-primary/50"
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <Globe
@@ -306,7 +306,7 @@ function ReleaseUpdateCard({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border bg-background p-4">
+        <div className="rounded-lg bg-background p-4 ring-1 ring-border">
           <div className="mb-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
             <span>{t("settings.aboutCockpit.artifact")}</span>
             <span>{progressLabel}</span>
@@ -320,7 +320,7 @@ function ReleaseUpdateCard({
             aria-label={t("settings.aboutCockpit.progressAria")}
           >
             <div
-              className="h-full rounded-full bg-primary transition-all duration-300"
+              className="h-full rounded-full bg-primary transition-[width] duration-300"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
@@ -342,7 +342,7 @@ function ReleaseUpdateCard({
           </InlineState>
         ) : null}
         {hasUpdate && releaseNotes ? (
-          <div className="rounded-2xl border border-border bg-muted/30 p-4">
+          <div className="rounded-lg bg-muted/30 p-4 ring-1 ring-border">
             <div className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
               {t("settings.aboutCockpit.releaseNotes")}
             </div>
@@ -439,7 +439,7 @@ function HelpResourcesCard() {
               href={resource.href}
               target="_blank"
               rel="noreferrer"
-              className="group rounded-2xl border border-border bg-background p-4 text-sm transition hover:border-primary/50 hover:bg-primary/10"
+              className="group rounded-lg bg-background p-4 text-sm ring-1 ring-border transition hover:bg-primary/10 hover:ring-primary/50"
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2 font-medium text-foreground">
@@ -474,11 +474,11 @@ function CockpitCard({
 }) {
   return (
     <section
-      className="rounded-[1.5rem] border border-border bg-muted/40 p-5"
+      className="rounded-xl bg-muted/40 p-5 ring-1 ring-border"
       data-testid={testId}
     >
       <div className="mb-4 flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-2xl border border-primary/30 bg-primary/15 text-primary">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-primary/30 bg-primary/15 text-primary">
           {icon}
         </span>
         <div>
@@ -497,7 +497,7 @@ function CockpitCard({
 
 function HeroMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-background px-4 py-3">
+    <div className="rounded-lg bg-background px-4 py-3 ring-1 ring-border">
       <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </div>
@@ -556,7 +556,7 @@ function DiagnosticRow({
   );
 
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-border bg-background p-3">
+    <div className="flex items-start gap-3 rounded-lg bg-background p-3 ring-1 ring-border">
       <span className="mt-0.5 text-primary [&_svg]:size-4" aria-hidden="true">
         {icon}
       </span>
@@ -582,7 +582,7 @@ function InlineState({
   return (
     <div
       className={cn(
-        "flex items-start gap-2 rounded-2xl border px-3 py-2 text-sm",
+        "flex items-start gap-2 rounded-lg border px-3 py-2 text-sm",
         statusChipClass[tone],
       )}
     >

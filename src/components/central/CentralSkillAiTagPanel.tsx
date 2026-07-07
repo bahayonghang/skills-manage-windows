@@ -55,7 +55,7 @@ export function CentralSkillAiTagPanel({
     <div className="space-y-3">
       <AiTagRateCard profile={aiTagRateProfile} t={t} />
       {!aiTaggingAvailable && (
-        <div className="rounded-2xl border border-border/90 bg-muted/20 p-3 text-xs text-foreground/75">
+        <div className="rounded-xl bg-muted/20 p-3 text-xs text-foreground/75 ring-1 ring-border/90">
           {t("central.aiTaggingNeedsConfig")}
         </div>
       )}
@@ -238,7 +238,7 @@ function SettledAiTagPanel({
         {message && (
           <p
             className={cn(
-              "rounded-xl border p-2.5 text-xs leading-relaxed",
+              "rounded-lg border p-2.5 text-xs leading-relaxed",
               job.status === "failed"
                 ? "border-destructive/30 bg-destructive/10 text-destructive"
                 : "border-warning/30 bg-warning/10 text-warning-foreground",
@@ -311,7 +311,7 @@ function AiTagRateCard({
       </div>
       {!profile.isSafeProfile && (
         <div
-          className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-2.5 text-xs leading-relaxed text-warning-foreground"
+          className="mt-3 rounded-lg border border-warning/30 bg-warning/10 p-2.5 text-xs leading-relaxed text-warning-foreground"
           data-testid="ai-tag-rate-risk"
         >
           <div className="mb-1 flex items-center gap-1.5 font-semibold">
@@ -371,7 +371,7 @@ function ItemCluster({
           <div
             key={`${item.skillId}:${item.status}`}
             className={cn(
-              "flex min-w-0 items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-xs",
+              "flex min-w-0 items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-xs",
               emphasized
                 ? "border-primary/25 bg-primary/10 text-primary"
                 : "border-border/80 bg-muted/10 text-foreground/75",
@@ -392,7 +392,7 @@ function StatusPill({ status, t }: { status: AiTagItemStatus; t: TFunction }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1",
+        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1",
         status === "running" && "bg-primary/10 text-primary ring-primary/20",
         status === "queued" && "bg-muted text-muted-foreground ring-border",
         status === "succeeded" &&
@@ -448,7 +448,7 @@ function DashboardCard({
 }) {
   return (
     <section
-      className="rounded-2xl border border-border/90 bg-background p-3 text-xs shadow-sm"
+      className="rounded-xl bg-background p-3 text-xs shadow-sm ring-1 ring-border/90"
       data-testid={testId}
     >
       <div className="mb-2 flex items-center gap-1.5 font-medium text-foreground">
@@ -468,7 +468,7 @@ function RateMetric({
   value: number | string;
 }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-muted/10 px-2 py-1.5">
+    <div className="rounded-lg border border-border/70 bg-muted/10 px-2 py-1.5">
       <div className="font-semibold tabular-nums text-foreground">{value}</div>
       <div className="mt-0.5 text-muted-foreground">{label}</div>
     </div>

@@ -1,12 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import * as tauriBridge from "@/lib/tauri";
+import { beforeEach, describe, expect, it } from "vitest";
+
 import { useObsidianStore } from "../stores/obsidianStore";
-
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
-}));
-
-import { invoke } from "@tauri-apps/api/core";
+import { ipcInvokeCalls, mockIpcCommand } from "./ipcMock";
 
 const mockVaults = [
   {
@@ -41,42 +36,59 @@ describe("obsidianStore", () => {
       loadingSkillsByVault: {},
       error: null,
     });
-    vi.clearAllMocks();
   });
 
   it("loads vaults via Tauri invoke", async () => {
-    vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(true);
-    vi.mocked(invoke).mockResolvedValueOnce(mockVaults);
+    mockIpcCommand("get_obsidian_vaults", mockVaults);
 
     await useObsidianStore.getState().loadVaults();
 
-    expect(invoke).toHaveBeenCalledWith("get_obsidian_vaults");
+    expect(ipcInvokeCalls("get_obsidian_vaults")).toHaveLength(1);
     expect(useObsidianStore.getState().vaults).toEqual(mockVaults);
     expect(useObsidianStore.getState().isLoadingVaults).toBe(false);
   });
 
   it("loads vault skills via Tauri invoke", async () => {
-    vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(true);
-    vi.mocked(invoke).mockResolvedValueOnce(mockSkills);
+    mockIpcCommand("get_obsidian_vault_skills", mockSkills);
 
     await useObsidianStore.getState().getVaultSkills("vault-1");
 
-    expect(invoke).toHaveBeenCalledWith("get_obsidian_vault_skills", {
-      vaultId: "vault-1",
-    });
-    expect(useObsidianStore.getState().skillsByVault["vault-1"]).toEqual(mockSkills);
-    expect(useObsidianStore.getState().loadingSkillsByVault["vault-1"]).toBe(false);
+    expect(ipcInvokeCalls("get_obsidian_vault_skills")).toEqual([
+      {
+        command: "get_obsidian_vault_skills",
+        args: { vaultId: "vault-1" },
+      },
+    ]);
+    expect(useObsidianStore.getState().skillsByVault["vault-1"]).toEqual(
+      mockSkills,
+    );
+    expect(useObsidianStore.getState().loadingSkillsByVault["vault-1"]).toBe(
+      false,
+    );
   });
 
-  it("uses browser fixtures when Tauri runtime is unavailable", async () => {
-    vi.spyOn(tauriBridge, "isTauriRuntime").mockReturnValue(false);
+  it("surfaces load errors as store error state", async () => {
+    mockIpcCommand("get_obsidian_vaults", () => {
+      throw new Error("scan failed");
+    });
 
     await useObsidianStore.getState().loadVaults();
-    await useObsidianStore.getState().getVaultSkills("fixture-vault");
 
-    expect(invoke).not.toHaveBeenCalled();
-    expect(useObsidianStore.getState().vaults).toHaveLength(1);
-    expect(useObsidianStore.getState().skillsByVault["fixture-vault"]).toHaveLength(1);
+    expect(useObsidianStore.getState().error).toContain("scan failed");
+    expect(useObsidianStore.getState().isLoadingVaults).toBe(false);
+  });
+
+  it("opens obsidian paths through the store action", async () => {
+    mockIpcCommand("open_obsidian_path", undefined);
+
+    await useObsidianStore.getState().openObsidianPath("/notes/vault-one");
+
+    expect(ipcInvokeCalls("open_obsidian_path")).toEqual([
+      {
+        command: "open_obsidian_path",
+        args: { path: "/notes/vault-one" },
+      },
+    ]);
   });
 
   it("resets all cached state on target change", () => {

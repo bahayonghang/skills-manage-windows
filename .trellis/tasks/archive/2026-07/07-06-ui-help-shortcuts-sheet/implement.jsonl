@@ -1,0 +1,2 @@
+{"file": "DESIGN.md", "reason": "卡片签名/圆角阶梯/键帽等表面语言约束（注意本日新增的 Corner Exceptions 登记制），新浮层必须遵守"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "若涉及数据获取需遵守 IPC adapter seam 约定（本任务应为纯前端静态清单，读以确认无需 IPC）"}

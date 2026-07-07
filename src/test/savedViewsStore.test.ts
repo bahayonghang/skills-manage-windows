@@ -5,8 +5,8 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 
-vi.mock("@/lib/tauri", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/tauri")>("@/lib/tauri");
+vi.mock("@/lib/ipc", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/ipc")>("@/lib/ipc");
   return {
     ...actual,
     invoke: (await import("@tauri-apps/api/core")).invoke,

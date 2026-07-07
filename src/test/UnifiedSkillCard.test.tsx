@@ -2,7 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
+import {
+  UnifiedSkillCard,
+  type CentralSkillCardProps,
+} from "@/components/skill/UnifiedSkillCard";
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 
 function resetUpdateCenterStore() {
@@ -18,6 +21,20 @@ function resetUpdateCenterStore() {
   });
 }
 
+const noop = () => {};
+
+/** central 场景的必填底座；用例按需覆盖字段。 */
+const centralBaseProps = {
+  variant: "central",
+  name: "s",
+  checkbox: { checked: false, onChange: noop },
+  onDetail: noop,
+  onInstallTo: noop,
+  onUninstallFromPlatforms: noop,
+  onUpdateCentral: noop,
+  onDeleteFromCentral: noop,
+} satisfies CentralSkillCardProps;
+
 describe("UnifiedSkillCard", () => {
   beforeEach(() => {
     resetUpdateCenterStore();
@@ -26,9 +43,11 @@ describe("UnifiedSkillCard", () => {
   it("shows a cached AI summary before the original description", () => {
     render(
       <UnifiedSkillCard
+        variant="marketplace"
         name="planner"
         description="Original English description"
         aiSummary="这是中文 AI 总结"
+        onDetail={noop}
       />
     );
 
@@ -40,8 +59,10 @@ describe("UnifiedSkillCard", () => {
   it("falls back to the description when no AI summary exists", () => {
     render(
       <UnifiedSkillCard
+        variant="marketplace"
         name="planner"
         description="Original English description"
+        onDetail={noop}
       />
     );
 
@@ -52,9 +73,11 @@ describe("UnifiedSkillCard", () => {
   it("ignores blank AI summaries", () => {
     render(
       <UnifiedSkillCard
+        variant="marketplace"
         name="planner"
         description="Original English description"
         aiSummary="   "
+        onDetail={noop}
       />
     );
 
@@ -87,6 +110,7 @@ describe("UnifiedSkillCard", () => {
 
     render(
       <UnifiedSkillCard
+        {...centralBaseProps}
         name="planner"
         skillId="planner"
         onUpdateCentral={vi.fn()}
@@ -101,6 +125,7 @@ describe("UnifiedSkillCard", () => {
   it("enables card update action only for explicit update_available status", () => {
     render(
       <UnifiedSkillCard
+        {...centralBaseProps}
         name="planner"
         skillId="planner"
         onUpdateCentral={vi.fn()}
@@ -118,7 +143,7 @@ describe("UnifiedSkillCard", () => {
   });
 
   it("renders localized usageBadge text and tooltip when count > 0", () => {
-    render(<UnifiedSkillCard name="review" usageBadge={12} />);
+    render(<UnifiedSkillCard {...centralBaseProps} name="review" usageBadge={12} />);
 
     const badge = screen.getByTestId("usage-badge");
     expect(badge).toBeInTheDocument();
@@ -128,22 +153,28 @@ describe("UnifiedSkillCard", () => {
   });
 
   it("hides usageBadge when count is 0 or undefined", () => {
-    const { rerender } = render(<UnifiedSkillCard name="x" usageBadge={0} />);
+    const { rerender } = render(
+      <UnifiedSkillCard {...centralBaseProps} name="x" usageBadge={0} />,
+    );
     expect(screen.queryByTestId("usage-badge")).not.toBeInTheDocument();
 
-    rerender(<UnifiedSkillCard name="x" />);
+    rerender(<UnifiedSkillCard {...centralBaseProps} name="x" />);
     expect(screen.queryByTestId("usage-badge")).not.toBeInTheDocument();
   });
 
   it("传入 statusChipLabel 渲染文字状态 chip", () => {
     render(
-      <UnifiedSkillCard name="s" statusAccent="amber" statusChipLabel="可更新" />,
+      <UnifiedSkillCard
+        {...centralBaseProps}
+        statusAccent="warning"
+        statusChipLabel="可更新"
+      />,
     );
     expect(screen.getByText("可更新")).toBeInTheDocument();
   });
 
   it("不传 statusChipLabel 时无状态 chip", () => {
-    render(<UnifiedSkillCard name="s" />);
+    render(<UnifiedSkillCard {...centralBaseProps} />);
     expect(screen.queryByText("可更新")).not.toBeInTheDocument();
   });
 
@@ -151,7 +182,7 @@ describe("UnifiedSkillCard", () => {
     const onRemove = vi.fn();
     render(
       <UnifiedSkillCard
-        name="s"
+        {...centralBaseProps}
         editableTags={{
           tags: [{ id: "t1", name: "frontend" }],
           allTags: [
@@ -173,7 +204,7 @@ describe("UnifiedSkillCard", () => {
   it("footer：显示 repo 名", () => {
     render(
       <UnifiedSkillCard
-        name="s"
+        {...centralBaseProps}
         footer={{ repoName: "anthropics/skills", repoColor: "#7c3aed" }}
         usageBadge={5}
       />,
@@ -182,7 +213,7 @@ describe("UnifiedSkillCard", () => {
   });
 
   it("不传 footer 时不渲染 footer 区域", () => {
-    const { container } = render(<UnifiedSkillCard name="s" />);
+    const { container } = render(<UnifiedSkillCard {...centralBaseProps} />);
     expect(container.querySelector("[data-testid='card-footer']")).toBeNull();
   });
 });

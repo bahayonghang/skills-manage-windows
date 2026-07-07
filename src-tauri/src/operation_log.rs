@@ -8,7 +8,8 @@
 //!   to the Local target.
 //! - Build [`OperationLogEvent`] records carrying category, action, status,
 //!   subject, error summary, sanitized details, duration and batch id.
-//! - Sanitize details JSON by redacting sensitive keys before persistence.
+//! - Redact details JSON through the crate-wide redaction policy seam
+//!   (`crate::redaction`) before persistence.
 //! - Summarize free-form error text by collapsing whitespace and truncating
 //!   to a stable maximum width.
 //! - Map status to log level for the persisted entry.
@@ -30,20 +31,6 @@ use crate::AppState;
 /// Maximum number of characters allowed in an error summary stored on the log.
 /// Longer strings are truncated and ended with the ellipsis character.
 const MAX_ERROR_SUMMARY_CHARS: usize = 500;
-
-/// Detail keys treated as sensitive. Any matching key (case-insensitive
-/// substring) is redacted before details are persisted.
-const SENSITIVE_DETAIL_KEY_NEEDLES: &[&str] = &[
-    "password",
-    "passphrase",
-    "token",
-    "pat",
-    "api_key",
-    "apikey",
-    "secret",
-    "private_key",
-    "credential",
-];
 
 /// Target context attached to every Operation Log entry.
 ///
@@ -138,7 +125,7 @@ impl OperationLogEvent {
     }
 
     pub fn details(mut self, details: Value) -> Self {
-        self.details_json = Some(sanitize_details_value(details).to_string());
+        self.details_json = Some(crate::redaction::redact_operation_details(details).to_string());
         self
     }
 
@@ -291,41 +278,12 @@ pub fn summarize_error(error: &str) -> String {
     truncated
 }
 
-/// Recursively sanitize `value`, redacting any object key flagged by
-/// [`is_sensitive_detail_key`].
-pub fn sanitize_details_value(value: Value) -> Value {
-    match value {
-        Value::Array(items) => {
-            Value::Array(items.into_iter().map(sanitize_details_value).collect())
-        }
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .map(|(key, value)| {
-                    if is_sensitive_detail_key(&key) {
-                        (key, Value::String("[redacted]".to_string()))
-                    } else {
-                        (key, sanitize_details_value(value))
-                    }
-                })
-                .collect(),
-        ),
-        other => other,
-    }
-}
-
 fn level_for_status(status: &str) -> String {
     match status {
         "failed" => "error".to_string(),
         "partial" | "cancelled" => "warn".to_string(),
         _ => "info".to_string(),
     }
-}
-
-fn is_sensitive_detail_key(key: &str) -> bool {
-    let key = key.to_ascii_lowercase();
-    SENSITIVE_DETAIL_KEY_NEEDLES
-        .iter()
-        .any(|needle| key.contains(needle))
 }
 
 #[cfg(test)]
@@ -354,54 +312,6 @@ mod tests {
     fn summarize_error_returns_empty_string_for_blank_input() {
         assert_eq!(summarize_error(""), "");
         assert_eq!(summarize_error("   \n\t  "), "");
-    }
-
-    #[test]
-    fn sanitize_details_redacts_nested_sensitive_fields() {
-        let sanitized = sanitize_details_value(serde_json::json!({
-            "password": "secret",
-            "nested": {
-                "apiKey": "secret",
-                "safe": "kept"
-            }
-        }));
-
-        assert_eq!(sanitized["password"], "[redacted]");
-        assert_eq!(sanitized["nested"]["apiKey"], "[redacted]");
-        assert_eq!(sanitized["nested"]["safe"], "kept");
-    }
-
-    #[test]
-    fn sanitize_details_redacts_inside_arrays_and_keeps_scalar_keys() {
-        let sanitized = sanitize_details_value(serde_json::json!({
-            "items": [
-                { "Token": "t", "value": 1 },
-                { "private_KEY": "p", "value": 2 }
-            ],
-            "count": 2
-        }));
-
-        assert_eq!(sanitized["items"][0]["Token"], "[redacted]");
-        assert_eq!(sanitized["items"][0]["value"], 1);
-        assert_eq!(sanitized["items"][1]["private_KEY"], "[redacted]");
-        assert_eq!(sanitized["items"][1]["value"], 2);
-        assert_eq!(sanitized["count"], 2);
-    }
-
-    #[test]
-    fn sanitize_details_passes_scalar_values_through() {
-        assert_eq!(
-            sanitize_details_value(serde_json::json!("hello")),
-            serde_json::json!("hello")
-        );
-        assert_eq!(
-            sanitize_details_value(serde_json::json!(42)),
-            serde_json::json!(42)
-        );
-        assert_eq!(
-            sanitize_details_value(serde_json::json!(null)),
-            serde_json::json!(null)
-        );
     }
 
     #[test]
@@ -469,6 +379,7 @@ mod tests {
     async fn best_effort_logger_does_not_return_business_errors() {
         // Connecting to an empty in-memory pool means the operation_log table
         // does not exist. The recorder must still complete without panicking.
+        // （豁免 test_support::mem_pool：本测试需要未建 schema 的裸池。）
         let pool = SqlitePool::connect(":memory:").await.unwrap();
 
         record_operation_log_best_effort(
@@ -481,8 +392,7 @@ mod tests {
 
     #[tokio::test]
     async fn with_operation_log_records_success_and_preserves_result() {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        crate::db::init_database(&pool).await.unwrap();
+        let pool = crate::test_support::mem_pool().await;
         let app_state = test_app_state(pool);
 
         let result = with_operation_log(
@@ -525,8 +435,7 @@ mod tests {
 
     #[tokio::test]
     async fn with_operation_log_records_failure_and_preserves_error() {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        crate::db::init_database(&pool).await.unwrap();
+        let pool = crate::test_support::mem_pool().await;
         let app_state = test_app_state(pool);
 
         let result = with_operation_log(

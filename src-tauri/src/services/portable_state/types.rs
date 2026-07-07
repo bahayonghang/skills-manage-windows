@@ -30,6 +30,33 @@ pub struct SkillportStateManifest {
 #[serde(rename_all = "camelCase")]
 pub struct ExportedFrom {
     pub app: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<ExportedTarget>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportedTarget {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PortableStateTargetContext {
+    pub(crate) id: String,
+    pub(crate) kind: String,
+    pub(crate) label: String,
+}
+
+impl From<&PortableStateTargetContext> for ExportedTarget {
+    fn from(target: &PortableStateTargetContext) -> Self {
+        Self {
+            id: target.id.clone(),
+            kind: target.kind.clone(),
+            label: target.label.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

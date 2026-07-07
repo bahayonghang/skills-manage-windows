@@ -288,15 +288,16 @@ pub fn builtin_agents() -> Vec<Agent> {
 
 pub fn builtin_agents_for_posix_home(home: &str) -> Vec<Agent> {
     let home = normalize_posix_home(home);
-    let central_skills_dir = posix_join(&home, &[".skillsmanage", "skills"]);
-    let universal_skills_dir = posix_join(&home, &[".agents", "skills"]);
+    let central_skills_dir = posix_join(&home, &[crate::paths::APP_DATA_DIR_NAME, "skills"]);
+    let universal_skills_dir =
+        posix_join(&home, &[crate::paths::UNIVERSAL_AGENTS_DIR_NAME, "skills"]);
 
     let rewrite_path = |local_path: &str| -> String {
         let normalized = local_path.replace('\\', "/");
-        if normalized.ends_with("/.skillsmanage/skills") {
+        if normalized.ends_with(&format!("/{}", crate::paths::CENTRAL_SKILLS_REL_FROM_HOME)) {
             return central_skills_dir.clone();
         }
-        if normalized.ends_with("/.agents/skills") {
+        if normalized.ends_with(&format!("/{}", crate::paths::UNIVERSAL_SKILLS_REL)) {
             return universal_skills_dir.clone();
         }
 

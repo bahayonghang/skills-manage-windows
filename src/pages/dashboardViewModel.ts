@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { TFunction } from "i18next";
 
-import { isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/ipc";
 import { isRemoteLikeTarget, isWslTarget } from "@/lib/targetKind";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,

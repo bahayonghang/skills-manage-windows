@@ -184,7 +184,7 @@ fn scan_obsidian_vault(vault_dir: &Path, central_dir: &Path) -> Vec<ObsidianSkil
 
     for rel_source in [
         PathBuf::from(".skills"),
-        PathBuf::from(".agents/skills"),
+        PathBuf::from(crate::paths::UNIVERSAL_SKILLS_REL),
         PathBuf::from(".claude/skills"),
     ] {
         let source_dir = vault_dir.join(rel_source);
@@ -283,4 +283,69 @@ pub async fn get_obsidian_vault_skills_impl(
         ObsidianError::task_join,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::write_skill_md;
+    use tempfile::TempDir;
+
+    fn make_vault(root: &Path) -> PathBuf {
+        let vault = root.join("vault");
+        std::fs::create_dir_all(vault.join(".obsidian")).unwrap();
+        vault
+    }
+
+    /// 同一 skill id 同现 `.skills` 与 `.claude/skills` 时取 `.skills`，且不重复。
+    #[test]
+    fn scan_prefers_dot_skills_over_platform_sources() {
+        let tmp = TempDir::new().unwrap();
+        let vault = make_vault(tmp.path());
+        let central = tmp.path().join("central");
+        std::fs::create_dir_all(&central).unwrap();
+
+        write_skill_md(&vault.join(".skills/alpha"), "alpha", Some("primary"));
+        write_skill_md(&vault.join(".claude/skills/alpha"), "alpha", Some("shadowed"));
+        write_skill_md(&vault.join(".claude/skills/beta"), "beta", Some("claude only"));
+
+        let skills = scan_obsidian_vault(&vault, &central);
+        assert_eq!(skills.len(), 2);
+        let alpha = skills.iter().find(|s| s.name == "alpha").unwrap();
+        assert_eq!(
+            alpha.description.as_deref(),
+            Some("primary"),
+            ".skills 源应优先于 .claude/skills"
+        );
+        assert!(skills.iter().any(|s| s.name == "beta"));
+    }
+
+    #[test]
+    fn scan_marks_skills_already_in_central() {
+        let tmp = TempDir::new().unwrap();
+        let vault = make_vault(tmp.path());
+        let central = tmp.path().join("central");
+        std::fs::create_dir_all(central.join("alpha")).unwrap();
+
+        write_skill_md(&vault.join(".skills/alpha"), "alpha", None);
+        write_skill_md(&vault.join(".skills/beta"), "beta", None);
+
+        let skills = scan_obsidian_vault(&vault, &central);
+        let alpha = skills.iter().find(|s| s.name == "alpha").unwrap();
+        let beta = skills.iter().find(|s| s.name == "beta").unwrap();
+        assert!(alpha.is_already_central);
+        assert!(!beta.is_already_central);
+    }
+
+    /// 没有 `.obsidian` 标记的目录不是 vault，即便有 skill 也返回空。
+    #[test]
+    fn scan_returns_empty_for_non_vault_dir() {
+        let tmp = TempDir::new().unwrap();
+        let not_vault = tmp.path().join("plain");
+        write_skill_md(&not_vault.join(".skills/alpha"), "alpha", None);
+        let central = tmp.path().join("central");
+        std::fs::create_dir_all(&central).unwrap();
+
+        assert!(scan_obsidian_vault(&not_vault, &central).is_empty());
+    }
 }

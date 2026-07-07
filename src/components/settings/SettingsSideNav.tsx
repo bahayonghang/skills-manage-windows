@@ -37,7 +37,7 @@ export function SettingsSideNav({ activePageId }: SettingsSideNavProps) {
               data-settings-page-nav={page.id}
               onClick={() => navigate(getSettingsPagePath(page.id))}
               className={cn(
-                "group flex min-h-10 w-full items-center gap-3 rounded-xl border px-3 py-2 text-left text-sm transition-all active:scale-[0.98]",
+                "group flex min-h-10 w-full items-center gap-3 rounded-xl border px-3 py-2 text-left text-sm transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]",
                 active
                   ? "border-primary/35 bg-primary/10 text-foreground shadow-[inset_0_1px_0_color-mix(in_oklch,white_18%,transparent)]"
                   : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/55 hover:text-foreground",

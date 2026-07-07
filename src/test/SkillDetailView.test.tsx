@@ -11,6 +11,8 @@ import {
   TargetSummary,
 } from "../types";
 
+const mockOpenExternalUrl = vi.hoisted(() => vi.fn());
+
 // ─── Mock stores ──────────────────────────────────────────────────────────────
 
 vi.mock("../stores/skillDetailStore", () => ({
@@ -19,6 +21,10 @@ vi.mock("../stores/skillDetailStore", () => ({
 
 vi.mock("../stores/platformStore", () => ({
   usePlatformStore: vi.fn(),
+}));
+
+vi.mock("@/lib/externalUrl", () => ({
+  openExternalUrl: mockOpenExternalUrl,
 }));
 
 // ─── Mock CollectionPickerDialog ──────────────────────────────────────────────
@@ -526,11 +532,12 @@ describe("SkillDetailView", () => {
     renderView("frontend-design", "page", { skipMockSetup: true });
 
     const sidebar = screen.getByTestId("skill-detail-right-sidebar");
-    const link = within(sidebar).getByRole("link", { name: "打开 GitHub 仓库" });
+    const button = within(sidebar).getByRole("button", { name: "打开 GitHub 仓库" });
 
     expect(within(sidebar).getAllByText("openai/skills").length).toBeGreaterThan(0);
     expect(within(sidebar).getByText("skills/frontend-design")).toBeInTheDocument();
-    expect(link).toHaveAttribute("href", "https://github.com/openai/skills");
+    fireEvent.click(button);
+    expect(mockOpenExternalUrl).toHaveBeenCalledWith("https://github.com/openai/skills");
   });
 
   it("uses the widened inspector rail classes in page variant", () => {
@@ -835,6 +842,112 @@ describe("SkillDetailView", () => {
       name: /切换 frontend-design 在 Claude Code 的链接状态/i,
     });
     expect(claudeToggle).toHaveAttribute("title", expect.stringContaining("Claude Code"));
+  });
+
+  it("shows currently installed platforms without listing uninstalled platforms", () => {
+    renderView();
+
+    const installedPlatforms = screen.getByTestId("detail-installed-platforms");
+    const claudeRow = within(installedPlatforms).getByTestId(
+      "detail-installed-platform-claude-code"
+    );
+
+    expect(within(installedPlatforms).getByText("已安装平台")).toBeInTheDocument();
+    expect(claudeRow).toHaveTextContent("Claude Code");
+    expect(within(installedPlatforms).queryByText("Cursor")).toBeNull();
+  });
+
+  it("opens platform uninstall confirmation without uninstalling immediately", async () => {
+    renderView();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "从 Claude Code 删除 frontend-design",
+      })
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("删除这个平台安装？")).toBeInTheDocument();
+    expect(within(dialog).getByText(/只会从 Claude Code 删除 frontend-design/)).toBeInTheDocument();
+    expect(mockUninstallSkill).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(mockUninstallSkill).not.toHaveBeenCalled();
+  });
+
+  it("confirms single-platform uninstall from the installed platform list", async () => {
+    renderView();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "从 Claude Code 删除 frontend-design",
+      })
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("confirm-detail-platform-uninstall"));
+
+    await waitFor(() => {
+      expect(mockUninstallSkill).toHaveBeenCalledWith("frontend-design", "claude-code");
+    });
+    expect(mockRefreshCounts).toHaveBeenCalledTimes(1);
+    expect(mockRefreshInstallations).toHaveBeenCalledWith("frontend-design");
+  });
+
+  it("does not expose platform delete controls for read-only details", () => {
+    applyStoreMocks({
+      detail: {
+        ...mockPluginDetail,
+        installations: mockDetail.installations,
+      },
+      content: mockPluginContent,
+    });
+
+    render(
+      <MemoryRouter>
+        <SkillDetailView
+          skillId="frontend-design"
+          agentId="claude-code"
+          rowId="claude-code::plugin::frontend-design"
+          variant="drawer"
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByTestId("detail-installed-platforms")).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "从 Claude Code 删除 frontend-design",
+      })
+    ).toBeNull();
+  });
+
+  it("does not expose platform delete controls for shared-root installs", () => {
+    applyStoreMocks(
+      {},
+      {
+        agents: mockAgents.map((agent) =>
+          agent.id === "claude-code"
+            ? { ...agent, global_skills_dir: "~/.skillsmanage/skills/" }
+            : agent
+        ),
+      }
+    );
+
+    renderView("frontend-design", "page", { skipMockSetup: true });
+
+    const installedPlatforms = screen.getByTestId("detail-installed-platforms");
+    expect(
+      within(installedPlatforms).getByTestId("detail-installed-platform-claude-code")
+    ).toHaveTextContent("Claude Code");
+    expect(
+      within(installedPlatforms).queryByRole("button", {
+        name: "从 Claude Code 删除 frontend-design",
+      })
+    ).toBeNull();
   });
 
   it("calls installSkill when unlinked platform icon is clicked", async () => {

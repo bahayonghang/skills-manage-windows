@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "复核：无新增 Result<T,String> 于 services；#[error] 文案未动；无 error.contains 嗅探"}
+{"file": ".trellis/spec/backend/spawn-blocking-io.md", "reason": "复核：无直接 std::fs 于 async 上下文；AppHandle 不按值进 blocking 闭包"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "复核：无 .skillsmanage/.agents 字面量新增"}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "复核：新测试无 connect(\":memory:\") 手抄"}

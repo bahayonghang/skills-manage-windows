@@ -238,7 +238,7 @@ function StatusBadge({
   return (
     <span
       className={cn(
-        "rounded-full px-2 py-0.5 text-[10px] font-medium",
+        "rounded-full px-2 py-0.5 text-[11px] font-medium",
         tone === "running" &&
           "bg-primary/10 text-primary ring-1 ring-primary/20",
         tone === "ok" &&

@@ -1,10 +1,9 @@
 import { create } from "zustand";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke } from "@/lib/ipc";
 import type {
   RuntimeLogClearRequest,
   RuntimeLogFile,
   RuntimeLogLevel,
-  RuntimeLogLine,
   RuntimeLogReadRequest,
   RuntimeLogReadResult,
 } from "@/types";
@@ -30,41 +29,15 @@ interface RuntimeLogState {
 
   loadFiles: () => Promise<RuntimeLogFile[]>;
   selectFile: (fileName: string) => Promise<RuntimeLogReadResult>;
-  readFile: (request?: Partial<RuntimeLogReadRequest>) => Promise<RuntimeLogReadResult>;
+  readFile: (
+    request?: Partial<RuntimeLogReadRequest>,
+  ) => Promise<RuntimeLogReadResult>;
   setFilter: (partial: Partial<RuntimeLogFilter>) => void;
   clearFilters: () => void;
   clearLogs: (request?: RuntimeLogClearRequest) => Promise<number>;
   exportLog: (fileName?: string) => Promise<string>;
   clearError: () => void;
 }
-
-const fixtureFiles: RuntimeLogFile[] = [
-  {
-    fileName: "skillport-2026-06-03.log",
-    date: "2026-06-03",
-    sizeBytes: 512,
-    modifiedAt: "2026-06-03T10:00:00Z",
-  },
-];
-
-const fixtureLines: RuntimeLogLine[] = [
-  {
-    lineNumber: 1,
-    timestamp: "2026-06-03T10:00:00Z",
-    level: "info",
-    source: "skillport::startup",
-    message: "SkillPort file logging initialized",
-    raw: "2026-06-03T10:00:00Z INFO skillport::startup: SkillPort file logging initialized",
-  },
-  {
-    lineNumber: 2,
-    timestamp: "2026-06-03T10:02:00Z",
-    level: "error",
-    source: "window.error",
-    message: "Example frontend runtime error",
-    raw: "2026-06-03T10:02:00Z ERROR skillport::frontend: Example frontend runtime error source=window.error token=[REDACTED]",
-  },
-];
 
 function normalizeText(value?: string): string | undefined {
   const trimmed = value?.trim();
@@ -74,9 +47,9 @@ function normalizeText(value?: string): string | undefined {
 function normalizeReadRequest(
   selectedFileName: string | null,
   filter: RuntimeLogFilter,
-  request: Partial<RuntimeLogReadRequest> = {}
+  request: Partial<RuntimeLogReadRequest> = {},
 ): RuntimeLogReadRequest {
-  const fileName = request.fileName ?? selectedFileName ?? fixtureFiles[0]?.fileName;
+  const fileName = request.fileName ?? selectedFileName;
   if (!fileName) {
     throw new Error("No runtime log file is available.");
   }
@@ -89,33 +62,6 @@ function normalizeReadRequest(
     limit: request.limit ?? DEFAULT_RUNTIME_LIMIT,
     offset: request.offset ?? 0,
     tail: request.tail ?? true,
-  };
-}
-
-function fixtureRead(request: RuntimeLogReadRequest): RuntimeLogReadResult {
-  const query = request.query?.toLowerCase();
-  const source = request.source?.toLowerCase();
-  const level = request.level?.toLowerCase();
-  const matched = fixtureLines.filter((line) => {
-    if (level && line.level?.toLowerCase() !== level) return false;
-    if (source && !line.source.toLowerCase().includes(source)) return false;
-    if (query) {
-      const haystack = `${line.source} ${line.message} ${line.raw}`.toLowerCase();
-      if (!haystack.includes(query)) return false;
-    }
-    return true;
-  });
-  const limit = request.limit ?? DEFAULT_RUNTIME_LIMIT;
-  const offset = request.tail
-    ? Math.max(0, matched.length - limit)
-    : Math.max(0, request.offset ?? 0);
-
-  return {
-    fileName: request.fileName,
-    total: matched.length,
-    limit,
-    offset,
-    lines: matched.slice(offset, offset + limit),
   };
 }
 
@@ -133,14 +79,12 @@ export const useRuntimeLogStore = create<RuntimeLogState>((set, get) => ({
   loadFiles: async () => {
     set({ isLoadingFiles: true, error: null });
     try {
-      const files = isTauriRuntime()
-        ? await invoke<RuntimeLogFile[]>("list_runtime_log_files")
-        : fixtureFiles;
+      const files = await invoke("list_runtime_log_files");
       const selectedFileName = files.some(
-        (file) => file.fileName === get().selectedFileName
+        (file) => file.fileName === get().selectedFileName,
       )
         ? get().selectedFileName
-        : files[0]?.fileName ?? null;
+        : (files[0]?.fileName ?? null);
       set({ files, selectedFileName, isLoadingFiles: false });
       return files;
     } catch (err) {
@@ -158,15 +102,17 @@ export const useRuntimeLogStore = create<RuntimeLogState>((set, get) => ({
     const nextRequest = normalizeReadRequest(
       get().selectedFileName,
       get().filter,
-      request
+      request,
     );
-    set({ isLoadingLines: true, error: null, selectedFileName: nextRequest.fileName });
+    set({
+      isLoadingLines: true,
+      error: null,
+      selectedFileName: nextRequest.fileName,
+    });
     try {
-      const result = isTauriRuntime()
-        ? await invoke<RuntimeLogReadResult>("read_runtime_log_file", {
-            request: nextRequest,
-          })
-        : fixtureRead(nextRequest);
+      const result = await invoke("read_runtime_log_file", {
+        request: nextRequest,
+      });
       set({ readResult: result, isLoadingLines: false });
       return result;
     } catch (err) {
@@ -191,17 +137,20 @@ export const useRuntimeLogStore = create<RuntimeLogState>((set, get) => ({
   clearLogs: async (request) => {
     const currentFileName = get().selectedFileName;
     const targetRequest: RuntimeLogClearRequest =
-      request ?? (currentFileName ? { fileName: currentFileName } : { all: true });
+      request ??
+      (currentFileName ? { fileName: currentFileName } : { all: true });
     set({ isClearing: true, error: null });
     try {
-      const deleted = isTauriRuntime()
-        ? await invoke<number>("clear_runtime_logs", { request: targetRequest })
-        : targetRequest.fileName || targetRequest.all
-          ? 1
-          : 0;
+      const deleted = await invoke("clear_runtime_logs", {
+        request: targetRequest,
+      });
       const files = await get().loadFiles();
       if (files.length > 0) {
-        await get().readFile({ fileName: files[0].fileName, offset: 0, tail: true });
+        await get().readFile({
+          fileName: files[0].fileName,
+          offset: 0,
+          tail: true,
+        });
       } else {
         set({ selectedFileName: null, readResult: null });
       }
@@ -221,11 +170,9 @@ export const useRuntimeLogStore = create<RuntimeLogState>((set, get) => ({
 
     set({ isExporting: true, error: null });
     try {
-      const payload = isTauriRuntime()
-        ? await invoke<string>("export_runtime_log_file", {
-            fileName: targetFileName,
-          })
-        : fixtureLines.map((line) => line.raw).join("\n");
+      const payload = await invoke("export_runtime_log_file", {
+        fileName: targetFileName,
+      });
       set({ isExporting: false });
       return payload;
     } catch (err) {

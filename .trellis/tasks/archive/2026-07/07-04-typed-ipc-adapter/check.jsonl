@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "检查前端 spec 合规与新 spec 挂链完整性"}
+{"file": ".trellis/spec/guides/index.md", "reason": "quality check 时核对通用约定（测试/提交/i18n）"}

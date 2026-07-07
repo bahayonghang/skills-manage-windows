@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/platform-grouping.md", "reason": "验收基准：平台分组约定未被破坏，无新的平台 ID 字面量列表"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "验收基准：未出现新的内联/场景专用技能卡片实现"}

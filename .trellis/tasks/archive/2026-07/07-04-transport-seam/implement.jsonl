@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "InstallationError 契约：不新增字符串错误、#[error] 文案逐字保留、Remote(String) 拍平边界"}
+{"file": ".trellis/spec/backend/spawn-blocking-io.md", "reason": "local place_install 的重 IO 必须走 fs_util::run_blocking_fs_with 唯一包装"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "remote_join/paths.rs 单点路径构造，transport 路径拼接不得重打字面量"}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "新测试用 mem_pool/mem_pool_with_home fixture，禁手抄池构造"}
+{"file": ".trellis/tasks/07-04-transport-seam/research/inventory-impl-families-and-dispatch-sites.md", "reason": "impl 函数族与命令层分发点全景（含死代码清单与基线口径）"}
+{"file": ".trellis/tasks/07-04-transport-seam/research/execution-layer-and-install-path.md", "reason": "targets 执行层 spawn 点、runner 插入点与 install 三份实现重复度实测"}

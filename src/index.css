@@ -8,6 +8,15 @@
 
 @custom-variant dark (&:is([data-theme='mocha'] *, [data-theme='macchiato'] *, [data-theme='frappe'] *, [data-theme='claude-dark'] *));
 
+/* Shared keyboard focus ring for hand-written buttons/controls (a11y).
+   Equivalent to: focus-visible:outline-none focus-visible:ring-2
+   focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card */
+@utility focus-ring {
+  &:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-1 ring-offset-card;
+  }
+}
+
 /* ─── Global hover color variable ─────────────────────────────────────────── */
 :root {
   --hover-bg: var(--primary);
@@ -56,7 +65,7 @@
   gap: 1.25rem;
   justify-items: center;
   border: 1px solid rgba(180, 190, 254, 0.18);
-  border-radius: 1.5rem;
+  border-radius: 1.125rem;
   background: rgba(24, 24, 37, 0.76);
   padding: 2rem;
   box-shadow:
@@ -902,6 +911,33 @@
   }
 }
 
+/* ─── Central Skills polish primitives ────────────────────────────────────── */
+@layer components {
+  .central-skill-card-surface {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent),
+      0 1px 2px -1px color-mix(in srgb, var(--foreground) 10%, transparent),
+      0 14px 30px -22px color-mix(in srgb, var(--foreground) 34%, transparent);
+    transition-property: background-color, box-shadow, scale;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  .central-skill-card-surface:hover {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary) 30%, var(--border)),
+      0 2px 4px -2px color-mix(in srgb, var(--foreground) 13%, transparent),
+      0 20px 42px -24px color-mix(in srgb, var(--primary) 34%, transparent);
+  }
+
+  .central-skill-card-surface.central-skill-card-selected {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary) 54%, transparent),
+      0 2px 4px -2px color-mix(in srgb, var(--foreground) 13%, transparent),
+      0 18px 36px -24px color-mix(in srgb, var(--primary) 42%, transparent);
+  }
+}
+
 /* ─── Skill markdown surfaces ─────────────────────────────────────────────── */
 .skill-markdown-panel {
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
@@ -1037,7 +1073,7 @@
   background: color-mix(in srgb, var(--muted) 70%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   padding: 0.12rem 0.34rem;
-  border-radius: 0.45rem;
+  border-radius: 0.5rem;
 }
 
 .skill-markdown pre {
@@ -1241,8 +1277,9 @@
   --font-body:
     "JetBrains Mono Variable", "Geist Variable", ui-monospace, monospace;
   --font-scale: 1;
-  --shadow-orbit: 0 24px 70px
-    color-mix(in oklch, var(--background) 86%, transparent);
+  --shadow-orbit:
+    0 0 0 1px color-mix(in oklch, var(--border) 54%, transparent),
+    0 18px 46px color-mix(in oklch, var(--background) 78%, transparent);
 }
 
 html[data-display-font="geist"] {
@@ -1288,15 +1325,15 @@ html[data-body-font="system"] {
 .surface-glass {
   background: linear-gradient(
     145deg,
-    color-mix(in oklch, var(--card) 92%, white 4%),
-    color-mix(in oklch, var(--card) 84%, transparent 12%)
+    color-mix(in oklch, var(--card) 91%, white 3%),
+    color-mix(in oklch, var(--card) 86%, transparent 10%)
   );
-  border: 1px solid color-mix(in oklch, var(--border) 88%, transparent);
+  border: 1px solid color-mix(in oklch, var(--border) 78%, transparent);
   box-shadow:
-    inset 0 1px 0 color-mix(in oklch, var(--foreground) 6%, transparent),
+    inset 0 1px 0 color-mix(in oklch, var(--foreground) 5%, transparent),
     var(--shadow-orbit);
-  backdrop-filter: blur(26px) saturate(155%);
-  -webkit-backdrop-filter: blur(26px) saturate(155%);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
 }
 
 .surface-glass-strong {
@@ -1317,13 +1354,13 @@ html[data-body-font="system"] {
   background:
     radial-gradient(
       circle at 16% 4%,
-      color-mix(in oklch, var(--primary) 28%, transparent),
-      transparent 34rem
+      color-mix(in oklch, var(--primary) 18%, transparent),
+      transparent 32rem
     ),
     radial-gradient(
       circle at 80% 2%,
-      color-mix(in oklch, var(--ring) 20%, transparent),
-      transparent 30rem
+      color-mix(in oklch, var(--ring) 12%, transparent),
+      transparent 28rem
     ),
     linear-gradient(
       145deg,
@@ -1335,7 +1372,7 @@ html[data-body-font="system"] {
 .dashboard-hero-glow {
   background: radial-gradient(
     circle,
-    color-mix(in oklch, var(--primary) 38%, transparent),
+    color-mix(in oklch, var(--primary) 24%, transparent),
     transparent 70%
   );
 }
@@ -1349,10 +1386,10 @@ html[data-body-font="system"] {
   );
   border-color: color-mix(in oklch, var(--border) 92%, var(--foreground) 8%);
   box-shadow:
-    inset 0 1px 0 color-mix(in oklch, white 38%, transparent),
-    0 18px 44px color-mix(in oklch, var(--foreground) 10%, transparent);
-  backdrop-filter: blur(16px) saturate(118%);
-  -webkit-backdrop-filter: blur(16px) saturate(118%);
+    inset 0 1px 0 color-mix(in oklch, white 32%, transparent),
+    0 14px 34px color-mix(in oklch, var(--foreground) 8%, transparent);
+  backdrop-filter: blur(14px) saturate(112%);
+  -webkit-backdrop-filter: blur(14px) saturate(112%);
 }
 
 [data-theme="latte"] .surface-glass-strong,
@@ -1411,23 +1448,23 @@ html[data-body-font="system"] {
 .readiness-card::before {
   content: "";
   position: absolute;
-  inset: -38% -22% auto auto;
-  width: 17rem;
+  inset: -42% -24% auto auto;
+  width: 15rem;
   aspect-ratio: 1;
   border-radius: 999px;
   background:
     radial-gradient(
       circle,
-      color-mix(in oklch, var(--primary) 30%, transparent),
+      color-mix(in oklch, var(--primary) 18%, transparent),
       transparent 68%
     ),
     conic-gradient(
       from 140deg,
-      color-mix(in oklch, var(--chart-1) 45%, transparent),
+      color-mix(in oklch, var(--chart-1) 28%, transparent),
       transparent 46%
     );
   filter: blur(4px);
-  opacity: 0.72;
+  opacity: 0.42;
 }
 
 .readiness-card::after {
@@ -1438,12 +1475,12 @@ html[data-body-font="system"] {
   background:
     linear-gradient(
       90deg,
-      color-mix(in oklch, var(--border) 22%, transparent) 1px,
+      color-mix(in oklch, var(--border) 14%, transparent) 1px,
       transparent 1px
     ),
     linear-gradient(
       0deg,
-      color-mix(in oklch, var(--border) 18%, transparent) 1px,
+      color-mix(in oklch, var(--border) 12%, transparent) 1px,
       transparent 1px
     );
   background-size: 2.35rem 2.35rem;
@@ -1453,7 +1490,7 @@ html[data-body-font="system"] {
     black 34%,
     transparent 78%
   );
-  opacity: 0.18;
+  opacity: 0.12;
 }
 
 .readiness-score-plaque {
@@ -1462,19 +1499,19 @@ html[data-body-font="system"] {
   background:
     linear-gradient(
       145deg,
-      color-mix(in oklch, var(--card) 94%, white 5%),
-      color-mix(in oklch, var(--card) 82%, transparent)
+      color-mix(in oklch, var(--card) 92%, white 4%),
+      color-mix(in oklch, var(--card) 86%, transparent)
     ),
     conic-gradient(
       from 215deg,
-      color-mix(in oklch, var(--primary) 28%, transparent) 0
+      color-mix(in oklch, var(--primary) 18%, transparent) 0
         var(--score-angle, 0deg),
       transparent var(--score-angle, 0deg) 360deg
     );
-  border: 1px solid color-mix(in oklch, var(--border) 86%, transparent);
+  border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
   box-shadow:
-    inset 0 1px 0 color-mix(in oklch, var(--foreground) 8%, transparent),
-    0 18px 48px color-mix(in oklch, var(--background) 78%, transparent);
+    inset 0 1px 0 color-mix(in oklch, var(--foreground) 6%, transparent),
+    0 10px 28px color-mix(in oklch, var(--background) 64%, transparent);
 }
 
 .readiness-score-plaque::before {
@@ -1485,7 +1522,7 @@ html[data-body-font="system"] {
   background: linear-gradient(
     110deg,
     transparent,
-    color-mix(in oklch, var(--foreground) 7%, transparent),
+    color-mix(in oklch, var(--foreground) 4%, transparent),
     transparent
   );
   transform: translateX(-52%);
@@ -1504,12 +1541,12 @@ html[data-body-font="system"] {
       color-mix(in oklch, var(--chart-1) 24%, transparent),
       transparent 48%
     );
-  opacity: 0.48;
+  opacity: 0.32;
 }
 
 [data-theme="latte"] .readiness-card::after,
 [data-theme="claude-light"] .readiness-card::after {
-  opacity: 0.12;
+  opacity: 0.08;
 }
 
 [data-theme="latte"] .readiness-score-plaque,
@@ -1528,8 +1565,8 @@ html[data-body-font="system"] {
     );
   border-color: color-mix(in oklch, var(--border) 94%, var(--foreground) 6%);
   box-shadow:
-    inset 0 1px 0 color-mix(in oklch, white 42%, transparent),
-    0 14px 34px color-mix(in oklch, var(--foreground) 10%, transparent);
+    inset 0 1px 0 color-mix(in oklch, white 36%, transparent),
+    0 10px 26px color-mix(in oklch, var(--foreground) 8%, transparent);
 }
 
 .readiness-rail {
@@ -1548,7 +1585,7 @@ html[data-body-font="system"] {
     color-mix(in oklch, var(--foreground) 5%, transparent),
     transparent
   );
-  opacity: 0.48;
+  opacity: 0.28;
 }
 
 .readiness-rail > * {

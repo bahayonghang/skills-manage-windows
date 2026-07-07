@@ -1,4 +1,5 @@
 import { AgentWithStatus } from "@/types";
+import { DEFAULT_ENABLED_PLATFORM_IDS } from "@/lib/platformRegistry";
 
 export type PlatformCategoryKey = "coding" | "lobster";
 
@@ -7,24 +8,20 @@ export interface PlatformCategoryVisibility {
   lobster: boolean;
 }
 
-export const PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY = "platform_category_visibility";
+export const PLATFORM_CATEGORY_VISIBILITY_SETTING_KEY =
+  "platform_category_visibility";
 
-export const DEFAULT_ENABLED_PLATFORM_IDS = [
-  "claude-code",
-  "codex",
-  "grok",
-  "antigravity",
-  "antigravity-cli",
-  "opencode",
-  "kiro",
-] as const;
+export { DEFAULT_ENABLED_PLATFORM_IDS };
 
-const DEFAULT_ENABLED_PLATFORM_ID_SET = new Set<string>(DEFAULT_ENABLED_PLATFORM_IDS);
+const DEFAULT_ENABLED_PLATFORM_ID_SET = new Set<string>(
+  DEFAULT_ENABLED_PLATFORM_IDS,
+);
 
-export const DEFAULT_PLATFORM_CATEGORY_VISIBILITY: PlatformCategoryVisibility = {
-  coding: true,
-  lobster: false,
-};
+export const DEFAULT_PLATFORM_CATEGORY_VISIBILITY: PlatformCategoryVisibility =
+  {
+    coding: true,
+    lobster: false,
+  };
 
 export function getPlatformCategoryKey(category: string): PlatformCategoryKey {
   return category === "lobster" ? "lobster" : "coding";
@@ -35,7 +32,7 @@ export function isDefaultEnabledPlatform(agentId: string): boolean {
 }
 
 export function derivePlatformCategoryVisibility(
-  agents: AgentWithStatus[]
+  agents: AgentWithStatus[],
 ): PlatformCategoryVisibility {
   if (agents.length === 0) {
     return DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
@@ -46,20 +43,20 @@ export function derivePlatformCategoryVisibility(
       (agent) =>
         agent.id !== "central" &&
         getPlatformCategoryKey(agent.category) === "coding" &&
-        agent.is_enabled
+        agent.is_enabled,
     ),
     lobster: agents.some(
       (agent) =>
         agent.id !== "central" &&
         getPlatformCategoryKey(agent.category) === "lobster" &&
-        agent.is_enabled
+        agent.is_enabled,
     ),
   };
 }
 
 export function normalizePlatformCategoryVisibility(
   value: Partial<PlatformCategoryVisibility> | null | undefined,
-  fallback = DEFAULT_PLATFORM_CATEGORY_VISIBILITY
+  fallback = DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
 ): PlatformCategoryVisibility {
   return {
     coding: value?.coding ?? fallback.coding,
@@ -70,7 +67,7 @@ export function normalizePlatformCategoryVisibility(
 export function ensureAtLeastOnePlatformCategoryVisible(
   value: PlatformCategoryVisibility,
   fallback = DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-  agents: AgentWithStatus[] = []
+  agents: AgentWithStatus[] = [],
 ): PlatformCategoryVisibility {
   if (value.coding || value.lobster || agents.length === 0) {
     return value;
@@ -85,7 +82,7 @@ export function ensureAtLeastOnePlatformCategoryVisible(
 
 export function resolvePlatformCategoryVisibility(
   value: string | null | undefined,
-  agents: AgentWithStatus[]
+  agents: AgentWithStatus[],
 ): PlatformCategoryVisibility {
   const fallback = derivePlatformCategoryVisibility(agents);
 
@@ -98,7 +95,7 @@ export function resolvePlatformCategoryVisibility(
     return ensureAtLeastOnePlatformCategoryVisible(
       normalizePlatformCategoryVisibility(parsed, fallback),
       fallback,
-      agents
+      agents,
     );
   } catch {
     return fallback;
@@ -106,14 +103,14 @@ export function resolvePlatformCategoryVisibility(
 }
 
 export function parsePlatformCategoryVisibility(
-  value: string | null | undefined
+  value: string | null | undefined,
 ): PlatformCategoryVisibility {
   return resolvePlatformCategoryVisibility(value, []);
 }
 
 export function isPlatformAgentVisible(
   agent: AgentWithStatus,
-  categoryVisibility: PlatformCategoryVisibility
+  categoryVisibility: PlatformCategoryVisibility,
 ): boolean {
   if (agent.id === "central") {
     return true;
@@ -128,25 +125,31 @@ export function isPlatformAgentVisible(
 
 export function filterVisiblePlatformAgents(
   agents: AgentWithStatus[],
-  categoryVisibility: PlatformCategoryVisibility
+  categoryVisibility: PlatformCategoryVisibility,
 ): AgentWithStatus[] {
   const visibleAgents = agents.filter(
     (agent) =>
-      agent.id !== "central" && isPlatformAgentVisible(agent, categoryVisibility)
+      agent.id !== "central" &&
+      isPlatformAgentVisible(agent, categoryVisibility),
   );
 
-  if (visibleAgents.length > 0 || categoryVisibility.coding || categoryVisibility.lobster) {
+  if (
+    visibleAgents.length > 0 ||
+    categoryVisibility.coding ||
+    categoryVisibility.lobster
+  ) {
     return visibleAgents;
   }
 
   return agents.filter(
     (agent) =>
-      agent.id !== "central" && isPlatformAgentVisible(agent, DEFAULT_PLATFORM_CATEGORY_VISIBILITY)
+      agent.id !== "central" &&
+      isPlatformAgentVisible(agent, DEFAULT_PLATFORM_CATEGORY_VISIBILITY),
   );
 }
 
 export function sortPlatformVisibilityAgents(
-  agents: AgentWithStatus[]
+  agents: AgentWithStatus[],
 ): AgentWithStatus[] {
   return [...agents].sort((left, right) => {
     if (left.is_enabled !== right.is_enabled) {
@@ -154,10 +157,10 @@ export function sortPlatformVisibilityAgents(
     }
 
     const leftDefaultRank = DEFAULT_ENABLED_PLATFORM_IDS.indexOf(
-      left.id as (typeof DEFAULT_ENABLED_PLATFORM_IDS)[number]
+      left.id as (typeof DEFAULT_ENABLED_PLATFORM_IDS)[number],
     );
     const rightDefaultRank = DEFAULT_ENABLED_PLATFORM_IDS.indexOf(
-      right.id as (typeof DEFAULT_ENABLED_PLATFORM_IDS)[number]
+      right.id as (typeof DEFAULT_ENABLED_PLATFORM_IDS)[number],
     );
 
     if (leftDefaultRank !== -1 || rightDefaultRank !== -1) {

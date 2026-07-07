@@ -615,13 +615,9 @@ export interface SkillsShFileEntry {
 // ─── Portable State Types ───────────────────────────────────────────────────
 
 export type SkillportStateSourceStatus = "exists" | "will_add" | "duplicate";
-export type SkillportStateSkillStatus =
-  | "ready"
-  | "conflict"
-  | "missing"
-  | "unrestorable"
-  | "duplicate_skipped";
+export type SkillportStateSkillStatus = "ready" | "conflict" | "missing" | "unrestorable" | "duplicate_skipped";
 export type SkillportStateImportResolutionType = "overwrite" | "skip" | "rename";
+export type { SkillportStateExportedTarget } from "./portableState";
 
 export type SkillportStatePortabilityJobStatus =
   | "idle"

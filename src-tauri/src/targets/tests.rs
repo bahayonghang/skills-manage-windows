@@ -2,7 +2,6 @@ use super::*;
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
-    use sqlx::SqlitePool;
     use std::path::Path;
 
     #[derive(Default)]
@@ -66,11 +65,7 @@ pub(super) mod tests {
         }
     }
 
-    async fn memory_db() -> DbPool {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
+    use crate::test_support::mem_pool as memory_db;
 
     fn password_target() -> RemoteTargetConfig {
         RemoteTargetConfig {
@@ -126,6 +121,7 @@ pub(super) mod tests {
             password: target.password.clone(),
             target,
             askpass_helper: None,
+            runner: Arc::new(ProcessRunner),
         }
     }
 
@@ -183,6 +179,7 @@ pub(super) mod tests {
     fn wsl_base_command_passes_distribution_before_shell() {
         let connection = ConnectedWslTarget {
             target: wsl_target(),
+            runner: Arc::new(ProcessRunner),
         };
         let args = command_arg_strings(connection.base_command());
 
@@ -244,6 +241,16 @@ pub(super) mod tests {
         assert_eq!(
             remote_join("/home/alice", ".skillsmanage/skills"),
             "/home/alice/.skillsmanage/skills"
+        );
+    }
+
+    #[test]
+    fn remote_probe_script_matches_historical_literal_byte_for_byte() {
+        assert_eq!(
+            remote_probe_script(),
+            r#"printf 'HOME\t%s\n' "$HOME"
+printf 'OS\t%s\n' "$(uname -s 2>/dev/null || printf '%s' unknown)"
+mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#
         );
     }
 
@@ -430,6 +437,7 @@ pub(super) mod tests {
             password,
             target,
             askpass_helper: Some(helper),
+            runner: Arc::new(ProcessRunner),
         };
 
         let command = connection.base_command();
@@ -835,5 +843,166 @@ pub(super) mod tests {
         assert_eq!(summary.credential_status, None);
         assert_eq!(summary.has_stored_password, None);
         assert_eq!(summary.credential_error, None);
+    }
+
+    // ─── CommandRunner 注入：执行半边（base_command 之后）的单元测试 ─────────
+
+    use crate::test_support::FakeRunner;
+
+    fn key_target() -> RemoteTargetConfig {
+        let mut target = password_target();
+        target.auth_method = SshAuthMethod::Key;
+        target.key_path = "~/.ssh/id_ed25519".to_string();
+        target.credential_key = None;
+        target.password = None;
+        target
+    }
+
+    fn fake_ssh_connection() -> (Arc<FakeRunner>, ConnectedSshTarget) {
+        let runner = Arc::new(FakeRunner::new());
+        let connection = ConnectedSshTarget::for_tests_with_runner(key_target(), runner.clone());
+        (runner, connection)
+    }
+
+    fn fake_wsl_connection() -> (Arc<FakeRunner>, ConnectedWslTarget) {
+        let runner = Arc::new(FakeRunner::new());
+        let connection = ConnectedWslTarget {
+            target: wsl_target(),
+            runner: runner.clone(),
+        };
+        (runner, connection)
+    }
+
+    #[tokio::test]
+    async fn ssh_exists_maps_exit_codes_to_bool_and_error() {
+        let (runner, connection) = fake_ssh_connection();
+        runner.push_output(0, "", "");
+        runner.push_output(1, "", "");
+        runner.push_output(255, "", "ssh: connect refused");
+
+        assert!(connection.exists("/tmp/a").await.unwrap());
+        assert!(!connection.exists("/tmp/a").await.unwrap());
+        let error = connection.exists("/tmp/a").await.unwrap_err();
+        match error {
+            TargetsError::RemoteInspectFailed { path, detail } => {
+                assert_eq!(path, "/tmp/a");
+                assert_eq!(detail, "ssh: connect refused");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+
+        let calls = runner.calls();
+        assert_eq!(calls.len(), 3);
+        assert_eq!(
+            calls[0].args.last().map(String::as_str),
+            Some("test -e '/tmp/a'")
+        );
+        assert!(calls[0].stdin.is_none());
+    }
+
+    #[tokio::test]
+    async fn ssh_inspect_path_parses_symlink_output() {
+        let (runner, connection) = fake_ssh_connection();
+        runner.push_success("symlink\t/home/alice/.skillsmanage/skills/demo\n");
+
+        let info = connection.inspect_path("/home/alice/.claude/skills/demo").await;
+        assert_eq!(
+            info.unwrap(),
+            Some(RemotePathInfo {
+                file_type: "symlink".to_string(),
+                symlink_target: Some("/home/alice/.skillsmanage/skills/demo".to_string()),
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn ssh_run_script_pipes_script_via_stdin_with_quoted_args() {
+        let (runner, connection) = fake_ssh_connection();
+        runner.push_success("done\n");
+
+        let output = connection
+            .run_script("printf '%s' \"$1\"", &["a b", "c"])
+            .await
+            .unwrap();
+        assert_eq!(output, "done\n");
+
+        let calls = runner.calls();
+        assert_eq!(
+            calls[0].args.last().map(String::as_str),
+            Some("sh -s -- 'a b' 'c'")
+        );
+        assert_eq!(
+            calls[0].stdin.as_deref(),
+            Some("printf '%s' \"$1\"".as_bytes())
+        );
+    }
+
+    #[tokio::test]
+    async fn ssh_run_command_failure_carries_stderr_detail() {
+        let (runner, connection) = fake_ssh_connection();
+        runner.push_output(2, "", "rm: cannot remove '/x': Read-only file system");
+
+        let error = connection.run_command("rm -rf -- '/x'").await.unwrap_err();
+        match error {
+            TargetsError::RemoteCommandFailed { detail, .. } => {
+                assert_eq!(detail, "rm: cannot remove '/x': Read-only file system");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ssh_runner_start_failure_maps_to_start_ssh_error() {
+        let (runner, connection) = fake_ssh_connection();
+        runner.push_error(RunnerPhase::Start, "program not found");
+
+        let error = connection.run_command("true").await.unwrap_err();
+        assert!(error.to_string().contains("Failed to start ssh"));
+    }
+
+    #[tokio::test]
+    async fn wsl_exists_runs_through_login_shell_and_maps_exit_codes() {
+        let (runner, connection) = fake_wsl_connection();
+        runner.push_output(0, "", "");
+        runner.push_output(1, "", "");
+
+        assert!(connection.exists("/tmp/a").await.unwrap());
+        assert!(!connection.exists("/tmp/a").await.unwrap());
+
+        let calls = runner.calls();
+        assert_eq!(
+            calls[0].args,
+            vec!["-d", "Ubuntu-24.04", "--", "sh", "-lc", "test -e '/tmp/a'"]
+        );
+    }
+
+    #[tokio::test]
+    async fn wsl_run_script_passes_args_after_stdin_shell() {
+        let (runner, connection) = fake_wsl_connection();
+        runner.push_success("ok");
+
+        let output = connection.run_script("echo hi", &["x y"]).await.unwrap();
+        assert_eq!(output, "ok");
+
+        let calls = runner.calls();
+        assert_eq!(
+            calls[0].args,
+            vec!["-d", "Ubuntu-24.04", "--", "sh", "-s", "--", "x y"]
+        );
+        assert_eq!(calls[0].stdin.as_deref(), Some("echo hi".as_bytes()));
+    }
+
+    #[tokio::test]
+    async fn wsl_command_failure_carries_stderr_detail() {
+        let (runner, connection) = fake_wsl_connection();
+        runner.push_output(3, "", "cp: no space left");
+
+        let error = connection.run_command("cp -R a b").await.unwrap_err();
+        match error {
+            TargetsError::WslCommandFailed { detail, .. } => {
+                assert_eq!(detail, "cp: no space left");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 }

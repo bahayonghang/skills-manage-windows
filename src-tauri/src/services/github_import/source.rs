@@ -257,6 +257,9 @@ pub(crate) fn inspect_repo_skill_candidates_from_snapshot_at_path(
 
         match outcome {
             Ok(candidate) => {
+                if is_generic_remote_skill_candidate(&candidate) {
+                    continue;
+                }
                 if seen_names.insert(candidate.skill_name.clone()) {
                     valid_candidates.push(candidate);
                 }
@@ -300,6 +303,9 @@ pub(super) async fn build_remote_repo_skill_candidates_from_workspace(
             .map_err(GithubImportError::Budget)?;
         let candidate = build_remote_skill_candidate(repo, &manifest, raw, direct_endpoint)
             .map_err(|invalid| GithubImportError::InvalidCandidate(invalid.detail))?;
+        if is_generic_remote_skill_candidate(&candidate) {
+            continue;
+        }
         if !seen_names.insert(candidate.skill_name.clone()) {
             continue;
         }
@@ -379,6 +385,10 @@ pub(super) fn invalid_candidate_from_manifest(
         reason: reason.to_string(),
         detail: detail.to_string(),
     }
+}
+
+fn is_generic_remote_skill_candidate(candidate: &RemoteSkillCandidate) -> bool {
+    candidate.source_path != "." && candidate.skill_id == "skill"
 }
 
 pub(super) fn invalid_utf8_message(manifest: &SnapshotSkillManifest) -> String {
@@ -650,23 +660,8 @@ pub(super) fn is_safe_repo_relative_path(path: &str) -> bool {
             .all(|component| matches!(component, Component::Normal(_)))
 }
 pub(crate) fn parse_frontmatter(content: &str) -> Option<SkillFrontmatter> {
-    let content = content.trim_start_matches('\u{feff}').trim_start();
-    let opening_end = content.find('\n')?;
-    let opening = &content[..opening_end];
-    if opening.trim() != "---" {
-        return None;
-    }
-
-    let rest = &content[opening_end + 1..];
-    let mut offset = 0;
-    for line in rest.split_inclusive('\n') {
-        if line.trim() == "---" {
-            return serde_norway::from_str::<SkillFrontmatter>(&rest[..offset]).ok();
-        }
-        offset += line.len();
-    }
-
-    None
+    let block = crate::services::scanner::extract_frontmatter_block(content)?;
+    serde_norway::from_str::<SkillFrontmatter>(block).ok()
 }
 
 pub(super) fn sanitize_skill_id(raw: &str) -> Result<String, GithubImportError> {

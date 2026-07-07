@@ -19,6 +19,7 @@ mod exec;
 mod model;
 mod registry;
 mod remote;
+mod runner;
 #[cfg(test)]
 mod tests;
 mod wsl_discovery;
@@ -39,4 +40,5 @@ pub use exec::*;
 pub use model::*;
 pub use registry::TargetRegistry;
 pub use remote::*;
+pub(crate) use runner::{CommandRunner, ProcessRunner, RunnerError, RunnerPhase};
 pub use wsl_discovery::list_wsl_distributions_impl;

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 14
-- **Last Active**: 2026-06-12
+- **Total Sessions**: 29
+- **Last Active**: 2026-07-07
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~541 | Active |
+| `journal-1.md` | ~1286 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,21 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 29 | 2026-07-07 | 平台视图安装来源快速导航栏（07-07-ui-platform-origin-nav） | `6a62e259`, `ee60e3be`, `b3a4cb76` | `dev` |
+| 28 | 2026-07-06 | UI 设计审计落地:六子任务全量实施 | `425143de`, `7be2c021`, `4462e352`, `b3c8e07b`, `2532f068`, `47659e35`, `da3e428d`, `c78c3b67` | `dev` |
+| 27 | 2026-07-06 | Update check failure feedback | `5ba049db` | `dev` |
+| 26 | 2026-07-05 | typed-ipc-adapter：类型化 IPC adapter 与 fixture seam 全程落地 | `c17f608e`, `dd9bfbce`, `9da9b492`, `95c8cd1c`, `4767cad8`, `624c09c4`, `d9ada6b3`, `34ff4aa0`, `a01c428d` | `dev` |
+| 25 | 2026-07-05 | Platform management module：registry 登记点 + 共享多选 + 展示分支收敛 | `1dfa9ca9`, `6d59e707`, `2407fd3c`, `ec7a7bd2`, `4419a074` | `dev` |
+| 24 | 2026-07-04 | Update Center 落 service 域：阶段 D inventory 归位 + 阶段 E 收尾 | `26bee16f`, `ca5e4e56`, `0907a5f3` | `dev` |
+| 23 | 2026-07-04 | 架构评审 + 统一 Redaction policy 落地 | `225027a3`, `4855edd2`, `abc3f94e`, `3b4153f6`, `6d94c937`, `8328cd78` | `dev` |
+| 22 | 2026-06-24 | Central skill platform uninstall button | `a64cdce3`, `cf3a055c` | `dev` |
+| 21 | 2026-06-24 | Central Skills interface polish | `97fabbd9`, `8bc7e0bb` | `dev` |
+| 20 | 2026-06-24 | Dashboard interface polish | `5316674d` | `dev` |
+| 19 | 2026-06-24 | 修复跨平台快捷键提示 | `42afa5e6`, `d1429dbb`, `1d297ca3` | `dev` |
+| 18 | 2026-06-19 | Target-aware Central state portability | `011dac1d`, `3a976b1a`, `c98283be` | `dev` |
+| 17 | 2026-06-18 | Align repository-scoped update check labels | `2876b79`, `d4325f1` | `dev` |
+| 16 | 2026-06-15 | Archive skill detail platform installs task | `91cb9d1`, `b08602c` | `dev` |
+| 15 | 2026-06-13 | Filter generic skill updates and style source metadata | `1b01fd8` | `dev` |
 | 14 | 2026-06-12 | thiserror 批次3：尾批五域+db/repos 透传+全局收尾 | `7cd0fe8`, `ac0d618`, `4bdcf09`, `997a494`, `f1229d1`, `5353479`, `d62b8a5`, `ea6631f`, `83a802d`, `53d152b`, `50023a1` | `dev` |
 | 13 | 2026-06-12 | thiserror 批次2：中批五域错误枚举迁移 | `b3633cb`, `b3ebf3c`, `75cf0d3`, `76fd327`, `4b37031`, `fd0e7d0` | `dev` |
 | 12 | 2026-06-11 | 优化更新机制重构 | `0b9edba`, `aacf783`, `e2357cd` | `dev` |

@@ -1,15 +1,10 @@
 use super::*;
 use crate::db::{self, Skill};
 use crate::services::github_import::DuplicateResolution;
-use sqlx::SqlitePool;
+use crate::targets::{ActiveTarget, RemoteTargetConfig, SshAuthMethod, WslTargetConfig};
+use crate::test_support::mem_pool as setup_test_db;
 use std::collections::{HashMap, HashSet};
 use std::sync::{atomic::AtomicBool, Arc};
-
-async fn setup_test_db() -> DbPool {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database(&pool).await.unwrap();
-    pool
-}
 
 fn github_source(path: &str) -> PortableCentralSkillSource {
     github_source_for_repo("openai", "skills", "main", path)
@@ -38,6 +33,7 @@ fn manifest_with_skill(id: &str, path: &str) -> SkillportStateManifest {
         exported_at: "2026-04-25T00:00:00Z".to_string(),
         exported_from: ExportedFrom {
             app: "SkillPort".to_string(),
+            target: None,
         },
         github_sources: vec![PortableGithubSource {
             name: "OpenAI Skills".to_string(),
@@ -63,13 +59,47 @@ fn manifest_with_skill(id: &str, path: &str) -> SkillportStateManifest {
 #[tokio::test]
 async fn export_empty_state_produces_manifest() {
     let pool = setup_test_db().await;
-    let json = export_skillport_state_impl(&pool, None, None)
+    let json = export_skillport_state_impl(&pool, None, None, None)
         .await
         .unwrap();
     let manifest = parse_manifest(&json).unwrap();
     assert_eq!(manifest.kind, EXPORT_KIND);
     assert_eq!(manifest.version, EXPORT_VERSION);
     assert!(manifest.github_sources.is_empty());
+}
+
+#[test]
+fn parse_manifest_accepts_v1_without_target_metadata() {
+    let json = r#"{"kind":"skillport/state-export","version":1,"exportedAt":"2026-04-25T00:00:00Z","exportedFrom":{"app":"SkillPort"},"githubSources":[],"centralSkills":[],"unrestorableSkills":[]}"#;
+
+    let manifest = parse_manifest(json).unwrap();
+
+    assert_eq!(manifest.exported_from.app, "SkillPort");
+    assert_eq!(manifest.exported_from.target, None);
+}
+
+#[tokio::test]
+async fn export_includes_target_metadata_when_provided() {
+    let pool = setup_test_db().await;
+    let target = PortableStateTargetContext {
+        id: "wsl-ubuntu".to_string(),
+        kind: "wsl".to_string(),
+        label: "Ubuntu".to_string(),
+    };
+
+    let json = export_skillport_state_impl(&pool, Some(&target), None, None)
+        .await
+        .unwrap();
+    let manifest = parse_manifest(&json).unwrap();
+
+    assert_eq!(
+        manifest.exported_from.target,
+        Some(ExportedTarget {
+            id: "wsl-ubuntu".to_string(),
+            kind: "wsl".to_string(),
+            label: "Ubuntu".to_string(),
+        })
+    );
 }
 
 #[tokio::test]
@@ -129,7 +159,7 @@ async fn export_includes_github_skill_and_unrestorable_local_skill() {
     db::upsert_skill(&pool, &local).await.unwrap();
 
     let manifest = parse_manifest(
-        &export_skillport_state_impl(&pool, None, None)
+        &export_skillport_state_impl(&pool, None, None, None)
             .await
             .unwrap(),
     )
@@ -212,7 +242,7 @@ async fn export_counts_distinct_github_repositories_backing_central_skills() {
     .unwrap();
 
     let manifest = parse_manifest(
-        &export_skillport_state_impl(&pool, None, None)
+        &export_skillport_state_impl(&pool, None, None, None)
             .await
             .unwrap(),
     )
@@ -435,6 +465,7 @@ async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_warning() 
         exported_at: "2026-04-25T00:00:00Z".to_string(),
         exported_from: ExportedFrom {
             app: "SkillPort".to_string(),
+            target: None,
         },
         github_sources: vec![],
         central_skills: vec![
@@ -534,6 +565,47 @@ async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_warning() 
         Some("https://github.com/other/skills/tree/main")
     );
     assert_eq!(preview.warnings[0].source_path, None);
+}
+
+#[test]
+fn portable_import_target_kind_maps_local_and_remote_targets() {
+    assert_eq!(
+        portable_import_target_kind(&ActiveTarget::Local),
+        PortableImportTargetKind::Local
+    );
+
+    let ssh = ActiveTarget::Ssh(Box::new(RemoteTargetConfig {
+        id: "ssh-dev".to_string(),
+        label: "SSH Dev".to_string(),
+        host: "example.com".to_string(),
+        username: "dev".to_string(),
+        port: 22,
+        auth_method: SshAuthMethod::Key,
+        key_path: String::new(),
+        credential_key: None,
+        protected_password: None,
+        password: None,
+        remote_home: "/home/dev".to_string(),
+        remote_os: "linux".to_string(),
+        symlink_enabled: true,
+    }));
+    assert_eq!(
+        portable_import_target_kind(&ssh),
+        PortableImportTargetKind::Remote
+    );
+
+    let wsl = ActiveTarget::Wsl(Box::new(WslTargetConfig {
+        id: "wsl-ubuntu".to_string(),
+        label: "Ubuntu".to_string(),
+        distribution: "Ubuntu".to_string(),
+        remote_home: "/home/dev".to_string(),
+        remote_os: "linux".to_string(),
+        symlink_enabled: true,
+    }));
+    assert_eq!(
+        portable_import_target_kind(&wsl),
+        PortableImportTargetKind::Remote
+    );
 }
 
 #[tokio::test]

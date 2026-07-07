@@ -1,6 +1,5 @@
 import { create } from "zustand";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
-import { invokeCommand } from "@/lib/ipc";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { DirectoryTreeEntry, ProjectUsingSkill, SkillDetail, SkillDetailRequest } from "@/types";
 import { parseBackendError } from "@/lib/backendError";
@@ -255,9 +254,9 @@ export const useSkillDetailStore = create<SkillDetailState>((set, get) => ({
       return;
     }
     try {
-      const detail = await invokeCommand("get_skill_detail", buildDetailInvokeArgs(detailRequest));
+      const detail = await invoke("get_skill_detail", buildDetailInvokeArgs(detailRequest));
       const resolvedRequest = setActiveDetailRequestFromDetail(detailRequest, detail);
-      const content = await invokeCommand("read_file_by_path", buildPathInvokeArgs(detail.file_path, resolvedRequest));
+      const content = await invoke("read_file_by_path", buildPathInvokeArgs(detail.file_path, resolvedRequest));
       set({ detail, content, isLoading: false });
     } catch (err) {
       set({ error: String(err), isLoading: false });
@@ -352,7 +351,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set, get) => ({
       });
       // Reload detail so the installations list reflects the new install.
       const detailRequest = getActiveDetailRequest(skillId);
-      const detail = await invokeCommand("get_skill_detail", buildDetailInvokeArgs(detailRequest));
+      const detail = await invoke("get_skill_detail", buildDetailInvokeArgs(detailRequest));
       setActiveDetailRequestFromDetail(detailRequest, detail);
       set({ detail, installingAgentId: null });
     } catch (err) {
@@ -381,7 +380,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set, get) => ({
       });
       // Reload detail so the installations list reflects the removal.
       const detailRequest = getActiveDetailRequest(skillId);
-      const detail = await invokeCommand("get_skill_detail", buildDetailInvokeArgs(detailRequest));
+      const detail = await invoke("get_skill_detail", buildDetailInvokeArgs(detailRequest));
       setActiveDetailRequestFromDetail(detailRequest, detail);
       set({ detail, installingAgentId: null });
     } catch (err) {
@@ -395,7 +394,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set, get) => ({
     }
     try {
       const detailRequest = getActiveDetailRequest(skillId);
-      const detail = await invokeCommand("get_skill_detail", buildDetailInvokeArgs(detailRequest));
+      const detail = await invoke("get_skill_detail", buildDetailInvokeArgs(detailRequest));
       setActiveDetailRequestFromDetail(detailRequest, detail);
       set((state) => ({
         detail,
@@ -426,7 +425,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set, get) => ({
     }
     const detailRequest = getActiveDetailRequest(detail.id);
     try {
-      const text = await invokeCommand("read_file_by_path", buildPathInvokeArgs(path, detailRequest));
+      const text = await invoke("read_file_by_path", buildPathInvokeArgs(path, detailRequest));
       set({ fileContent: text, fileIsLoading: false });
     } catch {
       set({ fileContent: null, fileIsLoading: false });
@@ -450,7 +449,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set, get) => ({
     }
     const detailRequest = getActiveDetailRequest(detail.id);
     try {
-      const directoryTree = await invokeCommand("list_directory_tree", buildPathInvokeArgs(path, detailRequest));
+      const directoryTree = await invoke("list_directory_tree", buildPathInvokeArgs(path, detailRequest));
       set({ directoryTree: directoryTree ?? [], isDirectoryLoading: false });
     } catch {
       set({ directoryTree: [], isDirectoryLoading: false });
@@ -492,7 +491,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set, get) => ({
     }
     const detailRequest = getActiveDetailRequest(detail.id);
     try {
-      await invokeCommand("open_in_file_manager", buildPathInvokeArgs(path, detailRequest));
+      await invoke("open_in_file_manager", buildPathInvokeArgs(path, detailRequest));
     } catch {
       // silently ignore — opener failure should not surface as a hard error
     }

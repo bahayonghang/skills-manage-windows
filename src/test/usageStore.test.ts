@@ -4,6 +4,12 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { useUsageStore } from "../stores/usageStore";
 import { useTargetStore } from "../stores/targetStore";
 import { useUsageBootstrap } from "../pages/skillUsageBindings";
+import {
+  ipcInvokeCalls,
+  ipcInvokedCommands,
+  mockIpcCommand,
+  mockIpcCommands,
+} from "./ipcMock";
 
 vi.mock("sonner", () => ({
   toast: {
@@ -13,17 +19,8 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/lib/tauri", () => ({
-  invoke: vi.fn(),
-  listen: vi.fn(),
-  isTauriRuntime: vi.fn(() => true),
-}));
-
-import { invoke, isTauriRuntime } from "@/lib/tauri";
 import { toast } from "sonner";
 
-const invokeMock = vi.mocked(invoke);
-const runtimeMock = vi.mocked(isTauriRuntime);
 const toastInfoMock = vi.mocked(toast.info);
 const initialActions = {
   refresh: useUsageStore.getState().refresh,
@@ -45,10 +42,30 @@ function overviewFixture() {
   };
 }
 
+function refreshPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    summary: {
+      cached: false,
+      callsWritten: 4,
+      providersAvailable: 1,
+      scannedAtMs: 1700000000000,
+    },
+    overview: overviewFixture(),
+    recent: [],
+    providers: [],
+    scope: {
+      targetId: "local",
+      label: "Local",
+      isRemote: false,
+      remoteReachable: false,
+    },
+    usedCachedData: false,
+    refreshError: null,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
-  invokeMock.mockReset();
-  runtimeMock.mockReset();
-  runtimeMock.mockReturnValue(true);
   toastInfoMock.mockReset();
   useUsageStore.setState({
     overview: null,
@@ -65,37 +82,24 @@ beforeEach(() => {
   });
   useTargetStore.setState({
     targets: [{ id: "local", kind: "local", label: "Local", isActive: true }],
-    activeTarget: { id: "local", kind: "local", label: "Local", isActive: true },
+    activeTarget: {
+      id: "local",
+      kind: "local",
+      label: "Local",
+      isActive: true,
+    },
   });
 });
 
 describe("usageStore", () => {
   it("refresh uses the single usage_refresh payload and stores all returned panels", async () => {
-    invokeMock.mockResolvedValue({
-      summary: {
-        cached: false,
-        callsWritten: 4,
-        providersAvailable: 1,
-        scannedAtMs: 1700000000000,
-      },
-      overview: overviewFixture(),
-      recent: [],
-      providers: [],
-      scope: {
-        targetId: "local",
-        label: "Local",
-        isRemote: false,
-        remoteReachable: false,
-      },
-      usedCachedData: false,
-      refreshError: null,
-    });
+    mockIpcCommand("usage_refresh", refreshPayload());
 
     const result = await useUsageStore.getState().refresh(true);
 
     expect(result?.summary.callsWritten).toBe(4);
-    expect(invokeMock).toHaveBeenCalledWith("usage_refresh", { force: true });
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(ipcInvokeCalls("usage_refresh")[0].args).toEqual({ force: true });
+    expect(ipcInvokeCalls()).toHaveLength(1);
 
     const state = useUsageStore.getState();
     expect(state.overview?.kpis.totalCalls).toBe(4);
@@ -104,60 +108,25 @@ describe("usageStore", () => {
   });
 
   it("deduplicates concurrent refresh calls for the same active target", async () => {
-    type RefreshPayload = {
-      summary: {
-        cached: boolean;
-        callsWritten: number;
-        providersAvailable: number;
-        scannedAtMs: number;
-      };
-      overview: ReturnType<typeof overviewFixture>;
-      recent: [];
-      providers: [];
-      scope: {
-        targetId: string;
-        label: string;
-        isRemote: boolean;
-        remoteReachable: boolean;
-      };
-      usedCachedData: boolean;
-      refreshError: null;
-    };
+    type RefreshPayload = ReturnType<typeof refreshPayload>;
     let resolveRefresh: (value: RefreshPayload) => void = () => {
       throw new Error("refresh resolver missing");
     };
-    invokeMock.mockImplementation(
+    mockIpcCommand(
+      "usage_refresh",
       () =>
         new Promise<RefreshPayload>((resolve) => {
           resolveRefresh = resolve;
-        })
+        }),
     );
 
     const first = useUsageStore.getState().refresh(false);
     const second = useUsageStore.getState().refresh(true);
 
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(ipcInvokeCalls("usage_refresh")).toHaveLength(1);
     expect(second).not.toBeNull();
 
-    resolveRefresh({
-      summary: {
-        cached: false,
-        callsWritten: 4,
-        providersAvailable: 1,
-        scannedAtMs: 1700000000000,
-      },
-      overview: overviewFixture(),
-      recent: [],
-      providers: [],
-      scope: {
-        targetId: "local",
-        label: "Local",
-        isRemote: false,
-        remoteReachable: false,
-      },
-      usedCachedData: false,
-      refreshError: null,
-    });
+    resolveRefresh(refreshPayload());
 
     const [firstResult, secondResult] = await Promise.all([first, second]);
     expect(firstResult?.summary.callsWritten).toBe(4);
@@ -165,28 +134,35 @@ describe("usageStore", () => {
   });
 
   it("keeps cached payload on remote refresh failure and shows cached-data toast", async () => {
-    invokeMock.mockResolvedValue({
-      summary: {
-        cached: true,
-        callsWritten: 0,
-        providersAvailable: 0,
-        scannedAtMs: 1700000000000,
-      },
-      overview: overviewFixture(),
-      recent: [],
-      providers: [],
-      scope: {
-        targetId: "ssh-prod",
-        label: "alice@prod",
-        isRemote: true,
-        remoteReachable: false,
-      },
-      usedCachedData: true,
-      refreshError: "ssh timeout",
-    });
+    mockIpcCommand(
+      "usage_refresh",
+      refreshPayload({
+        summary: {
+          cached: true,
+          callsWritten: 0,
+          providersAvailable: 0,
+          scannedAtMs: 1700000000000,
+        },
+        scope: {
+          targetId: "ssh-prod",
+          label: "alice@prod",
+          isRemote: true,
+          remoteReachable: false,
+        },
+        usedCachedData: true,
+        refreshError: "ssh timeout",
+      }),
+    );
     useTargetStore.setState({
-      targets: [{ id: "ssh-prod", kind: "ssh", label: "alice@prod", isActive: true }],
-      activeTarget: { id: "ssh-prod", kind: "ssh", label: "alice@prod", isActive: true },
+      targets: [
+        { id: "ssh-prod", kind: "ssh", label: "alice@prod", isActive: true },
+      ],
+      activeTarget: {
+        id: "ssh-prod",
+        kind: "ssh",
+        label: "alice@prod",
+        isActive: true,
+      },
     });
 
     const result = await useUsageStore.getState().refresh(true);
@@ -200,7 +176,9 @@ describe("usageStore", () => {
   });
 
   it("refresh writes error on backend failure and stops refreshing", async () => {
-    invokeMock.mockRejectedValue(new Error("io error"));
+    mockIpcCommand("usage_refresh", () =>
+      Promise.reject(new Error("io error")),
+    );
     const summary = await useUsageStore.getState().refresh(false);
     expect(summary).toBeNull();
     const state = useUsageStore.getState();
@@ -208,33 +186,31 @@ describe("usageStore", () => {
     expect(state.refreshing).toBe(false);
   });
 
-  it("falls back to fixture overview when not running in Tauri", async () => {
-    runtimeMock.mockReturnValue(false);
-    await useUsageStore.getState().refresh(false);
-    const state = useUsageStore.getState();
-    expect(state.overview?.heatmap.length).toBe(16 * 7);
-    expect(state.providers.length).toBe(8);
-  });
-
   it("selectSource reloads overview and recent with the selected source", async () => {
-    invokeMock.mockResolvedValueOnce({
-      ...overviewFixture(),
-      kpis: {
-        ...overviewFixture().kpis,
-        totalCalls: 2,
-        uniqueSessions: 2,
+    mockIpcCommands({
+      usage_get_overview: {
+        ...overviewFixture(),
+        kpis: {
+          ...overviewFixture().kpis,
+          totalCalls: 2,
+          uniqueSessions: 2,
+        },
       },
+      usage_get_recent: [],
     });
-    invokeMock.mockResolvedValueOnce([]);
 
     await useUsageStore.getState().selectSource("Claude Code");
 
     expect(useUsageStore.getState().selectedSource).toBe("Claude Code");
-    expect(invokeMock).toHaveBeenNthCalledWith(1, "usage_get_overview", {
+    expect(ipcInvokedCommands()).toEqual([
+      "usage_get_overview",
+      "usage_get_recent",
+    ]);
+    expect(ipcInvokeCalls("usage_get_overview")[0].args).toEqual({
       topSkillsLimit: 50,
       source: "Claude Code",
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(2, "usage_get_recent", {
+    expect(ipcInvokeCalls("usage_get_recent")[0].args).toEqual({
       limit: 20,
       source: "Claude Code",
     });
@@ -242,52 +218,38 @@ describe("usageStore", () => {
 
   it("refresh preserves selected source when the provider still has calls", async () => {
     useUsageStore.setState({ selectedSource: "Claude Code" });
-    invokeMock.mockResolvedValueOnce({
-      summary: {
-        cached: false,
-        callsWritten: 4,
-        providersAvailable: 1,
-        scannedAtMs: 1700000000000,
-      },
-      overview: overviewFixture(),
-      recent: [],
-      providers: [
-        {
-          providerId: "claude-code",
-          displayName: "Claude Code",
-          available: true,
-          callCount: 4,
-          scannedAtMs: 1700000000000,
+    mockIpcCommands({
+      usage_refresh: refreshPayload({
+        providers: [
+          {
+            providerId: "claude-code",
+            displayName: "Claude Code",
+            available: true,
+            callCount: 4,
+            scannedAtMs: 1700000000000,
+          },
+        ],
+      }),
+      usage_get_overview: {
+        ...overviewFixture(),
+        kpis: {
+          ...overviewFixture().kpis,
+          totalCalls: 4,
+          uniqueSessions: 2,
         },
-      ],
-      scope: {
-        targetId: "local",
-        label: "Local",
-        isRemote: false,
-        remoteReachable: false,
       },
-      usedCachedData: false,
-      refreshError: null,
+      usage_get_recent: [],
     });
-    invokeMock.mockResolvedValueOnce({
-      ...overviewFixture(),
-      kpis: {
-        ...overviewFixture().kpis,
-        totalCalls: 4,
-        uniqueSessions: 2,
-      },
-    });
-    invokeMock.mockResolvedValueOnce([]);
 
     await useUsageStore.getState().refresh(true);
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(ipcInvokeCalls()).toHaveLength(3));
 
     expect(useUsageStore.getState().selectedSource).toBe("Claude Code");
-    expect(invokeMock).toHaveBeenNthCalledWith(2, "usage_get_overview", {
+    expect(ipcInvokeCalls("usage_get_overview")[0].args).toEqual({
       topSkillsLimit: 50,
       source: "Claude Code",
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(3, "usage_get_recent", {
+    expect(ipcInvokeCalls("usage_get_recent")[0].args).toEqual({
       limit: 20,
       source: "Claude Code",
     });
@@ -295,38 +257,31 @@ describe("usageStore", () => {
 
   it("refresh falls back to all platforms when selected provider has no calls", async () => {
     useUsageStore.setState({ selectedSource: "Claude Code" });
-    invokeMock.mockResolvedValue({
-      summary: {
-        cached: false,
-        callsWritten: 0,
-        providersAvailable: 0,
-        scannedAtMs: 1700000000000,
-      },
-      overview: overviewFixture(),
-      recent: [],
-      providers: [
-        {
-          providerId: "claude-code",
-          displayName: "Claude Code",
-          available: true,
-          callCount: 0,
+    mockIpcCommand(
+      "usage_refresh",
+      refreshPayload({
+        summary: {
+          cached: false,
+          callsWritten: 0,
+          providersAvailable: 0,
           scannedAtMs: 1700000000000,
         },
-      ],
-      scope: {
-        targetId: "local",
-        label: "Local",
-        isRemote: false,
-        remoteReachable: false,
-      },
-      usedCachedData: false,
-      refreshError: null,
-    });
+        providers: [
+          {
+            providerId: "claude-code",
+            displayName: "Claude Code",
+            available: true,
+            callCount: 0,
+            scannedAtMs: 1700000000000,
+          },
+        ],
+      }),
+    );
 
     await useUsageStore.getState().refresh(true);
 
     expect(useUsageStore.getState().selectedSource).toBeNull();
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(ipcInvokeCalls()).toHaveLength(1);
   });
 
   it("bootstrap refreshes when active target differs from cached usage scope inside TTL", async () => {
@@ -351,7 +306,12 @@ describe("usageStore", () => {
         { id: "local", kind: "local", label: "Local", isActive: false },
         { id: "ssh-prod", kind: "ssh", label: "prod", isActive: true },
       ],
-      activeTarget: { id: "ssh-prod", kind: "ssh", label: "prod", isActive: true },
+      activeTarget: {
+        id: "ssh-prod",
+        kind: "ssh",
+        label: "prod",
+        isActive: true,
+      },
     });
 
     renderHook(() => useUsageBootstrap());
@@ -369,7 +329,7 @@ describe("usageStore", () => {
       () =>
         new Promise<() => void>((resolve) => {
           resolveUnlisten = resolve;
-        })
+        }),
     );
     useUsageStore.setState({
       overview: overviewFixture(),
@@ -394,7 +354,9 @@ describe("usageStore", () => {
   });
 
   it("resolveSkillId returns null on backend failure", async () => {
-    invokeMock.mockRejectedValue(new Error("nope"));
+    mockIpcCommand("usage_resolve_skill_id", () =>
+      Promise.reject(new Error("nope")),
+    );
     const id = await useUsageStore.getState().resolveSkillId("review");
     expect(id).toBeNull();
   });

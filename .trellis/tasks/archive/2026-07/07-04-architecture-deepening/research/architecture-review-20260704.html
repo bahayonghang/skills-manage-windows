@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Architecture review — SkillPort</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+</script>
+<style>
+  .seam { border-style: dashed; }
+  .deep { background: linear-gradient(135deg, #0f172a, #1e293b); color: #f8fafc; }
+  .band { border-left-width: 6px; }
+  pre.mermaid { display: flex; justify-content: center; }
+  .chip { font-size: 10px; line-height: 1; padding: 3px 6px; border-radius: 9999px; }
+</style>
+</head>
+<body class="bg-stone-50 text-slate-900 font-sans antialiased">
+<main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+
+<!-- ============ HEADER ============ -->
+<header class="space-y-4">
+  <h1 class="font-serif text-4xl tracking-tight">Architecture review — SkillPort</h1>
+  <p class="text-sm text-slate-500">2026-07-04 · branch <span class="font-mono">dev</span> · 范围：<span class="font-mono">src/</span>（React）+ <span class="font-mono">src-tauri/src/</span>（Rust，67.7k 行）· 3 个走查代理 + 关键结论人工复核</p>
+  <div class="flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600 border-t border-b border-stone-200 py-3">
+    <span><span class="inline-block w-3 h-3 border-2 border-slate-500 align-[-1px] mr-1"></span>module</span>
+    <span><span class="inline-block w-3 h-0 border-t-2 border-dashed border-slate-500 align-[3px] mr-1"></span>seam</span>
+    <span><span class="inline-block w-3 h-0 border-t-2 border-red-600 align-[3px] mr-1"></span>跨 seam 泄漏</span>
+    <span><span class="inline-block w-3 h-3 deep align-[-1px] mr-1"></span>deep module</span>
+    <span class="ml-auto flex gap-2">
+      <span class="chip bg-emerald-100 text-emerald-800 font-semibold">Strong</span>
+      <span class="chip bg-amber-100 text-amber-800 font-semibold">Worth exploring</span>
+      <span class="chip bg-slate-200 text-slate-700 font-semibold">Speculative</span>
+    </span>
+  </div>
+</header>
+
+<!-- ============ CONTEXT.MD 校准 ============ -->
+<section class="space-y-3">
+  <h2 class="font-serif text-2xl">CONTEXT.md 六个优先方向 · 现状校准</h2>
+  <p class="text-sm text-slate-600">先对账再提案：两项已落地，一项被证据推翻，三项收窄为更小的真实摩擦。</p>
+  <div class="overflow-hidden rounded-lg border border-stone-200 bg-white text-sm">
+    <table class="w-full">
+      <tbody class="divide-y divide-stone-100">
+        <tr><td class="px-4 py-2.5 w-64 font-medium">1 统一 Path policy Module</td><td class="px-4 py-2.5"><span class="chip bg-amber-100 text-amber-800">半完成</span> local 半边已收进 <span class="font-mono text-xs">paths.rs</span>（712 行）；remote 半边仍散落 → <a href="#path-policy" class="text-emerald-700 underline">卡片 6</a></td></tr>
+        <tr><td class="px-4 py-2.5 font-medium">2 提取 Platform management Module</td><td class="px-4 py-2.5"><span class="chip bg-amber-100 text-amber-800">摩擦转移</span> 后端定义已集中在 <span class="font-mono text-xs">db/seed.rs</span>；真实摩擦在前端分组/多选 → <a href="#platform-management" class="text-emerald-700 underline">卡片 3</a></td></tr>
+        <tr><td class="px-4 py-2.5 font-medium">3 加深 Operation Log Module</td><td class="px-4 py-2.5"><span class="chip bg-red-100 text-red-800">摩擦坐实</span> <span class="font-mono text-xs">operation_log.rs</span> 本身已是 deep module；泄漏在 redaction 策略三份漂移 → <a href="#redaction" class="text-emerald-700 underline">卡片 1</a></td></tr>
+        <tr><td class="px-4 py-2.5 font-medium">4 拆出 Discover scan core</td><td class="px-4 py-2.5"><span class="chip bg-emerald-100 text-emerald-800">大体已有</span> <span class="font-mono text-xs">scanner/mod.rs</span>（745 行）在位；残余是 frontmatter 解析两份分叉 → <a href="#frontmatter" class="text-emerald-700 underline">卡片 9</a></td></tr>
+        <tr><td class="px-4 py-2.5 font-medium">5 收窄 Central Skills workflow Modules</td><td class="px-4 py-2.5"><span class="chip bg-emerald-100 text-emerald-800">已落地</span> query / delete / files / common + delete/repository 已按 workflow 拆分，无需再动</td></tr>
+        <tr><td class="px-4 py-2.5 font-medium">6 条件拆分 Settings store</td><td class="px-4 py-2.5"><span class="chip bg-slate-200 text-slate-700">证据不支持</span> 消费方均为细粒度 selector，theme/语言另有归属；按约束（调用依赖未变小）<b>移出清单</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 space-y-1">
+    <p>⚠ 文档即 interface 的一部分，两处与实现不符：<b>CLAUDE.md</b> 称 InstallDialog“默认勾选已链接平台”，实际默认勾选<b>全部</b> enabled/visible 目标（<span class="font-mono text-xs">InstallDialog.tsx:112-152</span>），linked 只是徽标。</p>
+    <p>⚠ <b>obsidian</b> 域是全仓唯一 service + command 双层 0 测试的域（其余域 7–66 条）——见卡片 7 的首个受益者。</p>
+  </div>
+</section>
+
+<!-- ============ CANDIDATES ============ -->
+<section id="candidates" class="space-y-12">
+  <h2 class="font-serif text-2xl">Deepening 候选（9）</h2>
+
+  <!-- ======== 1 REDACTION ======== -->
+  <article id="redaction" class="rounded-xl border border-stone-200 bg-white p-6 space-y-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="chip bg-emerald-100 text-emerald-800 font-semibold">Strong</span>
+      <span class="chip bg-slate-100 text-slate-600">in-process</span>
+      <span class="chip bg-indigo-50 text-indigo-700">CONTEXT.md 优先 #3</span>
+      <h3 class="w-full font-serif text-xl mt-1">1 · 统一 Redaction policy —— 一份敏感字段契约，两个日志层共用</h3>
+    </div>
+    <div class="font-mono text-xs text-slate-600 bg-stone-50 rounded p-3 leading-relaxed">
+      src-tauri/src/operation_log.rs:36-46（词表，含 passphrase）· :296-329 sanitize_details_value<br/>
+      src-tauri/src/logging.rs:702-736 is_sensitive_key（8 词，<span class="text-red-600">无 passphrase</span>）· :623-648 redact_sensitive_line<br/>
+      src-tauri/src/targets/model.rs:101（passphrase 字段真实存在）
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — 一个概念，三份 implementation</p>
+        <div class="space-y-2 text-xs">
+          <div class="border-2 border-slate-400 rounded p-2">
+            <p class="font-mono font-semibold">operation_log::sanitize_details_value</p>
+            <p class="text-slate-500 mt-1">9 词 · passphrase ✓ · 标记 <span class="font-mono">[redacted]</span></p>
+          </div>
+          <div class="border-2 border-red-400 rounded p-2">
+            <p class="font-mono font-semibold">logging::redact_json_map</p>
+            <p class="text-red-600 mt-1">8 词 · passphrase ✗ · 标记 <span class="font-mono">[REDACTED]</span></p>
+          </div>
+          <div class="border-2 border-red-400 rounded p-2">
+            <p class="font-mono font-semibold">logging::redact_sensitive_line</p>
+            <p class="text-red-600 mt-1">正则版 · passphrase ✗</p>
+          </div>
+          <p class="text-red-700 font-medium pt-1">⚠ 已漂移：SSH passphrase 在 Operation Log 被脱敏，进 Runtime Log（skillport-YYYY-MM-DD.log）原文泄漏</p>
+        </div>
+      </div>
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">After — 一个 seam，两个调用方</p>
+        <div class="flex flex-col items-center gap-0 text-xs">
+          <div class="flex gap-3 w-full">
+            <div class="flex-1 border-2 border-slate-300 rounded p-2 text-center">Operation Log<br/><span class="text-slate-400">语义不变</span></div>
+            <div class="flex-1 border-2 border-slate-300 rounded p-2 text-center">Runtime Log<br/><span class="text-slate-400">语义不变</span></div>
+          </div>
+          <div class="flex w-full justify-around text-slate-400 py-1"><span>↓</span><span>↓</span></div>
+          <div class="w-full border-t-2 border-dashed border-slate-400 relative"><span class="absolute -top-2 right-0 text-[10px] uppercase tracking-wider text-slate-400 bg-white px-1">seam</span></div>
+          <div class="deep rounded-lg w-full mt-2 p-4 text-center">
+            <p class="font-mono font-semibold text-sm">redaction policy module</p>
+            <p class="text-slate-300 mt-1">词表 + 打码规则，一处定义 · interface：redact_value / redact_line</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="text-sm"><b>Problem</b> — “什么算敏感、如何打码”这一个概念有三份 implementation，词表已经分叉：passphrase 只有一边脱敏，标记分裂为 <span class="font-mono text-xs">[redacted]</span>/<span class="font-mono text-xs">[REDACTED]</span>，证明两套独立演化。</p>
+    <p class="text-sm"><b>Solution</b> — 抽一个 redaction policy module（词表 + 打码一处定义），Operation Log 与 Runtime Log 成为同一 seam 上的两个调用方；两层日志的数据源与生命周期语义不动。</p>
+    <ul class="text-sm grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside text-slate-700">
+      <li>locality：敏感词表一处演进</li>
+      <li>已发生的 passphrase 泄漏当场闭合</li>
+      <li>测试面：一个 interface 覆盖两层日志</li>
+      <li>Observability Console 双层语义保持分离</li>
+    </ul>
+    <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">遵守 CONTEXT.md：这<b>不是</b> Operation Log DSL——interface 只有两三个 redact 函数，目标是提高 locality，不是扩大 interface。</div>
+  </article>
+
+  <!-- ======== 2 UPDATE CENTER ======== -->
+  <article id="update-center" class="rounded-xl border border-stone-200 bg-white p-6 space-y-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="chip bg-emerald-100 text-emerald-800 font-semibold">Strong</span>
+      <span class="chip bg-slate-100 text-slate-600">in-process</span>
+      <span class="chip bg-rose-50 text-rose-700">新发现</span>
+      <h3 class="w-full font-serif text-xl mt-1">2 · 给 Update Center 一个 service 域 —— 4000+ 行业务从 IPC 壳层落回原位</h3>
+    </div>
+    <div class="font-mono text-xs text-slate-600 bg-stone-50 rounded p-3 leading-relaxed">
+      commands/central_updates.rs（1212 行，37 fn / 仅 5 #[tauri::command]）· central_updates/repository_sync.rs（683）+ repository_sync/<br/>
+      commands/central_updates_fs.rs（783 行，17 std::fs + 7 spawn_blocking）· commands/central_store_location.rs（691 行，10 sqlx + 14 std::fs）<br/>
+      commands/skill_update_inventory.rs（698）+ skill_update_inventory/{apply_steps,force,scan,persistence,relocation,scope,view,…}<br/>
+      <span class="text-red-600">services/ 下无对应域（已复核目录清单）</span>
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — 业务长在壳层，service 槽位空缺</p>
+        <div class="space-y-1.5 text-xs">
+          <div class="band border-slate-300 bg-stone-100 rounded-r px-3 py-1.5">React 前端</div>
+          <div class="band border-red-500 bg-red-50 rounded-r px-3 py-6">
+            <p class="font-semibold text-red-800">commands/ —— ≈4000+ 行更新中心 + 仓库迁移业务</p>
+            <p class="text-red-600 mt-1">orchestration 循环 ×14 · 错误提前字符串化 · 自建 fs façade</p>
+          </div>
+          <div class="band border-slate-300 border-dashed bg-white rounded-r px-3 py-3 seam text-slate-400">services/ —— <span class="italic">缺位：无 central_updates 域</span></div>
+          <div class="band border-slate-300 bg-stone-100 rounded-r px-3 py-1.5">db/（repos + schema）</div>
+        </div>
+      </div>
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">After — 三层契约恢复</p>
+        <div class="space-y-1.5 text-xs">
+          <div class="band border-slate-300 bg-stone-100 rounded-r px-3 py-1.5">React 前端</div>
+          <div class="band border-slate-300 bg-stone-100 rounded-r px-3 py-1.5">commands/ —— 纯壳：参数翻译 · 操作日志 · 字符串化</div>
+          <div class="deep rounded-lg px-3 py-6">
+            <p class="font-mono font-semibold text-sm">services/central_updates（+ store location）</p>
+            <p class="text-slate-300 mt-1">域错误枚举 · run_blocking_fs_with 复用 · 经 service interface 可测</p>
+          </div>
+          <div class="band border-slate-300 bg-stone-100 rounded-r px-3 py-1.5">db/（repos + schema）</div>
+        </div>
+      </div>
+    </div>
+    <p class="text-sm"><b>Problem</b> — 更新中心 + 中央仓库迁移是一个完整业务域，却整体长在 commands 层：<span class="font-mono text-xs">central_updates_fs.rs</span> 的注释自己承认它是“typed service domains 的 commands 侧对应物”——service 形状的逻辑穿着壳层外衣，“commands = 纯壳”契约在这里必然破产。</p>
+    <p class="text-sm"><b>Solution</b> — 落一个 services 域承接这批逻辑（域错误枚举 + <span class="font-mono text-xs">fs_util</span> seam 复用），commands 收回纯壳职责。</p>
+    <ul class="text-sm grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside text-slate-700">
+      <li>三层契约恢复，壳层删薄</li>
+      <li>错误走域枚举，不再提前字符串化</li>
+      <li>测试穿 service interface，不靠 _impl 影子</li>
+      <li>自建 fs façade 并入 fs_util seam</li>
+    </ul>
+  </article>
+
+  <!-- ======== 3 PLATFORM MANAGEMENT ======== -->
+  <article id="platform-management" class="rounded-xl border border-stone-200 bg-white p-6 space-y-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="chip bg-emerald-100 text-emerald-800 font-semibold">Strong</span>
+      <span class="chip bg-slate-100 text-slate-600">in-process</span>
+      <span class="chip bg-indigo-50 text-indigo-700">CONTEXT.md 优先 #2</span>
+      <h3 class="w-full font-serif text-xl mt-1">3 · 提取前端 Platform management module —— Universal Agents 分组与平台多选</h3>
+    </div>
+    <div class="font-mono text-xs text-slate-600 bg-stone-50 rounded p-3 leading-relaxed">
+      src/lib/platformTargetGroups.ts:10,23,39（三份有序 ID 列表）· src/lib/platformVisibility.ts:12<br/>
+      isUniversalPlatformTarget 分支 ≈18 个组件文件（Sidebar / TopBar / GlobalSearchDialog / SkillDetailSidebar / …）<br/>
+      多选网格 + 选中推导 ×4：InstallDialog.tsx:81,298 · CollectionInstallDialog.tsx:49,136 · ProjectInstallDialog.tsx:84,248 · BatchInstallCentralSkillsDialog.tsx:91,275
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before — 分组知识无 module 承载</p>
+        <pre class="mermaid">
+flowchart TD
+  D1["InstallDialog"] -.-> K
+  D2["CollectionInstallDialog"] -.-> K
+  D3["ProjectInstallDialog"] -.-> K
+  D4["BatchInstallCentralSkillsDialog"] -.-> K
+  C["组件 ×18 各自分支<br/>isUniversalPlatformTarget?"] -.-> K
+  K["分组知识散布：4 份有序 ID 列表<br/>+ 多选网格重实现 ×4"]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#b91c1c;
+  class K,C leak
+        </pre>
+      </div>
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After — 一个 deep module，薄调用方</p>
+        <pre class="mermaid">
+flowchart TD
+  D1["InstallDialog"] --> M
+  D2["CollectionInstallDialog"] --> M
+  D3["ProjectInstallDialog"] --> M
+  D4["BatchInstall…"] --> M
+  C["组件 ×18 → 薄调用"] --> M
+  M["Platform management module<br/>Universal Agents 分组 · 可见性 · 多选行为"]
+  classDef deep fill:#0f172a,color:#f8fafc,stroke:#0f172a;
+  class M deep
+        </pre>
+      </div>
+    </div>
+    <p class="text-sm"><b>Problem</b> — “Universal Agents 是一个虚拟分组”这条领域知识没有 module：4 份 ID 清单 + 18 处条件分支 + 4 份多选网格重实现；新增 Platform #37 最多要改 4 个前端列表，漏一处就静默渲染成独立平台。</p>
+    <p class="text-sm"><b>Solution</b> — 一个平台分组/选择 module 把分组、可见性与多选行为收进一个小 interface，四个 Platform install 对话框与 18 处分支降级为薄调用方。</p>
+    <ul class="text-sm grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside text-slate-700">
+      <li>leverage：4 个对话框共用一份实现</li>
+      <li>locality：新平台一处注册</li>
+      <li>对话框测试穿一个 interface</li>
+      <li>分组规则退出 18 个组件文件</li>
+    </ul>
+  </article>
+
+  <!-- ======== 4 IPC ADAPTER ======== -->
+  <article id="ipc-adapter" class="rounded-xl border border-stone-200 bg-white p-6 space-y-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="chip bg-emerald-100 text-emerald-800 font-semibold">Strong</span>
+      <span class="chip bg-slate-100 text-slate-600">ports &amp; adapters</span>
+      <span class="chip bg-rose-50 text-rose-700">新发现</span>
+      <h3 class="w-full font-serif text-xl mt-1">4 · 唯一的按命令名类型化 IPC adapter —— fixture 与测试挂在同一 seam</h3>
+    </div>
+    <div class="font-mono text-xs text-slate-600 bg-stone-50 rounded p-3 leading-relaxed">
+      src/lib/tauri.ts（裸 invoke）vs src/lib/ipc.ts:19-27（IpcCommandMap 仅覆盖 7/171 命令）—— 两个并行 adapter<br/>
+      isTauriRuntime fixture guard ×154 处 / 41 文件 · src/test/setup.ts:168（invoke = vi.fn()，无按名路由）<br/>
+      seam 泄漏：hooks/useSkillCallCounts.ts:67 · hooks/useSkillExplanationSummaries.ts:46 · lib/displayFont.ts:190,221 · pages/ObsidianVaultView.tsx:226
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before — 无类型单点 + 竞争 adapter</p>
+        <pre class="mermaid">
+flowchart LR
+  S["stores ×20<br/>guard ×154"] --> T1["lib/tauri.ts<br/>裸 invoke"]
+  S --> T2["lib/ipc.ts<br/>仅 7/171 有类型"]
+  H["hooks / lib 直连 ×5"] -.绕过 store seam.-> V["Tauri invoke"]
+  T1 --> V
+  T2 --> V
+  X["测试：按调用顺序<br/>mockResolvedValueOnce"] -.-> T1
+  classDef leak stroke:#dc2626,color:#b91c1c;
+  class H,X leak
+        </pre>
+      </div>
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After — two adapters = real seam</p>
+        <pre class="mermaid">
+flowchart LR
+  S["stores / hooks"] --> A["IPC adapter<br/>按命令名类型化（171 命令）"]
+  A --> R1["Tauri adapter（生产）"]
+  A --> R2["fixture adapter<br/>浏览器演示 + 测试按名打桩"]
+  classDef deep fill:#0f172a,color:#f8fafc,stroke:#0f172a;
+  class A deep
+        </pre>
+      </div>
+    </div>
+    <p class="text-sm"><b>Problem</b> — <span class="font-mono text-xs">invoke(cmd, args)</span> 是无类型单点，于是前端长出两个互相竞争的 adapter、154 处浏览器 fixture guard，测试只能按调用顺序打桩——store 里加一次 invoke，无关断言全崩（仅 1 个测试文件按命令名路由）。</p>
+    <p class="text-sm"><b>Solution</b> — 收敛到一个按命令名类型化的 IPC adapter：真实 Tauri 与浏览器/测试 fixture 是同一 interface 的两个 adapter，store 与测试都按命令名对话。</p>
+    <ul class="text-sm grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside text-slate-700">
+      <li>154 处 guard 蒸发进 adapter</li>
+      <li>测试从按顺序改为按命令名</li>
+      <li>类型覆盖 171 命令而非 7 个</li>
+      <li>四处 store seam 泄漏点有了归宿</li>
+    </ul>
+    <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600">延伸（Speculative，不在本卡范围）：snake_case 载荷在 50 文件 / 153 处被直接消费，类型化 adapter 是未来做载荷转换 seam 的自然落点，但当前收益不确定。</div>
+  </article>
+
+  <!-- ======== 5 TRANSPORT SEAM ======== -->
+  <article id="transport-seam" class="rounded-xl border border-stone-200 bg-white p-6 space-y-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="chip bg-amber-100 text-amber-800 font-semibold">Worth exploring</span>
+      <span class="chip bg-slate-100 text-slate-600">ports &amp; adapters</span>
+      <span class="chip bg-rose-50 text-rose-700">新发现</span>
+      <h3 class="w-full font-serif text-xl mt-1">5 · 收拢 Local/SSH/WSL transport seam —— 一份操作实现，三个 adapter</h3>
+    </div>
+    <div class="font-mono text-xs text-slate-600 bg-stone-50 rounded p-3 leading-relaxed">
+      函数族：8 个 *_ssh_impl + 5 个 *_remote_impl（例：install_skill_to_agent_impl / _remote_impl / _ssh_impl；delete_central_skills_impl 三连）<br/>
+      match &amp;active_target { Local ⇒ … Ssh|Wsl ⇒ … } 分发复制在 14 个命令文件 · targets/（连接原语，非操作 seam）
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before — 每个操作写三遍</p>
+        <pre class="mermaid">
+flowchart LR
+  C["命令壳 ×14 文件"] --> M{"match active_target"}
+  M --> A1["*_impl（本地）"]
+  M --> A2["*_remote_impl ×5"]
+  M --> A3["*_ssh_impl ×8"]
+  classDef leak stroke:#dc2626,color:#b91c1c;
+  class M,A2,A3 leak
+        </pre>
+      </div>
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After — 操作只写一遍</p>
+        <pre class="mermaid">
+flowchart LR
+  C["命令壳"] --> S["技能操作 seam<br/>“对 active target 执行”"]
+  S --> L["Local adapter"]
+  S --> SS["SSH adapter"]
+  S --> W["WSL adapter"]
+  classDef deep fill:#0f172a,color:#f8fafc,stroke:#0f172a;
+  class S deep
+        </pre>
+      </div>
+    </div>
+    <p class="text-sm"><b>Problem</b> — 传输是被泄漏的横切维度：每个技能操作要写约三遍，14 个命令壳各自重新学习 Local-vs-remote 分支；远程行为改动必须人肉镜像到 ssh 路径，SSH 执行半边因无可注入 seam 而不可测。</p>
+    <p class="text-sm"><b>Solution</b> — 定义“对 active target 执行技能操作”的 seam：Local / SSH / WSL 作为三个 adapter（三个真实 adapter，seam 千真万确），targets/ 连接原语退到 adapter 内部。</p>
+    <ul class="text-sm grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside text-slate-700">
+      <li>leverage：新操作一份实现</li>
+      <li>locality：远程行为改动一处</li>
+      <li>14 处 match 分发降为 1</li>
+      <li>SSH 执行半边首次可测</li>
+    </ul>
+    <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">遵守 CONTEXT.md：SSH remote target <b>lifecycle</b>（增删改/连接管理）不是本卡对象，那条“不要深化”约束仍然成立——这里只动操作执行 seam。改动半径大（14 文件 × 3 族），建议先切一个操作（install）试深，再决定推广。</div>
+  </article>
+
+  <!-- ======== 6 PATH POLICY REMOTE ======== -->
+  <article id="path-policy" class="rounded-xl border border-stone-200 bg-white p-6 space-y-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="chip bg-amber-100 text-amber-800 font-semibold">Worth exploring</span>
+      <span class="chip bg-slate-100 text-slate-600">in-process</span>
+      <span class="chip bg-indigo-50 text-indigo-700">CONTEXT.md 优先 #1（剩余半边）</span>
+      <h3 class="w-full font-serif text-xl mt-1">6 · 补完 Path policy 的 remote 半边</h3>
+    </div>
+    <div class="font-mono text-xs text-slate-600 bg-stone-50 rounded p-3 leading-relaxed">
+      已收拢：paths.rs（712 行）central_skills_dir_from_home:113 · universal_skills_dir_from_home:122 · expand_remote_home_path:222 · remote_join_home:401<br/>
+      仍散落：targets/exec.rs:38,53,698（shell $HOME/.skillsmanage/skills + remote_join）· services/local_remote_sync.rs:238,241,550 · db/types.rs:36（.agents/skills）· github_import/types.rs:170 · obsidian/query.rs:187
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — local 一个 seam，remote 九处手拼</p>
+        <div class="text-xs space-y-3">
+          <div class="border-2 border-emerald-500 rounded p-2 bg-emerald-50"><span class="font-mono font-semibold">paths.rs</span> —— local 路径全部穿此 seam ✓</div>
+          <div class="flex flex-wrap gap-1.5">
+            <span class="chip bg-red-50 text-red-700 border border-red-200 font-mono">targets/exec.rs:38</span>
+            <span class="chip bg-red-50 text-red-700 border border-red-200 font-mono">targets/exec.rs:53</span>
+            <span class="chip bg-red-50 text-red-700 border border-red-200 font-mono">targets/exec.rs:698</span>
+            <span class="chip bg-red-50 text-red-700 border border-red-200 font-mono">local_remote_sync.rs:238</span>
+            <span class="chip bg-red-50 text-red-700 border border-red-200 font-mono">local_remote_sync.rs:241</span>
+            <span class="chip bg-red-50 text-red-700 border border-red-200 font-mono">local_remote_sync.rs:550</span>
+            <span class="chip bg-red-50 text-red-700 border border-red-200 font-mono">db/types.rs:36</span>
+            <span class="chip bg-red-50 text-red-700 border border-red-200 font-mono">github_import/types.rs:170</span>
+            <span class="chip bg-red-50 text-red-700 border border-red-200 font-mono">obsidian/query.rs:187</span>
+          </div>
+          <p class="text-red-700">目录名 .skillsmanage/{skills,repos,targets}、.agents/skills 被当作字面量反复重打</p>
+        </div>
+      </div>
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">After — 字面量一次命名</p>
+        <div class="deep rounded-lg p-4 text-xs">
+          <p class="font-mono font-semibold text-sm mb-2">path policy module（local + remote）</p>
+          <p class="text-slate-300 leading-relaxed">Central Skills ~/.skillsmanage/skills/ · Universal Agents ~/.agents/skills/ · 数据库 · targets 缓存 · repos —— 本地与远端同一份命名</p>
+          <div class="flex flex-wrap gap-1.5 mt-3 opacity-50">
+            <span class="chip bg-slate-700 text-slate-300 font-mono">remote_join</span>
+            <span class="chip bg-slate-700 text-slate-300 font-mono">repos 目录名</span>
+            <span class="chip bg-slate-700 text-slate-300 font-mono">.agents/skills</span>
+            <span class="chip bg-slate-700 text-slate-300 font-mono">$HOME 展开</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="text-sm"><b>Problem</b> — README 的路径语义只有一半被代码强制执行：本地路径穿 paths.rs，remote 路径与目录字面量仍在约 9 处被重新拼写，<span class="font-mono text-xs">remote_join</span> 长在 targets/exec.rs 而非 seam 内。</p>
+    <p class="text-sm"><b>Solution</b> — remote 构造与目录名并入 path policy module，字面量一次命名，各泄漏点改为调用方。</p>
+    <ul class="text-sm grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside text-slate-700">
+      <li>README 路径语义单点执行</li>
+      <li>Central Skills / Universal Agents 目录名唯一</li>
+      <li>SSH remote target 缓存路径不再手拼</li>
+    </ul>
+  </article>
+
+  <!-- ======== 7 TEST SUPPORT ======== -->
+  <article id="test-support" class="rounded-xl border border-stone-200 bg-white p-6 space-y-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="chip bg-amber-100 text-amber-800 font-semibold">Worth exploring</span>
+      <span class="chip bg-slate-100 text-slate-600">mock / harness</span>
+      <span class="chip bg-rose-50 text-rose-700">新发现</span>
+      <h3 class="w-full font-serif text-xl mt-1">7 · Rust test-support module —— 24 份手抄 harness 收敛为一个</h3>
+    </div>
+    <div class="font-mono text-xs text-slate-600 bg-stone-50 rounded p-3 leading-relaxed">
+      24 个 setup_test_db / setup_db / setup_pool 定义 / 23 文件 · 29 处 SqlitePool::connect(":memory:") / 21 文件<br/>
+      域内私有 fixture：installation/tests.rs:41,60,88 · projects/tests.rs:468（seed_central_skill）· 返回类型四种不统一<br/>
+      集成测试仅 1 个（tests/projects_e2e.rs）· obsidian 域 0 测试
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — 同一套 setup 重推导 24 次</p>
+        <div class="grid grid-cols-6 gap-1.5">
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+          <div class="border border-red-300 bg-red-50 rounded text-center text-[9px] font-mono py-1.5 text-red-700">setup</div>
+        </div>
+        <p class="text-xs text-slate-500 mt-2">pool + 迁移 + 临时目录 + agent/skill fixture，每份微妙不同</p>
+      </div>
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">After — 一个 harness，薄测试文件</p>
+        <div class="space-y-2 text-xs">
+          <div class="deep rounded-lg p-3">
+            <p class="font-mono font-semibold text-sm">test_support module</p>
+            <p class="text-slate-300 mt-1">内存库 + 迁移 + 临时目录 + 常用 fixture，一个小 interface</p>
+          </div>
+          <div class="flex justify-around text-slate-400"><span>↑</span><span>↑</span><span>↑</span><span>↑</span></div>
+          <div class="grid grid-cols-4 gap-1.5">
+            <div class="border border-slate-300 rounded text-center text-[9px] font-mono py-1.5">installation</div>
+            <div class="border border-slate-300 rounded text-center text-[9px] font-mono py-1.5">projects</div>
+            <div class="border border-slate-300 rounded text-center text-[9px] font-mono py-1.5">scanner</div>
+            <div class="border border-emerald-400 bg-emerald-50 rounded text-center text-[9px] font-mono py-1.5 text-emerald-700">obsidian（新）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="text-sm"><b>Problem</b> — 几乎每个域测试都需要的“pool + 迁移 + 临时目录 + fixture”没有家，被重推导约 24 次且返回类型不统一；新域写第一条测试的成本高到 obsidian 至今全黑，跨域端到端只有 1 个。</p>
+    <p class="text-sm"><b>Solution</b> — 一个 test_support module 提供小 interface 的测试 harness，各域测试成为薄调用方。</p>
+    <ul class="text-sm grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside text-slate-700">
+      <li>新域首条测试成本骤降</li>
+      <li>fixture 语义一处演进</li>
+      <li>obsidian（0 测试）是首个受益者</li>
+      <li>跨域 e2e 有了搭建原语</li>
+    </ul>
+  </article>
+
+  <!-- ======== 8 UNIFIED SKILL CARD ======== -->
+  <article id="unified-skill-card" class="rounded-xl border border-stone-200 bg-white p-6 space-y-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="chip bg-amber-100 text-amber-800 font-semibold">Worth exploring</span>
+      <span class="chip bg-slate-100 text-slate-600">in-process</span>
+      <span class="chip bg-rose-50 text-rose-700">新发现</span>
+      <h3 class="w-full font-serif text-xl mt-1">8 · UnifiedSkillCard 显式场景 interface —— 40 个 props 收为命名场景</h3>
+    </div>
+    <div class="font-mono text-xs text-slate-600 bg-stone-50 rounded p-3 leading-relaxed">
+      src/components/skill/UnifiedSkillCard.tsx —— 717 行 · ~40 props（仅 name 必填）· 11 个回调 · 3 个嵌套配置对象<br/>
+      场景由 prop 组合隐式决定：:256 onClick &amp;&amp; !hasActions &amp;&amp; !hasCheckbox &amp;&amp; !hasPlatformIcons（hasActions = 10 个回调之 OR，:214-225）· 调用点 ×9
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — interface 与 implementation 一样厚（shallow）</p>
+        <div class="flex items-end justify-center gap-6 h-56">
+          <div class="flex flex-col items-center gap-1 w-32">
+            <div class="w-full h-40 border-2 border-amber-500 bg-amber-50 rounded flex items-center justify-center text-center text-[10px] px-1 text-amber-800">interface<br/>~40 props · 11 回调<br/>5 场景全暴露</div>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400">调用方必须知道的</span>
+          </div>
+          <div class="flex flex-col items-center gap-1 w-32">
+            <div class="w-full h-48 border-2 border-slate-400 bg-stone-100 rounded flex items-center justify-center text-center text-[10px] px-1">implementation<br/>717 行</div>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400">模块内部</span>
+          </div>
+        </div>
+      </div>
+      <div class="rounded-lg border border-stone-200 bg-white p-4">
+        <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">After — interface 缩水，implementation 吸收组合</p>
+        <div class="flex items-end justify-center gap-6 h-56">
+          <div class="flex flex-col items-center gap-1 w-32">
+            <div class="w-full h-12 border-2 border-emerald-500 bg-emerald-50 rounded flex items-center justify-center text-center text-[10px] px-1 text-emerald-800">命名场景 + 窄 props</div>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400">调用方必须知道的</span>
+          </div>
+          <div class="flex flex-col items-center gap-1 w-32">
+            <div class="w-full h-48 deep rounded flex items-center justify-center text-center text-[10px] px-1">implementation<br/>组合逻辑内化<br/>唯一卡片不变</div>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400">模块内部</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="text-sm"><b>Problem</b> — 唯一卡片 module 的 interface 正在逼近 5 张卡片之和：central / platform / project / marketplace / collection 五个场景没有名字，由 9 个调用点各自用 prop 组合拼出来——渲染一张卡要“知道”的事约 40 项，模块是 shallow 的。</p>
+    <p class="text-sm"><b>Solution</b> — 保持唯一 implementation（CLAUDE.md 约束不破），interface 改为命名场景 + 各场景窄 props，隐式组合判定吸进模块内部。</p>
+    <ul class="text-sm grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside text-slate-700">
+      <li>interface 缩水，implementation 吸收组合</li>
+      <li>调用方按场景只学所需 props</li>
+      <li>卡片测试按场景枚举</li>
+      <li>“唯一卡片”约束保持成立</li>
+    </ul>
+  </article>
+
+  <!-- ======== 9 FRONTMATTER ======== -->
+  <article id="frontmatter" class="rounded-xl border border-stone-200 bg-white p-6 space-y-4 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="chip bg-slate-200 text-slate-700 font-semibold">Speculative（小改动）</span>
+      <span class="chip bg-slate-100 text-slate-600">in-process</span>
+      <span class="chip bg-indigo-50 text-indigo-700">CONTEXT.md 优先 #4（残余）</span>
+      <h3 class="w-full font-serif text-xl mt-1">9 · 统一 SKILL.md frontmatter 解析</h3>
+    </div>
+    <div class="font-mono text-xs text-slate-600 bg-stone-50 rounded p-3 leading-relaxed">
+      services/scanner/mod.rs:94 parse_skill_md_content（不去 BOM）· services/github_import/source.rs:662 parse_frontmatter（去 BOM、typed）· scanner/ssh_batch.rs（remote 变体）
+    </div>
+    <div class="flex items-center justify-center gap-4 text-xs py-3">
+      <div class="border-2 border-red-300 rounded p-2 text-center">Discover 用解析<br/><span class="text-red-600">BOM ✗</span></div>
+      <div class="border-2 border-red-300 rounded p-2 text-center">Marketplace import 用解析<br/><span class="text-emerald-600">BOM ✓</span></div>
+      <span class="text-slate-400 text-lg">→</span>
+      <div class="deep rounded p-3 text-center">一份 frontmatter 解析 module<br/><span class="text-slate-300">边界行为一处定义</span></div>
+    </div>
+    <p class="text-sm"><b>Problem</b> — 同一个核心解析存在两三份 implementation，边界行为已分叉：带 BOM 的 SKILL.md 走 Discover 与走 Marketplace import 结果不同。 <b>Solution</b> — 一份解析 module，scanner 与 github_import 共用。 <b>Wins</b> — locality：解析边界一处；BOM 分叉闭合。改动小，可捎带完成。</p>
+  </article>
+</section>
+
+<!-- ============ TOP RECOMMENDATION ============ -->
+<section id="top-recommendation" class="rounded-xl border-2 border-emerald-600 bg-emerald-50 p-8 space-y-3">
+  <p class="text-xs uppercase tracking-wider text-emerald-700 font-semibold">Top recommendation</p>
+  <h2 class="font-serif text-2xl"><a href="#redaction" class="underline decoration-emerald-400 underline-offset-4">卡片 1 · 统一 Redaction policy</a></h2>
+  <p class="text-sm text-emerald-950 leading-relaxed">这是 CONTEXT.md 早已点名的真实摩擦，而且泄漏<b>已经发生</b>——passphrase 词表分叉不是假设的重构收益，是现行行为差异；两个真实调用方（Operation Log / Runtime Log）已经在场，seam 是 real 的；在四个 Strong 候选里它改动半径最小、测试面最小，一次收口即可让安全策略此后只在一处演进。次选：卡片 2（Update Center service 域）——最大的结构性欠账，但工程量数倍于此。</p>
+</section>
+
+<footer class="text-xs text-slate-400 border-t border-stone-200 pt-4">
+  来源：3 个只读走查代理（Rust 后端 / React 前端 / 测试面）；passphrase 词表分叉、services/ 域清单、更新中心行数已人工复核。报告位于系统临时目录，不落仓库。
+</footer>
+
+</main>
+</body>
+</html>

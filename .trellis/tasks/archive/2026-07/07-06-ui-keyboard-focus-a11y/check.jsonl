@@ -1,0 +1,2 @@
+{"file": "DESIGN.md", "reason": "验收基准：焦点环与非颜色状态编码符合设计总纲"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "检查 InlineConfirm Esc 撤退不破坏异步反馈约定"}

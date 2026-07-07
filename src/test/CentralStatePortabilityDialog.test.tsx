@@ -4,7 +4,11 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import defaultCapability from "../../src-tauri/capabilities/default.json";
 import { CentralStatePortabilityDialog } from "../components/central/CentralStatePortabilityDialog";
-import type { SkillportStateImportPreview, SkillportStatePortabilityJob } from "../types";
+import type {
+  SkillportStateImportPreview,
+  SkillportStatePortabilityJob,
+  TargetSummary,
+} from "../types";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: vi.fn(),
@@ -80,12 +84,31 @@ const idlePortabilityJob: SkillportStatePortabilityJob = {
   completed: 0,
 };
 
+const localTarget: TargetSummary = {
+  id: "local",
+  kind: "local",
+  label: "Local",
+  isActive: true,
+};
+
+const wslTarget: TargetSummary = {
+  id: "wsl-ubuntu",
+  kind: "wsl",
+  label: "Ubuntu",
+  distribution: "Ubuntu",
+  remoteHome: "/home/lyh",
+  remoteOs: "linux",
+  symlinkEnabled: true,
+  isActive: true,
+};
+
 function renderDialog(props: Partial<ComponentProps<typeof CentralStatePortabilityDialog>> = {}) {
   const exportState = vi.fn().mockResolvedValue(manifestJson);
   const result = render(
     <CentralStatePortabilityDialog
       open
       onOpenChange={vi.fn()}
+      activeTarget={localTarget}
       exportState={exportState}
       previewImport={vi.fn()}
       importState={vi.fn()}
@@ -141,6 +164,46 @@ describe("CentralStatePortabilityDialog", () => {
         "D:\\exports\\skillport-state.json",
         JSON.stringify(JSON.parse(manifestJson), null, 2)
       )
+    );
+  });
+
+  it("shows the active target boundary", async () => {
+    const result = renderDialog({ activeTarget: wslTarget });
+    await flushInitialExport(result);
+
+    expect(screen.getByTestId("central-portability-active-target")).toHaveTextContent(
+      "导出来源WSL · Ubuntu"
+    );
+
+    fireEvent.click(screen.getByTestId("central-portability-import-tab"));
+    expect(screen.getByTestId("central-portability-active-target")).toHaveTextContent(
+      "导入目标WSL · Ubuntu"
+    );
+  });
+
+  it("warns when imported JSON came from another target", async () => {
+    const crossTargetJson = JSON.stringify({
+      kind: "skillport/state-export",
+      version: 1,
+      exportedAt: "2026-04-25T00:00:00Z",
+      exportedFrom: {
+        app: "SkillPort",
+        target: { id: "ssh-prod", kind: "ssh", label: "Production" },
+      },
+      githubSources: [],
+      centralSkills: [],
+      unrestorableSkills: [],
+    });
+
+    renderDialog({ activeTarget: wslTarget });
+
+    fireEvent.click(screen.getByTestId("central-portability-import-tab"));
+    fireEvent.change(screen.getByTestId("central-portability-json-input"), {
+      target: { value: crossTargetJson },
+    });
+
+    expect(screen.getByTestId("central-portability-origin-warning")).toHaveTextContent(
+      "此 JSON 导出自 SSH · Production，将导入当前目标 WSL · Ubuntu。"
     );
   });
 

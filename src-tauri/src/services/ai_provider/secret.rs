@@ -495,12 +495,7 @@ pub async fn clear_ai_api_key_impl(
 mod tests {
     use super::*;
     use crate::secrets::{MockSecretStore, SecretError};
-
-    async fn setup_test_db() -> DbPool {
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
+    use crate::test_support::mem_pool as setup_test_db;
 
     #[tokio::test]
     async fn legacy_ai_api_key_migrates_to_secret_store_and_deletes_setting() {

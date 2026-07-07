@@ -1,7 +1,12 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-const APP_DATA_DIR_NAME: &str = ".skillsmanage";
+pub const APP_DATA_DIR_NAME: &str = ".skillsmanage";
+pub const CENTRAL_SKILLS_REL_FROM_HOME: &str = ".skillsmanage/skills";
+pub const REMOTE_REPOS_REL_FROM_HOME: &str = ".skillsmanage/repos";
+pub const TARGETS_CACHE_DIR_NAME: &str = "targets";
+pub const UNIVERSAL_AGENTS_DIR_NAME: &str = ".agents";
+pub const UNIVERSAL_SKILLS_REL: &str = ".agents/skills";
 #[cfg(windows)]
 const APP_DATABASE_FILE_NAME: &str = "db.sqlite";
 
@@ -413,6 +418,26 @@ fn remote_join_home(remote_home: &str, child: &str) -> String {
     }
 }
 
+pub fn remote_join(parent: &str, child: &str) -> String {
+    let parent = parent.trim_end_matches('/');
+    let child = child.trim_start_matches('/');
+    if parent.is_empty() || parent == "/" {
+        format!("/{}", child)
+    } else if child.is_empty() {
+        parent.to_string()
+    } else {
+        format!("{}/{}", parent, child)
+    }
+}
+
+pub fn remote_central_skills_root(remote_home: &str) -> String {
+    remote_join(remote_home, CENTRAL_SKILLS_REL_FROM_HOME)
+}
+
+pub fn remote_repos_root(remote_home: &str) -> String {
+    remote_join(remote_home, REMOTE_REPOS_REL_FROM_HOME)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -607,6 +632,52 @@ mod tests {
     fn expand_remote_home_path_uses_posix_separators() {
         let expanded = expand_remote_home_path("~/.agents/skills", "/home/alice");
         assert_eq!(expanded, "/home/alice/.agents/skills");
+    }
+
+    #[test]
+    fn remote_join_uses_posix_separators() {
+        assert_eq!(
+            remote_join("/home/alice", CENTRAL_SKILLS_REL_FROM_HOME),
+            "/home/alice/.skillsmanage/skills"
+        );
+    }
+
+    #[test]
+    fn remote_join_handles_root_parent_and_empty_child() {
+        assert_eq!(remote_join("/", "skills"), "/skills");
+        assert_eq!(remote_join("", "skills"), "/skills");
+        assert_eq!(remote_join("/home/alice", ""), "/home/alice");
+    }
+
+    #[test]
+    fn remote_central_skills_root_matches_readme_semantics() {
+        assert_eq!(
+            remote_central_skills_root("/home/alice"),
+            "/home/alice/.skillsmanage/skills"
+        );
+        assert_eq!(
+            remote_central_skills_root("/home/alice/"),
+            "/home/alice/.skillsmanage/skills"
+        );
+        assert_eq!(remote_central_skills_root("/"), "/.skillsmanage/skills");
+    }
+
+    #[test]
+    fn remote_repos_root_matches_readme_semantics() {
+        assert_eq!(
+            remote_repos_root("/home/alice"),
+            "/home/alice/.skillsmanage/repos"
+        );
+    }
+
+    #[test]
+    fn path_policy_dir_name_constants_are_pinned() {
+        assert_eq!(APP_DATA_DIR_NAME, ".skillsmanage");
+        assert_eq!(CENTRAL_SKILLS_REL_FROM_HOME, ".skillsmanage/skills");
+        assert_eq!(REMOTE_REPOS_REL_FROM_HOME, ".skillsmanage/repos");
+        assert_eq!(TARGETS_CACHE_DIR_NAME, "targets");
+        assert_eq!(UNIVERSAL_AGENTS_DIR_NAME, ".agents");
+        assert_eq!(UNIVERSAL_SKILLS_REL, ".agents/skills");
     }
 
     #[test]

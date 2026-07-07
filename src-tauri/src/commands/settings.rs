@@ -457,13 +457,7 @@ pub async fn set_settings(
 mod tests {
     use super::*;
     use crate::db;
-    use sqlx::SqlitePool;
-
-    async fn setup_test_db() -> DbPool {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
+    use crate::test_support::mem_pool as setup_test_db;
 
     // ── get_scan_directories_impl ─────────────────────────────────────────────
 

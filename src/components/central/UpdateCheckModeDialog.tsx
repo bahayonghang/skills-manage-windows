@@ -19,22 +19,26 @@ import type { UpdateCheckMode } from "@/pages/centralUpdateCheckMode";
 interface UpdateCheckModeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  scopeLabel: string;
+  regularScopeLabel: string;
+  syncScopeLabel: string;
   mode?: UpdateCheckMode;
   isSubmitting?: boolean;
   syncDisabled?: boolean;
   syncDisabledReason?: string;
+  error?: string | null;
   onConfirm: (mode: UpdateCheckMode) => void;
 }
 
 export function UpdateCheckModeDialog({
   open,
   onOpenChange,
-  scopeLabel,
+  regularScopeLabel,
+  syncScopeLabel,
   mode: initialMode = "regular",
   isSubmitting = false,
   syncDisabled = false,
   syncDisabledReason,
+  error = null,
   onConfirm,
 }: UpdateCheckModeDialogProps) {
   const { t } = useTranslation();
@@ -47,6 +51,7 @@ export function UpdateCheckModeDialog({
   }, [initialMode, open, syncDisabled]);
 
   const effectiveMode = mode === "sync" && syncDisabled ? "regular" : mode;
+  const scopeLabel = effectiveMode === "sync" ? syncScopeLabel : regularScopeLabel;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -96,6 +101,19 @@ export function UpdateCheckModeDialog({
             />
             <span>{t("central.updateCheckMode.note")}</span>
           </div>
+          {error ? (
+            <div
+              className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+              data-testid="update-check-mode-error"
+              role="alert"
+            >
+              <AlertTriangle
+                className="mt-0.5 size-3.5 shrink-0"
+                aria-hidden="true"
+              />
+              <span>{error}</span>
+            </div>
+          ) : null}
         </DialogBody>
 
         <DialogFooter>

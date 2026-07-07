@@ -1,4 +1,4 @@
-import { listen, isTauriRuntime } from "@/lib/tauri";
+import { listen, isTauriRuntime } from "@/lib/ipc";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 export interface ExplanationChunkPayload {

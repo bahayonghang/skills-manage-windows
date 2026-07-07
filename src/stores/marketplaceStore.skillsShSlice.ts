@@ -1,4 +1,4 @@
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import type { SkillsShFileEntry, SkillsShSkill } from "@/types";
 import type { MarketplaceState, MarketplaceStoreContext } from "./marketplaceStore.types";
 

@@ -11,7 +11,7 @@ import {
   GitHubPatState,
   WslDistributionSummary,
 } from "../types";
-import { invoke } from "@/lib/tauri";
+import { invoke } from "@/lib/ipc";
 
 // Mock stores
 vi.mock("../stores/settingsStore", () => ({
@@ -54,7 +54,7 @@ vi.mock("../stores/appUpdateStore", async () => {
   };
 });
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   invoke: vi.fn(),
   isTauriRuntime: vi.fn(() => true),
 }));

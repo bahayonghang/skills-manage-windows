@@ -1,5 +1,5 @@
 import { UnlistenFn } from "@tauri-apps/api/event";
-import { invoke, listen, isTauriRuntime } from "@/lib/tauri";
+import { invoke, listen, isTauriRuntime } from "@/lib/ipc";
 import { GitHubImportProgressPayload } from "@/types";
 import {
   createInitialGitHubImportState,

@@ -3,13 +3,18 @@ use std::collections::{HashMap, HashSet};
 use tauri::AppHandle;
 use uuid::Uuid;
 
+#[cfg(test)]
+use crate::secrets::SecretStore;
 use crate::{
     db::{self, DbPool},
-    secrets::SecretStore,
     services::{
         github_import,
-        github_import::{DuplicateResolution, GitHubSkillImportSelection},
+        github_import::{
+            DuplicateResolution, GitHubRepoImportResult, GitHubSkillImportSelection,
+            ImportedGitHubSkillSummary,
+        },
     },
+    targets::ActiveTarget,
 };
 
 use super::error::PortableStateError;
@@ -25,6 +30,7 @@ use super::{
     normalize_registry_identity, repo_key, repo_url_for_source,
 };
 
+#[cfg(test)]
 pub(crate) async fn import_skillport_state_impl(
     pool: &DbPool,
     secrets: &dyn SecretStore,
@@ -37,6 +43,27 @@ pub(crate) async fn import_skillport_state_impl(
         return Ok(cancelled_import_result(manifest, 0, 0));
     }
     let auth = github_import::github_direct_auth_from_secret_store(pool, secrets).await?;
+    import_skillport_state_for_target(
+        pool,
+        &ActiveTarget::Local,
+        auth.as_deref(),
+        manifest,
+        resolutions,
+        app,
+        cancel,
+    )
+    .await
+}
+
+pub(crate) async fn import_skillport_state_for_target(
+    pool: &DbPool,
+    active_target: &ActiveTarget,
+    auth: Option<&str>,
+    manifest: &SkillportStateManifest,
+    resolutions: Vec<SkillportStateImportResolution>,
+    app: Option<&AppHandle>,
+    cancel: Option<&CancelFlag>,
+) -> Result<SkillportStateImportResult, PortableStateError> {
     if check_cancel(cancel).is_err() {
         return Ok(cancelled_import_result(manifest, 0, 0));
     }
@@ -103,15 +130,7 @@ pub(crate) async fn import_skillport_state_impl(
             Some("Importing GitHub-backed skills"),
             Some(&group.repo_url),
         );
-        match github_import::import_github_repo_skills_partially_with_auth(
-            pool,
-            &group.repo_url,
-            group.selections,
-            None,
-            auth.as_deref(),
-        )
-        .await
-        {
+        match import_group_for_target(pool, active_target, &group, app, auth).await {
             Ok(imported) => {
                 result.skipped_skills.extend(imported.skipped_skills);
                 for skill in imported.imported_skills {
@@ -166,6 +185,88 @@ pub(crate) async fn import_skillport_state_impl(
     }
 
     Ok(result)
+}
+
+async fn import_group_for_target(
+    pool: &DbPool,
+    active_target: &ActiveTarget,
+    group: &ImportGroup,
+    app: Option<&AppHandle>,
+    auth: Option<&str>,
+) -> Result<PortableGroupImportResult, PortableStateError> {
+    match portable_import_target_kind(active_target) {
+        PortableImportTargetKind::Local => {
+            let imported = github_import::import_github_repo_skills_partially_with_auth(
+                pool,
+                &group.repo_url,
+                group.selections.clone(),
+                app,
+                auth,
+            )
+            .await?;
+            Ok(PortableGroupImportResult {
+                imported_skills: imported.imported_skills,
+                skipped_skills: imported.skipped_skills,
+                failed_skills: imported
+                    .failed_skills
+                    .into_iter()
+                    .map(|failure| PortableGroupImportFailure {
+                        source_path: failure.source_path,
+                        error: failure.error,
+                    })
+                    .collect(),
+            })
+        }
+        PortableImportTargetKind::Remote => {
+            let imported = github_import::import_github_repo_skills_remote_with_auth(
+                pool,
+                active_target,
+                &group.repo_url,
+                group.selections.clone(),
+                None,
+                app,
+                auth,
+            )
+            .await?;
+            Ok(portable_group_import_from_full_result(imported))
+        }
+    }
+}
+
+fn portable_group_import_from_full_result(
+    imported: GitHubRepoImportResult,
+) -> PortableGroupImportResult {
+    PortableGroupImportResult {
+        imported_skills: imported.imported_skills,
+        skipped_skills: imported.skipped_skills,
+        failed_skills: Vec::new(),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PortableImportTargetKind {
+    Local,
+    Remote,
+}
+
+pub(crate) fn portable_import_target_kind(
+    active_target: &ActiveTarget,
+) -> PortableImportTargetKind {
+    match active_target {
+        ActiveTarget::Local => PortableImportTargetKind::Local,
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => PortableImportTargetKind::Remote,
+    }
+}
+
+struct PortableGroupImportResult {
+    imported_skills: Vec<ImportedGitHubSkillSummary>,
+    skipped_skills: Vec<String>,
+    failed_skills: Vec<PortableGroupImportFailure>,
+}
+
+struct PortableGroupImportFailure {
+    source_path: String,
+    error: String,
 }
 
 fn cancelled_import_result(

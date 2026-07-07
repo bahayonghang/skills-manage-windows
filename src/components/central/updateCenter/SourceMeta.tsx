@@ -9,9 +9,18 @@ interface SourceMetaProps {
 }
 
 type SourceMetaRow = {
-  key: string;
+  key: SourceMetaRowKey;
   label: string;
   value: string;
+};
+
+type SourceMetaRowKey = "repository" | "path" | "url" | "cache" | "hash";
+
+// 字段区分靠 <dt> 标签文字，不靠色相：五类行统一中性样板（随主题换肤）。
+const ROW_STYLE = {
+  container: "bg-muted/35 ring-border/60",
+  label: "text-muted-foreground",
+  value: "text-foreground/90",
 };
 
 function clean(value?: string | null): string | null {
@@ -29,8 +38,8 @@ export function SourceMeta({
   const path = clean(sourcePath);
   const url = clean(sourceUrl);
   const repository =
-    clean(repositoryLabel)
-    ?? (path || url ? t("central.updateCenter.sourceRepositoryUnknown") : null);
+    clean(repositoryLabel) ??
+    (path || url ? t("central.updateCenter.sourceRepositoryUnknown") : null);
 
   const rows: SourceMetaRow[] = [];
   if (repository) {
@@ -76,11 +85,12 @@ export function SourceMeta({
       {rows.map((row) => (
         <div
           key={row.key}
-          className="grid w-full min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)] items-baseline gap-1.5 rounded-md bg-muted/35 px-2 py-1 ring-1 ring-border/60 sm:w-auto"
+          data-source-meta-key={row.key}
+          className={`grid w-full min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)] items-baseline gap-1.5 rounded-md px-2 py-1 ring-1 sm:w-auto ${ROW_STYLE.container}`}
         >
-          <dt className="font-medium text-muted-foreground">{row.label}</dt>
+          <dt className={`font-medium ${ROW_STYLE.label}`}>{row.label}</dt>
           <dd
-            className="min-w-0 break-all font-mono text-foreground/90"
+            className={`min-w-0 break-all font-mono ${ROW_STYLE.value}`}
             title={row.value}
           >
             {row.value}

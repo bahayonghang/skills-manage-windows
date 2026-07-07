@@ -1,22 +1,23 @@
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Blocks, Moon, Plus, Search, Sun } from "lucide-react";
+import { Blocks, Keyboard, Moon, Plus, Search, Sun } from "lucide-react";
 
 import { usePlatformStore } from "@/stores/platformStore";
 import { useThemeStore, type ThemeFlavor } from "@/stores/themeStore";
 import { TargetQuickSwitcher } from "@/components/layout/TargetQuickSwitcher";
 import { Button } from "@/components/ui/button";
+import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { cn } from "@/lib/utils";
+import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import {
-  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-} from "@/lib/platformVisibility";
-import {
+  getPlatformTargetCountAgentId,
   getPlatformTargetGroups,
-  isUniversalPlatformTarget,
+  getPlatformTargetLabel,
 } from "@/lib/platformTargetGroups";
 
 interface TopBarProps {
   onSearchClick: () => void;
+  onShortcutsClick: () => void;
 }
 
 const LIGHT_FLAVORS: ThemeFlavor[] = ["latte", "claude-light"];
@@ -29,7 +30,7 @@ const FLAVOR_TOGGLE_MAP: Record<ThemeFlavor, ThemeFlavor> = {
   "claude-light": "claude-dark",
 };
 
-export function TopBar({ onSearchClick }: TopBarProps) {
+export function TopBar({ onSearchClick, onShortcutsClick }: TopBarProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -39,7 +40,8 @@ export function TopBar({ onSearchClick }: TopBarProps) {
   const agents = usePlatformStore((s) => s.agents);
   const skillsByAgent = usePlatformStore((s) => s.skillsByAgent);
   const categoryVisibility =
-    usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+    usePlatformStore((s) => s.categoryVisibility) ??
+    DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const platformTargets = getPlatformTargetGroups(agents, categoryVisibility);
 
   const isLightFlavor = LIGHT_FLAVORS.includes(flavor);
@@ -58,13 +60,11 @@ export function TopBar({ onSearchClick }: TopBarProps) {
       const agent =
         platformTargets.find((a) => a.id === agentId) ??
         agents.find((a) => a.id === agentId);
-      const countAgentId =
-        agent && isUniversalPlatformTarget(agent) ? agent.install_agent_id : agentId;
+      const countAgentId = agent
+        ? getPlatformTargetCountAgentId(agent)
+        : agentId;
       return {
-        label:
-          agent && isUniversalPlatformTarget(agent)
-            ? t("platformTargets.universalShortLabel")
-            : agent?.display_name ?? agentId,
+        label: agent ? getPlatformTargetLabel(agent, t, "short") : agentId,
         count: skillsByAgent[countAgentId] ?? 0,
       };
     }
@@ -85,10 +85,6 @@ export function TopBar({ onSearchClick }: TopBarProps) {
     }
     return { label: "", count: undefined };
   })();
-
-  const isMac =
-    typeof navigator !== "undefined" &&
-    navigator.platform.toUpperCase().includes("MAC");
 
   function handleToggleTheme() {
     setFlavor(FLAVOR_TOGGLE_MAP[flavor] ?? "latte");
@@ -122,9 +118,10 @@ export function TopBar({ onSearchClick }: TopBarProps) {
             <span className="truncate flex-1 text-left">
               {t("globalSearch.trigger")}
             </span>
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono text-muted-foreground/60 border border-border/50 rounded px-1 py-0.5">
-              {isMac ? "⌘" : "Ctrl"}K
-            </kbd>
+            <ShortcutHint
+              shortcut="mod+k"
+              className="hidden rounded border border-border/50 px-1 py-0.5 text-[11px] text-muted-foreground/60 sm:inline-flex"
+            />
           </button>
         </div>
       </div>
@@ -163,16 +160,32 @@ export function TopBar({ onSearchClick }: TopBarProps) {
       <TargetQuickSwitcher />
 
       <button
+        onClick={onShortcutsClick}
+        className={cn(
+          "z-10 p-1.5 rounded-md transition-colors cursor-pointer shrink-0 focus-ring",
+          "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+        )}
+        aria-label={t("shortcuts.openButton")}
+        title={t("shortcuts.openButton")}
+      >
+        <Keyboard className="size-4" />
+      </button>
+
+      <button
         onClick={handleToggleTheme}
         className={cn(
           "z-10 p-1.5 rounded-md transition-colors cursor-pointer shrink-0",
           "text-muted-foreground hover:text-foreground hover:bg-muted/60",
         )}
         aria-label={
-          isLightFlavor ? t("topbar.themeToggleDark") : t("topbar.themeToggleLight")
+          isLightFlavor
+            ? t("topbar.themeToggleDark")
+            : t("topbar.themeToggleLight")
         }
         title={
-          isLightFlavor ? t("topbar.themeToggleDark") : t("topbar.themeToggleLight")
+          isLightFlavor
+            ? t("topbar.themeToggleDark")
+            : t("topbar.themeToggleLight")
         }
       >
         {isLightFlavor ? (

@@ -167,7 +167,7 @@ pub(super) const PRIORITY_SKILL_ROOTS: &[&str] = &[
     "skills/.curated",
     "skills/.experimental",
     "skills/.system",
-    ".agents/skills",
+    crate::paths::UNIVERSAL_SKILLS_REL,
     ".augment/skills",
     ".bob/skills",
     ".claude/skills",

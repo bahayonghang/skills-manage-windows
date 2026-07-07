@@ -11,13 +11,15 @@ describe("InlineConfirmAction", () => {
         confirmLabel="Confirm delete"
         onConfirm={onConfirm}
         icon={<span>x</span>}
-      />
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Remove item" }));
 
     expect(onConfirm).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Confirm delete" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirm delete" }),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
 
@@ -36,19 +38,52 @@ describe("InlineConfirmAction", () => {
           icon={<span>x</span>}
         />
         <button type="button">Outside</button>
-      </div>
+      </div>,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Remove item" }));
-    expect(screen.getByRole("button", { name: "Confirm delete" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirm delete" }),
+    ).toBeInTheDocument();
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "Outside" }));
 
     await waitFor(() => {
       expect(
-        screen.queryByRole("button", { name: "Confirm delete" })
+        screen.queryByRole("button", { name: "Confirm delete" }),
       ).not.toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: "Remove item" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove item" }),
+    ).toBeInTheDocument();
+  });
+
+  it("resets to idle on Escape without confirming and restores focus to the idle trigger", async () => {
+    const onConfirm = vi.fn();
+
+    render(
+      <InlineConfirmAction
+        idleAriaLabel="Remove item"
+        confirmLabel="Confirm delete"
+        onConfirm={onConfirm}
+        icon={<span>x</span>}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove item" }));
+    const confirmButton = screen.getByRole("button", {
+      name: "Confirm delete",
+    });
+    expect(confirmButton).toHaveFocus();
+
+    fireEvent.keyDown(confirmButton, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "Confirm delete" }),
+      ).not.toBeInTheDocument();
+    });
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Remove item" })).toHaveFocus();
   });
 });

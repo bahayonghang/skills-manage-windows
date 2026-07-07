@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 
-import { PanelHeader, ProgressRow } from "@/components/dashboard/DashboardPanels";
+import {
+  PanelHeader,
+  ProgressRow,
+} from "@/components/dashboard/DashboardPanels";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface ProgressBreakdownProps {
@@ -21,7 +24,7 @@ export function ProgressBreakdown({
   const { t } = useTranslation();
 
   return (
-    <Card className="surface-glass overflow-hidden rounded-3xl border-0 bg-transparent p-0 shadow-none">
+    <Card className="surface-glass overflow-hidden rounded-2xl border-0 bg-transparent p-0 shadow-none">
       <PanelHeader
         title={t("dashboard.health.title")}
         description={t("dashboard.health.description")}

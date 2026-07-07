@@ -4,7 +4,6 @@ pub mod bootstrap;
 pub mod central_metadata;
 pub mod central_store_location;
 pub mod central_updates;
-pub mod central_updates_fs;
 pub mod collections;
 pub mod github_import;
 pub mod linker;

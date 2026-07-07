@@ -162,7 +162,7 @@ export function TargetQuickSwitcher() {
                           : target.label}
                       </span>
                       {isActive && (
-                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
                           {t("targets.active")}
                         </span>
                       )}
@@ -175,7 +175,7 @@ export function TargetQuickSwitcher() {
                     {isSwitching ? (
                       <Loader2 className="size-3.5 animate-spin text-primary" />
                     ) : !isActive ? (
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-[11px] text-muted-foreground">
                         {t("targets.quickSwitch.useThis")}
                       </span>
                     ) : null}

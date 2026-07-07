@@ -98,7 +98,7 @@ export function GitHubRepoImportPreviewWorkspace({
                   <div className="text-sm font-semibold">
                     {t("marketplace.githubImportSelectionTitle")}
                   </div>
-                  <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     {preview.skills.length}
                   </span>
                 </div>

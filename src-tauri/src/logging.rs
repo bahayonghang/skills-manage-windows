@@ -1,8 +1,7 @@
 use crate::paths;
 use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
-use regex::{Captures, Regex};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -11,7 +10,6 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 
 static LOG_GUARD: OnceLock<WorkerGuard> = OnceLock::new();
-static REDACTION_PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
 
 const RUNTIME_LOG_RETENTION_DAYS: i64 = 14;
 const RUNTIME_LOG_PREFIX: &str = "skillport-";
@@ -356,7 +354,7 @@ fn export_runtime_log_file_from_dir(
     })?;
     Ok(content
         .lines()
-        .map(redact_sensitive_line)
+        .map(crate::redaction::redact_runtime_line)
         .collect::<Vec<_>>()
         .join("\n"))
 }
@@ -513,7 +511,7 @@ fn runtime_line_matches(
 }
 
 fn parse_runtime_log_line(line_number: usize, raw: &str) -> RuntimeLogLine {
-    let raw = redact_sensitive_line(raw);
+    let raw = crate::redaction::redact_runtime_line(raw);
     let level = detect_runtime_level(&raw);
     let timestamp = detect_runtime_timestamp(&raw);
     let target_source = detect_runtime_target_source(&raw);
@@ -620,33 +618,6 @@ fn runtime_log_file_date(file_name: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()
 }
 
-fn redact_sensitive_line(raw: &str) -> String {
-    let patterns = REDACTION_PATTERNS.get_or_init(|| {
-        vec![
-            Regex::new(
-                r#"(?ix)(?P<prefix>["']?(?:password|token|pat|api[_-]?key|apikey|secret|private[_-]?key|credential)["']?\s*:\s*["'])[^"']+(?P<suffix>["'])"#,
-            )
-            .expect("valid JSON redaction regex"),
-            Regex::new(
-                r#"(?ix)(?P<prefix>\b(?:password|token|pat|api[_-]?key|apikey|secret|private[_-]?key|credential)\b\s*=\s*["']?)[^"'\s,;})\]]+"#,
-            )
-            .expect("valid key-value redaction regex"),
-        ]
-    });
-
-    let mut redacted = patterns[0]
-        .replace_all(raw, |captures: &Captures<'_>| {
-            format!("{}[REDACTED]{}", &captures["prefix"], &captures["suffix"])
-        })
-        .to_string();
-    redacted = patterns[1]
-        .replace_all(&redacted, |captures: &Captures<'_>| {
-            format!("{}[REDACTED]", &captures["prefix"])
-        })
-        .to_string();
-    redacted
-}
-
 fn sanitize_frontend_runtime_log_payload(
     payload: FrontendRuntimeLogPayload,
 ) -> SanitizedFrontendRuntimeLog {
@@ -674,7 +645,7 @@ fn sanitize_frontend_runtime_log_payload(
         MAX_FRONTEND_SOURCE_CHARS,
     );
     let message = truncate_chars(
-        &redact_sensitive_line(
+        &crate::redaction::redact_runtime_line(
             payload
                 .message
                 .as_deref()
@@ -686,7 +657,7 @@ fn sanitize_frontend_runtime_log_payload(
     );
     let details = payload
         .details
-        .map(redact_json_value)
+        .map(crate::redaction::redact_runtime_json)
         .and_then(|value| serde_json::to_string(&value).ok())
         .map(|value| truncate_chars(&value, MAX_FRONTEND_DETAILS_CHARS))
         .unwrap_or_else(|| "{}".to_string());
@@ -695,44 +666,8 @@ fn sanitize_frontend_runtime_log_payload(
         level,
         source,
         message,
-        details: redact_sensitive_line(&details),
+        details: crate::redaction::redact_runtime_line(&details),
     }
-}
-
-fn redact_json_value(value: Value) -> Value {
-    match value {
-        Value::Object(map) => Value::Object(redact_json_map(map)),
-        Value::Array(items) => Value::Array(items.into_iter().map(redact_json_value).collect()),
-        other => other,
-    }
-}
-
-fn redact_json_map(map: Map<String, Value>) -> Map<String, Value> {
-    map.into_iter()
-        .map(|(key, value)| {
-            if is_sensitive_key(&key) {
-                (key, Value::String("[REDACTED]".to_string()))
-            } else {
-                (key, redact_json_value(value))
-            }
-        })
-        .collect()
-}
-
-fn is_sensitive_key(key: &str) -> bool {
-    let key = key.to_lowercase();
-    [
-        "password",
-        "token",
-        "pat",
-        "api_key",
-        "apikey",
-        "secret",
-        "private_key",
-        "credential",
-    ]
-    .into_iter()
-    .any(|needle| key.contains(needle))
 }
 
 fn truncate_chars(value: &str, max_chars: usize) -> String {

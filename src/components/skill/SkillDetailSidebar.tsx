@@ -40,6 +40,13 @@ import {
   SectionLabel,
   SourceOriginBadge,
 } from "./SkillDetailViewShared";
+import {
+  InstalledPlatformList,
+} from "./SkillDetailInstalledPlatforms";
+import {
+  buildInstalledPlatformRows,
+  type InstalledPlatformUninstallRequest,
+} from "./skillDetailInstalledPlatformsModel";
 import { SkillDetailFileTree } from "./SkillDetailFileTree";
 import type { SourceMetadata } from "./skillDetailViewTypes";
 import type { DirectoryTreeEntry } from "@/types";
@@ -75,6 +82,8 @@ interface SkillDetailSidebarProps {
   sharedRootAgentIds: Set<string>;
   installingAgentId: string | null;
   onToggleInstall: (agentId: string) => void;
+  onOpenGitHubRepository: (url: string) => void;
+  onRequestUninstallInstalledPlatform: (request: InstalledPlatformUninstallRequest) => void;
   skillCollections: Collection[];
   addToCollectionButtonRef: RefObject<HTMLButtonElement | null>;
   onOpenCollectionPicker: () => void;
@@ -124,7 +133,7 @@ function PlatformInstallStatusGroups({
 
     return (
       <div className="flex items-center gap-1">
-        <span className="w-12 shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+        <span className="w-12 shrink-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
           {categoryLabel}
         </span>
         <div className="flex flex-wrap items-center gap-0.5">
@@ -182,7 +191,7 @@ function SourceMetadataSection({
       <SectionLabel>{t("detail.metadata")}</SectionLabel>
       <div className="space-y-2.5">
         <div className="space-y-0.5">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70">
             {t("common.platform")}
           </div>
           <div className="inline-flex items-center gap-1 break-all font-mono text-xs leading-relaxed text-foreground">
@@ -191,7 +200,7 @@ function SourceMetadataSection({
           </div>
         </div>
         <div className="space-y-0.5">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70">
             {t("common.project")}
           </div>
           <div className="inline-flex items-center gap-1 break-all font-mono text-xs leading-relaxed text-foreground">
@@ -200,7 +209,7 @@ function SourceMetadataSection({
           </div>
         </div>
         <div className="space-y-0.5">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70">
             {t("common.filePath")}
           </div>
           <button
@@ -248,6 +257,8 @@ export function SkillDetailSidebar({
   sharedRootAgentIds,
   installingAgentId,
   onToggleInstall,
+  onOpenGitHubRepository,
+  onRequestUninstallInstalledPlatform,
   skillCollections,
   addToCollectionButtonRef,
   onOpenCollectionPicker,
@@ -257,6 +268,11 @@ export function SkillDetailSidebar({
   const { t, i18n } = useTranslation();
   const repositoryLabel = repositoryDisplayName(detail?.repository);
   const githubRepositoryUrl = buildGitHubRepositoryUrl(detail?.repository);
+  const installedPlatformRows = buildInstalledPlatformRows(
+    targetAgents,
+    installationMap,
+    sharedRootAgentIds
+  );
 
   return (
     <aside
@@ -344,10 +360,9 @@ export function SkillDetailSidebar({
               {githubRepositoryUrl && repositoryLabel && (
                 <div className={inspectorCardClassName}>
                   <MetadataRow label={t("detail.githubRepository")} value={repositoryLabel} />
-                  <a
-                    href={githubRepositoryUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => onOpenGitHubRepository(githubRepositoryUrl)}
                     className={cn(
                       inspectorActionButtonClassName,
                       "inline-flex h-9 items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-xs transition-[color,box-shadow] hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -355,7 +370,7 @@ export function SkillDetailSidebar({
                   >
                     <ExternalLink className="size-3.5 shrink-0" />
                     <span className="min-w-0 truncate">{t("detail.openGithubRepo")}</span>
-                  </a>
+                  </button>
                   {detail.source_path && (
                     <MetadataRow label={t("detail.repositoryPath")} value={detail.source_path} />
                   )}
@@ -400,7 +415,7 @@ export function SkillDetailSidebar({
               <SectionLabel>{t("detail.updateStatus")}</SectionLabel>
               <div data-testid="detail-update-status-card" className={inspectorCardClassName}>
                 <div className="min-w-0 space-y-2">
-                  <span className="inline-flex rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70">
+                  <span className="inline-flex rounded-full bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border/70">
                     {updateStatus
                       ? t(`central.updateStatus.${updateStatus.status}`)
                       : t("central.updateStatus.not_checked")}
@@ -475,7 +490,7 @@ export function SkillDetailSidebar({
                 {detail.tags.map((tag) => (
                   <span
                     key={tag.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border/70"
+                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border/70"
                     title={tag.description ?? tag.name}
                   >
                     <Tag className="size-2.5" />
@@ -566,15 +581,22 @@ export function SkillDetailSidebar({
               ) : targetAgents.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t("detail.noPlatforms")}</p>
               ) : (
-                <PlatformInstallStatusGroups
-                  lobsterAgents={lobsterAgents}
-                  codingAgents={codingAgents}
-                  installationMap={installationMap}
-                  sharedRootAgentIds={sharedRootAgentIds}
-                  installingAgentId={installingAgentId}
-                  onToggleInstall={onToggleInstall}
-                  skillName={detail.name}
-                />
+                <>
+                  <PlatformInstallStatusGroups
+                    lobsterAgents={lobsterAgents}
+                    codingAgents={codingAgents}
+                    installationMap={installationMap}
+                    sharedRootAgentIds={sharedRootAgentIds}
+                    installingAgentId={installingAgentId}
+                    onToggleInstall={onToggleInstall}
+                    skillName={detail.name}
+                  />
+                  <InstalledPlatformList
+                    rows={installedPlatformRows}
+                    skillName={detail.name}
+                    onRequestUninstall={onRequestUninstallInstalledPlatform}
+                  />
+                </>
               )}
             </div>
           </section>
@@ -605,13 +627,13 @@ export function SkillDetailSidebar({
                         >
                           {row.projectName}
                         </div>
-                        <div className="truncate text-[10px] text-muted-foreground">
+                        <div className="truncate text-[11px] text-muted-foreground">
                           {row.agentDisplayName}
                         </div>
                       </div>
                       <span
                         className={cn(
-                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium ring-1",
                           row.linkType === "symlink"
                             ? "bg-success/10 text-success-foreground ring-success/20"
                             : "bg-warning/10 text-warning-foreground ring-warning/20"
@@ -641,7 +663,7 @@ export function SkillDetailSidebar({
                 {skillCollections.map((collection) => (
                   <span
                     key={collection.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary ring-1 ring-primary/20"
+                    className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary ring-1 ring-primary/20"
                     title={collection.description ?? collection.name}
                   >
                     <Tag className="size-2.5" />

@@ -2,13 +2,12 @@ import type { ReactNode } from "react";
 
 import { ChevronRight } from "lucide-react";
 
-import {
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { OperationLogEntry } from "@/types";
+
+const dashboardControlMotion =
+  "transition-[scale,background-color,border-color,box-shadow,color] duration-150 ease-out active:scale-[0.96]";
 
 function ratio(count: number, total: number) {
   if (total <= 0) return 0;
@@ -61,11 +60,11 @@ export function PanelHeader({
     <CardHeader className="border-b border-border/70 px-4 py-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <CardTitle className="truncate text-sm font-semibold">
+          <CardTitle className="truncate text-sm font-semibold text-balance">
             {title}
           </CardTitle>
           {description && (
-            <CardDescription className="mt-1 max-w-full break-words text-xs leading-5">
+            <CardDescription className="mt-1 max-w-full break-words text-pretty text-xs leading-5">
               {description}
             </CardDescription>
           )}
@@ -154,53 +153,6 @@ export function ProgressRow({
   );
 }
 
-export function StatButton({
-  icon,
-  label,
-  value,
-  description,
-  onClick,
-  testId,
-  emphasized = false,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: number | string;
-  description: string;
-  onClick: () => void;
-  testId?: string;
-  emphasized?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      data-testid={testId}
-      onClick={onClick}
-      className={cn(
-        "flex min-h-[6.75rem] min-w-0 flex-col rounded-md border px-3 py-3 text-left transition-colors",
-        emphasized
-          ? "border-primary/35 bg-primary/10 hover:border-primary/55"
-          : "border-border/80 bg-background hover:border-primary/40 hover:bg-muted/25"
-      )}
-    >
-      <span className="flex items-center justify-between gap-2 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
-        <span className={cn("truncate", emphasized && "text-primary-text")}>
-          {label}
-        </span>
-        <span className={cn("shrink-0", emphasized && "text-primary-text")}>
-          {icon}
-        </span>
-      </span>
-      <span className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
-        {value}
-      </span>
-      <span className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-        {description}
-      </span>
-    </button>
-  );
-}
-
 export function QueueRow({
   label,
   count,
@@ -216,9 +168,12 @@ export function QueueRow({
     <button
       type="button"
       onClick={onClick}
-      className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left transition-colors first:border-t-0 hover:bg-muted/25"
+      className={cn(
+        "focus-ring grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left first:border-t-0 hover:bg-muted/25",
+        dashboardControlMotion,
+      )}
     >
-      <span className="grid size-9 place-items-center rounded-md border border-primary/25 bg-primary/10 text-sm font-semibold tabular-nums text-primary-text">
+      <span className="grid size-9 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-sm font-semibold tabular-nums text-primary-text">
         {count}
       </span>
       <span className="min-w-0">
@@ -227,7 +182,7 @@ export function QueueRow({
           {description}
         </span>
       </span>
-      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-muted-foreground">
+      <span className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-xs font-medium text-muted-foreground">
         <ChevronRight className="size-3" />
       </span>
     </button>
@@ -246,7 +201,7 @@ export function LogRow({
       <span
         className={cn(
           "mt-1.5 size-2 rounded-full ring-4 ring-muted/35",
-          logDotClass(entry.status)
+          logDotClass(entry.status),
         )}
       />
       <div className="min-w-0">
@@ -261,7 +216,7 @@ export function LogRow({
         <span
           className={cn(
             "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium",
-            logStatusClass(entry.status)
+            logStatusClass(entry.status),
           )}
         >
           {statusLabel}

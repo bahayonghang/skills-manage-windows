@@ -1,18 +1,19 @@
-//! Remote install/uninstall orchestration. Drives the
-//! `REMOTE_CENTRAL_INSTALL_SCRIPT` shell snippet on a POSIX remote-like target
-//! (SSH or WSL).
+//! Remote (SSH/WSL) execution half of skill install / uninstall. Drives the
+//! `REMOTE_CENTRAL_INSTALL_SCRIPT` shell snippet on a POSIX remote-like
+//! target in a single round trip. The business orchestration lives in
+//! `install.rs`; this module only implements the Remote arms of the
+//! [`super::transport::InstallTransport`] hooks.
 
-use crate::db::{self, DbPool, SkillInstallation};
-use crate::targets::{
-    connect_remote_target, connect_ssh_target, remote_join, ActiveTarget, ConnectedRemoteTarget,
-    RemoteTargetConfig,
-};
+use crate::db::{self, DbPool};
+use crate::targets::{remote_join, ConnectedRemoteTarget};
 
+#[cfg(test)]
+use crate::db::SkillInstallation;
 #[cfg(test)]
 use crate::targets::RemotePathInfo;
 
 use super::error::InstallationError;
-use super::types::InstallResult;
+use super::transport::{transport_error, Placement, ResolvedMethod, SourceContext};
 
 /// POSIX shell snippet executed on the remote host to centralize a skill,
 /// clear the install slot, and lay down the symlink or copy.
@@ -66,29 +67,6 @@ else
 fi
 "#;
 
-async fn record_remote_installation(
-    pool: &DbPool,
-    skill_id: &str,
-    agent_id: &str,
-    installed_path: &str,
-    link_type: &str,
-    symlink_target: Option<String>,
-) -> Result<InstallResult, InstallationError> {
-    let installation = SkillInstallation {
-        skill_id: skill_id.to_string(),
-        agent_id: agent_id.to_string(),
-        installed_path: installed_path.to_string(),
-        link_type: link_type.to_string(),
-        symlink_target,
-        created_at: chrono::Utc::now().to_rfc3339(),
-    };
-    db::upsert_skill_installation(pool, &installation).await?;
-
-    Ok(InstallResult {
-        symlink_path: installed_path.to_string(),
-    })
-}
-
 pub(crate) async fn ensure_remote_centralized(
     connection: &ConnectedRemoteTarget,
     pool: &DbPool,
@@ -99,7 +77,7 @@ pub(crate) async fn ensure_remote_centralized(
     if connection
         .exists(&canonical_skill_md)
         .await
-        .map_err(|e| InstallationError::Remote(e.to_string()))?
+        .map_err(transport_error)?
     {
         return Ok(());
     }
@@ -113,7 +91,7 @@ pub(crate) async fn ensure_remote_centralized(
     if !connection
         .exists(&source_skill_md)
         .await
-        .map_err(|e| InstallationError::Remote(e.to_string()))?
+        .map_err(transport_error)?
     {
         return Err(InstallationError::SkillSourceMissing(source_skill_md));
     }
@@ -121,7 +99,7 @@ pub(crate) async fn ensure_remote_centralized(
     connection
         .copy_dir(&source_dir, canonical_dir)
         .await
-        .map_err(|e| InstallationError::Remote(e.to_string()))?;
+        .map_err(transport_error)?;
 
     let mut updated = skill;
     updated.canonical_path = Some(canonical_dir.to_string());
@@ -132,7 +110,10 @@ pub(crate) async fn ensure_remote_centralized(
     Ok(())
 }
 
-fn remote_skill_source_dir(skill: &db::Skill, skill_id: &str) -> Result<String, InstallationError> {
+pub(crate) fn remote_skill_source_dir(
+    skill: &db::Skill,
+    skill_id: &str,
+) -> Result<String, InstallationError> {
     crate::targets::remote_parent(&skill.file_path)
         .ok_or_else(|| InstallationError::InvalidSkillFilePath(skill_id.to_string()))
 }
@@ -172,8 +153,68 @@ async fn run_remote_central_install_script(
             ],
         )
         .await
-        .map_err(|e| InstallationError::Remote(e.to_string()))
+        .map_err(transport_error)
         .map(|_| ())
+}
+
+/// Placement Remote arm: one atomic script round trip that centralizes,
+/// clears the install slot, and lays down the symlink or copy; then marks
+/// the skill centralized in the DB.
+pub(crate) async fn place_install_remote(
+    pool: &DbPool,
+    connection: &ConnectedRemoteTarget,
+    source: SourceContext,
+    agent: &db::Agent,
+    central: &db::Agent,
+    skill_id: &str,
+    method: ResolvedMethod,
+) -> Result<Placement, InstallationError> {
+    let SourceContext::Remote { skill, source_dir } = source else {
+        return Err(InstallationError::Remote(
+            "remote install invoked without a remote source context".to_string(),
+        ));
+    };
+
+    let canonical_dir = remote_join(&central.global_skills_dir, skill_id);
+    let canonical_skill_md = remote_join(&canonical_dir, "SKILL.md");
+    let target_path = remote_join(&agent.global_skills_dir, skill_id);
+
+    let method = match method {
+        ResolvedMethod::Symlink => "symlink",
+        ResolvedMethod::Copy | ResolvedMethod::Auto => "copy",
+    };
+    let installations = db::get_skill_installations(pool, skill_id).await?;
+    let installation = installations
+        .iter()
+        .find(|record| record.agent_id == agent.id);
+    let managed_copy = installation
+        .is_some_and(|record| record.link_type == "copy" && record.installed_path == target_path);
+
+    run_remote_central_install_script(
+        connection,
+        &source_dir,
+        &canonical_dir,
+        &target_path,
+        &agent.global_skills_dir,
+        method,
+        managed_copy,
+    )
+    .await?;
+    mark_remote_skill_centralized(pool, *skill, &canonical_dir, &canonical_skill_md).await?;
+
+    if method == "symlink" {
+        return Ok(Placement {
+            installed_path: target_path,
+            link_type: "symlink",
+            symlink_target: Some(canonical_dir),
+        });
+    }
+
+    Ok(Placement {
+        installed_path: target_path,
+        link_type: "copy",
+        symlink_target: None,
+    })
 }
 
 #[cfg(test)]
@@ -219,153 +260,4 @@ pub(crate) fn classify_remote_existing_install_target(
         "A remote {} already exists at '{}'. Uninstall the existing entry or delete it before installing with {}.",
         entry_type, target_path, method
     ))
-}
-
-pub async fn install_skill_to_agent_ssh_impl(
-    pool: &DbPool,
-    target: &RemoteTargetConfig,
-    skill_id: &str,
-    agent_id: &str,
-    method: &str,
-) -> Result<InstallResult, InstallationError> {
-    let connection = ConnectedRemoteTarget::Ssh(
-        connect_ssh_target(target)
-            .await
-            .map_err(|e| InstallationError::Remote(e.to_string()))?,
-    );
-    install_skill_to_agent_ssh_with_connection(pool, &connection, skill_id, agent_id, method).await
-}
-
-pub async fn install_skill_to_agent_remote_impl(
-    pool: &DbPool,
-    active_target: &ActiveTarget,
-    skill_id: &str,
-    agent_id: &str,
-    method: &str,
-) -> Result<InstallResult, InstallationError> {
-    let connection = connect_remote_target(active_target)
-        .await
-        .map_err(|e| InstallationError::Remote(e.to_string()))?;
-    install_skill_to_agent_ssh_with_connection(pool, &connection, skill_id, agent_id, method).await
-}
-
-pub(crate) async fn install_skill_to_agent_ssh_with_connection(
-    pool: &DbPool,
-    connection: &ConnectedRemoteTarget,
-    skill_id: &str,
-    agent_id: &str,
-    method: &str,
-) -> Result<InstallResult, InstallationError> {
-    if agent_id == "central" {
-        return Err(InstallationError::CentralAgentTarget);
-    }
-
-    let agent = db::get_agent_by_id(pool, agent_id)
-        .await?
-        .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
-    let central = db::get_agent_by_id(pool, "central")
-        .await?
-        .ok_or(InstallationError::CentralAgentMissing)?;
-    let canonical_dir = remote_join(&central.global_skills_dir, skill_id);
-    let canonical_skill_md = remote_join(&canonical_dir, "SKILL.md");
-    let skill = db::get_skill_by_id(pool, skill_id)
-        .await?
-        .ok_or_else(|| InstallationError::SkillNotFound(skill_id.to_string()))?;
-    let source_dir = remote_skill_source_dir(&skill, skill_id)?;
-
-    if agent.global_skills_dir == central.global_skills_dir {
-        ensure_remote_centralized(connection, pool, skill_id, &canonical_dir).await?;
-
-        return record_remote_installation(
-            pool,
-            skill_id,
-            agent_id,
-            &canonical_dir,
-            "native",
-            None,
-        )
-        .await;
-    }
-
-    let target_path = remote_join(&agent.global_skills_dir, skill_id);
-    let method = if method == "symlink" {
-        "symlink"
-    } else {
-        "copy"
-    };
-    if method == "symlink" && !connection.symlink_allowed() {
-        return Err(InstallationError::RemoteSymlinkDisabled);
-    }
-    let installations = db::get_skill_installations(pool, skill_id).await?;
-    let installation = installations
-        .iter()
-        .find(|record| record.agent_id == agent_id);
-    let managed_copy = installation
-        .is_some_and(|record| record.link_type == "copy" && record.installed_path == target_path);
-
-    run_remote_central_install_script(
-        connection,
-        &source_dir,
-        &canonical_dir,
-        &target_path,
-        &agent.global_skills_dir,
-        method,
-        managed_copy,
-    )
-    .await?;
-    mark_remote_skill_centralized(pool, skill, &canonical_dir, &canonical_skill_md).await?;
-
-    if method == "symlink" {
-        return record_remote_installation(
-            pool,
-            skill_id,
-            agent_id,
-            &target_path,
-            "symlink",
-            Some(canonical_dir),
-        )
-        .await;
-    }
-
-    record_remote_installation(pool, skill_id, agent_id, &target_path, "copy", None).await
-}
-
-pub async fn uninstall_skill_from_agent_ssh_impl(
-    pool: &DbPool,
-    target: &RemoteTargetConfig,
-    skill_id: &str,
-    agent_id: &str,
-) -> Result<(), InstallationError> {
-    let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
-    uninstall_skill_from_agent_remote_impl(pool, &active_target, skill_id, agent_id).await
-}
-
-pub async fn uninstall_skill_from_agent_remote_impl(
-    pool: &DbPool,
-    active_target: &ActiveTarget,
-    skill_id: &str,
-    agent_id: &str,
-) -> Result<(), InstallationError> {
-    let agent = db::get_agent_by_id(pool, agent_id)
-        .await?
-        .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
-    let central = db::get_agent_by_id(pool, "central")
-        .await?
-        .ok_or(InstallationError::CentralAgentMissing)?;
-
-    if agent_id == "central" || agent.global_skills_dir == central.global_skills_dir {
-        return Err(InstallationError::SharedCentralUninstall {
-            display_name: agent.display_name,
-        });
-    }
-
-    let install_path = remote_join(&agent.global_skills_dir, skill_id);
-    let connection = connect_remote_target(active_target)
-        .await
-        .map_err(|e| InstallationError::Remote(e.to_string()))?;
-    connection
-        .remove_tree(&install_path)
-        .await
-        .map_err(|e| InstallationError::Remote(e.to_string()))?;
-    Ok(db::delete_skill_installation(pool, skill_id, agent_id).await?)
 }

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke } from "@/lib/ipc";
 import type { SkillExplanationSummaryMap } from "@/types/skillExplanation";
 
-function normalizeSkillIds(skillIds: readonly (string | null | undefined)[]): string[] {
+function normalizeSkillIds(
+  skillIds: readonly (string | null | undefined)[],
+): string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];
 
@@ -21,12 +23,18 @@ function normalizeSkillIds(skillIds: readonly (string | null | undefined)[]): st
 
 export function useSkillExplanationSummaries(
   skillIds: readonly (string | null | undefined)[],
-  lang = "zh"
+  lang = "zh",
 ): SkillExplanationSummaryMap {
   const [summaries, setSummaries] = useState<SkillExplanationSummaryMap>({});
   const normalizedLang = lang.trim() || "zh";
-  const normalizedSkillIds = useMemo(() => normalizeSkillIds(skillIds), [skillIds]);
-  const skillIdsKey = useMemo(() => normalizedSkillIds.join("\0"), [normalizedSkillIds]);
+  const normalizedSkillIds = useMemo(
+    () => normalizeSkillIds(skillIds),
+    [skillIds],
+  );
+  const skillIdsKey = useMemo(
+    () => normalizedSkillIds.join("\0"),
+    [normalizedSkillIds],
+  );
   const normalizedSkillIdsRef = useRef(normalizedSkillIds);
 
   useEffect(() => {
@@ -37,16 +45,16 @@ export function useSkillExplanationSummaries(
     let cancelled = false;
     const requestSkillIds = normalizedSkillIdsRef.current;
 
-    if (!isTauriRuntime() || requestSkillIds.length === 0) {
+    if (requestSkillIds.length === 0) {
       setSummaries({});
       return;
     }
 
     void Promise.resolve(
-      invoke<SkillExplanationSummaryMap>("get_skill_explanation_summaries", {
+      invoke("get_skill_explanation_summaries", {
         skillIds: requestSkillIds,
         lang: normalizedLang,
-      })
+      }),
     )
       .then((result) => {
         if (!cancelled) {

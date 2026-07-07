@@ -1,0 +1,2 @@
+{"file": "DESIGN.md", "reason": "验收基准：例外登记条目、圆角阶梯口径、Dashboard 密度定位条目必须已落"}
+{"file": "src/components/ui/card.tsx", "reason": "检查收敛后的卡片与标准签名一致"}

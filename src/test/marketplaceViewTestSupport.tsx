@@ -614,7 +614,7 @@ vi.mock("@/stores/skillStore", () => ({
 }));
 
 import { MarketplaceView as MarketplaceViewComponent } from "@/pages/MarketplaceView";
-import * as tauriBridgeModule from "@/lib/tauri";
+import * as tauriBridgeModule from "@/lib/ipc";
 import { useTargetStore as targetStoreHook } from "@/stores/targetStore";
 
 export const MarketplaceView = MarketplaceViewComponent;

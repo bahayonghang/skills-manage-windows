@@ -1,16 +1,10 @@
 use super::*;
 use crate::db;
-use sqlx::SqlitePool;
+use crate::test_support::mem_pool as setup_test_db;
 use std::fs;
 use tempfile::TempDir;
 
 const BUILTIN_AGENT_COUNT: usize = 37;
-
-async fn setup_test_db() -> DbPool {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database(&pool).await.unwrap();
-    pool
-}
 
 #[test]
 fn test_is_detected_existing_dir() {
@@ -68,10 +62,7 @@ async fn test_list_platform_paths_resolves_local_paths() {
 
 #[tokio::test]
 async fn test_list_platform_paths_resolves_remote_paths() {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database_for_remote_home(&pool, "/home/alice")
-        .await
-        .unwrap();
+    let pool = crate::test_support::mem_pool_with_home("/home/alice").await;
 
     let paths = list_platform_paths_impl(&pool, Some("/home/alice"))
         .await

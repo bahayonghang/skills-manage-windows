@@ -12,7 +12,8 @@ function renderDialog(overrides: Partial<ComponentProps<typeof UpdateCheckModeDi
     <UpdateCheckModeDialog
       open
       onOpenChange={onOpenChange}
-      scopeLabel="检查所选（2）"
+      regularScopeLabel="检查所选（2）"
+      syncScopeLabel="检查全部仓库（1 个）"
       onConfirm={onConfirm}
       {...overrides}
     />,
@@ -40,6 +41,7 @@ describe("UpdateCheckModeDialog", () => {
     const dialog = screen.getByRole("dialog");
 
     fireEvent.click(within(dialog).getByTestId("update-check-mode-sync"));
+    expect(within(dialog).getByText(/当前范围：检查全部仓库（1 个）/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     expect(onConfirm).toHaveBeenCalledWith("sync" satisfies UpdateCheckMode);
@@ -50,6 +52,7 @@ describe("UpdateCheckModeDialog", () => {
     const dialog = screen.getByRole("dialog");
 
     expect(within(dialog).getByText("选择更新检查模式")).toBeInTheDocument();
+    expect(within(dialog).getByText(/当前范围：检查全部仓库（1 个）/)).toBeInTheDocument();
     expect(within(dialog).getByTestId("update-check-mode-regular")).toBeInTheDocument();
     expect(within(dialog).getByTestId("update-check-mode-sync")).toHaveAttribute(
       "aria-pressed",
@@ -100,5 +103,14 @@ describe("UpdateCheckModeDialog", () => {
     fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
 
     expect(onConfirm).toHaveBeenCalledWith("regular");
+  });
+
+  it("shows an inline check failure", () => {
+    renderDialog({ error: "检查更新失败: network unavailable" });
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "检查更新失败: network unavailable",
+    );
   });
 });

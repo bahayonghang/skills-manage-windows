@@ -27,6 +27,8 @@ export function InlineConfirmAction({
   const [isConfirming, setIsConfirming] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
+  const idleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const shouldRestoreFocusRef = useRef(false);
 
   useEffect(() => {
     if (!isConfirming) return;
@@ -37,11 +39,20 @@ export function InlineConfirmAction({
       }
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape" || isLoading) return;
+      event.stopPropagation();
+      shouldRestoreFocusRef.current = true;
+      setIsConfirming(false);
+    }
+
     document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown, true);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [isConfirming]);
+  }, [isConfirming, isLoading]);
 
   useEffect(() => {
     if (disabled && !isLoading) {
@@ -52,6 +63,9 @@ export function InlineConfirmAction({
   useEffect(() => {
     if (isConfirming) {
       confirmButtonRef.current?.focus();
+    } else if (shouldRestoreFocusRef.current) {
+      shouldRestoreFocusRef.current = false;
+      idleButtonRef.current?.focus();
     }
   }, [isConfirming]);
 
@@ -84,8 +98,8 @@ export function InlineConfirmAction({
           disabled={disabled || isLoading}
           aria-label={confirmLabel}
           className={cn(
-            "inline-flex h-8 items-center justify-center rounded-md px-2.5 text-xs font-medium transition-colors text-destructive bg-destructive/10 hover:bg-destructive/15 disabled:opacity-50 disabled:cursor-default",
-            className
+            "focus-ring inline-flex h-8 items-center justify-center rounded-md px-2.5 text-xs font-medium transition-colors text-destructive bg-destructive/10 hover:bg-destructive/15 disabled:opacity-50 disabled:cursor-default",
+            className,
           )}
         >
           {isLoading ? (
@@ -99,14 +113,15 @@ export function InlineConfirmAction({
         </button>
       ) : (
         <button
+          ref={idleButtonRef}
           type="button"
           onClick={handleArmConfirm}
           disabled={disabled}
           title={idleTitle ?? idleAriaLabel}
           aria-label={idleAriaLabel}
           className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:cursor-default",
-            className
+            "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:cursor-default",
+            className,
           )}
         >
           {icon}

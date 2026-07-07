@@ -17,10 +17,12 @@ use crate::targets::{connect_remote_target, ActiveTarget};
 
 mod claude_plugin;
 mod error;
+mod frontmatter;
 mod persistence;
 mod ssh_batch;
 
 pub use error::ScannerError;
+pub use frontmatter::extract_frontmatter_block;
 
 use claude_plugin::{
     agent_tracks_observations, observation_row_id, scan_roots_for_agent, AgentScanRoot, SourceKind,
@@ -92,14 +94,7 @@ pub fn parse_skill_md(path: &Path) -> Option<SkillInfo> {
 }
 
 pub fn parse_skill_md_content(content: &str) -> Option<SkillInfo> {
-    // Frontmatter must begin on the very first line with "---"
-    let after_open = content
-        .strip_prefix("---\n")
-        .or_else(|| content.strip_prefix("---\r\n"))?;
-
-    // Locate the closing "---" delimiter
-    let close_pos = after_open.find("\n---")?;
-    let frontmatter_str = &after_open[..close_pos];
+    let frontmatter_str = extract_frontmatter_block(content)?;
 
     // Parse the YAML block
     let yaml: serde_norway::Value = serde_norway::from_str(frontmatter_str).ok()?;

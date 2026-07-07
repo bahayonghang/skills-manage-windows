@@ -10,13 +10,15 @@ use std::time::Instant;
 use tauri::{AppHandle, State};
 
 use crate::operation_log::{
-    local_target_context, record_operation_log_best_effort, OperationLogEvent,
+    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
 };
+use crate::services::github_import;
 use crate::services::portable_state::{
     build_remote_catalog, emit_portability_progress, export_skillport_state_impl,
-    import_skillport_state_impl, parse_manifest, preview_skillport_state_import_impl,
-    PortabilityProgressUpdate, PortableStateError,
+    import_skillport_state_for_target, parse_manifest, preview_skillport_state_import_impl,
+    PortabilityProgressUpdate, PortableStateError, PortableStateTargetContext,
 };
+use crate::targets::{ActiveTarget, TargetKind};
 use crate::AppState;
 
 pub use crate::services::portable_state::{
@@ -38,6 +40,10 @@ pub async fn export_skillport_state(
     state.portable_state_cancel.store(false, Ordering::SeqCst);
     let cancel = Arc::clone(&state.portable_state_cancel);
     let started_at = Instant::now();
+    let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
+    let export_target = portable_state_target_context(&active_target);
+    let pool = state.active_db().await?;
     emit_portability_progress(
         &app,
         PortabilityProgressUpdate {
@@ -50,7 +56,8 @@ pub async fn export_skillport_state(
             error: None,
         },
     );
-    let result = export_skillport_state_impl(&state.db, Some(&app), Some(&cancel)).await;
+    let result =
+        export_skillport_state_impl(&pool, Some(&export_target), Some(&app), Some(&cancel)).await;
     match &result {
         Ok(payload) => {
             emit_portability_progress(
@@ -68,7 +75,7 @@ pub async fn export_skillport_state(
             let manifest = serde_json::from_str::<SkillportStateManifest>(payload).ok();
             record_operation_log_best_effort(
                 &state.db,
-                local_target_context(),
+                target_context.clone(),
                 OperationLogEvent::new(
                     "import_export",
                     "state.export",
@@ -106,7 +113,7 @@ pub async fn export_skillport_state(
             );
             record_operation_log_best_effort(
                 &state.db,
-                local_target_context(),
+                target_context,
                 OperationLogEvent::new(
                     "import_export",
                     "state.export",
@@ -132,6 +139,9 @@ pub async fn preview_skillport_state_import(
     state.portable_state_cancel.store(false, Ordering::SeqCst);
     let cancel = Arc::clone(&state.portable_state_cancel);
     let started_at = Instant::now();
+    let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
+    let pool = state.active_db().await?;
     emit_portability_progress(
         &app,
         PortabilityProgressUpdate {
@@ -156,7 +166,7 @@ pub async fn preview_skillport_state_import(
             .await
             {
                 Ok(remote_catalog) => match preview_skillport_state_import_impl(
-                    &state.db,
+                    &pool,
                     &manifest,
                     Some(&remote_catalog),
                     Some(&app),
@@ -188,7 +198,7 @@ pub async fn preview_skillport_state_import(
             );
             record_operation_log_best_effort(
                 &state.db,
-                local_target_context(),
+                target_context.clone(),
                 OperationLogEvent::new(
                     "import_export",
                     "state.preview_import",
@@ -224,7 +234,7 @@ pub async fn preview_skillport_state_import(
             );
             record_operation_log_best_effort(
                 &state.db,
-                local_target_context(),
+                target_context,
                 OperationLogEvent::new(
                     "import_export",
                     "state.preview_import",
@@ -251,6 +261,9 @@ pub async fn import_skillport_state(
     state.portable_state_cancel.store(false, Ordering::SeqCst);
     let cancel = Arc::clone(&state.portable_state_cancel);
     let started_at = Instant::now();
+    let active_target = state.active_target().await?;
+    let target_context = target_context_from_active_target(&active_target);
+    let pool = state.active_db().await?;
     emit_portability_progress(
         &app,
         PortabilityProgressUpdate {
@@ -265,15 +278,27 @@ pub async fn import_skillport_state(
     );
     let result = match parse_manifest(&json) {
         Ok(manifest) => {
-            import_skillport_state_impl(
+            let auth = github_import::github_direct_auth_from_secret_store(
                 &state.db,
                 state.secrets.as_ref(),
-                &manifest,
-                resolutions,
-                Some(&app),
-                Some(&cancel),
             )
             .await
+            .map_err(PortableStateError::GithubImport);
+            match auth {
+                Ok(auth) => {
+                    import_skillport_state_for_target(
+                        &pool,
+                        &active_target,
+                        auth.as_deref(),
+                        &manifest,
+                        resolutions,
+                        Some(&app),
+                        Some(&cancel),
+                    )
+                    .await
+                }
+                Err(error) => Err(error),
+            }
         }
         Err(error) => Err(error),
     };
@@ -315,7 +340,7 @@ pub async fn import_skillport_state(
             );
             record_operation_log_best_effort(
                 &state.db,
-                local_target_context(),
+                target_context.clone(),
                 OperationLogEvent::new(
                     "import_export",
                     "state.import",
@@ -361,7 +386,7 @@ pub async fn import_skillport_state(
             );
             record_operation_log_best_effort(
                 &state.db,
-                local_target_context(),
+                target_context,
                 OperationLogEvent::new(
                     "import_export",
                     "state.import",
@@ -382,4 +407,17 @@ pub async fn import_skillport_state(
 pub async fn cancel_skillport_state_portability(state: State<'_, AppState>) -> Result<(), String> {
     state.portable_state_cancel.store(true, Ordering::SeqCst);
     Ok(())
+}
+
+fn portable_state_target_context(active_target: &ActiveTarget) -> PortableStateTargetContext {
+    let kind = match active_target.kind() {
+        TargetKind::Local => "local",
+        TargetKind::Ssh => "ssh",
+        TargetKind::Wsl => "wsl",
+    };
+    PortableStateTargetContext {
+        id: active_target.id().to_string(),
+        kind: kind.to_string(),
+        label: active_target.label().to_string(),
+    }
 }

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke } from "@/lib/ipc";
 import {
   BatchUninstallSkillRequest,
   BatchUninstallSkillResult,
@@ -7,81 +7,6 @@ import {
   SkillWithLinks,
 } from "@/types";
 import { getBatchUninstallRequestActionKey } from "@/lib/platformBatchActions";
-import {
-  BROWSER_PLATFORM_PATHS,
-  getPlatformSkillDir,
-  getPlatformSkillFilePath,
-} from "@/lib/platformPathPolicy";
-
-const BROWSER_FIXTURE_SKILLS_BY_AGENT: Record<string, ScannedSkill[]> = {
-  "claude-code": [
-    {
-      id: "fixture-central-skill",
-      name: "fixture-central-skill",
-      description: "Installed browser validation fixture for platform drawer flows.",
-      file_path: getPlatformSkillFilePath(
-        BROWSER_PLATFORM_PATHS,
-        "claude-code",
-        "fixture-central-skill"
-      ),
-      dir_path: getPlatformSkillDir(
-        BROWSER_PLATFORM_PATHS,
-        "claude-code",
-        "fixture-central-skill"
-      ),
-      link_type: "symlink",
-      symlink_target: getPlatformSkillDir(
-        BROWSER_PLATFORM_PATHS,
-        "central",
-        "fixture-central-skill"
-      ),
-      is_central: true,
-    },
-  ],
-  codex: [
-    {
-      id: "fixture-universal-skill",
-      name: "fixture-universal-skill",
-      description: "Installed browser validation fixture for Universal platform flows.",
-      file_path: getPlatformSkillFilePath(
-        BROWSER_PLATFORM_PATHS,
-        "codex",
-        "fixture-universal-skill"
-      ),
-      dir_path: getPlatformSkillDir(
-        BROWSER_PLATFORM_PATHS,
-        "codex",
-        "fixture-universal-skill"
-      ),
-      link_type: "native",
-      is_central: false,
-    },
-  ],
-  cursor: [
-    {
-      id: "fixture-central-skill",
-      name: "fixture-central-skill",
-      description: "Installed browser validation fixture for platform drawer flows.",
-      file_path: getPlatformSkillFilePath(
-        BROWSER_PLATFORM_PATHS,
-        "cursor",
-        "fixture-central-skill"
-      ),
-      dir_path: getPlatformSkillDir(
-        BROWSER_PLATFORM_PATHS,
-        "cursor",
-        "fixture-central-skill"
-      ),
-      link_type: "symlink",
-      symlink_target: getPlatformSkillDir(
-        BROWSER_PLATFORM_PATHS,
-        "central",
-        "fixture-central-skill"
-      ),
-      is_central: true,
-    },
-  ],
-};
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -93,10 +18,14 @@ interface SkillState {
 
   // Actions
   getSkillsByAgent: (agentId: string) => Promise<void>;
-  uninstallSkillFromAgent: (skillId: string, agentId: string, rowId?: string | null) => Promise<void>;
+  uninstallSkillFromAgent: (
+    skillId: string,
+    agentId: string,
+    rowId?: string | null,
+  ) => Promise<void>;
   batchUninstallSkillsFromAgent: (
     agentId: string,
-    requests: BatchUninstallSkillRequest[]
+    requests: BatchUninstallSkillRequest[],
   ) => Promise<BatchUninstallSkillResult>;
   /** Fetch central skills as a one-shot read (no internal caching). */
   fetchCentralSkillsList: () => Promise<SkillWithLinks[]>;
@@ -105,7 +34,11 @@ interface SkillState {
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-function skillActionKey(agentId: string, skillId: string, rowId?: string | null) {
+function skillActionKey(
+  agentId: string,
+  skillId: string,
+  rowId?: string | null,
+) {
   return rowId ?? `${agentId}::${skillId}`;
 }
 
@@ -127,18 +60,8 @@ export const useSkillStore = create<SkillState>((set) => ({
       loadingByAgent: { ...state.loadingByAgent, [agentId]: true },
       error: null,
     }));
-    if (!isTauriRuntime()) {
-      set((state) => ({
-        skillsByAgent: {
-          ...state.skillsByAgent,
-          [agentId]: BROWSER_FIXTURE_SKILLS_BY_AGENT[agentId] ?? [],
-        },
-        loadingByAgent: { ...state.loadingByAgent, [agentId]: false },
-      }));
-      return;
-    }
     try {
-      const skills = await invoke<ScannedSkill[]>("get_skills_by_agent", {
+      const skills = await invoke("get_skills_by_agent", {
         agentId,
       });
       set((state) => ({
@@ -156,7 +79,11 @@ export const useSkillStore = create<SkillState>((set) => ({
     }
   },
 
-  uninstallSkillFromAgent: async (skillId: string, agentId: string, rowId?: string | null) => {
+  uninstallSkillFromAgent: async (
+    skillId: string,
+    agentId: string,
+    rowId?: string | null,
+  ) => {
     const generation = skillStoreGeneration;
     const actionKey = skillActionKey(agentId, skillId, rowId);
     set((state) => ({
@@ -167,25 +94,13 @@ export const useSkillStore = create<SkillState>((set) => ({
       error: null,
     }));
 
-    if (!isTauriRuntime()) {
-      set((state) => {
-        const next = { ...state.pendingSkillActionKeys };
-        delete next[actionKey];
-        return {
-          pendingSkillActionKeys: next,
-          error: "Uninstalling skills requires the Tauri desktop runtime.",
-        };
-      });
-      return;
-    }
-
     try {
       await invoke("uninstall_skill_from_agent", {
         skillId,
         agentId,
         ...(rowId ? { rowId } : {}),
       });
-      const skills = await invoke<ScannedSkill[]>("get_skills_by_agent", {
+      const skills = await invoke("get_skills_by_agent", {
         agentId,
       });
 
@@ -215,7 +130,7 @@ export const useSkillStore = create<SkillState>((set) => ({
 
   batchUninstallSkillsFromAgent: async (
     agentId: string,
-    requests: BatchUninstallSkillRequest[]
+    requests: BatchUninstallSkillRequest[],
   ) => {
     if (requests.length === 0) {
       return { succeeded: [], failed: [] };
@@ -223,7 +138,7 @@ export const useSkillStore = create<SkillState>((set) => ({
 
     const generation = skillStoreGeneration;
     const actionKeys = requests.map((request) =>
-      getBatchUninstallRequestActionKey(agentId, request)
+      getBatchUninstallRequestActionKey(agentId, request),
     );
     set((state) => ({
       pendingSkillActionKeys: {
@@ -233,27 +148,12 @@ export const useSkillStore = create<SkillState>((set) => ({
       error: null,
     }));
 
-    if (!isTauriRuntime()) {
-      set((state) => {
-        const next = { ...state.pendingSkillActionKeys };
-        actionKeys.forEach((key) => delete next[key]);
-        return {
-          pendingSkillActionKeys: next,
-          error: "Uninstalling skills requires the Tauri desktop runtime.",
-        };
-      });
-      throw new Error("Uninstalling skills requires the Tauri desktop runtime.");
-    }
-
     try {
-      const result = await invoke<BatchUninstallSkillResult>(
-        "batch_uninstall_skills_from_agent",
-        {
-          agentId,
-          requests,
-        }
-      );
-      const skills = await invoke<ScannedSkill[]>("get_skills_by_agent", {
+      const result = await invoke("batch_uninstall_skills_from_agent", {
+        agentId,
+        requests,
+      });
+      const skills = await invoke("get_skills_by_agent", {
         agentId,
       });
 
@@ -293,9 +193,6 @@ export const useSkillStore = create<SkillState>((set) => ({
   },
 
   fetchCentralSkillsList: async () => {
-    if (!isTauriRuntime()) {
-      return [];
-    }
-    return invoke<SkillWithLinks[]>("get_central_skills");
+    return invoke("get_central_skills");
   },
 }));

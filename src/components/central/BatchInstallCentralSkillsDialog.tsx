@@ -13,19 +13,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
 import type { InstallMethod } from "@/components/central/InstallDialog";
 import { ProjectPathPicker } from "@/components/central/ProjectPathPicker";
+import {
+  InstallFailureList,
+  PlatformMultiSelectGrid,
+  usePlatformTargetSelection,
+} from "@/components/platform/PlatformMultiSelect";
 import { AgentWithStatus, CentralBatchInstallResult } from "@/types";
 import { useTargetStore } from "@/stores/targetStore";
 import { isRemoteLikeTarget } from "@/lib/targetKind";
-import {
-  getPlatformTargetInstallAgentIds,
-  getPlatformTargetMemberNames,
-  hasProjectSkillPattern,
-  isUniversalPlatformTarget,
-} from "@/lib/platformTargetGroups";
+import { hasProjectSkillPattern } from "@/lib/platformTargetGroups";
 
 type TargetMode = "platform" | "project";
 
@@ -67,9 +66,6 @@ export function BatchInstallCentralSkillsDialog({
     [agents],
   );
   const [targetMode, setTargetMode] = useState<TargetMode>("platform");
-  const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(
-    new Set(),
-  );
   const [installMethod, setInstallMethod] = useState<InstallMethod>("symlink");
   const [projectPath, setProjectPath] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -88,35 +84,21 @@ export function BatchInstallCentralSkillsDialog({
   const isProjectTargetDisabled = (agent: AgentWithStatus) =>
     targetMode === "project" && !hasProjectSkillPattern(agent);
 
-  const selectedInstallAgentIds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          targetAgents
-            .filter((agent) => selectedAgentIds.has(agent.id))
-            .filter(
-              (agent) =>
-                targetMode !== "project" || hasProjectSkillPattern(agent),
-            )
-            .flatMap((agent) => getPlatformTargetInstallAgentIds(agent)),
-        ),
-      ),
-    [selectedAgentIds, targetAgents, targetMode],
-  );
+  const selection = usePlatformTargetSelection({
+    targets: targetAgents,
+    isTargetDisabled: isProjectTargetDisabled,
+    isTargetDefaultSelected: (agent) =>
+      !isProjectTargetDisabled(agent) && !defaultExcludedSet.has(agent.id),
+  });
+
+  const selectedInstallAgentIds = selection.selectedInstallAgentIds();
   const platformCount = selectedInstallAgentIds.length;
+  const { reset: resetSelection } = selection;
 
   useEffect(() => {
     if (!open) return;
 
-    const initialSelection = new Set(
-      targetAgents
-        .filter(
-          (agent) => targetMode === "platform" || hasProjectSkillPattern(agent),
-        )
-        .filter((agent) => !defaultExcludedSet.has(agent.id))
-        .map((agent) => agent.id),
-    );
-    setSelectedAgentIds(initialSelection);
+    resetSelection();
     setError(null);
     setResult(null);
     if (targetMode === "platform") {
@@ -132,6 +114,7 @@ export function BatchInstallCentralSkillsDialog({
     isRemoteTarget,
     canUseSymlink,
     defaultExcludedSet,
+    resetSelection,
   ]);
 
   function handleModeChange(mode: TargetMode) {
@@ -139,23 +122,6 @@ export function BatchInstallCentralSkillsDialog({
     setInstallMethod(mode === "project" || !canUseSymlink ? "copy" : "symlink");
     setError(null);
     setResult(null);
-  }
-
-  function handleToggle(agentId: string, checked: boolean) {
-    const target = targetAgents.find((agent) => agent.id === agentId);
-    if (target && isProjectTargetDisabled(target)) {
-      return;
-    }
-
-    setSelectedAgentIds((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(agentId);
-      } else {
-        next.delete(agentId);
-      }
-      return next;
-    });
   }
 
   async function handleConfirm() {
@@ -271,66 +237,23 @@ export function BatchInstallCentralSkillsDialog({
             )}
           </div>
 
-          <div
-            className="grid grid-cols-2 gap-x-4 gap-y-2"
-            role="group"
-            aria-label={t("central.batchInstallSelectPlatform")}
-          >
-            {targetAgents.length === 0 ? (
-              <p className="col-span-2 text-sm text-muted-foreground">
-                {t("central.batchInstallNoPlatforms")}
-              </p>
-            ) : (
-              targetAgents.map((agent) => {
-                const isUniversal = isUniversalPlatformTarget(agent);
-                const isDisabled = isProjectTargetDisabled(agent);
-                const isChecked = selectedAgentIds.has(agent.id) && !isDisabled;
-                const displayName = isUniversal
-                  ? t("platformTargets.universalLabel")
-                  : agent.display_name;
-                const memberNames =
-                  getPlatformTargetMemberNames(agent).join(", ");
-
-                return (
-                  <div key={agent.id} className="flex items-center gap-2">
-                    <Checkbox
-                      checked={isChecked}
-                      disabled={isDisabled}
-                      onCheckedChange={(checked) =>
-                        handleToggle(agent.id, !!checked)
-                      }
-                      aria-label={displayName}
-                    />
-                    <div
-                      className={`min-w-0 flex-1 select-none ${
-                        isDisabled
-                          ? "cursor-default text-muted-foreground"
-                          : "cursor-pointer text-foreground"
-                      }`}
-                      title={
-                        isUniversal ? memberNames : agent.global_skills_dir
-                      }
-                      onClick={() =>
-                        !isDisabled && handleToggle(agent.id, !isChecked)
-                      }
-                    >
-                      <div className="truncate text-sm">{displayName}</div>
-                      {isUniversal && (
-                        <div className="truncate text-[11px] text-muted-foreground">
-                          {memberNames}
-                        </div>
-                      )}
-                    </div>
-                    {isDisabled && (
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {t("central.batchInstallProjectUnsupported")}
-                      </span>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
+          <PlatformMultiSelectGrid
+            targets={targetAgents}
+            isSelected={(agent) =>
+              selection.isSelected(agent) && !isProjectTargetDisabled(agent)
+            }
+            isDisabled={isProjectTargetDisabled}
+            onToggle={selection.toggle}
+            renderBadges={(agent) =>
+              isProjectTargetDisabled(agent) ? (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {t("central.batchInstallProjectUnsupported")}
+                </span>
+              ) : null
+            }
+            emptyMessage={t("central.batchInstallNoPlatforms")}
+            ariaLabel={t("central.batchInstallSelectPlatform")}
+          />
 
           <div className="space-y-2">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -394,13 +317,12 @@ export function BatchInstallCentralSkillsDialog({
                   </ul>
                 </div>
               )}
-              <ul className="max-h-32 space-y-0.5 overflow-auto text-xs text-destructive">
-                {result.failed.map((failure) => (
-                  <li key={`${failure.skill_id}:${failure.agent_id}`}>
-                    {failure.skill_id} / {failure.agent_id}: {failure.error}
-                  </li>
-                ))}
-              </ul>
+              <InstallFailureList
+                failures={result.failed.map((failure) => ({
+                  key: `${failure.skill_id}:${failure.agent_id}`,
+                  label: `${failure.skill_id} / ${failure.agent_id}: ${failure.error}`,
+                }))}
+              />
             </div>
           )}
 

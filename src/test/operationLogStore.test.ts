@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   invoke: vi.fn(),
   isTauriRuntime: vi.fn(() => true),
 }));
 
-import { invoke } from "@/lib/tauri";
+import { invoke } from "@/lib/ipc";
 import { useOperationLogStore } from "@/stores/operationLogStore";
 import { OperationLogEntry, OperationLogPage } from "@/types";
 

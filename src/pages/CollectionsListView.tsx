@@ -31,9 +31,7 @@ import {
   consumeScrollPosition,
   consumeReturnContext,
 } from "@/lib/scrollRestoration";
-import {
-  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-} from "@/lib/platformVisibility";
+import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { getPlatformTargetGroups } from "@/lib/platformTargetGroups";
 
 // Build a stable scroll-restoration key for a given collection id. The
@@ -63,15 +61,25 @@ export function CollectionsListView() {
   const importCollection = useCollectionStore((s) => s.importCollection);
   const currentDetail = useCollectionStore((s) => s.currentDetail);
   const isLoadingDetail = useCollectionStore((s) => s.isLoadingDetail);
-  const loadCollectionDetail = useCollectionStore((s) => s.loadCollectionDetail);
-  const removeSkillFromCollection = useCollectionStore((s) => s.removeSkillFromCollection);
+  const loadCollectionDetail = useCollectionStore(
+    (s) => s.loadCollectionDetail,
+  );
+  const removeSkillFromCollection = useCollectionStore(
+    (s) => s.removeSkillFromCollection,
+  );
   const deleteCollection = useCollectionStore((s) => s.deleteCollection);
-  const batchInstallCollection = useCollectionStore((s) => s.batchInstallCollection);
+  const batchInstallCollection = useCollectionStore(
+    (s) => s.batchInstallCollection,
+  );
   const exportCollection = useCollectionStore((s) => s.exportCollection);
-  const addSkillToCollection = useCollectionStore((s) => s.addSkillToCollection);
+  const addSkillToCollection = useCollectionStore(
+    (s) => s.addSkillToCollection,
+  );
 
   const agents = usePlatformStore((s) => s.agents);
-  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+  const categoryVisibility =
+    usePlatformStore((s) => s.categoryVisibility) ??
+    DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const refreshCounts = usePlatformStore((s) => s.refreshCounts);
 
   // Central skills (for resolving SkillWithLinks before opening InstallDialog)
@@ -80,11 +88,11 @@ export function CollectionsListView() {
   const installCentralSkill = useCentralSkillsStore((s) => s.installSkill);
   const visibleCollectionAgents = useMemo(
     () => getPlatformTargetGroups(agents, categoryVisibility),
-    [agents, categoryVisibility]
+    [agents, categoryVisibility],
   );
   const visibleCentralAgents = useMemo(
     () => getPlatformTargetGroups(agents, categoryVisibility),
-    [agents, categoryVisibility]
+    [agents, categoryVisibility],
   );
 
   // Restoration context supplied via navigation state when returning from a
@@ -98,11 +106,9 @@ export function CollectionsListView() {
   // link. Consuming the fallback map is done lazily (inside useState's
   // initializer) so it fires exactly once on mount.
   const locationCollectionContext = location.state?.collectionContext as
-    | { collectionId?: string }
-    | undefined;
+    { collectionId?: string } | undefined;
   const locationRestorationState = location.state?.scrollRestoration as
-    | { key?: string; scrollTop?: number }
-    | undefined;
+    { key?: string; scrollTop?: number } | undefined;
 
   // Local state. When a collection context was restored from navigation state
   // (either via location.state on entry, or via the in-memory return-context
@@ -126,7 +132,7 @@ export function CollectionsListView() {
   const [fallbackRestorationKey] = useState<string | null>(() =>
     selectedId && !locationRestorationState
       ? collectionScrollKey(selectedId)
-      : null
+      : null,
   );
   const restorationState: { key?: string; scrollTop?: number } | undefined =
     locationRestorationState ??
@@ -136,7 +142,8 @@ export function CollectionsListView() {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isInstallOpen, setIsInstallOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [installTargetSkill, setInstallTargetSkill] = useState<SkillWithLinks | null>(null);
+  const [installTargetSkill, setInstallTargetSkill] =
+    useState<SkillWithLinks | null>(null);
   const [isSingleInstallOpen, setIsSingleInstallOpen] = useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -186,7 +193,7 @@ export function CollectionsListView() {
   }, [centralSkills.length, loadCentralSkills]);
   const selectedSkillIds = useMemo(
     () => currentDetail?.skills.map((skill) => skill.id) ?? [],
-    [currentDetail?.skills]
+    [currentDetail?.skills],
   );
   const aiSummaries = useSkillExplanationSummaries(selectedSkillIds, "zh");
 
@@ -260,16 +267,23 @@ export function CollectionsListView() {
     skillId: string,
     agentIds: string[],
     method: string,
-    projectPath?: string | null
+    projectPath?: string | null,
   ) {
     try {
-      const result = await installCentralSkill(skillId, agentIds, method, projectPath);
+      const result = await installCentralSkill(
+        skillId,
+        agentIds,
+        method,
+        projectPath,
+      );
       await refreshCounts();
       if (result.failed.length > 0) {
         const failedNames = result.failed
           .map((failure) => `${failure.agent_id}: ${failure.error}`)
           .join("; ");
-        toast.error(t("central.installPartialFail", { platforms: failedNames }));
+        toast.error(
+          t("central.installPartialFail", { platforms: failedNames }),
+        );
       }
       return result;
     } catch (err) {
@@ -303,7 +317,12 @@ export function CollectionsListView() {
 
   async function handleDelete() {
     if (!selectedId || !currentDetail) return;
-    if (!window.confirm(t("collection.deleteConfirm", { name: currentDetail.name }))) return;
+    if (
+      !window.confirm(
+        t("collection.deleteConfirm", { name: currentDetail.name }),
+      )
+    )
+      return;
     setIsDeleting(true);
     try {
       await deleteCollection(selectedId);
@@ -388,7 +407,11 @@ export function CollectionsListView() {
             <p className="text-sm font-medium text-muted-foreground">
               {t("collectionPicker.noCollections")}
             </p>
-            <Button variant="default" size="sm" onClick={() => setIsEditorOpen(true)}>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setIsEditorOpen(true)}
+            >
               <Plus className="size-3.5" />
               {t("sidebar.newCollectionLabel")}
             </Button>
@@ -413,7 +436,9 @@ export function CollectionsListView() {
                 {/* Detail header */}
                 <div className="flex items-center justify-between gap-4 px-6 py-3 border-b border-border">
                   <div className="min-w-0">
-                    <h2 className="text-sm font-semibold truncate">{currentDetail.name}</h2>
+                    <h2 className="text-sm font-semibold truncate">
+                      {currentDetail.name}
+                    </h2>
                     {currentDetail.description && (
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">
                         {currentDetail.description}
@@ -421,7 +446,11 @@ export function CollectionsListView() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Button variant="outline" size="sm" onClick={() => setIsEditOpen(true)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditOpen(true)}
+                    >
                       <Pencil className="size-3.5" />
                       <span>{t("collection.edit")}</span>
                     </Button>
@@ -436,7 +465,11 @@ export function CollectionsListView() {
                       disabled={isDeleting}
                       className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
                     >
-                      {isDeleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                      {isDeleting ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-3.5" />
+                      )}
                       <span>{t("collection.delete")}</span>
                     </Button>
                   </div>
@@ -445,7 +478,9 @@ export function CollectionsListView() {
                 {/* Skills sub-header */}
                 <div className="flex items-center justify-between px-6 py-3 border-b border-border">
                   <span className="text-sm font-medium text-muted-foreground">
-                    {t("collection.skills", { count: currentDetail.skills.length })}
+                    {t("collection.skills", {
+                      count: currentDetail.skills.length,
+                    })}
                   </span>
                   <div className="flex items-center gap-2">
                     <Button
@@ -457,7 +492,11 @@ export function CollectionsListView() {
                       <PackagePlus className="size-3.5" />
                       <span>{t("collection.batchInstall")}</span>
                     </Button>
-                    <Button variant="default" size="sm" onClick={() => setIsPickerOpen(true)}>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => setIsPickerOpen(true)}
+                    >
                       <Plus className="size-3.5" />
                       <span>{t("collection.addSkill")}</span>
                     </Button>
@@ -471,9 +510,17 @@ export function CollectionsListView() {
                       <div className="p-4 rounded-full bg-muted/60">
                         <BookOpen className="size-12 text-muted-foreground opacity-60" />
                       </div>
-                      <p className="text-sm font-medium text-muted-foreground">{t("collection.noSkillsTitle")}</p>
-                      <p className="text-xs text-muted-foreground/70">{t("collection.noSkillsDesc")}</p>
-                      <Button variant="default" size="sm" onClick={() => setIsPickerOpen(true)}>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        {t("collection.noSkillsTitle")}
+                      </p>
+                      <p className="text-xs text-muted-foreground/70">
+                        {t("collection.noSkillsDesc")}
+                      </p>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => setIsPickerOpen(true)}
+                      >
                         <Plus className="size-3.5" />
                         {t("collection.addFirstSkill")}
                       </Button>
@@ -482,13 +529,18 @@ export function CollectionsListView() {
                     <div className="mx-6 my-3 grid grid-cols-2 gap-4">
                       {currentDetail.skills.map((skill) => (
                         <UnifiedSkillCard
+                          variant="collection"
                           key={skill.id}
                           name={skill.name}
                           description={skill.description}
                           aiSummary={aiSummaries[skill.id]}
                           onDetail={() => handleOpenDrawer(skill.id)}
-                          detailButtonRef={(node) => setDetailButtonRef(skill.id, node)}
-                          onInstallTo={() => handleInstallSingleSkillClick(skill.id)}
+                          detailButtonRef={(node) =>
+                            setDetailButtonRef(skill.id, node)
+                          }
+                          onInstallTo={() =>
+                            handleInstallSingleSkillClick(skill.id)
+                          }
                           onRemove={() => handleRemoveSkill(skill.id)}
                         />
                       ))}
@@ -507,17 +559,25 @@ export function CollectionsListView() {
       </div>
 
       {/* Dialogs */}
-      <CollectionEditor open={isEditorOpen} onOpenChange={setIsEditorOpen} collection={null} />
+      <CollectionEditor
+        open={isEditorOpen}
+        onOpenChange={setIsEditorOpen}
+        collection={null}
+      />
 
       {currentDetail && (
         <>
-          <CollectionEditor open={isEditOpen} onOpenChange={setIsEditOpen} collection={{
-            id: currentDetail.id,
-            name: currentDetail.name,
-            description: currentDetail.description,
-            created_at: currentDetail.created_at,
-            updated_at: currentDetail.updated_at,
-          }} />
+          <CollectionEditor
+            open={isEditOpen}
+            onOpenChange={setIsEditOpen}
+            collection={{
+              id: currentDetail.id,
+              name: currentDetail.name,
+              description: currentDetail.description,
+              created_at: currentDetail.created_at,
+              updated_at: currentDetail.updated_at,
+            }}
+          />
           <SkillPickerDialog
             open={isPickerOpen}
             onOpenChange={setIsPickerOpen}
@@ -530,7 +590,9 @@ export function CollectionsListView() {
             collectionName={currentDetail.name}
             skillCount={currentDetail.skills.length}
             agents={visibleCollectionAgents}
-            onInstall={(agentIds) => batchInstallCollection(currentDetail.id, agentIds)}
+            onInstall={(agentIds) =>
+              batchInstallCollection(currentDetail.id, agentIds)
+            }
           />
         </>
       )}
@@ -591,10 +653,15 @@ function CollectionChip({
         "flex items-center gap-2 px-4 py-2 rounded-md border transition-colors cursor-pointer shrink-0",
         isActive
           ? "bg-primary/15 border-primary text-foreground font-medium"
-          : "border-border hover:border-primary/40 hover:bg-hover-bg/10 text-muted-foreground"
+          : "border-border hover:border-primary/40 hover:bg-hover-bg/10 text-muted-foreground",
       )}
     >
-      <Layers className={cn("size-4", isActive ? "text-primary" : "text-muted-foreground")} />
+      <Layers
+        className={cn(
+          "size-4",
+          isActive ? "text-primary" : "text-muted-foreground",
+        )}
+      />
       <span className="text-sm truncate max-w-[160px]">{collection.name}</span>
     </button>
   );

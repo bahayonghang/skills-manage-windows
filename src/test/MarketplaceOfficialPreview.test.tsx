@@ -7,7 +7,7 @@ import { MarketplaceView } from "@/pages/MarketplaceView";
 const mockInvoke = vi.fn();
 const mockIsTauriRuntime = vi.fn(() => true);
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
   isTauriRuntime: () => mockIsTauriRuntime(),
 }));

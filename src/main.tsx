@@ -14,6 +14,13 @@ import {
   loadFontPreferences,
 } from "./lib/displayFont";
 import { installRuntimeLogger } from "./lib/runtimeLogger";
+import { isTauriRuntime } from "@/lib/ipc";
+import { installBrowserIpcFixtures } from "./fixtures";
+
+// 浏览器演示态：先按命令名注册 IPC fixtures，再做任何会触发 invoke 的初始化
+if (!isTauriRuntime()) {
+  installBrowserIpcFixtures();
+}
 
 // Apply theme synchronously before React renders to prevent flash of wrong theme
 useThemeStore.getState().init();
@@ -28,5 +35,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <App />
       <Toaster position="bottom-right" richColors />
     </BrowserRouter>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

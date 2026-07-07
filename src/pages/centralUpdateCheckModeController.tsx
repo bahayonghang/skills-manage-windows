@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 import { UpdateCheckModeDialog } from "@/components/central/UpdateCheckModeDialog";
 import { UpdateModePreferenceSelect } from "@/components/central/UpdateModePreferenceSelect";
@@ -37,6 +38,7 @@ export function useCentralUpdateCheckModeController({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const refreshUpdateInventory = useUpdateCenterStore((state) => state.refresh);
   const openUpdateCenter = useUpdateCenterStore((state) => state.openDialog);
   const isUpdateCenterRefreshing = useUpdateCenterStore((state) => state.isRefreshing);
@@ -49,6 +51,10 @@ export function useCentralUpdateCheckModeController({
   const setModePreference = useSettingsStore((state) => state.setCentralUpdateCheckMode);
   const syncableRepositoryAvailable = hasSyncableGitHubRepository(repositories);
   const syncDisabledReason = t("central.updateCheckMode.sync.disabledNoRepository");
+  const checkButtonLabel =
+    modePreference === "sync" && syncableRepositoryAvailable
+      ? checkButtonState.syncLabel
+      : checkButtonState.regularLabel;
 
   useEffect(() => {
     if (!modeLoaded) {
@@ -58,6 +64,7 @@ export function useCentralUpdateCheckModeController({
 
   const handleConfirm = useCallback(
     async (mode: UpdateCheckMode) => {
+      setSubmitError(null);
       setIsSubmitting(true);
       try {
         const scope = buildUpdateCheckScope(mode, checkButtonState);
@@ -67,15 +74,27 @@ export function useCentralUpdateCheckModeController({
           buildUpdateCheckRefreshContext(scope, checkButtonState),
         );
         setOpen(false);
+      } catch (err) {
+        const message = t("central.updateCheckError", { error: String(err) });
+        setSubmitError(message);
+        toast.error(message);
       } finally {
         setIsSubmitting(false);
       }
     },
-    [checkButtonState, openUpdateCenter, refreshUpdateInventory],
+    [checkButtonState, openUpdateCenter, refreshUpdateInventory, t],
   );
 
   const handleClick = useCallback(() => {
+    setSubmitError(null);
     setOpen(true);
+  }, []);
+
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setSubmitError(null);
+    }
   }, []);
 
   const handleModePreferenceChange = useCallback(
@@ -93,7 +112,7 @@ export function useCentralUpdateCheckModeController({
 
   return {
     checkButton: {
-      label: checkButtonState.label,
+      label: checkButtonLabel,
       disabled:
         disabled ||
         isUpdateCenterRefreshing ||
@@ -113,12 +132,14 @@ export function useCentralUpdateCheckModeController({
     dialog: (
       <UpdateCheckModeDialog
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={handleOpenChange}
         mode={modePreference}
-        scopeLabel={checkButtonState.label}
+        regularScopeLabel={checkButtonState.regularLabel}
+        syncScopeLabel={checkButtonState.syncLabel}
         isSubmitting={isSubmitting}
         syncDisabled={!syncableRepositoryAvailable}
         syncDisabledReason={syncDisabledReason}
+        error={submitError}
         onConfirm={handleConfirm}
       />
     ),

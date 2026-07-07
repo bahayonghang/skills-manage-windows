@@ -1,0 +1,33 @@
+{
+  "id": "ui-design-audit",
+  "name": "ui-design-audit",
+  "title": "UI 设计审查落地：调度台一致性优化",
+  "description": "基于 2026-07-06 双 agent 设计审查（Nielsen 28/40，无 P0）：收敛语义色、键盘焦点、表面语言、微交互四类问题，兑现 DESIGN.md 承诺",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-07-06",
+  "completedAt": "2026-07-06",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-06-ui-semantic-status-color",
+    "07-06-ui-keyboard-focus-a11y",
+    "07-06-ui-surface-language",
+    "07-06-ui-micro-interaction-polish",
+    "07-06-ui-dashboard-metric-strip",
+    "07-06-ui-help-shortcuts-sheet"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

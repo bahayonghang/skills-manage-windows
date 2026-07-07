@@ -13,7 +13,44 @@ use super::fs_util::{copy_dir_all_blocking, create_symlink, run_blocking_fs, sym
 use super::native::should_fallback_to_copy;
 use super::remote::ensure_remote_centralized;
 use super::skip::detect_existing_project_install;
+use super::transport::InstallTransport;
 use super::types::{InstallOutcome, InstallResult};
+
+/// Transport dispatcher for project-scoped installs. Unlike agent installs,
+/// the two halves keep their own orchestration (dispatcher-only convergence
+/// for the pilot); callers stop branching on the active target regardless.
+pub(crate) async fn install_central_skill_to_project(
+    pool: &DbPool,
+    transport: &InstallTransport,
+    skill_id: &str,
+    agent_id: &str,
+    project_path: &str,
+    method: &str,
+) -> Result<InstallOutcome, InstallationError> {
+    match transport {
+        InstallTransport::Local => {
+            install_central_skill_to_project_outcome_impl(
+                pool,
+                skill_id,
+                agent_id,
+                Path::new(project_path),
+                method,
+            )
+            .await
+        }
+        InstallTransport::Remote(connection) => {
+            install_central_skill_to_remote_project_outcome_impl(
+                pool,
+                connection,
+                skill_id,
+                agent_id,
+                project_path,
+                method,
+            )
+            .await
+        }
+    }
+}
 
 pub(crate) fn project_relative_skills_dir(agent: &db::Agent) -> Result<PathBuf, InstallationError> {
     if agent.id == "central" {

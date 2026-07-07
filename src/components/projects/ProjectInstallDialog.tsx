@@ -13,17 +13,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
-import { PlatformIcon } from "@/components/platform/PlatformIcon";
+import {
+  PlatformMultiSelectGrid,
+  usePlatformTargetSelection,
+} from "@/components/platform/PlatformMultiSelect";
 import { formatPathForDisplay } from "@/lib/path";
 import {
-  getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberIds,
-  getPlatformTargetMemberNames,
   hasProjectSkillPattern,
-  isUniversalPlatformTarget,
   type PlatformTarget,
 } from "@/lib/platformTargetGroups";
 import { cn } from "@/lib/utils";
@@ -58,9 +57,6 @@ export function ProjectInstallDialog({
 }: ProjectInstallDialogProps) {
   const { t } = useTranslation();
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
-  const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(
-    new Set(),
-  );
   const [installMethod, setInstallMethod] = useState<InstallMethod>("symlink");
   const [skillSearch, setSkillSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -76,22 +72,13 @@ export function ProjectInstallDialog({
     [platformTargets],
   );
 
-  const selectedTargets = useMemo(
-    () => eligibleTargets.filter((target) => selectedTargetIds.has(target.id)),
-    [eligibleTargets, selectedTargetIds],
+  const selection = usePlatformTargetSelection({ targets: eligibleTargets });
+
+  const selectedTargets = eligibleTargets.filter((target) =>
+    selection.isSelected(target),
   );
 
-  const selectedInstallAgentIds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          selectedTargets.flatMap((target) =>
-            getPlatformTargetInstallAgentIds(target),
-          ),
-        ),
-      ),
-    [selectedTargets],
-  );
+  const selectedInstallAgentIds = selection.selectedInstallAgentIds();
 
   const filteredSkills = useMemo(() => {
     const q = skillSearch.trim().toLowerCase();
@@ -103,26 +90,16 @@ export function ProjectInstallDialog({
     );
   }, [centralSkills, skillSearch]);
 
+  const { reset: resetSelection } = selection;
+
   useEffect(() => {
     if (!open) return;
     setSelectedSkillId(null);
-    setSelectedTargetIds(new Set(eligibleTargets.map((target) => target.id)));
+    resetSelection();
     setInstallMethod("symlink");
     setSkillSearch("");
     setError(null);
-  }, [open, eligibleTargets]);
-
-  function getTargetDisplayName(target: PlatformTarget): string {
-    return isUniversalPlatformTarget(target)
-      ? t("platformTargets.universalShortLabel")
-      : target.display_name;
-  }
-
-  function getTargetTitle(target: PlatformTarget): string {
-    return isUniversalPlatformTarget(target)
-      ? getPlatformTargetMemberNames(target).join(", ")
-      : target.global_skills_dir;
-  }
+  }, [open, eligibleTargets, resetSelection]);
 
   function existingForTarget(
     skillId: string,
@@ -132,15 +109,6 @@ export function ProjectInstallDialog({
     return existingSkills.find(
       (s) => s.skillId === skillId && memberIds.has(s.agentId),
     );
-  }
-
-  function toggleTarget(id: string) {
-    setSelectedTargetIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   }
 
   async function handleConfirm() {
@@ -240,49 +208,31 @@ export function ProjectInstallDialog({
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               {t("projectInstall.pickAgents")}
             </p>
-            {eligibleTargets.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {t("projectInstall.noEligibleAgents")}
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                {eligibleTargets.map((target) => {
-                  const exists = selectedSkillId
-                    ? existingForTarget(selectedSkillId, target)
-                    : undefined;
-                  const isChecked = selectedTargetIds.has(target.id);
-                  const displayName = getTargetDisplayName(target);
-                  return (
-                    <label
-                      key={target.id}
-                      title={getTargetTitle(target)}
-                      className="flex items-center gap-2 cursor-pointer text-sm"
-                    >
-                      <Checkbox
-                        checked={isChecked}
-                        onCheckedChange={() => toggleTarget(target.id)}
-                      />
-                      <PlatformIcon
-                        agentId={target.id}
-                        className="size-3.5 shrink-0"
-                      />
-                      <span className="flex-1 truncate">{displayName}</span>
-                      {exists ? (
-                        <span className="text-[10px] text-warning-foreground shrink-0">
-                          {t("projectInstall.willReplace", {
-                            type: exists.linkType,
-                          })}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground shrink-0">
-                          {t("projectInstall.willCreate")}
-                        </span>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
+            <PlatformMultiSelectGrid
+              targets={eligibleTargets}
+              isSelected={selection.isSelected}
+              onToggle={selection.toggle}
+              showIcon
+              labelVariant="short"
+              renderBadges={(target) => {
+                const exists = selectedSkillId
+                  ? existingForTarget(selectedSkillId, target)
+                  : undefined;
+                return exists ? (
+                  <span className="text-[11px] text-warning-foreground shrink-0">
+                    {t("projectInstall.willReplace", {
+                      type: exists.linkType,
+                    })}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground shrink-0">
+                    {t("projectInstall.willCreate")}
+                  </span>
+                );
+              }}
+              emptyMessage={t("projectInstall.noEligibleAgents")}
+              ariaLabel={t("projectInstall.pickAgents")}
+            />
           </div>
 
           <div className="space-y-2">

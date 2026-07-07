@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import { Collection, CollectionDetail, CollectionBatchInstallResult } from "@/types";
 import { usePlatformStore } from "@/stores/platformStore";
 import {

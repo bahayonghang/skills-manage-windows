@@ -3,7 +3,7 @@ import i18n from "@/i18n";
 import { setupExplanationStreamListeners } from "@/lib/explanationStream";
 import { buildDirectoryTreeFromSkillsShEntries } from "@/lib/fileTree";
 import { parseFrontmatter } from "@/lib/frontmatter";
-import { isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/ipc";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import type { DirectoryTreeEntry } from "@/types";
 import type {

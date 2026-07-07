@@ -7,7 +7,7 @@ import { InstallDialog } from "@/components/central/InstallDialog";
 import { MarketplaceShell } from "@/components/marketplace/MarketplaceShell";
 import type { MarketplaceSkillDetail } from "@/components/marketplace/marketplaceSkillDetailTypes";
 import type { OfficialPublisher, SkillTag } from "@/data/officialSources";
-import { isTauriRuntime } from "@/lib/tauri";
+import { isTauriRuntime } from "@/lib/ipc";
 import { useMarketplaceBindings } from "@/pages/marketplaceBindings";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import {

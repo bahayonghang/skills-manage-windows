@@ -19,6 +19,7 @@ import { usePlatformStore } from "@/stores/platformStore";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import {
   getPlatformTargetGroups,
+  getPlatformTargetLabel,
   isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
 import { cn } from "@/lib/utils";
@@ -55,7 +56,7 @@ function NavItem({
         aria-label={label}
         aria-current={isActive ? "page" : undefined}
         className={cn(
-          "flex items-center w-full rounded-md transition-colors active:scale-[0.98] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
+          "flex items-center w-full rounded-md transition-[scale,background-color,color] active:scale-[0.96] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
           !isActive &&
             "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
           isActive &&
@@ -302,7 +303,7 @@ export function Sidebar() {
             {lobsterAgents.length > 0 && (
               <>
                 {expanded ? (
-                  <div className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider px-2.5 pt-2 pb-1">
+                  <div className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider px-2.5 pt-2 pb-1">
                     {t("sidebar.categoryLobster")}
                   </div>
                 ) : (
@@ -311,11 +312,7 @@ export function Sidebar() {
                 {lobsterAgents.map((agent) => (
                   <NavItem
                     key={agent.id}
-                    label={
-                      isUniversalPlatformTarget(agent)
-                        ? t("platformTargets.universalShortLabel")
-                        : agent.display_name
-                    }
+                    label={getPlatformTargetLabel(agent, t, "short")}
                     isActive={pathname === platformRoute(agent)}
                     onClick={() => navigate(platformRoute(agent))}
                     icon={
@@ -332,7 +329,7 @@ export function Sidebar() {
             {codingAgents.length > 0 && (
               <>
                 {expanded ? (
-                  <div className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider px-2.5 pt-2 pb-1">
+                  <div className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider px-2.5 pt-2 pb-1">
                     {t("sidebar.categoryCoding")}
                   </div>
                 ) : (
@@ -341,11 +338,7 @@ export function Sidebar() {
                 {codingAgents.map((agent) => (
                   <NavItem
                     key={agent.id}
-                    label={
-                      isUniversalPlatformTarget(agent)
-                        ? t("platformTargets.universalShortLabel")
-                        : agent.display_name
-                    }
+                    label={getPlatformTargetLabel(agent, t, "short")}
                     isActive={pathname === platformRoute(agent)}
                     onClick={() => navigate(platformRoute(agent))}
                     icon={

@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "验收 grep：services 域无 Result<T,String>；错误文案逐字校验"}
+{"file": ".trellis/tasks/07-04-central-updates-service-domain/design.md", "reason": "§6 验收映射与行为保持红线清单"}

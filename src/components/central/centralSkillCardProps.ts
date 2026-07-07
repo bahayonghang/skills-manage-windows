@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 
-import type { UnifiedSkillCardProps } from "@/components/skill/UnifiedSkillCard";
+import type { CentralSkillCardProps } from "@/components/skill/UnifiedSkillCard";
 import { statusAccentOf } from "@/lib/centralSkillCardStatus";
 import { getVisibleSkillTags } from "@/lib/centralTags";
 import type { CentralSkillUpdateState, SkillWithLinks } from "@/types";
@@ -19,11 +19,12 @@ interface CentralSkillCardPropsContext {
   updatingSkillIds: string[];
   tags?: readonly CentralSkillCardTag[];
   t: TFunction;
-  density: UnifiedSkillCardProps["density"];
+  density: CentralSkillCardProps["density"];
   setDetailButtonRef: (skillId: string, node: HTMLButtonElement | null) => void;
   onToggleSelection: (skillId: string) => void;
   onDetail: (skillId: string) => void;
   onInstallTo: (skill: SkillWithLinks) => void;
+  onUninstallFromPlatforms: (skill: SkillWithLinks) => void;
   onUpdateCentral: (skillIds: string[]) => void;
   onDelete: (skill: SkillWithLinks) => void;
   onAddSkillTag?: (skillId: string, tagId: string) => void;
@@ -34,7 +35,7 @@ interface CentralSkillCardPropsContext {
 export function buildCentralSkillCardProps(
   skill: SkillWithLinks,
   context: CentralSkillCardPropsContext,
-): UnifiedSkillCardProps {
+): CentralSkillCardProps {
   const skillTags = getVisibleSkillTags(skill.tags ?? []).map((tag) => ({
     id: tag.id,
     name: tag.name,
@@ -53,6 +54,7 @@ export function buildCentralSkillCardProps(
       : undefined;
 
   return {
+    variant: "central",
     name: skill.name,
     description: skill.description,
     aiSummary: context.aiSummaries[skill.id],
@@ -76,6 +78,7 @@ export function buildCentralSkillCardProps(
       : undefined,
     onDetail: () => context.onDetail(skill.id),
     onInstallTo: () => context.onInstallTo(skill),
+    onUninstallFromPlatforms: () => context.onUninstallFromPlatforms(skill),
     onUpdateCentral: () => context.onUpdateCentral([skill.id]),
     onDeleteFromCentral: () => context.onDelete(skill),
     detailButtonRef: (node) => context.setDetailButtonRef(skill.id, node),

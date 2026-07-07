@@ -9,7 +9,7 @@ use super::{
     skills_sh_file_entries_from_snapshot, source_to_github_url, sync_registry_impl,
     RegistryCacheMetadata, RegistrySyncStatus, SyncRegistryOptions,
 };
-use crate::commands::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
+use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
 use crate::db;
 use crate::secrets::MockSecretStore;
 use std::collections::HashMap;
@@ -17,12 +17,7 @@ use std::path::Path;
 use tempfile::{tempdir, TempDir};
 
 async fn setup_test_db() -> (crate::db::DbPool, TempDir) {
-    let dir = tempdir().expect("create tempdir");
-    let db_path = dir.path().join("marketplace-cache.sqlite");
-    let db_path = db_path.to_string_lossy().into_owned();
-    let pool = db::create_pool(&db_path).await.expect("create pool");
-    db::init_database(&pool).await.expect("init db");
-    (pool, dir)
+    crate::test_support::file_pool().await
 }
 
 #[test]
@@ -251,6 +246,8 @@ async fn force_refresh_failure_preserves_last_good_cached_data() {
 
 #[tokio::test]
 async fn registry_cache_column_migration_is_idempotent() {
+    // 豁免 test_support::file_pool：本测试手工搭建 legacy schema 验证迁移，
+    // 必须拿到未 init 的裸文件池。
     let dir = tempdir().expect("create tempdir");
     let db_path = dir.path().join("migration.sqlite");
     let db_path = db_path.to_string_lossy().into_owned();

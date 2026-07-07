@@ -1,4 +1,4 @@
-import { invoke, isTauriRuntime } from "@/lib/tauri";
+import { invoke, isTauriRuntime } from "@/lib/ipc";
 import { AI_PROVIDERS, type ApiProtocol, type RegionId } from "@/data/aiProviders";
 import {
   normalizeApiProtocol,

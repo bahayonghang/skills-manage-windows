@@ -34,6 +34,7 @@ import type {
   SkillportStateImportResolution,
   SkillportStateImportResult,
   SkillportStatePortabilityJob,
+  TargetSummary,
 } from "@/types";
 import type {
   CentralRepositoryAdditionSkipRequest,
@@ -72,6 +73,7 @@ type PlatformManagementProps = Omit<
 
 export function CentralSkillDialogs({
   agents,
+  activeTarget,
   availableInstallAgents,
   batchDeletePreview,
   batchDeletePreviewError,
@@ -158,6 +160,7 @@ export function CentralSkillDialogs({
   onResolveRemoteMissing,
 }: {
   agents: AgentWithStatus[];
+  activeTarget: TargetSummary;
   availableInstallAgents: PlatformTarget[];
   batchDeletePreview: BatchDeleteCentralSkillPreviewResult | null;
   batchDeletePreviewError: string | null;
@@ -478,6 +481,7 @@ export function CentralSkillDialogs({
           <CentralStatePortabilityDialog
             open={isPortabilityOpen}
             onOpenChange={setIsPortabilityOpen}
+            activeTarget={activeTarget}
             exportState={exportSkillportState}
             previewImport={previewSkillportStateImport}
             importState={importSkillportState}

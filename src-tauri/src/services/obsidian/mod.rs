@@ -9,6 +9,9 @@ mod import;
 mod query;
 mod types;
 
+#[cfg(test)]
+mod tests;
+
 pub use error::ObsidianError;
 pub use import::{import_obsidian_skill_to_central_impl, import_obsidian_skill_to_platform_impl};
 pub use query::{get_obsidian_vault_skills_impl, get_obsidian_vaults_impl};

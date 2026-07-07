@@ -310,15 +310,10 @@ mod tests {
     use super::*;
     use crate::db;
     use crate::secrets::{MockSecretStore, AI_API_KEY_SECRET_KEY};
+    use crate::test_support::mem_pool as setup_test_db;
     use std::sync::{Arc, Mutex};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
-
-    async fn setup_test_db() -> crate::db::DbPool {
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
 
     async fn spawn_connection_test_server(body: &'static str) -> (String, Arc<Mutex<Vec<String>>>) {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");

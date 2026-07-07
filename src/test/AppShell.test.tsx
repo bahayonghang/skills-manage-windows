@@ -8,7 +8,7 @@ import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import type { TargetSummary } from "@/types";
-import { listen, isTauriRuntime, showMainWindowWhenReady } from "@/lib/tauri";
+import { listen, isTauriRuntime, showMainWindowWhenReady } from "@/lib/ipc";
 import { toast } from "sonner";
 
 let triggerRescanInMock = false;
@@ -33,7 +33,7 @@ vi.mock("@/stores/marketplaceStore", () => ({
   useMarketplaceStore: vi.fn(),
 }));
 
-vi.mock("@/lib/tauri", () => ({
+vi.mock("@/lib/ipc", () => ({
   listen: vi.fn(),
   isTauriRuntime: vi.fn(() => true),
   showMainWindowWhenReady: vi.fn().mockResolvedValue(undefined),

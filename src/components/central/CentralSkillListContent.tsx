@@ -56,6 +56,7 @@ export function CentralSkillListContent({
   onDelete,
   onDetail,
   onInstallTo,
+  onUninstallFromPlatforms,
   onRemoveSkillTag,
   onTogglePlatform,
   onToggleSelection,
@@ -84,6 +85,7 @@ export function CentralSkillListContent({
   onDelete: (skill: SkillWithLinks) => void;
   onDetail: (skillId: string) => void;
   onInstallTo: (skill: SkillWithLinks) => void;
+  onUninstallFromPlatforms: (skill: SkillWithLinks) => void;
   onRemoveSkillTag?: (skillId: string, tagId: string) => void;
   onTogglePlatform: (skillId: string, agentId: string) => Promise<void>;
   onToggleSelection: (skillId: string) => void;
@@ -129,6 +131,7 @@ export function CentralSkillListContent({
       onToggleSelection,
       onDetail,
       onInstallTo,
+      onUninstallFromPlatforms,
       onUpdateCentral,
       onDelete,
       onAddSkillTag,
@@ -169,7 +172,7 @@ export function CentralSkillListContent({
       ref={contentRef}
       data-testid="central-skill-list-scroll"
       className={cn(
-        "scrollbar-subtle flex-1 overflow-auto p-6",
+        "scrollbar-subtle min-w-0 flex-1 overflow-auto p-4 sm:p-6",
         selectedCount > 0 && "pb-28",
       )}
     >

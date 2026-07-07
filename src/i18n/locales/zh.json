@@ -536,7 +536,6 @@
     "sourceSymlinkLabel": "符号链接",
     "sourceCopyLabel": "复制安装",
     "notFound": "未找到平台",
-    "searchSkillLabel": "查看技能 {{name}}",
     "sourceFilterTabsLabel": "Claude 来源筛选",
     "sourceFilter": {
       "all": "全部",
@@ -547,6 +546,15 @@
     "originPlugin": "插件来源",
     "readOnly": "只读",
     "noSourceSkills": "{{name}} 下暂无{{source}}技能",
+    "originNav": {
+      "label": "安装来源导航",
+      "all": "全部",
+      "central": "SkillPort 安装",
+      "standalone": "独立安装",
+      "unassigned": "未指派来源",
+      "emptyFiltered": "该来源下暂无技能",
+      "clearFilter": "清除筛选"
+    },
     "uninstallFromLabel": "从 {{platform}} 卸载 {{skill}}",
     "scanDuplicates": "扫描重复",
     "scanDuplicatesLabel": "扫描 {{platform}} 的重复技能",
@@ -639,6 +647,8 @@
     "viewDetailsLabel": "查看 {{name}} 的详情",
     "installLabel": "将 {{name}} 安装到平台",
     "installTo": "安装到...",
+    "uninstallFromPlatforms": "从平台卸载",
+    "uninstallFromPlatformsLabel": "从平台卸载 {{name}}",
     "deleteSkill": "从中央技能库删除",
     "deleteSkillLabel": "从中央技能库删除 {{name}}",
     "deleteDialogTitle": "删除 {{name}}",
@@ -1073,6 +1083,8 @@
     "checkUpdatesSelected": "检查所选（{{count}}）",
     "checkUpdatesCurrentResults": "检查当前结果（{{count}}）",
     "checkUpdatesRepository": "检查 {{repo}}（{{count}}）",
+    "checkUpdatesRepositorySync": "检查 {{repo}}（{{count}} 个仓库）",
+    "checkUpdatesAllRepositories": "检查全部仓库（{{count}} 个）",
     "cancelUpdateJob": "中断更新检查",
     "cancellingUpdateJob": "中断中…",
     "updateCancelRequested": "已请求中断",
@@ -1120,6 +1132,10 @@
     "portabilityOpen": "导入 / 导出",
     "portabilityTitle": "导入导出中央库状态",
     "portabilityDesc": "在 SkillPort 安装之间迁移 GitHub 源和中央库清单。",
+    "portabilityTargetBadge": "{{kind}} · {{label}}",
+    "portabilityExportTarget": "导出来源",
+    "portabilityImportTarget": "导入目标",
+    "portabilityOriginTargetWarning": "此 JSON 导出自 {{origin}}，将导入当前目标 {{active}}。",
     "portabilityExportTab": "导出",
     "portabilityImportTab": "导入",
     "portabilityGithubSources": "GitHub 源",
@@ -1486,6 +1502,7 @@
     "repository": "仓库来源",
     "githubRepository": "GitHub 仓库",
     "openGithubRepo": "打开 GitHub 仓库",
+    "openGithubRepoError": "打开 GitHub 仓库失败: {{error}}",
     "repositoryPath": "仓库内路径",
     "technicalDetails": "技术详情",
     "updateStatus": "更新状态",
@@ -1498,6 +1515,11 @@
     "userManagedDesc": "此 Claude 用户副本会保留正常的安装状态与技能集管理能力。",
     "readOnlyInstallBlocked": "插件来源的只读副本不可安装或卸载。",
     "readOnlyCollectionsBlocked": "插件来源的只读副本不可调整技能集。",
+    "installedPlatforms": "已安装平台",
+    "removeInstalledPlatformAriaLabel": "从 {{platform}} 删除 {{skill}}",
+    "uninstallPlatformTitle": "删除这个平台安装？",
+    "uninstallPlatformDesc": "只会从 {{platform}} 删除 {{skill}} 的安装，中央技能仍会保留。",
+    "uninstallPlatformConfirm": "删除平台安装",
     "fileTreeTitle": "文件树",
     "fileTreeLoading": "正在加载文件树...",
     "fileTreeEmpty": "当前技能没有可展示的文件。"
@@ -2016,6 +2038,34 @@
     "actionNewCollection": "新建技能集",
     "actionDiscover": "打开发现扫描",
     "skillDetail": "技能详情"
+  },
+  "shortcuts": {
+    "title": "键盘快捷键",
+    "description": "应用内可用的快捷键一览。",
+    "openButton": "查看键盘快捷键",
+    "or": "或",
+    "groups": {
+      "global": "全局",
+      "central": "中央技能库",
+      "logs": "操作日志",
+      "targets": "目标快切"
+    },
+    "entries": {
+      "globalSearch": "打开/关闭全局搜索",
+      "shortcutsSheet": "打开/关闭快捷键速查",
+      "commandPalette": "打开/关闭命令面板",
+      "logsFocusSearch": "聚焦日志搜索框",
+      "logsRefresh": "刷新日志",
+      "logsExport": "导出日志",
+      "logsMoveFocus": "在日志行间移动焦点",
+      "targetsCloseMenu": "关闭目标切换菜单"
+    },
+    "scopes": {
+      "questionNotWhileTyping": "? 键在输入焦点下不触发",
+      "notWhileTyping": "输入焦点下不触发",
+      "sharedWithGlobalSearch": "仅中央技能库页，与全局搜索同键",
+      "menuOpen": "菜单打开时"
+    }
   },
   "projects": {
     "title": "项目",

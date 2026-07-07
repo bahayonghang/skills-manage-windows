@@ -2,12 +2,14 @@ import { Search, X } from "lucide-react";
 import type { TFunction } from "i18next";
 
 import { Input } from "@/components/ui/input";
+import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { cn } from "@/lib/utils";
 import {
   getInstalledFilterPlatformId,
   type InstalledSkillsFilterValue,
 } from "@/lib/centralInstalledFilters";
 import {
+  getPlatformTargetLabel,
   getPlatformTargetMemberNames,
   isUniversalPlatformTarget,
   type PlatformTarget,
@@ -111,7 +113,7 @@ export function CentralSearchBar({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder ?? t("central.v2.searchPlaceholder")}
-          className="pl-10 pr-24"
+          className="h-9 rounded-xl border-border/70 bg-background/75 pl-10 pr-24 shadow-[0_0_0_1px_color-mix(in_srgb,var(--foreground)_3%,transparent)] transition-[background-color,border-color,box-shadow] focus-visible:ring-primary/20"
           data-testid="central-search-input-v2"
         />
         <div className="absolute right-2 flex items-center gap-1">
@@ -120,7 +122,7 @@ export function CentralSearchBar({
               type="button"
               onClick={onClear}
               aria-label={t("central.v2.selectionClear")}
-              className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              className="focus-ring grid size-8 place-items-center rounded-lg text-muted-foreground transition-[scale,background-color,color] hover:bg-muted/60 hover:text-foreground active:scale-[0.96]"
             >
               <X className="size-4" />
             </button>
@@ -131,9 +133,9 @@ export function CentralSearchBar({
               data-testid="central-open-palette"
               onClick={onOpenPalette}
               aria-label={t("central.v2.commandPaletteOpen")}
-              className="inline-flex items-center gap-1 rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground"
+              className="focus-ring inline-flex h-7 items-center gap-1 rounded-lg border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground transition-[scale,background-color,border-color,color] hover:border-border hover:bg-muted/40 hover:text-foreground active:scale-[0.96]"
             >
-              ⌘K
+              <ShortcutHint shortcut="mod+k" />
             </button>
           )}
         </div>
@@ -142,7 +144,7 @@ export function CentralSearchBar({
       {hasAnyChip && (
         <div
           data-testid="central-search-chip-row"
-          className="flex flex-wrap items-center gap-1.5 text-[11px]"
+          className="flex flex-wrap items-center gap-1.5 text-pretty text-[11px]"
         >
           {queryAst.filters.map((filter, idx) => (
             <FilterChip
@@ -198,7 +200,7 @@ export function CentralSearchBar({
           {hasInvalid && (
             <span
               data-testid="central-search-invalid-hint"
-              className="rounded-md border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-warning-foreground"
+              className="rounded-lg border border-warning/40 bg-warning/10 px-2 py-1 text-warning-foreground"
             >
               {t("central.v2.searchInvalidTokens", {
                 tokens: queryAst.invalid.join(", "),
@@ -254,9 +256,7 @@ function resolveInstalledChip(
   const agent = agents.find((a) => a.id === platformId);
   const displayName = !agent
     ? platformId
-    : isUniversalPlatformTarget(agent)
-      ? t("platformTargets.universalLabel")
-      : agent.display_name;
+    : getPlatformTargetLabel(agent, t, "full");
   const titleAttr =
     agent && isUniversalPlatformTarget(agent)
       ? getPlatformTargetMemberNames(agent).join(", ")
@@ -284,7 +284,7 @@ function FilterChip({
     <span
       data-testid={`filter-chip-${filter.kind}`}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono",
+        "inline-flex min-h-6 items-center gap-1 rounded-lg border px-1.5 py-0.5 font-mono",
         filter.negated
           ? "border-destructive/40 bg-destructive/10 text-destructive"
           : "border-primary/30 bg-primary/10 text-primary",
@@ -295,7 +295,7 @@ function FilterChip({
         type="button"
         onClick={onRemove}
         aria-label={t("central.v2.filtersRemove", { key: filter.kind, value })}
-        className="grid size-3.5 place-items-center rounded-sm hover:bg-foreground/10"
+        className="focus-ring grid size-5 place-items-center rounded-md transition-[scale,background-color] hover:bg-foreground/10 active:scale-[0.96]"
       >
         <X className="size-2.5" />
       </button>
@@ -320,7 +320,7 @@ function SimpleChip({
     <span
       data-testid={testId}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5",
+        "inline-flex min-h-6 items-center gap-1 rounded-lg border px-1.5 py-0.5",
         tone === "primary" && "border-primary/30 bg-primary/10 text-primary",
         tone === "muted" &&
           "border-border/70 bg-muted/40 text-muted-foreground",
@@ -334,7 +334,7 @@ function SimpleChip({
           type="button"
           onClick={onRemove}
           aria-label={ariaLabel}
-          className="grid size-3.5 place-items-center rounded-sm hover:bg-foreground/10"
+          className="focus-ring grid size-5 place-items-center rounded-md transition-[scale,background-color] hover:bg-foreground/10 active:scale-[0.96]"
         >
           <X className="size-2.5" />
         </button>

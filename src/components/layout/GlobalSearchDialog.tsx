@@ -1,13 +1,13 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import {
-  Blocks,
-  Layers,
-  LayoutDashboard,
-  RefreshCw,
-  Plus,
-} from "lucide-react";
+import { Blocks, Layers, LayoutDashboard, RefreshCw, Plus } from "lucide-react";
 
 import {
   Command,
@@ -23,16 +23,18 @@ import { useCollectionStore } from "@/stores/collectionStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useHotkey } from "@/hooks/useHotkey";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
-import {
-  DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
-} from "@/lib/platformVisibility";
+import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import {
   getPlatformTargetGroups,
+  getPlatformTargetLabel,
   getPlatformTargetMemberNames,
   getPlatformTargetPathHint,
-  isUniversalPlatformTarget,
 } from "@/lib/platformTargetGroups";
-import { buildSearchText, normalizeSearchQuery, scoreSearchMatch } from "@/lib/search";
+import {
+  buildSearchText,
+  normalizeSearchQuery,
+  scoreSearchMatch,
+} from "@/lib/search";
 
 interface GlobalSearchDialogProps {
   open: boolean;
@@ -65,12 +67,14 @@ export function GlobalSearchDialog({
   const centralSkills = useCentralSkillsStore((s) => s.skills);
   const collections = useCollectionStore((s) => s.collections);
   const agents = usePlatformStore((s) => s.agents);
-  const categoryVisibility = usePlatformStore((s) => s.categoryVisibility) ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
+  const categoryVisibility =
+    usePlatformStore((s) => s.categoryVisibility) ??
+    DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = useMemo(
     () => normalizeSearchQuery(deferredQuery),
-    [deferredQuery]
+    [deferredQuery],
   );
 
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
@@ -97,7 +101,7 @@ export function GlobalSearchDialog({
         initialLimit: 10,
       },
     ],
-    [t]
+    [t],
   );
 
   useEffect(() => {
@@ -122,7 +126,9 @@ export function GlobalSearchDialog({
         description: skill.description,
         groupKey: "central",
         groupLabel: t("globalSearch.centralSkills"),
-        icon: <Blocks className="size-4 shrink-0 text-primary/70" />,
+        icon: (
+          <Blocks className="size-4 shrink-0 text-muted-foreground group-data-selected/command-item:text-primary" />
+        ),
         searchText: buildSearchText([skill.name, skill.description]),
         labelText,
         descriptionText,
@@ -141,7 +147,9 @@ export function GlobalSearchDialog({
         description: col.description,
         groupKey: "collections",
         groupLabel: t("globalSearch.collections"),
-        icon: <Layers className="size-4 shrink-0 text-primary/70" />,
+        icon: (
+          <Layers className="size-4 shrink-0 text-muted-foreground group-data-selected/command-item:text-primary" />
+        ),
         searchText: buildSearchText([col.name, col.description]),
         labelText: col.name.toLowerCase(),
         descriptionText: (col.description ?? "").toLowerCase(),
@@ -155,11 +163,8 @@ export function GlobalSearchDialog({
     // Platform Views
     const platformAgents = getPlatformTargetGroups(agents, categoryVisibility);
     for (const agent of platformAgents) {
-      const isUniversal = isUniversalPlatformTarget(agent);
       const displayPath = getPlatformTargetPathHint(agent);
-      const label = isUniversal
-        ? t("platformTargets.universalShortLabel")
-        : agent.display_name;
+      const label = getPlatformTargetLabel(agent, t, "short");
       const memberNames = getPlatformTargetMemberNames(agent);
       result.push({
         id: `platform-${agent.id}`,
@@ -168,9 +173,16 @@ export function GlobalSearchDialog({
         groupKey: "platforms",
         groupLabel: t("globalSearch.platforms"),
         icon: (
-          <PlatformIcon agentId={agent.id} className="size-4 text-primary/70" />
+          <PlatformIcon
+            agentId={agent.id}
+            className="size-4 text-muted-foreground group-data-selected/command-item:text-primary"
+          />
         ),
-        searchText: buildSearchText([label, agent.global_skills_dir, ...memberNames]),
+        searchText: buildSearchText([
+          label,
+          agent.global_skills_dir,
+          ...memberNames,
+        ]),
         labelText: label.toLowerCase(),
         descriptionText: displayPath.toLowerCase(),
         onSelect: () => {
@@ -187,7 +199,9 @@ export function GlobalSearchDialog({
         label: t("globalSearch.actionDashboard"),
         groupKey: "actions",
         groupLabel: t("globalSearch.actions"),
-        icon: <LayoutDashboard className="size-4 shrink-0 text-primary/70" />,
+        icon: (
+          <LayoutDashboard className="size-4 shrink-0 text-muted-foreground group-data-selected/command-item:text-primary" />
+        ),
         searchText: buildSearchText([
           t("globalSearch.actionDashboard"),
           t("sidebar.dashboard"),
@@ -204,7 +218,9 @@ export function GlobalSearchDialog({
         label: t("globalSearch.actionRescan"),
         groupKey: "actions",
         groupLabel: t("globalSearch.actions"),
-        icon: <RefreshCw className="size-4 shrink-0 text-primary/70" />,
+        icon: (
+          <RefreshCw className="size-4 shrink-0 text-muted-foreground group-data-selected/command-item:text-primary" />
+        ),
         searchText: buildSearchText([t("globalSearch.actionRescan")]),
         labelText: t("globalSearch.actionRescan").toLowerCase(),
         descriptionText: "",
@@ -218,7 +234,9 @@ export function GlobalSearchDialog({
         label: t("globalSearch.actionNewCollection"),
         groupKey: "actions",
         groupLabel: t("globalSearch.actions"),
-        icon: <Plus className="size-4 shrink-0 text-primary/70" />,
+        icon: (
+          <Plus className="size-4 shrink-0 text-muted-foreground group-data-selected/command-item:text-primary" />
+        ),
         searchText: buildSearchText([t("globalSearch.actionNewCollection")]),
         labelText: t("globalSearch.actionNewCollection").toLowerCase(),
         descriptionText: "",
@@ -226,7 +244,7 @@ export function GlobalSearchDialog({
           close();
           onAction("new-collection");
         },
-      }
+      },
     );
 
     return result;
@@ -264,7 +282,7 @@ export function GlobalSearchDialog({
           normalizedQuery,
           item.labelText,
           item.descriptionText,
-          item.searchText
+          item.searchText,
         ),
       }))
       .filter((entry) => Number.isFinite(entry.score))

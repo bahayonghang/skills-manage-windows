@@ -1,17 +1,17 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   AgentWithStatus,
   BootstrapSnapshot,
   PlatformPathMap,
   SkillCountsSummary,
 } from "../types";
-
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
-}));
-
-import { invoke } from "@tauri-apps/api/core";
 import { usePlatformStore } from "../stores/platformStore";
+import {
+  ipcInvokeCalls,
+  ipcInvokedCommands,
+  mockIpcCommand,
+  mockIpcCommands,
+} from "./ipcMock";
 
 const mockAgents: AgentWithStatus[] = [
   {
@@ -50,7 +50,7 @@ const mockPlatformPaths: PlatformPathMap = Object.fromEntries(
       global_skills_dir: agent.global_skills_dir,
       project_skills_dir: agent.project_skills_dir ?? null,
     },
-  ])
+  ]),
 );
 
 const mockBootstrapSnapshot: BootstrapSnapshot = {
@@ -95,6 +95,32 @@ const allHiddenCategoryVisibility = {
   lobster: false,
 };
 
+const mockScanResult = {
+  total_skills: 12,
+  agents_scanned: 2,
+  skills_by_agent: {},
+};
+
+/** 注册 hydrateShell + 后台刷新的完整命令面；bootstrap 快照首查/复查可给不同响应。 */
+function mockInitializeCommands({
+  firstSnapshot = mockBootstrapSnapshot,
+  secondSnapshot = refreshedSnapshot,
+  categoryVisibility = JSON.stringify(mockCategoryVisibility),
+}: {
+  firstSnapshot?: BootstrapSnapshot | Promise<BootstrapSnapshot>;
+  secondSnapshot?: BootstrapSnapshot;
+  categoryVisibility?: string | null;
+} = {}) {
+  let snapshotCall = 0;
+  mockIpcCommands({
+    get_bootstrap_snapshot: () =>
+      snapshotCall++ === 0 ? firstSnapshot : secondSnapshot,
+    get_setting: categoryVisibility,
+    list_platform_paths: mockPlatformPaths,
+    scan_all_skills: mockScanResult,
+  });
+}
+
 describe("platformStore", () => {
   beforeEach(() => {
     usePlatformStore.setState({
@@ -113,7 +139,6 @@ describe("platformStore", () => {
       scanGeneration: 0,
       error: null,
     });
-    vi.clearAllMocks();
   });
 
   it("has correct initial state", () => {
@@ -134,25 +159,22 @@ describe("platformStore", () => {
   });
 
   it("initialize hydrates the shell first and then refreshes in background", async () => {
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(mockBootstrapSnapshot)
-      .mockResolvedValueOnce(JSON.stringify(mockCategoryVisibility))
-      .mockResolvedValueOnce(mockPlatformPaths)
-      .mockResolvedValueOnce({ total_skills: 12, agents_scanned: 2, skills_by_agent: {} })
-      .mockResolvedValueOnce(refreshedSnapshot)
-      .mockResolvedValueOnce(mockPlatformPaths);
+    mockInitializeCommands();
 
     await usePlatformStore.getState().initialize();
 
     const state = usePlatformStore.getState();
-    expect(invoke).toHaveBeenNthCalledWith(1, "get_bootstrap_snapshot");
-    expect(invoke).toHaveBeenNthCalledWith(2, "get_setting", {
+    expect(ipcInvokedCommands()).toEqual([
+      "get_bootstrap_snapshot",
+      "get_setting",
+      "list_platform_paths",
+      "scan_all_skills",
+      "get_bootstrap_snapshot",
+      "list_platform_paths",
+    ]);
+    expect(ipcInvokeCalls("get_setting")[0].args).toEqual({
       key: "platform_category_visibility",
     });
-    expect(invoke).toHaveBeenNthCalledWith(3, "list_platform_paths");
-    expect(invoke).toHaveBeenNthCalledWith(4, "scan_all_skills");
-    expect(invoke).toHaveBeenNthCalledWith(5, "get_bootstrap_snapshot");
-    expect(invoke).toHaveBeenNthCalledWith(6, "list_platform_paths");
     expect(state.skillsByAgent).toEqual(refreshedSnapshot.cachedSkillCounts);
     expect(state.collectionCount).toBe(2);
     expect(state.categoryVisibility).toEqual(mockCategoryVisibility);
@@ -163,16 +185,12 @@ describe("platformStore", () => {
 
   it("initialize sets isLoading while the bootstrap snapshot is pending", async () => {
     let resolveSnapshot!: (value: BootstrapSnapshot) => void;
-
-    vi.mocked(invoke)
-      .mockReturnValueOnce(new Promise<BootstrapSnapshot>((resolve) => {
+    mockInitializeCommands({
+      firstSnapshot: new Promise<BootstrapSnapshot>((resolve) => {
         resolveSnapshot = resolve;
-      }))
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(mockPlatformPaths)
-      .mockResolvedValueOnce({ total_skills: 12, agents_scanned: 2, skills_by_agent: {} })
-      .mockResolvedValueOnce(refreshedSnapshot)
-      .mockResolvedValueOnce(mockPlatformPaths);
+      }),
+      categoryVisibility: null,
+    });
 
     const initPromise = usePlatformStore.getState().initialize();
     expect(usePlatformStore.getState().isLoading).toBe(true);
@@ -183,16 +201,12 @@ describe("platformStore", () => {
 
   it("initialize reuses the in-flight promise and does not trigger duplicate scans", async () => {
     let resolveSnapshot!: (value: BootstrapSnapshot) => void;
-
-    vi.mocked(invoke)
-      .mockReturnValueOnce(new Promise<BootstrapSnapshot>((resolve) => {
+    mockInitializeCommands({
+      firstSnapshot: new Promise<BootstrapSnapshot>((resolve) => {
         resolveSnapshot = resolve;
-      }))
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(mockPlatformPaths)
-      .mockResolvedValueOnce({ total_skills: 12, agents_scanned: 2, skills_by_agent: {} })
-      .mockResolvedValueOnce(refreshedSnapshot)
-      .mockResolvedValueOnce(mockPlatformPaths);
+      }),
+      categoryVisibility: null,
+    });
 
     const firstCall = usePlatformStore.getState().initialize();
     const secondCall = usePlatformStore.getState().initialize();
@@ -200,13 +214,20 @@ describe("platformStore", () => {
     resolveSnapshot(mockBootstrapSnapshot);
     await Promise.all([firstCall, secondCall]);
 
-    expect(invoke).toHaveBeenCalledTimes(6);
+    expect(ipcInvokeCalls()).toHaveLength(6);
   });
 
   it("sets error and clears isLoading when hydrateShell fails", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("bootstrap failed"));
+    mockIpcCommands({
+      get_bootstrap_snapshot: () =>
+        Promise.reject(new Error("bootstrap failed")),
+      get_setting: null,
+      list_platform_paths: mockPlatformPaths,
+    });
 
-    await expect(usePlatformStore.getState().hydrateShell()).rejects.toThrow("bootstrap failed");
+    await expect(usePlatformStore.getState().hydrateShell()).rejects.toThrow(
+      "bootstrap failed",
+    );
 
     const state = usePlatformStore.getState();
     expect(state.error).toContain("bootstrap failed");
@@ -231,13 +252,17 @@ describe("platformStore", () => {
       error: null,
     });
 
-    vi.mocked(invoke).mockResolvedValueOnce(mockCountsSummary);
+    mockIpcCommand("get_skill_counts_summary", mockCountsSummary);
 
     await usePlatformStore.getState().refreshCounts();
 
-    expect(invoke).toHaveBeenCalledWith("get_skill_counts_summary");
-    expect(usePlatformStore.getState().skillsByAgent).toEqual(mockCountsSummary.cachedSkillCounts);
-    expect(usePlatformStore.getState().lastScanAt).toBe(mockCountsSummary.lastScanAt);
+    expect(ipcInvokedCommands()).toEqual(["get_skill_counts_summary"]);
+    expect(usePlatformStore.getState().skillsByAgent).toEqual(
+      mockCountsSummary.cachedSkillCounts,
+    );
+    expect(usePlatformStore.getState().lastScanAt).toBe(
+      mockCountsSummary.lastScanAt,
+    );
     expect(usePlatformStore.getState().scanGeneration).toBe(2);
     expect(usePlatformStore.getState().isLoading).toBe(false);
     expect(usePlatformStore.getState().isRefreshing).toBe(false);
@@ -278,23 +303,29 @@ describe("platformStore", () => {
   it("rescan restores cached bootstrap data when the scan fails after a target reset", async () => {
     usePlatformStore.getState().resetForTargetChange();
 
-    vi.mocked(invoke)
-      .mockRejectedValueOnce(new Error("ssh scan failed"))
-      .mockResolvedValueOnce(mockBootstrapSnapshot)
-      .mockResolvedValueOnce(JSON.stringify(mockCategoryVisibility))
-      .mockResolvedValueOnce(mockPlatformPaths);
+    mockIpcCommands({
+      scan_all_skills: () => Promise.reject(new Error("ssh scan failed")),
+      get_bootstrap_snapshot: mockBootstrapSnapshot,
+      get_setting: JSON.stringify(mockCategoryVisibility),
+      list_platform_paths: mockPlatformPaths,
+    });
 
     await usePlatformStore.getState().rescan();
 
     const state = usePlatformStore.getState();
-    expect(invoke).toHaveBeenNthCalledWith(1, "scan_all_skills");
-    expect(invoke).toHaveBeenNthCalledWith(2, "get_bootstrap_snapshot");
-    expect(invoke).toHaveBeenNthCalledWith(3, "get_setting", {
+    expect(ipcInvokedCommands()).toEqual([
+      "scan_all_skills",
+      "get_bootstrap_snapshot",
+      "get_setting",
+      "list_platform_paths",
+    ]);
+    expect(ipcInvokeCalls("get_setting")[0].args).toEqual({
       key: "platform_category_visibility",
     });
-    expect(invoke).toHaveBeenNthCalledWith(4, "list_platform_paths");
     expect(state.agents).toEqual(mockAgents);
-    expect(state.skillsByAgent).toEqual(mockBootstrapSnapshot.cachedSkillCounts);
+    expect(state.skillsByAgent).toEqual(
+      mockBootstrapSnapshot.cachedSkillCounts,
+    );
     expect(state.collectionCount).toBe(mockBootstrapSnapshot.collectionCount);
     expect(state.categoryVisibility).toEqual(mockCategoryVisibility);
     expect(state.scanState).toBe("error");
@@ -304,15 +335,12 @@ describe("platformStore", () => {
   });
 
   it("hydrateShell applies persisted category visibility", async () => {
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(mockBootstrapSnapshot)
-      .mockResolvedValueOnce(JSON.stringify(mockCategoryVisibility))
-      .mockResolvedValueOnce(mockPlatformPaths);
+    mockInitializeCommands();
 
     await usePlatformStore.getState().hydrateShell();
 
     expect(usePlatformStore.getState().categoryVisibility).toEqual(
-      mockCategoryVisibility
+      mockCategoryVisibility,
     );
   });
 
@@ -323,11 +351,11 @@ describe("platformStore", () => {
         lobster: false,
       },
     });
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    mockIpcCommand("set_setting", undefined);
 
     await usePlatformStore.getState().setCategoryVisibility("lobster", true);
 
-    expect(invoke).toHaveBeenCalledWith("set_setting", {
+    expect(ipcInvokeCalls("set_setting")[0].args).toEqual({
       key: "platform_category_visibility",
       value: JSON.stringify({ coding: true, lobster: true }),
     });
@@ -353,11 +381,11 @@ describe("platformStore", () => {
       isRefreshing: false,
       error: null,
     });
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    mockIpcCommand("set_setting", undefined);
 
     await usePlatformStore.getState().setCategoryVisibility("coding", false);
 
-    expect(invoke).toHaveBeenCalledWith("set_setting", {
+    expect(ipcInvokeCalls("set_setting")[0].args).toEqual({
       key: "platform_category_visibility",
       value: JSON.stringify({ coding: true, lobster: false }),
     });
@@ -368,10 +396,9 @@ describe("platformStore", () => {
   });
 
   it("hydrateShell ignores persisted category visibility that hides every platform group", async () => {
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(mockBootstrapSnapshot)
-      .mockResolvedValueOnce(JSON.stringify(allHiddenCategoryVisibility))
-      .mockResolvedValueOnce(mockPlatformPaths);
+    mockInitializeCommands({
+      categoryVisibility: JSON.stringify(allHiddenCategoryVisibility),
+    });
 
     await usePlatformStore.getState().hydrateShell();
 
@@ -398,28 +425,26 @@ describe("platformStore", () => {
       error: null,
     });
 
-    vi.mocked(invoke).mockResolvedValueOnce({
+    mockIpcCommand("set_agent_enabled", {
       ...mockAgents[0],
       is_enabled: false,
     });
 
     await usePlatformStore.getState().setAgentEnabled("claude-code", false);
 
-    expect(invoke).toHaveBeenCalledWith("set_agent_enabled", {
+    expect(ipcInvokeCalls("set_agent_enabled")[0].args).toEqual({
       agentId: "claude-code",
       isEnabled: false,
     });
     expect(
-      usePlatformStore.getState().agents.find((agent) => agent.id === "claude-code")
-        ?.is_enabled
+      usePlatformStore
+        .getState()
+        .agents.find((agent) => agent.id === "claude-code")?.is_enabled,
     ).toBe(false);
   });
 
   it("hydrateShell derives category visibility from enabled agents when nothing is saved", async () => {
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(mockBootstrapSnapshot)
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(mockPlatformPaths);
+    mockInitializeCommands({ categoryVisibility: null });
 
     await usePlatformStore.getState().hydrateShell();
 
@@ -441,7 +466,7 @@ describe("platformStore", () => {
       is_builtin: false,
       is_enabled: true,
     };
-    vi.mocked(invoke).mockResolvedValueOnce(created);
+    mockIpcCommand("add_custom_agent", created);
 
     const config = {
       display_name: "QClaw",
@@ -451,19 +476,21 @@ describe("platformStore", () => {
     const result = await usePlatformStore.getState().addCustomAgent(config);
 
     expect(result).toEqual(created);
-    expect(invoke).toHaveBeenCalledWith("add_custom_agent", { config });
+    expect(ipcInvokeCalls("add_custom_agent")[0].args).toEqual({ config });
     expect(usePlatformStore.getState().agents).toContainEqual(created);
     expect(usePlatformStore.getState().skillsByAgent["custom-qclaw"]).toBe(0);
   });
 
   it("addCustomAgent throws on failure", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("UNIQUE constraint"));
+    mockIpcCommand("add_custom_agent", () =>
+      Promise.reject(new Error("UNIQUE constraint")),
+    );
 
     await expect(
       usePlatformStore.getState().addCustomAgent({
         display_name: "Dup",
         global_skills_dir: "/dup",
-      })
+      }),
     ).rejects.toThrow("UNIQUE constraint");
   });
 
@@ -476,7 +503,7 @@ describe("platformStore", () => {
       ...mockAgents[0],
       display_name: "Claude Code Pro",
     };
-    vi.mocked(invoke).mockResolvedValueOnce(updated);
+    mockIpcCommand("update_custom_agent", updated);
 
     const config = {
       display_name: "Claude Code Pro",
@@ -488,13 +515,13 @@ describe("platformStore", () => {
       .updateCustomAgent("claude-code", config);
 
     expect(result).toEqual(updated);
-    expect(invoke).toHaveBeenCalledWith("update_custom_agent", {
+    expect(ipcInvokeCalls("update_custom_agent")[0].args).toEqual({
       agentId: "claude-code",
       config,
     });
     expect(
       usePlatformStore.getState().agents.find((a) => a.id === "claude-code")
-        ?.display_name
+        ?.display_name,
     ).toBe("Claude Code Pro");
   });
 
@@ -506,24 +533,26 @@ describe("platformStore", () => {
       platformPaths: {},
       skillsByAgent: { "claude-code": 5, openclaw: 0, central: 3 },
     });
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    mockIpcCommand("remove_custom_agent", undefined);
 
     await usePlatformStore.getState().removeCustomAgent("openclaw");
 
-    expect(invoke).toHaveBeenCalledWith("remove_custom_agent", {
+    expect(ipcInvokeCalls("remove_custom_agent")[0].args).toEqual({
       agentId: "openclaw",
     });
     expect(
-      usePlatformStore.getState().agents.find((a) => a.id === "openclaw")
+      usePlatformStore.getState().agents.find((a) => a.id === "openclaw"),
     ).toBeUndefined();
     expect(usePlatformStore.getState().skillsByAgent.openclaw).toBeUndefined();
   });
 
   it("removeCustomAgent throws on failure", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("Not found"));
+    mockIpcCommand("remove_custom_agent", () =>
+      Promise.reject(new Error("Not found")),
+    );
 
     await expect(
-      usePlatformStore.getState().removeCustomAgent("nonexistent")
+      usePlatformStore.getState().removeCustomAgent("nonexistent"),
     ).rejects.toThrow("Not found");
   });
 });

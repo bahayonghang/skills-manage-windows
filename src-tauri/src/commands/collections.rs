@@ -2,12 +2,11 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::db::{self, Collection, DbPool, Skill};
+use crate::services::installation::{install_skill, InstallTransport};
+use crate::targets::ActiveTarget;
 use crate::AppState;
 
-use super::linker::{
-    install_skill_to_agent_impl, install_skill_to_agent_remote_impl, BatchInstallResult,
-    FailedInstall,
-};
+use super::linker::{BatchInstallResult, FailedInstall};
 
 mod export_import;
 
@@ -142,6 +141,7 @@ pub async fn update_collection_impl(
 /// in the `failed` list rather than aborting the whole batch.
 pub async fn batch_install_collection_impl(
     pool: &DbPool,
+    active_target: &ActiveTarget,
     collection_id: &str,
     agent_ids: &[String],
 ) -> Result<BatchInstallResult, String> {
@@ -154,14 +154,36 @@ pub async fn batch_install_collection_impl(
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
 
-    for skill in &skills {
-        for agent_id in agent_ids {
-            match install_skill_to_agent_impl(pool, &skill.id, agent_id).await {
-                Ok(_) => succeeded.push(format!("{}:{}", skill.id, agent_id)),
-                Err(e) => failed.push(FailedInstall {
-                    agent_id: format!("{}:{}", skill.id, agent_id),
-                    error: e.to_string(),
-                }),
+    match InstallTransport::for_target(active_target).await {
+        Ok(transport) => {
+            // Historical semantics: local collection installs symlink; remote
+            // targets have always installed collection skills as copies.
+            let method = if transport.is_remote() {
+                "copy"
+            } else {
+                "symlink"
+            };
+            for skill in &skills {
+                for agent_id in agent_ids {
+                    match install_skill(pool, &transport, &skill.id, agent_id, method).await {
+                        Ok(_) => succeeded.push(format!("{}:{}", skill.id, agent_id)),
+                        Err(e) => failed.push(FailedInstall {
+                            agent_id: format!("{}:{}", skill.id, agent_id),
+                            error: e.to_string(),
+                        }),
+                    }
+                }
+            }
+        }
+        Err(error) => {
+            let error = error.to_string();
+            for skill in &skills {
+                for agent_id in agent_ids {
+                    failed.push(FailedInstall {
+                        agent_id: format!("{}:{}", skill.id, agent_id),
+                        error: error.clone(),
+                    });
+                }
             }
         }
     }
@@ -256,39 +278,7 @@ pub async fn batch_install_collection(
 ) -> Result<BatchInstallResult, String> {
     let active_target = state.active_target().await?;
     let pool = state.active_db().await?;
-    if active_target.is_remote_like() {
-        get_collection_or_err(&pool, &collection_id).await?;
-        let skills = db::get_collection_skills(&pool, &collection_id)
-            .await
-            .map_err(|e| e.to_string())?;
-        let mut succeeded = Vec::new();
-        let mut failed = Vec::new();
-        for skill in &skills {
-            for agent_id in &agent_ids {
-                match install_skill_to_agent_remote_impl(
-                    &pool,
-                    &active_target,
-                    &skill.id,
-                    agent_id,
-                    "copy",
-                )
-                .await
-                {
-                    Ok(_) => succeeded.push(format!("{}:{}", skill.id, agent_id)),
-                    Err(error) => failed.push(FailedInstall {
-                        agent_id: format!("{}:{}", skill.id, agent_id),
-                        error: error.to_string(),
-                    }),
-                }
-            }
-        }
-        return Ok(BatchInstallResult {
-            succeeded,
-            skipped: Vec::new(),
-            failed,
-        });
-    }
-    batch_install_collection_impl(&pool, &collection_id, &agent_ids).await
+    batch_install_collection_impl(&pool, &active_target, &collection_id, &agent_ids).await
 }
 
 /// Tauri command: export a collection to a JSON string.
@@ -317,16 +307,10 @@ pub async fn import_collection(
 mod tests {
     use super::*;
     use crate::db::{self, Skill};
+    use crate::test_support::mem_pool as setup_test_db;
     use chrono::Utc;
-    use sqlx::SqlitePool;
     use std::fs;
     use tempfile::TempDir;
-
-    async fn setup_test_db() -> SqlitePool {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
-        db::init_database(&pool).await.unwrap();
-        pool
-    }
 
     fn make_skill(id: &str) -> Skill {
         Skill {
@@ -863,7 +847,7 @@ mod tests {
             .await
             .unwrap();
 
-        let result = batch_install_collection_impl(&pool, &col.id, &["claude-code".to_string()])
+        let result = batch_install_collection_impl(&pool, &ActiveTarget::Local, &col.id, &["claude-code".to_string()])
             .await
             .unwrap();
 
@@ -941,7 +925,7 @@ mod tests {
             .await
             .unwrap();
 
-        let result = batch_install_collection_impl(&pool, &col.id, &["claude-code".to_string()])
+        let result = batch_install_collection_impl(&pool, &ActiveTarget::Local, &col.id, &["claude-code".to_string()])
             .await
             .unwrap();
 
@@ -954,6 +938,7 @@ mod tests {
         let pool = setup_test_db().await;
         let result = batch_install_collection_impl(
             &pool,
+            &ActiveTarget::Local,
             "no-such-collection",
             &["claude-code".to_string()],
         )
@@ -968,7 +953,7 @@ mod tests {
             .await
             .unwrap();
 
-        let result = batch_install_collection_impl(&pool, &col.id, &["claude-code".to_string()])
+        let result = batch_install_collection_impl(&pool, &ActiveTarget::Local, &col.id, &["claude-code".to_string()])
             .await
             .unwrap();
 

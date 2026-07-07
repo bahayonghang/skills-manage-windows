@@ -1,34 +1,6 @@
 import { create } from "zustand";
-import { invoke, isTauriRuntime } from "@/lib/tauri";
-import { invokeCommand } from "@/lib/ipc";
+import { invoke } from "@/lib/ipc";
 import type { ObsidianSkill, ObsidianVault } from "@/types";
-
-const BROWSER_FIXTURE_VAULTS: ObsidianVault[] = [
-  {
-    id: "fixture-vault",
-    name: "Fixture Vault",
-    path: "/Users/fixture/Notes/Fixture Vault",
-    skill_count: 1,
-  },
-];
-
-const BROWSER_FIXTURE_SKILLS: Record<string, ObsidianSkill[]> = {
-  "fixture-vault": [
-    {
-      id: "obsidian__fixture__fixture-skill",
-      name: "fixture-skill",
-      description: "Browser validation fixture for the Obsidian vault view.",
-      file_path:
-        "/Users/fixture/Notes/Fixture Vault/.skills/fixture-skill/SKILL.md",
-      dir_path: "/Users/fixture/Notes/Fixture Vault/.skills/fixture-skill",
-      platform_id: "obsidian",
-      platform_name: "Obsidian",
-      project_path: "/Users/fixture/Notes/Fixture Vault",
-      project_name: "Fixture Vault",
-      is_already_central: false,
-    },
-  ],
-};
 
 interface ObsidianState {
   vaults: ObsidianVault[];
@@ -38,6 +10,7 @@ interface ObsidianState {
   error: string | null;
   loadVaults: () => Promise<void>;
   getVaultSkills: (vaultId: string) => Promise<void>;
+  openObsidianPath: (path: string) => Promise<void>;
   resetForTargetChange: () => void;
 }
 
@@ -50,7 +23,7 @@ async function importObsidianSkillToCentral(skill: ObsidianSkill) {
 async function importObsidianSkillToPlatform(
   skill: ObsidianSkill,
   agentId: string,
-  method?: "symlink" | "copy"
+  method?: "symlink" | "copy",
 ) {
   return invoke("import_obsidian_skill_to_platform", {
     dirPath: skill.dir_path,
@@ -68,13 +41,9 @@ export const useObsidianStore = create<ObsidianState>((set) => ({
 
   loadVaults: async () => {
     set({ isLoadingVaults: true, error: null });
-    if (!isTauriRuntime()) {
-      set({ vaults: BROWSER_FIXTURE_VAULTS, isLoadingVaults: false });
-      return;
-    }
 
     try {
-      const vaults = await invokeCommand("get_obsidian_vaults");
+      const vaults = await invoke("get_obsidian_vaults");
       set({ vaults: vaults ?? [], isLoadingVaults: false });
     } catch (err) {
       set({ error: String(err), isLoadingVaults: false });
@@ -90,22 +59,8 @@ export const useObsidianStore = create<ObsidianState>((set) => ({
       error: null,
     }));
 
-    if (!isTauriRuntime()) {
-      set((state) => ({
-        skillsByVault: {
-          ...state.skillsByVault,
-          [vaultId]: BROWSER_FIXTURE_SKILLS[vaultId] ?? [],
-        },
-        loadingSkillsByVault: {
-          ...state.loadingSkillsByVault,
-          [vaultId]: false,
-        },
-      }));
-      return;
-    }
-
     try {
-      const skills = await invokeCommand("get_obsidian_vault_skills", { vaultId });
+      const skills = await invoke("get_obsidian_vault_skills", { vaultId });
       set((state) => ({
         skillsByVault: {
           ...state.skillsByVault,
@@ -125,6 +80,10 @@ export const useObsidianStore = create<ObsidianState>((set) => ({
         },
       }));
     }
+  },
+
+  openObsidianPath: async (path) => {
+    await invoke("open_obsidian_path", { path });
   },
 
   resetForTargetChange: () => {

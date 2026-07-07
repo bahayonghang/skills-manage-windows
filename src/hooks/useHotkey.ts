@@ -1,36 +1,37 @@
 import { useEffect } from "react";
 
+import {
+  isEditableEventTarget,
+  matchesShortcut,
+} from "@/lib/keyboardShortcuts";
+
+export interface UseHotkeyOptions {
+  /**
+   * When false, the hotkey is ignored (and not preventDefault-ed) while an
+   * input/textarea/select/contenteditable is focused. Defaults to true.
+   */
+  allowInEditable?: boolean;
+}
+
 /**
  * Registers a global keyboard shortcut.
  * @param key - The key combo (e.g. "mod+k"). "mod" maps to Meta on Mac, Ctrl elsewhere.
  * @param callback - Function to call when the shortcut fires.
+ * @param options - Optional behavior tweaks (see UseHotkeyOptions).
  */
-export function useHotkey(key: string, callback: () => void) {
+export function useHotkey(
+  key: string,
+  callback: () => void,
+  options: UseHotkeyOptions = {},
+) {
+  const { allowInEditable = true } = options;
+
   useEffect(() => {
-    const parts = key.toLowerCase().split("+");
-    const needsMeta = parts.includes("meta") || parts.includes("mod");
-    const needsCtrl = parts.includes("ctrl") || parts.includes("mod");
-    const needsShift = parts.includes("shift");
-    const mainKey = parts.filter(
-      (p) => !["meta", "ctrl", "shift", "mod"].includes(p)
-    )[0];
+    if (typeof window === "undefined") return;
 
     function handler(e: KeyboardEvent) {
-      const isMac = navigator.platform.toUpperCase().includes("MAC");
-      const metaOk = needsMeta
-        ? isMac
-          ? e.metaKey
-          : e.ctrlKey
-        : !e.metaKey && !e.ctrlKey;
-      const ctrlOk = needsCtrl ? e.ctrlKey : !e.ctrlKey || (isMac && needsMeta);
-      const shiftOk = needsShift ? e.shiftKey : !e.shiftKey;
-
-      if (
-        metaOk &&
-        (needsMeta || ctrlOk) &&
-        shiftOk &&
-        e.key.toLowerCase() === mainKey
-      ) {
+      if (!allowInEditable && isEditableEventTarget(e.target)) return;
+      if (matchesShortcut(e, key)) {
         e.preventDefault();
         callback();
       }
@@ -38,5 +39,5 @@ export function useHotkey(key: string, callback: () => void) {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [key, callback]);
+  }, [key, callback, allowInEditable]);
 }

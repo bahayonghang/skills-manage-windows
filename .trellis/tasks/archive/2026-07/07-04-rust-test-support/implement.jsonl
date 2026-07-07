@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "obsidian 测试的错误断言必须 matches! 域枚举变体，禁止字符串嗅探"}
+{"file": ".trellis/spec/backend/spawn-blocking-io.md", "reason": "被测 obsidian 导入/扫描路径经 run_blocking_fs_with，理解 async 边界避免误改"}
+{"file": ".trellis/tasks/07-04-architecture-deepening/prd.md", "reason": "父任务跨子任务约束（不改用户可见行为、spec 契约要求）与排序依据"}

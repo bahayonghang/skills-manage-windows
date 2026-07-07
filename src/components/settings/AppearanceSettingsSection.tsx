@@ -64,7 +64,9 @@ export function AppearanceSettingsSection({
     void loadFontPreferences().then((loaded) => {
       if (cancelled) return;
       if (hasEditedPrefs.current) return;
-      setPrefs((current) => (fontPreferencesEqual(current, loaded) ? current : loaded));
+      setPrefs((current) =>
+        fontPreferencesEqual(current, loaded) ? current : loaded,
+      );
       applyFontPreferences(loaded);
     });
     return () => {
@@ -73,22 +75,22 @@ export function AppearanceSettingsSection({
   }, []);
 
   const displayLabel = t(
-    `settings.appearance.displayFontOption.${getDisplayOption(prefs.display).labelKey}`
+    `settings.appearance.displayFontOption.${getDisplayOption(prefs.display).labelKey}`,
   );
   const bodyLabel = t(
-    `settings.appearance.bodyFontOption.${getBodyOption(prefs.body).labelKey}`
+    `settings.appearance.bodyFontOption.${getBodyOption(prefs.body).labelKey}`,
   );
   const scaleOption = getScaleOption(prefs.scale);
   const scaleLabel = t(`settings.appearance.${scaleOption.labelKey}`);
   const accentLabel = t(`settings.accent.${accent}`);
   const flavorLabel = t(`settings.${flavor}`);
   const languageLabel = t(
-    currentLanguage === "zh" ? "settings.chinese" : "settings.english"
+    currentLanguage === "zh" ? "settings.chinese" : "settings.english",
   );
   const scalePercent = `${Math.round(prefs.scale * 100)}%`;
   const previewScaleStyle = useMemo(
     () => ({ fontSize: `${prefs.scale}rem` }),
-    [prefs.scale]
+    [prefs.scale],
   );
 
   async function handleDisplayKey(key: DisplayFontKey) {
@@ -138,7 +140,7 @@ export function AppearanceSettingsSection({
       icon={<Type className="size-4 text-muted-foreground shrink-0" />}
     >
       <div className="space-y-4">
-        <section className="relative overflow-hidden rounded-[1.6rem] border border-[color:var(--settings-section-accent-border)] bg-[radial-gradient(circle_at_12%_10%,var(--settings-section-accent-soft),transparent_32rem),linear-gradient(135deg,var(--card),var(--background))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-5 xl:p-6">
+        <section className="relative overflow-hidden rounded-xl border border-[color:var(--settings-section-accent-border)] bg-[radial-gradient(circle_at_12%_10%,var(--settings-section-accent-soft),transparent_32rem),linear-gradient(135deg,var(--card),var(--background))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-5 xl:p-6">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,var(--settings-section-accent-faint)_1px,transparent_1px),linear-gradient(0deg,var(--settings-section-accent-faint)_1px,transparent_1px)] [background-size:2.4rem_2.4rem] opacity-30 [mask-image:linear-gradient(135deg,black,transparent_72%)]"
@@ -160,13 +162,22 @@ export function AppearanceSettingsSection({
 
               <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
                 <StatusChip label={t("settings.flavor")} value={flavorLabel} />
-                <StatusChip label={t("settings.language")} value={languageLabel} />
-                <StatusChip label={t("settings.accentColor")} value={accentLabel} />
-                <StatusChip label={t("settings.appearance.scale")} value={scaleLabel} />
+                <StatusChip
+                  label={t("settings.language")}
+                  value={languageLabel}
+                />
+                <StatusChip
+                  label={t("settings.accentColor")}
+                  value={accentLabel}
+                />
+                <StatusChip
+                  label={t("settings.appearance.scale")}
+                  value={scaleLabel}
+                />
               </div>
             </div>
 
-            <div className="min-w-0 rounded-[1.35rem] border border-border/80 bg-background/70 p-3 shadow-2xl shadow-background/30 backdrop-blur sm:p-4">
+            <div className="min-w-0 rounded-lg bg-card p-3 shadow-sm ring-1 ring-border sm:p-4">
               <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-3">
                 <div className="flex items-center gap-1.5" aria-hidden="true">
                   <span className="size-2.5 rounded-full bg-[color:var(--settings-section-accent)]" />
@@ -179,7 +190,7 @@ export function AppearanceSettingsSection({
               </div>
 
               <div className="grid gap-3 pt-4 sm:grid-cols-[0.42fr_1fr]">
-                <div className="hidden min-w-0 rounded-2xl border border-border/70 bg-card/80 p-3 sm:block">
+                <div className="hidden min-w-0 rounded-md bg-card/80 p-3 ring-1 ring-border/70 sm:block">
                   <div className="mb-3 h-2 w-12 rounded-full bg-[color:var(--settings-section-accent)]" />
                   <div className="space-y-2" aria-hidden="true">
                     <span className="block h-2 rounded-full bg-muted" />
@@ -188,7 +199,7 @@ export function AppearanceSettingsSection({
                   </div>
                 </div>
 
-                <div className="min-w-0 rounded-2xl border border-[color:var(--settings-section-accent-border)] bg-[linear-gradient(145deg,var(--settings-section-accent-soft),var(--card))] p-4">
+                <div className="min-w-0 rounded-md bg-[linear-gradient(145deg,var(--settings-section-accent-soft),var(--card))] p-4 ring-1 ring-[color:var(--settings-section-accent-border)]">
                   <div className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-[color:var(--settings-section-accent-text)]">
                     {t("settings.appearance.previewKicker")}
                   </div>
@@ -202,9 +213,18 @@ export function AppearanceSettingsSection({
                     {t("settings.appearance.previewBody")}
                   </p>
                   <div className="mt-4 grid grid-cols-3 gap-2">
-                    <PreviewMetric value="128" label={t("settings.appearance.previewMetricSkills")} />
-                    <PreviewMetric value="14" label={t("settings.appearance.previewMetricChecks")} />
-                    <PreviewMetric value="32" label={t("settings.appearance.previewMetricMs")} />
+                    <PreviewMetric
+                      value="128"
+                      label={t("settings.appearance.previewMetricSkills")}
+                    />
+                    <PreviewMetric
+                      value="14"
+                      label={t("settings.appearance.previewMetricChecks")}
+                    />
+                    <PreviewMetric
+                      value="32"
+                      label={t("settings.appearance.previewMetricMs")}
+                    />
                   </div>
                 </div>
               </div>
@@ -236,8 +256,11 @@ export function AppearanceSettingsSection({
           description={t("settings.appearance.surfaceGroupDesc")}
         >
           <div className="grid gap-3 lg:grid-cols-[1.05fr_0.75fr_1.2fr]">
-            <div className="rounded-2xl border border-border/80 bg-background/70 p-3">
-              <ControlLabel icon={<Palette className="size-3.5" />} label={t("settings.flavor")} />
+            <div className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80">
+              <ControlLabel
+                icon={<Palette className="size-3.5" />}
+                label={t("settings.flavor")}
+              />
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 2xl:grid-cols-3">
                 {flavorOrder.map((item) => {
                   const active = flavor === item;
@@ -247,9 +270,9 @@ export function AppearanceSettingsSection({
                       variant="outline"
                       size="sm"
                       className={cn(
-                        "h-9 justify-start gap-2 rounded-xl px-2.5 text-xs active:scale-95",
+                        "h-9 justify-start gap-2 rounded-lg px-2.5 text-xs active:scale-[0.96]",
                         active &&
-                          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]"
+                          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]",
                       )}
                       onClick={() => onSetFlavor(item)}
                       aria-pressed={active}
@@ -265,8 +288,11 @@ export function AppearanceSettingsSection({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-background/70 p-3">
-              <ControlLabel icon={<Globe2 className="size-3.5" />} label={t("settings.language")} />
+            <div className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80">
+              <ControlLabel
+                icon={<Globe2 className="size-3.5" />}
+                label={t("settings.language")}
+              />
               <div className="mt-3 grid gap-2">
                 {(["zh", "en"] as const).map((lang) => {
                   const active = currentLanguage === lang;
@@ -276,26 +302,37 @@ export function AppearanceSettingsSection({
                       variant="outline"
                       size="sm"
                       className={cn(
-                        "h-10 justify-between rounded-xl px-3 text-xs active:scale-95",
+                        "h-10 justify-between rounded-lg px-3 text-xs active:scale-[0.96]",
                         active &&
-                          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]"
+                          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]",
                       )}
                       onClick={() => {
                         void i18n.changeLanguage(lang);
                       }}
                       aria-pressed={active}
                     >
-                      <span>{t(lang === "zh" ? "settings.chinese" : "settings.english")}</span>
-                      {active ? <Check className="size-3.5" aria-hidden="true" /> : null}
+                      <span>
+                        {t(
+                          lang === "zh"
+                            ? "settings.chinese"
+                            : "settings.english",
+                        )}
+                      </span>
+                      {active ? (
+                        <Check className="size-3.5" aria-hidden="true" />
+                      ) : null}
                     </Button>
                   );
                 })}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-background/70 p-3">
+            <div className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80">
               <div className="flex items-center justify-between gap-3">
-                <ControlLabel icon={<Droplets className="size-3.5" />} label={t("settings.accentColor")} />
+                <ControlLabel
+                  icon={<Droplets className="size-3.5" />}
+                  label={t("settings.accentColor")}
+                />
                 <span className="truncate rounded-full border border-border/80 bg-card px-2 py-1 text-[0.68rem] text-muted-foreground">
                   {t("settings.appearance.selected", { value: accentLabel })}
                 </span>
@@ -318,10 +355,10 @@ export function AppearanceSettingsSection({
                       title={t(`settings.accent.${name}`)}
                       onClick={() => onSetAccent(name)}
                       className={cn(
-                        "relative size-7 rounded-xl transition active:scale-95 cursor-pointer",
+                        "relative size-7 rounded-xl transition active:scale-[0.96] cursor-pointer",
                         isActive
                           ? "ring-2 ring-ring ring-offset-2 ring-offset-background scale-105 shadow-[0_0_20px_var(--settings-section-accent-soft)]"
-                          : "ring-1 ring-border hover:scale-105 hover:ring-2 hover:ring-ring/50"
+                          : "ring-1 ring-border hover:scale-105 hover:ring-2 hover:ring-ring/50",
                       )}
                       style={{ backgroundColor: `var(${ctpVar})` }}
                     >
@@ -344,14 +381,19 @@ export function AppearanceSettingsSection({
           >
             <div className="grid gap-4 2xl:grid-cols-2">
               <div
-                className="rounded-2xl border border-border/80 bg-background/70 p-3"
+                className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80"
                 role="group"
                 aria-label={t("settings.appearance.displayFontOptionsLabel")}
               >
-                <ControlLabel icon={<Type className="size-3.5" />} label={t("settings.appearance.displayFont")} />
+                <ControlLabel
+                  icon={<Type className="size-3.5" />}
+                  label={t("settings.appearance.displayFont")}
+                />
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-2">
                   {DISPLAY_FONT_OPTIONS.map((option) => {
-                    const label = t(`settings.appearance.displayFontOption.${option.labelKey}`);
+                    const label = t(
+                      `settings.appearance.displayFontOption.${option.labelKey}`,
+                    );
                     const active = prefs.display === option.key;
                     return (
                       <TypeSpecimenTile
@@ -380,14 +422,19 @@ export function AppearanceSettingsSection({
               </div>
 
               <div
-                className="rounded-2xl border border-border/80 bg-background/70 p-3"
+                className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80"
                 role="group"
                 aria-label={t("settings.appearance.bodyFontOptionsLabel")}
               >
-                <ControlLabel icon={<Type className="size-3.5" />} label={t("settings.appearance.bodyFont")} />
+                <ControlLabel
+                  icon={<Type className="size-3.5" />}
+                  label={t("settings.appearance.bodyFont")}
+                />
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-2">
                   {BODY_FONT_OPTIONS.map((option) => {
-                    const label = t(`settings.appearance.bodyFontOption.${option.labelKey}`);
+                    const label = t(
+                      `settings.appearance.bodyFontOption.${option.labelKey}`,
+                    );
                     const active = prefs.body === option.key;
                     return (
                       <TypeSpecimenTile
@@ -422,9 +469,16 @@ export function AppearanceSettingsSection({
             title={t("settings.appearance.densityGroup")}
             description={t("settings.appearance.densityGroupDesc")}
           >
-            <div className="rounded-2xl border border-border/80 bg-background/70 p-3">
-              <ControlLabel icon={<SlidersHorizontal className="size-3.5" />} label={t("settings.appearance.scale")} />
-              <div className="mt-3 grid gap-2" role="group" aria-label={t("settings.appearance.scale")}>
+            <div className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80">
+              <ControlLabel
+                icon={<SlidersHorizontal className="size-3.5" />}
+                label={t("settings.appearance.scale")}
+              />
+              <div
+                className="mt-3 grid gap-2"
+                role="group"
+                aria-label={t("settings.appearance.scale")}
+              >
                 {FONT_SCALE_OPTIONS.map((option) => {
                   const active = Math.abs(prefs.scale - option.value) < 1e-3;
                   const label = t(`settings.appearance.${option.labelKey}`);
@@ -434,9 +488,9 @@ export function AppearanceSettingsSection({
                       variant="outline"
                       size="sm"
                       className={cn(
-                        "h-11 justify-between rounded-xl px-3 text-xs active:scale-95",
+                        "h-11 justify-between rounded-lg px-3 text-xs active:scale-[0.96]",
                         active &&
-                          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]"
+                          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]",
                       )}
                       onClick={() => void handleScale(option.value)}
                       aria-pressed={active}
@@ -449,15 +503,17 @@ export function AppearanceSettingsSection({
                   );
                 })}
               </div>
-              <div className="mt-3 rounded-xl border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] p-3">
-                <div className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-[color:var(--settings-section-accent-text)]">
+              <div className="mt-3 rounded-md border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] p-3">
+                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[color:var(--settings-section-accent-text)]">
                   {t("settings.appearance.scaleSpecimen")}
                 </div>
                 <div className="mt-2 font-display text-3xl font-semibold tabular-nums tracking-[-0.06em]">
                   {scalePercent}
                 </div>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {t("settings.appearance.scaleSample", { scale: scalePercent })}
+                  {t("settings.appearance.scaleSample", {
+                    scale: scalePercent,
+                  })}
                 </p>
               </div>
             </div>
@@ -480,14 +536,18 @@ function ControlGroup({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-[1.35rem] border border-border/80 bg-card/70 p-3 shadow-sm sm:p-4">
+    <section className="rounded-xl bg-card/70 p-3 shadow-sm ring-1 ring-border/80 sm:p-4">
       <div className="mb-3 flex items-start gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-[color:var(--settings-section-accent-text)]">
           {icon}
         </span>
         <div className="min-w-0">
-          <h4 className="text-sm font-semibold tracking-tight text-foreground">{title}</h4>
-          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
+          <h4 className="text-sm font-semibold tracking-tight text-foreground">
+            {title}
+          </h4>
+          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+            {description}
+          </p>
         </div>
       </div>
       {children}
@@ -507,20 +567,22 @@ function ControlLabel({ icon, label }: { icon: ReactNode; label: string }) {
 function StatusChip({ label, value }: { label: string; value: string }) {
   return (
     <div
-      className="min-w-0 rounded-2xl border border-border/80 bg-background/70 px-3 py-2"
+      className="min-w-0 rounded-lg bg-background/70 px-3 py-2 ring-1 ring-border/80"
       aria-label={`${label} ${value}`}
     >
       <div className="truncate text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </div>
-      <div className="mt-0.5 truncate text-sm font-semibold text-foreground">{value}</div>
+      <div className="mt-0.5 truncate text-sm font-semibold text-foreground">
+        {value}
+      </div>
     </div>
   );
 }
 
 function PreviewMetric({ value, label }: { value: string; label: string }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-background/60 px-2.5 py-2">
+    <div className="rounded-sm border border-border/70 bg-background/60 px-2.5 py-2">
       <div className="font-display text-lg font-semibold leading-none tabular-nums tracking-[-0.05em]">
         {value}
       </div>
@@ -542,13 +604,18 @@ function SpecimenStrip({
 }) {
   return (
     <div
-      className="min-w-0 rounded-xl border border-border/70 bg-card/70 px-3 py-2"
+      className="min-w-0 rounded-md border border-border/70 bg-card/70 px-3 py-2"
       aria-label={`${label} ${value}`}
     >
       <div className="truncate text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {label}
       </div>
-      <div className={cn("mt-1 truncate text-sm font-semibold text-foreground", previewClassName)}>
+      <div
+        className={cn(
+          "mt-1 truncate text-sm font-semibold text-foreground",
+          previewClassName,
+        )}
+      >
         {value}
       </div>
     </div>
@@ -574,16 +641,21 @@ function TypeSpecimenTile({
     <button
       type="button"
       className={cn(
-        "min-h-24 rounded-2xl border border-border/80 bg-card/70 p-3 text-left transition active:scale-[0.99]",
+        "min-h-24 rounded-md border border-border/80 bg-card/70 p-3 text-left transition active:scale-[0.96]",
         "hover:border-[color:var(--settings-section-accent-border)] hover:bg-[color:var(--settings-section-accent-faint)]",
         active &&
-          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] shadow-sm ring-1 ring-[color:var(--settings-section-accent-border)]"
+          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] shadow-sm ring-1 ring-[color:var(--settings-section-accent-border)]",
       )}
       onClick={onClick}
       aria-pressed={active}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className={cn("text-2xl font-semibold leading-none tracking-[-0.06em]", previewClassName)}>
+        <span
+          className={cn(
+            "text-2xl font-semibold leading-none tracking-[-0.06em]",
+            previewClassName,
+          )}
+        >
           {sample}
         </span>
         {active ? (
@@ -592,7 +664,9 @@ function TypeSpecimenTile({
           </span>
         ) : null}
       </div>
-      <div className="mt-3 truncate text-xs font-semibold text-foreground">{title}</div>
+      <div className="mt-3 truncate text-xs font-semibold text-foreground">
+        {title}
+      </div>
       <div className="mt-1 line-clamp-2 text-[0.68rem] leading-4 text-muted-foreground">
         {detail}
       </div>
@@ -605,17 +679,24 @@ function getCurrentLanguage(language: string): "zh" | "en" {
 }
 
 function getDisplayOption(key: DisplayFontKey) {
-  return DISPLAY_FONT_OPTIONS.find((option) => option.key === key) ?? DISPLAY_FONT_OPTIONS[0];
+  return (
+    DISPLAY_FONT_OPTIONS.find((option) => option.key === key) ??
+    DISPLAY_FONT_OPTIONS[0]
+  );
 }
 
 function getBodyOption(key: BodyFontKey) {
-  return BODY_FONT_OPTIONS.find((option) => option.key === key) ?? BODY_FONT_OPTIONS[0];
+  return (
+    BODY_FONT_OPTIONS.find((option) => option.key === key) ??
+    BODY_FONT_OPTIONS[0]
+  );
 }
 
 function getScaleOption(value: number) {
   return (
-    FONT_SCALE_OPTIONS.find((option) => Math.abs(option.value - value) < 1e-3) ??
-    FONT_SCALE_OPTIONS[1]
+    FONT_SCALE_OPTIONS.find(
+      (option) => Math.abs(option.value - value) < 1e-3,
+    ) ?? FONT_SCALE_OPTIONS[1]
   );
 }
 

@@ -539,3 +539,748 @@ Filled backend and frontend Trellis spec docs for ref/skillshare with source-bac
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: Filter generic skill updates and style source metadata
+
+**Date**: 2026-06-13
+**Task**: Filter generic skill updates and style source metadata
+**Branch**: `dev`
+
+### Summary
+
+Filtered non-root GitHub import candidates whose normalized skill id is exactly 'skill', added Update Center inventory and import safety regressions, and gave repository/path/url/cache/hash source metadata distinct chip styles.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1b01fd8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 16: Archive skill detail platform installs task
+
+**Date**: 2026-06-15
+**Task**: Archive skill detail platform installs task
+**Branch**: `dev`
+
+### Summary
+
+Archived the completed skill detail repository-link and platform-install removal task after confirming the working tree was clean and the task recorded focused Vitest plus just ci validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `91cb9d1` | (see git log) |
+| `b08602c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 17: Align repository-scoped update check labels
+
+**Date**: 2026-06-18
+**Task**: Align repository-scoped update check labels
+**Branch**: `dev`
+
+### Summary
+
+Implemented repository-scoped update-check copy for sync mode, added focused UI tests, committed Trellis task metadata, and archived task 06-18-repo-scoped-update-check-labels.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2876b79` | (see git log) |
+| `d4325f1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 18: Target-aware Central state portability
+
+**Date**: 2026-06-19
+**Task**: Target-aware Central state portability
+**Branch**: `dev`
+
+### Summary
+
+Fixed Windows just shell execution, implemented target-aware Central state import/export for Local/SSH/WSL, and recorded the Trellis task plan and verification artifacts.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `011dac1d` | (see git log) |
+| `3a976b1a` | (see git log) |
+| `c98283be` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 19: 修复跨平台快捷键提示
+
+**Date**: 2026-06-24
+**Task**: 修复跨平台快捷键提示
+**Branch**: `dev`
+
+### Summary
+
+统一 mod+k 快捷键显示和事件匹配，修复 Windows 上显示 macOS ⌘K 的问题，补充 focused 测试与 Trellis 记录，并提交当前 TODO 占位改动。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `42afa5e6` | (see git log) |
+| `d1429dbb` | (see git log) |
+| `1d297ca3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 20: Dashboard interface polish
+
+**Date**: 2026-06-24
+**Task**: Dashboard interface polish
+**Branch**: `dev`
+
+### Summary
+
+Polished the Dashboard first viewport with calmer hero hierarchy, readiness surfaces, explicit Dashboard-only control motion, visual screenshots, and full just ci validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5316674d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 21: Central Skills interface polish
+
+**Date**: 2026-06-24
+**Task**: Central Skills interface polish
+**Branch**: `dev`
+
+### Summary
+
+Created the Central Skills polish task from screenshot audit, implemented frontend-only UI polish for header, filters, sidebar, and unified skill cards, verified focused tests/typecheck/lint/just ci, and archived the task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `97fabbd9` | (see git log) |
+| `8bc7e0bb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 22: Central skill platform uninstall button
+
+**Date**: 2026-06-24
+**Task**: Central skill platform uninstall button
+**Branch**: `dev`
+
+### Summary
+
+Added card-level Central skill platform uninstall action and recorded the Trellis task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a64cdce3` | (see git log) |
+| `cf3a055c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 23: 架构评审 + 统一 Redaction policy 落地
+
+**Date**: 2026-07-04
+**Task**: 架构评审 + 统一 Redaction policy 落地
+**Branch**: `dev`
+
+### Summary
+
+运行 /improve-codebase-architecture 全仓走查（3 只读代理+人工复核），产出 9 个 deepening 候选并建 Trellis 父任务+9 子任务；完成子任务 1：新建 redaction.rs deep module（3 函数接口+parity 守卫测试），operation_log/logging 迁移到唯一策略点，闭合 passphrase 泄漏与 pat 子串误伤 path 的线上缺陷，前端词表同步；全量门禁绿（cargo test 716、pnpm test 1249、clippy/typecheck/lint 干净），新增 spec/backend/redaction-policy.md 契约。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `225027a3` | (see git log) |
+| `4855edd2` | (see git log) |
+| `abc3f94e` | (see git log) |
+| `3b4153f6` | (see git log) |
+| `6d94c937` | (see git log) |
+| `8328cd78` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 24: Rust test-support harness 落地（架构深化 2/9）
+
+**Date**: 2026-07-04
+**Task**: 07-04-rust-test-support（收敛 26 份手抄测试 setup + obsidian 域破零）
+**Branch**: `dev`
+
+### Summary
+
+新建 `src-tauri/src/test_support.rs`（#[cfg(test)] 单文件 harness：4 种池 fixture + set_agent_dir + write_skill_md/central_skill_row/seed_central_skill + symlink_dir，自带 5 条自测），分两批把 23 个文件的手抄 setup 迁成 use-alias/薄壳（断言与 fixture 字面量逐字保留），并用 harness 给 obsidian 域写下首批 10 条 service 测试（导入 7 + 扫描 3）。豁免清单落地：4 处语义豁免（无 schema 容错 / 3 处 legacy-schema 迁移测试）+ projects_e2e 结构性豁免，全部现场注释。新增 spec/backend/test-support.md 契约。
+
+### Main Changes
+
+- connect(":memory:") 31 → harness 外 4（全部豁免在案）；手抄池体定义 26 → 0（剩 8 个薄壳）
+- cargo test 718 → 733（+5 harness 自测 +10 obsidian），clippy -D warnings 干净，--all-targets 零新增 unused
+- 前端三件套（typecheck/lint/test 1249）全绿，零联动破坏
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `61006cc2` | docs(Trellis): 登记 rust-test-support 的 design/implement 并激活 |
+| `554935fc` | test(test-support): 新增共享测试 harness |
+| `8cefda34` | test(harness): 高频域测试 setup 迁移至 test_support（第一批） |
+| `82f6e707` | test(harness): 其余域测试 setup 迁移至 test_support（第二批） |
+| `2f6e0118` | test(obsidian): 基于 test_support 的首批 service 测试（0→10 条） |
+| `0788354a` | test(harness): marketplace legacy 迁移测试补豁免注释 |
+| `158865d7` | docs(spec): 登记 Rust 测试 fixture 契约（test_support） |
+| `5af857b7` | chore(task): archive 07-04-rust-test-support |
+
+### Testing
+
+- [OK] cd src-tauri && cargo test：731 passed + 2 ignored（总 733 ≥ 基线 718）
+- [OK] cargo clippy -- -D warnings：No issues found
+- [OK] pnpm typecheck / lint / test：1249 passed
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 架构深化专项 2/9 完成；按既定顺序下一个子任务为 unify-frontmatter-parsing（9 号候选，小改动）
+
+## Session 25: 统一 SKILL.md frontmatter 解析（架构深化 3/9）
+
+**Date**: 2026-07-04
+**Task**: 07-04-unify-frontmatter-parsing（收敛栅栏剥离为单一实现，闭合 BOM 分叉）
+**Branch**: `dev`
+
+### Summary
+
+新建 `services/scanner/frontmatter.rs` 的 `extract_frontmatter_block`（全仓唯一栅栏剥离：去 UTF-8 BOM、容前导空白、闭合栅栏须独立成行，采历史上更严谨的 github_import 语义），`scanner::parse_skill_md_content` 与 `github_import::parse_frontmatter` 迁移为调用方（各自保留 YAML→字段映射，字段语义零变化）。ssh_batch remote 路径实测本就走 Rust 侧解析，统一后自动继承（PRD 需求 4 免费达成）。Spec 契约登记 `spec/backend/skill-frontmatter-parsing.md`（禁手抄 + 巡检命令）。
+
+### Main Changes
+
+- 栅栏剥离手抄 2 处 → 0（巡检 `strip_prefix("---` / `find("\n---` 零命中）
+- 新增测试 8 条：frontmatter 单测 6 + scanner BOM 入口 1 + 双入口 BOM 一致性 1；scanner 45→52、github_import 61→62
+- cargo test 739 passed + 2 ignored 全绿；clippy -D warnings 干净（--all-targets 14 个报错均为 usage/secrets 存量，与本任务无关）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bc57d028` | refactor(scanner): 统一 SKILL.md frontmatter 栅栏剥离为单一实现 |
+| `92f16755` | docs(spec): 登记 SKILL.md frontmatter 解析契约 |
+| `f5d3e9cc` | chore(task): archive 07-04-unify-frontmatter-parsing |
+
+### Testing
+
+- [OK] cd src-tauri && cargo test：739 passed + 2 ignored
+- [OK] cargo clippy -- -D warnings：No issues found
+- [OK] 巡检：全仓无手抄栅栏剥离残留
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 架构深化专项 3/9 完成；剩余候选：central-updates-service-domain / frontend-platform-module / typed-ipc-adapter / transport-seam / path-policy-remote-half / skill-card-scenarios
+
+
+## Session 24: Update Center 落 service 域：阶段 D inventory 归位 + 阶段 E 收尾
+
+**Date**: 2026-07-04
+**Task**: Update Center 落 service 域：阶段 D inventory 归位 + 阶段 E 收尾
+**Branch**: `dev`
+
+### Summary
+
+完成 07-04-central-updates-service-domain 收官：inventory 9 子模块迁入 services/central_updates/inventory 并全面 typed 化（CentralUpdatesError，serde 走 Json 变体、db/github_import #[from] 透传）；commands/skill_update_inventory.rs 收缩为 8 纯壳（IPC 名与载荷不变），B6/C 迁移桥全拆；49 条测试随迁。门禁 cargo test 739+2、clippy、just ci 全绿；sizecheck 基线豁免随代码迁移从老壳(1407)移至 core.rs(861 棘轮)；spec 域清单登记 central_store_location/central_updates 两域。备注：CentralSkillsView.github-import-* 两条前端测试为存量 flaky（复跑全过）。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `26bee16f` | (see git log) |
+| `ca5e4e56` | (see git log) |
+| `0907a5f3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 25: Platform management module：registry 登记点 + 共享多选 + 展示分支收敛
+
+**Date**: 2026-07-05
+**Task**: Platform management module：registry 登记点 + 共享多选 + 展示分支收敛
+**Branch**: `dev`
+
+### Summary
+
+实施架构深化子任务 5/9 frontend-platform-module：新建 platformRegistry.ts 唯一登记表（三份 UNIVERSAL_*_ORDER + DEFAULT_ENABLED_PLATFORM_IDS 全部表推导，行为锁测试），新建 PlatformMultiSelect 共享模块（hook+网格+失败列表）薄化 4 个安装对话框（行为锁断言零改动），11 个组件文件展示三元收敛到 label/title/count 三 helper；CLAUDE.md InstallDialog 描述勘误；沉淀 .trellis/spec/frontend/platform-grouping.md 三条约定。门禁 pnpm test 1276 过 + typecheck/lint 干净。过程记录：清理了 07-04 21:03 残留的陈旧 .git/index.lock；CLAUDE.md 按 hunk 拆分提交（issue-tracker 行改动留给另一窗口）。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1dfa9ca9` | (see git log) |
+| `6d59e707` | (see git log) |
+| `2407fd3c` | (see git log) |
+| `ec7a7bd2` | (see git log) |
+| `4419a074` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 26: typed-ipc-adapter：类型化 IPC adapter 与 fixture seam 全程落地
+
+**Date**: 2026-07-05
+**Task**: typed-ipc-adapter：类型化 IPC adapter 与 fixture seam 全程落地
+**Branch**: `dev`
+
+### Summary
+
+完成 07-04-typed-ipc-adapter 七步实施：新建 src/lib/ipc/ 目录 adapter（双 overload 按命令名类型化 invoke + fixture 注册表 + 浏览器安全 listen），全仓 63 文件 flip 到唯一入口并删除 lib/tauri.ts；setup.ts 换命令路由 mock dispatcher；批次 1 的 9 个 store + 2 hook + displayFont + ObsidianVaultView 剥 isTauriRuntime guard，浏览器演示态改为 src/fixtures/ 命令级响应驱动真实 store 逻辑；UNTYPED_IPC_COMMANDS 登记 104 存量命令并以 ipcCommandCoverage ratchet 锁死只减不增。验收：isTauriRuntime() 调用点 154→100（≤100 达标）、IPC map 60 命令（≥40）、必迁测试 0 顺序桩、browserFixtures 安全网 10 例常驻、just ci 全绿。产出 spec：.trellis/spec/frontend/ipc-adapter.md（五条约定）；批次 2/3 遗留登记父任务 notes。父任务进度 6/9。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c17f608e` | (see git log) |
+| `dd9bfbce` | (see git log) |
+| `9da9b492` | (see git log) |
+| `95c8cd1c` | (see git log) |
+| `4767cad8` | (see git log) |
+| `624c09c4` | (see git log) |
+| `d9ada6b3` | (see git log) |
+| `34ff4aa0` | (see git log) |
+| `a01c428d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+## Session 27: path-policy-remote-half：Path policy remote 半边收敛
+
+**Date**: 2026-07-05
+**Task**: 补完 Path policy 的 remote 半边
+**Branch**: `dev`
+
+### Summary
+
+完成 07-04-path-policy-remote-half：目录名常量单点化到 paths.rs（APP_DATA_DIR_NAME 转 pub + CENTRAL_SKILLS_REL_FROM_HOME / REMOTE_REPOS_REL_FROM_HOME / TARGETS_CACHE_DIR_NAME / UNIVERSAL_AGENTS_DIR_NAME / UNIVERSAL_SKILLS_REL）；remote_join 本体从 targets/exec.rs 迁入 paths.rs（targets pub use 保持约 25 处调用点零改动），新增 remote_central_skills_root / remote_repos_root helper；probe 脚本抽 remote_probe_script() 并补逐字节等价测试。迁移 9 处泄漏点（targets/exec、local_remote_sync ×3、db/types、db/seed remote 家目录改写、github_import/types、obsidian/query、claude_plugin）。纯收敛零行为变化。验收：cargo test 745 通过、clippy -D warnings 干净、grep 残留仅剩 design §4 白名单（paths.rs/测试/注释/用户可见文案）。产出 spec：.trellis/spec/backend/path-policy.md。父任务进度 7/9，剩 transport-seam、skill-card-scenarios。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e675ed6a` | refactor(paths): [AI] ♻️ remote 路径构造与目录名收敛到 path policy 单点 |
+| `ed1cb196` | docs(spec): [AI] 📝 Path policy 单点约定与任务工件落档 |
+| `599d6e53` | chore(task): archive 07-04-path-policy-remote-half |
+
+### Testing
+
+- [OK] cd src-tauri && cargo test：745 passed, 2 ignored
+- [OK] cargo clippy -- -D warnings：无告警
+- [OK] grep 白名单复核：生产代码字面量仅剩 paths.rs 与 design §4 白名单
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 下一子任务：07-04-skill-card-scenarios（PRD 建议顺序），transport-seam 收尾
+
+## Session 28: skill-card-scenarios：UnifiedSkillCard 显式场景 interface
+
+**Date**: 2026-07-05
+**Task**: UnifiedSkillCard 显式场景 interface
+**Branch**: `dev`
+
+### Summary
+
+完成 07-04-skill-card-scenarios：UnifiedSkillCard 约 40 个扁平可选 props 收窄为 6 个命名场景判别联合（central/platform/project/import/marketplace/collection，import 为 design 阶段据实新增的 Obsidian 簇），跨场景 props 编译期拒绝（unifiedSkillCardVariants.test.tsx 持 6 正例 + 5 组对象字面量负例 + 1 组 JSX 负例，@ts-expect-error 由 typecheck 双向强制）。内部 toModel 归一化到模块私有 SkillCardModel，渲染树零改动实现视觉零回归。删除实测无人使用死面：可点击分支与 onClick、summaryLabel、isInstalled、zh/en platform.searchSkillLabel。11 处调用点全迁移（central 3 处经 buildCentralSkillCardProps 注入）。单场景可见 props 收敛到 9–23（原 40）。产出 spec：.trellis/spec/frontend/skill-card-scenarios.md；CLAUDE.md 卡片描述行同步（只暂存自己的 hunk，避开另一窗口的 issue-tracker 改动——RTK hook 会把 git diff 改写成非法 unified diff，需 rtk proxy 取原始输出再过滤）。父任务进度 8/9，仅剩 transport-seam。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b128671e` | refactor(skill-card): [AI] ♻️ UnifiedSkillCard 收敛为显式场景判别联合 |
+| `ad1ec19e` | docs(spec): [AI] 📝 技能卡片显式场景 interface 约定与任务工件落档 |
+| `84104d06` | chore(task): archive 07-04-skill-card-scenarios |
+
+### Testing
+
+- [OK] pnpm test：120 文件 / 1296 通过（1 skipped 为存量）
+- [OK] pnpm typecheck：绿，6 条 @ts-expect-error 互斥负例无一 Unused
+- [OK] pnpm lint：No issues found
+- [OK] grep 复核：组件内 onClick/summaryLabel/isInstalled 死 prop 零残留、searchSkillLabel 全仓清零、variant 覆盖 11 调用点
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 最后子任务：07-04-transport-seam（硬前置 update-center 已完成）；父任务收尾时刷新 CONTEXT.md 清单
+
+---
+
+## 收拢 Local/SSH/WSL transport seam：一份操作实现三个 adapter
+
+**Date**: 2026-07-06
+**Task**: 07-04-transport-seam
+**Branch**: `dev`
+
+### Summary
+
+完成 07-04-transport-seam（架构深化 9/9，父任务全部子任务完结）。两段式落地：① targets 层新增 CommandRunner 可注入执行缝（trait + ProcessRunner 默认实现，SSH/WSL 10 个 spawn 现场改走 runner，base_command 纯构建器不动），test_support 增 FakeRunner，targets 层 8 个执行半边单测；② installation 域新增 InstallTransport { Local, Remote(Box<ConnectedRemoteTarget>) } 操作级缝 + install.rs 单份编排，native.rs/remote.rs 收敛为各自 transport 执行半边，7 处语义不对称（本地 skip 检测/auto 回退 vs 远程单脚本原子回合等）逐字保留，REMOTE_CENTRAL_INSTALL_SCRIPT 字节不动。调用面迁移：linker.rs 5 命令、collections.rs、batch.rs、central_updates apply_steps 全走 for_target + 编排；删除 installation 域 2 个死 _ssh_impl；batch_uninstall 空 skill_id 守卫补齐远程侧（消除 agent 目录整树 rm -rf 隐患）。新增 4 个 FakeRunner 假连接远程路径测试（脚本六参、RemoteSymlinkDisabled、同根 native 捷径、远程卸载）。design §4 四项指标复核达成：install 家族 1 份编排、linker/collections 命令层分发归零、linker 无 connect_remote_target、死 _ssh_impl=0。试点结论写回本任务 notes.md 与父任务 prd.md（central_skills delete/preview 族值得收，scanner/agents/github_import/usage 观望，local_remote_sync/obsidian 不收）；产出 spec：.trellis/spec/backend/transport-seam.md。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `571b1c9c` | refactor(targets): [AI] ♻️ 引入可注入 CommandRunner 执行缝 |
+| `bc8a2907` | refactor(installation): [AI] ♻️ 收拢安装域到 InstallTransport 缝 |
+
+### Testing
+
+- [OK] cd src-tauri && cargo test：757 通过（2 ignored 为存量）
+- [OK] cargo clippy -- -D warnings：干净（新代码触发的 large_enum_variant×2 / too_many_arguments 已以 Box + 去冗余参数消除）
+- [OK] pnpm typecheck：绿（前端零改动）
+- [OK] grep 复核 design §4 四项量化指标全部达标
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 父任务 07-04-architecture-deepening 收尾：刷新 CONTEXT.md deepening 清单、集成审查（redaction/path/frontmatter 各 grep 一次）、just ci 全门禁
+
+---
+
+## 架构深化专项父任务收尾（9/9 完结归档）
+
+**Date**: 2026-07-06
+**Task**: 07-04-architecture-deepening
+**Branch**: `dev`
+
+### Summary
+
+父任务收尾三件套完成：① CONTEXT.md「当前优先 deepening opportunities」按实际落地结果重写——旧 6 项全部处理（Path policy/Platform module/Operation Log redaction 已落地移除；central_skills 已拆分、Settings store 证据不支持按评审结论移除；Discover scan core 随页面废弃失效），登记新格局三项（transport seam 扩展 central_skills delete/preview 族、exec.rs spawn_blocking 债、Remote(String) 类型化）+ 观望/不收清单。② 集成审查 grep 三项全过：redaction.rs 外无第二份 redact 实现、.skillsmanage 硬编码仅存于测试断言、frontmatter 栅栏剥离手抄零残留。③ just ci 全绿——首跑暴露 web:sizecheck 失败（UnifiedSkillCard.tsx 840 行超 800 预算，系上一子任务 b128671e 判别联合重构遗留、当时未跑 sizecheck），按脚本既有冻结基线机制登记 840 行上限后复跑全绿。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0cd449a0` | chore(sizecheck): [AI] 🔧 UnifiedSkillCard 冻结基线 840 行 |
+| `24c75ee5` | docs(context): [AI] 📝 刷新 deepening 清单并勾结父任务 AC |
+
+### Testing
+
+- [OK] just ci：Web（typecheck/lint/test/sizecheck）+ Rust（test/clippy）双链全绿
+- [OK] 集成审查 grep×3：redaction / path / frontmatter 无平行实现复活
+
+### Status
+
+[OK] **Completed**（架构深化专项 2026-07-04 → 2026-07-06 全部完结）
+
+### Next Steps
+
+- 后续 deepening 以 CONTEXT.md 新登记清单为准；transport seam 扩展到 central_skills 时先读 .trellis/spec/backend/transport-seam.md 与归档任务 notes
+- UnifiedSkillCard 后续重构时回落 840 行冻结基线
+
+
+## Session 27: Update check failure feedback
+
+**Date**: 2026-07-06
+**Task**: Update check failure feedback
+**Branch**: `dev`
+
+### Summary
+
+Created and completed Trellis task 07-06-update-check-failure-feedback. Added visible inline and toast feedback for failed Central update checks from the mode dialog, preserved successful Update Center opening behavior, added regression coverage, and documented the frontend async error-feedback convention. Verified with focused Vitest coverage, pnpm typecheck, pnpm lint, and just ci.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5ba049db` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 28: UI 设计审计落地:六子任务全量实施
+
+**Date**: 2026-07-06
+**Task**: UI 设计审计落地:六子任务全量实施
+**Branch**: `dev`
+
+### Summary
+
+实施 07-06-ui-design-audit 全部 6 个子任务(trellis-implement/check 双代理流程,全部 PASS,just ci 两轮全绿):P1 语义状态色收敛 statusTone(statusAccent 改名 warning/error,tagColor 身份色板豁免入 PRD);P1 键盘焦点 a11y(focus-ring @utility 覆盖手写按钮,toggle 非颜色状态编码,dialog Close i18n,InlineConfirm Esc 撤退);P2 表面语言收敛(rounded-3xl/任意值圆角归阶梯,border 惯用法统一 ring,DESIGN.md 落 Corner Exceptions/密度定位/#89b4fa/按压双轨);P2 快捷键速查浮层(? 与 mod+/ 唤起,shortcutRegistry 集中清单逐条核实,登记 mod+k 双浮层存量怪癖);P3 微交互(scale 全归 0.96,transition-all 清零,信息标签托底 11px);P3 MetricStrip 单行统计条(删孤儿 StatButton)。8 笔中文拆分提交,按文件边界归属主导任务。遗留:中央库页 mod+k 双浮层互斥可开后续任务;Appearance StatusChip/SpecimenStrip 存量 0.6rem 标签低于 11px 托底。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `425143de` | (see git log) |
+| `7be2c021` | (see git log) |
+| `4462e352` | (see git log) |
+| `b3c8e07b` | (see git log) |
+| `2532f068` | (see git log) |
+| `47659e35` | (see git log) |
+| `da3e428d` | (see git log) |
+| `c78c3b67` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 29: 平台视图安装来源快速导航栏（07-07-ui-platform-origin-nav）
+
+**Date**: 2026-07-07
+**Task**: 平台视图安装来源快速导航栏（07-07-ui-platform-origin-nav）
+**Branch**: `dev`
+
+### Summary
+
+为 /platform/:agentId 新增左侧安装来源导航（全部/SkillPort 安装按仓库细分/独立安装），分类唯一信号 link_type===symlink，与卡片 SourceIndicator 同语义。关键教训已沉淀 spec：installed_at 是首次扫描时间而非安装标记（扫描器对手放技能也 upsert skill_installations）。just ci 首轮失败为既有 flaky 用例 CentralSkillsView.github-import-preview（并行超时），单跑通过，待后续调超时余量。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6a62e259` | (see git log) |
+| `ee60e3be` | (see git log) |
+| `b3a4cb76` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
