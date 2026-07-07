@@ -1,11 +1,11 @@
 # Desktop release process
 
-SkillPort desktop releases are published from version tags through the canonical
-`Release Desktop` workflow at `.github/workflows/release-desktop.yml`.
+SkillPort desktop releases are published from GitHub Releases through the
+canonical `Release Desktop` workflow at `.github/workflows/release-desktop.yml`.
 
 ## Canonical workflow
 
-- Trigger: push a tag matching `v*`.
+- Trigger: publish a GitHub Release for a `v*` tag.
 - Release body source: `scripts/prepare-release-body.mjs`.
 - Updater metadata source: `scripts/generate-latest-json.mjs`.
 - Required Windows updater secrets:
@@ -39,7 +39,8 @@ signing and `latest.json` stay in sync.
    - `pnpm release:preflight -- --version <version> --tag v<version> --config release-updater-config.json --asset-dir release-assets`
    - This validates that the release updater pubkey is no longer the placeholder, updater artifacts are enabled, the NSIS `.sig` exists, and `latest.json` points at the expected signed asset.
 7. Merge the release commit to `main`.
-8. Push `v<version>`.
+8. Publish the GitHub Release for `v<version>` so GitHub creates the tag and
+   starts the `Release Desktop` workflow.
 9. Confirm the release contains:
    - `latest.json`
    - `skillport_<version>_windows_x64_nsis.exe`
