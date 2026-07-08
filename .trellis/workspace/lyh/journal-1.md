@@ -1284,3 +1284,36 @@ Created and completed Trellis task 07-06-update-check-failure-feedback. Added vi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 30: Add confirmed one-click platform leftover cleanup
+
+**Date**: 2026-07-08
+**Task**: Add confirmed one-click platform leftover cleanup
+**Branch**: `dev`
+
+### Summary
+
+Added a confirmed Update Center action for cleaning all platform leftovers, including cleanup-only decision aggregation, localized copy, focused tests, and full just ci verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bec41f3e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

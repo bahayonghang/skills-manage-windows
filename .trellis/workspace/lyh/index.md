@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 29
-- **Last Active**: 2026-07-07
+- **Total Sessions**: 30
+- **Last Active**: 2026-07-08
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1286 | Active |
+| `journal-1.md` | ~1319 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 30 | 2026-07-08 | Add confirmed one-click platform leftover cleanup | `bec41f3e` | `dev` |
 | 29 | 2026-07-07 | 平台视图安装来源快速导航栏（07-07-ui-platform-origin-nav） | `6a62e259`, `ee60e3be`, `b3a4cb76` | `dev` |
 | 28 | 2026-07-06 | UI 设计审计落地:六子任务全量实施 | `425143de`, `7be2c021`, `4462e352`, `b3c8e07b`, `2532f068`, `47659e35`, `da3e428d`, `c78c3b67` | `dev` |
 | 27 | 2026-07-06 | Update check failure feedback | `5ba049db` | `dev` |
