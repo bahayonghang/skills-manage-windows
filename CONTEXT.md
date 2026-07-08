@@ -46,6 +46,10 @@ SkillPort 支持的目标工具或平台，例如 Claude Code、Codex CLI、Curs
 
 把 Central Skills 中的 Skill 安装到一个或多个 Platform 的流程。安装方式包括 copy 和 symlink。涉及安装、卸载、中央化链路时，优先复用现有 linker 逻辑，尤其是 `ensure_centralized` 约束。
 
+### Platform leftover
+
+Platform 中仍存在、但对应 Central Skill 已不存在的可写 Skill 副本。它是清理候选项；清理时只删除 Platform 侧副本，不删除 Central Skills。
+
 ### Discover
 
 扫描本地磁盘中的项目级 skill 库。Discover 识别项目目录下的 platform skill patterns，把找到的 Skill 汇总成可导入项。

@@ -1323,7 +1323,13 @@
       "deletedPlatformCopies": {
         "group": "{{agent}} 中的 {{skill}}",
         "description": "Central 技能库中已不存在该 skill。确认后将直接删除选中的平台副本。",
-        "selectPath": "选择删除 {{skill}}：{{path}}"
+        "selectPath": "选择删除 {{skill}}：{{path}}",
+        "cleanupAll": "清理残留（{{count}}）",
+        "cleanupAllApplying": "正在清理残留…",
+        "cleanupAllConfirm": "将删除 {{count}} 条平台残留路径。\n\n此操作只删除平台侧副本，不会删除 Central Skills。",
+        "cleanupAllSuccess": "已清理 {{count}} 条平台残留路径",
+        "cleanupAllPartial": "已清理 {{succeeded}} 条平台残留路径，失败 {{failed}} 条",
+        "cleanupAllError": "清理平台残留失败：{{error}}"
       }
     },
     "sortByInstalledPlatformCount": "安装平台数",

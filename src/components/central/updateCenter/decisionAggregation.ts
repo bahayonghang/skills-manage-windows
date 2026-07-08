@@ -186,6 +186,40 @@ export function summarizeDecisionSelections(
   return { updatable, added, missing, duplicates, deletedPlatformCopies };
 }
 
+export function countDeletedPlatformCopyPaths(
+  inventory: SkillUpdateInventory | null,
+): number {
+  if (!inventory) return 0;
+  return (inventory.deletedPlatformCopies ?? []).reduce(
+    (total, group) => total + new Set(group.writablePaths).size,
+    0,
+  );
+}
+
+export function buildDeletedPlatformCopyCleanupDecisions(
+  inventory: SkillUpdateInventory,
+  allowedAgentIds?: string[],
+): SkillUpdateDecisions {
+  return {
+    allowedAgentIds:
+      allowedAgentIds && allowedAgentIds.length > 0 ? allowedAgentIds : null,
+    updates: [],
+    keepMissing: [],
+    deleteMissing: [],
+    importAdditions: [],
+    skipAdditions: [],
+    unskipAdditions: [],
+    removePlatformDuplicates: [],
+    removeDeletedPlatformCopies: (inventory.deletedPlatformCopies ?? [])
+      .map<DeletedPlatformCopyRemoval>((group) => ({
+        agentId: group.agentId,
+        skillId: group.skillId,
+        paths: Array.from(new Set(group.writablePaths)),
+      }))
+      .filter((removal) => removal.paths.length > 0),
+  };
+}
+
 export function buildDecisions(
   decisions: DecisionState,
   inventory: SkillUpdateInventory,
