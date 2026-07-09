@@ -659,6 +659,7 @@ pub(crate) async fn build_preview_skills(
             skill_id: candidate.skill_id.clone(),
             skill_name: candidate.skill_name.clone(),
             description: candidate.description.clone(),
+            plugin_name: candidate.plugin_name.clone(),
             root_directory: candidate.root_directory.clone(),
             skill_directory_name: candidate.skill_directory_name.clone(),
             download_url: candidate.download_url.clone(),

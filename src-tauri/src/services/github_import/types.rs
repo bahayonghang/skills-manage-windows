@@ -33,6 +33,8 @@ pub struct GitHubSkillPreview {
     pub skill_id: String,
     pub skill_name: String,
     pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_name: Option<String>,
     pub root_directory: String,
     pub skill_directory_name: String,
     pub download_url: String,
@@ -107,6 +109,7 @@ pub(crate) struct RemoteSkillCandidate {
     pub(crate) skill_id: String,
     pub(crate) skill_name: String,
     pub(crate) description: Option<String>,
+    pub(crate) plugin_name: Option<String>,
     pub(crate) root_directory: String,
     pub(crate) skill_directory_name: String,
     pub(crate) download_url: String,

@@ -2224,6 +2224,7 @@
     "githubImportRepreview": "重新预览",
     "githubImportSelectionTitle": "预览技能",
     "githubImportSelectionDesc": "在左侧选择要查看的技能，并决定哪些技能参与导入。",
+    "githubImportPluginGroupOther": "其他",
     "githubImportSelectAllSkills": "全选",
     "githubImportDeselectAllSkills": "全不选",
     "githubImportSkillDescription": "描述",

@@ -2224,6 +2224,7 @@
     "githubImportRepreview": "Re-preview",
     "githubImportSelectionTitle": "Previewed skills",
     "githubImportSelectionDesc": "Choose which skill to inspect and which skills to import.",
+    "githubImportPluginGroupOther": "Other",
     "githubImportSelectAllSkills": "Select all",
     "githubImportDeselectAllSkills": "Deselect all",
     "githubImportSkillDescription": "Description",
