@@ -1317,3 +1317,37 @@ Added a confirmed Update Center action for cleaning all platform leftovers, incl
 ### Next Steps
 
 - None - task complete
+
+
+## Session 31: GitHub import plugin grouping
+
+**Date**: 2026-07-09
+**Task**: GitHub import plugin grouping
+**Branch**: `dev`
+
+### Summary
+
+Implemented preview-only Claude plugin manifest grouping for GitHub import, added backend/frontend tests, and documented the preview contract.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0696f55e` | (see git log) |
+| `35cc8943` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
