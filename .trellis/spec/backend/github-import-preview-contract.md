@@ -122,3 +122,57 @@ GitHubSkillPreview {
 }
 ```
 
+## Scenario: Repository-Level Singular Skill Directory
+
+### 1. Scope / Trigger
+
+Update this scenario when candidate identity or filtering changes for a
+repository-level `skill/SKILL.md`, or when the GitHub import wizard changes how
+it classifies backend error strings for authentication guidance.
+
+### 2. Candidate Contract
+
+- A valid `skill/SKILL.md` directly under the repository root is a
+  repository-level skill container. It uses the same normalized repository ID
+  as a root `SKILL.md`.
+- The candidate keeps `sourcePath = "skill"`, `rootDirectory = "/"`, and
+  `skillDirectoryName = "skill"`. Import copying and source/update metadata
+  remain scoped to the `skill/` subtree.
+- Repository-root and explicit `tree/<branch>/skill` inputs produce the same
+  candidate identity.
+- Deeper generic paths such as `agent_reach/skill/SKILL.md` and
+  `packages/example/skill/SKILL.md` keep the existing generic-candidate filter.
+- Named skill directories, root `SKILL.md`, manifest grouping, DTOs, import
+  selections, and persisted metadata keep their existing semantics.
+
+### 3. Authentication Guidance Contract
+
+The frontend may show PAT guidance only when the backend message carries an
+explicit authentication signal: rate limiting, `Personal Access Token`, a
+standalone `PAT`, `GitHub denied access`, `requires authentication`, or a
+configured GitHub token.
+
+Bare `github`, bare `settings`, or embedded character sequences such as the
+`pat` inside `subpaths` are not authentication signals.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Repository contains valid top-level `skill/SKILL.md` | Preview one candidate using the normalized repository ID |
+| Same repository is addressed through `tree/<branch>/skill` | Return the same candidate identity and source path |
+| Repository contains only deep `.../skill/SKILL.md` wrappers | Preserve generic-candidate filtering |
+| `NoImportableSkills` text contains `subpaths` | Render the error without PAT guidance |
+| URL validation text contains `github.com` | Render the error without PAT guidance |
+| Backend reports rate limiting or unauthenticated access denial | Render the generic PAT settings guidance |
+| Backend reports a configured token access denial | Render the configured-token guidance |
+
+### 5. Tests Required
+
+- Backend candidate regression using a `kill-ai-slop`-shaped snapshot with
+  `skill/SKILL.md` plus unrelated repository files.
+- Repository-root and explicit-subpath parity assertion.
+- Existing deep generic-wrapper filtering and crafted-selection tests.
+- Real wizard component tests for `subpaths`, URL validation, rate limiting,
+  and configured-token denial messages.
+- Full gate: `just ci`.
