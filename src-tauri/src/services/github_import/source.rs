@@ -354,7 +354,7 @@ pub(super) fn build_remote_skill_candidate(
         detail: invalid_frontmatter_message(manifest),
     })?;
 
-    let skill_id = if manifest.source_path == "." {
+    let skill_id = if manifest.source_path == "." || manifest.source_path == "skill" {
         let repo_skill_id =
             sanitize_skill_id(&repo.repo).map_err(|error| InvalidRemoteSkillCandidate {
                 source_path: manifest.source_path.clone(),

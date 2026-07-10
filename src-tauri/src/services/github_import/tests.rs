@@ -150,6 +150,23 @@ metadata:
         ])
     }
 
+    fn repository_level_singular_skill_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "skill/SKILL.md",
+                sample_frontmatter("kill-ai-slop", "Find and remove AI slop"),
+            ),
+            (
+                "skill/references/detection.md",
+                "# Detection patterns\n".to_string(),
+            ),
+            (
+                "website/src/pages/index.astro",
+                "<main>Website content</main>\n".to_string(),
+            ),
+        ])
+    }
+
     fn compound_plugin_like_snapshot() -> GitHubRepoSnapshot {
         repo_snapshot(&[
             (
@@ -1497,6 +1514,36 @@ metadata:
             "plugins/compound-engineering/skills/ce-work"
         );
         assert_eq!(candidates[0].skill_id, "ce-work");
+    }
+
+    #[test]
+    fn repository_level_singular_skill_directory_uses_repository_identity() {
+        let repo = GitHubRepoRef {
+            owner: "yetone".to_string(),
+            repo: "kill-ai-slop".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/yetone/kill-ai-slop".to_string(),
+        };
+        let snapshot = repository_level_singular_skill_snapshot();
+
+        let candidates = build_repo_skill_candidates_from_snapshot(&repo, &snapshot)
+            .expect("repository candidates");
+        let subpath_candidates =
+            build_repo_skill_candidates_from_snapshot_at_path(&repo, &snapshot, Some("skill"))
+                .expect("subpath candidates");
+
+        assert_eq!(candidates, subpath_candidates);
+        assert_eq!(candidates.len(), 1);
+        let candidate = &candidates[0];
+        assert_eq!(candidate.source_path, "skill");
+        assert_eq!(candidate.skill_id, "kill-ai-slop");
+        assert_eq!(candidate.skill_name, "kill-ai-slop");
+        assert_eq!(
+            candidate.description.as_deref(),
+            Some("Find and remove AI slop")
+        );
+        assert_eq!(candidate.root_directory, "/");
+        assert_eq!(candidate.skill_directory_name, "skill");
     }
 
     #[test]

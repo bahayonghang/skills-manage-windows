@@ -146,9 +146,11 @@ function makeGroupedPreview(): GitHubRepoPreview {
 
 function renderWizard({
   preview = makePreview(),
+  previewError = null,
   onImport = vi.fn(),
 }: {
-  preview?: GitHubRepoPreview;
+  preview?: GitHubRepoPreview | null;
+  previewError?: string | null;
   onImport?: (selections: GitHubSkillImportSelection[]) => Promise<void> | void;
 } = {}) {
   render(
@@ -159,7 +161,7 @@ function renderWizard({
         repoUrl="https://github.com/mattpocock/skills"
         onRepoUrlChange={vi.fn()}
         preview={preview}
-        previewError={null}
+        previewError={previewError}
         isPreviewLoading={false}
         isImporting={false}
         importResult={null}
@@ -181,6 +183,59 @@ async function reviewImport() {
 }
 
 describe("GitHubRepoImportWizard", () => {
+  it("does not show PAT guidance for non-auth import errors containing subpaths", () => {
+    renderWizard({
+      preview: null,
+      previewError:
+        "No importable skills found in this repository. Supported layouts include root SKILL.md, common skill directories such as skills/, .agents/skills/, .claude/skills/, direct repository subpaths, and bounded recursive SKILL.md discovery.",
+    });
+
+    expect(
+      screen.getByText(/No importable skills found in this repository/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Open Settings and save a GitHub Personal Access Token|请前往设置并保存 GitHub Personal Access Token/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show PAT guidance for GitHub URL validation errors", () => {
+    renderWizard({
+      preview: null,
+      previewError: "Only github.com repository URLs are supported.",
+    });
+
+    expect(
+      screen.getByText("Only github.com repository URLs are supported."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Open Settings and save a GitHub Personal Access Token|请前往设置并保存 GitHub Personal Access Token/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows PAT settings guidance for GitHub rate-limit errors", () => {
+    renderWizard({
+      preview: null,
+      previewError:
+        "GitHub API access was denied because the rate limit was exceeded (HTTP 403).",
+    });
+
+    expect(
+      screen.getByText(/Open Settings and save a GitHub Personal Access Token|请前往设置并保存 GitHub Personal Access Token/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows configured-token guidance for authenticated access denials", () => {
+    renderWizard({
+      preview: null,
+      previewError:
+        "GitHub denied access while inspecting the repository (HTTP 403). A configured GitHub token was used, but token permissions are insufficient.",
+    });
+
+    expect(
+      screen.getByText(/A configured GitHub token was already used|当前请求已经使用已配置的 GitHub 令牌/i),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the confirm step open after clicking review import", async () => {
     renderWizard();
 

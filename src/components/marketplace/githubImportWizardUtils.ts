@@ -89,7 +89,9 @@ export function normalizeMessage(message: string) {
 }
 
 export function looksLikeGitHubAuthGuidance(message: string) {
-  return /github|rate limit|personal access token|pat|settings/i.test(message);
+  return /rate limit|personal access token|\bpat\b|github denied access|requires authentication|configured github token/i.test(
+    message,
+  );
 }
 
 export function looksLikeConfiguredGitHubTokenFailure(message: string) {
