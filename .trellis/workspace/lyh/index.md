@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 31
-- **Last Active**: 2026-07-09
+- **Total Sessions**: 32
+- **Last Active**: 2026-07-10
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1353 | Active |
+| `journal-1.md` | ~1387 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 32 | 2026-07-10 | 修复 GitHub 导入顶层 skill 目录误判 | `3bc3b6c`, `33dcad2` | `dev` |
 | 31 | 2026-07-09 | GitHub import plugin grouping | `0696f55e`, `35cc8943` | `dev` |
 | 30 | 2026-07-08 | Add confirmed one-click platform leftover cleanup | `bec41f3e` | `dev` |
 | 29 | 2026-07-07 | 平台视图安装来源快速导航栏（07-07-ui-platform-origin-nav） | `6a62e259`, `ee60e3be`, `b3a4cb76` | `dev` |

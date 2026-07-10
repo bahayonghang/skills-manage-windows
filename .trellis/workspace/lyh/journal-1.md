@@ -1351,3 +1351,37 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 32: 修复 GitHub 导入顶层 skill 目录误判
+
+**Date**: 2026-07-10
+**Task**: 修复 GitHub 导入顶层 skill 目录误判
+**Branch**: `dev`
+
+### Summary
+
+支持仓库顶层 skill/SKILL.md 使用仓库身份导入，保留深层泛化目录过滤，修复 subpaths 误触发 PAT 指引，并补齐后端、真实向导测试与持久化契约。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3bc3b6c` | (see git log) |
+| `33dcad2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
