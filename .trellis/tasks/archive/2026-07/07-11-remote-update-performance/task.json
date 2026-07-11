@@ -1,0 +1,28 @@
+{
+  "id": "remote-update-performance",
+  "name": "remote-update-performance",
+  "title": "优化 SSH/WSL 技能更新可靠性与性能",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-07-11",
+  "completedAt": "2026-07-12",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-11-ssh-persistent-session"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
