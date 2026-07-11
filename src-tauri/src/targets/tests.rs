@@ -183,7 +183,34 @@ pub(super) mod tests {
         };
         let args = command_arg_strings(connection.base_command());
 
-        assert_eq!(args, vec!["-d", "Ubuntu-24.04", "--"]);
+        assert_eq!(args, vec!["-d", "Ubuntu-24.04", "--exec"]);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn remote_target_open_does_not_probe_wsl_distribution() {
+        let mut target = wsl_target();
+        target.distribution = "missing-skillport-test-distribution".to_string();
+
+        let connection = connect_remote_target(&ActiveTarget::Wsl(Box::new(target)))
+            .await
+            .expect("opening a WSL transport must not start wsl.exe");
+
+        assert_eq!(connection.target_id(), "wsl-ubuntu");
+    }
+
+    #[tokio::test]
+    async fn remote_target_open_does_not_probe_ssh_host() {
+        let mut target = password_target();
+        target.auth_method = SshAuthMethod::Key;
+        target.host.clear();
+        target.password = None;
+
+        let connection = connect_remote_target(&ActiveTarget::Ssh(Box::new(target)))
+            .await
+            .expect("opening an SSH transport must not start ssh");
+
+        assert_eq!(connection.target_id(), "ssh-demo");
     }
 
     #[test]
@@ -905,7 +932,9 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#
         let (runner, connection) = fake_ssh_connection();
         runner.push_success("symlink\t/home/alice/.skillsmanage/skills/demo\n");
 
-        let info = connection.inspect_path("/home/alice/.claude/skills/demo").await;
+        let info = connection
+            .inspect_path("/home/alice/.claude/skills/demo")
+            .await;
         assert_eq!(
             info.unwrap(),
             Some(RemotePathInfo {
@@ -972,7 +1001,14 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#
         let calls = runner.calls();
         assert_eq!(
             calls[0].args,
-            vec!["-d", "Ubuntu-24.04", "--", "sh", "-lc", "test -e '/tmp/a'"]
+            vec![
+                "-d",
+                "Ubuntu-24.04",
+                "--exec",
+                "sh",
+                "-lc",
+                "test -e '/tmp/a'"
+            ]
         );
     }
 
@@ -987,7 +1023,7 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#
         let calls = runner.calls();
         assert_eq!(
             calls[0].args,
-            vec!["-d", "Ubuntu-24.04", "--", "sh", "-s", "--", "x y"]
+            vec!["-d", "Ubuntu-24.04", "--exec", "sh", "-s", "--", "x y"]
         );
         assert_eq!(calls[0].stdin.as_deref(), Some("echo hi".as_bytes()));
     }

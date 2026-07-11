@@ -4,7 +4,6 @@
 //! Both sides (local and remote) share the same interface so the
 //! orchestration code in this domain never branches on target type.
 
-use flate2::{write::GzEncoder, Compression};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Component, Path, PathBuf};
@@ -14,21 +13,21 @@ use uuid::Uuid;
 use crate::fs_util::run_blocking_fs_with;
 use crate::services::github_import::GitHubRepoSnapshot;
 use crate::services::installation::copy_dir_all;
-use crate::targets::{
-    connect_remote_target, remote_parent, shell_quote, ActiveTarget, ConnectedRemoteTarget,
-};
+use crate::targets::{connect_remote_target, ActiveTarget, ConnectedRemoteTarget};
 
 use super::error::CentralUpdatesError;
 
+mod batch;
 mod remote_scripts;
+
+pub(crate) use batch::{CentralSkillWrite, CopyRefreshRequest};
 
 #[cfg(test)]
 mod tests;
 
-use remote_scripts::{
-    REMOTE_CENTRAL_UPDATE_SCRIPT, REMOTE_HASH_SCRIPT, REMOTE_HASH_UNSUPPORTED_EXIT_CODE,
-    REMOTE_REFRESH_COPY_SCRIPT,
-};
+use remote_scripts::{REMOTE_HASH_SCRIPT, REMOTE_HASH_UNSUPPORTED_EXIT_CODE};
+
+const REMOTE_HASH_CHUNK_SIZE: usize = 32;
 
 #[derive(Debug, Clone)]
 pub(crate) struct RemoteSkillFile {
@@ -49,9 +48,19 @@ pub(crate) enum CentralFs {
 }
 
 impl CentralFs {
+    #[tracing::instrument(
+        skip_all,
+        fields(phase = "target_open", target_kind = tracing::field::Empty)
+    )]
     pub(crate) async fn from_active_target(
         target: ActiveTarget,
     ) -> Result<Self, CentralUpdatesError> {
+        let target_kind = match &target {
+            ActiveTarget::Local => "local",
+            ActiveTarget::Ssh(_) => "ssh",
+            ActiveTarget::Wsl(_) => "wsl",
+        };
+        tracing::Span::current().record("target_kind", target_kind);
         match target {
             ActiveTarget::Local => Ok(Self::Local),
             ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
@@ -65,6 +74,15 @@ impl CentralFs {
 
     /// Compute hashes for many skill directories. SSH mode batches roots into
     /// one remote script per chunk; local mode stays simple and deterministic.
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            phase = "local_or_remote_hash",
+            target_kind = self.target_kind(),
+            roots = roots.len(),
+            hash_chunks = roots.len().div_ceil(REMOTE_HASH_CHUNK_SIZE)
+        )
+    )]
     pub(crate) async fn hash_directories(
         &self,
         roots: &[PathBuf],
@@ -86,65 +104,6 @@ impl CentralFs {
                 .await
             }
             Self::Remote(conn) => hash_remote_directories(conn, roots).await,
-        }
-    }
-
-    /// Atomically replace `target_dir` with the contents of `files`.
-    ///
-    /// Both variants write into a sibling staging directory first, then swap
-    /// it into place using a rename pair so a failure mid-write never leaves
-    /// the canonical directory empty.
-    pub(crate) async fn write_skill_dir_atomic(
-        &self,
-        skill_id: &str,
-        target_dir: &Path,
-        files: &[RemoteSkillFile],
-    ) -> Result<(), CentralUpdatesError> {
-        match self {
-            Self::Local => {
-                let skill_id = skill_id.to_string();
-                let target_dir = target_dir.to_path_buf();
-                let files = files.to_vec();
-                run_blocking_fs_with(
-                    "central skill atomic write",
-                    move || write_skill_dir_atomic_local(&skill_id, &target_dir, &files),
-                    CentralUpdatesError::task_join,
-                )
-                .await
-            }
-            Self::Remote(conn) => {
-                write_skill_dir_atomic_remote(conn, skill_id, &posix_path(target_dir), files).await
-            }
-        }
-    }
-
-    /// Refresh a copy-installation so that `target` mirrors `source_dir`.
-    ///
-    /// `target` must end with `skill_id` to keep the operation scoped to the
-    /// expected installation slot. The remote variant uses `cp -R` over SSH;
-    /// the local variant delegates to the installation domain's
-    /// [`copy_dir_all`].
-    pub(crate) async fn refresh_copy_install(
-        &self,
-        skill_id: &str,
-        source_dir: &Path,
-        target: &str,
-    ) -> Result<(), CentralUpdatesError> {
-        match self {
-            Self::Local => {
-                let skill_id = skill_id.to_string();
-                let source_dir = source_dir.to_path_buf();
-                let target = target.to_string();
-                run_blocking_fs_with(
-                    "copy install refresh",
-                    move || refresh_copy_install_local(&skill_id, &source_dir, &target),
-                    CentralUpdatesError::task_join,
-                )
-                .await
-            }
-            Self::Remote(conn) => {
-                refresh_copy_install_remote(conn, skill_id, &posix_path(source_dir), target).await
-            }
         }
     }
 }
@@ -270,7 +229,10 @@ fn replace_target_dir(
             let _ = std::fs::rename(backup_dir, target_dir);
         }
         return Err(CentralUpdatesError::io(
-            format!("Failed to replace skill directory '{}'", target_dir.display()),
+            format!(
+                "Failed to replace skill directory '{}'",
+                target_dir.display()
+            ),
             error,
         ));
     }
@@ -319,55 +281,6 @@ fn write_skill_dir_atomic_local(
     replace_target_dir(target_dir, &temp_dir, &backup_dir)
 }
 
-async fn write_skill_dir_atomic_remote(
-    conn: &ConnectedRemoteTarget,
-    skill_id: &str,
-    target_dir: &str,
-    files: &[RemoteSkillFile],
-) -> Result<(), CentralUpdatesError> {
-    let parent =
-        remote_parent(target_dir).ok_or_else(|| CentralUpdatesError::RemoteTargetDirNoParent {
-            skill_id: skill_id.to_string(),
-            target_dir: target_dir.to_string(),
-        })?;
-
-    let staging_dir = format!(
-        "{}/.skillport-update-{}-{}",
-        parent.trim_end_matches('/'),
-        skill_id,
-        Uuid::new_v4()
-    );
-    let backup_dir = format!(
-        "{}/.skillport-backup-{}-{}",
-        parent.trim_end_matches('/'),
-        skill_id,
-        Uuid::new_v4()
-    );
-
-    for file in files {
-        if !is_safe_relative_path(&file.relative_path) {
-            return Err(CentralUpdatesError::UnsupportedRepoFilePath(
-                file.repo_path.clone(),
-            ));
-        }
-    }
-
-    let archive = build_skill_archive(files)?;
-    conn.run_command_with_stdin_bytes(
-        &remote_update_command(target_dir, &parent, &staging_dir, &backup_dir),
-        &archive,
-    )
-    .map(|_| ())
-    .map_err(|err| {
-        // The script aborts before staging touches `target_dir`, so the
-        // canonical directory remains untouched on early failures.
-        CentralUpdatesError::Remote(format!(
-            "Remote update script failed for '{}': {}",
-            target_dir, err
-        ))
-    })
-}
-
 fn refresh_copy_install_local(
     skill_id: &str,
     source_dir: &Path,
@@ -384,72 +297,6 @@ fn refresh_copy_install_local(
     }
     copy_dir_all(source_dir, &target_path)?;
     Ok(())
-}
-
-async fn refresh_copy_install_remote(
-    conn: &ConnectedRemoteTarget,
-    skill_id: &str,
-    source_dir: &str,
-    target: &str,
-) -> Result<(), CentralUpdatesError> {
-    let basename = target.trim_end_matches('/').rsplit('/').next();
-    if basename != Some(skill_id) {
-        return Err(CentralUpdatesError::CopyInstallOutsideSkillDir(
-            target.to_string(),
-        ));
-    }
-    conn.run_script(REMOTE_REFRESH_COPY_SCRIPT, &[source_dir, target, skill_id])
-        .await
-        .map(|_| ())
-        .map_err(|e| CentralUpdatesError::Remote(e.to_string()))
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-fn build_skill_archive(files: &[RemoteSkillFile]) -> Result<Vec<u8>, CentralUpdatesError> {
-    let encoder = GzEncoder::new(Vec::new(), Compression::default());
-    let mut builder = tar::Builder::new(encoder);
-    for file in files {
-        if !is_safe_relative_path(&file.relative_path) {
-            return Err(CentralUpdatesError::UnsupportedRepoFilePath(
-                file.repo_path.clone(),
-            ));
-        }
-        let mut header = tar::Header::new_gnu();
-        header.set_size(file.bytes.len() as u64);
-        header.set_mode(0o644);
-        header.set_cksum();
-        builder
-            .append_data(&mut header, &file.relative_path, file.bytes.as_slice())
-            .map_err(|e| {
-                CentralUpdatesError::io(
-                    format!("Failed to build update archive entry '{}'", file.repo_path),
-                    e,
-                )
-            })?;
-    }
-    let encoder = builder
-        .into_inner()
-        .map_err(|e| CentralUpdatesError::io("Failed to finalize update archive", e))?;
-    encoder
-        .finish()
-        .map_err(|e| CentralUpdatesError::io("Failed to compress update archive", e))
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-fn remote_update_command(
-    target_dir: &str,
-    parent_dir: &str,
-    staging_dir: &str,
-    backup_dir: &str,
-) -> String {
-    format!(
-        "sh -c {} -- {} {} {} {}",
-        shell_quote(REMOTE_CENTRAL_UPDATE_SCRIPT),
-        shell_quote(target_dir),
-        shell_quote(parent_dir),
-        shell_quote(staging_dir),
-        shell_quote(backup_dir)
-    )
 }
 
 pub(crate) fn hash_remote_files(
@@ -533,7 +380,7 @@ async fn hash_remote_directories(
     roots: &[PathBuf],
 ) -> Result<HashMap<PathBuf, String>, CentralUpdatesError> {
     let mut hashes = HashMap::with_capacity(roots.len());
-    for chunk in roots.chunks(32) {
+    for chunk in roots.chunks(REMOTE_HASH_CHUNK_SIZE) {
         let root_args = chunk
             .iter()
             .map(|root| posix_path(root))
@@ -556,7 +403,11 @@ async fn hash_remote_directories(
                     hashes.insert(root.clone(), hash);
                 }
             }
-            Err(error) if error.to_string().contains(REMOTE_HASH_UNSUPPORTED_EXIT_CODE) => {
+            Err(error)
+                if error
+                    .to_string()
+                    .contains(REMOTE_HASH_UNSUPPORTED_EXIT_CODE) =>
+            {
                 tracing::warn!(
                     error = %error,
                     "Remote target has no sha256 tool; falling back to per-file SSH hashing"
@@ -575,9 +426,7 @@ async fn hash_remote_directories(
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-fn parse_remote_hash_output(
-    output: &str,
-) -> Result<HashMap<String, String>, CentralUpdatesError> {
+fn parse_remote_hash_output(output: &str) -> Result<HashMap<String, String>, CentralUpdatesError> {
     let mut hashes = HashMap::new();
     let mut current_root: Option<String> = None;
     let mut entries: Vec<(String, String)> = Vec::new();
@@ -673,8 +522,8 @@ fn collect_local_hash_entries(
             e,
         )
     })? {
-        let entry = entry
-            .map_err(|e| CentralUpdatesError::io("Failed to read local skill entry", e))?;
+        let entry =
+            entry.map_err(|e| CentralUpdatesError::io("Failed to read local skill entry", e))?;
         let path = entry.path();
         let file_type = entry.file_type().map_err(|e| {
             CentralUpdatesError::io(

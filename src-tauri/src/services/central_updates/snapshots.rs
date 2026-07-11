@@ -120,6 +120,10 @@ pub(crate) async fn prepare_snapshots_for_repo_refs(
     .await
 }
 
+#[tracing::instrument(
+    skip_all,
+    fields(phase = "snapshot_download", repositories = repos.len())
+)]
 pub(crate) async fn prepare_snapshots_for_repo_refs_with_policy(
     client: &reqwest::Client,
     auth_token: Option<&str>,

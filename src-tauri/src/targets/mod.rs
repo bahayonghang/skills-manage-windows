@@ -33,7 +33,7 @@ use model::*;
 #[cfg(test)]
 use wsl_discovery::*;
 
-pub use askpass::{connect_ssh_target, ConnectedSshTarget};
+pub use askpass::{open_ssh_target, ConnectedSshTarget};
 pub use commands::*;
 pub use error::TargetsError;
 pub use exec::*;
