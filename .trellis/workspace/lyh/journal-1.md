@@ -1385,3 +1385,37 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 33: 优化 SSH/WSL 技能更新性能
+
+**Date**: 2026-07-12
+**Task**: 优化 SSH/WSL 技能更新性能
+**Branch**: `dev`
+
+### Summary
+
+修复 WSL argv 与 eager probe，批量化远端 Central 写入和 copy 刷新，补充安全日志、回滚/取消测试及 WSL 性能基准。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cc22ba2e` | (see git log) |
+| `c998eb6c` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
