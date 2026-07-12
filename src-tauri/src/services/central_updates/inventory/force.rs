@@ -9,8 +9,8 @@ use crate::services::central_skills::{
 use crate::services::central_updates::{
     collect_remote_added_skills, load_remote_skill_content, prepare_skill_updates,
     prepare_snapshots_for_repo_refs_with_policy, repo_cache_key, state_from_remote,
-    update_one_skill, update_one_skill_with_options, CentralFs, CentralUpdateSnapshotCache,
-    CentralUpdatesError, RemoteSkillLoadError, SkillUpdateStatus, SnapshotCachePolicy,
+    update_skills_batch, CentralFs, CentralUpdateSnapshotCache, CentralUpdatesError,
+    RemoteSkillLoadError, SkillUpdatePlan, SkillUpdateStatus, SnapshotCachePolicy,
 };
 use crate::services::github_import::{
     self, DuplicateResolution, GitHubSkillImportSelection, ImportedGitHubSkillSummary,
@@ -53,40 +53,13 @@ pub(crate) async fn force_update_central_skills_impl(
     .await?;
 
     let mut result = ForceSkillUpdateResult::default();
+    let mut pending_updates = Vec::new();
     for prepared_skill in prepared {
         let skill = &prepared_skill.skill;
         match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) => {
                 let before = state_from_remote(skill, &remote, false);
-                match update_one_skill_with_options(
-                    pool,
-                    fs,
-                    skill,
-                    remote,
-                    request.refresh_copy_installations,
-                )
-                .await
-                {
-                    Ok(state) => {
-                        db::upsert_skill_update_state(pool, &state).await?;
-                        result.overwritten.push(ForceSkillUpdateSuccess {
-                            skill_id: skill.id.clone(),
-                            repository_id: repository_id_for_state_from_db(pool, &before).await?,
-                            source_path: before.source_path.clone(),
-                            local_hash: before.last_remote_hash.clone(),
-                            remote_hash: before.latest_remote_hash.clone(),
-                            bytes_changed: before.status
-                                == SkillUpdateStatus::UpdateAvailable.as_str(),
-                            copy_installations_refreshed: request.refresh_copy_installations,
-                        });
-                    }
-                    Err(error) => result.failed.push(ForceSkillUpdateFailure {
-                        skill_id: skill.id.clone(),
-                        repository_id: repository_id_for_state_from_db(pool, &before).await?,
-                        source_path: before.source_path.clone(),
-                        error: error.to_string(),
-                    }),
-                }
+                pending_updates.push((skill.clone(), remote, before));
             }
             Ok(None) => result.skipped.push(ForceSkillUpdateSkip {
                 skill_id: skill.id.clone(),
@@ -106,6 +79,40 @@ pub(crate) async fn force_update_central_skills_impl(
                     error,
                 });
             }
+        }
+    }
+    let plans = pending_updates
+        .iter()
+        .map(|(skill, remote, _)| SkillUpdatePlan {
+            skill: skill.clone(),
+            remote: remote.clone(),
+            refresh_copies: request.refresh_copy_installations,
+        })
+        .collect();
+    for ((skill, _, before), outcome) in pending_updates
+        .into_iter()
+        .zip(update_skills_batch(pool, fs, plans, None).await)
+    {
+        debug_assert_eq!(skill.id, outcome.skill_id);
+        match outcome.result {
+            Ok(state) => {
+                db::upsert_skill_update_state(pool, &state).await?;
+                result.overwritten.push(ForceSkillUpdateSuccess {
+                    skill_id: skill.id,
+                    repository_id: repository_id_for_state_from_db(pool, &before).await?,
+                    source_path: before.source_path,
+                    local_hash: before.last_remote_hash,
+                    remote_hash: before.latest_remote_hash,
+                    bytes_changed: before.status == SkillUpdateStatus::UpdateAvailable.as_str(),
+                    copy_installations_refreshed: request.refresh_copy_installations,
+                });
+            }
+            Err(error) => result.failed.push(ForceSkillUpdateFailure {
+                skill_id: skill.id,
+                repository_id: repository_id_for_state_from_db(pool, &before).await?,
+                source_path: before.source_path,
+                error: error.to_string(),
+            }),
         }
     }
     let succeeded = result
@@ -167,32 +174,13 @@ pub(crate) async fn force_mirror_central_repositories_impl(
         db::get_central_skills_by_ids(pool, &normalize_ids(skill_ids)).await?
     };
     let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
+    let mut pending_overwrites = Vec::new();
     for prepared_skill in prepared {
         let skill = &prepared_skill.skill;
         match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) if request.overwrite_tracked => {
                 let before = state_from_remote(skill, &remote, false);
-                match update_one_skill(pool, fs, skill, remote).await {
-                    Ok(state) => {
-                        db::upsert_skill_update_state(pool, &state).await?;
-                        overwritten.push(ForceSkillUpdateSuccess {
-                            skill_id: skill.id.clone(),
-                            repository_id: repository_id_for_state_from_db(pool, &before).await?,
-                            source_path: before.source_path.clone(),
-                            local_hash: before.last_remote_hash.clone(),
-                            remote_hash: before.latest_remote_hash.clone(),
-                            bytes_changed: before.status
-                                == SkillUpdateStatus::UpdateAvailable.as_str(),
-                            copy_installations_refreshed: true,
-                        });
-                    }
-                    Err(error) => failed_items.push(ForceSkillUpdateFailure {
-                        skill_id: skill.id.clone(),
-                        repository_id: repository_id_for_state_from_db(pool, &before).await?,
-                        source_path: before.source_path.clone(),
-                        error: error.to_string(),
-                    }),
-                }
+                pending_overwrites.push((skill.clone(), remote, before));
             }
             Ok(Some(_)) => {}
             Ok(None) => skipped.push(ForceSkillUpdateSkip {
@@ -213,6 +201,40 @@ pub(crate) async fn force_mirror_central_repositories_impl(
                 repository_id: None,
                 source_path: None,
                 error,
+            }),
+        }
+    }
+    let overwrite_plans = pending_overwrites
+        .iter()
+        .map(|(skill, remote, _)| SkillUpdatePlan {
+            skill: skill.clone(),
+            remote: remote.clone(),
+            refresh_copies: true,
+        })
+        .collect();
+    for ((skill, _, before), outcome) in pending_overwrites
+        .into_iter()
+        .zip(update_skills_batch(pool, fs, overwrite_plans, None).await)
+    {
+        debug_assert_eq!(skill.id, outcome.skill_id);
+        match outcome.result {
+            Ok(state) => {
+                db::upsert_skill_update_state(pool, &state).await?;
+                overwritten.push(ForceSkillUpdateSuccess {
+                    skill_id: skill.id,
+                    repository_id: repository_id_for_state_from_db(pool, &before).await?,
+                    source_path: before.source_path,
+                    local_hash: before.last_remote_hash,
+                    remote_hash: before.latest_remote_hash,
+                    bytes_changed: before.status == SkillUpdateStatus::UpdateAvailable.as_str(),
+                    copy_installations_refreshed: true,
+                });
+            }
+            Err(error) => failed_items.push(ForceSkillUpdateFailure {
+                skill_id: skill.id,
+                repository_id: repository_id_for_state_from_db(pool, &before).await?,
+                source_path: before.source_path,
+                error: error.to_string(),
             }),
         }
     }

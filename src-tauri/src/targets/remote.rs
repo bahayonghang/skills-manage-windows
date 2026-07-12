@@ -1,7 +1,7 @@
-use super::askpass::{connect_ssh_target, ConnectedSshTarget};
+use super::askpass::{open_ssh_target, ConnectedSshTarget};
 use super::error::TargetsError;
 use super::exec::{
-    connect_wsl_target, remote_symlink_allowed, wsl_symlink_allowed, ConnectedWslTarget,
+    open_wsl_target, remote_symlink_allowed, wsl_symlink_allowed, ConnectedWslTarget,
     RemoteDirEntry, RemotePathInfo,
 };
 use super::model::ActiveTarget;
@@ -11,12 +11,8 @@ pub async fn connect_remote_target(
 ) -> Result<ConnectedRemoteTarget, TargetsError> {
     match active_target {
         ActiveTarget::Local => Err(TargetsError::LocalTargetNotRemote),
-        ActiveTarget::Ssh(target) => connect_ssh_target(target)
-            .await
-            .map(ConnectedRemoteTarget::Ssh),
-        ActiveTarget::Wsl(target) => connect_wsl_target(target)
-            .await
-            .map(ConnectedRemoteTarget::Wsl),
+        ActiveTarget::Ssh(target) => open_ssh_target(target).map(ConnectedRemoteTarget::Ssh),
+        ActiveTarget::Wsl(target) => open_wsl_target(target).map(ConnectedRemoteTarget::Wsl),
     }
 }
 

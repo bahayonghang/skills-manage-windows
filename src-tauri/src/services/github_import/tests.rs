@@ -150,6 +150,23 @@ metadata:
         ])
     }
 
+    fn repository_level_singular_skill_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "skill/SKILL.md",
+                sample_frontmatter("kill-ai-slop", "Find and remove AI slop"),
+            ),
+            (
+                "skill/references/detection.md",
+                "# Detection patterns\n".to_string(),
+            ),
+            (
+                "website/src/pages/index.astro",
+                "<main>Website content</main>\n".to_string(),
+            ),
+        ])
+    }
+
     fn compound_plugin_like_snapshot() -> GitHubRepoSnapshot {
         repo_snapshot(&[
             (
@@ -205,6 +222,123 @@ metadata:
             (
                 "packages/fallback/duplicate/SKILL.md",
                 sample_frontmatter("duplicate-skill", "Fallback"),
+            ),
+        ])
+    }
+
+    fn plugin_json_grouped_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                ".claude-plugin/plugin.json",
+                r#"{
+                  "name": "mattpocock-skills",
+                  "skills": [
+                    "./skills/engineering/ask-matt",
+                    "skills/engineering/code-review"
+                  ]
+                }"#
+                .to_string(),
+            ),
+            (
+                "skills/engineering/ask-matt/SKILL.md",
+                sample_frontmatter("ask-matt", "Ask Matt"),
+            ),
+            (
+                "skills/engineering/code-review/SKILL.md",
+                sample_frontmatter("code-review", "Review code"),
+            ),
+            (
+                "skills/writing/blog-post/SKILL.md",
+                sample_frontmatter("blog-post", "Write posts"),
+            ),
+        ])
+    }
+
+    fn manifest_hint_with_priority_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                ".claude-plugin/plugin.json",
+                r#"{
+                  "name": "deep-plugin",
+                  "skills": ["packages/hidden/deep-skill"]
+                }"#
+                .to_string(),
+            ),
+            (
+                "skills/top-level/SKILL.md",
+                sample_frontmatter("top-level", "Priority root skill"),
+            ),
+            (
+                "packages/hidden/deep-skill/SKILL.md",
+                sample_frontmatter("deep-skill", "Manifest-only skill"),
+            ),
+        ])
+    }
+
+    fn broken_manifest_hint_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                ".claude-plugin/plugin.json",
+                r#"{
+                  "name": "broken-plugin",
+                  "skills": [
+                    "packages/missing-skill",
+                    "packages/bad-frontmatter",
+                    "../escape",
+                    "/absolute/path",
+                    "https://example.com/remote-skill"
+                  ]
+                }"#
+                .to_string(),
+            ),
+            (
+                "skills/top-level/SKILL.md",
+                sample_frontmatter("top-level", "Priority root skill"),
+            ),
+            (
+                "packages/bad-frontmatter/SKILL.md",
+                "# invalid\n".to_string(),
+            ),
+        ])
+    }
+
+    fn marketplace_json_grouped_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                ".claude-plugin/marketplace.json",
+                r#"{
+                  "metadata": { "pluginRoot": "plugins" },
+                  "plugins": [
+                    {
+                      "name": "docs",
+                      "source": "docs-plugin",
+                      "skills": ["skills/write-docs"]
+                    },
+                    {
+                      "name": "remote-object",
+                      "source": { "type": "github", "repo": "owner/repo" },
+                      "skills": ["skills/remote-skill"]
+                    },
+                    {
+                      "name": "remote-string",
+                      "source": "https://github.com/owner/repo",
+                      "skills": ["skills/remote-skill"]
+                    }
+                  ]
+                }"#
+                .to_string(),
+            ),
+            (
+                "skills/top-level/SKILL.md",
+                sample_frontmatter("top-level", "Priority root skill"),
+            ),
+            (
+                "plugins/docs-plugin/skills/write-docs/SKILL.md",
+                sample_frontmatter("write-docs", "Write docs"),
+            ),
+            (
+                "plugins/remote-plugin/skills/remote-skill/SKILL.md",
+                sample_frontmatter("remote-skill", "Remote plugin skill"),
             ),
         ])
     }
@@ -576,6 +710,7 @@ metadata:
             skill_id: "web-access".to_string(),
             skill_name: "web-access".to_string(),
             description: Some("remote import".to_string()),
+            plugin_name: None,
             root_directory: "skills".to_string(),
             skill_directory_name: "web-access".to_string(),
             download_url: "https://raw.githubusercontent.com/eze-is/web-access/main/SKILL.md"
@@ -1382,6 +1517,36 @@ metadata:
     }
 
     #[test]
+    fn repository_level_singular_skill_directory_uses_repository_identity() {
+        let repo = GitHubRepoRef {
+            owner: "yetone".to_string(),
+            repo: "kill-ai-slop".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/yetone/kill-ai-slop".to_string(),
+        };
+        let snapshot = repository_level_singular_skill_snapshot();
+
+        let candidates = build_repo_skill_candidates_from_snapshot(&repo, &snapshot)
+            .expect("repository candidates");
+        let subpath_candidates =
+            build_repo_skill_candidates_from_snapshot_at_path(&repo, &snapshot, Some("skill"))
+                .expect("subpath candidates");
+
+        assert_eq!(candidates, subpath_candidates);
+        assert_eq!(candidates.len(), 1);
+        let candidate = &candidates[0];
+        assert_eq!(candidate.source_path, "skill");
+        assert_eq!(candidate.skill_id, "kill-ai-slop");
+        assert_eq!(candidate.skill_name, "kill-ai-slop");
+        assert_eq!(
+            candidate.description.as_deref(),
+            Some("Find and remove AI slop")
+        );
+        assert_eq!(candidate.root_directory, "/");
+        assert_eq!(candidate.skill_directory_name, "skill");
+    }
+
+    #[test]
     fn recursive_fallback_skips_test_fixture_skill_directories() {
         let repo = GitHubRepoRef {
             owner: "everyinc".to_string(),
@@ -1448,6 +1613,177 @@ metadata:
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].source_path, "skills/preferred");
         assert_eq!(candidates[0].description.as_deref(), Some("Preferred"));
+    }
+
+    #[tokio::test]
+    async fn plugin_json_assigns_preview_grouping_without_persisted_import_metadata() {
+        let pool = setup_test_db().await;
+        let repo = GitHubRepoRef {
+            owner: "mattpocock".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/mattpocock/skills".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &plugin_json_grouped_snapshot())
+                .expect("candidates");
+        let grouped = candidates
+            .iter()
+            .filter(|candidate| candidate.plugin_name.as_deref() == Some("mattpocock-skills"))
+            .map(|candidate| candidate.source_path.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(grouped.len(), 2);
+        assert!(grouped.contains(&"skills/engineering/ask-matt"));
+        assert!(grouped.contains(&"skills/engineering/code-review"));
+        let unlisted = candidates
+            .iter()
+            .find(|candidate| candidate.source_path == "skills/writing/blog-post")
+            .expect("unlisted skill");
+        assert_eq!(unlisted.plugin_name, None);
+
+        let preview = build_preview_skills(&pool, &candidates)
+            .await
+            .expect("preview");
+        assert!(preview.iter().any(|skill| {
+            skill.source_path == "skills/engineering/ask-matt"
+                && skill.plugin_name.as_deref() == Some("mattpocock-skills")
+        }));
+        let summary_json = serde_json::to_value(ImportedGitHubSkillSummary {
+            source_path: "skills/engineering/ask-matt".to_string(),
+            original_skill_id: "ask-matt".to_string(),
+            imported_skill_id: "ask-matt".to_string(),
+            skill_name: "ask-matt".to_string(),
+            target_directory: "/tmp/ask-matt".to_string(),
+            resolution: DuplicateResolution::Overwrite,
+        })
+        .expect("serialize summary");
+        assert!(
+            summary_json.get("pluginName").is_none(),
+            "plugin grouping must stay preview-only"
+        );
+    }
+
+    #[test]
+    fn manifest_hints_find_deep_skills_without_suppressing_priority_discovery() {
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "mixed-layout".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/mixed-layout".to_string(),
+        };
+
+        let candidates = build_repo_skill_candidates_from_snapshot(
+            &repo,
+            &manifest_hint_with_priority_snapshot(),
+        )
+        .expect("candidates");
+        let source_paths = candidates
+            .iter()
+            .map(|candidate| candidate.source_path.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            source_paths,
+            vec!["skills/top-level", "packages/hidden/deep-skill"]
+        );
+        let hinted = candidates
+            .iter()
+            .find(|candidate| candidate.source_path == "packages/hidden/deep-skill")
+            .expect("hinted deep skill");
+        assert_eq!(hinted.plugin_name.as_deref(), Some("deep-plugin"));
+    }
+
+    #[test]
+    fn manifest_hints_drop_broken_and_unsafe_entries_without_failing() {
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "broken-hints".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/broken-hints".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &broken_manifest_hint_snapshot())
+                .expect("broken manifest hints should not fail candidate building");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].source_path, "skills/top-level");
+        assert_eq!(candidates[0].plugin_name, None);
+    }
+
+    #[test]
+    fn malformed_plugin_manifest_json_keeps_legacy_discovery() {
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "malformed-manifest".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/malformed-manifest".to_string(),
+        };
+        let snapshot = repo_snapshot(&[
+            (".claude-plugin/plugin.json", "{not valid json".to_string()),
+            (
+                "skills/top-level/SKILL.md",
+                sample_frontmatter("top-level", "Priority root skill"),
+            ),
+        ]);
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &snapshot).expect("candidates");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].source_path, "skills/top-level");
+        assert_eq!(candidates[0].plugin_name, None);
+    }
+
+    #[test]
+    fn marketplace_json_groups_local_plugin_skills_relative_to_plugin_directory() {
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "marketplace-manifest".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/marketplace-manifest".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &marketplace_json_grouped_snapshot())
+                .expect("candidates");
+        let source_paths = candidates
+            .iter()
+            .map(|candidate| candidate.source_path.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            source_paths,
+            vec!["skills/top-level", "plugins/docs-plugin/skills/write-docs"]
+        );
+        let docs = candidates
+            .iter()
+            .find(|candidate| candidate.source_path == "plugins/docs-plugin/skills/write-docs")
+            .expect("docs plugin skill");
+        assert_eq!(docs.plugin_name.as_deref(), Some("docs"));
+        assert!(!candidates
+            .iter()
+            .any(|candidate| candidate.source_path.contains("remote-plugin")));
+    }
+
+    #[test]
+    fn manifest_hints_do_not_suppress_recursive_fallback_for_unlisted_skills() {
+        let repo = GitHubRepoRef {
+            owner: "mattpocock".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/mattpocock/skills".to_string(),
+        };
+
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &plugin_json_grouped_snapshot())
+                .expect("candidates");
+
+        assert!(candidates
+            .iter()
+            .any(|candidate| candidate.source_path == "skills/writing/blog-post"));
     }
 
     #[test]

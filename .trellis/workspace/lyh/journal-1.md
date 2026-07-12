@@ -1284,3 +1284,138 @@ Created and completed Trellis task 07-06-update-check-failure-feedback. Added vi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 30: Add confirmed one-click platform leftover cleanup
+
+**Date**: 2026-07-08
+**Task**: Add confirmed one-click platform leftover cleanup
+**Branch**: `dev`
+
+### Summary
+
+Added a confirmed Update Center action for cleaning all platform leftovers, including cleanup-only decision aggregation, localized copy, focused tests, and full just ci verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bec41f3e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 31: GitHub import plugin grouping
+
+**Date**: 2026-07-09
+**Task**: GitHub import plugin grouping
+**Branch**: `dev`
+
+### Summary
+
+Implemented preview-only Claude plugin manifest grouping for GitHub import, added backend/frontend tests, and documented the preview contract.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0696f55e` | (see git log) |
+| `35cc8943` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 32: 修复 GitHub 导入顶层 skill 目录误判
+
+**Date**: 2026-07-10
+**Task**: 修复 GitHub 导入顶层 skill 目录误判
+**Branch**: `dev`
+
+### Summary
+
+支持仓库顶层 skill/SKILL.md 使用仓库身份导入，保留深层泛化目录过滤，修复 subpaths 误触发 PAT 指引，并补齐后端、真实向导测试与持久化契约。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3bc3b6c` | (see git log) |
+| `33dcad2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 33: 优化 SSH/WSL 技能更新性能
+
+**Date**: 2026-07-12
+**Task**: 优化 SSH/WSL 技能更新性能
+**Branch**: `dev`
+
+### Summary
+
+修复 WSL argv 与 eager probe，批量化远端 Central 写入和 copy 刷新，补充安全日志、回滚/取消测试及 WSL 性能基准。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cc22ba2e` | (see git log) |
+| `c998eb6c` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

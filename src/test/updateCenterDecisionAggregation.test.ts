@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildDeletedPlatformCopyCleanupDecisions,
   buildDecisions,
   buildInitialState,
+  countDeletedPlatformCopyPaths,
   countDecisionSelections,
   summarizeDecisionSelections,
 } from "@/components/central/updateCenter/decisionAggregation";
@@ -134,6 +136,79 @@ describe("updateCenter decision aggregation", () => {
         },
       ],
     });
+  });
+
+  it("builds cleanup-only decisions for all platform leftover paths", () => {
+    const inventory = emptyInventory({
+      updatable: [
+        {
+          state: {
+            skill_id: "has-update",
+            source_type: "github",
+            source_url: "https://github.com/example/repo",
+            ref: "main",
+            source_path: "skills/has-update",
+            status: "update_available",
+            error: null,
+          },
+        },
+      ],
+      platformDuplicates: [
+        {
+          agentId: "codex",
+          skillId: "dup-skill",
+          skillName: "dup-skill",
+          writablePaths: ["~/.agents/skills/dup-skill"],
+          pluginPaths: ["~/.codex/plugins/cache/plugin/skills/dup-skill"],
+        },
+      ],
+      deletedPlatformCopies: [
+        {
+          agentId: "codex",
+          skillId: "removed-skill",
+          skillName: "removed-skill",
+          writablePaths: [
+            "~/.agents/skills/removed-skill",
+            "~/.agents/skills/removed-skill-copy",
+            "~/.agents/skills/removed-skill",
+          ],
+        },
+        {
+          agentId: "amp",
+          skillId: "old-skill",
+          skillName: "old-skill",
+          writablePaths: ["~/.amp/skills/old-skill"],
+        },
+      ],
+    });
+
+    expect(countDeletedPlatformCopyPaths(inventory)).toBe(3);
+    expect(buildDeletedPlatformCopyCleanupDecisions(inventory, ["codex"]))
+      .toEqual({
+        allowedAgentIds: ["codex"],
+        updates: [],
+        keepMissing: [],
+        deleteMissing: [],
+        importAdditions: [],
+        skipAdditions: [],
+        unskipAdditions: [],
+        removePlatformDuplicates: [],
+        removeDeletedPlatformCopies: [
+          {
+            agentId: "codex",
+            skillId: "removed-skill",
+            paths: [
+              "~/.agents/skills/removed-skill",
+              "~/.agents/skills/removed-skill-copy",
+            ],
+          },
+          {
+            agentId: "amp",
+            skillId: "old-skill",
+            paths: ["~/.amp/skills/old-skill"],
+          },
+        ],
+      });
   });
 
   it("only defaults duplicate cleanup paths inside current-platform scope", () => {

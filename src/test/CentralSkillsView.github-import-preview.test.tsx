@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import * as S from "./centralSkillsViewTestSupport";
 
 const { renderCentralSkillsView } = S;
@@ -51,9 +51,20 @@ describe("CentralSkillsView GitHub import preview", () => {
     });
 
     fireEvent.click(screen.getByTestId("central-github-import-open"));
-    fireEvent.click(await screen.findByRole("button", { name: /检查导入内容/i }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /GitHub import wizard/i,
+    });
+    const wizard = within(dialog);
 
-    expect(await screen.findByTestId("github-import-confirm-summary")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /返回预览修改/i })).toBeInTheDocument();
+    fireEvent.click(
+      await wizard.findByRole("button", { name: /检查导入内容|Review import/i }),
+    );
+
+    expect(
+      await wizard.findByTestId("github-import-confirm-summary"),
+    ).toBeInTheDocument();
+    expect(
+      wizard.getByRole("button", { name: /返回预览修改|Back to preview/i }),
+    ).toBeInTheDocument();
   });
 });

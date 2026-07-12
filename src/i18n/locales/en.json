@@ -1323,7 +1323,13 @@
       "deletedPlatformCopies": {
         "group": "{{skill}} in {{agent}}",
         "description": "This skill no longer exists in Central. Applying will directly delete the selected platform copies.",
-        "selectPath": "Select {{skill}} for deletion: {{path}}"
+        "selectPath": "Select {{skill}} for deletion: {{path}}",
+        "cleanupAll": "Clean leftovers ({{count}})",
+        "cleanupAllApplying": "Cleaning leftovers…",
+        "cleanupAllConfirm": "Delete {{count}} platform leftover path(s)?\n\nThis only deletes platform-side copies and will not delete Central Skills.",
+        "cleanupAllSuccess": "{{count}} platform leftover path(s) cleaned",
+        "cleanupAllPartial": "{{succeeded}} platform leftover path(s) cleaned, {{failed}} failed",
+        "cleanupAllError": "Failed to clean platform leftovers: {{error}}"
       }
     },
     "sortByInstalledPlatformCount": "Installed platform count",
@@ -2218,6 +2224,7 @@
     "githubImportRepreview": "Re-preview",
     "githubImportSelectionTitle": "Previewed skills",
     "githubImportSelectionDesc": "Choose which skill to inspect and which skills to import.",
+    "githubImportPluginGroupOther": "Other",
     "githubImportSelectAllSkills": "Select all",
     "githubImportDeselectAllSkills": "Deselect all",
     "githubImportSkillDescription": "Description",

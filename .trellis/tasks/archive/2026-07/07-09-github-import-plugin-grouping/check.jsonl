@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/skill-frontmatter-parsing.md", "reason": "verify no duplicate frontmatter parsing is introduced"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "verify manifest path handling is safe and bounded"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "verify frontend data flow stays within existing store/IPC seams"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "verify backend/frontend contract and tests cover optional grouping"}

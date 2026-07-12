@@ -137,8 +137,12 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
         importResult ? "result" : preview ? "preview" : "input"
       );
       const [localResult, setLocalResult] = React.useState(importResult);
+      const lastPreviewRef = React.useRef(preview);
 
       React.useEffect(() => {
+        const previewChanged = lastPreviewRef.current !== preview;
+        lastPreviewRef.current = preview;
+
         if (!open) {
           setStep("input");
           setLocalResult(null);
@@ -152,7 +156,9 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
         }
 
         if (preview) {
-          setStep("preview");
+          setStep((current) =>
+            current === "input" || previewChanged ? "preview" : current
+          );
           return;
         }
 

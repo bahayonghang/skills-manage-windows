@@ -38,8 +38,10 @@ mkdir -p -- "$HOME/{central_skills}" && printf 'MKDIR_OK\n'"#,
     )
 }
 
-pub(super) async fn probe_ssh_target(target: &RemoteTargetConfig) -> Result<SshProbe, TargetsError> {
-    let connection = connect_ssh_target(target).await?;
+pub(super) async fn probe_ssh_target(
+    target: &RemoteTargetConfig,
+) -> Result<SshProbe, TargetsError> {
+    let connection = open_ssh_target(target)?;
     let output = connection.run_script(&remote_probe_script(), &[]).await?;
     let probe = parse_ssh_probe_output(&output)?;
 
@@ -47,7 +49,7 @@ pub(super) async fn probe_ssh_target(target: &RemoteTargetConfig) -> Result<SshP
 }
 
 pub(super) async fn probe_wsl_target(target: &WslTargetConfig) -> Result<SshProbe, TargetsError> {
-    let connection = connect_wsl_target(target).await?;
+    let connection = open_wsl_target(target)?;
     let output = connection.run_script(&remote_probe_script(), &[]).await?;
     parse_ssh_probe_output(&output)
 }
@@ -142,9 +144,7 @@ fn wsl_runner_error(error: RunnerError) -> TargetsError {
     TargetsError::io(context, error.source)
 }
 
-pub async fn connect_wsl_target(
-    target: &WslTargetConfig,
-) -> Result<ConnectedWslTarget, TargetsError> {
+pub fn open_wsl_target(target: &WslTargetConfig) -> Result<ConnectedWslTarget, TargetsError> {
     #[cfg(not(windows))]
     {
         let _ = target;
@@ -153,14 +153,10 @@ pub async fn connect_wsl_target(
 
     #[cfg(windows)]
     {
-        let connection = ConnectedWslTarget {
+        Ok(ConnectedWslTarget {
             target: target.clone(),
             runner: Arc::new(ProcessRunner),
-        };
-        connection
-            .run_command("printf '%s' connected >/dev/null")
-            .await?;
-        Ok(connection)
+        })
     }
 }
 
@@ -294,10 +290,7 @@ impl ConnectedSshTarget {
     pub async fn run_command(&self, command: &str) -> Result<String, TargetsError> {
         let mut process = self.base_command();
         process.arg(command);
-        let output = self
-            .runner
-            .run(process, None)
-            .map_err(ssh_runner_error)?;
+        let output = self.runner.run(process, None).map_err(ssh_runner_error)?;
         if output.status.success() {
             String::from_utf8(output.stdout).map_err(TargetsError::RemoteStdoutNotUtf8)
         } else {
@@ -322,10 +315,7 @@ impl ConnectedSshTarget {
     fn run_command_bytes(&self, command: &str) -> Result<Vec<u8>, TargetsError> {
         let mut process = self.base_command();
         process.arg(command);
-        let output = self
-            .runner
-            .run(process, None)
-            .map_err(ssh_runner_error)?;
+        let output = self.runner.run(process, None).map_err(ssh_runner_error)?;
         if output.status.success() {
             Ok(output.stdout)
         } else {
@@ -344,10 +334,7 @@ impl ConnectedSshTarget {
         let command = format!("test -e {}", shell_quote(path));
         let mut process = self.base_command();
         process.arg(command);
-        let output = self
-            .runner
-            .run(process, None)
-            .map_err(ssh_runner_error)?;
+        let output = self.runner.run(process, None).map_err(ssh_runner_error)?;
         match output.status.code() {
             Some(0) => Ok(true),
             Some(1) => Ok(false),
@@ -365,14 +352,11 @@ impl ConnectedSshTarget {
         );
         let mut process = self.base_command();
         process.arg(command);
-        let output = self
-            .runner
-            .run(process, None)
-            .map_err(ssh_runner_error)?;
+        let output = self.runner.run(process, None).map_err(ssh_runner_error)?;
         match output.status.code() {
             Some(0) => {
-                let stdout = String::from_utf8(output.stdout)
-                    .map_err(TargetsError::RemoteStdoutNotUtf8)?;
+                let stdout =
+                    String::from_utf8(output.stdout).map_err(TargetsError::RemoteStdoutNotUtf8)?;
                 let mut parts = stdout.trim_end().splitn(2, '\t');
                 let file_type = parts.next().unwrap_or("other").to_string();
                 let symlink_target = parts
@@ -464,7 +448,10 @@ impl ConnectedWslTarget {
         {
             hide_child_window(&mut command);
         }
-        command.arg("-d").arg(&self.target.distribution).arg("--");
+        command
+            .arg("-d")
+            .arg(&self.target.distribution)
+            .arg("--exec");
         command
     }
 
@@ -511,10 +498,7 @@ impl ConnectedWslTarget {
     pub async fn run_command(&self, command: &str) -> Result<String, TargetsError> {
         let mut process = self.base_command();
         process.arg("sh").arg("-lc").arg(command);
-        let output = self
-            .runner
-            .run(process, None)
-            .map_err(wsl_runner_error)?;
+        let output = self.runner.run(process, None).map_err(wsl_runner_error)?;
         if output.status.success() {
             String::from_utf8(output.stdout).map_err(TargetsError::WslStdoutNotUtf8)
         } else {
@@ -541,10 +525,7 @@ impl ConnectedWslTarget {
     fn run_command_bytes(&self, command: &str) -> Result<Vec<u8>, TargetsError> {
         let mut process = self.base_command();
         process.arg("sh").arg("-lc").arg(command);
-        let output = self
-            .runner
-            .run(process, None)
-            .map_err(wsl_runner_error)?;
+        let output = self.runner.run(process, None).map_err(wsl_runner_error)?;
         if output.status.success() {
             Ok(output.stdout)
         } else {
@@ -563,10 +544,7 @@ impl ConnectedWslTarget {
         let command = format!("test -e {}", shell_quote(path));
         let mut process = self.base_command();
         process.arg("sh").arg("-lc").arg(command);
-        let output = self
-            .runner
-            .run(process, None)
-            .map_err(wsl_runner_error)?;
+        let output = self.runner.run(process, None).map_err(wsl_runner_error)?;
         match output.status.code() {
             Some(0) => Ok(true),
             Some(1) => Ok(false),
@@ -584,10 +562,7 @@ impl ConnectedWslTarget {
         );
         let mut process = self.base_command();
         process.arg("sh").arg("-lc").arg(command);
-        let output = self
-            .runner
-            .run(process, None)
-            .map_err(wsl_runner_error)?;
+        let output = self.runner.run(process, None).map_err(wsl_runner_error)?;
         match output.status.code() {
             Some(0) => {
                 let stdout =

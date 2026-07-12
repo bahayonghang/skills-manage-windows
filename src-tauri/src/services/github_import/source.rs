@@ -265,7 +265,9 @@ pub(crate) fn inspect_repo_skill_candidates_from_snapshot_at_path(
                 }
             }
             Err(error) => {
-                invalid_candidates.push(invalid_candidate_from_manifest(&manifest, &error))
+                if !manifest.from_manifest_hint {
+                    invalid_candidates.push(invalid_candidate_from_manifest(&manifest, &error));
+                }
             }
         }
     }
@@ -285,24 +287,43 @@ pub(super) async fn build_remote_repo_skill_candidates_from_workspace(
 ) -> Result<Vec<RemoteSkillCandidate>, GithubImportError> {
     let direct_endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
     let manifest_paths = remote_skill_manifest_paths(connection, remote_repo_dir).await?;
-    let manifests = discover_skill_manifests_from_paths(
+    let plugin_discovery =
+        plugin_manifest_discovery_from_remote_workspace(connection, remote_repo_dir, source_path)
+            .await?;
+    let manifests = discover_skill_manifests_from_paths_with_plugin_discovery(
         manifest_paths.iter().map(String::as_str),
         source_path,
+        &plugin_discovery,
     )?;
 
     let mut candidates = Vec::with_capacity(manifests.len());
     let mut seen_names = HashSet::new();
     for manifest in manifests {
         let skill_md_remote_path = remote_join(remote_repo_dir, &manifest.skill_md_path);
-        let raw = connection
-            .read_file(&skill_md_remote_path)
-            .await
-            .map_err(|e| GithubImportError::Remote(e.to_string()))?;
-        ResourceBudget::default_skill()
+        let raw = match connection.read_file(&skill_md_remote_path).await {
+            Ok(raw) => raw,
+            Err(error) if manifest.from_manifest_hint => {
+                let _ = error;
+                continue;
+            }
+            Err(error) => return Err(GithubImportError::Remote(error.to_string())),
+        };
+        if let Err(error) = ResourceBudget::default_skill()
             .reject_file_read_size(&skill_md_remote_path, raw.len() as u64)
-            .map_err(GithubImportError::Budget)?;
-        let candidate = build_remote_skill_candidate(repo, &manifest, raw, direct_endpoint)
-            .map_err(|invalid| GithubImportError::InvalidCandidate(invalid.detail))?;
+        {
+            if manifest.from_manifest_hint {
+                continue;
+            }
+            return Err(GithubImportError::Budget(error));
+        }
+        let candidate = match build_remote_skill_candidate(repo, &manifest, raw, direct_endpoint) {
+            Ok(candidate) => candidate,
+            Err(invalid) if manifest.from_manifest_hint => {
+                let _ = invalid;
+                continue;
+            }
+            Err(invalid) => return Err(GithubImportError::InvalidCandidate(invalid.detail)),
+        };
         if is_generic_remote_skill_candidate(&candidate) {
             continue;
         }
@@ -333,7 +354,7 @@ pub(super) fn build_remote_skill_candidate(
         detail: invalid_frontmatter_message(manifest),
     })?;
 
-    let skill_id = if manifest.source_path == "." {
+    let skill_id = if manifest.source_path == "." || manifest.source_path == "skill" {
         let repo_skill_id =
             sanitize_skill_id(&repo.repo).map_err(|error| InvalidRemoteSkillCandidate {
                 source_path: manifest.source_path.clone(),
@@ -359,6 +380,7 @@ pub(super) fn build_remote_skill_candidate(
         skill_id,
         skill_name: frontmatter.name,
         description: frontmatter.description,
+        plugin_name: manifest.plugin_name.clone(),
         root_directory: manifest.root_directory.clone(),
         skill_directory_name: if manifest.source_path == "." {
             repo.repo.clone()
@@ -441,18 +463,41 @@ pub(super) struct SnapshotSkillManifest {
     pub(super) root_directory: String,
     pub(super) skill_directory_name: String,
     pub(super) skill_md_path: String,
+    pub(super) plugin_name: Option<String>,
+    pub(super) from_manifest_hint: bool,
 }
 
 pub(super) fn discover_skill_manifests(
     snapshot: &GitHubRepoSnapshot,
     source_path: Option<&str>,
 ) -> Result<Vec<SnapshotSkillManifest>, GithubImportError> {
-    discover_skill_manifests_from_paths(snapshot.files.keys().map(String::as_str), source_path)
+    let plugin_discovery = plugin_manifest_discovery_from_snapshot(snapshot, source_path)?;
+    discover_skill_manifests_from_paths_with_plugin_discovery(
+        snapshot.files.keys().map(String::as_str),
+        source_path,
+        &plugin_discovery,
+    )
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn discover_skill_manifests_from_paths<'a, I>(
     paths: I,
     source_path: Option<&str>,
+) -> Result<Vec<SnapshotSkillManifest>, GithubImportError>
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    discover_skill_manifests_from_paths_with_plugin_discovery(
+        paths,
+        source_path,
+        &PluginManifestDiscovery::default(),
+    )
+}
+
+pub(super) fn discover_skill_manifests_from_paths_with_plugin_discovery<'a, I>(
+    paths: I,
+    source_path: Option<&str>,
+    plugin_discovery: &PluginManifestDiscovery,
 ) -> Result<Vec<SnapshotSkillManifest>, GithubImportError>
 where
     I: IntoIterator<Item = &'a str>,
@@ -483,6 +528,24 @@ where
         for manifest in recursive_skill_manifests(&path_set, &base_path)? {
             insert_manifest(&mut manifests, &mut seen_source_paths, manifest);
         }
+    }
+
+    for source_path in &plugin_discovery.explicit_skill_paths {
+        let skill_md_path = skill_md_path_from_source_path(source_path)?;
+        if !path_set.contains(&skill_md_path) {
+            continue;
+        }
+        if let Some(mut manifest) = manifest_from_skill_md_path(&skill_md_path) {
+            manifest.from_manifest_hint = true;
+            insert_manifest(&mut manifests, &mut seen_source_paths, manifest);
+        }
+    }
+
+    for manifest in &mut manifests {
+        manifest.plugin_name = plugin_discovery
+            .plugin_by_source_path
+            .get(&manifest.source_path)
+            .cloned();
     }
 
     Ok(manifests)
@@ -597,6 +660,8 @@ pub(super) fn manifest_from_skill_md_path(path: &str) -> Option<SnapshotSkillMan
         root_directory,
         skill_directory_name,
         skill_md_path: normalized,
+        plugin_name: None,
+        from_manifest_hint: false,
     })
 }
 

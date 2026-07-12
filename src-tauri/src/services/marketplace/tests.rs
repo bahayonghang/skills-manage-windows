@@ -9,9 +9,9 @@ use super::{
     skills_sh_file_entries_from_snapshot, source_to_github_url, sync_registry_impl,
     RegistryCacheMetadata, RegistrySyncStatus, SyncRegistryOptions,
 };
-use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
 use crate::db;
 use crate::secrets::MockSecretStore;
+use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
 use std::collections::HashMap;
 use std::path::Path;
 use tempfile::{tempdir, TempDir};
@@ -30,6 +30,7 @@ fn marketplace_skills_from_candidates_supports_namespaced_layouts() {
                 skill_id: "openai-docs".to_string(),
                 skill_name: "openai-docs".to_string(),
                 description: Some("Docs skill".to_string()),
+                plugin_name: None,
                 root_directory: "skills/.curated".to_string(),
                 skill_directory_name: "openai-docs".to_string(),
                 download_url:
@@ -41,6 +42,7 @@ fn marketplace_skills_from_candidates_supports_namespaced_layouts() {
                 skill_id: "skill-creator".to_string(),
                 skill_name: "skill-creator".to_string(),
                 description: Some("Create skills".to_string()),
+                plugin_name: None,
                 root_directory: "skills/.system".to_string(),
                 skill_directory_name: "skill-creator".to_string(),
                 download_url:

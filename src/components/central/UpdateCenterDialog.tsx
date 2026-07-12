@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -29,7 +29,9 @@ import {
 import { UpdateCenterToolbar } from "@/components/central/updateCenter/UpdateCenterToolbar";
 import {
   buildDecisions,
+  buildDeletedPlatformCopyCleanupDecisions,
   buildInitialState,
+  countDeletedPlatformCopyPaths,
   countDecisionSelections,
   countsFromInventory,
   emptyDecisionState,
@@ -84,6 +86,7 @@ export function UpdateCenterDialog() {
 
   const [scopeKind, setScopeKind] = useState<SkillRefreshScopeKind>("all");
   const [decisions, setDecisions] = useState<DecisionState>(emptyDecisionState);
+  const [isCleaningLeftovers, setIsCleaningLeftovers] = useState(false);
   const existingSkillSources = useMemo(
     () => buildSkillConflictSourceMap(skills),
     [skills],
@@ -121,6 +124,10 @@ export function UpdateCenterDialog() {
   const totalSelected = useMemo(
     () => countDecisionSelections(decisions, inventory),
     [decisions, inventory],
+  );
+  const deletedPlatformCopyPathCount = useMemo(
+    () => countDeletedPlatformCopyPaths(inventory),
+    [inventory],
   );
   const selectionSummary = useMemo(
     () => summarizeDecisionSelections(decisions, inventory),
@@ -210,6 +217,52 @@ export function UpdateCenterDialog() {
       toast.error(
         t("central.updateCenter.applyError", { error: String(err) }),
       );
+    }
+  }
+
+  async function handleCleanAllDeletedPlatformCopies() {
+    if (!inventory || deletedPlatformCopyPathCount === 0) return;
+    const confirmed = window.confirm(
+      t("central.updateCenter.deletedPlatformCopies.cleanupAllConfirm", {
+        count: deletedPlatformCopyPathCount,
+      }),
+    );
+    if (!confirmed) return;
+    const scope = currentRefreshScope();
+    const payload = buildDeletedPlatformCopyCleanupDecisions(
+      inventory,
+      scope.kind === "platform" ? scope.agentIds ?? [] : undefined,
+    );
+    setIsCleaningLeftovers(true);
+    try {
+      const result = await apply(payload, scope);
+      const succeeded = result.removedDeletedPlatformCopyPaths.length;
+      const failedCount = result.failures.length;
+      if (failedCount === 0) {
+        toast.success(
+          t("central.updateCenter.deletedPlatformCopies.cleanupAllSuccess", {
+            count: succeeded,
+          }),
+        );
+      } else {
+        toast.error(
+          t("central.updateCenter.deletedPlatformCopies.cleanupAllPartial", {
+            succeeded,
+            failed: failedCount,
+          }),
+        );
+        for (const failure of result.failures.slice(0, 3)) {
+          toast.error(`${failure.step}: ${failure.error}`);
+        }
+      }
+    } catch (err) {
+      toast.error(
+        t("central.updateCenter.deletedPlatformCopies.cleanupAllError", {
+          error: String(err),
+        }),
+      );
+    } finally {
+      setIsCleaningLeftovers(false);
     }
   }
 
@@ -435,6 +488,32 @@ export function UpdateCenterDialog() {
           <Button
             variant="destructive"
             size="sm"
+            onClick={handleCleanAllDeletedPlatformCopies}
+            disabled={
+              isApplying
+              || isRefreshing
+              || isForcing
+              || deletedPlatformCopyPathCount === 0
+              || !inventory
+            }
+          >
+            {isCleaningLeftovers ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" />
+                {t("central.updateCenter.deletedPlatformCopies.cleanupAllApplying")}
+              </>
+            ) : (
+              <>
+                <Trash2 className="size-3.5" />
+                {t("central.updateCenter.deletedPlatformCopies.cleanupAll", {
+                  count: deletedPlatformCopyPathCount,
+                })}
+              </>
+            )}
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
             onClick={handleForceMirrorRepositories}
             disabled={
               isApplying
@@ -459,7 +538,7 @@ export function UpdateCenterDialog() {
             onClick={handleApplySelected}
             disabled={isApplying || isForcing || totalSelected === 0 || !inventory}
           >
-            {isApplying || isForcing ? (
+            {(isApplying && !isCleaningLeftovers) || isForcing ? (
               <>
                 <Loader2 className="size-3.5 animate-spin" />
                 {t(

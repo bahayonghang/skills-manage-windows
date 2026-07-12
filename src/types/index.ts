@@ -737,6 +737,7 @@ export interface GitHubSkillPreview {
   skillId: string;
   skillName: string;
   description?: string | null;
+  pluginName?: string | null;
   rootDirectory: string;
   skillDirectoryName: string;
   downloadUrl: string;

@@ -24,6 +24,59 @@ import type {
   SelectionState,
 } from "@/components/marketplace/githubImportWizardUtils";
 
+interface GitHubImportPreviewSkillSection {
+  key: string;
+  label: string | null;
+  skills: GitHubSkillPreview[];
+}
+
+function buildGitHubImportPreviewSkillSections(
+  skills: GitHubSkillPreview[],
+  otherLabel: string,
+): GitHubImportPreviewSkillSection[] {
+  const hasPluginGroups = skills.some((skill) => skill.pluginName?.trim());
+  if (!hasPluginGroups) {
+    return [{ key: "flat", label: null, skills }];
+  }
+
+  const sections: GitHubImportPreviewSkillSection[] = [];
+  const sectionByPluginName = new Map<
+    string,
+    GitHubImportPreviewSkillSection
+  >();
+  const ungroupedSkills: GitHubSkillPreview[] = [];
+
+  skills.forEach((skill) => {
+    const pluginName = skill.pluginName?.trim();
+    if (!pluginName) {
+      ungroupedSkills.push(skill);
+      return;
+    }
+
+    let section = sectionByPluginName.get(pluginName);
+    if (!section) {
+      section = {
+        key: `plugin:${pluginName}`,
+        label: pluginName,
+        skills: [],
+      };
+      sectionByPluginName.set(pluginName, section);
+      sections.push(section);
+    }
+    section.skills.push(skill);
+  });
+
+  if (ungroupedSkills.length > 0) {
+    sections.push({
+      key: "plugin:other",
+      label: otherLabel,
+      skills: ungroupedSkills,
+    });
+  }
+
+  return sections;
+}
+
 interface GitHubRepoImportPreviewWorkspaceProps {
   preview: GitHubRepoPreview;
   selectionState: Record<string, SelectionState>;
@@ -83,6 +136,10 @@ export function GitHubRepoImportPreviewWorkspace({
   onRegenerateAiSummary,
 }: GitHubRepoImportPreviewWorkspaceProps) {
   const { t } = useTranslation();
+  const skillSections = buildGitHubImportPreviewSkillSections(
+    preview.skills,
+    t("marketplace.githubImportPluginGroupOther"),
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
@@ -142,102 +199,127 @@ export function GitHubRepoImportPreviewWorkspace({
             className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3"
             data-testid="github-import-summary-list"
           >
-            {preview.skills.map((skill) => {
-              const state = selectionState[skill.sourcePath];
-              const selected = state?.selected ?? true;
-              const isActive =
-                selectedPreviewSkill?.sourcePath === skill.sourcePath;
-
-              const resolution =
-                state?.resolution ?? (skill.conflict ? "skip" : "overwrite");
-
-              return (
-                <div
-                  key={skill.sourcePath}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onSelectSkillPath(skill.sourcePath)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onSelectSkillPath(skill.sourcePath);
-                    }
-                  }}
-                  className={cn(
-                    "w-full rounded-xl border p-3 text-left transition-colors",
-                    isActive
-                      ? "border-primary/40 bg-primary/10 shadow-sm"
-                      : "border-border/70 bg-background hover:border-primary/20 hover:bg-muted/30",
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <input
-                      aria-label={t("marketplace.selectSkill")}
-                      type="checkbox"
-                      className="mt-1"
-                      checked={selected}
-                      onChange={(event) => {
-                        event.stopPropagation();
-                        onToggleSkillSelected(skill, event.target.checked);
-                      }}
-                      onClick={(event) => event.stopPropagation()}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="truncate text-sm font-semibold">
-                          {skill.skillName}
-                        </div>
-                      </div>
-                      <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                        {skill.description ||
-                          t("marketplace.githubImportNoDescription")}
-                      </div>
-                      {skill.conflict ? (
-                        <div
-                          className="mt-3 inline-flex max-w-full items-center gap-1 rounded-lg border border-border/70 bg-muted/25 p-0.5"
-                          role="group"
-                          aria-label={t(
-                            "marketplace.githubImportInlineResolutionLabel",
-                            { name: skill.skillName },
-                          )}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          {(["skip", "overwrite"] as const).map(
-                            (nextResolution) => {
-                              const isCurrent = resolution === nextResolution;
-                              return (
-                                <Button
-                                  key={nextResolution}
-                                  type="button"
-                                  variant={isCurrent ? "default" : "ghost"}
-                                  size="sm"
-                                  className={cn(
-                                    "h-7 rounded-md px-2.5 text-[11px]",
-                                    isCurrent
-                                      ? "shadow-sm"
-                                      : "text-muted-foreground hover:text-foreground",
-                                  )}
-                                  aria-pressed={isCurrent}
-                                  onClick={() =>
-                                    onUpdateSelection(skill, {
-                                      resolution: nextResolution,
-                                    })
-                                  }
-                                >
-                                  {t(
-                                    `marketplace.duplicateResolution.${nextResolution}`,
-                                  )}
-                                </Button>
-                              );
-                            },
-                          )}
-                        </div>
-                      ) : null}
+            {skillSections.map((section) => (
+              <div
+                key={section.key}
+                className="space-y-2"
+                data-testid={
+                  section.label ? "github-import-skill-group" : undefined
+                }
+              >
+                {section.label ? (
+                  <div className="flex items-center justify-between gap-3 px-1 pt-1">
+                    <div
+                      className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                      data-testid="github-import-skill-group-title"
+                    >
+                      {section.label}
                     </div>
+                    <span className="shrink-0 rounded-full border border-border/70 bg-background/80 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      {section.skills.length}
+                    </span>
                   </div>
-                </div>
-              );
-            })}
+                ) : null}
+                {section.skills.map((skill) => {
+                  const state = selectionState[skill.sourcePath];
+                  const selected = state?.selected ?? true;
+                  const isActive =
+                    selectedPreviewSkill?.sourcePath === skill.sourcePath;
+
+                  const resolution =
+                    state?.resolution ??
+                    (skill.conflict ? "skip" : "overwrite");
+
+                  return (
+                    <div
+                      key={skill.sourcePath}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onSelectSkillPath(skill.sourcePath)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onSelectSkillPath(skill.sourcePath);
+                        }
+                      }}
+                      className={cn(
+                        "w-full rounded-xl border p-3 text-left transition-colors",
+                        isActive
+                          ? "border-primary/40 bg-primary/10 shadow-sm"
+                          : "border-border/70 bg-background hover:border-primary/20 hover:bg-muted/30",
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          aria-label={t("marketplace.selectSkill")}
+                          type="checkbox"
+                          className="mt-1"
+                          checked={selected}
+                          onChange={(event) => {
+                            event.stopPropagation();
+                            onToggleSkillSelected(skill, event.target.checked);
+                          }}
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="truncate text-sm font-semibold">
+                              {skill.skillName}
+                            </div>
+                          </div>
+                          <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                            {skill.description ||
+                              t("marketplace.githubImportNoDescription")}
+                          </div>
+                          {skill.conflict ? (
+                            <div
+                              className="mt-3 inline-flex max-w-full items-center gap-1 rounded-lg border border-border/70 bg-muted/25 p-0.5"
+                              role="group"
+                              aria-label={t(
+                                "marketplace.githubImportInlineResolutionLabel",
+                                { name: skill.skillName },
+                              )}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              {(["skip", "overwrite"] as const).map(
+                                (nextResolution) => {
+                                  const isCurrent =
+                                    resolution === nextResolution;
+                                  return (
+                                    <Button
+                                      key={nextResolution}
+                                      type="button"
+                                      variant={isCurrent ? "default" : "ghost"}
+                                      size="sm"
+                                      className={cn(
+                                        "h-7 rounded-md px-2.5 text-[11px]",
+                                        isCurrent
+                                          ? "shadow-sm"
+                                          : "text-muted-foreground hover:text-foreground",
+                                      )}
+                                      aria-pressed={isCurrent}
+                                      onClick={() =>
+                                        onUpdateSelection(skill, {
+                                          resolution: nextResolution,
+                                        })
+                                      }
+                                    >
+                                      {t(
+                                        `marketplace.duplicateResolution.${nextResolution}`,
+                                      )}
+                                    </Button>
+                                  );
+                                },
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </div>
 

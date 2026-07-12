@@ -27,6 +27,7 @@ mod archive;
 mod error;
 mod import;
 mod pat;
+mod plugin_manifest;
 mod preview;
 mod preview_workspace;
 mod progress;
@@ -40,6 +41,7 @@ mod types;
 #[cfg(test)]
 use archive::*;
 use import::*;
+use plugin_manifest::*;
 use preview_workspace::*;
 use progress::*;
 use raw_http::*;

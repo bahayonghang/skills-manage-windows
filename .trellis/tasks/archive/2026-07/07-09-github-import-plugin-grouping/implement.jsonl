@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/skill-frontmatter-parsing.md", "reason": "github_import must reuse the shared frontmatter extraction contract while extending candidate metadata"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "manifest paths must stay normalized and repo-relative without introducing path policy drift"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "frontend changes must keep IPC behind store/adapters and use typed preview DTOs"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "feature adds backend DTO data consumed by frontend grouping"}

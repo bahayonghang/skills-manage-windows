@@ -43,6 +43,13 @@ pub enum CentralUpdatesError {
     #[error("{0}")]
     Remote(String),
 
+    /// Batch archive/protocol failures that are not tied to one IO source.
+    #[error("{0}")]
+    Batch(String),
+
+    #[error("Central update was cancelled.")]
+    BatchCancelled,
+
     // ── Update selection / state validation ─────────────────────────────────
     #[error("Select at least one Central skill to update.")]
     NoUpdateSelection,

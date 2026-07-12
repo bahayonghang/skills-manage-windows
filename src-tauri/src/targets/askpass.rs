@@ -34,9 +34,7 @@ pub(super) const ASKPASS_HELPER_FILE_PREFIX: &str = "skillport-ssh-askpass-";
 #[cfg(not(windows))]
 pub(super) const ASKPASS_HELPER_MAX_AGE_SECS: u64 = 60 * 60;
 
-pub async fn connect_ssh_target(
-    target: &RemoteTargetConfig,
-) -> Result<ConnectedSshTarget, TargetsError> {
+pub fn open_ssh_target(target: &RemoteTargetConfig) -> Result<ConnectedSshTarget, TargetsError> {
     let password = match target.auth_method {
         SshAuthMethod::Key => None,
         SshAuthMethod::Password => Some(load_target_password(target)?),
@@ -45,16 +43,12 @@ pub async fn connect_ssh_target(
         Some(_) => Some(create_askpass_helper()?),
         None => None,
     };
-    let connection = ConnectedSshTarget {
+    Ok(ConnectedSshTarget {
         target: target.clone(),
         password,
         askpass_helper,
         runner: Arc::new(ProcessRunner),
-    };
-    connection
-        .run_command("printf '%s' connected >/dev/null")
-        .await?;
-    Ok(connection)
+    })
 }
 
 #[cfg(windows)]

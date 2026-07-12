@@ -12,6 +12,7 @@ import type {
   SkillsShSkill,
   TargetSummary,
 } from "@/types";
+import { looksLikeGitHubAuthGuidance } from "@/components/marketplace/githubImportWizardUtils";
 import { isRemoteLikeTarget, requiresSshPasswordRepair } from "@/lib/targetKind";
 
 const mockLoadRegistries = vi.fn();
@@ -337,7 +338,7 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
                   onChange={(event) => onRepoUrlChange(event.target.value)}
                 />
               </label>
-              {previewError?.match(/github|rate limit|personal access token|pat|settings/i) ? (
+              {previewError && looksLikeGitHubAuthGuidance(previewError) ? (
                 <div>GitHub Personal Access Token</div>
               ) : null}
             </div>
