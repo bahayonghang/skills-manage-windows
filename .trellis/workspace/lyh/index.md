@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 33
+- **Total Sessions**: 34
 - **Last Active**: 2026-07-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1421 | Active |
+| `journal-1.md` | ~1455 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 34 | 2026-07-12 | 完成字体 fallback 与设置界面优化 | `5178d84b86f1bb39ed2ed6201bee84eef633b89e`, `da2dad135224ad9ac3cefb8e2c0a293e1c26f382` | `dev` |
 | 33 | 2026-07-12 | 优化 SSH/WSL 技能更新性能 | `cc22ba2e`, `c998eb6c` | `dev` |
 | 32 | 2026-07-10 | 修复 GitHub 导入顶层 skill 目录误判 | `3bc3b6c`, `33dcad2` | `dev` |
 | 31 | 2026-07-09 | GitHub import plugin grouping | `0696f55e`, `35cc8943` | `dev` |
