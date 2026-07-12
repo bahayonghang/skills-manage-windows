@@ -404,12 +404,12 @@ describe("SettingsView", () => {
 
   // ── Rendering ─────────────────────────────────────────────────────────────
 
-  it("renders the settings header", () => {
+  it("renders one page heading without a duplicate settings banner", () => {
     setupMocks();
     renderSettingsView();
-    const heading = screen.getByRole("heading", { name: "设置" });
-    expect(heading).toBeTruthy();
+    const heading = screen.getByRole("heading", { name: "外观", level: 1 });
     expect(heading).toHaveClass("font-heading");
+    expect(screen.queryByRole("heading", { name: "设置" })).toBeNull();
   });
 
   it("renders the github token section", () => {
@@ -834,20 +834,13 @@ describe("SettingsView", () => {
     expect(screen.getByText("应用版本")).toBeTruthy();
   });
 
-  it("applies stable section tones to settings cards and page navigation", () => {
+  it("renders flat settings sections and stable page navigation", () => {
     setupMocks();
     const { container } = renderSettingsView("/settings/integrations");
 
-    expect(
-      container.querySelector(
-        '[data-settings-section="github-pat"][data-settings-section-tone="github-pat"]'
-      )
-    ).toBeTruthy();
-    expect(
-      container.querySelector(
-        '[data-settings-section="ai-provider"][data-settings-section-tone="ai-provider"]'
-      )
-    ).toBeTruthy();
+    expect(container.querySelector('[data-settings-section="github-pat"]')).toBeTruthy();
+    expect(container.querySelector('[data-settings-section="ai-provider"]')).toBeTruthy();
+    expect(container.querySelector("[data-settings-section-tone]")).toBeNull();
 
     expect(
       container.querySelector(
@@ -879,14 +872,11 @@ describe("SettingsView", () => {
     setupMocks();
     const { container } = renderSettingsView("/settings/connections");
 
-    expect(screen.getByRole("heading", { name: "设置" })).toHaveClass(
-      "font-heading"
-    );
     expect(screen.getByRole("heading", { name: "连接与同步" })).toHaveClass(
       "font-heading"
     );
     expect(
-      container.querySelector('[data-slot="card-title"]')
+      container.querySelector('[data-settings-section] h3')
     ).toHaveClass("font-heading");
     expect(
       screen
@@ -1780,7 +1770,9 @@ describe("SettingsView", () => {
     setupMocks();
     renderSettingsView("/settings");
     const rosewaterSwatch = screen.getByRole("radio", { name: "玫瑰水" });
-    expect(rosewaterSwatch.style.backgroundColor).toBe("var(--ctp-rosewater)");
+    expect(
+      (rosewaterSwatch.firstElementChild as HTMLElement).style.backgroundColor
+    ).toBe("var(--ctp-rosewater)");
   });
 
   it("keeps language and font scale controls operable with aria-pressed", () => {
@@ -1818,39 +1810,88 @@ describe("SettingsView", () => {
     expect(screen.queryByLabelText("自定义正文字体族")).toBeNull();
 
     const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
-    fireEvent.click(within(displayGroup).getByRole("button", { name: /自定义/ }));
+    fireEvent.change(within(displayGroup).getByLabelText("标题字体"), {
+      target: { value: "custom" },
+    });
 
     expect(within(displayGroup).getByLabelText("自定义标题字体族")).toBeTruthy();
     expect(screen.queryByLabelText("自定义正文字体族")).toBeNull();
 
     const bodyGroup = screen.getByRole("group", { name: "正文字体选项" });
-    fireEvent.click(within(bodyGroup).getByRole("button", { name: /自定义/ }));
+    fireEvent.change(within(bodyGroup).getByLabelText("正文字体"), {
+      target: { value: "custom" },
+    });
 
     expect(within(displayGroup).getByLabelText("自定义标题字体族")).toBeTruthy();
     expect(within(bodyGroup).getByLabelText("自定义正文字体族")).toBeTruthy();
   });
 
-  it("updates the preview specimen chips from selected font and scale state", () => {
+  it("updates font selectors, independent fallbacks, and mixed specimens", () => {
     setupMocks();
     renderSettingsView("/settings");
 
-    expect(screen.getByText("Midnight Type Lab")).toBeTruthy();
-    expect(screen.getByLabelText("标题字体 Geist Sans")).toBeTruthy();
-    expect(screen.getByLabelText("正文字体 JetBrains Mono")).toBeTruthy();
-    expect(screen.getByLabelText("字号缩放 默认")).toBeTruthy();
+    expect(screen.getAllByText("SkillPort 技能管理")).toHaveLength(2);
 
     const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
     const bodyGroup = screen.getByRole("group", { name: "正文字体选项" });
 
-    fireEvent.click(
-      within(displayGroup).getByRole("button", { name: /Instrument Serif/ })
-    );
-    fireEvent.click(within(bodyGroup).getByRole("button", { name: /Inter/ }));
+    fireEvent.change(within(displayGroup).getByLabelText("标题字体"), {
+      target: { value: "serif" },
+    });
+    fireEvent.change(within(bodyGroup).getByLabelText("正文字体"), {
+      target: { value: "inter" },
+    });
+    fireEvent.change(within(displayGroup).getByLabelText("标题中文 fallback"), {
+      target: { value: "custom" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /宽松/ }));
 
-    expect(screen.getByLabelText("标题字体 Instrument Serif")).toBeTruthy();
-    expect(screen.getByLabelText("正文字体 Inter")).toBeTruthy();
-    expect(screen.getByLabelText("字号缩放 宽松")).toBeTruthy();
+    expect(within(displayGroup).getByLabelText("标题字体")).toHaveValue("serif");
+    expect(within(bodyGroup).getByLabelText("正文字体")).toHaveValue("inter");
+    expect(
+      within(displayGroup).getByLabelText("自定义标题中文 fallback 字体族")
+    ).toBeTruthy();
+    expect(
+      within(bodyGroup).queryByLabelText("自定义正文中文 fallback 字体族")
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: /宽松/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("persists display and body Chinese fallbacks to independent settings keys", async () => {
+    setupMocks();
+    renderSettingsView("/settings");
+
+    const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
+    const bodyGroup = screen.getByRole("group", { name: "正文字体选项" });
+
+    fireEvent.change(within(displayGroup).getByLabelText("标题中文 fallback"), {
+      target: { value: "sourceHanSerif" },
+    });
+    fireEvent.change(within(bodyGroup).getByLabelText("正文中文 fallback"), {
+      target: { value: "custom" },
+    });
+    fireEvent.change(
+      within(bodyGroup).getByLabelText("自定义正文中文 fallback 字体族"),
+      { target: { value: "Noto Serif CJK SC" } },
+    );
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "display_chinese_fallback_v1",
+        value: "sourceHanSerif",
+      });
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "body_chinese_fallback_v1",
+        value: "custom",
+      });
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "body_chinese_fallback_custom_v1",
+        value: "Noto Serif CJK SC",
+      });
+    });
   });
 
   it("toggles coding group visibility from settings", async () => {

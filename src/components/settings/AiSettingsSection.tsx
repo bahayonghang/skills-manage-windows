@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { SecretValueInput } from "@/components/settings/SecretValueInput";
-import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
+import { SettingsSection } from "@/components/settings/SettingsSection";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -92,7 +92,7 @@ export function AiSettingsSection({
   }, [aiSettings.provider, aiSettings.apiKey, aiApiKeyState.configured]);
 
   return (
-    <SettingsCollapsibleCard
+    <SettingsSection
       sectionId="ai-provider"
       title={t("settings.aiProviderTitle")}
       description={t("settings.aiProviderDesc")}
@@ -343,7 +343,7 @@ export function AiSettingsSection({
           />
         )}
       </div>
-    </SettingsCollapsibleCard>
+    </SettingsSection>
   );
 }
 

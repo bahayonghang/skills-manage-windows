@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
-import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
+import { SettingsSection } from "@/components/settings/SettingsSection";
 import { Switch } from "@/components/ui/switch";
 import { formatPathForDisplay } from "@/lib/path";
 import type { ScanDirectory } from "@/types";
@@ -36,7 +36,7 @@ export function ScanDirectoriesSettingsSection({
   const builtinDirs = scanDirectories.filter((dir) => dir.is_builtin);
 
   return (
-    <SettingsCollapsibleCard
+    <SettingsSection
       sectionId="scan-directories"
       title={t("settings.scanDirs")}
       description={t("settings.scanDirsDesc")}
@@ -110,7 +110,7 @@ export function ScanDirectoriesSettingsSection({
             )}
           </div>
         )}
-    </SettingsCollapsibleCard>
+    </SettingsSection>
   );
 }
 

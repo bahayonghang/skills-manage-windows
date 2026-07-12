@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
+import { SettingsSection } from "@/components/settings/SettingsSection";
 import type { TargetSummary } from "@/types";
 
 import { RemoteTargetRow, SshTargetForm, WslTargetForm } from "./RemoteTargetsSettingsControls";
@@ -143,7 +143,7 @@ export function RemoteTargetsSettingsSection({
   );
 
   return (
-    <SettingsCollapsibleCard
+    <SettingsSection
       sectionId="remote-targets"
       title={t("targets.title")}
       description={t("targets.description")}
@@ -233,6 +233,6 @@ export function RemoteTargetsSettingsSection({
           <p>{t("targets.wslHint")}</p>
         </div>
       </div>
-    </SettingsCollapsibleCard>
+    </SettingsSection>
   );
 }
