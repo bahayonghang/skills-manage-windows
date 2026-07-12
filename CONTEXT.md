@@ -101,6 +101,16 @@ SkillPort 默认本地优先。元数据、集合、扫描结果、设置和 AI 
 ~/.skillsmanage/db.sqlite
 ```
 
+## 外观字体词汇
+
+### Primary Font
+
+字体角色当前选中的预设或 custom family，位于 CSS 字体链首位。Display 与 Body 各自拥有一个 Primary Font。
+
+### Chinese Fallback Font
+
+追加在 Primary Font 后、用于补齐其缺失中文字形的可选字体。Display 与 Body 各自拥有独立值；它遵循标准 CSS 缺字 fallback，不保证在 Primary Font 已含中文字形时强制接管中文。
+
 ## 架构走查约束
 
 ### 路径语义
