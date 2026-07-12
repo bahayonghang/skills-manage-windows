@@ -1654,7 +1654,13 @@
       "languageGroup": "语言",
       "languageGroupDesc": "设置界面显示语言。",
       "typographyGroup": "字体",
-      "typographyGroupDesc": "分别设置标题、正文及其中文 fallback。",
+      "typographyGroupDesc": "分别设置亮色与暗色主题的标题、正文及中文 fallback。",
+      "fontThemeMode": "主题字体",
+      "fontThemeCurrentSuffix": "（当前）",
+      "fontTheme": {
+        "light": "亮色",
+        "dark": "暗色"
+      },
       "densityGroup": "密度",
       "densityGroupDesc": "调整全局基础字号。",
       "displayFontOptionsLabel": "标题字体选项",

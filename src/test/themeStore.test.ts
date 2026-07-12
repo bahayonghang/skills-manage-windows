@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { useThemeStore, ThemeFlavor, ACCENT_NAMES, THEME_FLAVORS } from "../stores/themeStore";
+import {
+  ACCENT_NAMES,
+  THEME_FLAVORS,
+  fontThemeModeForFlavor,
+  type ThemeFlavor,
+  useThemeStore,
+} from "../stores/themeStore";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +39,24 @@ describe("themeStore", () => {
 
   afterEach(() => {
     resetStore();
+  });
+
+  it("classifies every flavor into its shared font theme mode", () => {
+    expect(
+      Object.fromEntries(
+        THEME_FLAVORS.map((flavor) => [
+          flavor,
+          fontThemeModeForFlavor(flavor),
+        ]),
+      ),
+    ).toEqual({
+      mocha: "dark",
+      macchiato: "dark",
+      frappe: "dark",
+      latte: "light",
+      "claude-light": "light",
+      "claude-dark": "dark",
+    });
   });
 
   // ── Initial State ─────────────────────────────────────────────────────────

@@ -1654,7 +1654,13 @@
       "languageGroup": "Language",
       "languageGroupDesc": "Set the interface language.",
       "typographyGroup": "Typography",
-      "typographyGroupDesc": "Set display and body fonts with independent Chinese fallbacks.",
+      "typographyGroupDesc": "Set display, body, and Chinese fallback fonts for light and dark themes.",
+      "fontThemeMode": "Theme fonts",
+      "fontThemeCurrentSuffix": " (Current)",
+      "fontTheme": {
+        "light": "Light",
+        "dark": "Dark"
+      },
       "densityGroup": "Density",
       "densityGroupDesc": "Adjust the global base type size.",
       "displayFontOptionsLabel": "Display font options",

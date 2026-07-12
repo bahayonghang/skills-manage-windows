@@ -22,15 +22,15 @@ vi.mock("../stores/platformStore", () => ({
   usePlatformStore: vi.fn(),
 }));
 
-vi.mock("../stores/themeStore", () => ({
-  useThemeStore: vi.fn(),
-  ACCENT_NAMES: [
-    "rosewater", "flamingo", "pink", "mauve", "red", "maroon",
-    "peach", "yellow", "green", "teal", "sky", "sapphire",
-    "blue", "lavender",
-  ],
-  THEME_FLAVORS: ["mocha", "macchiato", "frappe", "latte", "claude-light", "claude-dark"],
-}));
+vi.mock("../stores/themeStore", async () => {
+  const actual = await vi.importActual<typeof import("../stores/themeStore")>(
+    "../stores/themeStore",
+  );
+  return {
+    ...actual,
+    useThemeStore: vi.fn(),
+  };
+});
 
 vi.mock("../stores/targetStore", () => ({
   useTargetStore: vi.fn(),
@@ -61,7 +61,7 @@ vi.mock("@/lib/ipc", () => ({
 
 import { useSettingsStore } from "../stores/settingsStore";
 import { usePlatformStore } from "../stores/platformStore";
-import { useThemeStore } from "../stores/themeStore";
+import { useThemeStore, type ThemeFlavor } from "../stores/themeStore";
 import { useTargetStore } from "../stores/targetStore";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
 import { useMarketplaceStore } from "../stores/marketplaceStore";
@@ -216,7 +216,7 @@ function setupMocks({
   loadCentralSkills = vi.fn(),
   loadMarketplaceRegistries = vi.fn(),
   loadMarketplaceSkills = vi.fn(),
-  flavor = "mocha" as const,
+  flavor = "mocha" as ThemeFlavor,
   setFlavor = vi.fn(),
   accent = "lavender" as const,
   setAccent = vi.fn(),
@@ -383,14 +383,18 @@ function setupMocks({
   );
 }
 
-function renderSettingsView(initialEntry = "/settings") {
-  return render(
+function settingsViewElement(initialEntry = "/settings") {
+  return (
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/settings/*" element={<SettingsView />} />
       </Routes>
     </MemoryRouter>
   );
+}
+
+function renderSettingsView(initialEntry = "/settings") {
+  return render(settingsViewElement(initialEntry));
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -1711,6 +1715,61 @@ describe("SettingsView", () => {
     expect(setFlavor).toHaveBeenCalledWith("latte");
   });
 
+  it("edits light and dark font modes without switching the app theme", async () => {
+    const setFlavor = vi.fn();
+    setupMocks({ flavor: "mocha", setFlavor });
+    renderSettingsView("/settings");
+
+    const darkMode = screen.getByRole("button", { name: /暗色.*当前/ });
+    const lightMode = screen.getByRole("button", { name: /^亮色$/ });
+    expect(darkMode).toHaveAttribute("aria-pressed", "true");
+    expect(lightMode).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(lightMode);
+
+    expect(lightMode).toHaveAttribute("aria-pressed", "true");
+    expect(darkMode).toHaveAttribute("aria-pressed", "false");
+    const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
+    fireEvent.change(within(displayGroup).getByLabelText("标题字体"), {
+      target: { value: "serif" },
+    });
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "display_font_light_v2",
+        value: "serif",
+      });
+    });
+    expect(setFlavor).not.toHaveBeenCalled();
+  });
+
+  it("updates the current marker without changing the selected font editor", () => {
+    setupMocks({ flavor: "mocha" });
+    const view = renderSettingsView("/settings");
+
+    fireEvent.click(screen.getByRole("button", { name: /^亮色$/ }));
+    expect(screen.getByRole("button", { name: /^亮色$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    setupMocks({ flavor: "latte" });
+    view.rerender(settingsViewElement("/settings"));
+    expect(
+      screen.getByRole("button", { name: /亮色.*当前/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    setupMocks({ flavor: "claude-dark" });
+    view.rerender(settingsViewElement("/settings"));
+    expect(screen.getByRole("button", { name: /^亮色$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("button", { name: /暗色.*当前/ }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("each flavor button shows a color dot", () => {
     setupMocks();
     renderSettingsView("/settings");
@@ -1854,10 +1913,52 @@ describe("SettingsView", () => {
     expect(
       within(bodyGroup).queryByLabelText("自定义正文中文 fallback 字体族")
     ).toBeNull();
+    expect(
+      (within(displayGroup).getByText("SkillPort 技能管理").parentElement as HTMLElement)
+        .style.fontFamily,
+    ).toContain("Instrument Serif");
+    expect(
+      (within(bodyGroup).getByText("SkillPort 技能管理").parentElement as HTMLElement)
+        .style.fontFamily,
+    ).toContain("Inter Variable");
     expect(screen.getByRole("button", { name: /宽松/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
+  });
+
+  it("merges an early font edit with untouched loaded fields", async () => {
+    let releaseReads!: () => void;
+    const readsReleased = new Promise<void>((resolve) => {
+      releaseReads = resolve;
+    });
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "get_setting") {
+        await readsReleased;
+        const key = (args as { key: string }).key;
+        return key === "body_font_dark_v2" ? "geist" : null;
+      }
+      return undefined;
+    });
+    setupMocks({ flavor: "mocha" });
+    renderSettingsView("/settings");
+
+    const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
+    fireEvent.change(within(displayGroup).getByLabelText("标题字体"), {
+      target: { value: "serif" },
+    });
+    releaseReads();
+
+    await waitFor(() => {
+      expect(within(displayGroup).getByLabelText("标题字体")).toHaveValue(
+        "serif",
+      );
+      expect(
+        within(
+          screen.getByRole("group", { name: "正文字体选项" }),
+        ).getByLabelText("正文字体"),
+      ).toHaveValue("geist");
+    });
   });
 
   it("persists display and body Chinese fallbacks to independent settings keys", async () => {
@@ -1880,15 +1981,15 @@ describe("SettingsView", () => {
 
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith("set_setting", {
-        key: "display_chinese_fallback_v1",
+        key: "display_chinese_fallback_dark_v2",
         value: "sourceHanSerif",
       });
       expect(invoke).toHaveBeenCalledWith("set_setting", {
-        key: "body_chinese_fallback_v1",
+        key: "body_chinese_fallback_dark_v2",
         value: "custom",
       });
       expect(invoke).toHaveBeenCalledWith("set_setting", {
-        key: "body_chinese_fallback_custom_v1",
+        key: "body_chinese_fallback_custom_dark_v2",
         value: "Noto Serif CJK SC",
       });
     });

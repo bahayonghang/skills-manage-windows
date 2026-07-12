@@ -30,14 +30,17 @@ interface SettingsSectionProps {
 ## Appearance 结构
 
 - 固定按 Theme、Language、Typography、Density 分组。
-- Display 与 Body 各自提供 Primary、Chinese Fallback、按需 Custom 输入和混排 specimen。
+- 分组说明栏使用约 10-12rem 固定轨道，内容列占剩余空间；禁止嵌套比例 label/value 网格制造宽屏中间空洞。
+- Typography 顶部提供 Light/Dark segmented editor，默认当前主题 mode；按钮以可见“当前”文字标明 active mode，切换 editor 不得切换 Theme flavor。
+- Display 与 Body 各自提供 Primary、Chinese Fallback、按需 Custom 输入和混排 specimen；宽内容区并排、窄内容区堆叠，不增加 role 卡片。
+- active mode 编辑实时应用；inactive mode 只更新其 setting 与 specimen。specimen 必须复用字体边界的安全解析结果。
 - 选择控件和按钮最小 hit area 40px，必须有可访问名称与可见 focus；窄窗口允许 label/value 换行，但不得产生水平不可达内容。
 - Flavor、accent、language、font、scale 的业务语义继续由原 store/API 负责，视觉组件不新增第二套状态模型。
 
 ## Tests Required
 
 - `SettingsView.test.tsx` 锁定单一 `h1`、扁平导航、section 折叠持久化、Appearance 控件和非 Appearance 业务行为。
-- 视觉变更检查 900x600、1200x800、1440x900；自动化工具不可用时必须明确记录未验证项，不得声明通过。
+- 视觉变更检查 900x600、1200x800、1440x900、440x900；自动化工具不可用时必须明确记录未验证项，不得声明通过。
 
 ## Wrong vs Correct
 

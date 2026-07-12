@@ -10,6 +10,8 @@ export type ThemeFlavor =
   | "claude-light"
   | "claude-dark";
 
+export type FontThemeMode = "light" | "dark";
+
 export const THEME_FLAVORS: ThemeFlavor[] = [
   "mocha",
   "macchiato",
@@ -18,6 +20,12 @@ export const THEME_FLAVORS: ThemeFlavor[] = [
   "claude-light",
   "claude-dark",
 ];
+
+export function fontThemeModeForFlavor(
+  flavor: ThemeFlavor,
+): FontThemeMode {
+  return flavor === "latte" || flavor === "claude-light" ? "light" : "dark";
+}
 
 /** The 14 Catppuccin accent color names (same order as the Obsidian theme). */
 export type CatppuccinAccent =
