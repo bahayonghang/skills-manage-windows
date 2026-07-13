@@ -22,15 +22,15 @@ vi.mock("../stores/platformStore", () => ({
   usePlatformStore: vi.fn(),
 }));
 
-vi.mock("../stores/themeStore", () => ({
-  useThemeStore: vi.fn(),
-  ACCENT_NAMES: [
-    "rosewater", "flamingo", "pink", "mauve", "red", "maroon",
-    "peach", "yellow", "green", "teal", "sky", "sapphire",
-    "blue", "lavender",
-  ],
-  THEME_FLAVORS: ["mocha", "macchiato", "frappe", "latte", "claude-light", "claude-dark"],
-}));
+vi.mock("../stores/themeStore", async () => {
+  const actual = await vi.importActual<typeof import("../stores/themeStore")>(
+    "../stores/themeStore",
+  );
+  return {
+    ...actual,
+    useThemeStore: vi.fn(),
+  };
+});
 
 vi.mock("../stores/targetStore", () => ({
   useTargetStore: vi.fn(),
@@ -61,7 +61,7 @@ vi.mock("@/lib/ipc", () => ({
 
 import { useSettingsStore } from "../stores/settingsStore";
 import { usePlatformStore } from "../stores/platformStore";
-import { useThemeStore } from "../stores/themeStore";
+import { useThemeStore, type ThemeFlavor } from "../stores/themeStore";
 import { useTargetStore } from "../stores/targetStore";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
 import { useMarketplaceStore } from "../stores/marketplaceStore";
@@ -216,7 +216,7 @@ function setupMocks({
   loadCentralSkills = vi.fn(),
   loadMarketplaceRegistries = vi.fn(),
   loadMarketplaceSkills = vi.fn(),
-  flavor = "mocha" as const,
+  flavor = "mocha" as ThemeFlavor,
   setFlavor = vi.fn(),
   accent = "lavender" as const,
   setAccent = vi.fn(),
@@ -383,14 +383,18 @@ function setupMocks({
   );
 }
 
-function renderSettingsView(initialEntry = "/settings") {
-  return render(
+function settingsViewElement(initialEntry = "/settings") {
+  return (
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/settings/*" element={<SettingsView />} />
       </Routes>
     </MemoryRouter>
   );
+}
+
+function renderSettingsView(initialEntry = "/settings") {
+  return render(settingsViewElement(initialEntry));
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -404,12 +408,12 @@ describe("SettingsView", () => {
 
   // ── Rendering ─────────────────────────────────────────────────────────────
 
-  it("renders the settings header", () => {
+  it("renders one page heading without a duplicate settings banner", () => {
     setupMocks();
     renderSettingsView();
-    const heading = screen.getByRole("heading", { name: "设置" });
-    expect(heading).toBeTruthy();
+    const heading = screen.getByRole("heading", { name: "外观", level: 1 });
     expect(heading).toHaveClass("font-heading");
+    expect(screen.queryByRole("heading", { name: "设置" })).toBeNull();
   });
 
   it("renders the github token section", () => {
@@ -834,20 +838,13 @@ describe("SettingsView", () => {
     expect(screen.getByText("应用版本")).toBeTruthy();
   });
 
-  it("applies stable section tones to settings cards and page navigation", () => {
+  it("renders flat settings sections and stable page navigation", () => {
     setupMocks();
     const { container } = renderSettingsView("/settings/integrations");
 
-    expect(
-      container.querySelector(
-        '[data-settings-section="github-pat"][data-settings-section-tone="github-pat"]'
-      )
-    ).toBeTruthy();
-    expect(
-      container.querySelector(
-        '[data-settings-section="ai-provider"][data-settings-section-tone="ai-provider"]'
-      )
-    ).toBeTruthy();
+    expect(container.querySelector('[data-settings-section="github-pat"]')).toBeTruthy();
+    expect(container.querySelector('[data-settings-section="ai-provider"]')).toBeTruthy();
+    expect(container.querySelector("[data-settings-section-tone]")).toBeNull();
 
     expect(
       container.querySelector(
@@ -879,14 +876,11 @@ describe("SettingsView", () => {
     setupMocks();
     const { container } = renderSettingsView("/settings/connections");
 
-    expect(screen.getByRole("heading", { name: "设置" })).toHaveClass(
-      "font-heading"
-    );
     expect(screen.getByRole("heading", { name: "连接与同步" })).toHaveClass(
       "font-heading"
     );
     expect(
-      container.querySelector('[data-slot="card-title"]')
+      container.querySelector('[data-settings-section] h3')
     ).toHaveClass("font-heading");
     expect(
       screen
@@ -1721,6 +1715,61 @@ describe("SettingsView", () => {
     expect(setFlavor).toHaveBeenCalledWith("latte");
   });
 
+  it("edits light and dark font modes without switching the app theme", async () => {
+    const setFlavor = vi.fn();
+    setupMocks({ flavor: "mocha", setFlavor });
+    renderSettingsView("/settings");
+
+    const darkMode = screen.getByRole("button", { name: /暗色.*当前/ });
+    const lightMode = screen.getByRole("button", { name: /^亮色$/ });
+    expect(darkMode).toHaveAttribute("aria-pressed", "true");
+    expect(lightMode).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(lightMode);
+
+    expect(lightMode).toHaveAttribute("aria-pressed", "true");
+    expect(darkMode).toHaveAttribute("aria-pressed", "false");
+    const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
+    fireEvent.change(within(displayGroup).getByLabelText("标题字体"), {
+      target: { value: "serif" },
+    });
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "display_font_light_v2",
+        value: "serif",
+      });
+    });
+    expect(setFlavor).not.toHaveBeenCalled();
+  });
+
+  it("updates the current marker without changing the selected font editor", () => {
+    setupMocks({ flavor: "mocha" });
+    const view = renderSettingsView("/settings");
+
+    fireEvent.click(screen.getByRole("button", { name: /^亮色$/ }));
+    expect(screen.getByRole("button", { name: /^亮色$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    setupMocks({ flavor: "latte" });
+    view.rerender(settingsViewElement("/settings"));
+    expect(
+      screen.getByRole("button", { name: /亮色.*当前/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    setupMocks({ flavor: "claude-dark" });
+    view.rerender(settingsViewElement("/settings"));
+    expect(screen.getByRole("button", { name: /^亮色$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("button", { name: /暗色.*当前/ }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("each flavor button shows a color dot", () => {
     setupMocks();
     renderSettingsView("/settings");
@@ -1780,7 +1829,9 @@ describe("SettingsView", () => {
     setupMocks();
     renderSettingsView("/settings");
     const rosewaterSwatch = screen.getByRole("radio", { name: "玫瑰水" });
-    expect(rosewaterSwatch.style.backgroundColor).toBe("var(--ctp-rosewater)");
+    expect(
+      (rosewaterSwatch.firstElementChild as HTMLElement).style.backgroundColor
+    ).toBe("var(--ctp-rosewater)");
   });
 
   it("keeps language and font scale controls operable with aria-pressed", () => {
@@ -1818,39 +1869,130 @@ describe("SettingsView", () => {
     expect(screen.queryByLabelText("自定义正文字体族")).toBeNull();
 
     const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
-    fireEvent.click(within(displayGroup).getByRole("button", { name: /自定义/ }));
+    fireEvent.change(within(displayGroup).getByLabelText("标题字体"), {
+      target: { value: "custom" },
+    });
 
     expect(within(displayGroup).getByLabelText("自定义标题字体族")).toBeTruthy();
     expect(screen.queryByLabelText("自定义正文字体族")).toBeNull();
 
     const bodyGroup = screen.getByRole("group", { name: "正文字体选项" });
-    fireEvent.click(within(bodyGroup).getByRole("button", { name: /自定义/ }));
+    fireEvent.change(within(bodyGroup).getByLabelText("正文字体"), {
+      target: { value: "custom" },
+    });
 
     expect(within(displayGroup).getByLabelText("自定义标题字体族")).toBeTruthy();
     expect(within(bodyGroup).getByLabelText("自定义正文字体族")).toBeTruthy();
   });
 
-  it("updates the preview specimen chips from selected font and scale state", () => {
+  it("updates font selectors, independent fallbacks, and mixed specimens", () => {
     setupMocks();
     renderSettingsView("/settings");
 
-    expect(screen.getByText("Midnight Type Lab")).toBeTruthy();
-    expect(screen.getByLabelText("标题字体 Geist Sans")).toBeTruthy();
-    expect(screen.getByLabelText("正文字体 JetBrains Mono")).toBeTruthy();
-    expect(screen.getByLabelText("字号缩放 默认")).toBeTruthy();
+    expect(screen.getAllByText("SkillPort 技能管理")).toHaveLength(2);
 
     const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
     const bodyGroup = screen.getByRole("group", { name: "正文字体选项" });
 
-    fireEvent.click(
-      within(displayGroup).getByRole("button", { name: /Instrument Serif/ })
-    );
-    fireEvent.click(within(bodyGroup).getByRole("button", { name: /Inter/ }));
+    fireEvent.change(within(displayGroup).getByLabelText("标题字体"), {
+      target: { value: "serif" },
+    });
+    fireEvent.change(within(bodyGroup).getByLabelText("正文字体"), {
+      target: { value: "inter" },
+    });
+    fireEvent.change(within(displayGroup).getByLabelText("标题中文 fallback"), {
+      target: { value: "custom" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /宽松/ }));
 
-    expect(screen.getByLabelText("标题字体 Instrument Serif")).toBeTruthy();
-    expect(screen.getByLabelText("正文字体 Inter")).toBeTruthy();
-    expect(screen.getByLabelText("字号缩放 宽松")).toBeTruthy();
+    expect(within(displayGroup).getByLabelText("标题字体")).toHaveValue("serif");
+    expect(within(bodyGroup).getByLabelText("正文字体")).toHaveValue("inter");
+    expect(
+      within(displayGroup).getByLabelText("自定义标题中文 fallback 字体族")
+    ).toBeTruthy();
+    expect(
+      within(bodyGroup).queryByLabelText("自定义正文中文 fallback 字体族")
+    ).toBeNull();
+    expect(
+      (within(displayGroup).getByText("SkillPort 技能管理").parentElement as HTMLElement)
+        .style.fontFamily,
+    ).toContain("Instrument Serif");
+    expect(
+      (within(bodyGroup).getByText("SkillPort 技能管理").parentElement as HTMLElement)
+        .style.fontFamily,
+    ).toContain("Inter Variable");
+    expect(screen.getByRole("button", { name: /宽松/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("merges an early font edit with untouched loaded fields", async () => {
+    let releaseReads!: () => void;
+    const readsReleased = new Promise<void>((resolve) => {
+      releaseReads = resolve;
+    });
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "get_setting") {
+        await readsReleased;
+        const key = (args as { key: string }).key;
+        return key === "body_font_dark_v2" ? "geist" : null;
+      }
+      return undefined;
+    });
+    setupMocks({ flavor: "mocha" });
+    renderSettingsView("/settings");
+
+    const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
+    fireEvent.change(within(displayGroup).getByLabelText("标题字体"), {
+      target: { value: "serif" },
+    });
+    releaseReads();
+
+    await waitFor(() => {
+      expect(within(displayGroup).getByLabelText("标题字体")).toHaveValue(
+        "serif",
+      );
+      expect(
+        within(
+          screen.getByRole("group", { name: "正文字体选项" }),
+        ).getByLabelText("正文字体"),
+      ).toHaveValue("geist");
+    });
+  });
+
+  it("persists display and body Chinese fallbacks to independent settings keys", async () => {
+    setupMocks();
+    renderSettingsView("/settings");
+
+    const displayGroup = screen.getByRole("group", { name: "标题字体选项" });
+    const bodyGroup = screen.getByRole("group", { name: "正文字体选项" });
+
+    fireEvent.change(within(displayGroup).getByLabelText("标题中文 fallback"), {
+      target: { value: "sourceHanSerif" },
+    });
+    fireEvent.change(within(bodyGroup).getByLabelText("正文中文 fallback"), {
+      target: { value: "custom" },
+    });
+    fireEvent.change(
+      within(bodyGroup).getByLabelText("自定义正文中文 fallback 字体族"),
+      { target: { value: "Noto Serif CJK SC" } },
+    );
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "display_chinese_fallback_dark_v2",
+        value: "sourceHanSerif",
+      });
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "body_chinese_fallback_dark_v2",
+        value: "custom",
+      });
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "body_chinese_fallback_custom_dark_v2",
+        value: "Noto Serif CJK SC",
+      });
+    });
   });
 
   it("toggles coding group visibility from settings", async () => {

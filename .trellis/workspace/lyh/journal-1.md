@@ -1419,3 +1419,104 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 34: 完成字体 fallback 与设置界面优化
+
+**Date**: 2026-07-12
+**Task**: 完成字体 fallback 与设置界面优化
+**Branch**: `dev`
+
+### Summary
+
+保留默认字体和安装包体积，为 Display/Body 增加独立中文 fallback，重构 Settings shell 与 Appearance，并补充测试和 frontend spec。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5178d84b86f1bb39ed2ed6201bee84eef633b89e` | (see git log) |
+| `da2dad135224ad9ac3cefb8e2c0a293e1c26f382` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 35: 优化明暗主题字体设置与紧凑排版
+
+**Date**: 2026-07-13
+**Task**: 优化明暗主题字体设置与紧凑排版
+**Branch**: `dev`
+
+### Summary
+
+为亮色与暗色主题分别保存和应用 Display/Body 字体偏好，压缩 Typography 排版，补齐迁移竞态与主题切换回归，并通过 just ci 和浏览器响应式验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b20b934f` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 36: 替换 SkillPort 图标并升级 0.10.13
+
+**Date**: 2026-07-13
+**Task**: 替换 SkillPort 图标并升级 0.10.13
+**Branch**: `dev`
+
+### Summary
+
+使用 1024 规范源重建全平台图标并精确保留用户提供的核心资产；同步版本到 0.10.13，通过 just ci 和 Windows NSIS bundle 验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c02ef2f8` | (see git log) |
+| `ec4d8c2a` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

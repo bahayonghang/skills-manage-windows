@@ -7,11 +7,15 @@ import "./index.css";
 // Initialize i18n before rendering the app
 import "./i18n";
 // Initialize Catppuccin theme before rendering so there's no flash
-import { useThemeStore } from "./stores/themeStore";
 import {
-  DEFAULT_FONT_PREFERENCES,
-  applyFontPreferences,
-  loadFontPreferences,
+  fontThemeModeForFlavor,
+  useThemeStore,
+} from "./stores/themeStore";
+import {
+  DEFAULT_THEMED_FONT_PREFERENCES,
+  activateFontTheme,
+  applyThemedFontPreferences,
+  loadThemedFontPreferences,
 } from "./lib/displayFont";
 import { installRuntimeLogger } from "./lib/runtimeLogger";
 import { isTauriRuntime } from "@/lib/ipc";
@@ -24,9 +28,19 @@ if (!isTauriRuntime()) {
 
 // Apply theme synchronously before React renders to prevent flash of wrong theme
 useThemeStore.getState().init();
-// 字体偏好：先 apply 默认值避免 layout 跳动；Tauri 端 IPC 完成后再覆盖
-applyFontPreferences(DEFAULT_FONT_PREFERENCES);
-void loadFontPreferences().then(applyFontPreferences);
+let activeFontMode = fontThemeModeForFlavor(useThemeStore.getState().flavor);
+// 字体偏好：先 apply 当前 mode 默认值避免 layout 跳动；IPC 完成后再覆盖
+applyThemedFontPreferences(DEFAULT_THEMED_FONT_PREFERENCES, activeFontMode);
+useThemeStore.subscribe((state) => {
+  const nextMode = fontThemeModeForFlavor(state.flavor);
+  if (nextMode === activeFontMode) return;
+  activeFontMode = nextMode;
+  activateFontTheme(nextMode);
+});
+void loadThemedFontPreferences().then((preferences) => {
+  activeFontMode = fontThemeModeForFlavor(useThemeStore.getState().flavor);
+  applyThemedFontPreferences(preferences, activeFontMode);
+});
 installRuntimeLogger();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

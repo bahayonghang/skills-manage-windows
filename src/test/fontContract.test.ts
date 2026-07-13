@@ -17,4 +17,9 @@ describe("font contract", () => {
   it("applies font scale to the html root", () => {
     expect(indexCss).toContain("font-size: calc(16px * var(--font-scale));");
   });
+
+  it("does not bundle fallback font assets", () => {
+    expect(indexCss).not.toContain("@font-face");
+    expect(indexCss).not.toContain("SourceHanSerif");
+  });
 });

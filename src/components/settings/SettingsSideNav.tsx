@@ -20,11 +20,11 @@ export function SettingsSideNav({ activePageId }: SettingsSideNavProps) {
     <nav
       aria-label={t("settings.pages.navAriaLabel")}
       className={cn(
-        "shrink-0 border-border/70 bg-card/40",
-        "lg:w-56 lg:border-r lg:bg-transparent xl:w-60 2xl:w-64",
+        "shrink-0 border-b border-border/70 bg-background/95",
+        "lg:w-52 lg:border-r lg:border-b-0 xl:w-56",
       )}
     >
-      <div className="sticky top-0 space-y-1 p-2 lg:top-4 lg:p-4">
+      <div className="scrollbar-subtle flex gap-1 overflow-x-auto p-2 lg:sticky lg:top-0 lg:block lg:space-y-1 lg:overflow-visible lg:p-3">
         {SETTINGS_PAGES.map((page) => {
           const active = page.id === activePageId;
           const Icon = page.icon;
@@ -37,31 +37,20 @@ export function SettingsSideNav({ activePageId }: SettingsSideNavProps) {
               data-settings-page-nav={page.id}
               onClick={() => navigate(getSettingsPagePath(page.id))}
               className={cn(
-                "group flex min-h-10 w-full items-center gap-3 rounded-xl border px-3 py-2 text-left text-sm transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]",
+                "group flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-[scale,background-color,color] active:scale-[0.96] lg:w-full",
                 active
-                  ? "border-primary/35 bg-primary/10 text-foreground shadow-[inset_0_1px_0_color-mix(in_oklch,white_18%,transparent)]"
-                  : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/55 hover:text-foreground",
+                  ? "bg-primary/12 text-foreground"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
               )}
             >
-              <span
+              <Icon
                 className={cn(
-                  "grid size-8 shrink-0 place-items-center rounded-lg border transition-colors",
-                  active
-                    ? "border-primary/40 bg-primary/15 text-primary"
-                    : "border-border/70 bg-background/60 text-muted-foreground group-hover:text-foreground",
+                  "size-4 shrink-0 transition-colors",
+                  active ? "text-primary" : "group-hover:text-foreground",
                 )}
                 aria-hidden="true"
-              >
-                <Icon className="size-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">
-                  {t(page.titleKey)}
-                </span>
-                <span className="hidden truncate text-xs text-muted-foreground 2xl:block">
-                  {t(page.descriptionKey)}
-                </span>
-              </span>
+              />
+              <span className="truncate font-medium">{t(page.titleKey)}</span>
             </button>
           );
         })}

@@ -444,29 +444,21 @@ export function SettingsView() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="border-b border-border px-6 py-4">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-          {t("settings.pages.eyebrow")}
-        </p>
-        <h1 className="mt-1 font-heading text-xl font-semibold">
-          {t("settings.title")}
-        </h1>
-      </div>
-
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <SettingsSideNav activePageId={activePageId} />
-        <main className="min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
-          <div className="mx-auto w-full max-w-7xl space-y-6">
-            <header className="border-b border-border/80 pb-5">
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-card text-primary shadow-sm">
-                  <PageIcon className="size-5" aria-hidden="true" />
-                </span>
+        <main className="min-h-0 flex-1 overflow-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-7 xl:px-10">
+          <div className="mx-auto w-full max-w-6xl space-y-7">
+            <header className="border-b border-border/70 pb-5">
+              <div className="flex items-start gap-2.5">
+                <PageIcon
+                  className="mt-1 size-5 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
                 <div className="min-w-0">
-                  <h2 className="font-heading text-2xl font-semibold tracking-tight">
+                  <h1 className="text-balance font-heading text-2xl font-semibold">
                     {t(activePage.titleKey)}
-                  </h2>
-                  <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                  </h1>
+                  <p className="mt-1 max-w-3xl text-pretty text-sm leading-6 text-muted-foreground">
                     {t(activePage.descriptionKey)}
                   </p>
                   {!isKnownSettingsSubpath ? (

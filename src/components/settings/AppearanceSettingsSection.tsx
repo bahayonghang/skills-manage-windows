@@ -1,35 +1,36 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Globe2, Palette, SlidersHorizontal, Type, type LucideIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  ALargeSmall,
-  Check,
-  Droplets,
-  Globe2,
-  Palette,
-  SlidersHorizontal,
-  Sparkles,
-  Type,
-} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
-import type { CatppuccinAccent, ThemeFlavor } from "@/stores/themeStore";
 import {
   BODY_FONT_OPTIONS,
-  DEFAULT_FONT_PREFERENCES,
+  CHINESE_FALLBACK_OPTIONS,
+  DEFAULT_THEMED_FONT_PREFERENCES,
   DISPLAY_FONT_OPTIONS,
   FONT_SCALE_OPTIONS,
-  applyFontPreferences,
-  loadFontPreferences,
+  loadThemedFontPreferences,
+  resolveBodyFontFamily,
+  resolveDisplayFontFamily,
+  saveBodyChineseFallback,
   saveBodyFont,
+  saveDisplayChineseFallback,
   saveDisplayFont,
   saveFontScale,
   type BodyFontKey,
+  type ChineseFallbackKey,
   type DisplayFontKey,
-  type FontPreferences,
+  type FontProfile,
+  type ThemedFontPreferences,
 } from "@/lib/displayFont";
 import { cn } from "@/lib/utils";
+import {
+  fontThemeModeForFlavor,
+  type CatppuccinAccent,
+  type FontThemeMode,
+  type ThemeFlavor,
+} from "@/stores/themeStore";
 
 interface AppearanceSettingsSectionProps {
   accent: CatppuccinAccent;
@@ -42,7 +43,10 @@ interface AppearanceSettingsSectionProps {
   onSetFlavor: (flavor: ThemeFlavor) => void;
 }
 
-type FontPreviewKey = DisplayFontKey | BodyFontKey;
+interface FontOption {
+  key: string;
+  labelKey: string;
+}
 
 export function AppearanceSettingsSection({
   accent,
@@ -55,622 +59,510 @@ export function AppearanceSettingsSection({
   onSetFlavor,
 }: AppearanceSettingsSectionProps) {
   const { t, i18n } = useTranslation();
-  const [prefs, setPrefs] = useState<FontPreferences>(DEFAULT_FONT_PREFERENCES);
-  const hasEditedPrefs = useRef(false);
+  const activeFontMode = fontThemeModeForFlavor(flavor);
+  const [editorFontMode, setEditorFontMode] =
+    useState<FontThemeMode>(activeFontMode);
+  const [prefs, setPrefs] = useState<ThemedFontPreferences>(
+    DEFAULT_THEMED_FONT_PREFERENCES,
+  );
   const currentLanguage = getCurrentLanguage(i18n.language);
+  const profile = prefs[editorFontMode];
 
   useEffect(() => {
     let cancelled = false;
-    void loadFontPreferences().then((loaded) => {
+    void loadThemedFontPreferences().then((loaded) => {
       if (cancelled) return;
-      if (hasEditedPrefs.current) return;
       setPrefs((current) =>
-        fontPreferencesEqual(current, loaded) ? current : loaded,
+        themedFontPreferencesEqual(current, loaded) ? current : loaded,
       );
-      applyFontPreferences(loaded);
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const displayLabel = t(
-    `settings.appearance.displayFontOption.${getDisplayOption(prefs.display).labelKey}`,
-  );
-  const bodyLabel = t(
-    `settings.appearance.bodyFontOption.${getBodyOption(prefs.body).labelKey}`,
-  );
-  const scaleOption = getScaleOption(prefs.scale);
-  const scaleLabel = t(`settings.appearance.${scaleOption.labelKey}`);
-  const accentLabel = t(`settings.accent.${accent}`);
-  const flavorLabel = t(`settings.${flavor}`);
-  const languageLabel = t(
-    currentLanguage === "zh" ? "settings.chinese" : "settings.english",
-  );
-  const scalePercent = `${Math.round(prefs.scale * 100)}%`;
-  const previewScaleStyle = useMemo(
-    () => ({ fontSize: `${prefs.scale}rem` }),
-    [prefs.scale],
-  );
-
   async function handleDisplayKey(key: DisplayFontKey) {
-    hasEditedPrefs.current = true;
-    const next = { ...prefs, display: key };
-    setPrefs(next);
-    await saveDisplayFont(key, prefs.displayCustom);
+    updateEditorProfile({ display: key });
+    await saveDisplayFont(editorFontMode, key, profile.displayCustom);
   }
 
   async function handleDisplayCustom(custom: string) {
-    hasEditedPrefs.current = true;
-    const next = { ...prefs, displayCustom: custom };
-    setPrefs(next);
-    if (prefs.display === "custom") {
-      await saveDisplayFont("custom", custom);
+    updateEditorProfile({ displayCustom: custom });
+    if (profile.display === "custom") {
+      await saveDisplayFont(editorFontMode, "custom", custom);
+    }
+  }
+
+  async function handleDisplayChineseFallback(key: ChineseFallbackKey) {
+    updateEditorProfile({ displayChineseFallback: key });
+    await saveDisplayChineseFallback(
+      editorFontMode,
+      key,
+      profile.displayChineseFallbackCustom,
+    );
+  }
+
+  async function handleDisplayChineseFallbackCustom(custom: string) {
+    updateEditorProfile({ displayChineseFallbackCustom: custom });
+    if (profile.displayChineseFallback === "custom") {
+      await saveDisplayChineseFallback(
+        editorFontMode,
+        "custom",
+        custom,
+      );
     }
   }
 
   async function handleBodyKey(key: BodyFontKey) {
-    hasEditedPrefs.current = true;
-    const next = { ...prefs, body: key };
-    setPrefs(next);
-    await saveBodyFont(key, prefs.bodyCustom);
+    updateEditorProfile({ body: key });
+    await saveBodyFont(editorFontMode, key, profile.bodyCustom);
   }
 
   async function handleBodyCustom(custom: string) {
-    hasEditedPrefs.current = true;
-    const next = { ...prefs, bodyCustom: custom };
-    setPrefs(next);
-    if (prefs.body === "custom") {
-      await saveBodyFont("custom", custom);
+    updateEditorProfile({ bodyCustom: custom });
+    if (profile.body === "custom") {
+      await saveBodyFont(editorFontMode, "custom", custom);
+    }
+  }
+
+  async function handleBodyChineseFallback(key: ChineseFallbackKey) {
+    updateEditorProfile({ bodyChineseFallback: key });
+    await saveBodyChineseFallback(
+      editorFontMode,
+      key,
+      profile.bodyChineseFallbackCustom,
+    );
+  }
+
+  async function handleBodyChineseFallbackCustom(custom: string) {
+    updateEditorProfile({ bodyChineseFallbackCustom: custom });
+    if (profile.bodyChineseFallback === "custom") {
+      await saveBodyChineseFallback(
+        editorFontMode,
+        "custom",
+        custom,
+      );
     }
   }
 
   async function handleScale(value: number) {
-    hasEditedPrefs.current = true;
-    const next = { ...prefs, scale: value };
-    setPrefs(next);
+    setPrefs((current) => ({ ...current, scale: value }));
     await saveFontScale(value);
   }
 
+  function updateEditorProfile(patch: Partial<FontProfile>) {
+    setPrefs((current) => ({
+      ...current,
+      [editorFontMode]: {
+        ...current[editorFontMode],
+        ...patch,
+      },
+    }));
+  }
+
   return (
-    <SettingsCollapsibleCard
-      sectionId="appearance"
-      title={t("settings.appearance.title")}
-      description={t("settings.appearance.description")}
-      icon={<Type className="size-4 text-muted-foreground shrink-0" />}
+    <div
+      className="divide-y divide-border/70 border-y border-border/70"
+      data-settings-section="appearance"
     >
-      <div className="space-y-4">
-        <section className="relative overflow-hidden rounded-xl border border-[color:var(--settings-section-accent-border)] bg-[radial-gradient(circle_at_12%_10%,var(--settings-section-accent-soft),transparent_32rem),linear-gradient(135deg,var(--card),var(--background))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-5 xl:p-6">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,var(--settings-section-accent-faint)_1px,transparent_1px),linear-gradient(0deg,var(--settings-section-accent-faint)_1px,transparent_1px)] [background-size:2.4rem_2.4rem] opacity-30 [mask-image:linear-gradient(135deg,black,transparent_72%)]"
-          />
-          <div className="relative grid gap-5 xl:grid-cols-[1.12fr_0.88fr] xl:items-stretch">
-            <div className="flex min-w-0 flex-col justify-between gap-5">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[color:var(--settings-section-accent-text)]">
-                  <Sparkles className="size-3.5" aria-hidden="true" />
-                  {t("settings.appearance.labEyebrow")}
-                </div>
-                <h3 className="mt-4 max-w-3xl font-display text-3xl font-semibold leading-[1.03] tracking-[-0.055em] text-foreground sm:text-4xl xl:text-5xl">
-                  {t("settings.appearance.labTitle")}
-                </h3>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                  {t("settings.appearance.labSubtitle")}
-                </p>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
-                <StatusChip label={t("settings.flavor")} value={flavorLabel} />
-                <StatusChip
-                  label={t("settings.language")}
-                  value={languageLabel}
-                />
-                <StatusChip
-                  label={t("settings.accentColor")}
-                  value={accentLabel}
-                />
-                <StatusChip
-                  label={t("settings.appearance.scale")}
-                  value={scaleLabel}
-                />
-              </div>
-            </div>
-
-            <div className="min-w-0 rounded-lg bg-card p-3 shadow-sm ring-1 ring-border sm:p-4">
-              <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-3">
-                <div className="flex items-center gap-1.5" aria-hidden="true">
-                  <span className="size-2.5 rounded-full bg-[color:var(--settings-section-accent)]" />
-                  <span className="size-2.5 rounded-full bg-muted" />
-                  <span className="size-2.5 rounded-full bg-muted/60" />
-                </div>
-                <div className="truncate text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  {t("settings.appearance.previewSurface")}
-                </div>
-              </div>
-
-              <div className="grid gap-3 pt-4 sm:grid-cols-[0.42fr_1fr]">
-                <div className="hidden min-w-0 rounded-md bg-card/80 p-3 ring-1 ring-border/70 sm:block">
-                  <div className="mb-3 h-2 w-12 rounded-full bg-[color:var(--settings-section-accent)]" />
-                  <div className="space-y-2" aria-hidden="true">
-                    <span className="block h-2 rounded-full bg-muted" />
-                    <span className="block h-2 w-4/5 rounded-full bg-muted/80" />
-                    <span className="block h-2 w-3/5 rounded-full bg-muted/60" />
-                  </div>
-                </div>
-
-                <div className="min-w-0 rounded-md bg-[linear-gradient(145deg,var(--settings-section-accent-soft),var(--card))] p-4 ring-1 ring-[color:var(--settings-section-accent-border)]">
-                  <div className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-[color:var(--settings-section-accent-text)]">
-                    {t("settings.appearance.previewKicker")}
-                  </div>
-                  <div
-                    className="mt-2 font-display text-2xl font-semibold leading-none tracking-[-0.045em] sm:text-3xl"
-                    style={previewScaleStyle}
+      <SettingGroup
+        icon={Palette}
+        title={t("settings.appearance.themeGroup")}
+        description={t("settings.appearance.themeGroupDesc")}
+      >
+        <div className="space-y-5">
+          <ControlField label={t("settings.flavor")}>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {flavorOrder.map((item) => {
+                const active = flavor === item;
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => onSetFlavor(item)}
+                    className={cn(
+                      "focus-ring flex min-h-10 items-center gap-2 rounded-lg px-3 text-left text-sm transition-[scale,background-color,color] active:scale-[0.96]",
+                      active
+                        ? "bg-primary/12 text-foreground"
+                        : "bg-muted/35 text-muted-foreground hover:bg-muted/65 hover:text-foreground",
+                    )}
                   >
-                    {t("settings.appearance.previewTitle")}
-                  </div>
-                  <p className="mt-3 font-body text-sm leading-6 text-muted-foreground">
-                    {t("settings.appearance.previewBody")}
-                  </p>
-                  <div className="mt-4 grid grid-cols-3 gap-2">
-                    <PreviewMetric
-                      value="128"
-                      label={t("settings.appearance.previewMetricSkills")}
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: flavorColors[item] }}
+                      aria-hidden="true"
                     />
-                    <PreviewMetric
-                      value="14"
-                      label={t("settings.appearance.previewMetricChecks")}
+                    <span className="truncate">{t(`settings.${item}`)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </ControlField>
+
+          <ControlField label={t("settings.accentColor")}>
+            <div
+              className="flex flex-wrap gap-1.5"
+              role="radiogroup"
+              aria-label={t("settings.accentColor")}
+            >
+              {accentNames.map((name) => {
+                const selected = accent === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={t(`settings.accent.${name}`)}
+                    onClick={() => onSetAccent(name)}
+                    className={cn(
+                      "focus-ring relative grid size-10 place-items-center rounded-full transition-[scale,box-shadow] active:scale-[0.96]",
+                      selected
+                        ? "shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--ring)]"
+                        : "hover:shadow-[0_0_0_2px_var(--background),0_0_0_3px_var(--border)]",
+                    )}
+                  >
+                    <span
+                      className="size-6 rounded-full"
+                      style={{ backgroundColor: `var(${ctpVarMap[name]})` }}
+                      aria-hidden="true"
                     />
-                    <PreviewMetric
-                      value="32"
-                      label={t("settings.appearance.previewMetricMs")}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
-                <SpecimenStrip
-                  label={t("settings.appearance.displayFont")}
-                  value={displayLabel}
-                  previewClassName={fontPreviewClassFor(prefs.display)}
-                />
-                <SpecimenStrip
-                  label={t("settings.appearance.bodyFont")}
-                  value={bodyLabel}
-                  previewClassName={fontPreviewClassFor(prefs.body)}
-                />
-                <SpecimenStrip
-                  label={t("settings.appearance.scale")}
-                  value={scalePercent}
-                  previewClassName="font-display tabular-nums"
-                />
-              </div>
+                  </button>
+                );
+              })}
             </div>
-          </div>
-        </section>
-
-        <ControlGroup
-          icon={<Palette className="size-4" />}
-          title={t("settings.appearance.surfaceGroup")}
-          description={t("settings.appearance.surfaceGroupDesc")}
-        >
-          <div className="grid gap-3 lg:grid-cols-[1.05fr_0.75fr_1.2fr]">
-            <div className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80">
-              <ControlLabel
-                icon={<Palette className="size-3.5" />}
-                label={t("settings.flavor")}
-              />
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 2xl:grid-cols-3">
-                {flavorOrder.map((item) => {
-                  const active = flavor === item;
-                  return (
-                    <Button
-                      key={item}
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        "h-9 justify-start gap-2 rounded-lg px-2.5 text-xs active:scale-[0.96]",
-                        active &&
-                          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]",
-                      )}
-                      onClick={() => onSetFlavor(item)}
-                      aria-pressed={active}
-                    >
-                      <span
-                        className="inline-block size-2.5 shrink-0 rounded-full ring-1 ring-background/70"
-                        style={{ backgroundColor: flavorColors[item] }}
-                      />
-                      <span className="truncate">{t(`settings.${item}`)}</span>
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80">
-              <ControlLabel
-                icon={<Globe2 className="size-3.5" />}
-                label={t("settings.language")}
-              />
-              <div className="mt-3 grid gap-2">
-                {(["zh", "en"] as const).map((lang) => {
-                  const active = currentLanguage === lang;
-                  return (
-                    <Button
-                      key={lang}
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        "h-10 justify-between rounded-lg px-3 text-xs active:scale-[0.96]",
-                        active &&
-                          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]",
-                      )}
-                      onClick={() => {
-                        void i18n.changeLanguage(lang);
-                      }}
-                      aria-pressed={active}
-                    >
-                      <span>
-                        {t(
-                          lang === "zh"
-                            ? "settings.chinese"
-                            : "settings.english",
-                        )}
-                      </span>
-                      {active ? (
-                        <Check className="size-3.5" aria-hidden="true" />
-                      ) : null}
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80">
-              <div className="flex items-center justify-between gap-3">
-                <ControlLabel
-                  icon={<Droplets className="size-3.5" />}
-                  label={t("settings.accentColor")}
-                />
-                <span className="truncate rounded-full border border-border/80 bg-card px-2 py-1 text-[0.68rem] text-muted-foreground">
-                  {t("settings.appearance.selected", { value: accentLabel })}
-                </span>
-              </div>
-              <div
-                className="mt-3 grid grid-cols-7 gap-1.5 sm:grid-cols-[repeat(14,minmax(0,1fr))] lg:grid-cols-7 2xl:grid-cols-[repeat(14,minmax(0,1fr))]"
-                role="radiogroup"
-                aria-label={t("settings.accentColor")}
-              >
-                {accentNames.map((name) => {
-                  const ctpVar = ctpVarMap[name];
-                  const isActive = accent === name;
-                  return (
-                    <button
-                      key={name}
-                      type="button"
-                      role="radio"
-                      aria-checked={isActive}
-                      aria-label={t(`settings.accent.${name}`)}
-                      title={t(`settings.accent.${name}`)}
-                      onClick={() => onSetAccent(name)}
-                      className={cn(
-                        "relative size-7 rounded-xl transition active:scale-[0.96] cursor-pointer",
-                        isActive
-                          ? "ring-2 ring-ring ring-offset-2 ring-offset-background scale-105 shadow-[0_0_20px_var(--settings-section-accent-soft)]"
-                          : "ring-1 ring-border hover:scale-105 hover:ring-2 hover:ring-ring/50",
-                      )}
-                      style={{ backgroundColor: `var(${ctpVar})` }}
-                    >
-                      {isActive ? (
-                        <span className="absolute inset-1 rounded-lg border border-background/60" />
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </ControlGroup>
-
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
-          <ControlGroup
-            icon={<ALargeSmall className="size-4" />}
-            title={t("settings.appearance.typographyGroup")}
-            description={t("settings.appearance.typographyGroupDesc")}
-          >
-            <div className="grid gap-4 2xl:grid-cols-2">
-              <div
-                className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80"
-                role="group"
-                aria-label={t("settings.appearance.displayFontOptionsLabel")}
-              >
-                <ControlLabel
-                  icon={<Type className="size-3.5" />}
-                  label={t("settings.appearance.displayFont")}
-                />
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-2">
-                  {DISPLAY_FONT_OPTIONS.map((option) => {
-                    const label = t(
-                      `settings.appearance.displayFontOption.${option.labelKey}`,
-                    );
-                    const active = prefs.display === option.key;
-                    return (
-                      <TypeSpecimenTile
-                        key={option.key}
-                        active={active}
-                        title={label}
-                        sample={option.sample}
-                        detail={t("settings.appearance.displaySample")}
-                        previewClassName={fontPreviewClassFor(option.key)}
-                        onClick={() => void handleDisplayKey(option.key)}
-                      />
-                    );
-                  })}
-                </div>
-                {prefs.display === "custom" && (
-                  <Input
-                    className="mt-3"
-                    placeholder={t("settings.appearance.customPlaceholder")}
-                    value={prefs.displayCustom}
-                    onChange={(event) => {
-                      void handleDisplayCustom(event.target.value);
-                    }}
-                    aria-label={t("settings.appearance.displayCustomLabel")}
-                  />
-                )}
-              </div>
-
-              <div
-                className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80"
-                role="group"
-                aria-label={t("settings.appearance.bodyFontOptionsLabel")}
-              >
-                <ControlLabel
-                  icon={<Type className="size-3.5" />}
-                  label={t("settings.appearance.bodyFont")}
-                />
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-2">
-                  {BODY_FONT_OPTIONS.map((option) => {
-                    const label = t(
-                      `settings.appearance.bodyFontOption.${option.labelKey}`,
-                    );
-                    const active = prefs.body === option.key;
-                    return (
-                      <TypeSpecimenTile
-                        key={option.key}
-                        active={active}
-                        title={label}
-                        sample={option.key === "jetbrains" ? "01" : "Aa"}
-                        detail={t("settings.appearance.bodySample")}
-                        previewClassName={fontPreviewClassFor(option.key)}
-                        onClick={() => void handleBodyKey(option.key)}
-                      />
-                    );
-                  })}
-                </div>
-                {prefs.body === "custom" && (
-                  <Input
-                    className="mt-3"
-                    placeholder={t("settings.appearance.customPlaceholder")}
-                    value={prefs.bodyCustom}
-                    onChange={(event) => {
-                      void handleBodyCustom(event.target.value);
-                    }}
-                    aria-label={t("settings.appearance.bodyCustomLabel")}
-                  />
-                )}
-              </div>
-            </div>
-          </ControlGroup>
-
-          <ControlGroup
-            icon={<SlidersHorizontal className="size-4" />}
-            title={t("settings.appearance.densityGroup")}
-            description={t("settings.appearance.densityGroupDesc")}
-          >
-            <div className="rounded-lg bg-background/70 p-3 ring-1 ring-border/80">
-              <ControlLabel
-                icon={<SlidersHorizontal className="size-3.5" />}
-                label={t("settings.appearance.scale")}
-              />
-              <div
-                className="mt-3 grid gap-2"
-                role="group"
-                aria-label={t("settings.appearance.scale")}
-              >
-                {FONT_SCALE_OPTIONS.map((option) => {
-                  const active = Math.abs(prefs.scale - option.value) < 1e-3;
-                  const label = t(`settings.appearance.${option.labelKey}`);
-                  return (
-                    <Button
-                      key={option.value}
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        "h-11 justify-between rounded-lg px-3 text-xs active:scale-[0.96]",
-                        active &&
-                          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-foreground shadow-sm hover:bg-[color:var(--settings-section-accent-soft)]",
-                      )}
-                      onClick={() => void handleScale(option.value)}
-                      aria-pressed={active}
-                    >
-                      <span>{label}</span>
-                      <span className="font-display tabular-nums text-muted-foreground">
-                        {Math.round(option.value * 100)}%
-                      </span>
-                    </Button>
-                  );
-                })}
-              </div>
-              <div className="mt-3 rounded-md border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] p-3">
-                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[color:var(--settings-section-accent-text)]">
-                  {t("settings.appearance.scaleSpecimen")}
-                </div>
-                <div className="mt-2 font-display text-3xl font-semibold tabular-nums tracking-[-0.06em]">
-                  {scalePercent}
-                </div>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {t("settings.appearance.scaleSample", {
-                    scale: scalePercent,
-                  })}
-                </p>
-              </div>
-            </div>
-          </ControlGroup>
+          </ControlField>
         </div>
-      </div>
-    </SettingsCollapsibleCard>
+      </SettingGroup>
+
+      <SettingGroup
+        icon={Globe2}
+        title={t("settings.appearance.languageGroup")}
+        description={t("settings.appearance.languageGroupDesc")}
+      >
+        <SegmentedControl
+          options={[
+            { value: "zh", label: t("settings.chinese") },
+            { value: "en", label: t("settings.english") },
+          ]}
+          value={currentLanguage}
+          onChange={(value) => void i18n.changeLanguage(value)}
+        />
+      </SettingGroup>
+
+      <SettingGroup
+        icon={Type}
+        title={t("settings.appearance.typographyGroup")}
+        description={t("settings.appearance.typographyGroupDesc")}
+      >
+        <div className="space-y-5">
+          <ControlField label={t("settings.appearance.fontThemeMode") }>
+            <SegmentedControl
+              options={(["light", "dark"] as const).map((mode) => ({
+                value: mode,
+                label: `${t(`settings.appearance.fontTheme.${mode}`)}${
+                  mode === activeFontMode
+                    ? t("settings.appearance.fontThemeCurrentSuffix")
+                    : ""
+                }`,
+              }))}
+              value={editorFontMode}
+              onChange={(value) =>
+                setEditorFontMode(value as FontThemeMode)
+              }
+            />
+          </ControlField>
+
+          <div className="grid gap-5 divide-y divide-border/70 xl:grid-cols-2 xl:divide-x xl:divide-y-0 [&>*+*]:pt-5 xl:[&>*+*]:pt-0 xl:[&>*+*]:pl-5">
+            <FontRoleControl
+              groupLabel={t("settings.appearance.displayFontOptionsLabel")}
+              title={t("settings.appearance.displayFont")}
+              primary={profile.display}
+              primaryOptions={DISPLAY_FONT_OPTIONS}
+              primaryOptionNamespace="displayFontOption"
+              primaryCustom={profile.displayCustom}
+              primaryCustomLabel={t("settings.appearance.displayCustomLabel")}
+              chineseFallback={profile.displayChineseFallback}
+              chineseFallbackLabel={t(
+                "settings.appearance.displayChineseFallback",
+              )}
+              chineseFallbackCustom={profile.displayChineseFallbackCustom}
+              chineseFallbackCustomLabel={t(
+                "settings.appearance.displayChineseFallbackCustomLabel",
+              )}
+              specimenFontFamily={resolveDisplayFontFamily(profile)}
+              onPrimaryChange={(value) =>
+                void handleDisplayKey(value as DisplayFontKey)
+              }
+              onPrimaryCustomChange={(value) => void handleDisplayCustom(value)}
+              onChineseFallbackChange={(value) =>
+                void handleDisplayChineseFallback(value)
+              }
+              onChineseFallbackCustomChange={(value) =>
+                void handleDisplayChineseFallbackCustom(value)
+              }
+            />
+            <FontRoleControl
+              groupLabel={t("settings.appearance.bodyFontOptionsLabel")}
+              title={t("settings.appearance.bodyFont")}
+              primary={profile.body}
+              primaryOptions={BODY_FONT_OPTIONS}
+              primaryOptionNamespace="bodyFontOption"
+              primaryCustom={profile.bodyCustom}
+              primaryCustomLabel={t("settings.appearance.bodyCustomLabel")}
+              chineseFallback={profile.bodyChineseFallback}
+              chineseFallbackLabel={t(
+                "settings.appearance.bodyChineseFallback",
+              )}
+              chineseFallbackCustom={profile.bodyChineseFallbackCustom}
+              chineseFallbackCustomLabel={t(
+                "settings.appearance.bodyChineseFallbackCustomLabel",
+              )}
+              specimenFontFamily={resolveBodyFontFamily(profile)}
+              onPrimaryChange={(value) => void handleBodyKey(value as BodyFontKey)}
+              onPrimaryCustomChange={(value) => void handleBodyCustom(value)}
+              onChineseFallbackChange={(value) =>
+                void handleBodyChineseFallback(value)
+              }
+              onChineseFallbackCustomChange={(value) =>
+                void handleBodyChineseFallbackCustom(value)
+              }
+            />
+          </div>
+        </div>
+      </SettingGroup>
+
+      <SettingGroup
+        icon={SlidersHorizontal}
+        title={t("settings.appearance.densityGroup")}
+        description={t("settings.appearance.densityGroupDesc")}
+      >
+        <div className="space-y-4">
+          <SegmentedControl
+            options={FONT_SCALE_OPTIONS.map((option) => ({
+              value: String(option.value),
+              label: t(`settings.appearance.${option.labelKey}`),
+            }))}
+            value={String(prefs.scale)}
+            onChange={(value) => void handleScale(Number(value))}
+          />
+          <div className="flex min-h-16 items-center justify-between gap-4 rounded-lg bg-muted/35 px-4 py-3 ring-1 ring-border/60">
+            <span
+              className="font-display font-semibold tabular-nums"
+              style={{ fontSize: `${prefs.scale}rem` }}
+            >
+              {t("settings.appearance.scaleSpecimen")}
+            </span>
+            <span className="text-sm tabular-nums text-muted-foreground">
+              {Math.round(prefs.scale * 100)}%
+            </span>
+          </div>
+        </div>
+      </SettingGroup>
+    </div>
   );
 }
 
-function ControlGroup({
-  icon,
+function SettingGroup({
+  icon: Icon,
   title,
   description,
   children,
 }: {
-  icon: ReactNode;
+  icon: LucideIcon;
   title: string;
   description: string;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl bg-card/70 p-3 shadow-sm ring-1 ring-border/80 sm:p-4">
-      <div className="mb-3 flex items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] text-[color:var(--settings-section-accent-text)]">
-          {icon}
-        </span>
+    <section className="grid gap-4 py-6 md:grid-cols-[minmax(10rem,12rem)_minmax(0,1fr)] md:gap-6">
+      <div className="flex items-start gap-2.5">
+        <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="min-w-0">
-          <h4 className="text-sm font-semibold tracking-tight text-foreground">
+          <h2 className="text-balance font-heading text-sm font-semibold leading-5">
             {title}
-          </h4>
-          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+          </h2>
+          <p className="mt-1 text-pretty text-xs leading-5 text-muted-foreground">
             {description}
           </p>
         </div>
       </div>
-      {children}
+      <div className="min-w-0">{children}</div>
     </section>
   );
 }
 
-function ControlLabel({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-      {icon}
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function StatusChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      className="min-w-0 rounded-lg bg-background/70 px-3 py-2 ring-1 ring-border/80"
-      aria-label={`${label} ${value}`}
-    >
-      <div className="truncate text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-0.5 truncate text-sm font-semibold text-foreground">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function PreviewMetric({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="rounded-sm border border-border/70 bg-background/60 px-2.5 py-2">
-      <div className="font-display text-lg font-semibold leading-none tabular-nums tracking-[-0.05em]">
-        {value}
-      </div>
-      <div className="mt-1 truncate text-[0.6rem] uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </div>
-    </div>
-  );
-}
-
-function SpecimenStrip({
+function ControlField({
   label,
-  value,
-  previewClassName,
+  children,
 }: {
   label: string;
-  value: string;
-  previewClassName: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div
-      className="min-w-0 rounded-md border border-border/70 bg-card/70 px-3 py-2"
-      aria-label={`${label} ${value}`}
-    >
-      <div className="truncate text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </div>
-      <div
-        className={cn(
-          "mt-1 truncate text-sm font-semibold text-foreground",
-          previewClassName,
-        )}
-      >
-        {value}
-      </div>
+    <div className="space-y-2">
+      <div className="text-sm font-medium text-foreground">{label}</div>
+      {children}
     </div>
   );
 }
 
-function TypeSpecimenTile({
-  active,
-  title,
-  sample,
-  detail,
-  previewClassName,
-  onClick,
+function SegmentedControl({
+  options,
+  value,
+  onChange,
 }: {
-  active: boolean;
-  title: string;
-  sample: string;
-  detail: string;
-  previewClassName: string;
-  onClick: () => void;
+  options: readonly { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
 }) {
   return (
-    <button
-      type="button"
-      className={cn(
-        "min-h-24 rounded-md border border-border/80 bg-card/70 p-3 text-left transition active:scale-[0.96]",
-        "hover:border-[color:var(--settings-section-accent-border)] hover:bg-[color:var(--settings-section-accent-faint)]",
-        active &&
-          "border-[color:var(--settings-section-accent-border)] bg-[color:var(--settings-section-accent-soft)] shadow-sm ring-1 ring-[color:var(--settings-section-accent-border)]",
-      )}
-      onClick={onClick}
-      aria-pressed={active}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <span
-          className={cn(
-            "text-2xl font-semibold leading-none tracking-[-0.06em]",
-            previewClassName,
-          )}
-        >
-          {sample}
-        </span>
-        {active ? (
-          <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[color:var(--settings-section-accent)] text-primary-foreground">
-            <Check className="size-3" aria-hidden="true" />
-          </span>
-        ) : null}
+    <div className="inline-flex min-h-10 max-w-full flex-wrap gap-1 rounded-lg bg-muted/45 p-1">
+      {options.map((option) => {
+        const active = value === option.value;
+        return (
+          <Button
+            key={option.value}
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-pressed={active}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "min-h-10 px-3",
+              active
+                ? "bg-background text-foreground shadow-sm hover:bg-background"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {option.label}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FontRoleControl({
+  groupLabel,
+  title,
+  primary,
+  primaryOptions,
+  primaryOptionNamespace,
+  primaryCustom,
+  primaryCustomLabel,
+  chineseFallback,
+  chineseFallbackLabel,
+  chineseFallbackCustom,
+  chineseFallbackCustomLabel,
+  specimenFontFamily,
+  onPrimaryChange,
+  onPrimaryCustomChange,
+  onChineseFallbackChange,
+  onChineseFallbackCustomChange,
+}: {
+  groupLabel: string;
+  title: string;
+  primary: string;
+  primaryOptions: readonly FontOption[];
+  primaryOptionNamespace: "displayFontOption" | "bodyFontOption";
+  primaryCustom: string;
+  primaryCustomLabel: string;
+  chineseFallback: ChineseFallbackKey;
+  chineseFallbackLabel: string;
+  chineseFallbackCustom: string;
+  chineseFallbackCustomLabel: string;
+  specimenFontFamily: string;
+  onPrimaryChange: (value: string) => void;
+  onPrimaryCustomChange: (value: string) => void;
+  onChineseFallbackChange: (value: ChineseFallbackKey) => void;
+  onChineseFallbackCustomChange: (value: string) => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="grid min-w-0 gap-4" role="group" aria-label={groupLabel}>
+      <h3 className="font-heading text-sm font-semibold leading-5">{title}</h3>
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(14rem,1fr))]">
+        <div className="space-y-3">
+          <label className="block space-y-1.5">
+            <span className="text-xs text-muted-foreground">
+              {t("settings.appearance.primaryFont")}
+            </span>
+            <select
+              value={primary}
+              onChange={(event) => onPrimaryChange(event.target.value)}
+              aria-label={title}
+              className="focus-ring h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+            >
+              {primaryOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {t(
+                    `settings.appearance.${primaryOptionNamespace}.${option.labelKey}`,
+                  )}
+                </option>
+              ))}
+            </select>
+          </label>
+          {primary === "custom" ? (
+            <Input
+              className="h-10"
+              placeholder={t("settings.appearance.customPlaceholder")}
+              value={primaryCustom}
+              onChange={(event) => onPrimaryCustomChange(event.target.value)}
+              aria-label={primaryCustomLabel}
+            />
+          ) : null}
+        </div>
+        <div className="space-y-3">
+          <label className="block space-y-1.5">
+            <span className="text-xs text-muted-foreground">
+              {chineseFallbackLabel}
+            </span>
+            <select
+              value={chineseFallback}
+              onChange={(event) =>
+                onChineseFallbackChange(
+                  event.target.value as ChineseFallbackKey,
+                )
+              }
+              aria-label={chineseFallbackLabel}
+              className="focus-ring h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+            >
+              {CHINESE_FALLBACK_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {t(
+                    `settings.appearance.chineseFallbackOption.${option.labelKey}`,
+                  )}
+                </option>
+              ))}
+            </select>
+          </label>
+          {chineseFallback === "custom" ? (
+            <Input
+              className="h-10"
+              placeholder={t("settings.appearance.customPlaceholder")}
+              value={chineseFallbackCustom}
+              onChange={(event) =>
+                onChineseFallbackCustomChange(event.target.value)
+              }
+              aria-label={chineseFallbackCustomLabel}
+            />
+          ) : null}
+        </div>
       </div>
-      <div className="mt-3 truncate text-xs font-semibold text-foreground">
-        {title}
+
+      <div
+        className="min-h-14 rounded-lg bg-muted/35 px-3 py-2.5 ring-1 ring-border/60"
+        style={{ fontFamily: specimenFontFamily }}
+      >
+        <div className="text-base font-semibold">
+          {t("settings.appearance.mixedSpecimen")}
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground">Aa 0123</div>
       </div>
-      <div className="mt-1 line-clamp-2 text-[0.68rem] leading-4 text-muted-foreground">
-        {detail}
-      </div>
-    </button>
+    </div>
   );
 }
 
@@ -678,52 +570,26 @@ function getCurrentLanguage(language: string): "zh" | "en" {
   return language.toLowerCase().startsWith("zh") ? "zh" : "en";
 }
 
-function getDisplayOption(key: DisplayFontKey) {
-  return (
-    DISPLAY_FONT_OPTIONS.find((option) => option.key === key) ??
-    DISPLAY_FONT_OPTIONS[0]
-  );
-}
-
-function getBodyOption(key: BodyFontKey) {
-  return (
-    BODY_FONT_OPTIONS.find((option) => option.key === key) ??
-    BODY_FONT_OPTIONS[0]
-  );
-}
-
-function getScaleOption(value: number) {
-  return (
-    FONT_SCALE_OPTIONS.find(
-      (option) => Math.abs(option.value - value) < 1e-3,
-    ) ?? FONT_SCALE_OPTIONS[1]
-  );
-}
-
-function fontPreviewClassFor(key: FontPreviewKey): string {
-  switch (key) {
-    case "serif":
-      return "[font-family:'Instrument_Serif',Georgia,serif]";
-    case "inter":
-      return "[font-family:'Inter_Variable',sans-serif]";
-    case "jetbrains":
-      return "[font-family:'JetBrains_Mono_Variable',monospace]";
-    case "system":
-      return "[font-family:ui-sans-serif,system-ui]";
-    case "custom":
-      return "italic";
-    case "geist":
-    default:
-      return "[font-family:'Geist_Variable',sans-serif]";
-  }
-}
-
-function fontPreferencesEqual(left: FontPreferences, right: FontPreferences) {
+function fontProfilesEqual(left: FontProfile, right: FontProfile) {
   return (
     left.display === right.display &&
     left.displayCustom === right.displayCustom &&
+    left.displayChineseFallback === right.displayChineseFallback &&
+    left.displayChineseFallbackCustom === right.displayChineseFallbackCustom &&
     left.body === right.body &&
     left.bodyCustom === right.bodyCustom &&
+    left.bodyChineseFallback === right.bodyChineseFallback &&
+    left.bodyChineseFallbackCustom === right.bodyChineseFallbackCustom
+  );
+}
+
+function themedFontPreferencesEqual(
+  left: ThemedFontPreferences,
+  right: ThemedFontPreferences,
+) {
+  return (
+    fontProfilesEqual(left.light, right.light) &&
+    fontProfilesEqual(left.dark, right.dark) &&
     Math.abs(left.scale - right.scale) < 1e-6
   );
 }

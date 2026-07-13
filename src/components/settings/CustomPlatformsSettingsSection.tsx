@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
-import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
+import { SettingsSection } from "@/components/settings/SettingsSection";
 import { formatPathForDisplay } from "@/lib/path";
 import type { AgentWithStatus } from "@/types";
 
@@ -27,7 +27,7 @@ export function CustomPlatformsSettingsSection({
   const { t } = useTranslation();
 
   return (
-    <SettingsCollapsibleCard
+    <SettingsSection
       sectionId="custom-platforms"
       title={t("settings.customPlatforms")}
       description={t("settings.customPlatformsDesc")}
@@ -67,7 +67,7 @@ export function CustomPlatformsSettingsSection({
             ))}
           </div>
         )}
-    </SettingsCollapsibleCard>
+    </SettingsSection>
   );
 }
 

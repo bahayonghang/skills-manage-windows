@@ -2,7 +2,7 @@ import { GitPullRequestArrow, RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
+import { SettingsSection } from "@/components/settings/SettingsSection";
 import { Button } from "@/components/ui/button";
 import type { UpdateCheckMode } from "@/pages/centralUpdateCheckMode";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ export function CentralUpdateCheckModeSettingsSection({
 }: CentralUpdateCheckModeSettingsSectionProps) {
   const { t } = useTranslation();
   return (
-    <SettingsCollapsibleCard
+    <SettingsSection
       sectionId="central-update-check-mode"
       title={t("settings.centralUpdateCheckModeTitle")}
       description={t("settings.centralUpdateCheckModeDesc")}
@@ -47,7 +47,7 @@ export function CentralUpdateCheckModeSettingsSection({
       <p className="mt-3 text-xs text-muted-foreground">
         {t("settings.centralUpdateCheckModeHint")}
       </p>
-    </SettingsCollapsibleCard>
+    </SettingsSection>
   );
 }
 

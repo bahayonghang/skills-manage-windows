@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, Eye, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Input } from "@/components/ui/input";
-import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
+import { SettingsSection } from "@/components/settings/SettingsSection";
 import { Switch } from "@/components/ui/switch";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import {
@@ -47,7 +47,7 @@ export function PlatformVisibilitySettingsSection({
   const { t } = useTranslation();
 
   return (
-    <SettingsCollapsibleCard
+    <SettingsSection
       sectionId="platform-visibility"
       title={t("settings.platformVisibility")}
       description={t("settings.platformVisibilityDesc")}
@@ -94,7 +94,7 @@ export function PlatformVisibilitySettingsSection({
             ))
           )}
         </div>
-    </SettingsCollapsibleCard>
+    </SettingsSection>
   );
 }
 

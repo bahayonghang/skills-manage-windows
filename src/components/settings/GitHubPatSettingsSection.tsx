@@ -5,7 +5,7 @@ import type { GitHubPatState, SecretStorageState } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import { SecretValueInput } from "@/components/settings/SecretValueInput";
-import { SettingsCollapsibleCard } from "@/components/settings/SettingsCollapsibleCard";
+import { SettingsSection } from "@/components/settings/SettingsSection";
 
 type GitHubPatMessage = {
   type: "success" | "error";
@@ -62,7 +62,7 @@ export function GitHubPatSettingsSection({
   }, [githubPatState.configured, githubPatInput]);
 
   return (
-    <SettingsCollapsibleCard
+    <SettingsSection
       sectionId="github-pat"
       title={t("settings.githubPatTitle")}
       description={t("settings.githubPatDesc")}
@@ -182,7 +182,7 @@ export function GitHubPatSettingsSection({
           ) : null}
         </div>
       </div>
-    </SettingsCollapsibleCard>
+    </SettingsSection>
   );
 }
 
