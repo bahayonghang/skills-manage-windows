@@ -1486,3 +1486,37 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 36: 替换 SkillPort 图标并升级 0.10.13
+
+**Date**: 2026-07-13
+**Task**: 替换 SkillPort 图标并升级 0.10.13
+**Branch**: `dev`
+
+### Summary
+
+使用 1024 规范源重建全平台图标并精确保留用户提供的核心资产；同步版本到 0.10.13，通过 just ci 和 Windows NSIS bundle 验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c02ef2f8` | (see git log) |
+| `ec4d8c2a` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
