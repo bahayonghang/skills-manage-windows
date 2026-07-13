@@ -18,6 +18,13 @@ use super::crud::{
 use crate::test_support::mem_pool as setup_test_db;
 use crate::test_support::write_skill_md;
 
+fn assert_path_equivalent(actual: &str, expected: &Path) {
+    assert!(
+        crate::paths::paths_equivalent(Path::new(actual), expected),
+        "paths differ: actual={actual:?}, expected={expected:?}",
+    );
+}
+
 #[test]
 fn project_id_is_stable_for_same_path() {
     let path = "/tmp/whatever/project";
@@ -101,10 +108,7 @@ async fn rescan_finds_skills_in_enabled_agent_dirs() {
     assert_eq!(skills[0].skill_id, "brainstorming");
     assert_eq!(skills[0].name, "brainstorming");
     assert_eq!(skills[0].description.as_deref(), Some("Test skill"));
-    assert_eq!(
-        skills[0].file_path,
-        crate::paths::normalize_stored_path(&claude_skill.join("SKILL.md").to_string_lossy())
-    );
+    assert_path_equivalent(&skills[0].file_path, &claude_skill.join("SKILL.md"));
     assert_eq!(skills[0].source_origin, "project");
     assert_eq!(skills[0].link_type, "copy", "regular dir should be 'copy'");
 }
@@ -129,10 +133,7 @@ async fn rescan_finds_universal_skills_from_agents_dir() {
     assert_eq!(skills[0].agent_display_name, "Codex CLI");
     assert_eq!(skills[0].skill_id, "brainstorming");
     assert_eq!(skills[0].description.as_deref(), Some("Universal skill"));
-    assert_eq!(
-        skills[0].installed_path,
-        crate::paths::normalize_stored_path(&universal_skill.to_string_lossy())
-    );
+    assert_path_equivalent(&skills[0].installed_path, &universal_skill);
 }
 
 #[tokio::test]
@@ -166,10 +167,7 @@ async fn rescan_uses_antigravity_as_universal_representative_when_it_is_the_enab
         skills[0].description.as_deref(),
         Some("Antigravity Universal skill")
     );
-    assert_eq!(
-        skills[0].installed_path,
-        crate::paths::normalize_stored_path(&universal_skill.to_string_lossy())
-    );
+    assert_path_equivalent(&skills[0].installed_path, &universal_skill);
 }
 
 #[tokio::test]
@@ -208,10 +206,7 @@ async fn rescan_uses_antigravity_cli_as_universal_representative_when_it_is_the_
         skills[0].description.as_deref(),
         Some("Antigravity CLI Universal skill")
     );
-    assert_eq!(
-        skills[0].installed_path,
-        crate::paths::normalize_stored_path(&universal_skill.to_string_lossy())
-    );
+    assert_path_equivalent(&skills[0].installed_path, &universal_skill);
 }
 
 #[tokio::test]
@@ -238,10 +233,7 @@ async fn rescan_prefers_universal_agents_dir_over_legacy_member_paths() {
         skills[0].description.as_deref(),
         Some("Canonical Universal")
     );
-    assert_eq!(
-        skills[0].installed_path,
-        crate::paths::normalize_stored_path(&canonical_skill.to_string_lossy())
-    );
+    assert_path_equivalent(&skills[0].installed_path, &canonical_skill);
 }
 
 #[tokio::test]
@@ -483,13 +475,9 @@ async fn install_skill_copy_writes_psi_and_copies_dir() {
     assert!(psi.symlink_target.is_none());
     assert_eq!(psi.name, "seeded");
     assert_eq!(psi.description.as_deref(), Some("seed"));
-    assert_eq!(
-        psi.file_path,
-        crate::paths::normalize_stored_path(
-            &project_root
-                .join(".claude/skills/seeded/SKILL.md")
-                .to_string_lossy()
-        )
+    assert_path_equivalent(
+        &psi.file_path,
+        &project_root.join(".claude/skills/seeded/SKILL.md"),
     );
     assert_eq!(psi.source_origin, "central");
 

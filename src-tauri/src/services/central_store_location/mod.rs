@@ -224,7 +224,7 @@ fn normalize_local_root(path: &Path) -> Result<PathBuf, CentralStoreLocationErro
             })?
             .join(path)
     };
-    Ok(absolute.canonicalize().unwrap_or(absolute))
+    Ok(crate::paths::canonicalize_path_with_missing(&absolute))
 }
 
 fn is_nested_path(parent: &Path, child: &Path) -> bool {

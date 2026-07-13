@@ -95,7 +95,10 @@ async fn central_store_location_apply_overwrites_preserves_old_and_imports_targe
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(central.global_skills_dir, stored_path_string(&target));
+    assert!(crate::paths::paths_equivalent(
+        Path::new(&central.global_skills_dir),
+        &target,
+    ));
     let skills = db::get_central_skills(&pool).await.unwrap();
     assert!(skills.iter().any(|skill| skill.id == "target-only"));
 }
