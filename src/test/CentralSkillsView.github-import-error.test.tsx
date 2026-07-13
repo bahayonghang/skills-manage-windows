@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import * as S from "./centralSkillsViewTestSupport";
 
-const { toast, renderCentralSkillsView } = S;
+const { ASYNC_UI_TIMEOUT_MS, toast, renderCentralSkillsView } = S;
 
 describe("CentralSkillsView GitHub import error", () => {
   beforeEach(S.resetCentralSkillsViewTestState);
@@ -49,14 +49,36 @@ describe("CentralSkillsView GitHub import error", () => {
     });
 
     fireEvent.click(screen.getByTestId("central-github-import-open"));
-    fireEvent.click(await screen.findByRole("button", { name: /检查导入内容|Review import/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /^导入$|^Import$/i }));
+    const dialog = await screen.findByRole(
+      "dialog",
+      { name: /GitHub import wizard/i },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const wizard = within(dialog);
 
-    await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith(
-        expect.stringContaining("GitHub"),
-      );
-    });
+    fireEvent.click(
+      await wizard.findByRole(
+        "button",
+        { name: /检查导入内容|Review import/i },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    );
+    fireEvent.click(
+      await wizard.findByRole(
+        "button",
+        { name: /^导入$|^Import$/i },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    );
+
+    await waitFor(
+      () => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("GitHub"),
+        );
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
     expect(toast.error).not.toHaveBeenCalledWith(
       expect.stringContaining("Install failed"),
     );

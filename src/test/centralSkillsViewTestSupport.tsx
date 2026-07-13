@@ -282,6 +282,8 @@ import * as tauriBridgeModule from "@/lib/ipc";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
+export const ASYNC_UI_TIMEOUT_MS = 5_000;
+
 export const mockAgents: AgentWithStatus[] = [
   {
     id: "claude-code",
