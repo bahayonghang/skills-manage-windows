@@ -6,6 +6,7 @@
 - [前端平台技能安装来源分类约定](./platform-origin-classification.md)
 - [前端 IPC adapter 与 fixture seam 约定](./ipc-adapter.md)
 - [前端异步动作失败反馈约定](./async-error-feedback.md)
+- [前端异步 UI 测试稳定性约定](./async-ui-test-stability.md)
 - [技能卡片显式场景 interface 约定](./skill-card-scenarios.md)
 - [字体偏好与中文 fallback 契约](./font-preferences.md)
 - [Settings 页面结构约定](./settings-structure.md)

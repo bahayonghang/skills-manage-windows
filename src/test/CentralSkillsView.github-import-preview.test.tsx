@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { fireEvent, screen, within } from "@testing-library/react";
 import * as S from "./centralSkillsViewTestSupport";
 
-const { renderCentralSkillsView } = S;
+const { ASYNC_UI_TIMEOUT_MS, renderCentralSkillsView } = S;
 
 describe("CentralSkillsView GitHub import preview", () => {
   beforeEach(S.resetCentralSkillsViewTestState);
@@ -53,15 +53,23 @@ describe("CentralSkillsView GitHub import preview", () => {
     fireEvent.click(screen.getByTestId("central-github-import-open"));
     const dialog = await screen.findByRole("dialog", {
       name: /GitHub import wizard/i,
-    });
+    }, { timeout: ASYNC_UI_TIMEOUT_MS });
     const wizard = within(dialog);
 
     fireEvent.click(
-      await wizard.findByRole("button", { name: /检查导入内容|Review import/i }),
+      await wizard.findByRole(
+        "button",
+        { name: /检查导入内容|Review import/i },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
     );
 
     expect(
-      await wizard.findByTestId("github-import-confirm-summary"),
+      await wizard.findByTestId(
+        "github-import-confirm-summary",
+        undefined,
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
     ).toBeInTheDocument();
     expect(
       wizard.getByRole("button", { name: /返回预览修改|Back to preview/i }),

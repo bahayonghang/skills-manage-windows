@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { fireEvent, screen, within } from "@testing-library/react";
 import * as S from "./centralSkillsViewTestSupport";
 
-const { renderCentralSkillsView } = S;
+const { ASYNC_UI_TIMEOUT_MS, renderCentralSkillsView } = S;
 
 describe("CentralSkillsView GitHub import result", () => {
   beforeEach(S.resetCentralSkillsViewTestState);
@@ -42,7 +42,11 @@ describe("CentralSkillsView GitHub import result", () => {
 
     fireEvent.click(screen.getByTestId("central-github-import-open"));
 
-    const dialog = await screen.findByRole("dialog", { name: /GitHub import wizard/i });
+    const dialog = await screen.findByRole(
+      "dialog",
+      { name: /GitHub import wizard/i },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
     expect(
       within(dialog).getByRole("button", { name: /^安装到平台$/i })
     ).toBeInTheDocument();

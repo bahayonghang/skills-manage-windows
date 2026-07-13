@@ -394,13 +394,7 @@ fn resolve_windows_legacy_home_dir_from_env_vars(
 }
 
 fn non_empty_os_env(value: Option<OsString>) -> Option<OsString> {
-    value.and_then(|value| {
-        if value.to_string_lossy().trim().is_empty() {
-            None
-        } else {
-            Some(value)
-        }
-    })
+    value.filter(|value| !value.to_string_lossy().trim().is_empty())
 }
 
 fn remote_join_home(remote_home: &str, child: &str) -> String {
