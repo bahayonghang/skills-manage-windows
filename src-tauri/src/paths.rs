@@ -302,8 +302,18 @@ pub fn paths_equivalent(left: &Path, right: &Path) -> bool {
     normalize_equivalence_path(left) == normalize_equivalence_path(right)
 }
 
+pub fn canonicalize_path_with_missing(path: &Path) -> PathBuf {
+    if let Ok(resolved) = path.canonicalize() {
+        return resolved;
+    }
+    match (path.parent(), path.file_name()) {
+        (Some(parent), Some(file_name)) => canonicalize_path_with_missing(parent).join(file_name),
+        _ => path.to_path_buf(),
+    }
+}
+
 fn normalize_equivalence_path(path: &Path) -> String {
-    let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let resolved = canonicalize_path_with_missing(path);
     let value = normalize_stored_path(&resolved.to_string_lossy());
 
     #[cfg(windows)]
@@ -765,6 +775,16 @@ mod tests {
         let canonical = path.canonicalize().unwrap();
 
         assert!(paths_equivalent(&path, &canonical));
+    }
+
+    #[test]
+    fn paths_equivalent_canonicalizes_existing_ancestor_for_missing_descendants() {
+        let temp = TempDir::new().unwrap();
+        let canonical_root = temp.path().canonicalize().unwrap();
+        assert!(paths_equivalent(
+            &temp.path().join("missing/child"),
+            &canonical_root.join("missing/child"),
+        ));
     }
 
     #[test]
