@@ -1687,3 +1687,36 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 42: 完成 GitHub 导入文件树预览
+
+**Date**: 2026-07-15
+**Task**: 完成 GitHub 导入文件树预览
+**Branch**: `dev`
+
+### Summary
+
+在 GitHub 导入 Preview 中增加与实际导入边界一致的文件清单和虚拟化文件树，覆盖本地及 SSH/WSL、缺失清单阻断、响应式布局与多尺寸视觉验证；just ci 全量通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f91b60f8` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
