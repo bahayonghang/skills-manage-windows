@@ -42,8 +42,12 @@ pub async fn acquire_central_mutation_guard(
     operation: &'static str,
     timeout: Duration,
 ) -> Result<CentralMutationGuard, CentralMutationError> {
-    acquire_central_mutation_guard_at(crate::paths::central_mutation_lock_path(), operation, timeout)
-        .await
+    acquire_central_mutation_guard_at(
+        crate::paths::central_mutation_lock_path(),
+        operation,
+        timeout,
+    )
+    .await
 }
 
 pub(crate) async fn acquire_central_mutation_guard_at(
@@ -86,7 +90,11 @@ fn acquire_lock_blocking(
         match file.try_lock_exclusive() {
             Ok(()) => {
                 let waited = started.elapsed();
-                tracing::debug!(operation, waited_ms = waited.as_millis(), "acquired Central mutation lock");
+                tracing::debug!(
+                    operation,
+                    waited_ms = waited.as_millis(),
+                    "acquired Central mutation lock"
+                );
                 return Ok(CentralMutationGuard {
                     file,
                     operation,
@@ -146,13 +154,10 @@ mod tests {
         }
         let lock_path = PathBuf::from(std::env::var_os(LOCK_PATH_ENV).unwrap());
         let ready_path = PathBuf::from(std::env::var_os(READY_PATH_ENV).unwrap());
-        let _guard = acquire_central_mutation_guard_at(
-            lock_path,
-            "process helper",
-            Duration::from_secs(5),
-        )
-        .await
-        .unwrap();
+        let _guard =
+            acquire_central_mutation_guard_at(lock_path, "process helper", Duration::from_secs(5))
+                .await
+                .unwrap();
         std::fs::write(&ready_path, b"ready").unwrap();
         std::thread::sleep(Duration::from_secs(30));
     }
@@ -175,7 +180,10 @@ mod tests {
         while !ready_path.exists() && started.elapsed() < Duration::from_secs(10) {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
-        assert!(ready_path.exists(), "helper process did not acquire the lock");
+        assert!(
+            ready_path.exists(),
+            "helper process did not acquire the lock"
+        );
 
         let error = acquire_central_mutation_guard_at(
             lock_path.clone(),
@@ -191,12 +199,9 @@ mod tests {
 
         child.kill().unwrap();
         child.wait().unwrap();
-        let _guard = acquire_central_mutation_guard_at(
-            lock_path,
-            "after crash",
-            Duration::from_secs(2),
-        )
-        .await
-        .unwrap();
+        let _guard =
+            acquire_central_mutation_guard_at(lock_path, "after crash", Duration::from_secs(2))
+                .await
+                .unwrap();
     }
 }

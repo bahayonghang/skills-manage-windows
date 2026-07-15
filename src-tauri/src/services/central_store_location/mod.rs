@@ -225,9 +225,7 @@ fn normalize_local_root(path: &Path) -> Result<PathBuf, CentralStoreLocationErro
         path.to_path_buf()
     } else {
         std::env::current_dir()
-            .map_err(|e| {
-                CentralStoreLocationError::io("Failed to resolve current directory", e)
-            })?
+            .map_err(|e| CentralStoreLocationError::io("Failed to resolve current directory", e))?
             .join(path)
     };
     Ok(crate::paths::canonicalize_path_with_missing(&absolute))
@@ -262,9 +260,8 @@ fn skill_dir_ids(root: &Path) -> Result<HashSet<String>, CentralStoreLocationErr
         )
     })?;
     for entry in entries {
-        let entry = entry.map_err(|e| {
-            CentralStoreLocationError::io("Failed to read central skill entry", e)
-        })?;
+        let entry = entry
+            .map_err(|e| CentralStoreLocationError::io("Failed to read central skill entry", e))?;
         let path = entry.path();
         if path.join("SKILL.md").exists() {
             ids.insert(entry.file_name().to_string_lossy().to_lowercase());

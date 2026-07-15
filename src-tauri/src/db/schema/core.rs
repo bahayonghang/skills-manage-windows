@@ -43,11 +43,9 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     .await?;
 
     let mut transaction = pool.begin().await?;
-    let missing_uid_rows = sqlx::query(
-        "SELECT id FROM skills WHERE uid IS NULL OR TRIM(uid) = ''",
-    )
-    .fetch_all(&mut *transaction)
-    .await?;
+    let missing_uid_rows = sqlx::query("SELECT id FROM skills WHERE uid IS NULL OR TRIM(uid) = ''")
+        .fetch_all(&mut *transaction)
+        .await?;
     for row in missing_uid_rows {
         let id = row.try_get::<String, _>("id")?;
         sqlx::query("UPDATE skills SET uid = ? WHERE id = ?")
@@ -62,12 +60,11 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await?;
 
-    let invalid_uid_count = sqlx::query(
-        "SELECT COUNT(*) AS count FROM skills WHERE uid IS NULL OR TRIM(uid) = ''",
-    )
-    .fetch_one(pool)
-    .await?
-    .try_get::<i64, _>("count")?;
+    let invalid_uid_count =
+        sqlx::query("SELECT COUNT(*) AS count FROM skills WHERE uid IS NULL OR TRIM(uid) = ''")
+            .fetch_one(pool)
+            .await?
+            .try_get::<i64, _>("count")?;
     if invalid_uid_count != 0 {
         return Err(sqlx::Error::InvalidArgument(
             "skills.uid backfill left empty identities".to_string(),

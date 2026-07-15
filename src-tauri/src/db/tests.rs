@@ -2127,10 +2127,11 @@ async fn test_migration_adds_created_at_to_skill_installations() {
         .await
         .expect("init_database should succeed and apply the created_at migration");
 
-    let migrated_uid: String = sqlx::query_scalar("SELECT uid FROM skills WHERE id = 'legacy-skill'")
-        .fetch_one(&pool)
-        .await
-        .expect("legacy skill should receive a uid");
+    let migrated_uid: String =
+        sqlx::query_scalar("SELECT uid FROM skills WHERE id = 'legacy-skill'")
+            .fetch_one(&pool)
+            .await
+            .expect("legacy skill should receive a uid");
     assert!(!migrated_uid.is_empty());
     assert!(uuid::Uuid::parse_str(&migrated_uid).is_ok());
 

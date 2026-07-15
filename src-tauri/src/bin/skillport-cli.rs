@@ -12,7 +12,11 @@ enum Language {
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "skillport-cli", version, about = "Manage Local SkillPort skills")]
+#[command(
+    name = "skillport-cli",
+    version,
+    about = "Manage Local SkillPort skills"
+)]
 struct Cli {
     #[arg(long, global = true)]
     json: bool,
@@ -33,7 +37,9 @@ enum TopCommand {
 #[derive(Debug, Subcommand)]
 enum SkillsCommand {
     List,
-    Show { reference: String },
+    Show {
+        reference: String,
+    },
     Search {
         query: String,
         #[arg(long)]

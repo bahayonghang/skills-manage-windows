@@ -69,7 +69,9 @@ impl From<central_skills::CentralSkillsError> for CliApiError {
                 Self::NotFound(format!("Skill '{reference}' not found"))
             }
             central_skills::CentralSkillsError::AmbiguousSkillReference(reference) => {
-                Self::Ambiguous(format!("Multiple skills are named '{reference}'; use uid or slug"))
+                Self::Ambiguous(format!(
+                    "Multiple skills are named '{reference}'; use uid or slug"
+                ))
             }
             central_skills::CentralSkillsError::CentralMutation(error) => mutation_error(error),
             other => Self::Internal(other.to_string()),
@@ -90,9 +92,7 @@ fn mutation_error(error: crate::services::central_mutation::CentralMutationError
 fn github_error(error: github_import::GithubImportError) -> CliApiError {
     match error {
         github_import::GithubImportError::CentralMutation(error) => mutation_error(error),
-        github_import::GithubImportError::InvalidUrl(message) => {
-            CliApiError::InvalidInput(message)
-        }
+        github_import::GithubImportError::InvalidUrl(message) => CliApiError::InvalidInput(message),
         github_import::GithubImportError::InvalidRepoUrl
         | github_import::GithubImportError::RepoUrlNotHttps
         | github_import::GithubImportError::RepoUrlNotGithub
@@ -134,7 +134,9 @@ fn marketplace_error(error: marketplace::MarketplaceError) -> CliApiError {
 
 impl CliApiError {
     fn duplicate(skill: String) -> Self {
-        Self::Duplicate(format!("Skill '{skill}' already exists; pass --replace to overwrite it"))
+        Self::Duplicate(format!(
+            "Skill '{skill}' already exists; pass --replace to overwrite it"
+        ))
     }
 }
 
@@ -209,7 +211,8 @@ pub struct CliContext {
 impl CliContext {
     pub async fn open_default() -> Result<Self, CliApiError> {
         let app_dir = crate::paths::app_data_dir();
-        std::fs::create_dir_all(&app_dir).map_err(|error| CliApiError::Internal(error.to_string()))?;
+        std::fs::create_dir_all(&app_dir)
+            .map_err(|error| CliApiError::Internal(error.to_string()))?;
         let db_path = crate::paths::path_to_string(&app_dir.join("db.sqlite"));
         let db = db::create_pool(&db_path).await?;
         db::init_database(&db).await?;
@@ -382,13 +385,14 @@ impl CliContext {
         record_operation_log_best_effort(
             &self.db,
             local_target_context(),
-            OperationLogEvent::new("cli", "skills_install", status, "CLI skill install")
-                .details(serde_json::json!({
+            OperationLogEvent::new("cli", "skills_install", status, "CLI skill install").details(
+                serde_json::json!({
                     "source": "cli",
                     "importedCount": output.imported_skill_ids.len(),
                     "failedCount": output.failed.len(),
                     "syncRequested": sync,
-                })),
+                }),
+            ),
         )
         .await;
         Ok(output)
@@ -469,7 +473,10 @@ impl CliContext {
             result: Some(result),
         };
         let result = output.result.as_ref().expect("sync result");
-        let status = match (result.succeeded.len() + result.skipped.len(), result.failed.len()) {
+        let status = match (
+            result.succeeded.len() + result.skipped.len(),
+            result.failed.len(),
+        ) {
             (_, 0) => "succeeded",
             (0, _) => "failed",
             _ => "partial",
@@ -590,10 +597,7 @@ mod tests {
         let mut skill = db::get_skill_by_id(&pool, "demo").await.unwrap().unwrap();
         skill.name = "Demo".to_string();
         db::upsert_skill(&pool, &skill).await.unwrap();
-        let context = CliContext::new(
-            pool,
-            Arc::new(crate::secrets::MockSecretStore::default()),
-        );
+        let context = CliContext::new(pool, Arc::new(crate::secrets::MockSecretStore::default()));
 
         let listed = context.list_skills().await.unwrap();
         assert_eq!(listed[0].uid, skill.uid);
@@ -601,7 +605,13 @@ mod tests {
         assert_eq!(context.show_skill("Demo").await.unwrap().uid, skill.uid);
 
         let plan = context
-            .sync_skills(vec![skill.uid], false, vec!["codex".to_string()], "copy", true)
+            .sync_skills(
+                vec![skill.uid],
+                false,
+                vec!["codex".to_string()],
+                "copy",
+                true,
+            )
             .await
             .unwrap();
         assert!(plan.dry_run);
@@ -612,10 +622,7 @@ mod tests {
 
     #[tokio::test]
     async fn exact_shorthand_fixture_runs_import_list_show_and_sync_preview() {
-        let parsed = parse_install_source(
-            "vercel-labs/agent-skills@react-best-practices",
-        )
-        .unwrap();
+        let parsed = parse_install_source("vercel-labs/agent-skills@react-best-practices").unwrap();
         let InstallSource::SkillsSh { source, skill_id } = parsed else {
             panic!("expected skills.sh shorthand");
         };
@@ -639,12 +646,9 @@ mod tests {
                     .to_vec(),
             )]),
         };
-        let candidate = marketplace::resolve_skills_sh_candidate_from_snapshot(
-            &repo,
-            &snapshot,
-            &skill_id,
-        )
-        .unwrap();
+        let candidate =
+            marketplace::resolve_skills_sh_candidate_from_snapshot(&repo, &snapshot, &skill_id)
+                .unwrap();
         let inspected = github_import::InspectedGitHubRepoSkills {
             repo: repo.clone(),
             valid_candidates: vec![candidate.clone()],
@@ -672,10 +676,7 @@ mod tests {
             .unwrap();
         assert!(preview[0].conflict.is_some());
 
-        let context = CliContext::new(
-            pool,
-            Arc::new(crate::secrets::MockSecretStore::default()),
-        );
+        let context = CliContext::new(pool, Arc::new(crate::secrets::MockSecretStore::default()));
         let listed = context.list_skills().await.unwrap();
         assert_eq!(listed.len(), 1);
         let shown = context.show_skill(&listed[0].uid).await.unwrap();

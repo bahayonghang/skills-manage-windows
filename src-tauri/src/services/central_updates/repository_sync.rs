@@ -202,7 +202,15 @@ pub(crate) async fn check_central_repository_sync_impl(
             break;
         }
 
-        emit_update_progress(app, "checking", "running", total, &counters, Some(skill), None);
+        emit_update_progress(
+            app,
+            "checking",
+            "running",
+            total,
+            &counters,
+            Some(skill),
+            None,
+        );
 
         let state_result = match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) => state_from_remote(skill, &remote, false),
@@ -281,8 +289,7 @@ pub(crate) async fn apply_central_repository_sync_impl(
     } else {
         match active_target {
             ActiveTarget::Local => {
-                central_skills::delete_central_skills_impl(pool, &decisions.delete_requests)
-                    .await?
+                central_skills::delete_central_skills_impl(pool, &decisions.delete_requests).await?
             }
             ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
                 central_skills::delete_central_skills_remote_impl(
@@ -317,8 +324,7 @@ pub(crate) async fn apply_central_repository_sync_impl(
     let mut unskipped_additions = Vec::new();
     for request in decisions.unskip_additions {
         let source_path = normalize_repo_path(&request.source_path)?;
-        if db::delete_skill_repository_sync_skip(pool, &request.repository_id, &source_path)
-            .await?
+        if db::delete_skill_repository_sync_skip(pool, &request.repository_id, &source_path).await?
         {
             unskipped_additions.push(CentralRepositoryAdditionUnskipRequest {
                 repository_id: request.repository_id,
@@ -488,7 +494,9 @@ async fn resolve_github_repo_ref_from_repository(
         return Ok(None);
     };
     Ok(Some(
-        github_import::resolve_repo_source(&url, auth_token).await?.repo,
+        github_import::resolve_repo_source(&url, auth_token)
+            .await?
+            .repo,
     ))
 }
 

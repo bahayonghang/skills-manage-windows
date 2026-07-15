@@ -3,9 +3,9 @@
 use std::collections::HashMap;
 
 use super::{CentralRemoteAddedSkill, CentralRemoteMissingSkill, CentralRepositorySyncSummary};
+use crate::db::{SkillRepository, SkillUpdateState};
 use crate::services::central_updates::SkillUpdateStatus;
 use crate::services::github_import::GitHubRepoRef;
-use crate::db::{SkillRepository, SkillUpdateState};
 
 pub(super) fn build_repository_sync_summaries(
     repo_by_id: &HashMap<String, SkillRepository>,

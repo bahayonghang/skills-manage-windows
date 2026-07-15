@@ -306,8 +306,16 @@ mod tests {
         std::fs::create_dir_all(&central).unwrap();
 
         write_skill_md(&vault.join(".skills/alpha"), "alpha", Some("primary"));
-        write_skill_md(&vault.join(".claude/skills/alpha"), "alpha", Some("shadowed"));
-        write_skill_md(&vault.join(".claude/skills/beta"), "beta", Some("claude only"));
+        write_skill_md(
+            &vault.join(".claude/skills/alpha"),
+            "alpha",
+            Some("shadowed"),
+        );
+        write_skill_md(
+            &vault.join(".claude/skills/beta"),
+            "beta",
+            Some("claude only"),
+        );
 
         let skills = scan_obsidian_vault(&vault, &central);
         assert_eq!(skills.len(), 2);

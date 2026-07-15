@@ -140,14 +140,15 @@ pub(crate) async fn preview_skillport_state_import_impl(
                 SkillPreviewStatus::Conflict,
                 Some(existing.id.clone()),
                 Some("stable_uid_conflict".to_string()),
-                Some("The manifest uid and skill id resolve to different existing skills.".to_string()),
+                Some(
+                    "The manifest uid and skill id resolve to different existing skills."
+                        .to_string(),
+                ),
             )
-        } else if let Some(existing) = existing_skills.get(&skill.id).filter(|existing| {
-            skill
-                .uid
-                .as_deref()
-                .is_some_and(|uid| uid != existing.uid)
-        }) {
+        } else if let Some(existing) = existing_skills
+            .get(&skill.id)
+            .filter(|existing| skill.uid.as_deref().is_some_and(|uid| uid != existing.uid))
+        {
             (
                 SkillPreviewStatus::Conflict,
                 Some(existing.id.clone()),

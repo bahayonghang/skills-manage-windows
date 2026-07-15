@@ -188,8 +188,8 @@ impl TargetRegistry {
         &self,
         target: &mut RemoteTargetConfig,
     ) -> Result<TargetCredentialState, TargetsError> {
-        let credential_key = credential_key_for_password_target(target)
-            .ok_or(TargetsError::MissingCredentialKey)?;
+        let credential_key =
+            credential_key_for_password_target(target).ok_or(TargetsError::MissingCredentialKey)?;
         let password = target
             .password
             .as_deref()
@@ -321,7 +321,10 @@ impl TargetRegistry {
         }
     }
 
-    pub async fn list_targets(&self, local_db: &DbPool) -> Result<Vec<TargetSummary>, TargetsError> {
+    pub async fn list_targets(
+        &self,
+        local_db: &DbPool,
+    ) -> Result<Vec<TargetSummary>, TargetsError> {
         let active_id = active_target_id(local_db).await?;
         let mut targets = vec![TargetSummary {
             id: LOCAL_TARGET_ID.to_string(),

@@ -38,9 +38,15 @@ async fn install_symlink_local(
     skill_id: &str,
     agent_id: &str,
 ) -> Result<InstallResult, InstallationError> {
-    install_skill(pool, &InstallTransport::Local, skill_id, agent_id, "symlink")
-        .await
-        .map(InstallOutcome::into_install_result)
+    install_skill(
+        pool,
+        &InstallTransport::Local,
+        skill_id,
+        agent_id,
+        "symlink",
+    )
+    .await
+    .map(InstallOutcome::into_install_result)
 }
 
 async fn install_copy_local(
@@ -761,8 +767,7 @@ async fn test_uninstall_same_root_agent_is_rejected_without_deleting_central_dir
         .await
         .unwrap();
 
-    let result =
-        uninstall_local(&pool, "shared-root-uninstall-skill", "codex").await;
+    let result = uninstall_local(&pool, "shared-root-uninstall-skill", "codex").await;
     assert!(
         result.as_ref().is_err_and(|error| error
             .to_string()
@@ -812,14 +817,9 @@ async fn test_uninstall_claude_user_row_removes_observed_dir_and_observation() {
     .await
     .unwrap();
 
-    uninstall_local_with_row(
-        &pool,
-        "observed-user-skill",
-        "claude-code",
-        Some(&row_id),
-    )
-    .await
-    .unwrap();
+    uninstall_local_with_row(&pool, "observed-user-skill", "claude-code", Some(&row_id))
+        .await
+        .unwrap();
 
     assert!(
         fs::symlink_metadata(&skill_dir).is_err(),
@@ -867,13 +867,8 @@ async fn test_uninstall_claude_plugin_row_is_rejected_without_deleting_path() {
         .await
         .unwrap();
 
-    let result = uninstall_local_with_row(
-        &pool,
-        "plugin-skill",
-        "claude-code",
-        Some(&row_id),
-    )
-    .await;
+    let result =
+        uninstall_local_with_row(&pool, "plugin-skill", "claude-code", Some(&row_id)).await;
 
     assert!(
         result
@@ -904,13 +899,7 @@ async fn test_uninstall_claude_row_rejects_skill_id_mismatch() {
         .await
         .unwrap();
 
-    let result = uninstall_local_with_row(
-        &pool,
-        "other-skill",
-        "claude-code",
-        Some(&row_id),
-    )
-    .await;
+    let result = uninstall_local_with_row(&pool, "other-skill", "claude-code", Some(&row_id)).await;
 
     assert!(
         result
@@ -1784,9 +1773,7 @@ async fn batch_install_impl(
     let mut failed = Vec::new();
 
     for agent_id in agent_ids {
-        match install_local_by_method(pool, skill_id, agent_id, "symlink")
-            .await
-        {
+        match install_local_by_method(pool, skill_id, agent_id, "symlink").await {
             Ok(InstallOutcome::Installed(_)) => succeeded.push(agent_id.clone()),
             Ok(InstallOutcome::Skipped(item)) => skipped.push(item),
             Err(e) => failed.push(FailedInstall {
@@ -2110,10 +2097,10 @@ async fn test_batch_install_uses_copy_method() {
 
 use std::sync::Arc;
 
-use crate::test_support::{mem_pool_with_home, FakeRunner};
 use crate::targets::{
     ConnectedRemoteTarget, ConnectedSshTarget, RemoteTargetConfig, SshAuthMethod,
 };
+use crate::test_support::{mem_pool_with_home, FakeRunner};
 
 fn fake_ssh_transport(
     remote_os: &str,
@@ -2208,7 +2195,10 @@ async fn test_remote_install_runs_central_install_script_with_six_args() {
     assert_eq!(installs.len(), 1);
     assert_eq!(installs[0].agent_id, "claude-code");
     assert_eq!(installs[0].link_type, "copy");
-    assert_eq!(installs[0].installed_path, "/home/alice/.claude/skills/demo");
+    assert_eq!(
+        installs[0].installed_path,
+        "/home/alice/.claude/skills/demo"
+    );
     assert_eq!(installs[0].symlink_target, None);
 }
 

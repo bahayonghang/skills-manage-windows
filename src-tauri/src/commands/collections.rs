@@ -849,9 +849,14 @@ mod tests {
             .await
             .unwrap();
 
-        let result = batch_install_collection_impl(&pool, &ActiveTarget::Local, &col.id, &["claude-code".to_string()])
-            .await
-            .unwrap();
+        let result = batch_install_collection_impl(
+            &pool,
+            &ActiveTarget::Local,
+            &col.id,
+            &["claude-code".to_string()],
+        )
+        .await
+        .unwrap();
 
         assert_eq!(result.succeeded.len(), 2, "both skills should succeed");
         assert!(result.failed.is_empty(), "no failures expected");
@@ -928,9 +933,14 @@ mod tests {
             .await
             .unwrap();
 
-        let result = batch_install_collection_impl(&pool, &ActiveTarget::Local, &col.id, &["claude-code".to_string()])
-            .await
-            .unwrap();
+        let result = batch_install_collection_impl(
+            &pool,
+            &ActiveTarget::Local,
+            &col.id,
+            &["claude-code".to_string()],
+        )
+        .await
+        .unwrap();
 
         assert_eq!(result.succeeded.len(), 1, "good skill should succeed");
         assert_eq!(result.failed.len(), 1, "missing skill should fail");
@@ -956,9 +966,14 @@ mod tests {
             .await
             .unwrap();
 
-        let result = batch_install_collection_impl(&pool, &ActiveTarget::Local, &col.id, &["claude-code".to_string()])
-            .await
-            .unwrap();
+        let result = batch_install_collection_impl(
+            &pool,
+            &ActiveTarget::Local,
+            &col.id,
+            &["claude-code".to_string()],
+        )
+        .await
+        .unwrap();
 
         assert!(result.succeeded.is_empty());
         assert!(result.failed.is_empty());
