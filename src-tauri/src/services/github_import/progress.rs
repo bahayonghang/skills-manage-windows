@@ -23,19 +23,7 @@ pub(super) fn collect_snapshot_source_files(
         .files
         .iter()
         .filter_map(|(path, bytes)| {
-            let relative_path = if source_path == "." {
-                if path.contains('/') {
-                    return None;
-                }
-                path.clone()
-            } else {
-                let prefix = format!("{}/", source_path.trim_matches('/'));
-                let relative = path.strip_prefix(&prefix)?;
-                if relative.is_empty() {
-                    return None;
-                }
-                relative.to_string()
-            };
+            let relative_path = repo_file_relative_to_source(path, source_path)?;
 
             Some(SnapshotSourceFile {
                 repo_path: path.clone(),

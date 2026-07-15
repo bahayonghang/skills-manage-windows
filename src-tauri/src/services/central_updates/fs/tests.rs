@@ -147,6 +147,45 @@ fn github_snapshot_hash_matches_local_directory_hash() {
 }
 
 #[test]
+fn github_root_snapshot_hash_matches_complete_local_directory() {
+    let snapshot = GitHubRepoSnapshot {
+        files: HashMap::from([
+            ("SKILL.md".to_string(), b"one".to_vec()),
+            ("README.md".to_string(), b"two".to_vec()),
+            ("references/guide.md".to_string(), b"three".to_vec()),
+            ("scripts/run.py".to_string(), b"four".to_vec()),
+        ]),
+    };
+    let files = collect_remote_skill_files(&snapshot, ".").unwrap();
+    let relative_paths = files
+        .iter()
+        .map(|file| file.relative_path.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        relative_paths,
+        vec![
+            "README.md",
+            "SKILL.md",
+            "references/guide.md",
+            "scripts/run.py",
+        ]
+    );
+
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("root-skill");
+    std::fs::create_dir_all(skill_dir.join("references")).unwrap();
+    std::fs::create_dir_all(skill_dir.join("scripts")).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"one").unwrap();
+    std::fs::write(skill_dir.join("README.md"), b"two").unwrap();
+    std::fs::write(skill_dir.join("references/guide.md"), b"three").unwrap();
+    std::fs::write(skill_dir.join("scripts/run.py"), b"four").unwrap();
+
+    let remote_hash = hash_remote_files(&snapshot, &files).unwrap();
+    assert_eq!(remote_hash, hash_local_directory(&skill_dir).unwrap());
+}
+
+#[test]
 fn collect_remote_skill_files_requires_source_path() {
     let snapshot = GitHubRepoSnapshot {
         files: HashMap::from([(

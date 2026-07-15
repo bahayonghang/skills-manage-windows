@@ -59,6 +59,19 @@ metadata:
         ])
     }
 
+    fn root_package_snapshot() -> GitHubRepoSnapshot {
+        repo_snapshot(&[
+            (
+                "SKILL.md",
+                sample_frontmatter("huashu-design", "root package skill"),
+            ),
+            ("README.md", "# Huashu Design\n".to_string()),
+            ("assets/example.txt", "asset\n".to_string()),
+            ("references/guide.md", "# Guide\n".to_string()),
+            ("scripts/run.py", "print('ok')\n".to_string()),
+        ])
+    }
+
     fn multi_skill_snapshot() -> GitHubRepoSnapshot {
         repo_snapshot(&[
             (
@@ -421,6 +434,30 @@ metadata:
     fn sanitize_skill_id_collapses_symbols() {
         let skill_id = sanitize_skill_id("My Cool_Skill!").expect("sanitize");
         assert_eq!(skill_id, "my-cool-skill");
+    }
+
+    #[test]
+    fn repo_file_path_mapping_distinguishes_root_and_nested_sources() {
+        assert_eq!(
+            repo_file_relative_to_source("references/guide.md", ".").as_deref(),
+            Some("references/guide.md")
+        );
+        assert_eq!(
+            repo_file_relative_to_source(
+                "skills/agent-browser/references/guide.md",
+                "skills/agent-browser",
+            )
+            .as_deref(),
+            Some("references/guide.md")
+        );
+        assert_eq!(
+            repo_file_relative_to_source("skill-data/core/SKILL.md", "skills/agent-browser"),
+            None
+        );
+        assert_eq!(
+            repo_file_relative_to_source("skills/agent-browser", "skills/agent-browser"),
+            None
+        );
     }
 
     #[test]
@@ -1917,6 +1954,78 @@ metadata:
         assert!(!files
             .iter()
             .any(|file| file.repo_path.contains("git-commit")));
+    }
+
+    #[test]
+    fn root_import_copy_includes_all_descendant_files() {
+        let files = collect_snapshot_source_files(&root_package_snapshot(), ".").expect("files");
+        let relative_paths = files
+            .iter()
+            .map(|file| file.relative_path.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            relative_paths,
+            vec![
+                "README.md",
+                "SKILL.md",
+                "assets/example.txt",
+                "references/guide.md",
+                "scripts/run.py",
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn root_repository_import_writes_complete_package_and_preserves_assignment() {
+        let pool = setup_test_db().await;
+        let central_root = tempdir().expect("central");
+        let repo = GitHubRepoRef {
+            owner: "alchaincyf".to_string(),
+            repo: "huashu-design".to_string(),
+            branch: "master".to_string(),
+            normalized_url: "https://github.com/alchaincyf/huashu-design".to_string(),
+        };
+        let snapshot = root_package_snapshot();
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &snapshot).expect("candidates");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].source_path, ".");
+
+        let result = import_github_repo_skills_from_snapshot(
+            &pool,
+            &repo,
+            &snapshot,
+            &candidates,
+            vec![GitHubSkillImportSelection {
+                source_path: ".".to_string(),
+                resolution: DuplicateResolution::Overwrite,
+                renamed_skill_id: None,
+            }],
+            central_root.path(),
+            None,
+        )
+        .await
+        .expect("root import");
+
+        assert_eq!(result.imported_skills.len(), 1);
+        let target = central_root.path().join("huashu-design");
+        assert!(target.join("SKILL.md").exists());
+        assert_eq!(
+            std::fs::read_to_string(target.join("references/guide.md")).unwrap(),
+            "# Guide\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(target.join("scripts/run.py")).unwrap(),
+            "print('ok')\n"
+        );
+        assert!(target.join("assets/example.txt").exists());
+
+        let assignment = db::get_skill_repository_assignment(&pool, "huashu-design")
+            .await
+            .expect("assignment");
+        assert_eq!(assignment.source_path.as_deref(), Some("."));
     }
 
     #[tokio::test]
