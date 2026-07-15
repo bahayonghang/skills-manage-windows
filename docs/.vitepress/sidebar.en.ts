@@ -78,6 +78,7 @@ export const sidebarEn: DefaultTheme.SidebarMulti = {
       text: 'Tooling',
       items: [
         { text: 'Shortcuts', link: '/reference/shortcuts' },
+        { text: 'SkillPort CLI', link: '/reference/skillport-cli' },
         { text: 'CLI: just', link: '/reference/cli-just' },
         { text: 'Desktop Release Process', link: '/reference/release-process' },
       ],

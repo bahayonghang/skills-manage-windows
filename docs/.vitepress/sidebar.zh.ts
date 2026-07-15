@@ -78,6 +78,7 @@ export const sidebarZh: DefaultTheme.SidebarMulti = {
       text: '工具',
       items: [
         { text: '快捷键', link: '/zh/reference/shortcuts' },
+        { text: 'SkillPort CLI', link: '/zh/reference/skillport-cli' },
         { text: 'CLI：just', link: '/zh/reference/cli-just' },
         { text: '桌面发布流程', link: '/zh/reference/release-process' },
       ],

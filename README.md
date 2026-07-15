@@ -87,6 +87,9 @@ Install the binary on `PATH` with:
 cargo install --path src-tauri --bin skillport-cli --locked --force
 ```
 
+See the [full SkillPort CLI reference](docs/reference/skillport-cli.md) for command
+options, JSON output, exit codes, duplicate safety, and sync workflows.
+
 ## Download
 
 - Latest release: <https://github.com/bahayonghang/skills-manage-windows/releases/latest>

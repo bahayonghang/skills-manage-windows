@@ -86,6 +86,9 @@ npm run cli -- skills sync <uid 或 slug> --agent codex --method copy --dry-run
 cargo install --path src-tauri --bin skillport-cli --locked --force
 ```
 
+完整的命令参数、JSON 输出、退出码、重复项安全规则和同步工作流见
+[SkillPort CLI 使用参考](docs/zh/reference/skillport-cli.md)。
+
 ## 下载
 
 - 最新发布：<https://github.com/bahayonghang/skills-manage-windows/releases/latest>
