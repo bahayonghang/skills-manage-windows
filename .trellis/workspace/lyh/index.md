@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 39
+- **Total Sessions**: 40
 - **Last Active**: 2026-07-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1622 | Active |
+| `journal-1.md` | ~1656 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 40 | 2026-07-15 | 修复根级 Skill 仓库导入 | `a17b2fe03b2a6901bc63c856b7f8233f2e19e9da`, `f0415928927ea3fa327b71df916cca05ba36fd8e` | `dev` |
 | 39 | 2026-07-15 | 完善 SkillPort CLI 使用文档 | `1c32cbd4` | `dev` |
 | 38 | 2026-07-15 | 修复 Tauri 多 binary 桌面入口 | `4c5ad0ca` | `dev` |
 | 37 | 2026-07-15 | 完成技能可移植性与共享本机 CLI | `b172f194`, `a7656ab4` | `dev` |

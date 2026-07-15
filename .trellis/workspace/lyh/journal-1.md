@@ -1620,3 +1620,37 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 40: 修复根级 Skill 仓库导入
+
+**Date**: 2026-07-15
+**Task**: 修复根级 Skill 仓库导入
+**Branch**: `dev`
+
+### Summary
+
+修复 sourcePath 为根目录时仅同步顶层文件的问题，统一导入与中央更新的仓库相对路径映射，补充完整导入、更新检测及强制修复回归测试，并固化内容边界规范。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a17b2fe03b2a6901bc63c856b7f8233f2e19e9da` | (see git log) |
+| `f0415928927ea3fa327b71df916cca05ba36fd8e` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
