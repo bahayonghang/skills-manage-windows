@@ -28,6 +28,13 @@ pub struct GitHubSkillConflict {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitHubSkillPreviewFile {
+    pub path: String,
+    pub byte_len: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct GitHubSkillPreview {
     pub source_path: String,
     pub skill_id: String,
@@ -39,6 +46,8 @@ pub struct GitHubSkillPreview {
     pub skill_directory_name: String,
     pub download_url: String,
     pub conflict: Option<GitHubSkillConflict>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files: Option<Vec<GitHubSkillPreviewFile>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

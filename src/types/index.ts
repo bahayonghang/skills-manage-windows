@@ -719,73 +719,19 @@ export interface SkillportStateImportResult {
   cancelled?: boolean;
 }
 
-export interface GitHubRepoRef {
-  owner: string;
-  repo: string;
-  branch: string;
-  normalizedUrl: string;
-}
-
-export interface GitHubSkillConflict {
-  existingSkillId: string;
-  existingName: string;
-  existingCanonicalPath?: string | null;
-  proposedSkillId: string;
-  proposedName: string;
-}
-
-export interface GitHubSkillPreview {
-  sourcePath: string;
-  skillId: string;
-  skillName: string;
-  description?: string | null;
-  pluginName?: string | null;
-  rootDirectory: string;
-  skillDirectoryName: string;
-  downloadUrl: string;
-  conflict?: GitHubSkillConflict | null;
-}
-
-export interface GitHubRepoPreview {
-  repo: GitHubRepoRef;
-  skills: GitHubSkillPreview[];
-  previewWorkspaceId?: string | null;
-}
-
-export type DuplicateResolution = "overwrite" | "skip" | "rename";
-
-export interface GitHubSkillImportSelection {
-  sourcePath: string;
-  resolution: DuplicateResolution;
-  renamedSkillId?: string | null;
-}
-
-export interface ImportedGitHubSkillSummary {
-  sourcePath: string;
-  originalSkillId: string;
-  importedSkillId: string;
-  skillName: string;
-  targetDirectory: string;
-  resolution: DuplicateResolution;
-}
-
-export interface GitHubRepoImportResult {
-  repo: GitHubRepoRef;
-  importedSkills: ImportedGitHubSkillSummary[];
-  skippedSkills: string[];
-}
-
-export type GitHubImportProgressPhase = "preparing" | "writing" | "finalizing";
-
-export interface GitHubImportProgressPayload {
-  phase: GitHubImportProgressPhase;
-  currentSkill?: string | null;
-  currentPath?: string | null;
-  completedFiles: number;
-  totalFiles: number;
-  completedBytes: number;
-  totalBytes: number;
-}
+export type {
+  DuplicateResolution,
+  GitHubImportProgressPayload,
+  GitHubImportProgressPhase,
+  GitHubRepoImportResult,
+  GitHubRepoPreview,
+  GitHubRepoRef,
+  GitHubSkillConflict,
+  GitHubSkillImportSelection,
+  GitHubSkillPreview,
+  GitHubSkillPreviewFile,
+  ImportedGitHubSkillSummary,
+} from "./githubImport";
 
 // ─── Central Skills v2 Information Architecture (M0~M6) ──────────────────
 // 类型契约移到独立文件以满足体积预算约束。

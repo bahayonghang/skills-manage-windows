@@ -42,6 +42,8 @@ mod types;
 use archive::*;
 use import::*;
 use plugin_manifest::*;
+#[cfg(test)]
+use preview::*;
 use preview_workspace::*;
 use progress::*;
 use raw_http::*;
@@ -81,7 +83,7 @@ pub(crate) use source::{
 pub use types::{
     DuplicateResolution, GitHubImportProgressPayload, GitHubImportProgressPhase, GitHubPatState,
     GitHubPatTestResult, GitHubRepoImportResult, GitHubRepoPreview, GitHubRepoRef,
-    GitHubSkillConflict, GitHubSkillImportSelection, GitHubSkillPreview,
+    GitHubSkillConflict, GitHubSkillImportSelection, GitHubSkillPreview, GitHubSkillPreviewFile,
     ImportedGitHubSkillSummary,
 };
 pub(crate) use types::{

@@ -9,6 +9,7 @@ pub(super) mod tests {
     use flate2::{write::GzEncoder, Compression};
     use serde_json::Value;
     use std::collections::HashMap;
+    use std::sync::Arc;
     use tempfile::tempdir;
 
     async fn setup_test_db() -> DbPool {
@@ -458,6 +459,189 @@ metadata:
             repo_file_relative_to_source("skills/agent-browser", "skills/agent-browser"),
             None
         );
+    }
+
+    #[tokio::test]
+    async fn preview_file_manifest_uses_root_content_boundary_and_serializes_camel_case() {
+        let pool = setup_test_db().await;
+        let snapshot = root_package_snapshot();
+        let repo = GitHubRepoRef {
+            owner: "alchaincyf".to_string(),
+            repo: "huashu-design".to_string(),
+            branch: "master".to_string(),
+            normalized_url: "https://github.com/alchaincyf/huashu-design".to_string(),
+        };
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &snapshot).expect("root candidate");
+        let mut previews = build_preview_skills(&pool, &candidates)
+            .await
+            .expect("preview skills");
+
+        assert!(serde_json::to_value(&previews[0])
+            .expect("serialize preview")
+            .get("files")
+            .is_none());
+
+        attach_preview_file_manifests(&mut previews, &snapshot_preview_repository_files(&snapshot))
+            .expect("attach files");
+
+        let files = previews[0].files.as_ref().expect("file manifest");
+        assert_eq!(
+            files
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "README.md",
+                "SKILL.md",
+                "assets/example.txt",
+                "references/guide.md",
+                "scripts/run.py",
+            ]
+        );
+        let serialized = serde_json::to_value(&previews[0]).expect("serialize preview");
+        assert_eq!(serialized["files"][0]["path"], "README.md");
+        assert_eq!(serialized["files"][0]["byteLen"], 16);
+        assert!(serialized["files"][0].get("byte_len").is_none());
+    }
+
+    #[tokio::test]
+    async fn preview_file_manifest_limits_nested_candidate_to_its_source_subtree() {
+        let pool = setup_test_db().await;
+        let snapshot = content_skills_snapshot();
+        let repo = GitHubRepoRef {
+            owner: "example".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/example/skills".to_string(),
+        };
+        let candidates =
+            build_repo_skill_candidates_from_snapshot(&repo, &snapshot).expect("nested candidates");
+        let candidate = candidates
+            .iter()
+            .find(|candidate| candidate.skill_id == "code-auditor")
+            .expect("code-auditor candidate")
+            .clone();
+        let mut previews = build_preview_skills(&pool, &[candidate])
+            .await
+            .expect("preview skills");
+
+        attach_preview_file_manifests(&mut previews, &snapshot_preview_repository_files(&snapshot))
+            .expect("attach files");
+
+        let files = previews[0].files.as_ref().expect("file manifest");
+        assert_eq!(
+            files
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["SKILL.md", "references/checklist.md"]
+        );
+    }
+
+    #[test]
+    fn remote_preview_file_manifest_parser_is_stable_and_budgeted() {
+        let output = "references/guide.md\05\0SKILL.md\012\0";
+        let files = parse_remote_preview_repository_files(output).expect("parse manifest");
+
+        assert_eq!(
+            files,
+            vec![
+                PreviewRepositoryFile {
+                    repo_path: "SKILL.md".to_string(),
+                    byte_len: 12,
+                },
+                PreviewRepositoryFile {
+                    repo_path: "references/guide.md".to_string(),
+                    byte_len: 5,
+                },
+            ]
+        );
+        assert!(REMOTE_PREVIEW_FILE_INVENTORY_SCRIPT.contains("find \"$repo_dir\" -type f"));
+        assert!(REMOTE_PREVIEW_FILE_INVENTORY_SCRIPT.contains("wc -c < \"$file\""));
+        assert!(REMOTE_PREVIEW_FILE_INVENTORY_SCRIPT.contains("printf \"%s\\0%s\\0\""));
+    }
+
+    #[test]
+    fn remote_preview_file_manifest_parser_rejects_malformed_or_duplicate_records() {
+        assert!(matches!(
+            parse_remote_preview_repository_files("SKILL.md\012"),
+            Err(GithubImportError::RemotePreviewInvalidFileManifest)
+        ));
+        assert!(matches!(
+            parse_remote_preview_repository_files("SKILL.md\012\0SKILL.md\012\0"),
+            Err(GithubImportError::RemotePreviewInvalidFileManifest)
+        ));
+        assert!(matches!(
+            parse_remote_preview_repository_files("SKILL.md\0not-a-size\0"),
+            Err(GithubImportError::RemotePreviewInvalidFileManifest)
+        ));
+    }
+
+    #[tokio::test]
+    async fn remote_preview_file_inventory_uses_one_fake_runner_script_call() {
+        let runner = Arc::new(crate::test_support::FakeRunner::new());
+        runner.push_success("SKILL.md\012\0references/guide.md\05\0");
+        let connection =
+            ConnectedRemoteTarget::Ssh(crate::targets::ConnectedSshTarget::for_tests_with_runner(
+                crate::targets::RemoteTargetConfig {
+                    id: "ssh-preview".to_string(),
+                    label: "SSH Preview".to_string(),
+                    host: "example.com".to_string(),
+                    username: "alice".to_string(),
+                    port: 22,
+                    auth_method: crate::targets::SshAuthMethod::Key,
+                    key_path: "~/.ssh/id_ed25519".to_string(),
+                    credential_key: None,
+                    protected_password: None,
+                    password: None,
+                    remote_home: "/home/alice".to_string(),
+                    remote_os: "Linux".to_string(),
+                    symlink_enabled: true,
+                },
+                runner.clone(),
+            ));
+
+        let files = remote_preview_repository_files(&connection, "/tmp/preview/repo")
+            .await
+            .expect("remote inventory");
+
+        assert_eq!(files.len(), 2);
+        let calls = runner.calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(
+            calls[0].stdin.as_deref(),
+            Some(REMOTE_PREVIEW_FILE_INVENTORY_SCRIPT.as_bytes())
+        );
+        assert_eq!(
+            calls[0].args.last().map(String::as_str),
+            Some("sh -s -- '/tmp/preview/repo'")
+        );
+    }
+
+    #[test]
+    fn preview_file_manifest_fails_closed_without_root_skill_markdown() {
+        let mut previews = vec![GitHubSkillPreview {
+            source_path: ".".to_string(),
+            skill_id: "demo".to_string(),
+            skill_name: "Demo".to_string(),
+            description: None,
+            plugin_name: None,
+            root_directory: "/".to_string(),
+            skill_directory_name: "demo".to_string(),
+            download_url: "https://example.com/SKILL.md".to_string(),
+            conflict: None,
+            files: None,
+        }];
+        let repository_files = vec![PreviewRepositoryFile {
+            repo_path: "README.md".to_string(),
+            byte_len: 4,
+        }];
+
+        assert!(matches!(
+            attach_preview_file_manifests(&mut previews, &repository_files),
+            Err(GithubImportError::PreviewFileManifestIncomplete(path)) if path == "."
+        ));
     }
 
     #[test]

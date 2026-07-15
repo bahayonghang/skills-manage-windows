@@ -671,6 +671,7 @@ pub(crate) async fn build_preview_skills(
             skill_directory_name: candidate.skill_directory_name.clone(),
             download_url: candidate.download_url.clone(),
             conflict,
+            files: None,
         });
     }
     Ok(skills)

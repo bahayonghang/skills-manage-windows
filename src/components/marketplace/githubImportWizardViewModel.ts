@@ -15,6 +15,7 @@ import {
   type WizardStep,
 } from "@/components/marketplace/githubImportWizardUtils";
 import { requiresSshPasswordRepair } from "@/lib/targetKind";
+import { getGitHubImportFileManifestIssue } from "@/lib/githubImportFileTree";
 
 export interface GitHubImportDecisionCounts {
   write: number;
@@ -34,6 +35,7 @@ export interface GitHubImportPreviewState {
   noSkillsSelected: boolean;
   selectedPreviewSkill: GitHubSkillPreview | null;
   blockingConflict: GitHubSkillPreview | undefined;
+  blockingFileManifest: GitHubSkillPreview | undefined;
   selectedImportPayload: GitHubSkillImportSelection[];
   skippedPreviewSkills: GitHubSkillPreview[];
   decisionCounts: GitHubImportDecisionCounts;
@@ -97,6 +99,9 @@ export function getGitHubImportPreviewState({
     }
     return false;
   });
+  const blockingFileManifest = selectedSkills.find((skill) =>
+    Boolean(getGitHubImportFileManifestIssue(skill.files)),
+  );
   const selectedImportPayload = selectedSkills.map((skill) => {
     const state = selectionState[skill.sourcePath];
     return {
@@ -156,6 +161,7 @@ export function getGitHubImportPreviewState({
     noSkillsSelected,
     selectedPreviewSkill,
     blockingConflict,
+    blockingFileManifest,
     selectedImportPayload,
     skippedPreviewSkills,
     decisionCounts,
@@ -178,6 +184,7 @@ export function getGitHubImportWizardShellState({
   previewError,
   selectedSkillsCount,
   hasBlockingConflict,
+  hasBlockingFileManifest,
   decisionWriteCount,
 }: {
   step: WizardStep;
@@ -192,6 +199,7 @@ export function getGitHubImportWizardShellState({
   previewError: string | null;
   selectedSkillsCount: number;
   hasBlockingConflict: boolean;
+  hasBlockingFileManifest: boolean;
   decisionWriteCount: number;
 }) {
   const isInputStep = step === "input" && !preview && !importResult;
@@ -230,7 +238,10 @@ export function getGitHubImportWizardShellState({
       showSshPasswordRepairSuccess ||
       (Boolean(missingSshPasswordError) &&
         sshPasswordRepairMessage?.type !== "success"));
-  const canReview = selectedSkillsCount > 0 && !hasBlockingConflict;
+  const canReview =
+    selectedSkillsCount > 0 &&
+    !hasBlockingConflict &&
+    !hasBlockingFileManifest;
   const canConfirm =
     canReview && decisionWriteCount > 0 && !activePasswordTargetNeedsPassword;
 

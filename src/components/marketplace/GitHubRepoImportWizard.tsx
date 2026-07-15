@@ -113,6 +113,7 @@ export function GitHubRepoImportWizard({
         previewError,
         selectedSkillsCount: previewState.selectedSkills.length,
         hasBlockingConflict: Boolean(previewState.blockingConflict),
+        hasBlockingFileManifest: Boolean(previewState.blockingFileManifest),
         decisionWriteCount: previewState.decisionCounts.write,
       }),
     [
@@ -124,6 +125,7 @@ export function GitHubRepoImportWizard({
       preview,
       previewError,
       previewState.blockingConflict,
+      previewState.blockingFileManifest,
       previewState.decisionCounts.write,
       previewState.selectedSkills.length,
       progressNow,
@@ -219,12 +221,6 @@ export function GitHubRepoImportWizard({
   useEffect(() => {
     if (step === "preview") {
       detailScrollRef.current?.scrollTo?.({ top: 0, behavior: "auto" });
-    }
-  }, [selectedSkillPath, step]);
-
-  useEffect(() => {
-    if (step === "preview") {
-      setDetailTab("overview");
     }
   }, [selectedSkillPath, step]);
 
@@ -377,6 +373,7 @@ export function GitHubRepoImportWizard({
                 browserMode={browserMode}
                 allSkillsSelected={previewState.allSkillsSelected}
                 noSkillsSelected={previewState.noSkillsSelected}
+                blockingFileManifest={previewState.blockingFileManifest}
                 skillMarkdown={skillMarkdown}
                 aiSummaries={aiSummaries}
                 detailScrollRef={detailScrollRef}

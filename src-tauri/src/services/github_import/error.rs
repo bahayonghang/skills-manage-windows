@@ -131,6 +131,12 @@ pub enum GithubImportError {
     #[error("{0}")]
     InvalidCandidate(String),
 
+    #[error("GitHub preview file manifest for skill '{0}' is incomplete.")]
+    PreviewFileManifestIncomplete(String),
+
+    #[error("Remote GitHub preview returned an invalid file manifest.")]
+    RemotePreviewInvalidFileManifest,
+
     // ── Import staging / execution ───────────────────────────────────────────
     #[error("Select at least one skill to import.")]
     NoSelections,
