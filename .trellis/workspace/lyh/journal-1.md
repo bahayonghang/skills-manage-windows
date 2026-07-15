@@ -1520,3 +1520,37 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 37: 完成技能可移植性与共享本机 CLI
+
+**Date**: 2026-07-15
+**Task**: 完成技能可移植性与共享本机 CLI
+**Branch**: `dev`
+
+### Summary
+
+实现稳定技能 uid、跨进程 Central mutation lock 与共享本机 CLI，补齐 Windows 多 binary 打包和双语文档；升级 Trellis 运行时归档保护，并清理已完成或未触发的任务材料。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b172f194` | (see git log) |
+| `a7656ab4` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

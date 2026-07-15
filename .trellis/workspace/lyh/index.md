@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 36
-- **Last Active**: 2026-07-13
+- **Total Sessions**: 37
+- **Last Active**: 2026-07-15
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1522 | Active |
+| `journal-1.md` | ~1556 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 37 | 2026-07-15 | 完成技能可移植性与共享本机 CLI | `b172f194`, `a7656ab4` | `dev` |
 | 36 | 2026-07-13 | 替换 SkillPort 图标并升级 0.10.13 | `c02ef2f8`, `ec4d8c2a` | `dev` |
 | 35 | 2026-07-13 | 优化明暗主题字体设置与紧凑排版 | `b20b934f` | `dev` |
 | 34 | 2026-07-12 | 完成字体 fallback 与设置界面优化 | `5178d84b86f1bb39ed2ed6201bee84eef633b89e`, `da2dad135224ad9ac3cefb8e2c0a293e1c26f382` | `dev` |
