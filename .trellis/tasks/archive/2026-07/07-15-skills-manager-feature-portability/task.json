@@ -1,0 +1,29 @@
+{
+  "id": "skills-manager-feature-portability",
+  "name": "skills-manager-feature-portability",
+  "title": "交付 SkillPort 共享核心 CLI 与稳定身份/并发基础",
+  "description": "协调共享核心 SkillPort CLI、不可变技能 uid 与中央库跨进程 mutation lock 两个子任务；明确排除 Git 备份与多设备合并。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": "parent:backend,frontend,cli,data-migration,windows-packaging",
+  "package": null,
+  "priority": "P1",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-07-15",
+  "completedAt": "2026-07-15",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-15-shared-core-cli",
+    "07-15-stable-skill-identity-mutation-lock"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
