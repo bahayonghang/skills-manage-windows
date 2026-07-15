@@ -176,3 +176,92 @@ Bare `github`, bare `settings`, or embedded character sequences such as the
 - Real wizard component tests for `subpaths`, URL validation, rate limiting,
   and configured-token denial messages.
 - Full gate: `just ci`.
+
+## Scenario: Root Skill Repository Content Boundary
+
+### 1. Scope / Trigger
+
+Apply this scenario when import or Central update code maps repository snapshot
+files into a selected skill source path. A root `SKILL.md` uses `sourcePath = "."`
+and represents one complete repository-backed skill package.
+
+### 2. Shared Path Contract
+
+```rust
+pub(crate) fn repo_file_relative_to_source(
+    repo_path: &str,
+    source_path: &str,
+) -> Option<String>;
+```
+
+- For `sourcePath = "."`, every snapshot file remains in scope and keeps its
+  repository-relative path. Descendants such as `references/guide.md` must not
+  be filtered because their path contains `/`.
+- For a nested source such as `skills/agent-browser`, only files below that
+  exact directory remain in scope and the source prefix is removed.
+- Import staging/progress and Central update hashing/writes must call the same
+  mapping helper. Do not maintain parallel root-path branches.
+- Candidate identity, repository assignment and update metadata continue to
+  persist `sourcePath = "."`; no schema or DTO change is required.
+- GitHub archive resource budgets and existing safe-relative-path checks remain
+  the security boundary for whole-repository root packages.
+
+### 3. Update And Repair Contract
+
+- Root descendants participate in remote hashes. Adding, changing or deleting
+  only a descendant file must change update state.
+- A previously truncated root package whose top-level files still match becomes
+  `update_available` after a fresh comparison.
+- Normal and force update reuse existing atomic staging/backup/swap behavior to
+  install the complete root tree and remove stale local files.
+- Copy installations refresh from the repaired Central directory through the
+  existing batched copy path.
+- SSH/WSL direct GitHub import keeps its existing recursive `cp -a` behavior;
+  local snapshot import and Central updates must produce the same file scope.
+
+### 4. Validation Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Root snapshot has `SKILL.md` plus `assets/`, `references/`, or `scripts/` descendants | Import every file with its original relative path |
+| Existing root package lacks descendants | Fresh inventory reports an update and update restores descendants |
+| Root upstream deletes a file | Atomic replacement removes the stale local file |
+| Source is `skills/agent-browser` | Import only that subtree, never repository root or sibling directories |
+| Update write fails | Restore the previous directory and leak no staging/backup directory |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a root package contains `SKILL.md`, `references/guide.md`, and
+  `scripts/run.py`; import and update preserve all three paths.
+- Base: a nested `skills/agent-browser/SKILL.md` package has no descendants;
+  only that file is imported and repository siblings remain excluded.
+- Bad: a root collector treats any path containing `/` as out of scope, so
+  local files and remote hashes silently omit every descendant directory.
+
+### 6. Tests Required
+
+- Pure root-vs-nested source-path mapping table.
+- Root import collector and end-to-end import with nested resources.
+- Root snapshot hash parity with a complete local directory.
+- Inventory regression for a top-level-equal but descendant-incomplete package.
+- Force update regression covering Central repair, stale-file removal,
+  repository assignment preservation and managed-copy refresh.
+- Existing nested import, `skill/` container, plugin grouping, generic filtering,
+  remote import and Central batching tests.
+- Full gate: `just ci`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```rust
+if source_path == "." && repo_path.contains('/') {
+    return None;
+}
+```
+
+#### Correct
+
+```rust
+let relative_path = repo_file_relative_to_source(repo_path, source_path)?;
+```
