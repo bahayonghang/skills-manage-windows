@@ -1554,3 +1554,36 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 38: 修复 Tauri 多 binary 桌面入口
+
+**Date**: 2026-07-15
+**Task**: 修复 Tauri 多 binary 桌面入口
+**Branch**: `dev`
+
+### Summary
+
+通过 Cargo default-run 固定 GUI 主入口，新增 just ci metadata 回归检查，修正 shared CLI 打包规范，并验证开发模式、Windows bundle 与安装后 GUI/CLI 入口。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4c5ad0ca` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
