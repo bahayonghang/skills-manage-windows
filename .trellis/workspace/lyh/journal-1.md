@@ -1587,3 +1587,36 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 39: 完善 SkillPort CLI 使用文档
+
+**Date**: 2026-07-15
+**Task**: 完善 SkillPort CLI 使用文档
+**Branch**: `dev`
+
+### Summary
+
+新增中英文 CLI reference，覆盖安装、命令、JSON、退出码、安全规则与同步工作流；接入导航和 README，并刷新生成架构参考。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c32cbd4` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
