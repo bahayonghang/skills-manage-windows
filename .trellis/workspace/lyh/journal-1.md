@@ -1654,3 +1654,36 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 41: 完成技能使用统计闭环
+
+**Date**: 2026-07-15
+**Task**: 完成技能使用统计闭环
+**Branch**: `dev`
+
+### Summary
+
+完成技能统计的可信聚合、技能元数据解析、详情交互与可访问展示；通过 just ci、定向测试和多视口浏览器验证后提交并归档。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2bc15b45fa73e5f9674e4077e365bc442a1b849d` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
