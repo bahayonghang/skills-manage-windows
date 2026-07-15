@@ -52,19 +52,21 @@ cargo install --path src-tauri --bin skillport-cli --locked --force
 - Stable uid/slug/name list-show tests plus non-Central name-shadow coverage.
 - JSON envelope and exit-code tests in the binary target.
 - Temporary HOME binary smoke test with an empty Local DB.
-- `just ci`, locked release CLI build, and Windows `pnpm tauri build`.
+- `pnpm entrypointcheck`, `just ci`, locked release CLI build, and Windows `pnpm tauri build`.
 - Verify both `target/release/skillport.exe` and `target/release/skillport-cli.exe` exist and run their expected entry points.
 
 ## 7. Wrong vs Correct
 
-```json
-// Wrong: with multiple Cargo bins, Tauri may select the CLI as the app binary.
-{ "identifier": "com.bahayonghang.skillport" }
+```toml
+# Wrong: multiple Cargo bins without an explicit default application target.
+[package]
+name = "skillport"
 
-// Correct: pin the desktop binary and build the CLI after desktop compilation.
-{
-  "identifier": "com.bahayonghang.skillport",
-  "mainBinaryName": "skillport",
-  "build": { "beforeBundleCommand": "pnpm build:cli" }
-}
+# Correct: Cargo and Tauri both resolve the desktop application as the main bin.
+[package]
+name = "skillport"
+default-run = "skillport"
 ```
+
+`mainBinaryName` only overrides the selected app binary's output filename. It does not
+select a Cargo target and must not replace the `package.default-run` contract.

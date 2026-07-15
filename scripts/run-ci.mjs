@@ -22,6 +22,7 @@ const chains = [
   {
     name: "rust",
     steps: [
+      { name: "entrypoints", command: "pnpm", args: ["entrypointcheck"] },
       {
         name: "clippy",
         command: "cargo",

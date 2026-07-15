@@ -9,6 +9,7 @@
     "build": "tsc && vite build",
     "build:cli": "cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --locked",
     "cli": "cargo run --manifest-path src-tauri/Cargo.toml --bin skillport-cli --",
+    "entrypointcheck": "node scripts/check-rust-entrypoints.mjs",
     "install:cli": "cargo install --path src-tauri --bin skillport-cli --locked --force",
     "preview": "vite preview",
     "tauri": "tauri",
