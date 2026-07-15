@@ -612,6 +612,7 @@ async fn test_init_does_not_duplicate_agents_on_reinit() {
 fn make_skill(id: &str, name: &str, is_central: bool) -> Skill {
     Skill {
         id: id.to_string(),
+        uid: format!("{id}-uid"),
         name: name.to_string(),
         description: Some(format!("Description for {}", name)),
         file_path: format!("/tmp/{}/SKILL.md", id),
@@ -648,11 +649,30 @@ async fn test_upsert_skill_update() {
     let mut skill = make_skill("skill-1", "Original Name", false);
     upsert_skill(&pool, &skill).await.unwrap();
 
+    let original_uid = skill.uid.clone();
+    skill.uid = "replacement-uid-must-not-win".to_string();
     skill.name = "Updated Name".to_string();
     upsert_skill(&pool, &skill).await.unwrap();
 
     let retrieved = get_skill_by_id(&pool, "skill-1").await.unwrap().unwrap();
     assert_eq!(retrieved.name, "Updated Name");
+    assert_eq!(retrieved.uid, original_uid);
+}
+
+#[tokio::test]
+async fn test_recreated_skill_slug_gets_a_new_uid() {
+    let pool = setup_test_db().await;
+    let first = make_skill("recreated", "First", true);
+    upsert_skill(&pool, &first).await.unwrap();
+    delete_skill(&pool, &first.id).await.unwrap();
+
+    let mut recreated = make_skill("recreated", "Second", true);
+    recreated.uid = "recreated-second-uid".to_string();
+    upsert_skill(&pool, &recreated).await.unwrap();
+
+    let stored = get_skill_by_id(&pool, "recreated").await.unwrap().unwrap();
+    assert_eq!(stored.uid, recreated.uid);
+    assert_ne!(stored.uid, first.uid);
 }
 
 #[tokio::test]
@@ -685,6 +705,7 @@ async fn test_upsert_skill_preserves_central_record_when_platform_copy_is_seen_l
         Some("/tmp/.skillsmanage/skills/shared-skill")
     );
     assert_eq!(retrieved.source.as_deref(), Some("native"));
+    assert_eq!(retrieved.uid, central.uid);
 }
 
 #[tokio::test]
@@ -2105,6 +2126,23 @@ async fn test_migration_adds_created_at_to_skill_installations() {
     init_database(&pool)
         .await
         .expect("init_database should succeed and apply the created_at migration");
+
+    let migrated_uid: String = sqlx::query_scalar("SELECT uid FROM skills WHERE id = 'legacy-skill'")
+        .fetch_one(&pool)
+        .await
+        .expect("legacy skill should receive a uid");
+    assert!(!migrated_uid.is_empty());
+    assert!(uuid::Uuid::parse_str(&migrated_uid).is_ok());
+
+    init_database(&pool)
+        .await
+        .expect("uid migration should be idempotent");
+    let uid_after_second_init: String =
+        sqlx::query_scalar("SELECT uid FROM skills WHERE id = 'legacy-skill'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(uid_after_second_init, migrated_uid);
 
     // Confirm the column now exists in PRAGMA table_info.
     let columns = sqlx::query("PRAGMA table_info(skill_installations)")

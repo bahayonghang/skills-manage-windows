@@ -25,6 +25,9 @@ pub enum CentralUpdatesError {
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 
+    #[error("{0}")]
+    CentralMutation(String),
+
     /// GitHub snapshot download / auth / repo resolution via the
     /// github_import domain.
     #[error(transparent)]

@@ -39,6 +39,7 @@ fn make_directory_tree_fixture(root: &Path) {
 fn make_central_skill_at(id: &str, name: &str, dir: &Path) -> Skill {
     Skill {
         id: id.to_string(),
+        uid: format!("{id}-uid"),
         name: name.to_string(),
         description: Some(format!("Desc for {}", name)),
         file_path: dir.join("SKILL.md").to_string_lossy().into_owned(),
@@ -72,6 +73,7 @@ fn make_installation_at(
 fn make_skill(id: &str, name: &str, is_central: bool) -> Skill {
     Skill {
         id: id.to_string(),
+        uid: format!("{id}-uid"),
         name: name.to_string(),
         description: Some(format!("Desc for {}", name)),
         file_path: format!("/tmp/{}/SKILL.md", id),
@@ -96,6 +98,7 @@ fn make_skill(id: &str, name: &str, is_central: bool) -> Skill {
 fn make_remote_central_skill(id: &str, dir: &str) -> Skill {
     Skill {
         id: id.to_string(),
+        uid: format!("{id}-uid"),
         name: id.to_string(),
         description: Some(format!("Desc for {}", id)),
         file_path: format!("{}/SKILL.md", dir.trim_end_matches('/')),
@@ -123,6 +126,43 @@ fn make_remote_installation(
         symlink_target: None,
         created_at: Utc::now().to_rfc3339(),
     }
+}
+
+#[tokio::test]
+async fn skill_reference_resolution_is_deterministic() {
+    let pool = setup_test_db().await;
+    let alpha = make_skill("alpha-slug", "Shared Name", true);
+    let beta = make_skill("beta-slug", "Shared Name", true);
+    let unique = make_skill("unique-slug", "Unique Name", true);
+    let platform_shadow = make_skill("platform-shadow", "Unique Name", false);
+    db::upsert_skill(&pool, &alpha).await.unwrap();
+    db::upsert_skill(&pool, &beta).await.unwrap();
+    db::upsert_skill(&pool, &unique).await.unwrap();
+    db::upsert_skill(&pool, &platform_shadow).await.unwrap();
+
+    assert_eq!(
+        resolve_skill_ref_impl(&pool, &alpha.uid).await.unwrap().id,
+        alpha.id
+    );
+    assert_eq!(
+        resolve_skill_ref_impl(&pool, &beta.id).await.unwrap().uid,
+        beta.uid
+    );
+    assert_eq!(
+        resolve_skill_ref_impl(&pool, "Unique Name")
+            .await
+            .unwrap()
+            .id,
+        unique.id
+    );
+    assert!(matches!(
+        resolve_skill_ref_impl(&pool, "Shared Name").await,
+        Err(CentralSkillsError::AmbiguousSkillReference(_))
+    ));
+    assert!(matches!(
+        resolve_skill_ref_impl(&pool, "missing").await,
+        Err(CentralSkillsError::SkillNotFound(_))
+    ));
 }
 
 fn make_observation(
@@ -1056,6 +1096,7 @@ async fn test_read_skill_content_returns_file_content() {
 
     let skill = Skill {
         id: "my-skill".to_string(),
+        uid: "my-skill-uid".to_string(),
         name: "My Skill".to_string(),
         description: None,
         file_path: skill_md_path.to_string_lossy().into_owned(),
@@ -1079,6 +1120,7 @@ async fn test_read_skill_content_file_not_found() {
 
     let skill = Skill {
         id: "missing-file-skill".to_string(),
+        uid: "missing-file-skill-uid".to_string(),
         name: "Missing File".to_string(),
         description: None,
         file_path: "/nonexistent/SKILL.md".to_string(),

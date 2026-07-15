@@ -81,6 +81,7 @@ async fn get_observation_detail(
     Ok(Some(SkillDetail {
         row_id: observation.row_id,
         id: observation.skill_id.clone(),
+        uid: manageable_skill.as_ref().map(|skill| skill.uid.clone()),
         name: observation.name,
         description: observation.description.or_else(|| {
             manageable_skill
@@ -152,6 +153,7 @@ pub async fn get_skill_detail_with_row_impl(
     Ok(SkillDetail {
         row_id,
         id: skill.id,
+        uid: Some(skill.uid),
         name: skill.name,
         description: skill.description,
         file_path: skill.file_path,
@@ -227,6 +229,7 @@ async fn skills_with_links_from_rows(
 
         result.push(SkillWithLinks {
             id: skill.id,
+            uid: skill.uid,
             name: skill.name,
             description: skill.description,
             file_path: skill.file_path,
@@ -246,6 +249,33 @@ async fn skills_with_links_from_rows(
     }
 
     Ok(result)
+}
+
+pub async fn resolve_skill_ref_impl(
+    pool: &DbPool,
+    reference: &str,
+) -> Result<db::Skill, CentralSkillsError> {
+    if let Some(skill) = db::get_skill_by_uid(pool, reference)
+        .await?
+        .filter(|skill| skill.is_central)
+    {
+        return Ok(skill);
+    }
+    if let Some(skill) = db::get_skill_by_id(pool, reference)
+        .await?
+        .filter(|skill| skill.is_central)
+    {
+        return Ok(skill);
+    }
+
+    let mut matches = db::get_central_skills_by_exact_name(pool, reference).await?;
+    match matches.len() {
+        0 => Err(CentralSkillsError::SkillNotFound(reference.to_string())),
+        1 => Ok(matches.remove(0)),
+        _ => Err(CentralSkillsError::AmbiguousSkillReference(
+            reference.to_string(),
+        )),
+    }
 }
 
 pub async fn get_central_skills_page_impl(

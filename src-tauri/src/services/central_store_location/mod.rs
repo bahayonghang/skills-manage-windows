@@ -111,6 +111,12 @@ pub async fn apply_central_store_location_change_impl(
         return Err(CentralStoreLocationError::RequiresOverwrite);
     }
 
+    preview_central_store_location_change_impl(pool, target_path).await?;
+    let _mutation_guard = crate::services::central_mutation::acquire_central_mutation_guard(
+        "central store relocation",
+        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+    )
+    .await?;
     let preview = preview_central_store_location_change_impl(pool, target_path).await?;
     let source_root = PathBuf::from(&preview.source_path);
     let target_root = PathBuf::from(&preview.target_path);

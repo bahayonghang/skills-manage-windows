@@ -34,6 +34,7 @@ async fn seed_central_skill(pool: &DbPool, canonical_dir: &Path, skill_id: &str)
     write_skill_md(canonical_dir, skill_id, "e2e seed");
     let skill = Skill {
         id: skill_id.to_string(),
+        uid: format!("{skill_id}-uid"),
         name: skill_id.to_string(),
         description: Some("e2e seed".to_string()),
         file_path: canonical_dir

@@ -29,6 +29,9 @@ pub enum GithubImportError {
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 
+    #[error(transparent)]
+    CentralMutation(#[from] crate::services::central_mutation::CentralMutationError),
+
     // ── HTTP categories (parent design.md 1.2 Http-variant convention) ──────
     /// HTTP transport/protocol failure (connect, timeout, non-2xx status,
     /// mirror-fallback summaries). Message preformatted at the call site.

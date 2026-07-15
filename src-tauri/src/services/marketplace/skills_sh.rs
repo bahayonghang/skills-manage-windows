@@ -234,10 +234,33 @@ pub async fn install_from_skills_sh_impl(
     source: String,
     skill_id: String,
 ) -> Result<String, MarketplaceError> {
+    install_from_skills_sh_with_options_impl(
+        pool,
+        secrets,
+        active_target,
+        source,
+        skill_id,
+        true,
+    )
+    .await
+}
+
+pub async fn install_from_skills_sh_with_options_impl(
+    pool: &crate::db::DbPool,
+    secrets: &dyn SecretStore,
+    active_target: ActiveTarget,
+    source: String,
+    skill_id: String,
+    replace: bool,
+) -> Result<String, MarketplaceError> {
     let auth = github_import::github_direct_auth_from_secret_store(pool, secrets).await?;
     let (resolved, snapshot, auth_used) = skills_sh_snapshot_with_auth(&source, &auth).await?;
     let candidate =
         resolve_skills_sh_candidate_from_snapshot(&resolved.repo, &snapshot, &skill_id)?;
+    let preview = github_import::build_preview_skills(pool, std::slice::from_ref(&candidate)).await?;
+    if preview.first().is_some_and(|skill| skill.conflict.is_some()) && !replace {
+        return Err(MarketplaceError::DuplicateRequiresReplace(skill_id));
+    }
     let selection = github_import::GitHubSkillImportSelection {
         source_path: candidate.source_path.clone(),
         resolution: github_import::DuplicateResolution::Overwrite,

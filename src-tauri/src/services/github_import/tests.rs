@@ -656,6 +656,7 @@ metadata:
             &pool,
             &Skill {
                 id: "twitterapi-io".to_string(),
+                uid: "twitterapi-io-uid".to_string(),
                 name: "twitterapi-io".to_string(),
                 description: Some("existing".to_string()),
                 file_path: existing_dir.join("SKILL.md").to_string_lossy().into_owned(),
@@ -721,6 +722,7 @@ metadata:
             &pool,
             &Skill {
                 id: "web-access".to_string(),
+                uid: "web-access-uid".to_string(),
                 name: "web-access".to_string(),
                 description: Some("platform copy left after central delete".to_string()),
                 file_path: "/tmp/codex/web-access/SKILL.md".to_string(),
@@ -793,6 +795,7 @@ metadata:
             &pool,
             &Skill {
                 id: agent_planner.skill_id.clone(),
+                uid: format!("{}-uid", agent_planner.skill_id),
                 name: "Agent Planner".to_string(),
                 description: Some("existing".to_string()),
                 file_path: "/tmp/agent-planner/SKILL.md".to_string(),
@@ -811,6 +814,7 @@ metadata:
             &pool,
             &Skill {
                 id: commit.skill_id.clone(),
+                uid: format!("{}-uid", commit.skill_id),
                 name: "Commit".to_string(),
                 description: Some("existing".to_string()),
                 file_path: "/tmp/commit/SKILL.md".to_string(),
@@ -829,6 +833,7 @@ metadata:
             &pool,
             &Skill {
                 id: code_review.skill_id.clone(),
+                uid: format!("{}-uid", code_review.skill_id),
                 name: "Code Review".to_string(),
                 description: Some("existing".to_string()),
                 file_path: "/tmp/code-review/SKILL.md".to_string(),
@@ -1124,6 +1129,7 @@ metadata:
             &pool,
             &Skill {
                 id: candidate.skill_id.clone(),
+                uid: format!("{}-uid", candidate.skill_id),
                 name: "Code Review".to_string(),
                 description: Some("existing description".to_string()),
                 file_path: existing_dir.join("SKILL.md").to_string_lossy().into_owned(),

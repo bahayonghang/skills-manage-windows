@@ -315,6 +315,7 @@ mod tests {
     fn make_skill(id: &str) -> Skill {
         Skill {
             id: id.to_string(),
+            uid: format!("{id}-uid"),
             name: format!("Skill {}", id),
             description: Some(format!("Description for {}", id)),
             file_path: format!("/tmp/central/{}/SKILL.md", id),
@@ -822,6 +823,7 @@ mod tests {
             // Insert the skill into DB.
             let skill = Skill {
                 id: skill_id.to_string(),
+                uid: format!("{skill_id}-uid"),
                 name: skill_id.to_string(),
                 description: None,
                 file_path: skill_dir.join("SKILL.md").to_string_lossy().into_owned(),
@@ -897,6 +899,7 @@ mod tests {
         for skill_id in &["good-skill", "missing-on-disk"] {
             let skill = Skill {
                 id: skill_id.to_string(),
+                uid: format!("{skill_id}-uid"),
                 name: skill_id.to_string(),
                 description: None,
                 file_path: central_dir

@@ -103,6 +103,7 @@ export interface ScannedSkill {
 
 export interface Skill {
   id: string;
+  uid?: string | null;
   name: string;
   description?: string;
   file_path: string;
@@ -153,6 +154,7 @@ export interface DirectoryTreeEntry {
 }
 export interface SkillWithLinks {
   id: string;
+  uid?: string | null;
   name: string;
   description?: string;
   file_path: string;

@@ -2145,6 +2145,7 @@ fn fake_ssh_transport(
 async fn seed_remote_source_skill(pool: &DbPool, skill_id: &str, source_dir: &str) {
     let skill = db::Skill {
         id: skill_id.to_string(),
+        uid: format!("{skill_id}-uid"),
         name: skill_id.to_string(),
         description: None,
         file_path: format!("{source_dir}/SKILL.md"),

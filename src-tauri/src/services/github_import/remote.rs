@@ -307,6 +307,7 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
 
         let db_skill = Skill {
             id: op.final_skill_id.clone(),
+            uid: uuid::Uuid::new_v4().to_string(),
             name: frontmatter.name.clone(),
             description: frontmatter.description.clone(),
             file_path: skill_md_path,

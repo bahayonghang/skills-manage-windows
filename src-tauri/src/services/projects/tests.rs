@@ -575,6 +575,7 @@ async fn install_skill_rejects_non_central_skill() {
     // 写一条非 central 的 skill 记录
     let skill = Skill {
         id: "ghost".to_string(),
+        uid: "ghost-uid".to_string(),
         name: "ghost".to_string(),
         description: None,
         file_path: tmp

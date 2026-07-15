@@ -43,6 +43,7 @@ fn manifest_with_skill(id: &str, path: &str) -> SkillportStateManifest {
         }],
         central_skills: vec![PortableCentralSkill {
             id: id.to_string(),
+            uid: None,
             name: id.to_string(),
             description: Some("demo".to_string()),
             source: github_source(path),
@@ -107,6 +108,7 @@ async fn export_includes_github_skill_and_unrestorable_local_skill() {
     let pool = setup_test_db().await;
     let github = Skill {
         id: "openai-docs".to_string(),
+        uid: "openai-docs-uid".to_string(),
         name: "openai-docs".to_string(),
         description: Some("docs".to_string()),
         file_path: "/tmp/openai-docs/SKILL.md".to_string(),
@@ -145,6 +147,7 @@ async fn export_includes_github_skill_and_unrestorable_local_skill() {
     .unwrap();
     let local = Skill {
         id: "local-skill".to_string(),
+        uid: "local-skill-uid".to_string(),
         name: "local-skill".to_string(),
         description: None,
         file_path: "/tmp/local-skill/SKILL.md".to_string(),
@@ -166,6 +169,10 @@ async fn export_includes_github_skill_and_unrestorable_local_skill() {
     .unwrap();
 
     assert_eq!(manifest.central_skills.len(), 1);
+    assert_eq!(
+        manifest.central_skills[0].uid.as_deref(),
+        Some("openai-docs-uid")
+    );
     assert_eq!(manifest.github_sources.len(), 1);
     assert_eq!(manifest.github_sources[0].name, "openai/skills");
     assert_eq!(
@@ -192,6 +199,7 @@ async fn export_counts_distinct_github_repositories_backing_central_skills() {
             &pool,
             &Skill {
                 id: id.to_string(),
+                uid: format!("{id}-uid"),
                 name: name.to_string(),
                 description: None,
                 file_path: format!("/tmp/{id}/SKILL.md"),
@@ -317,6 +325,7 @@ async fn preview_reports_ready_conflict_missing_and_unrestorable() {
     let pool = setup_test_db().await;
     let existing = Skill {
         id: "conflict-skill".to_string(),
+        uid: "conflict-skill-uid".to_string(),
         name: "conflict-skill".to_string(),
         description: None,
         file_path: "/tmp/conflict-skill/SKILL.md".to_string(),
@@ -333,6 +342,7 @@ async fn preview_reports_ready_conflict_missing_and_unrestorable() {
     let mut manifest = manifest_with_skill("ready-skill", "skills/ready-skill/SKILL.md");
     manifest.central_skills.push(PortableCentralSkill {
         id: "conflict-skill".to_string(),
+        uid: None,
         name: "conflict-skill".to_string(),
         description: None,
         source: github_source("skills/conflict-skill/SKILL.md"),
@@ -340,6 +350,7 @@ async fn preview_reports_ready_conflict_missing_and_unrestorable() {
     });
     manifest.central_skills.push(PortableCentralSkill {
         id: "missing-skill".to_string(),
+        uid: None,
         name: "missing-skill".to_string(),
         description: None,
         source: github_source("skills/missing-skill/SKILL.md"),
@@ -378,6 +389,57 @@ async fn preview_reports_ready_conflict_missing_and_unrestorable() {
 }
 
 #[tokio::test]
+async fn portable_manifest_stable_uid_conflict_requires_explicit_resolution() {
+    let pool = setup_test_db().await;
+    let existing = Skill {
+        id: "existing-slug".to_string(),
+        uid: "stable-existing-uid".to_string(),
+        name: "Existing".to_string(),
+        description: None,
+        file_path: "/tmp/existing-slug/SKILL.md".to_string(),
+        canonical_path: Some("/tmp/existing-slug".to_string()),
+        is_central: true,
+        source: None,
+        content: None,
+        scanned_at: "2026-04-25T00:00:00Z".to_string(),
+        fs_created_at: None,
+        fs_updated_at: None,
+    };
+    db::upsert_skill(&pool, &existing).await.unwrap();
+
+    let mut manifest = manifest_with_skill("different-slug", "skills/different-slug/SKILL.md");
+    manifest.central_skills[0].uid = Some(existing.uid.clone());
+    let source = manifest.central_skills[0].source.clone();
+    let catalog = HashMap::from([(
+        repo_key(&source),
+        RemoteCatalogEntry {
+            valid_source_paths: HashSet::from(["skills/different-slug".to_string()]),
+            invalid_candidates: HashMap::new(),
+            repo_error: None,
+        },
+    )]);
+
+    let preview = preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog), None, None)
+        .await
+        .unwrap();
+    assert_eq!(preview.summary.conflicts, 1);
+    assert_eq!(
+        preview.skills[0].reason.as_deref(),
+        Some("stable_uid_conflict")
+    );
+    assert_eq!(
+        preview.skills[0].existing_skill_id.as_deref(),
+        Some("existing-slug")
+    );
+
+    let (groups, result) = build_import_groups(&pool, &manifest, Vec::new())
+        .await
+        .unwrap();
+    assert!(groups.is_empty());
+    assert_eq!(result.skipped_skills, vec!["different-slug"]);
+}
+
+#[tokio::test]
 async fn preview_reports_internal_duplicate_skills_and_sources() {
     let pool = setup_test_db().await;
     let mut manifest = manifest_with_skill("dup-skill", "skills/dup-skill/SKILL.md");
@@ -392,6 +454,7 @@ async fn preview_reports_internal_duplicate_skills_and_sources() {
         .push(manifest.central_skills[0].clone());
     manifest.central_skills.push(PortableCentralSkill {
         id: "dup-skill".to_string(),
+        uid: None,
         name: "dup-skill-alt".to_string(),
         description: None,
         source: github_source("skills/dup-skill-alt/SKILL.md"),
@@ -433,6 +496,7 @@ async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_warning() 
     let pool = setup_test_db().await;
     let existing = Skill {
         id: "network-conflict".to_string(),
+        uid: "network-conflict-uid".to_string(),
         name: "network-conflict".to_string(),
         description: None,
         file_path: "/tmp/network-conflict/SKILL.md".to_string(),
@@ -471,6 +535,7 @@ async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_warning() 
         central_skills: vec![
             PortableCentralSkill {
                 id: "bad-frontmatter".to_string(),
+                uid: None,
                 name: "bad-frontmatter".to_string(),
                 description: None,
                 source: invalid_source.clone(),
@@ -478,6 +543,7 @@ async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_warning() 
             },
             PortableCentralSkill {
                 id: "network-error".to_string(),
+                uid: None,
                 name: "network-error".to_string(),
                 description: None,
                 source: repo_error_source.clone(),
@@ -485,6 +551,7 @@ async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_warning() 
             },
             PortableCentralSkill {
                 id: "network-conflict".to_string(),
+                uid: None,
                 name: "network-conflict".to_string(),
                 description: None,
                 source: repo_conflict_source,
@@ -614,6 +681,7 @@ async fn build_import_groups_applies_skip_overwrite_and_rename() {
     let mut manifest = manifest_with_skill("new-skill", "skills/new-skill/SKILL.md");
     manifest.central_skills.push(PortableCentralSkill {
         id: "renamed-skill".to_string(),
+        uid: None,
         name: "renamed-skill".to_string(),
         description: None,
         source: github_source("skills/renamed-skill/SKILL.md"),
@@ -621,6 +689,7 @@ async fn build_import_groups_applies_skip_overwrite_and_rename() {
     });
     manifest.central_skills.push(PortableCentralSkill {
         id: "skipped-skill".to_string(),
+        uid: None,
         name: "skipped-skill".to_string(),
         description: None,
         source: github_source("skills/skipped-skill/SKILL.md"),
@@ -685,6 +754,7 @@ async fn build_import_groups_requires_resolution_for_duplicate_id_with_different
     let mut manifest = manifest_with_skill("dup-skill", "skills/dup-skill/SKILL.md");
     manifest.central_skills.push(PortableCentralSkill {
         id: "dup-skill".to_string(),
+        uid: None,
         name: "dup-skill-alt".to_string(),
         description: None,
         source: github_source("skills/dup-skill-alt/SKILL.md"),
@@ -744,6 +814,7 @@ async fn restore_skill_tags_creates_and_assigns_tags() {
     let pool = setup_test_db().await;
     let skill = Skill {
         id: "tagged".to_string(),
+        uid: "tagged-uid".to_string(),
         name: "tagged".to_string(),
         description: None,
         file_path: "/tmp/tagged/SKILL.md".to_string(),

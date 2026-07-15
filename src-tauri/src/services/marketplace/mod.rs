@@ -16,7 +16,8 @@ mod skills_sh;
 
 pub use error::MarketplaceError;
 pub use skills_sh::{
-    browse_skills_sh_directory_impl, install_from_skills_sh_impl, read_skills_sh_file_impl,
+    browse_skills_sh_directory_impl, install_from_skills_sh_impl,
+    install_from_skills_sh_with_options_impl, read_skills_sh_file_impl,
     resolve_skills_sh_url_impl, search_skills_sh_impl, SkillsShFileEntry, SkillsShSkill,
 };
 

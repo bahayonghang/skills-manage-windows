@@ -3,10 +3,12 @@
   "productName": "SkillPort",
   "version": "0.10.13",
   "identifier": "com.bahayonghang.skillport",
+  "mainBinaryName": "skillport",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:24200",
     "beforeBuildCommand": "pnpm build",
+    "beforeBundleCommand": "pnpm build:cli",
     "frontendDist": "../dist"
   },
   "app": {

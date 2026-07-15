@@ -7,6 +7,7 @@ use crate::db::{Collection, SkillRepository, SkillRepositoryWithStats, SkillTag}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillWithLinks {
     pub id: String,
+    pub uid: String,
     pub name: String,
     pub description: Option<String>,
     pub file_path: String,
@@ -66,6 +67,7 @@ pub struct SkillInstallationDetail {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillDetail {
     pub id: String,
+    pub uid: Option<String>,
     pub row_id: String,
     pub name: String,
     pub description: Option<String>,
@@ -88,6 +90,14 @@ pub struct SkillDetail {
     pub tags: Vec<SkillTag>,
     pub source_path: Option<String>,
     pub is_source_unknown: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum SkillRef {
+    Uid(String),
+    Slug(String),
+    Name(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

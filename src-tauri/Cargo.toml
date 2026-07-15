@@ -29,7 +29,7 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
 futures-util = "0.3"
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 flate2 = "1"
 tar = "0.4"
 keyring = "3"
@@ -43,6 +43,8 @@ walkdir = "2"
 regex = "1"
 urlencoding = "2"
 tempfile = "3"
+fs2 = "0.4"
+clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

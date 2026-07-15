@@ -62,6 +62,15 @@ pub(crate) async fn preview_skillport_state_import_impl(
             .collect::<Vec<_>>(),
     )
     .await?;
+    let existing_skills_by_uid = db::get_skills_by_uids(
+        pool,
+        &manifest
+            .central_skills
+            .iter()
+            .filter_map(|skill| skill.uid.clone())
+            .collect::<Vec<_>>(),
+    )
+    .await?;
     let mut summary = SkillportStateImportPreviewSummary::default();
     let mut seen_source_identities = HashSet::new();
     let mut github_sources = Vec::new();
@@ -121,6 +130,29 @@ pub(crate) async fn preview_skillport_state_import_impl(
                     "The JSON contains the same skill id with different sourcePath values."
                         .to_string(),
                 ),
+            )
+        } else if let Some(existing) = skill.uid.as_deref().and_then(|uid| {
+            existing_skills_by_uid
+                .get(uid)
+                .filter(|existing| existing.id != skill.id)
+        }) {
+            (
+                SkillPreviewStatus::Conflict,
+                Some(existing.id.clone()),
+                Some("stable_uid_conflict".to_string()),
+                Some("The manifest uid and skill id resolve to different existing skills.".to_string()),
+            )
+        } else if let Some(existing) = existing_skills.get(&skill.id).filter(|existing| {
+            skill
+                .uid
+                .as_deref()
+                .is_some_and(|uid| uid != existing.uid)
+        }) {
+            (
+                SkillPreviewStatus::Conflict,
+                Some(existing.id.clone()),
+                Some("stable_uid_conflict".to_string()),
+                Some("The manifest uid does not match the existing skill identity.".to_string()),
             )
         } else if skill.source.source_type != "github" {
             (

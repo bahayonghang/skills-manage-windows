@@ -377,6 +377,15 @@ pub(crate) async fn build_import_groups(
             .collect::<Vec<_>>(),
     )
     .await?;
+    let existing_skills_by_uid = db::get_skills_by_uids(
+        pool,
+        &manifest
+            .central_skills
+            .iter()
+            .filter_map(|skill| skill.uid.clone())
+            .collect::<Vec<_>>(),
+    )
+    .await?;
     let mut grouped = HashMap::<RepoKey, ImportGroup>::new();
     let mut result = SkillportStateImportResult::default();
     let mut seen_skill_keys = HashSet::<SkillManifestKey>::new();
@@ -407,7 +416,12 @@ pub(crate) async fn build_import_groups(
         seen_skill_ids
             .entry(skill.id.clone())
             .or_insert_with(|| source_path.clone());
-        let resolution = resolution_for_skill(skill, &resolution_map, &existing_skills);
+        let resolution = resolution_for_skill(
+            skill,
+            &resolution_map,
+            &existing_skills,
+            &existing_skills_by_uid,
+        );
         if duplicate_id_with_other_path && resolution.resolution != DuplicateResolution::Rename {
             result.skipped_skills.push(skill.id.clone());
             continue;
@@ -437,6 +451,7 @@ fn resolution_for_skill(
     skill: &PortableCentralSkill,
     resolutions: &HashMap<String, SkillportStateImportResolution>,
     existing_skills: &HashMap<String, db::Skill>,
+    existing_skills_by_uid: &HashMap<String, db::Skill>,
 ) -> SkillportStateImportResolution {
     if let Some(resolution) = resolutions
         .get(&resolution_key(&skill.id, Some(&skill.source.source_path)))
@@ -445,7 +460,15 @@ fn resolution_for_skill(
         return resolution.clone();
     }
 
-    let resolution = if existing_skills.contains_key(&skill.id) {
+    let has_stable_identity_conflict = skill.uid.as_deref().is_some_and(|uid| {
+        existing_skills_by_uid
+            .get(uid)
+            .is_some_and(|existing| existing.id != skill.id)
+            || existing_skills
+                .get(&skill.id)
+                .is_some_and(|existing| existing.uid != uid)
+    });
+    let resolution = if has_stable_identity_conflict || existing_skills.contains_key(&skill.id) {
         DuplicateResolution::Skip
     } else {
         DuplicateResolution::Overwrite

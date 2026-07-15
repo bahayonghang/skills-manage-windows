@@ -7,6 +7,9 @@
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
     "build": "tsc && vite build",
+    "build:cli": "cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --locked",
+    "cli": "cargo run --manifest-path src-tauri/Cargo.toml --bin skillport-cli --",
+    "install:cli": "cargo install --path src-tauri --bin skillport-cli --locked --force",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",

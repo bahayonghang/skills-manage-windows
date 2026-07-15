@@ -456,6 +456,12 @@ pub(super) async fn import_single_staged_skill(
         }
     };
 
+    let _mutation_guard = crate::services::central_mutation::acquire_central_mutation_guard(
+        "GitHub skill import",
+        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+    )
+    .await?;
+
     let mut existing_backup = None;
     if target_dir.exists() {
         if op.resolution == DuplicateResolution::Overwrite {
@@ -488,6 +494,7 @@ pub(super) async fn import_single_staged_skill(
 
     let db_skill = Skill {
         id: op.final_skill_id.clone(),
+        uid: uuid::Uuid::new_v4().to_string(),
         name: frontmatter.name.clone(),
         description: frontmatter.description.clone(),
         file_path: target_dir.join("SKILL.md").to_string_lossy().into_owned(),

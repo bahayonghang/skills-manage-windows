@@ -22,6 +22,9 @@ pub enum CentralStoreLocationError {
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 
+    #[error(transparent)]
+    CentralMutation(#[from] crate::services::central_mutation::CentralMutationError),
+
     /// Skill directory copy / symlink creation via the installation domain.
     #[error(transparent)]
     Installation(#[from] InstallationError),

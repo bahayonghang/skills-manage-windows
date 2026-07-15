@@ -20,9 +20,9 @@ use crate::db::types::{
 use crate::skill_time::skill_filesystem_timestamps;
 
 const UPSERT_SKILL_SQL: &str = "INSERT INTO skills
-         (id, name, description, file_path, canonical_path, is_central, source, content,
+         (id, uid, name, description, file_path, canonical_path, is_central, source, content,
           scanned_at, fs_created_at, fs_updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name           = CASE
                               WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.name
@@ -65,6 +65,7 @@ fn bind_upsert_skill<'q>(
 ) -> Query<'q, Sqlite, SqliteArguments<'q>> {
     query
         .bind(&skill.id)
+        .bind(&skill.uid)
         .bind(&skill.name)
         .bind(&skill.description)
         .bind(&skill.file_path)
@@ -103,6 +104,7 @@ pub(crate) async fn upsert_skill_in_transaction(
 fn observation_to_skill(observation: AgentSkillObservation) -> Skill {
     Skill {
         id: observation.skill_id,
+        uid: uuid::Uuid::new_v4().to_string(),
         name: observation.name,
         description: observation.description,
         file_path: observation.file_path,
@@ -180,6 +182,7 @@ pub struct SkillForAgent {
 #[derive(Debug, FromRow)]
 struct InstalledSkillForAgentRow {
     id: String,
+    uid: String,
     name: String,
     description: Option<String>,
     file_path: String,
@@ -223,6 +226,7 @@ pub async fn get_skills_for_agent(
 
     let rows = sqlx::query_as::<_, InstalledSkillForAgentRow>(
         "SELECT s.id,
+                s.uid,
                 s.name,
                 s.description,
                 s.file_path,
@@ -272,6 +276,7 @@ fn installed_row_to_skill_for_agent(
 ) -> Result<SkillForAgent, sqlx::Error> {
     let skill = Skill {
         id: row.id.clone(),
+        uid: row.uid.clone(),
         name: row.name.clone(),
         description: row.description.clone(),
         file_path: row.file_path.clone(),
@@ -474,6 +479,25 @@ pub async fn get_skill_by_id(pool: &DbPool, skill_id: &str) -> Result<Option<Ski
         .await
 }
 
+pub async fn get_skill_by_uid(pool: &DbPool, uid: &str) -> Result<Option<Skill>, sqlx::Error> {
+    sqlx::query_as::<_, Skill>("SELECT * FROM skills WHERE uid = ?")
+        .bind(uid)
+        .fetch_optional(pool)
+        .await
+}
+
+pub async fn get_central_skills_by_exact_name(
+    pool: &DbPool,
+    name: &str,
+) -> Result<Vec<Skill>, sqlx::Error> {
+    sqlx::query_as::<_, Skill>(
+        "SELECT * FROM skills WHERE is_central = 1 AND name = ? COLLATE BINARY LIMIT 2",
+    )
+    .bind(name)
+    .fetch_all(pool)
+    .await
+}
+
 /// Retrieve multiple skills by ID in one round-trip.
 pub async fn get_skills_by_ids(
     pool: &DbPool,
@@ -494,6 +518,28 @@ pub async fn get_skills_by_ids(
     Ok(skills
         .into_iter()
         .map(|skill| (skill.id.clone(), skill))
+        .collect())
+}
+
+pub async fn get_skills_by_uids(
+    pool: &DbPool,
+    uids: &[String],
+) -> Result<HashMap<String, Skill>, sqlx::Error> {
+    if uids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = uids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!("SELECT * FROM skills WHERE uid IN ({placeholders})");
+    let mut query = sqlx::query_as::<_, Skill>(&sql);
+    for uid in uids {
+        query = query.bind(uid);
+    }
+
+    let skills = query.fetch_all(pool).await?;
+    Ok(skills
+        .into_iter()
+        .map(|skill| (skill.uid.clone(), skill))
         .collect())
 }
 

@@ -75,6 +75,7 @@ mod tests {
     ) -> db::Skill {
         db::Skill {
             id: "cached".to_string(),
+            uid: "cached-uid".to_string(),
             name: "Cached".to_string(),
             description: None,
             file_path: "Z:/missing/skill/SKILL.md".to_string(),

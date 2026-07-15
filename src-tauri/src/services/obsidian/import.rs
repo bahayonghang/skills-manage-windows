@@ -85,6 +85,7 @@ pub async fn import_obsidian_skill_to_central_impl(
         let now = Utc::now().to_rfc3339();
         let db_skill = db::Skill {
             id: skill_dir_name.clone(),
+            uid: uuid::Uuid::new_v4().to_string(),
             name: skill_info.name,
             description: skill_info.description,
             file_path: skill_md_path.to_string_lossy().into_owned(),
@@ -178,6 +179,7 @@ pub async fn import_obsidian_skill_to_platform_impl(
     if let Some(skill_info) = info {
         let db_skill = db::Skill {
             id: skill_dir_name.clone(),
+            uid: uuid::Uuid::new_v4().to_string(),
             name: skill_info.name,
             description: skill_info.description,
             file_path: stored_skill_md_path.to_string_lossy().into_owned(),

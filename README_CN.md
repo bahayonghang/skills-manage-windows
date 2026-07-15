@@ -66,6 +66,26 @@ SkillPort 可以通过 SSH 管理远程 Linux 或 macOS 用户目录里的全局
 
 ![技能集合视图](images/05.png)
 
+## 本机 CLI
+
+`skillport-cli` 与桌面端共用同一个本机 SQLite 数据库、稳定技能 `uid`、GitHub/skills.sh 导入服务、安装服务和跨进程 Central mutation lock。
+
+```powershell
+npm run cli -- skills list
+npm run cli -- skills show <uid、slug 或唯一名称>
+npm run cli -- skills search "react" --limit 10
+npm run cli -- skills install vercel-labs/agent-skills@react-best-practices --sync
+npm run cli -- skills sync <uid 或 slug> --agent codex --method copy --dry-run
+```
+
+重复安装默认停止，不会静默覆盖；需要覆盖时必须显式传入 `--replace`，从一个 GitHub URL 批量覆盖多个技能时还需 `--yes`。首版 CLI 只管理 Local 目标。CLI 修改不会向已经运行的桌面窗口推送事件，请在对应页面手动刷新。GitHub 凭据继续读取 SkillPort 现有的受保护 secret store。
+
+使用以下命令把 binary 安装到 `PATH`：
+
+```powershell
+cargo install --path src-tauri --bin skillport-cli --locked --force
+```
+
 ## 下载
 
 - 最新发布：<https://github.com/bahayonghang/skills-manage-windows/releases/latest>
