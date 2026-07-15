@@ -1,89 +1,83 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { ArrowUpRight } from "lucide-react";
 
-import type { SkillCall } from "@/types/usage";
-import { timeAgo, projectShort } from "@/lib/timeAgo";
+import { Button } from "@/components/ui/button";
+import { projectShort } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
-import { useUsageStore } from "@/stores/usageStore";
+import { formatUsageRelativeTime } from "@/components/usage/usageFormat";
+import type { RecentSkillCall } from "@/types/usage";
 
 interface RecentCallsFeedProps {
-  calls: SkillCall[];
+  calls: RecentSkillCall[];
+  onSelect: (skill: string, trigger: HTMLButtonElement) => void;
   className?: string;
   limit?: number;
 }
 
-/**
- * 最近调用 feed —— 按时间倒序展示最多 N 条 SkillCall。
- *
- * 单元素布局：[time-ago] [skill 链接] [source pill] [project short]
- *
- * 点击 skill 链接走 SkillBarChart 同款逻辑：resolveSkillId → /skill/:id；
- * 没匹配到中央库时只是高亮该名（不动作）。
- */
 export function RecentCallsFeed({
   calls,
+  onSelect,
   className,
   limit = 20,
 }: RecentCallsFeedProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const resolveSkillId = useUsageStore((s) => s.resolveSkillId);
-
   const list = calls.slice(0, limit);
 
   if (list.length === 0) {
     return (
-      <div
-        className={cn(
-          "rounded border border-dashed border-border/60 px-3 py-8 text-center text-xs text-muted-foreground",
-          className
-        )}
-      >
+      <div className={cn("px-4 py-10 text-center text-xs text-muted-foreground", className)}>
         {t("skillUsage.empty.noData")}
       </div>
     );
   }
 
-  async function handleClick(skill: string) {
-    const id = await resolveSkillId(skill);
-    if (id) navigate(`/skill/${id}`);
-  }
-
   return (
-    <ul
-      data-testid="recent-feed"
-      className={cn("divide-y divide-border/60 text-sm", className)}
-    >
-      {list.map((c) => (
+    <ul data-testid="recent-feed" className={cn("divide-y divide-border/60", className)}>
+      {list.map((call) => (
         <li
-          key={`${c.skill}-${c.timestampMs}-${c.sessionId}`}
-          data-testid={`recent-row-${c.skill}-${c.timestampMs}`}
-          className="grid grid-cols-[3.5rem_minmax(0,1fr)_minmax(0,1fr)_5.5rem] items-center gap-2 px-3 py-1.5"
+          key={`${call.skill}-${call.timestampMs}-${call.sessionId}`}
+          data-testid={`recent-row-${call.skill}-${call.timestampMs}`}
+          className="grid grid-cols-[4rem_minmax(0,1fr)_minmax(5rem,0.8fr)_2rem] items-center gap-2 px-3 py-2"
         >
-          <span className="text-xs tabular-nums text-muted-foreground" title={new Date(c.timestampMs).toISOString()}>
-            {timeAgo(c.timestampMs)}
+          <span
+            className="text-xs tabular-nums text-muted-foreground"
+            title={new Date(call.timestampMs).toLocaleString()}
+          >
+            {formatUsageRelativeTime(call.timestampMs, i18n.language)}
           </span>
           <button
             type="button"
-            onClick={() => void handleClick(c.skill)}
-            className="truncate text-left text-foreground hover:text-primary hover:underline"
+            onClick={(event) => onSelect(call.skill, event.currentTarget)}
+            className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {c.skill}
+            <span className="block truncate text-sm text-foreground hover:text-primary">
+              {call.skill}
+            </span>
+            <span className="block truncate text-[11px] text-muted-foreground">
+              {call.source}
+            </span>
           </button>
-          <span
-            className="truncate text-xs text-muted-foreground"
-            title={c.project}
-          >
-            {projectShort(c.project)}
+          <span className="truncate text-right text-xs text-muted-foreground">
+            {projectShort(call.project)}
           </span>
-          <span
-            className={cn(
-              "justify-self-end rounded-full border border-border bg-muted/40 px-2 py-0.5",
-              "text-[11px] uppercase tracking-wide text-muted-foreground"
-            )}
-          >
-            {c.source}
-          </span>
+          {call.resolvedSkillId ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              title={t("skillUsage.openSkill")}
+              aria-label={t("skillUsage.openSkillNamed", { skill: call.skill })}
+              onClick={() =>
+                navigate(`/skill/${encodeURIComponent(call.resolvedSkillId!)}`)
+              }
+            >
+              <ArrowUpRight className="size-3.5" />
+            </Button>
+          ) : (
+            <span aria-hidden />
+          )}
         </li>
       ))}
     </ul>

@@ -23,8 +23,8 @@ use tauri::State;
 
 use crate::services::usage::{
     self,
-    aggregate::{DayCount, SkillCount, UsageOverview},
-    ProviderHealth, RefreshSummary, Scope, SkillCall,
+    aggregate::{RecentSkillCall, SkillUsageDetail, UsageOverview},
+    ProviderHealth, RefreshSummary, Scope,
 };
 use crate::targets::{connect_remote_target, ActiveTarget};
 use crate::AppState;
@@ -76,24 +76,12 @@ fn cached_fallback_summary(last_scan_ms: Option<i64>) -> RefreshSummary {
     }
 }
 
-fn empty_skill_detail(skill: String) -> SkillUsageDetail {
-    SkillUsageDetail {
-        skill,
-        count: 0,
-        sessions: 0,
-        first_used_ms: 0,
-        last_used_ms: 0,
-        by_project: vec![],
-        weekly: vec![],
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageRefreshResult {
     pub summary: RefreshSummary,
     pub overview: UsageOverview,
-    pub recent: Vec<SkillCall>,
+    pub recent: Vec<RecentSkillCall>,
     pub providers: Vec<ProviderHealth>,
     pub scope: UsageScopeInfo,
     pub used_cached_data: bool,
@@ -111,11 +99,9 @@ async fn build_refresh_page(
     let overview = usage::build_overview(&state.db, target_id, None, 50)
         .await
         .map_err(|e| e.to_string())?;
-    let recent = usage::rows_to_skill_calls(
-        crate::db::list_recent_calls(&state.db, target_id, None, 20)
-            .await
-            .map_err(|e| e.to_string())?,
-    );
+    let recent = usage::list_recent_usage(&state.db, target_id, None, 20)
+        .await
+        .map_err(|e| e.to_string())?;
     let providers = usage::list_provider_health(&state.db, target_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -231,7 +217,7 @@ pub async fn usage_get_overview(
     source: Option<String>,
 ) -> Result<UsageOverview, String> {
     let target = active_usage_target(&state).await?;
-    let limit = top_skills_limit.unwrap_or(50);
+    let limit = top_skills_limit.unwrap_or(0);
     usage::build_overview(&state.db, &target.target_id, source.as_deref(), limit)
         .await
         .map_err(|e| e.to_string())
@@ -242,13 +228,12 @@ pub async fn usage_get_recent(
     state: State<'_, AppState>,
     limit: Option<i64>,
     source: Option<String>,
-) -> Result<Vec<SkillCall>, String> {
+) -> Result<Vec<RecentSkillCall>, String> {
     let n = limit.unwrap_or(20).max(1);
     let target = active_usage_target(&state).await?;
-    let rows = crate::db::list_recent_calls(&state.db, &target.target_id, source.as_deref(), n)
+    usage::list_recent_usage(&state.db, &target.target_id, source.as_deref(), n)
         .await
-        .map_err(|e| e.to_string())?;
-    Ok(usage::rows_to_skill_calls(rows))
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -261,69 +246,16 @@ pub async fn usage_get_providers(
         .map_err(|e| e.to_string())
 }
 
-/// 单 skill 详情 —— 当 SkillBarChart 没有匹配到中央库 skill_id 时的内嵌备选视图。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SkillUsageDetail {
-    pub skill: String,
-    pub count: i64,
-    pub sessions: i64,
-    pub first_used_ms: i64,
-    pub last_used_ms: i64,
-    pub by_project: Vec<SkillCount>,
-    pub weekly: Vec<DayCount>,
-}
-
 #[tauri::command]
 pub async fn usage_get_skill_detail(
     state: State<'_, AppState>,
     skill: String,
+    source: Option<String>,
 ) -> Result<SkillUsageDetail, String> {
     let target = active_usage_target(&state).await?;
-    let summary = crate::db::get_skill_detail_summary(&state.db, &target.target_id, &skill)
+    usage::build_skill_detail(&state.db, &target.target_id, &skill, source.as_deref())
         .await
-        .map_err(|e| e.to_string())?
-        .unwrap_or_default();
-
-    if summary.count == 0 {
-        return Ok(empty_skill_detail(skill));
-    }
-
-    let by_project = crate::db::list_skill_project_counts(&state.db, &target.target_id, &skill)
-        .await
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|row| SkillCount {
-            skill: row.skill,
-            count: row.count,
-            projects: row.projects,
-            sessions: row.sessions,
-            last_used_ms: row.last_used_ms,
-        })
-        .collect();
-    let cutoff_ms = Utc::now().timestamp_millis() - (16 * 7 * 86_400_000);
-    let weekly = usage::aggregate::heatmap_grid_16w_from_daily_counts(
-        &crate::db::list_skill_daily_counts_since(&state.db, &target.target_id, &skill, cutoff_ms)
-            .await
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .map(|row| DayCount {
-                date: row.date,
-                count: row.count,
-            })
-            .collect::<Vec<_>>(),
-        Utc::now().timestamp_millis(),
-    );
-
-    Ok(SkillUsageDetail {
-        skill,
-        count: summary.count,
-        sessions: summary.sessions,
-        first_used_ms: summary.first_used_ms,
-        last_used_ms: summary.last_used_ms,
-        by_project,
-        weekly,
-    })
+        .map_err(|e| e.to_string())
 }
 
 /// 给 PlatformView / CentralSkillsView 的 skill 卡片注入 "近 N 天 K 次" 徽章。
@@ -361,22 +293,10 @@ pub async fn usage_resolve_skill_id(
     state: State<'_, AppState>,
     skill_name: String,
 ) -> Result<Option<String>, String> {
-    let trimmed = skill_name.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
-    // 直接 SQL：先 is_central desc，再 name 大小写不敏感等值
-    let id: Option<(String,)> = sqlx::query_as(
-        "SELECT id FROM skills
-         WHERE LOWER(name) = LOWER(?)
-         ORDER BY is_central DESC, scanned_at DESC
-         LIMIT 1",
-    )
-    .bind(trimmed)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok(id.map(|(s,)| s))
+    let target = active_usage_target(&state).await?;
+    usage::resolve_skill_id(&state.db, &target.target_id, &skill_name)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 给 UI 显示「上次扫描时间」用的格式化辅助。time-ago 由前端 i18n 处理，
@@ -439,14 +359,5 @@ mod tests {
         let empty_summary = cached_fallback_summary(None);
         assert!(!empty_summary.cached);
         assert_eq!(empty_summary.scanned_at_ms, 0);
-    }
-
-    #[test]
-    fn empty_skill_detail_returns_zero_shape() {
-        let detail = empty_skill_detail("review".to_string());
-        assert_eq!(detail.skill, "review");
-        assert_eq!(detail.count, 0);
-        assert!(detail.by_project.is_empty());
-        assert!(detail.weekly.is_empty());
     }
 }

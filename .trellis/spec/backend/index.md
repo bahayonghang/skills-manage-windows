@@ -15,3 +15,4 @@
 - [GitHub Import Preview Contract](./github-import-preview-contract.md)
 - [Central Mutation Lock Contract](./central-mutation-lock.md)
 - [Shared Local CLI Contract](./shared-local-cli.md)
+- [Skill Usage Analytics Contract](./skill-usage-analytics.md)

@@ -1,4 +1,4 @@
-//! Skill Usage schema：3 张支撑「技能调用统计」页面的表。
+//! Skill Usage schema：支撑「技能调用统计」页面的事实表与派生缓存。
 //!
 //! 与 skilled 项目（ref/skilled/index/src/db.rs）保持同形：每行 `skill_calls`
 //! 是一次 SkillCall（来自某个 AI 编码工具的会话日志），`skill_call_providers`
@@ -97,6 +97,35 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             target_id          TEXT NOT NULL PRIMARY KEY,
             last_full_scan_ms  INTEGER NOT NULL
         )",
+    )
+    .execute(pool)
+    .await?;
+
+    // skill_usage_metadata：按 target + provider 原始 skill 名缓存保守身份解析
+    // 与 Skill.md 静态体量。它是可重建派生数据，不反向污染 skill_calls 事实。
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_usage_metadata (
+            target_id             TEXT NOT NULL,
+            skill                 TEXT NOT NULL,
+            match_status          TEXT NOT NULL
+                                  CHECK (match_status IN ('matched', 'ambiguous', 'unmatched')),
+            resolved_skill_id     TEXT,
+            static_token_estimate INTEGER CHECK (static_token_estimate >= 0),
+            static_byte_count     INTEGER CHECK (static_byte_count >= 0),
+            scanned_at_ms         INTEGER NOT NULL,
+            PRIMARY KEY (target_id, skill),
+            CHECK (
+                (match_status = 'matched' AND resolved_skill_id IS NOT NULL)
+                OR (match_status != 'matched' AND resolved_skill_id IS NULL)
+            )
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_skill_usage_metadata_resolved
+         ON skill_usage_metadata(target_id, resolved_skill_id)",
     )
     .execute(pool)
     .await?;

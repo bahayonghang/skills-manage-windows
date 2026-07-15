@@ -78,14 +78,18 @@ export function useUsageBindings() {
   const detail = useUsageStore((s) => s.detail);
   const scope = useUsageStore((s) => s.scope);
   const selectedSource = useUsageStore((s) => s.selectedSource);
+  const selectedSkill = useUsageStore((s) => s.selectedSkill);
   const refreshing = useUsageStore((s) => s.refreshing);
+  const loading = useUsageStore((s) => s.loading);
+  const detailLoading = useUsageStore((s) => s.detailLoading);
   const error = useUsageStore((s) => s.error);
+  const refreshError = useUsageStore((s) => s.refreshError);
+  const usedCachedData = useUsageStore((s) => s.usedCachedData);
   const lastRefreshMs = useUsageStore((s) => s.lastRefreshMs);
   const refresh = useUsageStore((s) => s.refresh);
   const selectSource = useUsageStore((s) => s.selectSource);
   const loadDetail = useUsageStore((s) => s.loadDetail);
   const clearDetail = useUsageStore((s) => s.clearDetail);
-  const resolveSkillId = useUsageStore((s) => s.resolveSkillId);
 
   return {
     overview,
@@ -94,13 +98,17 @@ export function useUsageBindings() {
     detail,
     scope,
     selectedSource,
+    selectedSkill,
     refreshing,
+    loading,
+    detailLoading,
     error,
+    refreshError,
+    usedCachedData,
     lastRefreshMs,
     refresh,
     selectSource,
     loadDetail,
     clearDetail,
-    resolveSkillId,
   };
 }

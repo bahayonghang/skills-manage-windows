@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, QueryBuilder, Sqlite};
 
-use crate::db::types::DbPool;
+use crate::db::types::{DbPool, Skill};
 
 /// 一次 skill 调用记录。字段对齐 skilled 的 SkillCall 模型。
 ///
@@ -59,6 +59,27 @@ pub struct ProviderScanOutcome {
     pub call_count: i64,
 }
 
+#[derive(Debug, Clone)]
+pub struct NewSkillUsageMetadata {
+    pub skill: String,
+    pub match_status: String,
+    pub resolved_skill_id: Option<String>,
+    pub static_token_estimate: Option<i64>,
+    pub static_byte_count: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillUsageMetadataRow {
+    pub target_id: String,
+    pub skill: String,
+    pub match_status: String,
+    pub resolved_skill_id: Option<String>,
+    pub static_token_estimate: Option<i64>,
+    pub static_byte_count: Option<i64>,
+    pub scanned_at_ms: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageKpisRow {
@@ -67,13 +88,6 @@ pub struct UsageKpisRow {
     pub unique_projects: i64,
     pub unique_sources: i64,
     pub unique_sessions: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct DayCountRow {
-    pub date: String,
-    pub count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq, Default)]
@@ -105,11 +119,22 @@ pub async fn replace_calls_for_target(
     target_id: &str,
     calls: &[NewSkillCall],
     providers: &[ProviderScanOutcome],
+    metadata: &[NewSkillUsageMetadata],
     scan_completed_at_ms: i64,
 ) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
 
     sqlx::query("DELETE FROM skill_calls WHERE target_id = ?")
+        .bind(target_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM skill_call_providers WHERE target_id = ?")
+        .bind(target_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM skill_usage_metadata WHERE target_id = ?")
         .bind(target_id)
         .execute(&mut *tx)
         .await?;
@@ -148,6 +173,24 @@ pub async fn replace_calls_for_target(
         .await?;
     }
 
+    for item in metadata {
+        sqlx::query(
+            "INSERT INTO skill_usage_metadata
+             (target_id, skill, match_status, resolved_skill_id,
+              static_token_estimate, static_byte_count, scanned_at_ms)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(target_id)
+        .bind(&item.skill)
+        .bind(&item.match_status)
+        .bind(&item.resolved_skill_id)
+        .bind(item.static_token_estimate)
+        .bind(item.static_byte_count)
+        .bind(scan_completed_at_ms)
+        .execute(&mut *tx)
+        .await?;
+    }
+
     sqlx::query(
         "INSERT OR REPLACE INTO skill_call_scan_state (target_id, last_full_scan_ms)
          VALUES (?, ?)",
@@ -158,6 +201,77 @@ pub async fn replace_calls_for_target(
     .await?;
 
     tx.commit().await
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillProjectCountRow {
+    pub project: String,
+    pub count: i64,
+    pub sessions: i64,
+    pub last_used_ms: i64,
+}
+
+pub async fn list_usage_skill_candidates(
+    pool: &DbPool,
+    normalized_names: &[String],
+) -> Result<Vec<Skill>, sqlx::Error> {
+    if normalized_names.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut builder = QueryBuilder::<Sqlite>::new(
+        "SELECT * FROM skills WHERE is_central = 1 AND (LOWER(TRIM(id)) IN (",
+    );
+    {
+        let mut separated = builder.separated(", ");
+        for name in normalized_names {
+            separated.push_bind(name);
+        }
+    }
+    builder.push(") OR LOWER(TRIM(name)) IN (");
+    {
+        let mut separated = builder.separated(", ");
+        for name in normalized_names {
+            separated.push_bind(name);
+        }
+    }
+    builder.push(")) ORDER BY id ASC");
+
+    builder.build_query_as::<Skill>().fetch_all(pool).await
+}
+
+pub async fn list_usage_metadata(
+    pool: &DbPool,
+    target_id: &str,
+) -> Result<Vec<SkillUsageMetadataRow>, sqlx::Error> {
+    sqlx::query_as::<_, SkillUsageMetadataRow>(
+        "SELECT target_id, skill, match_status, resolved_skill_id,
+                static_token_estimate, static_byte_count, scanned_at_ms
+         FROM skill_usage_metadata
+         WHERE target_id = ?
+         ORDER BY skill ASC",
+    )
+    .bind(target_id)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_usage_metadata_for_skill(
+    pool: &DbPool,
+    target_id: &str,
+    skill: &str,
+) -> Result<Option<SkillUsageMetadataRow>, sqlx::Error> {
+    sqlx::query_as::<_, SkillUsageMetadataRow>(
+        "SELECT target_id, skill, match_status, resolved_skill_id,
+                static_token_estimate, static_byte_count, scanned_at_ms
+         FROM skill_usage_metadata
+         WHERE target_id = ? AND skill = ?",
+    )
+    .bind(target_id)
+    .bind(skill)
+    .fetch_optional(pool)
+    .await
 }
 
 /// 读取指定 target 的最近一次扫描时间戳，给 5 分钟缓存判定用。
@@ -278,35 +392,37 @@ pub async fn list_top_skills(
     .await
 }
 
-pub async fn list_daily_counts_since(
+pub async fn list_timestamps_since(
     pool: &DbPool,
     target_id: &str,
     source: Option<&str>,
     cutoff_ms: i64,
-) -> Result<Vec<DayCountRow>, sqlx::Error> {
-    sqlx::query_as::<_, DayCountRow>(
-        "SELECT
-            strftime('%Y-%m-%d', timestamp_ms / 1000, 'unixepoch') AS date,
-            COUNT(*) AS count
+) -> Result<Vec<i64>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, (i64,)>(
+        "SELECT timestamp_ms
          FROM skill_calls
          WHERE target_id = ?
            AND (? IS NULL OR source = ?)
            AND timestamp_ms >= ?
-         GROUP BY date
-         ORDER BY date ASC",
+         ORDER BY timestamp_ms ASC",
     )
     .bind(target_id)
     .bind(source)
     .bind(source)
     .bind(cutoff_ms)
     .fetch_all(pool)
-    .await
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(timestamp_ms,)| timestamp_ms)
+        .collect())
 }
 
 pub async fn get_skill_detail_summary(
     pool: &DbPool,
     target_id: &str,
     skill: &str,
+    source: Option<&str>,
 ) -> Result<Option<SkillDetailSummaryRow>, sqlx::Error> {
     sqlx::query_as::<_, SkillDetailSummaryRow>(
         "SELECT
@@ -316,10 +432,13 @@ pub async fn get_skill_detail_summary(
             COALESCE(MAX(timestamp_ms), 0) AS last_used_ms
          FROM skill_calls
          WHERE target_id = ?
-           AND skill = ?",
+           AND skill = ?
+           AND (? IS NULL OR source = ?)",
     )
     .bind(target_id)
     .bind(skill)
+    .bind(source)
+    .bind(source)
     .fetch_optional(pool)
     .await
 }
@@ -328,48 +447,56 @@ pub async fn list_skill_project_counts(
     pool: &DbPool,
     target_id: &str,
     skill: &str,
-) -> Result<Vec<SkillCountRow>, sqlx::Error> {
-    sqlx::query_as::<_, SkillCountRow>(
+    source: Option<&str>,
+) -> Result<Vec<SkillProjectCountRow>, sqlx::Error> {
+    sqlx::query_as::<_, SkillProjectCountRow>(
         "SELECT
-            project AS skill,
+            project,
             COUNT(*) AS count,
-            1 AS projects,
-            0 AS sessions,
+            COUNT(DISTINCT session_id) AS sessions,
             MAX(timestamp_ms) AS last_used_ms
          FROM skill_calls
          WHERE target_id = ?
            AND skill = ?
+           AND (? IS NULL OR source = ?)
          GROUP BY project
-         ORDER BY count DESC, last_used_ms DESC, skill ASC",
+         ORDER BY count DESC, last_used_ms DESC, project ASC",
     )
     .bind(target_id)
     .bind(skill)
+    .bind(source)
+    .bind(source)
     .fetch_all(pool)
     .await
 }
 
-pub async fn list_skill_daily_counts_since(
+pub async fn list_skill_timestamps_since(
     pool: &DbPool,
     target_id: &str,
     skill: &str,
+    source: Option<&str>,
     cutoff_ms: i64,
-) -> Result<Vec<DayCountRow>, sqlx::Error> {
-    sqlx::query_as::<_, DayCountRow>(
-        "SELECT
-            strftime('%Y-%m-%d', timestamp_ms / 1000, 'unixepoch') AS date,
-            COUNT(*) AS count
+) -> Result<Vec<i64>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, (i64,)>(
+        "SELECT timestamp_ms
          FROM skill_calls
          WHERE target_id = ?
            AND skill = ?
+           AND (? IS NULL OR source = ?)
            AND timestamp_ms >= ?
-         GROUP BY date
-         ORDER BY date ASC",
+         ORDER BY timestamp_ms ASC",
     )
     .bind(target_id)
     .bind(skill)
+    .bind(source)
+    .bind(source)
     .bind(cutoff_ms)
     .fetch_all(pool)
-    .await
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(timestamp_ms,)| timestamp_ms)
+        .collect())
 }
 
 pub async fn list_skill_counts_since(
@@ -410,4 +537,131 @@ pub async fn list_skill_counts_since(
         .fetch_all(pool)
         .await?;
     Ok(rows)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::mem_pool;
+
+    fn call(skill: &str) -> NewSkillCall {
+        NewSkillCall {
+            skill: skill.to_string(),
+            timestamp_ms: 1_700_000_000_000,
+            project: "/project".to_string(),
+            session_id: "session".to_string(),
+            source: "Codex CLI".to_string(),
+        }
+    }
+
+    fn metadata(skill: &str, status: &str, resolved: Option<&str>) -> NewSkillUsageMetadata {
+        NewSkillUsageMetadata {
+            skill: skill.to_string(),
+            match_status: status.to_string(),
+            resolved_skill_id: resolved.map(str::to_string),
+            static_token_estimate: Some(12),
+            static_byte_count: Some(42),
+        }
+    }
+
+    #[tokio::test]
+    async fn metadata_replacement_is_atomic_and_target_scoped() {
+        let pool = mem_pool().await;
+        replace_calls_for_target(
+            &pool,
+            "local",
+            &[call("review")],
+            &[],
+            &[metadata("review", "matched", Some("review"))],
+            10,
+        )
+        .await
+        .unwrap();
+        replace_calls_for_target(
+            &pool,
+            "ssh-prod",
+            &[call("remote-review")],
+            &[],
+            &[metadata("remote-review", "unmatched", None)],
+            20,
+        )
+        .await
+        .unwrap();
+
+        let error = replace_calls_for_target(
+            &pool,
+            "local",
+            &[call("new-call")],
+            &[],
+            &[metadata("new-call", "invalid", None)],
+            30,
+        )
+        .await;
+        assert!(error.is_err(), "invalid metadata must roll back the batch");
+
+        let local_calls = list_calls_for_target(&pool, "local").await.unwrap();
+        assert_eq!(local_calls.len(), 1);
+        assert_eq!(local_calls[0].skill, "review");
+        let local_metadata = list_usage_metadata(&pool, "local").await.unwrap();
+        assert_eq!(local_metadata.len(), 1);
+        assert_eq!(
+            local_metadata[0].resolved_skill_id.as_deref(),
+            Some("review")
+        );
+
+        let remote_calls = list_calls_for_target(&pool, "ssh-prod").await.unwrap();
+        assert_eq!(remote_calls.len(), 1);
+        assert_eq!(remote_calls[0].skill, "remote-review");
+        let remote_metadata = list_usage_metadata(&pool, "ssh-prod").await.unwrap();
+        assert_eq!(remote_metadata.len(), 1);
+        assert_eq!(remote_metadata[0].match_status, "unmatched");
+    }
+
+    #[tokio::test]
+    async fn skill_detail_queries_filter_source_and_count_distinct_project_sessions() {
+        let pool = mem_pool().await;
+        let mut claude_first = call("review");
+        claude_first.source = "Claude Code".to_string();
+        claude_first.session_id = "claude-1".to_string();
+        let mut claude_repeat = claude_first.clone();
+        claude_repeat.timestamp_ms += 1;
+        let mut claude_second = claude_first.clone();
+        claude_second.timestamp_ms += 2;
+        claude_second.session_id = "claude-2".to_string();
+        let mut codex = claude_first.clone();
+        codex.timestamp_ms += 3;
+        codex.source = "Codex CLI".to_string();
+        codex.session_id = "codex-1".to_string();
+
+        replace_calls_for_target(
+            &pool,
+            "local",
+            &[claude_first, claude_repeat, claude_second, codex],
+            &[],
+            &[],
+            10,
+        )
+        .await
+        .unwrap();
+
+        let summary = get_skill_detail_summary(&pool, "local", "review", Some("Claude Code"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(summary.count, 3);
+        assert_eq!(summary.sessions, 2);
+
+        let projects = list_skill_project_counts(&pool, "local", "review", Some("Claude Code"))
+            .await
+            .unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].count, 3);
+        assert_eq!(projects[0].sessions, 2);
+
+        let timestamps =
+            list_skill_timestamps_since(&pool, "local", "review", Some("Claude Code"), 0)
+                .await
+                .unwrap();
+        assert_eq!(timestamps.len(), 3);
+    }
 }

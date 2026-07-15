@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::db::SkillCallRow;
+use crate::services::usage::UsageSkillMatchStatus;
 
 /// 单个 skill 的频次聚合结果。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +17,57 @@ pub struct SkillCount {
     pub projects: i64,
     pub sessions: i64,
     pub last_used_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillUsageSummary {
+    pub skill: String,
+    pub count: i64,
+    pub projects: i64,
+    pub sessions: i64,
+    pub last_used_ms: i64,
+    pub match_status: UsageSkillMatchStatus,
+    pub resolved_skill_id: Option<String>,
+    pub static_token_estimate: Option<i64>,
+    pub static_byte_count: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentSkillCall {
+    pub skill: String,
+    pub timestamp_ms: i64,
+    pub project: String,
+    pub session_id: String,
+    pub source: String,
+    pub match_status: UsageSkillMatchStatus,
+    pub resolved_skill_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillProjectCount {
+    pub project: String,
+    pub count: i64,
+    pub sessions: i64,
+    pub last_used_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillUsageDetail {
+    pub skill: String,
+    pub count: i64,
+    pub sessions: i64,
+    pub first_used_ms: i64,
+    pub last_used_ms: i64,
+    pub by_project: Vec<SkillProjectCount>,
+    pub weekly: Vec<DayCount>,
+    pub match_status: UsageSkillMatchStatus,
+    pub resolved_skill_id: Option<String>,
+    pub static_token_estimate: Option<i64>,
+    pub static_byte_count: Option<i64>,
 }
 
 /// 一日的调用数（用于 16 周热力图与每日趋势）。`date` 为 ISO `YYYY-MM-DD`。
@@ -42,7 +94,7 @@ pub struct UsageKpis {
 #[serde(rename_all = "camelCase")]
 pub struct UsageOverview {
     pub kpis: UsageKpis,
-    pub top_skills: Vec<SkillCount>,
+    pub top_skills: Vec<SkillUsageSummary>,
     pub heatmap: Vec<DayCount>,
     pub last_scan_ms: Option<i64>,
 }
@@ -121,16 +173,33 @@ pub fn top_skills_from_rows(rows: &[SkillCallRow], limit: usize) -> Vec<SkillCou
     result
 }
 
-/// 每日调用数（升序日期）。给前端组合周/月趋势。
-pub fn daily_counts(rows: &[SkillCallRow]) -> Vec<DayCount> {
-    use chrono::{DateTime, Utc};
+pub trait LocalDayResolver {
+    fn resolve_date(&self, timestamp_ms: i64) -> Option<chrono::NaiveDate>;
+}
+
+pub struct SystemLocalDayResolver;
+
+impl LocalDayResolver for SystemLocalDayResolver {
+    fn resolve_date(&self, timestamp_ms: i64) -> Option<chrono::NaiveDate> {
+        use chrono::{DateTime, Local, Utc};
+
+        DateTime::<Utc>::from_timestamp_millis(timestamp_ms)
+            .map(|date_time| date_time.with_timezone(&Local).date_naive())
+    }
+}
+
+/// 每日调用数（升序日期）。每个事件独立通过 resolver 换算，不能缓存固定 offset。
+pub fn daily_counts_with_resolver(
+    timestamps: &[i64],
+    resolver: &impl LocalDayResolver,
+) -> Vec<DayCount> {
     use std::collections::BTreeMap;
 
     let mut map: BTreeMap<String, i64> = BTreeMap::new();
-    for r in rows {
-        let dt = DateTime::<Utc>::from_timestamp_millis(r.timestamp_ms).unwrap_or_default();
-        let date = dt.format("%Y-%m-%d").to_string();
-        *map.entry(date).or_insert(0) += 1;
+    for timestamp_ms in timestamps {
+        if let Some(date) = resolver.resolve_date(*timestamp_ms) {
+            *map.entry(date.format("%Y-%m-%d").to_string()).or_insert(0) += 1;
+        }
     }
     map.into_iter()
         .map(|(date, count)| DayCount { date, count })
@@ -138,17 +207,18 @@ pub fn daily_counts(rows: &[SkillCallRow]) -> Vec<DayCount> {
 }
 
 /// 基于已聚合好的每日计数补齐 16 周热力图网格。
-pub fn heatmap_grid_16w_from_daily_counts(days: &[DayCount], now_ms: i64) -> Vec<DayCount> {
-    use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
+fn heatmap_grid_16w_from_daily_counts(
+    days: &[DayCount],
+    today: chrono::NaiveDate,
+) -> Vec<DayCount> {
+    use chrono::{Datelike, Duration, NaiveDate};
     use std::collections::HashMap;
 
     let day_count: HashMap<&str, i64> = days.iter().map(|d| (d.date.as_str(), d.count)).collect();
 
-    let now = DateTime::<Utc>::from_timestamp_millis(now_ms).unwrap_or_default();
-    // weekday: Monday=0..Sunday=6（与 skilled 的 `(getUTCDay()+6)%7` 一致）
-    let today_dow = (now.weekday().num_days_from_sunday() + 6) % 7;
+    let today_dow = today.weekday().num_days_from_monday();
     let total_back_days = (15 * 7 + today_dow) as i64;
-    let start_date: NaiveDate = (now - Duration::days(total_back_days)).date_naive();
+    let start_date: NaiveDate = today - Duration::days(total_back_days);
 
     let mut grid: Vec<DayCount> = Vec::with_capacity(16 * 7);
     for i in 0..(16 * 7) {
@@ -161,19 +231,51 @@ pub fn heatmap_grid_16w_from_daily_counts(days: &[DayCount], now_ms: i64) -> Vec
     grid
 }
 
-/// 16 周 × 7 天的热力图密集矩阵：返回 112 个 DayCount，按日期升序。
-/// 没有调用的日期 count=0；保证前端永远拿到完整 16w*7d 网格不用补 0。
-///
-/// 起点：以 `now_ms` 当日所在周的周一为基准，往前推 (16-1)=15 周得到首日。
-/// 这与 skilled `buildHeatmapGrid` 完全一致。
-pub fn heatmap_grid_16w(rows: &[SkillCallRow], now_ms: i64) -> Vec<DayCount> {
-    let days = daily_counts(rows);
-    heatmap_grid_16w_from_daily_counts(&days, now_ms)
+pub fn heatmap_grid_16w_from_timestamps(
+    timestamps: &[i64],
+    now_ms: i64,
+    resolver: &impl LocalDayResolver,
+) -> Vec<DayCount> {
+    let Some(today) = resolver.resolve_date(now_ms) else {
+        return Vec::new();
+    };
+    let days = daily_counts_with_resolver(timestamps, resolver);
+    heatmap_grid_16w_from_daily_counts(&days, today)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{DateTime, FixedOffset, Utc};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct SwitchingOffsetResolver {
+        switch_ms: i64,
+        calls: AtomicUsize,
+    }
+
+    impl LocalDayResolver for SwitchingOffsetResolver {
+        fn resolve_date(&self, timestamp_ms: i64) -> Option<chrono::NaiveDate> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            let seconds = if timestamp_ms < self.switch_ms {
+                -3_600
+            } else {
+                3_600
+            };
+            let offset = FixedOffset::east_opt(seconds)?;
+            DateTime::<Utc>::from_timestamp_millis(timestamp_ms)
+                .map(|date_time| date_time.with_timezone(&offset).date_naive())
+        }
+    }
+
+    struct FixedOffsetResolver(FixedOffset);
+
+    impl LocalDayResolver for FixedOffsetResolver {
+        fn resolve_date(&self, timestamp_ms: i64) -> Option<chrono::NaiveDate> {
+            DateTime::<Utc>::from_timestamp_millis(timestamp_ms)
+                .map(|date_time| date_time.with_timezone(&self.0).date_naive())
+        }
+    }
 
     fn row(skill: &str, project: &str, source: &str, ts: i64) -> SkillCallRow {
         SkillCallRow {
@@ -250,22 +352,25 @@ mod tests {
     }
 
     #[test]
-    fn daily_counts_groups_by_utc_date() {
-        // 2024-01-01 00:00:00 UTC = 1704067200000
-        let day1_morning = 1_704_067_200_000;
-        let day1_evening = day1_morning + 12 * 3600 * 1000;
-        let day2_morning = day1_morning + 24 * 3600 * 1000;
-        let rows = vec![
-            row("a", "/p", "A", day1_morning),
-            row("b", "/p", "A", day1_evening),
-            row("c", "/p", "A", day2_morning),
-        ];
-        let dc = daily_counts(&rows);
+    fn daily_counts_uses_requested_local_day_and_dynamic_offsets() {
+        let shanghai = FixedOffsetResolver(FixedOffset::east_opt(8 * 3_600).unwrap());
+        let dc = daily_counts_with_resolver(&[1_704_126_600_000], &shanghai);
+        assert_eq!(dc[0].date, "2024-01-02");
+
+        let resolver = SwitchingOffsetResolver {
+            switch_ms: 1_704_110_400_000,
+            calls: AtomicUsize::new(0),
+        };
+        let dc = daily_counts_with_resolver(
+            &[1_704_069_000_000, 1_704_151_800_000, i64::MAX],
+            &resolver,
+        );
         assert_eq!(dc.len(), 2);
-        assert_eq!(dc[0].date, "2024-01-01");
-        assert_eq!(dc[0].count, 2);
+        assert_eq!(dc[0].date, "2023-12-31");
+        assert_eq!(dc[0].count, 1);
         assert_eq!(dc[1].date, "2024-01-02");
         assert_eq!(dc[1].count, 1);
+        assert_eq!(resolver.calls.load(Ordering::Relaxed), 3);
     }
 
     #[test]
@@ -274,12 +379,12 @@ mod tests {
                                         // 一个 100 天前的调用应当落到网格内（如果 100 天 < 16w*7d=112d）
         let in_window = now_ms - 100 * 86_400_000;
         let out_window = now_ms - 200 * 86_400_000;
-        let rows = vec![
-            row("a", "/p", "A", in_window),
-            row("a", "/p", "A", in_window),
-            row("a", "/p", "A", out_window), // 应当不被计入
-        ];
-        let grid = heatmap_grid_16w(&rows, now_ms);
+        let resolver = FixedOffsetResolver(FixedOffset::east_opt(0).unwrap());
+        let grid = heatmap_grid_16w_from_timestamps(
+            &[in_window, in_window, out_window],
+            now_ms,
+            &resolver,
+        );
         assert_eq!(grid.len(), 16 * 7, "must be exactly 112 cells");
 
         let total: i64 = grid.iter().map(|d| d.count).sum();

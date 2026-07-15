@@ -38,7 +38,7 @@ import type {
 import type { SkillExplanationSummaryMap } from "@/types/skillExplanation";
 import type {
   ProviderHealth,
-  SkillCall,
+  RecentSkillCall,
   SkillUsageDetail,
   UsageOverview,
   UsageRefreshResult,
@@ -103,10 +103,13 @@ export const IPC_COMMANDS = {
   >(),
   usage_get_recent: command<
     { limit: number; source: string | null },
-    SkillCall[]
+    RecentSkillCall[]
   >(),
   usage_get_providers: command<undefined, ProviderHealth[]>(),
-  usage_get_skill_detail: command<{ skill: string }, SkillUsageDetail | null>(),
+  usage_get_skill_detail: command<
+    { skill: string; source: string | null },
+    SkillUsageDetail
+  >(),
   usage_get_scope_info: command<undefined, UsageScopeInfo>(),
   usage_resolve_skill_id: command<{ skillName: string }, string | null>(),
   usage_get_skill_counts: command<

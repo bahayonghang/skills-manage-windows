@@ -65,6 +65,14 @@ function refreshPayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 beforeEach(() => {
   toastInfoMock.mockReset();
   useUsageStore.setState({
@@ -73,9 +81,13 @@ beforeEach(() => {
     providers: [],
     detail: null,
     scope: null,
+    selectedSkill: null,
     loading: false,
     refreshing: false,
+    detailLoading: false,
     error: null,
+    refreshError: null,
+    usedCachedData: false,
     selectedSource: null,
     lastRefreshMs: null,
     ...initialActions,
@@ -172,6 +184,8 @@ describe("usageStore", () => {
     expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(4);
     expect(useUsageStore.getState().scope?.remoteReachable).toBe(false);
     expect(useUsageStore.getState().error).toBeNull();
+    expect(useUsageStore.getState().usedCachedData).toBe(true);
+    expect(useUsageStore.getState().refreshError).toContain("ssh timeout");
     expect(toastInfoMock).toHaveBeenCalledTimes(1);
   });
 
@@ -207,7 +221,7 @@ describe("usageStore", () => {
       "usage_get_recent",
     ]);
     expect(ipcInvokeCalls("usage_get_overview")[0].args).toEqual({
-      topSkillsLimit: 50,
+      topSkillsLimit: 0,
       source: "Claude Code",
     });
     expect(ipcInvokeCalls("usage_get_recent")[0].args).toEqual({
@@ -246,7 +260,7 @@ describe("usageStore", () => {
 
     expect(useUsageStore.getState().selectedSource).toBe("Claude Code");
     expect(ipcInvokeCalls("usage_get_overview")[0].args).toEqual({
-      topSkillsLimit: 50,
+      topSkillsLimit: 0,
       source: "Claude Code",
     });
     expect(ipcInvokeCalls("usage_get_recent")[0].args).toEqual({
@@ -353,11 +367,121 @@ describe("usageStore", () => {
     await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1));
   });
 
-  it("resolveSkillId returns null on backend failure", async () => {
-    mockIpcCommand("usage_resolve_skill_id", () =>
-      Promise.reject(new Error("nope")),
+  it("prevents a slow source request from overwriting the latest selection", async () => {
+    const claudeOverview = deferred<ReturnType<typeof overviewFixture>>();
+    const claudeRecent = deferred<never[]>();
+    const codexOverview = deferred<ReturnType<typeof overviewFixture>>();
+    const codexRecent = deferred<never[]>();
+    mockIpcCommand("usage_get_overview", ({ source }: { source: string | null }) =>
+      source === "Claude Code" ? claudeOverview.promise : codexOverview.promise,
     );
-    const id = await useUsageStore.getState().resolveSkillId("review");
-    expect(id).toBeNull();
+    mockIpcCommand("usage_get_recent", ({ source }: { source: string | null }) =>
+      source === "Claude Code" ? claudeRecent.promise : codexRecent.promise,
+    );
+
+    const first = useUsageStore.getState().selectSource("Claude Code");
+    const second = useUsageStore.getState().selectSource("Codex CLI");
+    codexOverview.resolve({
+      ...overviewFixture(),
+      kpis: { ...overviewFixture().kpis, totalCalls: 2 },
+    });
+    codexRecent.resolve([]);
+    await second;
+    expect(useUsageStore.getState().selectedSource).toBe("Codex CLI");
+    expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(2);
+
+    claudeOverview.resolve({
+      ...overviewFixture(),
+      kpis: { ...overviewFixture().kpis, totalCalls: 99 },
+    });
+    claudeRecent.resolve([]);
+    await first;
+    expect(useUsageStore.getState().selectedSource).toBe("Codex CLI");
+    expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(2);
+  });
+
+  it("keeps filtered data visible during refresh and commits the refetch atomically", async () => {
+    useUsageStore.setState({
+      selectedSource: "Claude Code",
+      overview: overviewFixture(),
+      recent: [],
+    });
+    const filteredOverview = deferred<ReturnType<typeof overviewFixture>>();
+    const filteredRecent = deferred<never[]>();
+    mockIpcCommands({
+      usage_refresh: refreshPayload({
+        overview: {
+          ...overviewFixture(),
+          kpis: { ...overviewFixture().kpis, totalCalls: 100 },
+        },
+        providers: [
+          {
+            providerId: "claude-code",
+            displayName: "Claude Code",
+            available: true,
+            callCount: 4,
+            scannedAtMs: 1_700_000_000_000,
+          },
+        ],
+      }),
+      usage_get_overview: () => filteredOverview.promise,
+      usage_get_recent: () => filteredRecent.promise,
+    });
+
+    const refresh = useUsageStore.getState().refresh(true);
+    await waitFor(() =>
+      expect(ipcInvokeCalls("usage_get_overview")).toHaveLength(1),
+    );
+    expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(4);
+
+    filteredOverview.resolve({
+      ...overviewFixture(),
+      kpis: { ...overviewFixture().kpis, totalCalls: 3 },
+    });
+    filteredRecent.resolve([]);
+    await refresh;
+    expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(3);
+    expect(useUsageStore.getState().selectedSource).toBe("Claude Code");
+  });
+
+  it("passes the selected source to detail and ignores stale detail results", async () => {
+    const detailRequest = deferred<{
+      skill: string;
+      count: number;
+      sessions: number;
+      firstUsedMs: number;
+      lastUsedMs: number;
+      byProject: never[];
+      weekly: never[];
+      matchStatus: "unmatched";
+      resolvedSkillId: null;
+      staticTokenEstimate: null;
+      staticByteCount: null;
+    }>();
+    useUsageStore.setState({ selectedSource: "Claude Code" });
+    mockIpcCommand("usage_get_skill_detail", () => detailRequest.promise);
+
+    const loading = useUsageStore.getState().loadDetail("review");
+    expect(ipcInvokeCalls("usage_get_skill_detail")[0].args).toEqual({
+      skill: "review",
+      source: "Claude Code",
+    });
+    useUsageStore.getState().clearDetail();
+    detailRequest.resolve({
+      skill: "review",
+      count: 1,
+      sessions: 1,
+      firstUsedMs: 1,
+      lastUsedMs: 1,
+      byProject: [],
+      weekly: [],
+      matchStatus: "unmatched",
+      resolvedSkillId: null,
+      staticTokenEstimate: null,
+      staticByteCount: null,
+    });
+    await loading;
+    expect(useUsageStore.getState().detail).toBeNull();
+    expect(useUsageStore.getState().selectedSkill).toBeNull();
   });
 });

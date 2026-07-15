@@ -171,9 +171,20 @@
     "title": "Skill Usage",
     "subtitle": "Aggregated skill calls across local AI coding tool session logs",
     "refresh": "Refresh",
-    "lastRefreshed": "Refreshed {{time}} ago",
+    "lastRefreshed": "Last scan: {{time}}",
     "neverRefreshed": "Not scanned yet",
     "notDetected": "not detected",
+    "unavailable": "Unavailable",
+    "showingCachedAfterError": "Refresh failed; showing the last successful scan",
+    "range": {
+      "allRecorded": "All recorded history",
+      "latestCalls": "Latest {{count}}",
+      "lastWeeks": "Last {{count}} weeks"
+    },
+    "scope": {
+      "local": "Local",
+      "remote": "Remote · {{label}}"
+    },
     "platformFilter": {
       "all": "All platforms"
     },
@@ -188,18 +199,60 @@
       "topSkills": "Top skills",
       "heatmap": "16-week activity",
       "recent": "Recent calls",
+      "detail": "Usage detail",
       "providers": "Provider health"
     },
     "empty": {
       "placeholder": "No data yet. Refresh to populate this panel.",
-      "noData": "No skill invocations detected. Make sure ~/.claude / ~/.codex etc. contain session logs."
+      "title": "No skill calls detected",
+      "noData": "Refresh or open provider health to check for readable session logs from supported platforms.",
+      "noActivity": "No activity in this period"
     },
     "sort": {
+      "label": "Sort skills",
       "count": "by count",
       "alpha": "a–z",
-      "recent": "recent"
+      "recent": "recent",
+      "name": "name"
     },
-    "remoteUnreachable": "Cannot reach remote host {{host}}; showing empty data temporarily. Check SSH status then refresh.",
+    "rankingCount": "{{count}} skills",
+    "columns": {
+      "skill": "Skill",
+      "match": "Central match",
+      "calls": "Calls",
+      "sessions": "Sessions",
+      "estimate": "Skill.md estimate",
+      "lastUsed": "Last used"
+    },
+    "match": {
+      "matched": "Matched",
+      "ambiguous": "Not uniquely mapped",
+      "unmatched": "Unmapped"
+    },
+    "projectsShort": "projects",
+    "callsShort": "calls",
+    "sessionsShort": "sessions",
+    "openSkill": "Open skill",
+    "openSkillNamed": "Open skill {{skill}}",
+    "closeDetail": "Close usage detail",
+    "staticEstimateUnavailable": "Skill.md unavailable; not reported as zero",
+    "staticEstimateTooltip": "Static Skill.md content-size estimate, {{bytes}} bytes. This is not task token consumption.",
+    "detail": {
+      "firstUsed": "First used",
+      "lastUsed": "Last used",
+      "projects": "Projects",
+      "staticEstimate": "Skill.md estimate",
+      "activity": "Skill activity"
+    },
+    "heatmap": {
+      "ariaLabel": "Skill calls over the last 16 weeks",
+      "cellLabel": "{{date}}: {{count}} calls",
+      "less": "Less",
+      "more": "More"
+    },
+    "providerSummary": "{{available}} of {{total}} providers available",
+    "remoteUnreachableCached": "Cannot reach remote host {{host}}; keeping the last successful scan.",
+    "remoteUnreachableEmpty": "Cannot reach remote host {{host}} and no cache is available. Check the connection and refresh.",
     "badge": {
       "countShort": "{{count}}×",
       "periodShort": "{{days}}d",

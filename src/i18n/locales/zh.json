@@ -171,9 +171,20 @@
     "title": "技能使用",
     "subtitle": "聚合各 AI 编码工具的本地会话日志",
     "refresh": "刷新",
-    "lastRefreshed": "{{time}} 前刷新",
+    "lastRefreshed": "上次扫描：{{time}}",
     "neverRefreshed": "尚未扫描",
     "notDetected": "未检测到",
+    "unavailable": "不可用",
+    "showingCachedAfterError": "刷新失败，正在显示上次成功扫描的数据",
+    "range": {
+      "allRecorded": "全部已记录历史",
+      "latestCalls": "最新 {{count}} 条",
+      "lastWeeks": "最近 {{count}} 周"
+    },
+    "scope": {
+      "local": "本机",
+      "remote": "远程 · {{label}}"
+    },
     "platformFilter": {
       "all": "全部平台"
     },
@@ -188,18 +199,60 @@
       "topSkills": "技能频次",
       "heatmap": "16 周活动",
       "recent": "最近调用",
+      "detail": "统计详情",
       "providers": "数据源状态"
     },
     "empty": {
       "placeholder": "暂无数据，刷新后此处会显示统计内容。",
-      "noData": "尚未发现任何技能调用。请确认 ~/.claude / ~/.codex 等目录中存在会话日志。"
+      "title": "尚未发现技能调用",
+      "noData": "请刷新或展开数据源状态，确认受支持平台存在可读取的会话日志。",
+      "noActivity": "此时间范围内没有活动"
     },
     "sort": {
+      "label": "技能排序",
       "count": "按次数",
       "alpha": "按名称",
-      "recent": "按最近"
+      "recent": "按最近",
+      "name": "按名称"
     },
-    "remoteUnreachable": "无法连接到远程主机 {{host}}，已暂时显示空数据。请检查 SSH 状态后再次刷新。",
+    "rankingCount": "{{count}} 个技能",
+    "columns": {
+      "skill": "技能",
+      "match": "中央库匹配",
+      "calls": "调用",
+      "sessions": "会话",
+      "estimate": "Skill.md 估算",
+      "lastUsed": "最近使用"
+    },
+    "match": {
+      "matched": "已匹配",
+      "ambiguous": "无法唯一映射",
+      "unmatched": "未映射"
+    },
+    "projectsShort": "项目",
+    "callsShort": "次",
+    "sessionsShort": "会话",
+    "openSkill": "打开技能",
+    "openSkillNamed": "打开技能 {{skill}}",
+    "closeDetail": "关闭统计详情",
+    "staticEstimateUnavailable": "Skill.md 不可用；未伪造为 0",
+    "staticEstimateTooltip": "Skill.md 静态内容体量估算，文件大小 {{bytes}} 字节；不代表任务 Token 消耗。",
+    "detail": {
+      "firstUsed": "首次使用",
+      "lastUsed": "最近使用",
+      "projects": "项目分布",
+      "staticEstimate": "Skill.md 估算",
+      "activity": "技能活动"
+    },
+    "heatmap": {
+      "ariaLabel": "最近 16 周技能调用热力图",
+      "cellLabel": "{{date}}：{{count}} 次调用",
+      "less": "少",
+      "more": "多"
+    },
+    "providerSummary": "{{available}} / {{total}} 个数据源可用",
+    "remoteUnreachableCached": "无法连接远程主机 {{host}}，当前保留上次成功扫描的数据。",
+    "remoteUnreachableEmpty": "无法连接远程主机 {{host}}，暂无可用缓存；请检查连接后刷新。",
     "badge": {
       "countShort": "{{count}} 次",
       "periodShort": "近 {{days}} 天",
