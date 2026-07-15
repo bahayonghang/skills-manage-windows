@@ -18,9 +18,7 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [
-    "07-11-ssh-persistent-session"
-  ],
+  "children": [],
   "parent": null,
   "relatedFiles": [],
   "notes": "",
