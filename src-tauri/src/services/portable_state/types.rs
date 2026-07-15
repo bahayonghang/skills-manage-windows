@@ -72,6 +72,8 @@ pub struct PortableGithubSource {
 #[serde(rename_all = "camelCase")]
 pub struct PortableCentralSkill {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
     pub name: String,
     pub description: Option<String>,
     pub source: PortableCentralSkillSource,

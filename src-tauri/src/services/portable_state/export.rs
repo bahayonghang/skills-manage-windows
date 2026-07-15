@@ -72,6 +72,7 @@ pub(crate) async fn export_skillport_state_impl(
         if let Some(source) = exportable_skill_source(&assignment) {
             central_skills.push(PortableCentralSkill {
                 id: skill.id.clone(),
+                uid: Some(skill.uid.clone()),
                 name: skill.name.clone(),
                 description: skill.description.clone(),
                 source,

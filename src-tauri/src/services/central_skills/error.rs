@@ -23,6 +23,9 @@ pub enum CentralSkillsError {
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 
+    #[error(transparent)]
+    CentralMutation(#[from] crate::services::central_mutation::CentralMutationError),
+
     /// Remote-target transport failures (connect / inspect / read / list /
     /// remove over the SSH or WSL channel; targets module returns String).
     #[error("{0}")]
@@ -42,6 +45,9 @@ pub enum CentralSkillsError {
 
     #[error("Skill '{0}' not found")]
     SkillNotFound(String),
+
+    #[error("Multiple skills are named '{0}'; use uid or slug")]
+    AmbiguousSkillReference(String),
 
     // ── Central skill deletion ───────────────────────────────────────────────
     #[error("Skill '{0}' is not a Central skill")]

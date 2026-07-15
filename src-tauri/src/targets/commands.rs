@@ -415,7 +415,9 @@ pub async fn active_target_id(local_db: &DbPool) -> Result<String, TargetsError>
         .unwrap_or_else(|| LOCAL_TARGET_ID.to_string()))
 }
 
-pub async fn load_remote_targets(local_db: &DbPool) -> Result<Vec<RemoteTargetConfig>, TargetsError> {
+pub async fn load_remote_targets(
+    local_db: &DbPool,
+) -> Result<Vec<RemoteTargetConfig>, TargetsError> {
     let Some(raw) = db::get_setting(local_db, TARGETS_SETTING_KEY).await? else {
         return Ok(Vec::new());
     };

@@ -111,6 +111,12 @@ pub async fn apply_central_store_location_change_impl(
         return Err(CentralStoreLocationError::RequiresOverwrite);
     }
 
+    preview_central_store_location_change_impl(pool, target_path).await?;
+    let _mutation_guard = crate::services::central_mutation::acquire_central_mutation_guard(
+        "central store relocation",
+        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+    )
+    .await?;
     let preview = preview_central_store_location_change_impl(pool, target_path).await?;
     let source_root = PathBuf::from(&preview.source_path);
     let target_root = PathBuf::from(&preview.target_path);
@@ -219,9 +225,7 @@ fn normalize_local_root(path: &Path) -> Result<PathBuf, CentralStoreLocationErro
         path.to_path_buf()
     } else {
         std::env::current_dir()
-            .map_err(|e| {
-                CentralStoreLocationError::io("Failed to resolve current directory", e)
-            })?
+            .map_err(|e| CentralStoreLocationError::io("Failed to resolve current directory", e))?
             .join(path)
     };
     Ok(crate::paths::canonicalize_path_with_missing(&absolute))
@@ -256,9 +260,8 @@ fn skill_dir_ids(root: &Path) -> Result<HashSet<String>, CentralStoreLocationErr
         )
     })?;
     for entry in entries {
-        let entry = entry.map_err(|e| {
-            CentralStoreLocationError::io("Failed to read central skill entry", e)
-        })?;
+        let entry = entry
+            .map_err(|e| CentralStoreLocationError::io("Failed to read central skill entry", e))?;
         let path = entry.path();
         if path.join("SKILL.md").exists() {
             ids.insert(entry.file_name().to_string_lossy().to_lowercase());

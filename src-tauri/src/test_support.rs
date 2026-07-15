@@ -99,6 +99,7 @@ pub fn write_skill_md(dir: &Path, name: &str, description: Option<&str>) -> Path
 pub fn central_skill_row(id: &str, canonical_dir: &Path) -> Skill {
     Skill {
         id: id.to_string(),
+        uid: format!("{id}-uid"),
         name: id.to_string(),
         description: None,
         file_path: canonical_dir

@@ -12,12 +12,15 @@
 //! [`Scope::Remote`] 时会走 `fs_backend::FsBackend` trait 替换底层 IO。
 
 pub mod aggregate;
+mod enrichment;
 mod error;
 pub mod fs_backend;
 pub mod providers;
 
+pub use enrichment::UsageSkillMatchStatus;
 pub use error::UsageError;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -303,12 +306,48 @@ async fn refresh_with_providers(
     let calls_written = all_calls.len() as i64;
     let scan_completed_ms = Utc::now().timestamp_millis();
 
+    let mut skill_names = all_calls
+        .iter()
+        .map(|call| call.skill.clone())
+        .collect::<Vec<_>>();
+    skill_names.sort();
+    skill_names.dedup();
+    let normalized_names = skill_names
+        .iter()
+        .map(|name| name.trim().to_lowercase())
+        .collect::<Vec<_>>();
+    let candidates = db::list_usage_skill_candidates(pool, &normalized_names).await?;
+    let resolved = enrichment::resolve_usage_skills(&skill_names, &candidates);
+    let mut paths = resolved
+        .iter()
+        .filter_map(|item| item.file_path.clone())
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    let content_by_path = if paths.is_empty() {
+        Default::default()
+    } else {
+        match scope.fs_backend().read_many_to_strings(&paths).await {
+            Ok(content) => content,
+            Err(error) => {
+                tracing::warn!(error = %error, "usage Skill.md enrichment read failed");
+                Default::default()
+            }
+        }
+    };
+    let metadata = enrichment::build_usage_metadata(
+        &resolved,
+        &content_by_path,
+        crate::services::resource_budget::ResourceBudget::default_skill(),
+    );
+
     // 4) 事务原子替换
     db::replace_calls_for_target(
         pool,
         &target_id,
         &all_calls,
         &provider_outcomes,
+        &metadata,
         scan_completed_ms,
     )
     .await?;
@@ -331,8 +370,14 @@ pub async fn build_overview(
 ) -> Result<aggregate::UsageOverview, UsageError> {
     let kpis_row = db::get_usage_kpis(pool, target_id, source).await?;
     let top_skill_rows = db::list_top_skills(pool, target_id, source, top_skills_limit).await?;
-    let cutoff_ms = Utc::now().timestamp_millis() - (16 * 7 * 86_400_000);
-    let day_rows = db::list_daily_counts_since(pool, target_id, source, cutoff_ms).await?;
+    let metadata = db::list_usage_metadata(pool, target_id)
+        .await?
+        .into_iter()
+        .map(|item| (item.skill.clone(), item))
+        .collect::<HashMap<_, _>>();
+    let now_ms = Utc::now().timestamp_millis();
+    let cutoff_ms = now_ms - (16 * 7 + 1) * 86_400_000;
+    let timestamps = db::list_timestamps_since(pool, target_id, source, cutoff_ms).await?;
     let last_scan_ms = db::get_last_scan_ms(pool, target_id).await?;
 
     Ok(aggregate::UsageOverview {
@@ -345,26 +390,157 @@ pub async fn build_overview(
         },
         top_skills: top_skill_rows
             .into_iter()
-            .map(|row| aggregate::SkillCount {
-                skill: row.skill,
-                count: row.count,
-                projects: row.projects,
-                sessions: row.sessions,
-                last_used_ms: row.last_used_ms,
+            .map(|row| {
+                let identity = metadata.get(&row.skill);
+                aggregate::SkillUsageSummary {
+                    skill: row.skill,
+                    count: row.count,
+                    projects: row.projects,
+                    sessions: row.sessions,
+                    last_used_ms: row.last_used_ms,
+                    match_status: identity
+                        .map(|item| UsageSkillMatchStatus::from_db(&item.match_status))
+                        .unwrap_or(UsageSkillMatchStatus::Unmatched),
+                    resolved_skill_id: identity.and_then(|item| item.resolved_skill_id.clone()),
+                    static_token_estimate: identity.and_then(|item| item.static_token_estimate),
+                    static_byte_count: identity.and_then(|item| item.static_byte_count),
+                }
             })
             .collect(),
-        heatmap: aggregate::heatmap_grid_16w_from_daily_counts(
-            &day_rows
-                .into_iter()
-                .map(|row| aggregate::DayCount {
-                    date: row.date,
-                    count: row.count,
-                })
-                .collect::<Vec<_>>(),
-            Utc::now().timestamp_millis(),
+        heatmap: aggregate::heatmap_grid_16w_from_timestamps(
+            &timestamps,
+            now_ms,
+            &aggregate::SystemLocalDayResolver,
         ),
         last_scan_ms,
     })
+}
+
+pub async fn list_recent_usage(
+    pool: &DbPool,
+    target_id: &str,
+    source: Option<&str>,
+    limit: i64,
+) -> Result<Vec<aggregate::RecentSkillCall>, UsageError> {
+    let rows = db::list_recent_calls(pool, target_id, source, limit).await?;
+    let metadata = db::list_usage_metadata(pool, target_id)
+        .await?
+        .into_iter()
+        .map(|item| (item.skill.clone(), item))
+        .collect::<HashMap<_, _>>();
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let identity = metadata.get(&row.skill);
+            aggregate::RecentSkillCall {
+                skill: row.skill,
+                timestamp_ms: row.timestamp_ms,
+                project: row.project,
+                session_id: row.session_id,
+                source: row.source,
+                match_status: identity
+                    .map(|item| UsageSkillMatchStatus::from_db(&item.match_status))
+                    .unwrap_or(UsageSkillMatchStatus::Unmatched),
+                resolved_skill_id: identity.and_then(|item| item.resolved_skill_id.clone()),
+            }
+        })
+        .collect())
+}
+
+pub async fn build_skill_detail(
+    pool: &DbPool,
+    target_id: &str,
+    skill: &str,
+    source: Option<&str>,
+) -> Result<aggregate::SkillUsageDetail, UsageError> {
+    let summary = db::get_skill_detail_summary(pool, target_id, skill, source)
+        .await?
+        .unwrap_or_default();
+    let identity = db::get_usage_metadata_for_skill(pool, target_id, skill).await?;
+    let match_status = identity
+        .as_ref()
+        .map(|item| UsageSkillMatchStatus::from_db(&item.match_status))
+        .unwrap_or(UsageSkillMatchStatus::Unmatched);
+
+    if summary.count == 0 {
+        return Ok(aggregate::SkillUsageDetail {
+            skill: skill.to_string(),
+            count: 0,
+            sessions: 0,
+            first_used_ms: 0,
+            last_used_ms: 0,
+            by_project: Vec::new(),
+            weekly: Vec::new(),
+            match_status,
+            resolved_skill_id: identity
+                .as_ref()
+                .and_then(|item| item.resolved_skill_id.clone()),
+            static_token_estimate: identity
+                .as_ref()
+                .and_then(|item| item.static_token_estimate),
+            static_byte_count: identity.as_ref().and_then(|item| item.static_byte_count),
+        });
+    }
+
+    let by_project = db::list_skill_project_counts(pool, target_id, skill, source)
+        .await?
+        .into_iter()
+        .map(|row| aggregate::SkillProjectCount {
+            project: row.project,
+            count: row.count,
+            sessions: row.sessions,
+            last_used_ms: row.last_used_ms,
+        })
+        .collect();
+    let now_ms = Utc::now().timestamp_millis();
+    let cutoff_ms = now_ms - (16 * 7 + 1) * 86_400_000;
+    let timestamps =
+        db::list_skill_timestamps_since(pool, target_id, skill, source, cutoff_ms).await?;
+
+    Ok(aggregate::SkillUsageDetail {
+        skill: skill.to_string(),
+        count: summary.count,
+        sessions: summary.sessions,
+        first_used_ms: summary.first_used_ms,
+        last_used_ms: summary.last_used_ms,
+        by_project,
+        weekly: aggregate::heatmap_grid_16w_from_timestamps(
+            &timestamps,
+            now_ms,
+            &aggregate::SystemLocalDayResolver,
+        ),
+        match_status,
+        resolved_skill_id: identity
+            .as_ref()
+            .and_then(|item| item.resolved_skill_id.clone()),
+        static_token_estimate: identity
+            .as_ref()
+            .and_then(|item| item.static_token_estimate),
+        static_byte_count: identity.as_ref().and_then(|item| item.static_byte_count),
+    })
+}
+
+pub async fn resolve_skill_id(
+    pool: &DbPool,
+    target_id: &str,
+    skill_name: &str,
+) -> Result<Option<String>, UsageError> {
+    let trimmed = skill_name.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if let Some(metadata) = db::get_usage_metadata_for_skill(pool, target_id, skill_name).await? {
+        return Ok(metadata.resolved_skill_id);
+    }
+
+    let names = vec![trimmed.to_lowercase()];
+    let candidates = db::list_usage_skill_candidates(pool, &names).await?;
+    let requested = vec![skill_name.to_string()];
+    Ok(enrichment::resolve_usage_skills(&requested, &candidates)
+        .into_iter()
+        .next()
+        .and_then(|item| item.resolved_skill_id))
 }
 
 /// 把 DB 行投影成可序列化给前端的 [`SkillCall`] 列表。
@@ -412,43 +588,7 @@ pub async fn list_provider_health(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn skill_call_serializes_to_camel_case() {
-        let call = SkillCall {
-            skill: "review".to_string(),
-            timestamp_ms: 1_700_000_000_000,
-            project: "/tmp/x".to_string(),
-            session_id: "s1".to_string(),
-            source: "Claude Code".to_string(),
-        };
-        let json = serde_json::to_string(&call).unwrap();
-        // 关键字段必须是 camelCase 才能直接喂给前端 ts 类型 SkillCall
-        assert!(json.contains("\"timestampMs\""));
-        assert!(json.contains("\"sessionId\""));
-        // 不应该出现 snake_case 残留
-        assert!(!json.contains("\"timestamp_ms\""));
-        assert!(!json.contains("\"session_id\""));
-    }
-
-    #[test]
-    fn scope_target_id_branches() {
-        assert_eq!(Scope::Local.target_id(), "local");
-        // Scope::Remote 的 target_id 在 refresh_tests / 远程集成测试中验证；
-        // 这里只能拿 Local，因为构造 Remote 需要一条真实 ConnectedRemoteTarget。
-    }
-
-    #[test]
-    fn join_posix_path_preserves_remote_home_root() {
-        assert_eq!(
-            super::join_posix_path("/home/alice/", &[".codex", "sessions"]),
-            "/home/alice/.codex/sessions"
-        );
-        assert_eq!(super::join_posix_path("/", &[".claude"]), "/.claude");
-    }
-}
+mod tests;
 
 /// 跨 provider 测试共享的 env mutex —— `HOME` / `USERPROFILE` /
 /// `CLAUDE_CONFIG_DIR` / `CODEX_HOME` 都是进程级全局，cargo test 默认
@@ -456,179 +596,3 @@ mod tests {
 /// 所有改动这些环境变量的测试必须先 lock 这把锁。
 #[cfg(test)]
 pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-#[cfg(test)]
-mod refresh_tests {
-    use super::*;
-    use crate::test_support::mem_pool as setup_pool;
-    use tempfile::TempDir;
-
-    struct FailingProvider;
-
-    #[async_trait::async_trait]
-    impl UsageProvider for FailingProvider {
-        fn id(&self) -> &'static str {
-            "failing"
-        }
-
-        fn display_name(&self) -> &'static str {
-            "Failing Provider"
-        }
-
-        async fn available(&self, _scope: &Scope) -> bool {
-            true
-        }
-
-        async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
-            Err(UsageError::Remote("fixture failure".to_string()))
-        }
-    }
-
-    fn write_claude_fixture(dir: &TempDir) {
-        let history = r#"{"display":"/review","project":"/p1","sessionId":"s1","timestamp":1700000000000}
-{"display":"/facts","project":"/p2","sessionId":"s2","timestamp":1700000010000}"#;
-        std::fs::write(dir.path().join("history.jsonl"), history).unwrap();
-    }
-
-    #[tokio::test]
-    async fn refresh_scans_then_caches_within_ttl_then_force_rescans() {
-        let _g = ENV_LOCK.lock().unwrap();
-        let pool = setup_pool().await;
-
-        let dir = TempDir::new().unwrap();
-        write_claude_fixture(&dir);
-        std::env::set_var("CLAUDE_CONFIG_DIR", dir.path());
-
-        // 第一次：实际跑扫描
-        let s1 = refresh(&pool, &Scope::Local, false).await.unwrap();
-        assert!(!s1.cached);
-        assert!(
-            s1.calls_written >= 2,
-            "should have at least 2 calls from claude fixture"
-        );
-        assert!(
-            s1.providers_available >= 1,
-            "claude code provider should be available with the fixture"
-        );
-        let first_scan_ms = s1.scanned_at_ms;
-
-        // 第二次：5min 内 → 缓存命中，不写库
-        let s2 = refresh(&pool, &Scope::Local, false).await.unwrap();
-        assert!(s2.cached, "second refresh within TTL must be cached");
-        assert_eq!(s2.calls_written, 0);
-        assert_eq!(s2.scanned_at_ms, first_scan_ms);
-
-        // 第三次 force=true：跳过缓存，重新跑
-        let s3 = refresh(&pool, &Scope::Local, true).await.unwrap();
-        assert!(!s3.cached, "force=true must skip cache");
-        assert!(s3.calls_written >= 2);
-
-        // overview 拉得到数据
-        let overview = build_overview(&pool, "local", None, 50).await.unwrap();
-        assert!(overview.kpis.total_calls >= 2);
-        assert!(overview.heatmap.len() == 16 * 7);
-        assert!(overview.last_scan_ms.is_some());
-
-        // provider health 列表能拉到全部 8 项（含 stub）
-        let health = list_provider_health(&pool, "local").await.unwrap();
-        assert_eq!(health.len(), 8, "all 8 providers should be recorded");
-
-        std::env::remove_var("CLAUDE_CONFIG_DIR");
-    }
-
-    #[tokio::test]
-    async fn refresh_marks_available_provider_unavailable_when_collect_fails() {
-        let pool = setup_pool().await;
-
-        let summary =
-            refresh_with_providers(&pool, &Scope::Local, true, vec![Box::new(FailingProvider)])
-                .await
-                .unwrap();
-
-        assert!(!summary.cached);
-        assert_eq!(summary.calls_written, 0);
-        assert_eq!(
-            summary.providers_available, 0,
-            "collect errors should not count as available providers"
-        );
-
-        let health = list_provider_health(&pool, "local").await.unwrap();
-        assert_eq!(health.len(), 1);
-        assert_eq!(health[0].provider_id, "failing");
-        assert!(!health[0].available);
-        assert_eq!(health[0].call_count, 0);
-    }
-
-    #[tokio::test]
-    async fn build_overview_and_recent_filter_by_source() {
-        let pool = setup_pool().await;
-        let now = Utc::now().timestamp_millis();
-
-        // Claude Code 2 条（2 skills / 2 sessions），Codex CLI 1 条；时间戳取近几秒，
-        // 确保落在 16 周热力图窗口内。
-        let calls = vec![
-            NewSkillCall {
-                skill: "review".into(),
-                timestamp_ms: now - 3_000,
-                project: "/p1".into(),
-                session_id: "s1".into(),
-                source: "Claude Code".into(),
-            },
-            NewSkillCall {
-                skill: "commit".into(),
-                timestamp_ms: now - 2_000,
-                project: "/p1".into(),
-                session_id: "s2".into(),
-                source: "Claude Code".into(),
-            },
-            NewSkillCall {
-                skill: "review".into(),
-                timestamp_ms: now - 1_000,
-                project: "/p2".into(),
-                session_id: "s3".into(),
-                source: "Codex CLI".into(),
-            },
-        ];
-        db::replace_calls_for_target(&pool, "local", &calls, &[], now)
-            .await
-            .unwrap();
-
-        // 全部平台（source = None）：聚合全集
-        let all = build_overview(&pool, "local", None, 50).await.unwrap();
-        assert_eq!(all.kpis.total_calls, 3);
-        assert_eq!(all.kpis.unique_sources, 2);
-        assert_eq!(all.kpis.unique_sessions, 3);
-
-        // 只看 Claude Code：KPI / topSkills / heatmap 全部只含该源
-        let claude = build_overview(&pool, "local", Some("Claude Code"), 50)
-            .await
-            .unwrap();
-        assert_eq!(claude.kpis.total_calls, 2);
-        assert_eq!(claude.kpis.unique_sources, 1);
-        assert_eq!(claude.kpis.unique_sessions, 2);
-        assert_eq!(claude.top_skills.len(), 2);
-        let claude_heatmap_total: i64 = claude.heatmap.iter().map(|d| d.count).sum();
-        assert_eq!(claude_heatmap_total, 2, "热力图只应计入 Claude Code 调用");
-
-        // 只看 Codex CLI
-        let codex = build_overview(&pool, "local", Some("Codex CLI"), 50)
-            .await
-            .unwrap();
-        assert_eq!(codex.kpis.total_calls, 1);
-        assert_eq!(codex.kpis.unique_sessions, 1);
-        assert_eq!(codex.top_skills.len(), 1);
-        assert_eq!(codex.top_skills[0].skill, "review");
-
-        // recent feed 同样按 source 过滤
-        let recent_claude = db::list_recent_calls(&pool, "local", Some("Claude Code"), 20)
-            .await
-            .unwrap();
-        assert_eq!(recent_claude.len(), 2);
-        assert!(recent_claude.iter().all(|c| c.source == "Claude Code"));
-
-        let recent_all = db::list_recent_calls(&pool, "local", None, 20)
-            .await
-            .unwrap();
-        assert_eq!(recent_all.len(), 3);
-    }
-}

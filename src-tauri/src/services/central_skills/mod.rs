@@ -30,12 +30,12 @@ pub use files::{
 };
 pub use query::{
     get_central_skills_impl, get_central_skills_page_impl, get_skill_detail_with_row_impl,
-    get_skills_by_agent_impl,
+    get_skills_by_agent_impl, resolve_skill_ref_impl,
 };
 pub use types::{
     BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest,
     BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, CentralSkillsPage,
     CentralSkillsPageRequest, DeleteCentralSkillPreview, DeleteCentralSkillResult,
     DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult, DirectoryTreeEntry,
-    FailedCentralSkillDelete, SkillDetail, SkillInstallationDetail, SkillWithLinks,
+    FailedCentralSkillDelete, SkillDetail, SkillInstallationDetail, SkillRef, SkillWithLinks,
 };

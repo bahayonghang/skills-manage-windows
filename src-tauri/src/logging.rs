@@ -225,8 +225,7 @@ fn init_file_logging_with_appender(appender: DailyLogWriter) -> Result<(), Loggi
         .compact()
         .finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .map_err(LoggingError::InstallSubscriber)?;
+    tracing::subscriber::set_global_default(subscriber).map_err(LoggingError::InstallSubscriber)?;
     LOG_GUARD
         .set(guard)
         .map_err(|_| LoggingError::RetainWorkerGuard)
@@ -258,7 +257,10 @@ fn list_runtime_log_files_in_dir(log_dir: &Path) -> Result<Vec<RuntimeLogFile>, 
     let mut files = Vec::new();
     for entry in fs::read_dir(log_dir).map_err(|error| {
         LoggingError::io(
-            format!("Failed to read runtime log directory '{}'", log_dir.display()),
+            format!(
+                "Failed to read runtime log directory '{}'",
+                log_dir.display()
+            ),
             error,
         )
     })? {

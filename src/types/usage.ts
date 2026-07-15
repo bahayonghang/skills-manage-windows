@@ -1,19 +1,27 @@
 // 与 Rust 端 services/usage + commands/usage 保持同名 camelCase。
 
-export interface SkillCall {
+export type UsageSkillMatchStatus = "matched" | "ambiguous" | "unmatched";
+
+export interface RecentSkillCall {
   skill: string;
   timestampMs: number;
   project: string;
   sessionId: string;
   source: string;
+  matchStatus: UsageSkillMatchStatus;
+  resolvedSkillId: string | null;
 }
 
-export interface SkillCount {
+export interface SkillUsageSummary {
   skill: string;
   count: number;
   projects: number;
   sessions: number;
   lastUsedMs: number;
+  matchStatus: UsageSkillMatchStatus;
+  resolvedSkillId: string | null;
+  staticTokenEstimate: number | null;
+  staticByteCount: number | null;
 }
 
 export interface DayCount {
@@ -31,7 +39,7 @@ export interface UsageKpis {
 
 export interface UsageOverview {
   kpis: UsageKpis;
-  topSkills: SkillCount[];
+  topSkills: SkillUsageSummary[];
   /** 16w x 7d = 112 项，按日期升序连续 */
   heatmap: DayCount[];
   lastScanMs: number | null;
@@ -55,7 +63,7 @@ export interface RefreshSummary {
 export interface UsageRefreshResult {
   summary: RefreshSummary;
   overview: UsageOverview;
-  recent: SkillCall[];
+  recent: RecentSkillCall[];
   providers: ProviderHealth[];
   scope: UsageScopeInfo;
   usedCachedData: boolean;
@@ -68,9 +76,20 @@ export interface SkillUsageDetail {
   sessions: number;
   firstUsedMs: number;
   lastUsedMs: number;
-  byProject: SkillCount[];
+  byProject: SkillProjectCount[];
   /** 16w x 7d，仅本 skill 的子集 */
   weekly: DayCount[];
+  matchStatus: UsageSkillMatchStatus;
+  resolvedSkillId: string | null;
+  staticTokenEstimate: number | null;
+  staticByteCount: number | null;
+}
+
+export interface SkillProjectCount {
+  project: string;
+  count: number;
+  sessions: number;
+  lastUsedMs: number;
 }
 
 export interface UsageScopeInfo {

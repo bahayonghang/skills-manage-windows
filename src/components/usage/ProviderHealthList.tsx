@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import type { ProviderHealth } from "@/types/usage";
-import { timeAgo } from "@/lib/timeAgo";
+import { formatUsageRelativeTime } from "@/components/usage/usageFormat";
 import { cn } from "@/lib/utils";
 
 interface ProviderHealthListProps {
@@ -27,7 +27,7 @@ export function ProviderHealthList({
   onSelect,
   className,
 }: ProviderHealthListProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   if (providers.length === 0) {
     return (
@@ -80,7 +80,7 @@ export function ProviderHealthList({
                 </span>
                 {p.scannedAtMs > 0 && (
                   <span className="text-muted-foreground">
-                    {timeAgo(p.scannedAtMs)}
+                    {formatUsageRelativeTime(p.scannedAtMs, i18n.language)}
                   </span>
                 )}
               </>

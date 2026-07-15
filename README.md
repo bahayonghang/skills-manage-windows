@@ -67,6 +67,29 @@ Remote mode manages the selected remote user's directories only. It does not mod
 
 ![Skill collections view](images/05.png)
 
+## Local CLI
+
+The `skillport-cli` binary uses the same Local SQLite database, stable skill `uid`, GitHub/skills.sh import services, installation service, and cross-process Central mutation lock as the desktop app.
+
+```powershell
+npm run cli -- skills list
+npm run cli -- skills show <uid-or-slug-or-unique-name>
+npm run cli -- skills search "react" --limit 10
+npm run cli -- skills install vercel-labs/agent-skills@react-best-practices --sync
+npm run cli -- skills sync <uid-or-slug> --agent codex --method copy --dry-run
+```
+
+Duplicate installs stop by default; use `--replace` explicitly, and add `--yes` when replacing multiple skills from one GitHub URL. The first CLI release manages only the Local target. A running desktop window does not receive a push event from CLI changes, so refresh the relevant view to reload state. GitHub credentials continue to come from SkillPort's existing protected secret store.
+
+Install the binary on `PATH` with:
+
+```powershell
+cargo install --path src-tauri --bin skillport-cli --locked --force
+```
+
+See the [full SkillPort CLI reference](docs/reference/skillport-cli.md) for command
+options, JSON output, exit codes, duplicate safety, and sync workflows.
+
 ## Download
 
 - Latest release: <https://github.com/bahayonghang/skills-manage-windows/releases/latest>

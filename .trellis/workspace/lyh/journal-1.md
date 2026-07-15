@@ -1520,3 +1520,203 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 37: 完成技能可移植性与共享本机 CLI
+
+**Date**: 2026-07-15
+**Task**: 完成技能可移植性与共享本机 CLI
+**Branch**: `dev`
+
+### Summary
+
+实现稳定技能 uid、跨进程 Central mutation lock 与共享本机 CLI，补齐 Windows 多 binary 打包和双语文档；升级 Trellis 运行时归档保护，并清理已完成或未触发的任务材料。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b172f194` | (see git log) |
+| `a7656ab4` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 38: 修复 Tauri 多 binary 桌面入口
+
+**Date**: 2026-07-15
+**Task**: 修复 Tauri 多 binary 桌面入口
+**Branch**: `dev`
+
+### Summary
+
+通过 Cargo default-run 固定 GUI 主入口，新增 just ci metadata 回归检查，修正 shared CLI 打包规范，并验证开发模式、Windows bundle 与安装后 GUI/CLI 入口。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4c5ad0ca` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 39: 完善 SkillPort CLI 使用文档
+
+**Date**: 2026-07-15
+**Task**: 完善 SkillPort CLI 使用文档
+**Branch**: `dev`
+
+### Summary
+
+新增中英文 CLI reference，覆盖安装、命令、JSON、退出码、安全规则与同步工作流；接入导航和 README，并刷新生成架构参考。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c32cbd4` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 40: 修复根级 Skill 仓库导入
+
+**Date**: 2026-07-15
+**Task**: 修复根级 Skill 仓库导入
+**Branch**: `dev`
+
+### Summary
+
+修复 sourcePath 为根目录时仅同步顶层文件的问题，统一导入与中央更新的仓库相对路径映射，补充完整导入、更新检测及强制修复回归测试，并固化内容边界规范。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a17b2fe03b2a6901bc63c856b7f8233f2e19e9da` | (see git log) |
+| `f0415928927ea3fa327b71df916cca05ba36fd8e` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 41: 完成技能使用统计闭环
+
+**Date**: 2026-07-15
+**Task**: 完成技能使用统计闭环
+**Branch**: `dev`
+
+### Summary
+
+完成技能统计的可信聚合、技能元数据解析、详情交互与可访问展示；通过 just ci、定向测试和多视口浏览器验证后提交并归档。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2bc15b45fa73e5f9674e4077e365bc442a1b849d` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 42: 完成 GitHub 导入文件树预览
+
+**Date**: 2026-07-15
+**Task**: 完成 GitHub 导入文件树预览
+**Branch**: `dev`
+
+### Summary
+
+在 GitHub 导入 Preview 中增加与实际导入边界一致的文件清单和虚拟化文件树，覆盖本地及 SSH/WSL、缺失清单阻断、响应式布局与多尺寸视觉验证；just ci 全量通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f91b60f8` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

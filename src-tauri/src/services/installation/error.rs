@@ -26,6 +26,9 @@ pub enum InstallationError {
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 
+    #[error(transparent)]
+    CentralMutation(#[from] crate::services::central_mutation::CentralMutationError),
+
     /// Platform without symlink support.
     #[error("Symlink creation is only supported on Unix systems")]
     SymlinkUnsupported,

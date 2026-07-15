@@ -43,6 +43,7 @@ fn custom_tag(id: &str, name: &str, description: &str) -> SkillTag {
 fn make_skill(id: &str, name: &str) -> Skill {
     Skill {
         id: id.to_string(),
+        uid: format!("{id}-uid"),
         name: name.to_string(),
         description: Some(format!("{name} description")),
         file_path: format!("/tmp/{id}/SKILL.md"),

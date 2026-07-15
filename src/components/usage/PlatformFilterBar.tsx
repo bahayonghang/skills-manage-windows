@@ -11,7 +11,7 @@ interface PlatformFilterBarProps {
 }
 
 /**
- * 平台筛选条 —— 顶部一排 pill：「全部平台」+ 全部 provider。
+ * 平台筛选条 —— 顶部紧凑 segmented options：「全部平台」+ 全部 provider。
  *
  * 固定列出全部 provider（不过滤），顺序沿用数组顺序与 ProviderHealthList 对齐。
  * 无数据 provider（callCount === 0）灰显 + 禁用，让支持的工具集一目了然，
@@ -28,7 +28,7 @@ export function PlatformFilterBar({
   return (
     <div
       data-testid="platform-filter-bar"
-      className={cn("flex flex-wrap items-center gap-2", className)}
+      className={cn("flex flex-wrap items-center gap-1.5", className)}
     >
       <PlatformPill
         testId="platform-pill-all"
@@ -80,7 +80,7 @@ function PlatformPill({
       title={title}
       onClick={onClick}
       className={cn(
-        "rounded-full border px-3 py-1 text-xs transition-colors",
+        "min-h-7 rounded-md border px-2.5 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         disabled && "cursor-not-allowed opacity-40",
         !disabled && active && "border-primary bg-primary/10 text-primary",
         !disabled &&

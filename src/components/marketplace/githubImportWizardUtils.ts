@@ -20,7 +20,7 @@ export type SelectionState = {
   renamedSkillId: string;
 };
 
-export type DetailTab = "overview" | "ai";
+export type DetailTab = "overview" | "files" | "ai";
 
 export interface GitHubRepoImportWizardProps {
   open: boolean;

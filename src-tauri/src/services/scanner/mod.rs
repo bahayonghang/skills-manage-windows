@@ -419,6 +419,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, ScannerEr
 
                     let db_skill = Skill {
                         id: skill.id.clone(),
+                        uid: uuid::Uuid::new_v4().to_string(),
                         name: skill.name.clone(),
                         description: skill.description.clone(),
                         file_path: skill.file_path.clone(),
@@ -481,6 +482,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, ScannerEr
 
             let db_skill = Skill {
                 id: skill.id.clone(),
+                uid: uuid::Uuid::new_v4().to_string(),
                 name: skill.name.clone(),
                 description: skill.description.clone(),
                 file_path: skill.file_path.clone(),
@@ -685,6 +687,7 @@ pub async fn scan_remote_skills_impl(
 
                     let db_skill = Skill {
                         id: skill.id.clone(),
+                        uid: uuid::Uuid::new_v4().to_string(),
                         name: skill.name.clone(),
                         description: skill.description.clone(),
                         file_path: skill.file_path.clone(),

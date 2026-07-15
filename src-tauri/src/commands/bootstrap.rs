@@ -318,6 +318,7 @@ mod tests {
             &pool,
             &Skill {
                 id: "frontend-design".to_string(),
+                uid: "frontend-design-uid".to_string(),
                 name: "frontend-design".to_string(),
                 description: Some("Build UI".to_string()),
                 file_path: "/tmp/frontend-design/SKILL.md".to_string(),
@@ -389,6 +390,7 @@ mod tests {
             pool,
             &Skill {
                 id: id.to_string(),
+                uid: format!("{id}-uid"),
                 name: id.to_string(),
                 description: description.map(str::to_string),
                 file_path: format!("/tmp/{id}/SKILL.md"),

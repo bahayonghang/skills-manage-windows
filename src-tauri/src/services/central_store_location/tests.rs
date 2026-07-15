@@ -30,6 +30,7 @@ fn skill_row(root: &Path, id: &str) -> Skill {
     let dir = root.join(id);
     Skill {
         id: id.to_string(),
+        uid: format!("{id}-uid"),
         name: id.to_string(),
         description: None,
         file_path: dir.join("SKILL.md").to_string_lossy().into_owned(),

@@ -219,6 +219,9 @@ pub fn app_data_dir() -> PathBuf {
         std::env::var_os("HOMEPATH"),
     )
 }
+pub fn central_mutation_lock_path() -> PathBuf {
+    app_data_dir().join("locks").join("central-mutation.lock")
+}
 
 pub fn expand_home_path(path: &str) -> PathBuf {
     expand_home_path_with_home(path, &resolve_home_dir())

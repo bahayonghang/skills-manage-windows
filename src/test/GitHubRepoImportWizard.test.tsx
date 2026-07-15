@@ -5,6 +5,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -63,6 +64,12 @@ function makePreview(): GitHubRepoPreview {
         skillDirectoryName: "design-an-interface",
         downloadUrl: "https://example.com/design-an-interface/SKILL.md",
         conflict: null,
+        files: [
+          { path: "SKILL.md", byteLen: 1024 },
+          { path: "assets/palette.json", byteLen: 512 },
+          { path: "references/guide.md", byteLen: 768 },
+          { path: "references/deep/example.md", byteLen: 256 },
+        ],
       },
     ],
     previewWorkspaceId: "preview-1",
@@ -81,6 +88,7 @@ function makeConflictPreview(): GitHubRepoPreview {
         rootDirectory: "skills",
         skillDirectoryName: "conflicting-skill",
         downloadUrl: "https://example.com/conflicting-skill/SKILL.md",
+        files: [{ path: "SKILL.md", byteLen: 400 }],
         conflict: {
           existingSkillId: "conflicting-skill",
           existingName: "Local conflicting skill",
@@ -99,6 +107,7 @@ function makeConflictPreview(): GitHubRepoPreview {
         skillDirectoryName: "fresh-skill",
         downloadUrl: "https://example.com/fresh-skill/SKILL.md",
         conflict: null,
+        files: [{ path: "SKILL.md", byteLen: 300 }],
       },
     ],
   };
@@ -118,6 +127,7 @@ function makeGroupedPreview(): GitHubRepoPreview {
         skillDirectoryName: "ask-matt",
         downloadUrl: "https://example.com/ask-matt/SKILL.md",
         conflict: null,
+        files: [{ path: "SKILL.md", byteLen: 200 }],
       },
       {
         sourcePath: "skills/engineering/code-review",
@@ -129,6 +139,7 @@ function makeGroupedPreview(): GitHubRepoPreview {
         skillDirectoryName: "code-review",
         downloadUrl: "https://example.com/code-review/SKILL.md",
         conflict: null,
+        files: [{ path: "SKILL.md", byteLen: 220 }],
       },
       {
         sourcePath: "skills/utility/ungrouped",
@@ -139,12 +150,13 @@ function makeGroupedPreview(): GitHubRepoPreview {
         skillDirectoryName: "ungrouped",
         downloadUrl: "https://example.com/ungrouped/SKILL.md",
         conflict: null,
+        files: [{ path: "SKILL.md", byteLen: 180 }],
       },
     ],
   };
 }
 
-function renderWizard({
+function wizardElement({
   preview = makePreview(),
   previewError = null,
   onImport = vi.fn(),
@@ -153,7 +165,7 @@ function renderWizard({
   previewError?: string | null;
   onImport?: (selections: GitHubSkillImportSelection[]) => Promise<void> | void;
 } = {}) {
-  render(
+  return (
     <MemoryRouter>
       <GitHubRepoImportWizard
         open
@@ -170,8 +182,14 @@ function renderWizard({
         onReset={vi.fn()}
         launcherLabel="Central Skills"
       />
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function renderWizard(
+  options: Parameters<typeof wizardElement>[0] = {},
+) {
+  return render(wizardElement(options));
 }
 
 async function reviewImport() {
@@ -183,6 +201,116 @@ async function reviewImport() {
 }
 
 describe("GitHubRepoImportWizard", () => {
+  it("shows a virtualized file tree with snapshot totals and expandable deep folders", async () => {
+    renderWizard();
+    await screen.findByTestId("github-import-preview-workspace");
+
+    fireEvent.click(screen.getByRole("button", { name: /File tree|文件树/i }));
+
+    const tree = screen.getByTestId("github-import-file-tree");
+    expect(tree).toHaveTextContent(/4 files|4 个文件/i);
+    expect(tree).toHaveTextContent(/3 folders|3 个目录/i);
+    expect(tree).toHaveTextContent("design-an-interface");
+    expect(within(tree).getByText("references")).toBeInTheDocument();
+    expect(within(tree).queryByText("example.md")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      within(tree).getByRole("button", { name: /Expand deep|展开 deep/i }),
+    );
+    expect(within(tree).getByText("example.md")).toBeInTheDocument();
+  });
+
+  it("expands and collapses directories from the keyboard", async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId("github-import-preview-workspace");
+    await user.click(screen.getByRole("button", { name: /File tree|文件树/i }));
+
+    const deepDirectory = screen.getByRole("button", {
+      name: /Expand deep|展开 deep/i,
+    });
+    expect(deepDirectory).toHaveAttribute("aria-expanded", "false");
+
+    deepDirectory.focus();
+    await user.keyboard("{Enter}");
+    expect(deepDirectory).toHaveAttribute("aria-expanded", "true");
+
+    await user.keyboard(" ");
+    expect(deepDirectory).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("atomically replaces the file tree after re-preview", async () => {
+    const initialPreview = makePreview();
+    const rendered = renderWizard({ preview: initialPreview });
+    await screen.findByTestId("github-import-preview-workspace");
+    fireEvent.click(screen.getByRole("button", { name: /File tree|文件树/i }));
+    expect(screen.getByTestId("github-import-file-tree")).toHaveTextContent(
+      "palette.json",
+    );
+
+    const refreshedPreview = makePreview();
+    refreshedPreview.skills[0].files = [
+      { path: "SKILL.md", byteLen: 1024 },
+      { path: "scripts/new-command.ts", byteLen: 320 },
+    ];
+    rendered.rerender(wizardElement({ preview: refreshedPreview }));
+
+    const refreshedTree = await screen.findByTestId("github-import-file-tree");
+    expect(refreshedTree).toHaveTextContent("new-command.ts");
+    expect(refreshedTree).not.toHaveTextContent("palette.json");
+  });
+
+  it("keeps the Files tab active when switching skills", async () => {
+    renderWizard({ preview: makeConflictPreview() });
+    await screen.findByTestId("github-import-preview-workspace");
+
+    const filesTab = screen.getByRole("button", { name: /File tree|文件树/i });
+    fireEvent.click(filesTab);
+    fireEvent.click(
+      within(screen.getByTestId("github-import-summary-list")).getByText(
+        "fresh-skill",
+      ),
+    );
+
+    expect(filesTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("github-import-file-tree")).toHaveTextContent(
+      "fresh-skill",
+    );
+  });
+
+  it("blocks review when a selected skill has no trustworthy file manifest", async () => {
+    const preview = makePreview();
+    preview.skills[0].files = undefined;
+    renderWizard({ preview });
+    await screen.findByTestId("github-import-preview-workspace");
+
+    expect(
+      screen.getByTestId("github-import-file-manifest-blocker"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Review import|检查导入内容/i }),
+    ).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /File tree|文件树/i }));
+    expect(screen.getByTestId("github-import-file-tree-error")).toBeInTheDocument();
+  });
+
+  it("keeps the rendered tree row count bounded for the archive file limit", async () => {
+    const preview = makePreview();
+    preview.skills[0].files = [
+      { path: "SKILL.md", byteLen: 10 },
+      ...Array.from({ length: 19_999 }, (_, index) => ({
+        path: `root-file-${String(index).padStart(5, "0")}.txt`,
+        byteLen: 1,
+      })),
+    ];
+    renderWizard({ preview });
+    await screen.findByTestId("github-import-preview-workspace");
+    fireEvent.click(screen.getByRole("button", { name: /File tree|文件树/i }));
+
+    expect(screen.getAllByTestId("github-import-file-tree-file").length).toBeLessThan(100);
+  });
+
   it("does not show PAT guidance for non-auth import errors containing subpaths", () => {
     renderWizard({
       preview: null,
@@ -323,6 +451,11 @@ describe("GitHubRepoImportWizard", () => {
     const input = screen.getByPlaceholderText("新的技能 ID");
     fireEvent.change(input, { target: { value: "conflicting-skill-copy" } });
     fireEvent.click(screen.getByRole("button", { name: "确认" }));
+
+    fireEvent.click(screen.getByRole("button", { name: /File tree|文件树/i }));
+    expect(screen.getByTestId("github-import-file-tree")).toHaveTextContent(
+      "conflicting-skill-copy",
+    );
 
     await reviewImport();
     fireEvent.click(screen.getByRole("button", { name: /^导入$/ }));

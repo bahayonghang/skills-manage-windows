@@ -542,9 +542,10 @@ fn should_exclude_repo_dir(root: &Path, path: &Path) -> Result<bool, LocalRemote
         })
         .collect::<Vec<_>>();
 
-    if components.windows(2).any(|pair| {
-        pair[0] == paths::APP_DATA_DIR_NAME && pair[1] == paths::TARGETS_CACHE_DIR_NAME
-    }) {
+    if components
+        .windows(2)
+        .any(|pair| pair[0] == paths::APP_DATA_DIR_NAME && pair[1] == paths::TARGETS_CACHE_DIR_NAME)
+    {
         return Ok(true);
     }
 

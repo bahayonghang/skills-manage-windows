@@ -122,6 +122,7 @@ impl std::str::FromStr for LinkType {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Skill {
     pub id: String,
+    pub uid: String,
     pub name: String,
     pub description: Option<String>,
     pub file_path: String,

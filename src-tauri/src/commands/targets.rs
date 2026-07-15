@@ -32,7 +32,9 @@ pub async fn list_targets(state: State<'_, AppState>) -> Result<Vec<TargetSummar
 
 #[tauri::command]
 pub async fn list_wsl_distributions() -> Result<Vec<WslDistributionSummary>, String> {
-    list_wsl_distributions_impl().await.map_err(|e| e.to_string())
+    list_wsl_distributions_impl()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -188,10 +190,9 @@ pub async fn update_ssh_target_password(
     target_id: String,
     password: String,
 ) -> Result<SshTargetTestResult, String> {
-    let result =
-        update_ssh_target_password_impl(&state.targets, &state.db, &target_id, &password)
-            .await
-            .map_err(|e| e.to_string());
+    let result = update_ssh_target_password_impl(&state.targets, &state.db, &target_id, &password)
+        .await
+        .map_err(|e| e.to_string());
     match &result {
         Ok(test_result) => {
             let status = if test_result.ok {

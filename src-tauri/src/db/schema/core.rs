@@ -8,6 +8,7 @@
 //! DEFAULT 表达式，故拆成两步。
 
 use sqlx::Row;
+use uuid::Uuid;
 
 use crate::db::migrations::ensure_column;
 use crate::db::DbPool;
@@ -17,6 +18,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skills (
             id             TEXT PRIMARY KEY,
+            uid            TEXT,
             name           TEXT NOT NULL,
             description    TEXT,
             file_path      TEXT NOT NULL,
@@ -31,6 +33,43 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+
+    ensure_column(
+        pool,
+        "skills",
+        "uid",
+        "ALTER TABLE skills ADD COLUMN uid TEXT",
+    )
+    .await?;
+
+    let mut transaction = pool.begin().await?;
+    let missing_uid_rows = sqlx::query("SELECT id FROM skills WHERE uid IS NULL OR TRIM(uid) = ''")
+        .fetch_all(&mut *transaction)
+        .await?;
+    for row in missing_uid_rows {
+        let id = row.try_get::<String, _>("id")?;
+        sqlx::query("UPDATE skills SET uid = ? WHERE id = ?")
+            .bind(Uuid::new_v4().to_string())
+            .bind(id)
+            .execute(&mut *transaction)
+            .await?;
+    }
+    transaction.commit().await?;
+
+    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_uid ON skills(uid)")
+        .execute(pool)
+        .await?;
+
+    let invalid_uid_count =
+        sqlx::query("SELECT COUNT(*) AS count FROM skills WHERE uid IS NULL OR TRIM(uid) = ''")
+            .fetch_one(pool)
+            .await?
+            .try_get::<i64, _>("count")?;
+    if invalid_uid_count != 0 {
+        return Err(sqlx::Error::InvalidArgument(
+            "skills.uid backfill left empty identities".to_string(),
+        ));
+    }
 
     // skill_installations：(skill_id, agent_id) 唯一安装关系。
     sqlx::query(

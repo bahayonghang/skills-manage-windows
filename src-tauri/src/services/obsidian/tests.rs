@@ -49,7 +49,10 @@ async fn platform_import_symlink_creates_link_and_rows() {
 
     let link = agent_dir.join("alpha");
     let meta = std::fs::symlink_metadata(&link).unwrap();
-    assert!(meta.file_type().is_symlink(), "import should create a symlink");
+    assert!(
+        meta.file_type().is_symlink(),
+        "import should create a symlink"
+    );
 
     let skill = db::get_skill_by_id(&pool, "alpha").await.unwrap().unwrap();
     assert!(!skill.is_central);
@@ -80,7 +83,10 @@ async fn platform_import_copy_copies_dir() {
 
     let target = agent_dir.join("alpha");
     let meta = std::fs::symlink_metadata(&target).unwrap();
-    assert!(meta.file_type().is_dir(), "copy import should materialize a dir");
+    assert!(
+        meta.file_type().is_dir(),
+        "copy import should materialize a dir"
+    );
     assert!(target.join("SKILL.md").exists());
 
     let skill = db::get_skill_by_id(&pool, "alpha").await.unwrap().unwrap();
@@ -103,7 +109,10 @@ async fn platform_import_defaults_to_symlink() {
         .unwrap();
 
     let meta = std::fs::symlink_metadata(agent_dir.join("alpha")).unwrap();
-    assert!(meta.file_type().is_symlink(), "method 缺省应按 symlink 处理");
+    assert!(
+        meta.file_type().is_symlink(),
+        "method 缺省应按 symlink 处理"
+    );
 }
 
 #[tokio::test]

@@ -677,6 +677,16 @@ pub(super) fn source_path_from_skill_md(path: &str) -> Option<String> {
         .map(|_| normalized[..normalized.len() - "/SKILL.md".len()].to_string())
 }
 
+pub(crate) fn repo_file_relative_to_source(repo_path: &str, source_path: &str) -> Option<String> {
+    if source_path == "." {
+        return Some(repo_path.to_string());
+    }
+
+    let prefix = format!("{}/", source_path.trim_matches('/'));
+    let relative = repo_path.strip_prefix(&prefix)?;
+    (!relative.is_empty()).then(|| relative.to_string())
+}
+
 pub(super) fn join_repo_path(base_path: &str, child: &str) -> Result<String, GithubImportError> {
     let mut parts = Vec::new();
     for part in base_path.split('/').chain(child.split('/')) {

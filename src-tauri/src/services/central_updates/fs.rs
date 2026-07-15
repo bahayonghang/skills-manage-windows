@@ -11,7 +11,7 @@ use std::path::{Component, Path, PathBuf};
 use uuid::Uuid;
 
 use crate::fs_util::run_blocking_fs_with;
-use crate::services::github_import::GitHubRepoSnapshot;
+use crate::services::github_import::{repo_file_relative_to_source, GitHubRepoSnapshot};
 use crate::services::installation::copy_dir_all;
 use crate::targets::{connect_remote_target, ActiveTarget, ConnectedRemoteTarget};
 
@@ -120,19 +120,7 @@ pub(crate) fn collect_remote_skill_files(
         .files
         .iter()
         .filter_map(|(repo_path, bytes)| {
-            let relative_path = if source_path == "." {
-                if repo_path.contains('/') {
-                    return None;
-                }
-                repo_path.clone()
-            } else {
-                let prefix = format!("{}/", source_path.trim_matches('/'));
-                let relative = repo_path.strip_prefix(&prefix)?;
-                if relative.is_empty() {
-                    return None;
-                }
-                relative.to_string()
-            };
+            let relative_path = repo_file_relative_to_source(repo_path, source_path)?;
 
             Some(RemoteSkillFile {
                 repo_path: repo_path.clone(),

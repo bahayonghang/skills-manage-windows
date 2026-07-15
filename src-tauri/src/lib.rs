@@ -1,4 +1,5 @@
 pub mod central_migration;
+pub mod cli_api;
 pub mod commands;
 pub mod db;
 pub mod fs_util;

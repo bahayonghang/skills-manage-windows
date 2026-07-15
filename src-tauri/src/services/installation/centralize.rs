@@ -27,6 +27,17 @@ pub(crate) async fn ensure_centralized(
         return Ok(());
     }
 
+    let _mutation_guard = crate::services::central_mutation::acquire_central_mutation_guard(
+        "centralize skill",
+        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+    )
+    .await?;
+
+    // Revalidate after acquiring the cross-process mutation lock.
+    if path_exists_blocking(&canonical_dir.join("SKILL.md")).await? {
+        return Ok(());
+    }
+
     // Look up the skill's actual file location from the database.
     let skill = db::get_skill_by_id(pool, skill_id)
         .await?

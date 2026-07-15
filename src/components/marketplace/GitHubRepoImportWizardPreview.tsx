@@ -14,6 +14,7 @@ import type { GitHubRepoPreview, GitHubSkillPreview } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MarkdownPreview } from "@/components/marketplace/MarkdownPreview";
+import { GitHubImportFileTree } from "@/components/marketplace/GitHubImportFileTree";
 import type {
   GitHubImportAiSummaryEntry,
   SkillMarkdownEntry,
@@ -86,6 +87,7 @@ interface GitHubRepoImportPreviewWorkspaceProps {
   browserMode: boolean;
   allSkillsSelected: boolean;
   noSkillsSelected: boolean;
+  blockingFileManifest: GitHubSkillPreview | undefined;
   skillMarkdown: Record<string, SkillMarkdownEntry>;
   aiSummaries: Record<string, GitHubImportAiSummaryEntry>;
   detailScrollRef: RefObject<HTMLDivElement | null>;
@@ -119,6 +121,7 @@ export function GitHubRepoImportPreviewWorkspace({
   browserMode,
   allSkillsSelected,
   noSkillsSelected,
+  blockingFileManifest,
   skillMarkdown,
   aiSummaries,
   detailScrollRef,
@@ -142,15 +145,25 @@ export function GitHubRepoImportPreviewWorkspace({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
+      {blockingFileManifest ? (
+        <div
+          className="flex shrink-0 items-start gap-2 border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+          data-testid="github-import-file-manifest-blocker"
+          role="alert"
+        >
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+          <span>{t("marketplace.githubImportFileManifestError")}</span>
+        </div>
+      ) : null}
       <div
-        className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.45fr)] xl:grid-cols-[minmax(360px,0.88fr)_minmax(0,1.52fr)]"
+        className="grid min-h-[44rem] flex-1 gap-4 md:min-h-[22rem] md:grid-cols-[minmax(260px,0.82fr)_minmax(0,1.38fr)] md:overflow-hidden lg:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.45fr)] xl:grid-cols-[minmax(360px,0.88fr)_minmax(0,1.52fr)]"
         data-testid="github-import-preview-workspace"
       >
-        <div className="flex min-h-[22rem] min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/70 shadow-sm">
+        <div className="flex min-h-[22rem] min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/70 shadow-sm md:min-h-0">
           <div className="border-b border-border/60 px-4 py-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
+            <div className="flex flex-col items-start gap-3 xl:flex-row xl:justify-between">
+              <div className="min-w-0 xl:flex-1">
                 <div className="flex items-center gap-2">
                   <div className="text-sm font-semibold">
                     {t("marketplace.githubImportSelectionTitle")}
@@ -324,7 +337,7 @@ export function GitHubRepoImportPreviewWorkspace({
         </div>
 
         <div
-          className="flex min-h-[22rem] min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/80 shadow-sm"
+          className="flex min-h-[22rem] min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/80 shadow-sm md:min-h-0"
           data-testid="github-import-detail-pane"
         >
           {selectedPreviewSkill ? (
@@ -601,6 +614,7 @@ function GitHubRepoImportPreviewDetailPane({
           {(
             [
               ["overview", t("marketplace.githubImportDetailTabs.overview")],
+              ["files", t("marketplace.githubImportDetailTabs.files")],
               ["ai", t("marketplace.githubImportDetailTabs.ai")],
             ] as const
           ).map(([tabId, label]) => {
@@ -628,7 +642,10 @@ function GitHubRepoImportPreviewDetailPane({
 
       <div
         ref={detailScrollRef}
-        className="min-h-0 flex-1 overflow-y-auto px-5 py-4"
+        className={cn(
+          "min-h-0 flex-1 px-5 py-4",
+          detailTab === "files" ? "overflow-hidden" : "overflow-y-auto",
+        )}
         data-testid="github-import-detail-scroll"
       >
         {detailTab === "overview" ? (
@@ -676,6 +693,22 @@ function GitHubRepoImportPreviewDetailPane({
             ) : (
               <MarkdownPreview content={markdownEntry.content ?? ""} />
             )}
+          </div>
+        ) : null}
+
+        {detailTab === "files" ? (
+          <div
+            className="h-full min-h-0"
+            data-testid="github-import-detail-panel-files"
+          >
+            <GitHubImportFileTree
+              files={selectedPreviewSkill.files}
+              rootName={
+                currentResolution === "rename"
+                  ? resolvedRenameId
+                  : selectedPreviewSkill.skillId
+              }
+            />
           </div>
         ) : null}
 

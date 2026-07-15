@@ -31,6 +31,29 @@ pub(crate) async fn update_skills_batch(
     plans: Vec<SkillUpdatePlan>,
     cancel: Option<&AtomicBool>,
 ) -> Vec<SkillUpdateBatchOutcome> {
+    let _mutation_guard = if matches!(fs, CentralFs::Local) {
+        match crate::services::central_mutation::acquire_central_mutation_guard(
+            "update Central skills",
+            crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+        )
+        .await
+        {
+            Ok(guard) => Some(guard),
+            Err(error) => {
+                let message = error.to_string();
+                return plans
+                    .into_iter()
+                    .map(|plan| SkillUpdateBatchOutcome {
+                        skill_id: plan.skill.id,
+                        result: Err(CentralUpdatesError::CentralMutation(message.clone())),
+                    })
+                    .collect();
+            }
+        }
+    } else {
+        None
+    };
+
     let writes = plans
         .iter()
         .map(|plan| CentralSkillWrite {
@@ -128,6 +151,7 @@ async fn persist_updated_skill(
     let skill_md_path = remote.target_dir.join("SKILL.md");
     let updated_skill = Skill {
         id: skill.id.clone(),
+        uid: skill.uid.clone(),
         name: remote.candidate.skill_name.clone(),
         description: remote.candidate.description.clone(),
         file_path: skill_md_path.to_string_lossy().into_owned(),

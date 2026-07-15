@@ -65,7 +65,9 @@ impl InstallTransport {
         match target {
             ActiveTarget::Local => Ok(Self::Local),
             ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => Ok(Self::Remote(Box::new(
-                connect_remote_target(target).await.map_err(transport_error)?,
+                connect_remote_target(target)
+                    .await
+                    .map_err(transport_error)?,
             ))),
         }
     }
@@ -132,9 +134,7 @@ impl InstallTransport {
         central: &db::Agent,
     ) -> Result<String, InstallationError> {
         match self {
-            Self::Local => {
-                native::centralize_shared_root_local(pool, skill_id, central).await
-            }
+            Self::Local => native::centralize_shared_root_local(pool, skill_id, central).await,
             Self::Remote(connection) => {
                 let canonical_dir =
                     crate::targets::remote_join(&central.global_skills_dir, skill_id);
@@ -220,8 +220,7 @@ impl InstallTransport {
         match self {
             Self::Local => native::remove_install_local(pool, agent, skill_id).await,
             Self::Remote(connection) => {
-                let install_path =
-                    crate::targets::remote_join(&agent.global_skills_dir, skill_id);
+                let install_path = crate::targets::remote_join(&agent.global_skills_dir, skill_id);
                 connection
                     .remove_tree(&install_path)
                     .await

@@ -102,8 +102,14 @@ pub async fn uninstall_skill_from_agent(
     let started_at = Instant::now();
     let result = match InstallTransport::for_target(&active_target).await {
         Ok(transport) => {
-            installation::uninstall_skill(&pool, &transport, &skill_id, &agent_id, row_id.as_deref())
-                .await
+            installation::uninstall_skill(
+                &pool,
+                &transport,
+                &skill_id,
+                &agent_id,
+                row_id.as_deref(),
+            )
+            .await
         }
         Err(error) => Err(error),
     };

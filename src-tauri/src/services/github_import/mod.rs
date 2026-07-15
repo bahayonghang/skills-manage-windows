@@ -42,6 +42,8 @@ mod types;
 use archive::*;
 use import::*;
 use plugin_manifest::*;
+#[cfg(test)]
+use preview::*;
 use preview_workspace::*;
 use progress::*;
 use raw_http::*;
@@ -76,12 +78,12 @@ pub(crate) use remote::{
 pub(crate) use source::{
     build_repo_skill_candidates_from_snapshot_at_path, fetch_repo_skill_candidates_from_source,
     inspect_github_repo_skills_with_auth, inspect_repo_skill_candidates_from_snapshot_at_path,
-    resolve_repo_source,
+    repo_file_relative_to_source, resolve_repo_source,
 };
 pub use types::{
     DuplicateResolution, GitHubImportProgressPayload, GitHubImportProgressPhase, GitHubPatState,
     GitHubPatTestResult, GitHubRepoImportResult, GitHubRepoPreview, GitHubRepoRef,
-    GitHubSkillConflict, GitHubSkillImportSelection, GitHubSkillPreview,
+    GitHubSkillConflict, GitHubSkillImportSelection, GitHubSkillPreview, GitHubSkillPreviewFile,
     ImportedGitHubSkillSummary,
 };
 pub(crate) use types::{

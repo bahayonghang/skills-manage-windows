@@ -13,3 +13,6 @@
 - [Transport Seam（Local/SSH/WSL 操作级传输缝）](./transport-seam.md)
 - [Central Update Batching Contract](./central-update-batching.md)
 - [GitHub Import Preview Contract](./github-import-preview-contract.md)
+- [Central Mutation Lock Contract](./central-mutation-lock.md)
+- [Shared Local CLI Contract](./shared-local-cli.md)
+- [Skill Usage Analytics Contract](./skill-usage-analytics.md)

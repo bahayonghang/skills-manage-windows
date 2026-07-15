@@ -511,6 +511,11 @@ pub async fn delete_central_skill_impl(
     skill_id: &str,
     remove_agent_ids: &[String],
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
+    let _mutation_guard = crate::services::central_mutation::acquire_central_mutation_guard(
+        "delete Central skill",
+        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+    )
+    .await?;
     let skill = db::get_skill_by_id(pool, skill_id)
         .await?
         .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;

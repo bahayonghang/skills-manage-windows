@@ -33,6 +33,7 @@ Indexes:
 | Column | Type | Nullable | Default | PK |
 | --- | --- | --- | --- | --- |
 | `id` | `TEXT` | yes | — | ✓ |
+| `uid` | `TEXT` | yes | — | — |
 | `name` | `TEXT` | no | — | — |
 | `description` | `TEXT` | yes | — | — |
 | `file_path` | `TEXT` | no | — | — |
@@ -469,4 +470,4 @@ Indexes:
 | `last_full_scan_ms` | `INTEGER` | no | — | — |
 
 ---
-Last generated: 2026-06-11
+Last generated: 2026-07-15

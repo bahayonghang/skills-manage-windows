@@ -1,20 +1,83 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
-import { KpiStrip } from "../components/usage/KpiStrip";
-import { ProviderHealthList } from "../components/usage/ProviderHealthList";
-import { PlatformFilterBar } from "../components/usage/PlatformFilterBar";
-import { SkillBarChart } from "../components/usage/SkillBarChart";
 import { ActivityHeatmap } from "../components/usage/ActivityHeatmap";
+import { PlatformFilterBar } from "../components/usage/PlatformFilterBar";
+import { ProviderHealthList } from "../components/usage/ProviderHealthList";
 import { RecentCallsFeed } from "../components/usage/RecentCallsFeed";
-import { useUsageStore } from "../stores/usageStore";
+import { SkillUsageDetailPanel } from "../components/usage/SkillUsageDetailPanel";
+import { SkillUsageTable } from "../components/usage/SkillUsageTable";
+import { UsageMetricStrip } from "../components/usage/UsageMetricStrip";
 import { useTargetStore } from "../stores/targetStore";
+import { useUsageStore } from "../stores/usageStore";
+import type {
+  DayCount,
+  RecentSkillCall,
+  SkillUsageDetail,
+  SkillUsageSummary,
+} from "../types/usage";
 
 const wrap = (ui: React.ReactNode) => <MemoryRouter>{ui}</MemoryRouter>;
 
+const skills: SkillUsageSummary[] = [
+  {
+    skill: "git-commit",
+    count: 10,
+    projects: 2,
+    sessions: 5,
+    lastUsedMs: 3_000,
+    matchStatus: "matched",
+    resolvedSkillId: "git-commit",
+    staticTokenEstimate: 420,
+    staticByteCount: 1_600,
+  },
+  {
+    skill: "review",
+    count: 25,
+    projects: 1,
+    sessions: 8,
+    lastUsedMs: 2_000,
+    matchStatus: "ambiguous",
+    resolvedSkillId: null,
+    staticTokenEstimate: null,
+    staticByteCount: null,
+  },
+  {
+    skill: "facts",
+    count: 5,
+    projects: 3,
+    sessions: 2,
+    lastUsedMs: 5_000,
+    matchStatus: "unmatched",
+    resolvedSkillId: null,
+    staticTokenEstimate: null,
+    staticByteCount: null,
+  },
+];
+
+const recent: RecentSkillCall[] = [
+  {
+    skill: "git-commit",
+    timestampMs: Date.now() - 60_000,
+    project: "C:/Users/demo/repo-a",
+    sessionId: "s1",
+    source: "Codex CLI",
+    matchStatus: "matched",
+    resolvedSkillId: "git-commit",
+  },
+  {
+    skill: "review",
+    timestampMs: Date.now() - 3_600_000,
+    project: "/home/demo/repo-b",
+    sessionId: "s2",
+    source: "Claude Code",
+    matchStatus: "ambiguous",
+    resolvedSkillId: null,
+  },
+];
+
 beforeEach(() => {
-  // reset zustand state for SkillBarChart's resolveSkillId selector
   useUsageStore.setState({
     overview: null,
     recent: [],
@@ -22,11 +85,14 @@ beforeEach(() => {
     detail: null,
     scope: null,
     selectedSource: null,
+    selectedSkill: null,
     loading: false,
     refreshing: false,
+    detailLoading: false,
     error: null,
+    refreshError: null,
+    usedCachedData: false,
     lastRefreshMs: null,
-    resolveSkillId: vi.fn(async () => null),
   });
   useTargetStore.setState({
     targets: [{ id: "local", kind: "local", label: "Local", isActive: true }],
@@ -39,13 +105,13 @@ beforeEach(() => {
   });
 });
 
-describe("KpiStrip", () => {
-  it("renders all 4 KPI cards with localized values", () => {
+describe("UsageMetricStrip", () => {
+  it("renders a compact four-metric strip with an explicit all-history range", () => {
     render(
       wrap(
-        <KpiStrip
+        <UsageMetricStrip
           kpis={{
-            totalCalls: 1234,
+            totalCalls: 1_234,
             uniqueSkills: 7,
             uniqueProjects: 3,
             uniqueSources: 2,
@@ -55,316 +121,209 @@ describe("KpiStrip", () => {
       ),
     );
 
-    // toLocaleString → 1,234 (依 jsdom 默认 locale)
     expect(screen.getByText(/1,234|1234/)).toBeInTheDocument();
-    expect(screen.getByText("7")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
-  });
-
-  it("shows sessions instead of sources in single-platform mode", () => {
-    render(
-      wrap(
-        <KpiStrip
-          singlePlatform
-          kpis={{
-            totalCalls: 10,
-            uniqueSkills: 4,
-            uniqueProjects: 2,
-            uniqueSources: 1,
-            uniqueSessions: 6,
-          }}
-        />,
-      ),
-    );
-
-    expect(document.body.textContent).toMatch(/会话数|Sessions/);
-    expect(document.body.textContent).not.toMatch(/数据源|Sources/);
-    expect(screen.getByText("6")).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/全部已记录|All recorded/);
+    expect(document.querySelector("[class*='gradient']")).toBeNull();
   });
 });
 
-describe("PlatformFilterBar", () => {
-  it("renders all providers and disables providers without calls", () => {
+describe("platform and provider controls", () => {
+  const providers = [
+    {
+      providerId: "claude-code",
+      displayName: "Claude Code",
+      available: true,
+      callCount: 42,
+      scannedAtMs: Date.now(),
+    },
+    {
+      providerId: "antigravity",
+      displayName: "Antigravity",
+      available: false,
+      callCount: 0,
+      scannedAtMs: 0,
+    },
+  ];
+
+  it("disables sources without calls and keeps provider zero distinct from unavailable", () => {
     const onSelect = vi.fn();
     render(
       wrap(
-        <PlatformFilterBar
-          selected={null}
-          onSelect={onSelect}
-          providers={[
-            {
-              providerId: "claude-code",
-              displayName: "Claude Code",
-              available: true,
-              callCount: 42,
-              scannedAtMs: 0,
-            },
-            {
-              providerId: "antigravity",
-              displayName: "Antigravity",
-              available: false,
-              callCount: 0,
-              scannedAtMs: 0,
-            },
-          ]}
-        />,
+        <>
+          <PlatformFilterBar
+            providers={providers}
+            selected={null}
+            onSelect={onSelect}
+          />
+          <ProviderHealthList providers={providers} />
+        </>,
       ),
     );
 
-    expect(screen.getByTestId("platform-pill-all")).toHaveAttribute(
-      "data-active",
-      "true",
-    );
     expect(screen.getByTestId("platform-pill-claude-code")).toBeEnabled();
     expect(screen.getByTestId("platform-pill-antigravity")).toBeDisabled();
-
-    fireEvent.click(screen.getByTestId("platform-pill-claude-code"));
-    expect(onSelect).toHaveBeenCalledWith("Claude Code");
+    expect(screen.getByTestId("provider-row-antigravity").textContent).toMatch(
+      /未检测到|not detected/,
+    );
   });
 });
 
-describe("ProviderHealthList", () => {
-  it("renders one row per provider with available state", () => {
+describe("SkillUsageTable", () => {
+  it("shows stable decision columns and defaults to count descending", () => {
     render(
       wrap(
-        <ProviderHealthList
-          providers={[
-            {
-              providerId: "claude-code",
-              displayName: "Claude Code",
-              available: true,
-              callCount: 42,
-              scannedAtMs: Date.now() - 1000 * 60 * 3,
-            },
-            {
-              providerId: "antigravity",
-              displayName: "Antigravity",
-              available: false,
-              callCount: 0,
-              scannedAtMs: 0,
-            },
-          ]}
+        <SkillUsageTable
+          skills={skills}
+          selectedSkill={null}
+          onSelect={vi.fn()}
+        />,
+      ),
+    );
+    const rows = screen.getAllByTestId(/^usage-row-/);
+    expect(rows[0]).toHaveAttribute("data-testid", "usage-row-review");
+    expect(rows[1]).toHaveAttribute("data-testid", "usage-row-git-commit");
+    expect(document.body.textContent).toMatch(/无法唯一映射|Not uniquely mapped/);
+    expect(document.body.textContent).toMatch(/420/);
+  });
+
+  it("uses explicit sort options and row selection for usage detail", () => {
+    const onSelect = vi.fn();
+    render(
+      wrap(
+        <SkillUsageTable
+          skills={skills}
+          selectedSkill="review"
+          onSelect={onSelect}
         />,
       ),
     );
 
-    expect(screen.getByTestId("provider-row-claude-code")).toBeInTheDocument();
-    expect(screen.getByTestId("provider-row-claude-code")).toHaveTextContent(
-      "Claude Code",
+    fireEvent.click(screen.getByRole("button", { name: /按名称|name/i }));
+    expect(screen.getAllByTestId(/^usage-row-/)[0]).toHaveAttribute(
+      "data-testid",
+      "usage-row-facts",
     );
-    expect(screen.getByText("42")).toBeInTheDocument();
-
-    const antigravityRow = screen.getByTestId("provider-row-antigravity");
-    expect(antigravityRow).toBeInTheDocument();
-    // 未检测到的行不应当显示数字 callCount，应当出现 i18n notDetected 文案
-    // (中文 "未检测到" 或英文 "not detected"，取决于 i18n init)
-    expect(antigravityRow.textContent).toMatch(/未检测到|not detected/);
+    const reviewButton = screen
+      .getByTestId("usage-row-review")
+      .querySelector("button")!;
+    fireEvent.click(reviewButton);
+    expect(onSelect).toHaveBeenCalledWith("review", reviewButton);
+    expect(reviewButton).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("shows empty placeholder when providers list is empty", () => {
-    render(wrap(<ProviderHealthList providers={[]} />));
-    // i18n placeholder
-    expect(document.body.textContent).toMatch(/暂无数据|No data yet/);
-  });
-});
-
-describe("SkillBarChart", () => {
-  const skills = [
-    {
-      skill: "git-commit",
-      count: 10,
-      projects: 2,
-      sessions: 5,
-      lastUsedMs: 3000,
-    },
-    { skill: "review", count: 25, projects: 1, sessions: 8, lastUsedMs: 2000 },
-    { skill: "facts", count: 5, projects: 3, sessions: 2, lastUsedMs: 5000 },
-  ];
-
-  it("renders one row per skill, default sort by count desc", () => {
-    render(wrap(<SkillBarChart skills={skills} />));
-    const rows = screen.getAllByTestId(/^bar-row-/);
-    // count desc: review(25), git-commit(10), facts(5)
-    expect(rows[0]).toHaveAttribute("data-testid", "bar-row-review");
-    expect(rows[1]).toHaveAttribute("data-testid", "bar-row-git-commit");
-    expect(rows[2]).toHaveAttribute("data-testid", "bar-row-facts");
-  });
-
-  it("cycles through count → alpha → recent on sort button click", () => {
-    render(wrap(<SkillBarChart skills={skills} />));
-    const cycle = screen.getByTestId("sort-cycle");
-
-    fireEvent.click(cycle); // → alpha (asc default)
-    let rows = screen.getAllByTestId(/^bar-row-/);
-    // alpha asc: facts, git-commit, review
-    expect(rows[0]).toHaveAttribute("data-testid", "bar-row-facts");
-    expect(rows[1]).toHaveAttribute("data-testid", "bar-row-git-commit");
-    expect(rows[2]).toHaveAttribute("data-testid", "bar-row-review");
-
-    fireEvent.click(cycle); // → recent (desc default)
-    rows = screen.getAllByTestId(/^bar-row-/);
-    // recent desc: facts(5000), git-commit(3000), review(2000)
-    expect(rows[0]).toHaveAttribute("data-testid", "bar-row-facts");
-    expect(rows[1]).toHaveAttribute("data-testid", "bar-row-git-commit");
-    expect(rows[2]).toHaveAttribute("data-testid", "bar-row-review");
-  });
-
-  it("invokes onSkillClick callback when resolveSkillId returns null", async () => {
-    const onSkillClick = vi.fn();
-    render(wrap(<SkillBarChart skills={skills} onSkillClick={onSkillClick} />));
-
-    fireEvent.click(screen.getByTestId("bar-row-review"));
-    await waitFor(() => expect(onSkillClick).toHaveBeenCalledWith("review"));
-  });
-
-  it("navigates to /skill/:id when resolveSkillId returns a skill id", async () => {
-    useUsageStore.setState({ resolveSkillId: vi.fn(async () => "abc123") });
-
+  it("exposes navigation only for uniquely matched rows", () => {
     function Probe() {
-      const loc = useLocation();
-      return <div data-testid="loc">{loc.pathname}</div>;
+      return <span data-testid="location">{useLocation().pathname}</span>;
     }
-
     render(
       <MemoryRouter initialEntries={["/usage"]}>
         <Routes>
-          <Route path="/usage" element={<SkillBarChart skills={skills} />} />
+          <Route
+            path="/usage"
+            element={
+              <SkillUsageTable skills={skills} onSelect={vi.fn()} />
+            }
+          />
           <Route path="/skill/:id" element={<Probe />} />
         </Routes>
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByTestId("bar-row-review"));
-    await waitFor(() =>
-      expect(screen.getByTestId("loc")).toHaveTextContent("/skill/abc123"),
+    expect(screen.getAllByRole("button", { name: /打开技能|Open skill/ })).toHaveLength(1);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /打开技能 git-commit|Open skill git-commit/,
+      }),
     );
-  });
-
-  it("shows empty state when skills list is empty", () => {
-    render(wrap(<SkillBarChart skills={[]} />));
-    expect(document.body.textContent).toMatch(/尚未发现|No skill invocations/);
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/skill/git-commit",
+    );
   });
 });
 
 describe("ActivityHeatmap", () => {
-  function buildDays(counts: number[]): Array<{ date: string; count: number }> {
-    return counts.map((c, i) => {
-      // 用 epoch + i 天保证 date 唯一，避免重复 key 警告
-      const ms = Date.UTC(2024, 0, 1) + i * 86400000;
-      return {
-        date: new Date(ms).toISOString().slice(0, 10),
-        count: c,
-      };
-    });
+  function buildDays(counts: number[]): DayCount[] {
+    return counts.map((count, index) => ({
+      date: new Date(Date.UTC(2024, 0, 1) + index * 86_400_000)
+        .toISOString()
+        .slice(0, 10),
+      count,
+    }));
   }
 
-  it("renders 112 cells for a full 16w x 7d window", () => {
-    const days = buildDays(new Array(16 * 7).fill(0));
-    render(<ActivityHeatmap days={days} />);
-    const grid = screen.getByTestId("heatmap-grid");
-    const cells = grid.querySelectorAll("[data-testid^='heatmap-cell-']");
-    expect(grid).toHaveClass("auto-cols-fr");
-    expect(cells.length).toBe(112);
-    expect(cells[0]).toHaveClass("aspect-square");
-  });
-
-  it("assigns level 0 to zero-count days and level 4 to max-count days", () => {
-    const days = buildDays([0, 1, 2, 3, 10]); // max=10
+  it("renders 112 focusable cells, quantile levels, months and a legend", () => {
+    const days = buildDays([
+      1,
+      2,
+      3,
+      4,
+      5,
+      100,
+      ...new Array(106).fill(0),
+    ]);
     render(<ActivityHeatmap days={days} />);
 
-    const cellLevels = days.map((d) => {
-      const cell = screen.getByTestId(`heatmap-cell-${d.date}`);
-      return cell.getAttribute("data-level");
-    });
-    expect(cellLevels[0]).toBe("0");
-    // 10 是 max 应当是 lvl 4
-    expect(cellLevels[4]).toBe("4");
-  });
-
-  it("renders empty placeholder when days array is empty", () => {
-    render(<ActivityHeatmap days={[]} />);
-    expect(screen.queryByTestId("heatmap-grid")).not.toBeInTheDocument();
+    const cells = screen.getAllByRole("gridcell");
+    expect(cells).toHaveLength(112);
+    expect(cells.filter((cell) => cell.tabIndex === 0)).toHaveLength(1);
+    cells[0].focus();
+    fireEvent.keyDown(cells[0], { key: "ArrowRight" });
+    expect(cells[7]).toHaveFocus();
+    expect(document.body.textContent).toMatch(/少|Less/);
+    expect(document.body.textContent).toMatch(/多|More/);
+    expect(cells[5]).toHaveAttribute("data-level", "5");
   });
 });
 
-describe("RecentCallsFeed", () => {
-  const calls = [
-    {
-      skill: "review",
-      timestampMs: Date.now() - 60_000,
-      project: "/home/me/repo-a",
-      sessionId: "s1",
-      source: "Claude Code",
-    },
-    {
-      skill: "git-commit",
-      timestampMs: Date.now() - 3_600_000,
-      project: "/home/me/repo-b",
-      sessionId: "s2",
-      source: "Codex CLI",
-    },
-  ];
+describe("detail and recent actions", () => {
+  const detail: SkillUsageDetail = {
+    skill: "git-commit",
+    count: 10,
+    sessions: 5,
+    firstUsedMs: Date.now() - 10 * 86_400_000,
+    lastUsedMs: Date.now() - 60_000,
+    byProject: [
+      {
+        project: "C:/Users/demo/repo-a",
+        count: 10,
+        sessions: 5,
+        lastUsedMs: Date.now() - 60_000,
+      },
+    ],
+    weekly: [],
+    matchStatus: "matched",
+    resolvedSkillId: "git-commit",
+    staticTokenEstimate: 420,
+    staticByteCount: 1_600,
+  };
 
-  it("renders one row per call with project short name + source pill", () => {
-    render(wrap(<RecentCallsFeed calls={calls} />));
-    expect(screen.getByText("review")).toBeInTheDocument();
-    expect(screen.getByText("git-commit")).toBeInTheDocument();
+  it("selects recent rows without exposing full project paths", () => {
+    const onSelect = vi.fn();
+    render(wrap(<RecentCallsFeed calls={recent} onSelect={onSelect} />));
     expect(screen.getByText("repo-a")).toBeInTheDocument();
-    expect(screen.getByText("repo-b")).toBeInTheDocument();
-    expect(screen.getByText("Claude Code")).toBeInTheDocument();
-    expect(screen.getByText("Codex CLI")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("C:/Users/demo");
+    fireEvent.click(screen.getByText("review"));
+    expect(onSelect).toHaveBeenCalledWith("review", expect.any(HTMLButtonElement));
   });
 
-  it("respects the limit prop", () => {
-    render(wrap(<RecentCallsFeed calls={calls} limit={1} />));
-    expect(screen.getByText("review")).toBeInTheDocument();
-    expect(screen.queryByText("git-commit")).not.toBeInTheDocument();
-  });
-
-  it("shows empty placeholder when no calls", () => {
-    render(wrap(<RecentCallsFeed calls={[]} />));
-    expect(document.body.textContent).toMatch(/尚未发现|No skill invocations/);
+  it("renders project session counts, static estimate and close action", () => {
+    const onClose = vi.fn();
+    render(
+      wrap(
+        <SkillUsageDetailPanel detail={detail} loading={false} onClose={onClose} />,
+      ),
+    );
+    expect(screen.getByTestId("usage-detail-panel")).toHaveTextContent("repo-a");
+    expect(screen.getByTestId("usage-detail-panel")).toHaveTextContent("420");
+    fireEvent.click(screen.getByRole("button", { name: /关闭|Close usage/ }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("SkillUsageView ScopeBadge", () => {
-  // ScopeBadge 是 SkillUsageView 内部的 helper；测试通过 store 设置 scope
-  // 后渲染整个 view 验证 badge data-scope-kind 属性。
-  it("renders Local badge when scope.isRemote=false", async () => {
-    useUsageStore.setState({
-      scope: {
-        targetId: "local",
-        label: "Local",
-        isRemote: false,
-        remoteReachable: false,
-      },
-      lastRefreshMs: Date.now(),
-      providers: [],
-      recent: [],
-      overview: {
-        kpis: {
-          totalCalls: 0,
-          uniqueSkills: 0,
-          uniqueProjects: 0,
-          uniqueSources: 0,
-          uniqueSessions: 0,
-        },
-        topSkills: [],
-        heatmap: [],
-        lastScanMs: null,
-      },
-    });
-    const { SkillUsageView } = await import("../pages/SkillUsageView");
-    render(wrap(<SkillUsageView />));
-    const badge = screen.getByTestId("scope-badge");
-    expect(badge).toHaveAttribute("data-scope-kind", "local");
-  });
-
-  it("renders Remote badge with host label and warning banner when unreachable", async () => {
+describe("SkillUsageView", () => {
+  it("shows remote cached state and keeps provider health secondary", async () => {
     useTargetStore.setState({
       targets: [
-        { id: "local", kind: "local", label: "Local", isActive: false },
         { id: "ssh-prod", kind: "ssh", label: "alice@prod", isActive: true },
       ],
       activeTarget: {
@@ -375,6 +334,20 @@ describe("SkillUsageView ScopeBadge", () => {
       },
     });
     useUsageStore.setState({
+      overview: {
+        kpis: {
+          totalCalls: 40,
+          uniqueSkills: 3,
+          uniqueProjects: 2,
+          uniqueSources: 2,
+          uniqueSessions: 12,
+        },
+        topSkills: skills,
+        heatmap: [],
+        lastScanMs: Date.now(),
+      },
+      recent,
+      providers: [],
       scope: {
         targetId: "ssh-prod",
         label: "alice@prod",
@@ -382,36 +355,21 @@ describe("SkillUsageView ScopeBadge", () => {
         remoteReachable: false,
       },
       lastRefreshMs: Date.now(),
-      providers: [],
-      recent: [],
-      overview: {
-        kpis: {
-          totalCalls: 9,
-          uniqueSkills: 2,
-          uniqueProjects: 1,
-          uniqueSources: 1,
-          uniqueSessions: 2,
-        },
-        topSkills: [
-          {
-            skill: "review",
-            count: 9,
-            projects: 1,
-            sessions: 2,
-            lastUsedMs: Date.now(),
-          },
-        ],
-        heatmap: [],
-        lastScanMs: null,
-      },
+      usedCachedData: true,
+      refreshError: "timeout",
     });
     const { SkillUsageView } = await import("../pages/SkillUsageView");
     render(wrap(<SkillUsageView />));
-    const badge = screen.getByTestId("scope-badge");
-    expect(badge).toHaveAttribute("data-scope-kind", "remote");
-    expect(badge.textContent).toMatch(/alice@prod/);
-    expect(screen.getByTestId("remote-unreachable-banner")).toBeInTheDocument();
-    expect(screen.getByText("review")).toBeInTheDocument();
-    expect(document.body.textContent).toMatch(/9/);
+
+    expect(screen.getByTestId("scope-badge")).toHaveAttribute(
+      "data-scope-kind",
+      "remote",
+    );
+    expect(screen.getByTestId("remote-unreachable-banner").textContent).toMatch(
+      /上次|last successful/i,
+    );
+    expect(screen.getByText(/数据源状态|Provider health/).closest("details")).not.toHaveAttribute(
+      "open",
+    );
   });
 });

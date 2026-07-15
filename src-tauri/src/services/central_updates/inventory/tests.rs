@@ -974,6 +974,49 @@ async fn refresh_persists_actionable_states_for_get_inventory_reload() {
 }
 
 #[tokio::test]
+async fn refresh_marks_truncated_root_repository_as_update_available() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("root-repo");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    let skill_md = b"---\nname: Root Repo\n---\n";
+    std::fs::write(skill_dir.join("SKILL.md"), skill_md).unwrap();
+    db::upsert_skill(&pool, &make_central_skill("root-repo", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "root-repo", ".").await;
+    let assignment = db::get_skill_repository_assignment(&pool, "root-repo")
+        .await
+        .unwrap();
+    let repository_id = assignment.repository.id;
+
+    let snapshot = skill_snapshot(vec![
+        ("SKILL.md", skill_md),
+        ("references/guide.md", b"missing locally"),
+    ]);
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        scope_repos(vec![&repository_id]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(inventory.updatable.len(), 1);
+    assert_eq!(inventory.updatable[0].state.skill_id, "root-repo");
+    assert_eq!(
+        inventory.updatable[0].state.source_path.as_deref(),
+        Some(".")
+    );
+}
+
+#[tokio::test]
 async fn refresh_clears_stale_update_inventory_without_touching_baseline() {
     let pool = setup_test_db().await;
     let temp = TempDir::new().unwrap();
@@ -2275,6 +2318,81 @@ async fn force_update_overwrites_when_hashes_match_and_refreshes_copy() {
     assert_eq!(states.len(), 1);
     assert_eq!(states[0].status, SkillUpdateStatus::UpToDate.to_string());
     assert_eq!(states[0].last_remote_hash, states[0].latest_remote_hash);
+}
+
+#[tokio::test]
+async fn force_update_repairs_truncated_root_repository_and_refreshes_copy() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().to_path_buf();
+    let pool = setup_test_db_with_home(&home).await;
+    let central_root = home.join(".skillsmanage/skills");
+    let central_dir = central_root.join("root-repo");
+    let copy_dir = home.join(".cursor/skills/root-repo");
+    std::fs::create_dir_all(&central_dir).unwrap();
+    std::fs::create_dir_all(&copy_dir).unwrap();
+    let skill_md = b"---\nname: Root Repo\n---\n";
+    std::fs::write(central_dir.join("SKILL.md"), skill_md).unwrap();
+    std::fs::write(central_dir.join("stale.txt"), b"remove me").unwrap();
+    std::fs::write(copy_dir.join("SKILL.md"), b"---\nname: Stale Copy\n---").unwrap();
+    std::fs::write(copy_dir.join("stale.txt"), b"remove me").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("root-repo", &central_dir))
+        .await
+        .unwrap();
+    db::upsert_skill_installation(&pool, &copy_installation("root-repo", "cursor", &copy_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "root-repo", ".").await;
+
+    let snapshot = skill_snapshot(vec![
+        ("SKILL.md", skill_md),
+        ("references/guide.md", b"guide"),
+        ("scripts/run.py", b"print('ok')\n"),
+    ]);
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let client = http_client();
+
+    let result = force_update_central_skills_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &client,
+        &cache,
+        SnapshotCachePolicy::UseFresh,
+        ForceSkillUpdateRequest {
+            skill_ids: vec!["root-repo".to_string()],
+            refresh_copy_installations: true,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.overwritten.len(), 1);
+    assert!(result.overwritten[0].bytes_changed);
+    assert!(result.overwritten[0].copy_installations_refreshed);
+    assert_eq!(
+        std::fs::read(central_dir.join("references/guide.md")).unwrap(),
+        b"guide"
+    );
+    assert_eq!(
+        std::fs::read(copy_dir.join("scripts/run.py")).unwrap(),
+        b"print('ok')\n"
+    );
+    assert!(!central_dir.join("stale.txt").exists());
+    assert!(!copy_dir.join("stale.txt").exists());
+
+    let assignment = db::get_skill_repository_assignment(&pool, "root-repo")
+        .await
+        .unwrap();
+    assert_eq!(assignment.source_path.as_deref(), Some("."));
+    let leaked_work_dirs = std::fs::read_dir(&central_root)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| {
+            name.starts_with(".skillport-update-") || name.starts_with(".skillport-backup-")
+        })
+        .collect::<Vec<_>>();
+    assert!(leaked_work_dirs.is_empty());
 }
 
 #[tokio::test]

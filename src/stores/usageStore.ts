@@ -1,59 +1,39 @@
 import { create } from "zustand";
 import { toast } from "sonner";
-import { invoke, listen } from "@/lib/ipc";
+
 import i18n from "@/i18n";
+import { invoke, listen } from "@/lib/ipc";
 import { useTargetStore } from "@/stores/targetStore";
 import type {
   ProviderHealth,
-  SkillCall,
+  RecentSkillCall,
   SkillUsageDetail,
-  UsageRefreshResult,
   UsageOverview,
+  UsageRefreshResult,
   UsageScopeInfo,
 } from "@/types/usage";
 
-/**
- * Skill Usage 页面的 Zustand store。
- *
- * 与后端 commands/usage.rs 一一对应：
- * - refresh()       → invoke('usage_refresh', { force })
- * - loadOverview()  → invoke('usage_get_overview')（补充读接口）
- * - loadRecent()    → invoke('usage_get_recent', { limit })（补充读接口）
- * - loadProviders() → invoke('usage_get_providers')（补充读接口）
- * - loadDetail()    → invoke('usage_get_skill_detail', { skill })
- * - resolveSkillId()→ invoke('usage_resolve_skill_id', { skillName })
- *
- * 浏览器调试模式（非 Tauri runtime）下走 fixture 数据，让 vitest 可单独测组件。
- */
-
 interface UsageState {
   overview: UsageOverview | null;
-  recent: SkillCall[];
+  recent: RecentSkillCall[];
   providers: ProviderHealth[];
   detail: SkillUsageDetail | null;
   scope: UsageScopeInfo | null;
-  /** 当前选中的平台（provider displayName）；null = 全部平台 */
   selectedSource: string | null;
+  selectedSkill: string | null;
   loading: boolean;
   refreshing: boolean;
+  detailLoading: boolean;
   error: string | null;
-  /** 上次成功 refresh 的时间戳（毫秒）；用于 5min 自动刷新判定 */
+  refreshError: string | null;
+  usedCachedData: boolean;
   lastRefreshMs: number | null;
 
   refresh: (force?: boolean) => Promise<UsageRefreshResult | null>;
-  /** 切换平台筛选：写状态后按所选 source 重拉 overview + recent。 */
   selectSource: (source: string | null) => Promise<void>;
-  loadOverview: (
-    topSkillsLimit?: number,
-    source?: string | null,
-  ) => Promise<void>;
-  loadRecent: (limit?: number, source?: string | null) => Promise<void>;
-  loadProviders: () => Promise<void>;
   loadDetail: (skill: string) => Promise<void>;
-  loadScope: () => Promise<UsageScopeInfo | null>;
   clearDetail: () => void;
-  resolveSkillId: (skillName: string) => Promise<string | null>;
-  /** 注册监听 active target 切换事件；返回 unlisten。Tauri-only。 */
+  loadScope: () => Promise<UsageScopeInfo | null>;
   subscribeTargetChanged: () => Promise<() => void>;
 }
 
@@ -62,9 +42,15 @@ let inFlightRefresh: {
   promise: Promise<UsageRefreshResult | null>;
 } | null = null;
 let refreshSequence = 0;
+let pageSequence = 0;
+let detailSequence = 0;
 
 function activeUsageTargetId(): string {
   return useTargetStore.getState().activeTarget.id ?? "local";
+}
+
+function pageRequestMatches(request: number, targetId: string): boolean {
+  return request === pageSequence && targetId === activeUsageTargetId();
 }
 
 export const useUsageStore = create<UsageState>((set, get) => ({
@@ -74,9 +60,13 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   detail: null,
   scope: null,
   selectedSource: null,
+  selectedSkill: null,
   loading: false,
   refreshing: false,
+  detailLoading: false,
   error: null,
+  refreshError: null,
+  usedCachedData: false,
   lastRefreshMs: null,
 
   async refresh(force = false) {
@@ -86,64 +76,85 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     }
 
     const requestSequence = ++refreshSequence;
+    ++pageSequence;
     const refreshPromise = (async () => {
       const stillLatestRequest = () =>
         requestSequence === refreshSequence &&
         targetId === activeUsageTargetId();
 
-      const applyRefreshResult = (result: UsageRefreshResult) => {
-        if (!stillLatestRequest()) {
-          return;
-        }
-        set({
-          overview: result.overview,
-          recent: result.recent,
+      set({ refreshing: true, error: null, refreshError: null });
+      try {
+        const result = await invoke("usage_refresh", { force });
+        if (!stillLatestRequest()) return result;
+
+        const commonState = {
           providers: result.providers,
           scope: result.scope,
           refreshing: false,
+          refreshError: result.refreshError,
+          usedCachedData: result.usedCachedData,
           error:
             result.refreshError && !result.usedCachedData
               ? result.refreshError
               : null,
           lastRefreshMs:
             result.summary.scannedAtMs > 0 ? result.summary.scannedAtMs : null,
-        });
-
-        // refresh 永远返回未过滤 base + 完整 providers；若此前选中了某平台
-        // 且刷新后它仍有数据，则按 source 重拉 overview/recent；否则回落「全部」。
+        };
         const selected = get().selectedSource;
-        if (selected) {
-          const stillHasData = result.providers.some(
-            (p) => p.displayName === selected && p.callCount > 0,
-          );
-          if (stillHasData) {
-            void get().loadOverview(50, selected);
-            void get().loadRecent(20, selected);
-          } else {
-            set({ selectedSource: null });
+        const selectedStillExists = selected
+          ? result.providers.some(
+              (provider) =>
+                provider.displayName === selected && provider.callCount > 0,
+            )
+          : false;
+
+        if (selected && selectedStillExists) {
+          set(commonState);
+          const filteredRequest = ++pageSequence;
+          try {
+            const [overview, recent] = await Promise.all([
+              invoke("usage_get_overview", {
+                topSkillsLimit: 0,
+                source: selected,
+              }),
+              invoke("usage_get_recent", { limit: 20, source: selected }),
+            ]);
+            if (
+              stillLatestRequest() &&
+              pageRequestMatches(filteredRequest, targetId) &&
+              get().selectedSource === selected
+            ) {
+              set({ overview, recent });
+            }
+          } catch (error) {
+            if (stillLatestRequest()) {
+              set({ error: errorMessage(error) });
+            }
           }
+        } else {
+          set({
+            ...commonState,
+            overview: result.overview,
+            recent: result.recent,
+            selectedSource: selectedStillExists ? selected : null,
+          });
         }
-      };
 
-      const applyRefreshError = (message: string) => {
-        if (!stillLatestRequest()) {
-          return;
-        }
-        set({ refreshing: false, error: message });
-      };
-
-      set({ refreshing: true, error: null });
-      try {
-        const result = await invoke("usage_refresh", {
-          force,
-        });
-        applyRefreshResult(result);
         if (result.usedCachedData && result.refreshError) {
           toast.info(i18n.t("skillUsage.showingCachedAfterError"));
         }
         return result;
-      } catch (e) {
-        applyRefreshError(errorMessage(e));
+      } catch (error) {
+        if (stillLatestRequest()) {
+          const message = errorMessage(error);
+          const hasCachedPage = get().overview !== null;
+          set({
+            refreshing: false,
+            refreshError: message,
+            usedCachedData: hasCachedPage,
+            error: hasCachedPage ? null : message,
+          });
+        }
         return null;
       }
     })();
@@ -157,60 +168,69 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   },
 
   async selectSource(source) {
-    set({ selectedSource: source });
-    await Promise.all([
-      get().loadOverview(50, source),
-      get().loadRecent(20, source),
-    ]);
-  },
+    if (source === get().selectedSource) return;
 
-  async loadOverview(topSkillsLimit = 50, source = null) {
-    set({ loading: true, error: null });
-    try {
-      const overview = await invoke("usage_get_overview", {
-        topSkillsLimit,
-        source,
-      });
-      set({ overview, loading: false });
-    } catch (e) {
-      set({ loading: false, error: errorMessage(e) });
-    }
-  },
+    const targetId = activeUsageTargetId();
+    const requestSequence = ++pageSequence;
+    ++detailSequence;
+    set({
+      loading: true,
+      error: null,
+      selectedSkill: null,
+      detail: null,
+      detailLoading: false,
+    });
 
-  async loadRecent(limit = 20, source = null) {
     try {
-      const recent = await invoke("usage_get_recent", {
-        limit,
-        source,
-      });
-      set({ recent });
-    } catch (e) {
-      set({ error: errorMessage(e) });
-    }
-  },
-
-  async loadProviders() {
-    try {
-      const providers = await invoke("usage_get_providers");
-      set({ providers });
-    } catch (e) {
-      set({ error: errorMessage(e) });
+      const [overview, recent] = await Promise.all([
+        invoke("usage_get_overview", { topSkillsLimit: 0, source }),
+        invoke("usage_get_recent", { limit: 20, source }),
+      ]);
+      if (pageRequestMatches(requestSequence, targetId)) {
+        set({
+          overview,
+          recent,
+          selectedSource: source,
+          loading: false,
+        });
+      }
+    } catch (error) {
+      if (pageRequestMatches(requestSequence, targetId)) {
+        set({ loading: false, error: errorMessage(error) });
+      }
     }
   },
 
   async loadDetail(skill) {
+    const targetId = activeUsageTargetId();
+    const source = get().selectedSource;
+    const requestSequence = ++detailSequence;
+    set({
+      selectedSkill: skill,
+      detail: null,
+      detailLoading: true,
+      error: null,
+    });
     try {
-      const detail = await invoke("usage_get_skill_detail", {
-        skill,
-      });
-      set({ detail });
-    } catch (e) {
-      set({ error: errorMessage(e) });
+      const detail = await invoke("usage_get_skill_detail", { skill, source });
+      if (
+        requestSequence === detailSequence &&
+        targetId === activeUsageTargetId() &&
+        source === get().selectedSource &&
+        skill === get().selectedSkill
+      ) {
+        set({ detail, detailLoading: false });
+      }
+    } catch (error) {
+      if (requestSequence === detailSequence) {
+        set({ detailLoading: false, error: errorMessage(error) });
+      }
     }
   },
 
   clearDetail() {
-    set({ detail: null });
+    ++detailSequence;
+    set({ selectedSkill: null, detail: null, detailLoading: false });
   },
 
   async loadScope() {
@@ -219,7 +239,6 @@ export const useUsageStore = create<UsageState>((set, get) => ({
       set({ scope });
       return scope;
     } catch {
-      // 静默——scope 未读到不应阻塞页面
       return null;
     }
   },
@@ -227,19 +246,22 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   async subscribeTargetChanged() {
     try {
       const unlisten = await listen<string>("usage://target-changed", () => {
-        // 切换 target 后保留旧数据直到新 refresh 完成，但立刻清空 target-bound
-        // 详情与 freshness，避免旧 target 的「刚刷新过」状态阻止重扫。
-        // 平台全集随机器变化，故所选平台也一并重置回「全部」。
+        ++refreshSequence;
+        ++pageSequence;
+        ++detailSequence;
         set({
           detail: null,
+          selectedSkill: null,
+          detailLoading: false,
+          scope: null,
           lastRefreshMs: null,
           error: null,
+          refreshError: null,
+          usedCachedData: false,
           selectedSource: null,
         });
         void get().refresh(true);
       });
-      // 包一层 try/catch：unlisten() 在 jsdom/纯前端测试环境下可能因
-      // Tauri 内部句柄缺失而抛 Promise rejection；吞掉避免污染测试输出。
       return () => {
         try {
           const result: unknown = unlisten();
@@ -247,28 +269,17 @@ export const useUsageStore = create<UsageState>((set, get) => ({
             (result as Promise<unknown>).catch(() => undefined);
           }
         } catch {
-          /* ignore */
+          // Browser fixtures expose a no-op listener.
         }
       };
     } catch {
       return () => undefined;
     }
   },
-
-  async resolveSkillId(skillName) {
-    try {
-      const id = await invoke("usage_resolve_skill_id", {
-        skillName,
-      });
-      return id ?? null;
-    } catch {
-      return null;
-    }
-  },
 }));
 
-function errorMessage(e: unknown): string {
-  if (typeof e === "string") return e;
-  if (e instanceof Error) return e.message;
-  return String(e);
+function errorMessage(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message;
+  return String(error);
 }

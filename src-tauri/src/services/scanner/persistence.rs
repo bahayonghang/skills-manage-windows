@@ -64,9 +64,9 @@ async fn upsert_scan_skill(
         tx,
         sqlx::query(
             "INSERT INTO skills
-             (id, name, description, file_path, canonical_path, is_central, source, content,
+             (id, uid, name, description, file_path, canonical_path, is_central, source, content,
               scanned_at, fs_created_at, fs_updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
                name           = CASE
                                   WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.name
@@ -104,6 +104,7 @@ async fn upsert_scan_skill(
                                 END",
         )
         .bind(&skill.id)
+        .bind(&skill.uid)
         .bind(&skill.name)
         .bind(&skill.description)
         .bind(&skill.file_path)

@@ -83,6 +83,9 @@ pub enum MarketplaceError {
 
     #[error("Skill '{0}' was not imported.")]
     SkillNotImported(String),
+
+    #[error("Skill '{0}' already exists; pass --replace to overwrite it.")]
+    DuplicateRequiresReplace(String),
 }
 
 impl MarketplaceError {
