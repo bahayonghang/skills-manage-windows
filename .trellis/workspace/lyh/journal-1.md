@@ -1753,3 +1753,36 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 44: 完成更新检查仓库进度反馈
+
+**Date**: 2026-07-16
+**Task**: 完成更新检查仓库进度反馈
+**Branch**: `dev`
+
+### Summary
+
+为 Central 更新检查增加真实仓库级进度、全部活跃 owner/repo 列表、可靠事件清理和失败重试反馈；补齐跨层契约与测试，并通过 just ci 和 Windows Tauri 手动验收。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `21b79e97` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
