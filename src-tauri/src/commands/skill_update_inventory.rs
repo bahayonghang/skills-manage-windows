@@ -4,8 +4,10 @@
 //! This module keeps the existing command names and payload shapes stable
 //! while translating `State<AppState>` into service inputs.
 
+use serde::Serialize;
 use serde_json::{json, Value};
-use tauri::{AppHandle, State};
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::operation_log::{
     with_operation_log, OperationLogEvent, OperationLogTargetContext, OperationSpec,
@@ -19,10 +21,26 @@ use crate::services::central_updates::inventory::{
     ForceSkillUpdateRequest, ForceSkillUpdateResult, PlatformDuplicateGroup, SkillRefreshScope,
     SkillRefreshScopeKind, SkillUpdateApplyResult, SkillUpdateDecisions, SkillUpdateInventory,
 };
-use crate::services::central_updates::{CentralFs, SnapshotCachePolicy};
+use crate::services::central_updates::{
+    CentralFs, SnapshotCachePolicy, SnapshotProgressEvent, SnapshotProgressReporter,
+    SnapshotProgressStatus,
+};
 use crate::services::github_import;
 use crate::targets::ActiveTarget;
 use crate::AppState;
+
+const UPDATE_INVENTORY_PROGRESS_EVENT: &str = "central://skill-update-inventory-progress";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillUpdateInventoryProgressPayload {
+    operation_id: String,
+    status: &'static str,
+    total: usize,
+    completed: usize,
+    repository_key: Option<String>,
+    repository_name: Option<String>,
+}
 
 #[derive(Debug)]
 struct UpdateCommandError(String);
@@ -47,12 +65,32 @@ impl std::fmt::Display for UpdateCommandError {
 
 #[tauri::command]
 pub async fn refresh_skill_update_inventory(
+    app: AppHandle,
     state: State<'_, AppState>,
     scope: SkillRefreshScope,
+    operation_id: String,
 ) -> Result<SkillUpdateInventory, String> {
     let active_target = state.active_target().await?;
     let target_context = update_target_context(&active_target);
     let request_details = refresh_request_details(&scope);
+    let progress_app = Arc::new(app);
+    let progress: SnapshotProgressReporter = Arc::new(move |event: SnapshotProgressEvent| {
+        let payload = SkillUpdateInventoryProgressPayload {
+            operation_id: operation_id.clone(),
+            status: match event.status {
+                SnapshotProgressStatus::Started => "started",
+                SnapshotProgressStatus::RepositoryStarted => "repository_started",
+                SnapshotProgressStatus::RepositoryCompleted => "repository_completed",
+                SnapshotProgressStatus::RepositoryFailed => "repository_failed",
+                SnapshotProgressStatus::Finalizing => "finalizing",
+            },
+            total: event.total,
+            completed: event.completed,
+            repository_key: event.repository_key,
+            repository_name: event.repository_name,
+        };
+        let _ = progress_app.emit(UPDATE_INVENTORY_PROGRESS_EVENT, payload);
+    });
     with_operation_log(
         &state,
         update_operation_spec(
@@ -82,6 +120,7 @@ pub async fn refresh_skill_update_inventory(
                 &client,
                 &state.central_update_snapshots,
                 scope,
+                Some(progress),
             )
             .await
             .map_err(|e| UpdateCommandError(e.to_string()))

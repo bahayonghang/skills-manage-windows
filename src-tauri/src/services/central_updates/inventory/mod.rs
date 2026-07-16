@@ -36,7 +36,10 @@ use super::core::{
 use super::error::CentralUpdatesError;
 use super::fs::{normalize_repo_path, CentralFs};
 use super::repository_sync::{collect_remote_added_skills, CentralRepositorySyncFailure};
-use super::snapshots::{prepare_snapshots_for_repo_refs_with_policy, CentralUpdateSnapshotCache};
+use super::snapshots::{
+    prepare_snapshots_for_repo_refs_with_policy_and_progress, CentralUpdateSnapshotCache,
+    SnapshotProgressEvent, SnapshotProgressReporter,
+};
 use super::types::{RemoteSkillLoadError, SkillUpdateStatus, SnapshotCachePolicy};
 
 mod apply_steps;
@@ -74,6 +77,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
     client: &reqwest::Client,
     snapshots_cache: &CentralUpdateSnapshotCache,
     scope: SkillRefreshScope,
+    progress: Option<SnapshotProgressReporter>,
 ) -> Result<SkillUpdateInventory, CentralUpdatesError> {
     /*
      * ========================================================================
@@ -157,14 +161,21 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         .collect::<Vec<_>>();
     snapshot_repos.extend(valid_repositories.iter().map(|(_, repo)| repo.clone()));
 
-    let snapshots = prepare_snapshots_for_repo_refs_with_policy(
+    let snapshots = prepare_snapshots_for_repo_refs_with_policy_and_progress(
         client,
         auth_token,
         &snapshot_repos,
         snapshots_cache,
         snapshot_cache_policy(cache_policy),
+        progress.clone(),
     )
     .await?;
+    if let Some(progress) = &progress {
+        progress(SnapshotProgressEvent::finalizing(
+            snapshots.len(),
+            snapshots.len(),
+        ));
+    }
 
     /*
      * ========================================================================

@@ -11,6 +11,7 @@ import type {
   SkillWithLinks,
   TargetSummary,
 } from "../types";
+import type { SkillUpdateInventoryRefreshProgress } from "../types/skillUpdateInventory";
 
 const mockedToast = vi.hoisted(() => ({
   success: vi.fn(),
@@ -41,6 +42,7 @@ const mockedUpdateCenter = vi.hoisted(() => {
     state: {
       inventory: null,
       isRefreshing: false,
+      refreshProgress: null as SkillUpdateInventoryRefreshProgress | null,
       isApplying: false,
       lastRefreshedAt: null,
       isDialogOpen: false,
@@ -513,6 +515,11 @@ export const mockUseSkillDetailStore = vi.mocked(useSkillDetailStore);
 export const mockRefreshUpdateInventory = mockedUpdateCenter.refresh;
 export const mockOpenUpdateCenterDialog = mockedUpdateCenter.openDialog;
 export const mockEmptyUpdateInventory = mockedUpdateCenter.emptyInventory;
+export function setMockUpdateCenterProgress(
+  progress: SkillUpdateInventoryRefreshProgress | null,
+) {
+  mockedUpdateCenter.state.refreshProgress = progress;
+}
 export const localTarget: TargetSummary = {
   id: "local",
   kind: "local",
@@ -744,6 +751,7 @@ export function resetCentralSkillsViewTestState() {
   mockKeepRemoteMissingSkills.mockResolvedValue([]);
   mockBatchUninstallSkillsFromAgent.mockResolvedValue({ succeeded: [], failed: [] });
   mockRefreshUpdateInventory.mockResolvedValue(mockEmptyUpdateInventory);
+  mockedUpdateCenter.state.refreshProgress = null;
   mockOpenUpdateCenterDialog.mockClear();
   mockPreviewCentralStoreLocationChange.mockResolvedValue({
     sourcePath: "/Users/test/.skillsmanage/skills",

@@ -1457,6 +1457,15 @@
       "note": "这里只执行检查并打开更新中心；新增导入、远端删除和更新应用仍需要在更新中心里再次确认。",
       "confirm": "开始检查",
       "confirming": "检查中…",
+      "progress": {
+        "scope": "当前范围：{{scope}}。",
+        "preparing": "正在准备仓库检查…",
+        "checking": "已检查 {{completed}} / {{total}} 个仓库",
+        "finalizing": "正在整理检查结果…",
+        "activeRepositories": "正在检查的仓库",
+        "aria": "更新检查进度：已完成 {{completed}} / {{total}} 个仓库",
+        "ariaPreparing": "正在准备更新检查"
+      },
       "inlineLabel": "更新模式",
       "inlineHint": "点击检查时会先确认本次使用的模式。",
       "regular": {

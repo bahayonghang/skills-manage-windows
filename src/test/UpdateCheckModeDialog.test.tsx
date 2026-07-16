@@ -72,18 +72,71 @@ describe("UpdateCheckModeDialog", () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it("disables sync and submit while submitting", () => {
-    const { onConfirm } = renderDialog({
+  it("replaces mode choices with determinate repository progress", () => {
+    renderDialog({
       isSubmitting: true,
-      syncDisabled: true,
-      syncDisabledReason: "当前没有可同步的 GitHub 仓库。",
+      progress: {
+        operationId: "refresh-1",
+        phase: "checking",
+        total: 5,
+        completed: 1,
+        activeRepositories: [
+          { key: "openai/skills/main", name: "openai/skills" },
+          { key: "anthropics/skills/main", name: "anthropics/skills" },
+          { key: "vercel-labs/agent-skills/main", name: "vercel-labs/agent-skills" },
+          {
+            key: "example/a-very-long-repository-name/main",
+            name: "example/a-very-long-repository-name",
+          },
+        ],
+      },
     });
     const dialog = screen.getByRole("dialog");
 
-    expect(within(dialog).getByTestId("update-check-mode-sync")).toBeDisabled();
-    expect(within(dialog).getByTestId("confirm-update-check-mode")).toBeDisabled();
-    expect(within(dialog).getByText("当前没有可同步的 GitHub 仓库。")).toBeInTheDocument();
-    expect(onConfirm).not.toHaveBeenCalled();
+    expect(within(dialog).queryByTestId("update-check-mode-sync")).not.toBeInTheDocument();
+    expect(within(dialog).queryByTestId("confirm-update-check-mode")).not.toBeInTheDocument();
+    const progressbar = within(dialog).getByRole("progressbar", {
+      name: "更新检查进度：已完成 1 / 5 个仓库",
+    });
+    expect(progressbar).toHaveAttribute("aria-valuemin", "0");
+    expect(progressbar).toHaveAttribute("aria-valuemax", "5");
+    expect(progressbar).toHaveAttribute("aria-valuenow", "1");
+    expect(within(dialog).getByText("已检查 1 / 5 个仓库")).toBeInTheDocument();
+    for (const name of [
+      "openai/skills",
+      "anthropics/skills",
+      "vercel-labs/agent-skills",
+      "example/a-very-long-repository-name",
+    ]) {
+      expect(within(dialog).getByTitle(name)).toBeInTheDocument();
+    }
+  });
+
+  it("shows an indeterminate preparing state before the repository total arrives", () => {
+    renderDialog({ isSubmitting: true, progress: null });
+    const progressbar = within(screen.getByRole("dialog")).getByRole("progressbar", {
+      name: "正在准备更新检查",
+    });
+
+    expect(progressbar).not.toHaveAttribute("aria-valuenow");
+    expect(progressbar).not.toHaveAttribute("aria-valuemax");
+    expect(screen.getByText("正在准备仓库检查…")).toBeInTheDocument();
+  });
+
+  it("shows finalizing after all active repositories settle", () => {
+    renderDialog({
+      isSubmitting: true,
+      progress: {
+        operationId: "refresh-1",
+        phase: "finalizing",
+        total: 2,
+        completed: 2,
+        activeRepositories: [],
+      },
+    });
+
+    expect(screen.getByText("正在整理检查结果…")).toBeInTheDocument();
+    expect(screen.queryByText("正在检查的仓库")).not.toBeInTheDocument();
   });
 
   it("falls back to regular mode when saved sync preference is unavailable", () => {

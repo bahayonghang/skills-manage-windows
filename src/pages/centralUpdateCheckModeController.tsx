@@ -42,6 +42,7 @@ export function useCentralUpdateCheckModeController({
   const refreshUpdateInventory = useUpdateCenterStore((state) => state.refresh);
   const openUpdateCenter = useUpdateCenterStore((state) => state.openDialog);
   const isUpdateCenterRefreshing = useUpdateCenterStore((state) => state.isRefreshing);
+  const refreshProgress = useUpdateCenterStore((state) => state.refreshProgress);
   const modePreference = useSettingsStore((state) => state.centralUpdateCheckMode);
   const modeLoaded = useSettingsStore((state) => state.centralUpdateCheckModeLoaded);
   const isSavingModePreference = useSettingsStore(
@@ -137,6 +138,7 @@ export function useCentralUpdateCheckModeController({
         regularScopeLabel={checkButtonState.regularLabel}
         syncScopeLabel={checkButtonState.syncLabel}
         isSubmitting={isSubmitting}
+        progress={refreshProgress}
         syncDisabled={!syncableRepositoryAvailable}
         syncDisabledReason={syncDisabledReason}
         error={submitError}

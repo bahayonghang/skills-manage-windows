@@ -16,3 +16,4 @@
 - [Central Mutation Lock Contract](./central-mutation-lock.md)
 - [Shared Local CLI Contract](./shared-local-cli.md)
 - [Skill Usage Analytics Contract](./skill-usage-analytics.md)
+- [Central Update Inventory Progress Contract](./central-update-inventory-progress.md)

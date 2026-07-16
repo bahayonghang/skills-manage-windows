@@ -645,6 +645,41 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     });
   });
 
+  it("shows all active repositories while the confirmed check is running", async () => {
+    S.setMockUpdateCenterProgress({
+      operationId: "refresh-1",
+      phase: "checking",
+      total: 4,
+      completed: 1,
+      activeRepositories: [
+        { key: "openai/skills/main", name: "openai/skills" },
+        { key: "anthropics/skills/main", name: "anthropics/skills" },
+      ],
+    });
+    let resolveRefresh: ((inventory: typeof mockEmptyUpdateInventory) => void) | undefined;
+    mockRefreshUpdateInventory.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByTestId("central-check-updates"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
+
+    await waitFor(() => {
+      expect(within(dialog).getByTestId("update-check-progress-view")).toBeInTheDocument();
+    });
+    expect(within(dialog).queryByTestId("update-check-mode-regular")).not.toBeInTheDocument();
+    expect(within(dialog).getByTitle("openai/skills")).toBeInTheDocument();
+    expect(within(dialog).getByTitle("anthropics/skills")).toBeInTheDocument();
+
+    resolveRefresh?.(mockEmptyUpdateInventory);
+    await waitFor(() => expect(mockOpenUpdateCenterDialog).toHaveBeenCalledOnce());
+  });
+
   it("persists the visible update mode selector preference", async () => {
     renderCentralSkillsView();
 

@@ -1457,6 +1457,15 @@
       "note": "This only checks and opens Update Center. Imports, removals, and update application still require another explicit decision there.",
       "confirm": "Start check",
       "confirming": "Checking…",
+      "progress": {
+        "scope": "Current scope: {{scope}}.",
+        "preparing": "Preparing repository check…",
+        "checking": "Checked {{completed}} / {{total}} repositories",
+        "finalizing": "Finalizing check results…",
+        "activeRepositories": "Repositories being checked",
+        "aria": "Update check progress: {{completed}} of {{total}} repositories completed",
+        "ariaPreparing": "Preparing update check"
+      },
       "inlineLabel": "Update mode",
       "inlineHint": "Each check opens a confirmation with the selected mode.",
       "regular": {
