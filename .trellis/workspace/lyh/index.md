@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 42
-- **Last Active**: 2026-07-15
+- **Total Sessions**: 43
+- **Last Active**: 2026-07-16
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1722 | Active |
+| `journal-1.md` | ~1755 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 43 | 2026-07-16 | 优化技能详情页视觉层级 | `6fbe92d2` | `dev` |
 | 42 | 2026-07-15 | 完成 GitHub 导入文件树预览 | `f91b60f8` | `dev` |
 | 41 | 2026-07-15 | 完成技能使用统计闭环 | `2bc15b45fa73e5f9674e4077e365bc442a1b849d` | `dev` |
 | 40 | 2026-07-15 | 修复根级 Skill 仓库导入 | `a17b2fe03b2a6901bc63c856b7f8233f2e19e9da`, `f0415928927ea3fa327b71df916cca05ba36fd8e` | `dev` |
