@@ -350,6 +350,7 @@ function renderView(
 const updateStatusCases: Array<{
   label: string;
   updateStatuses: Record<string, CentralSkillUpdateState>;
+  expectedStatus: string;
   expectedBadge: string;
   updateEnabled: boolean;
   expectedError?: string;
@@ -357,6 +358,7 @@ const updateStatusCases: Array<{
   {
     label: "not checked",
     updateStatuses: {},
+    expectedStatus: "not_checked",
     expectedBadge: "未检查",
     updateEnabled: false,
   },
@@ -371,6 +373,7 @@ const updateStatusCases: Array<{
         last_checked_at: "2026-04-29T01:23:45Z",
       },
     },
+    expectedStatus: "up_to_date",
     expectedBadge: "已是最新",
     updateEnabled: false,
   },
@@ -386,8 +389,37 @@ const updateStatusCases: Array<{
         last_checked_at: "2026-04-29T01:23:45Z",
       },
     },
+    expectedStatus: "update_available",
     expectedBadge: "有更新",
     updateEnabled: true,
+  },
+  {
+    label: "unsupported",
+    updateStatuses: {
+      "frontend-design": {
+        skill_id: "frontend-design",
+        source_type: "local",
+        status: "unsupported",
+        source_url: "https://github.com/openai/skills",
+      },
+    },
+    expectedStatus: "unsupported",
+    expectedBadge: "不支持",
+    updateEnabled: false,
+  },
+  {
+    label: "remote missing",
+    updateStatuses: {
+      "frontend-design": {
+        skill_id: "frontend-design",
+        source_type: "github",
+        status: "remote_missing",
+        source_url: "https://github.com/openai/skills",
+      },
+    },
+    expectedStatus: "remote_missing",
+    expectedBadge: "远端已删除",
+    updateEnabled: false,
   },
   {
     label: "error",
@@ -401,6 +433,7 @@ const updateStatusCases: Array<{
         last_checked_at: "2026-04-29T01:23:45Z",
       },
     },
+    expectedStatus: "error",
     expectedBadge: "检查失败",
     updateEnabled: false,
     expectedError: "Network timeout",
@@ -506,6 +539,27 @@ describe("SkillDetailView", () => {
     expect(screen.getByRole("region", { name: /技能基本信息/i })).toBeInTheDocument();
   });
 
+  it("orders operational state before organization, files, and technical metadata", () => {
+    renderView();
+
+    const orderedRegions = [
+      screen.getByRole("region", { name: /安装状态/i }),
+      screen.getByRole("region", { name: /更新状态/i }),
+      screen.getByRole("region", { name: /技能基本信息/i }),
+      screen.getByRole("region", { name: /归类管理/i }),
+      screen.getByRole("region", { name: /已装在哪些项目/i }),
+      screen.getByRole("region", { name: /^技能集合$/i }),
+      screen.getByRole("region", { name: /文件树/i }),
+    ];
+
+    for (let index = 0; index < orderedRegions.length - 1; index += 1) {
+      expect(
+        orderedRegions[index].compareDocumentPosition(orderedRegions[index + 1])
+          & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    }
+  });
+
   it("keeps raw file path in collapsed technical details", () => {
     renderView();
 
@@ -555,16 +609,18 @@ describe("SkillDetailView", () => {
     expect(sidebar.className).not.toContain("md:w-64");
   });
 
-  it.each(updateStatusCases)("renders update status inspector layout for $label", ({ updateStatuses, expectedBadge, updateEnabled, expectedError }) => {
+  it.each(updateStatusCases)("renders update status inspector layout for $label", ({ updateStatuses, expectedStatus, expectedBadge, updateEnabled, expectedError }) => {
     useCentralSkillsStore.setState({ updateStatuses });
     renderView();
 
     const card = screen.getByTestId("detail-update-status-card");
+    const status = screen.getByTestId("detail-update-status");
     const actions = screen.getByTestId("detail-update-actions");
     const checkButton = within(actions).getByRole("button", { name: "检查" });
     const updateButton = within(actions).getByRole("button", { name: "更新" });
 
     expect(card).toHaveTextContent(expectedBadge);
+    expect(status).toHaveAttribute("data-update-status", expectedStatus);
     expect(actions.className).toContain("grid");
     expect(actions.className).toContain("grid-cols-2");
     expect(actions.className).toContain("gap-2");
@@ -584,6 +640,17 @@ describe("SkillDetailView", () => {
     if (expectedError) {
       expect(card).toHaveTextContent(expectedError);
     }
+  });
+
+  it("shows the checking transition with announced status text", () => {
+    useCentralSkillsStore.setState({ isCheckingUpdates: true });
+    renderView();
+
+    expect(screen.getByTestId("detail-update-status")).toHaveAttribute(
+      "data-update-status",
+      "checking"
+    );
+    expect(screen.getByTestId("detail-update-status-card")).toHaveTextContent("检查中");
   });
 
   it("opens an update confirmation dialog after detail check finds an update", async () => {
@@ -842,6 +909,14 @@ describe("SkillDetailView", () => {
       name: /切换 frontend-design 在 Claude Code 的链接状态/i,
     });
     expect(claudeToggle).toHaveAttribute("title", expect.stringContaining("Claude Code"));
+    expect(claudeToggle).toHaveAttribute("aria-pressed", "true");
+    expect(claudeToggle).toHaveAttribute("data-install-state", "installed");
+
+    const universalToggle = screen.getByRole("button", {
+      name: /切换 frontend-design 在 Universal 的链接状态/i,
+    });
+    expect(universalToggle).toHaveAttribute("aria-pressed", "false");
+    expect(universalToggle).toHaveAttribute("data-install-state", "uninstalled");
   });
 
   it("shows currently installed platforms without listing uninstalled platforms", () => {
@@ -948,6 +1023,12 @@ describe("SkillDetailView", () => {
         name: "从 Claude Code 删除 frontend-design",
       })
     ).toBeNull();
+    const lockedToggle = screen.getByRole("button", {
+      name: /Claude Code.*始终包含/i,
+    });
+    expect(lockedToggle).toBeDisabled();
+    expect(lockedToggle).toHaveAttribute("aria-pressed", "true");
+    expect(lockedToggle).toHaveAttribute("data-install-state", "locked");
   });
 
   it("calls installSkill when unlinked platform icon is clicked", async () => {

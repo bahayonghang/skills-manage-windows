@@ -1176,6 +1176,7 @@
     "updateFailed": "{{count}} failed",
     "updateStatus": {
       "not_checked": "Not checked",
+      "checking": "Checking",
       "up_to_date": "Up to date",
       "update_available": "Update available",
       "unsupported": "Unsupported",
@@ -1515,6 +1516,7 @@
     "installedOn": "Installed",
     "installed": "installed",
     "collections": "Collections",
+    "collectionsEmpty": "Not in a collection yet.",
     "addToCollection": "Add to collection",
     "projectsUsingSkill": "Projects using this skill",
     "projectsUsingSkillRegion": "Projects using this skill",
@@ -1581,7 +1583,10 @@
     "uninstallPlatformConfirm": "Remove platform install",
     "fileTreeTitle": "File tree",
     "fileTreeLoading": "Loading file tree...",
-    "fileTreeEmpty": "No files available for this skill."
+    "fileTreeEmpty": "No files available for this skill.",
+    "expandDirectory": "Expand {{name}}",
+    "collapseDirectory": "Collapse {{name}}",
+    "openTreePath": "Open {{name}}"
   },
   "collection": {
     "edit": "Edit",

@@ -1176,6 +1176,7 @@
     "updateFailed": "失败 {{count}}",
     "updateStatus": {
       "not_checked": "未检查",
+      "checking": "检查中",
       "up_to_date": "已是最新",
       "update_available": "有更新",
       "unsupported": "不支持",
@@ -1515,6 +1516,7 @@
     "installedOn": "安装于",
     "installed": "已安装",
     "collections": "技能集合",
+    "collectionsEmpty": "尚未加入技能集。",
     "addToCollection": "加入技能集",
     "projectsUsingSkill": "已装在哪些项目",
     "projectsUsingSkillRegion": "已装在哪些项目",
@@ -1581,7 +1583,10 @@
     "uninstallPlatformConfirm": "删除平台安装",
     "fileTreeTitle": "文件树",
     "fileTreeLoading": "正在加载文件树...",
-    "fileTreeEmpty": "当前技能没有可展示的文件。"
+    "fileTreeEmpty": "当前技能没有可展示的文件。",
+    "expandDirectory": "展开 {{name}}",
+    "collapseDirectory": "折叠 {{name}}",
+    "openTreePath": "打开 {{name}}"
   },
   "collection": {
     "edit": "编辑",

@@ -345,8 +345,9 @@ describe("MarketplaceSkillDetailDrawer", () => {
       expect(mockBrowseSkillsShDirectory).toHaveBeenCalledTimes(1);
       expect(mockReadSkillsShFile).toHaveBeenCalledTimes(1);
 
-      fireEvent.click(screen.getByRole("button", { name: "展开" }));
-      fireEvent.click(await screen.findByRole("button", { name: "guide.md" }));
+      fireEvent.click(screen.getByRole("button", { name: "展开 webapp-testing" }));
+      fireEvent.click(await screen.findByRole("button", { name: "展开 references" }));
+      fireEvent.click(await screen.findByRole("button", { name: "打开 guide.md" }));
 
       await waitFor(() => {
         expect(mockReadSkillsShFile).toHaveBeenCalledWith(

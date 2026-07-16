@@ -1,15 +1,22 @@
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  AlertCircle,
+  CheckCircle2,
+  CircleHelp,
+  CircleSlash2,
   Copy,
   Download,
   ExternalLink,
+  FolderGit2,
   FolderOpen,
   Loader2,
+  Link2Off,
   Monitor,
   Plus,
   RefreshCw,
   Tag,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { repositoryDisplayName } from "@/lib/centralConflictSource";
@@ -21,6 +28,7 @@ import {
 } from "@/lib/platformTargetGroups";
 import type {
   AgentWithStatus,
+  CentralSkillUpdateStatus,
   CentralSkillUpdateState,
   Collection,
   ProjectUsingSkill,
@@ -107,6 +115,21 @@ function buildGitHubRepositoryUrl(repository?: RepositoryLinkLike | null): strin
   return `https://github.com/${owner}/${repo}`;
 }
 
+type UpdatePresentationStatus = CentralSkillUpdateStatus | "not_checked" | "checking";
+
+const UPDATE_STATUS_PRESENTATION: Record<
+  UpdatePresentationStatus,
+  { icon: LucideIcon; className: string }
+> = {
+  not_checked: { icon: CircleHelp, className: "text-muted-foreground" },
+  checking: { icon: Loader2, className: "text-info-foreground" },
+  up_to_date: { icon: CheckCircle2, className: "text-success-foreground" },
+  update_available: { icon: Download, className: "text-primary-text" },
+  unsupported: { icon: CircleSlash2, className: "text-muted-foreground" },
+  remote_missing: { icon: Link2Off, className: "text-warning-foreground" },
+  error: { icon: AlertCircle, className: "text-foreground" },
+};
+
 function PlatformInstallStatusGroups({
   lobsterAgents,
   codingAgents,
@@ -133,7 +156,7 @@ function PlatformInstallStatusGroups({
 
     return (
       <div className="flex items-center gap-1">
-        <span className="w-12 shrink-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+        <span className="w-12 shrink-0 text-[0.72rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
           {categoryLabel}
         </span>
         <div className="flex flex-wrap items-center gap-0.5">
@@ -191,7 +214,7 @@ function SourceMetadataSection({
       <SectionLabel>{t("detail.metadata")}</SectionLabel>
       <div className="space-y-2.5">
         <div className="space-y-0.5">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70">
+          <div className="text-[0.72rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
             {t("common.platform")}
           </div>
           <div className="inline-flex items-center gap-1 break-all font-mono text-xs leading-relaxed text-foreground">
@@ -200,7 +223,7 @@ function SourceMetadataSection({
           </div>
         </div>
         <div className="space-y-0.5">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70">
+          <div className="text-[0.72rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
             {t("common.project")}
           </div>
           <div className="inline-flex items-center gap-1 break-all font-mono text-xs leading-relaxed text-foreground">
@@ -209,7 +232,7 @@ function SourceMetadataSection({
           </div>
         </div>
         <div className="space-y-0.5">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70">
+          <div className="text-[0.72rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
             {t("common.filePath")}
           </div>
           <button
@@ -273,6 +296,11 @@ export function SkillDetailSidebar({
     installationMap,
     sharedRootAgentIds
   );
+  const visibleUpdateStatus: UpdatePresentationStatus = isCheckingUpdates
+    ? "checking"
+    : updateStatus?.status ?? "not_checked";
+  const updatePresentation = UPDATE_STATUS_PRESENTATION[visibleUpdateStatus];
+  const UpdateStatusIcon = updatePresentation.icon;
 
   return (
     <aside
@@ -324,101 +352,63 @@ export function SkillDetailSidebar({
             </section>
           )}
 
-          <section aria-label={t("detail.metadataRegion")}>
-            <SectionLabel>{t("detail.metadata")}</SectionLabel>
-            <div className="space-y-3">
-              {detail.dir_path && (
-                <div className={inspectorCardClassName}>
-                  <MetadataRow
-                    label={t("detail.localDirectory")}
-                    value={detail.dir_path}
+          <section aria-label={t("detail.installStatusRegion")}>
+            <SectionLabel>{t("detail.installStatus")}</SectionLabel>
+            <div className="space-y-2">
+              {detail.is_read_only ? (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("detail.readOnlyInstallBlocked", {
+                    defaultValue: i18n.language.startsWith("zh")
+                      ? "插件来源的只读副本不可安装或卸载。"
+                      : "Install and uninstall are unavailable for read-only plugin copies.",
+                  })}
+                </p>
+              ) : targetAgents.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{t("detail.noPlatforms")}</p>
+              ) : (
+                <>
+                  <PlatformInstallStatusGroups
+                    lobsterAgents={lobsterAgents}
+                    codingAgents={codingAgents}
+                    installationMap={installationMap}
+                    sharedRootAgentIds={sharedRootAgentIds}
+                    installingAgentId={installingAgentId}
+                    onToggleInstall={onToggleInstall}
+                    skillName={detail.name}
                   />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={onOpenDetailDirectory}
-                    className={cn(
-                      inspectorActionButtonClassName,
-                      "h-9 justify-start gap-2 px-3 text-xs font-medium",
-                    )}
-                  >
-                    {isRemoteTarget ? (
-                      <Copy className="size-3.5 shrink-0" />
-                    ) : (
-                      <FolderOpen className="size-3.5 shrink-0" />
-                    )}
-                    <span className="min-w-0 truncate">
-                      {isRemoteTarget
-                        ? t("detail.copyRemoteFolderPath")
-                        : t("detail.openFolder")}
-                    </span>
-                  </Button>
-                </div>
-              )}
-
-              {githubRepositoryUrl && repositoryLabel && (
-                <div className={inspectorCardClassName}>
-                  <MetadataRow label={t("detail.githubRepository")} value={repositoryLabel} />
-                  <button
-                    type="button"
-                    onClick={() => onOpenGitHubRepository(githubRepositoryUrl)}
-                    className={cn(
-                      inspectorActionButtonClassName,
-                      "inline-flex h-9 items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-xs transition-[color,box-shadow] hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                    )}
-                  >
-                    <ExternalLink className="size-3.5 shrink-0" />
-                    <span className="min-w-0 truncate">{t("detail.openGithubRepo")}</span>
-                  </button>
-                  {detail.source_path && (
-                    <MetadataRow label={t("detail.repositoryPath")} value={detail.source_path} />
-                  )}
-                </div>
-              )}
-
-              <details
-                data-testid="detail-technical-details"
-                className={cn(inspectorCardClassName, "group")}
-              >
-                <summary className="cursor-pointer text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
-                  {t("detail.technicalDetails")}
-                </summary>
-                <div className="mt-3 space-y-2.5">
-                  <MetadataRow label={t("detail.filePath")} value={detail.file_path} />
-                  {detail.canonical_path && (
-                    <MetadataRow label={t("detail.canonical")} value={detail.canonical_path} />
-                  )}
-                  {detail.source_root && (
-                    <MetadataRow label={t("detail.sourceRoot")} value={detail.source_root} />
-                  )}
-                  {detail.source && (
-                    <MetadataRow label={t("detail.source")} value={detail.source} />
-                  )}
-                  <MetadataRow
-                    label={t("detail.scannedAt")}
-                    value={new Date(detail.scanned_at).toLocaleString()}
+                  <InstalledPlatformList
+                    rows={installedPlatformRows}
+                    skillName={detail.name}
+                    onRequestUninstall={onRequestUninstallInstalledPlatform}
                   />
-                </div>
-              </details>
+                </>
+              )}
             </div>
           </section>
-
-          <SkillDetailFileTree
-            entries={directoryTree}
-            isLoading={isDirectoryLoading}
-            onOpenPath={onOpenFileTreePath}
-          />
 
           {detail.is_central && !detail.is_read_only && (
             <section aria-label={t("detail.updateStatusRegion")}>
               <SectionLabel>{t("detail.updateStatus")}</SectionLabel>
               <div data-testid="detail-update-status-card" className={inspectorCardClassName}>
-                <div className="min-w-0 space-y-2">
-                  <span className="inline-flex rounded-full bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border/70">
-                    {updateStatus
-                      ? t(`central.updateStatus.${updateStatus.status}`)
-                      : t("central.updateStatus.not_checked")}
+                <div
+                  data-testid="detail-update-status"
+                  data-update-status={visibleUpdateStatus}
+                  role="status"
+                  aria-live={visibleUpdateStatus === "checking" ? "polite" : undefined}
+                  className={cn(
+                    "inline-flex min-w-0 items-center gap-1.5 text-xs font-medium",
+                    updatePresentation.className,
+                  )}
+                >
+                  <UpdateStatusIcon
+                    className={cn(
+                      "size-3.5 shrink-0",
+                      visibleUpdateStatus === "checking" && "animate-spin",
+                      visibleUpdateStatus === "error" && "text-destructive",
+                    )}
+                  />
+                  <span>
+                    {t(`central.updateStatus.${visibleUpdateStatus}`)}
                   </span>
                 </div>
                 <div data-testid="detail-update-actions" className="grid grid-cols-2 gap-2">
@@ -469,11 +459,101 @@ export function SkillDetailSidebar({
                   />
                 )}
                 {updateStatus?.error && (
-                  <p className="text-xs leading-relaxed text-destructive">{updateStatus.error}</p>
+                  <p className="flex items-start gap-1.5 text-xs leading-relaxed text-foreground">
+                    <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                    <span className="min-w-0 break-words">{updateStatus.error}</span>
+                  </p>
                 )}
               </div>
             </section>
           )}
+
+          <section aria-label={t("detail.metadataRegion")}>
+            <SectionLabel>{t("detail.metadata")}</SectionLabel>
+            <div className="divide-y divide-border/60">
+              {detail.dir_path && (
+                <div className="space-y-3 pb-3">
+                  <MetadataRow
+                    label={t("detail.localDirectory")}
+                    value={detail.dir_path}
+                    icon={<FolderOpen className="mt-0.5 size-3.5 shrink-0 text-primary-text" />}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={onOpenDetailDirectory}
+                    className={cn(
+                      inspectorActionButtonClassName,
+                      "h-9 justify-start gap-2 px-3 text-xs font-medium",
+                    )}
+                  >
+                    {isRemoteTarget ? (
+                      <Copy className="size-3.5 shrink-0" />
+                    ) : (
+                      <FolderOpen className="size-3.5 shrink-0" />
+                    )}
+                    <span className="min-w-0 truncate">
+                      {isRemoteTarget
+                        ? t("detail.copyRemoteFolderPath")
+                        : t("detail.openFolder")}
+                    </span>
+                  </Button>
+                </div>
+              )}
+
+              {githubRepositoryUrl && repositoryLabel && (
+                <div className="space-y-3 py-3">
+                  <MetadataRow
+                    label={t("detail.githubRepository")}
+                    value={repositoryLabel}
+                    icon={<FolderGit2 className="mt-0.5 size-3.5 shrink-0 text-info-foreground" />}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onOpenGitHubRepository(githubRepositoryUrl)}
+                    className={cn(
+                      inspectorActionButtonClassName,
+                      "h-9 justify-start gap-2 px-3 text-xs font-medium",
+                    )}
+                  >
+                    <ExternalLink className="size-3.5 shrink-0" />
+                    <span className="min-w-0 truncate">{t("detail.openGithubRepo")}</span>
+                  </Button>
+                  {detail.source_path && (
+                    <MetadataRow label={t("detail.repositoryPath")} value={detail.source_path} />
+                  )}
+                </div>
+              )}
+
+              <details
+                data-testid="detail-technical-details"
+                className="group pt-3"
+              >
+                <summary className="cursor-pointer rounded text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  {t("detail.technicalDetails")}
+                </summary>
+                <div className="mt-3 space-y-2.5">
+                  <MetadataRow label={t("detail.filePath")} value={detail.file_path} />
+                  {detail.canonical_path && (
+                    <MetadataRow label={t("detail.canonical")} value={detail.canonical_path} />
+                  )}
+                  {detail.source_root && (
+                    <MetadataRow label={t("detail.sourceRoot")} value={detail.source_root} />
+                  )}
+                  {detail.source && (
+                    <MetadataRow label={t("detail.source")} value={detail.source} />
+                  )}
+                  <MetadataRow
+                    label={t("detail.scannedAt")}
+                    value={new Date(detail.scanned_at).toLocaleString()}
+                  />
+                </div>
+              </details>
+            </div>
+          </section>
 
           {detail.tags && detail.tags.length > 0 && (
             <section
@@ -490,7 +570,7 @@ export function SkillDetailSidebar({
                 {detail.tags.map((tag) => (
                   <span
                     key={tag.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border/70"
+                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[0.72rem] font-medium text-muted-foreground ring-1 ring-border/70"
                     title={tag.description ?? tag.name}
                   >
                     <Tag className="size-2.5" />
@@ -567,42 +647,11 @@ export function SkillDetailSidebar({
             </section>
           )}
 
-          <section aria-label={t("detail.installStatusRegion")}>
-            <SectionLabel>{t("detail.installStatus")}</SectionLabel>
-            <div className="space-y-1.5">
-              {detail.is_read_only ? (
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {t("detail.readOnlyInstallBlocked", {
-                    defaultValue: i18n.language.startsWith("zh")
-                      ? "插件来源的只读副本不可安装或卸载。"
-                      : "Install and uninstall are unavailable for read-only plugin copies.",
-                  })}
-                </p>
-              ) : targetAgents.length === 0 ? (
-                <p className="text-xs text-muted-foreground">{t("detail.noPlatforms")}</p>
-              ) : (
-                <>
-                  <PlatformInstallStatusGroups
-                    lobsterAgents={lobsterAgents}
-                    codingAgents={codingAgents}
-                    installationMap={installationMap}
-                    sharedRootAgentIds={sharedRootAgentIds}
-                    installingAgentId={installingAgentId}
-                    onToggleInstall={onToggleInstall}
-                    skillName={detail.name}
-                  />
-                  <InstalledPlatformList
-                    rows={installedPlatformRows}
-                    skillName={detail.name}
-                    onRequestUninstall={onRequestUninstallInstalledPlatform}
-                  />
-                </>
-              )}
-            </div>
-          </section>
-
           {detail.is_central && !detail.is_read_only && (
-            <section aria-label={t("detail.projectsUsingSkillRegion")}>
+            <section
+              aria-label={t("detail.projectsUsingSkillRegion")}
+              aria-busy={isLoadingProjectsUsingSkill}
+            >
               <SectionLabel>{t("detail.projectsUsingSkill")}</SectionLabel>
               {isLoadingProjectsUsingSkill ? (
                 <p className="text-xs leading-relaxed text-muted-foreground">
@@ -613,11 +662,11 @@ export function SkillDetailSidebar({
                   {t("detail.projectsUsingSkillEmpty")}
                 </p>
               ) : (
-                <ul className="space-y-1.5">
+                <ul className="divide-y divide-border/60">
                   {projectsUsingSkill.map((row) => (
                     <li
                       key={`${row.projectId}:${row.agentId}`}
-                      className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5"
+                      className="flex items-center gap-2 px-1 py-2"
                     >
                       <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
                       <div className="min-w-0 flex-1 space-y-0.5">
@@ -627,13 +676,13 @@ export function SkillDetailSidebar({
                         >
                           {row.projectName}
                         </div>
-                        <div className="truncate text-[11px] text-muted-foreground">
+                        <div className="truncate text-[0.72rem] text-muted-foreground">
                           {row.agentDisplayName}
                         </div>
                       </div>
                       <span
                         className={cn(
-                          "shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium ring-1",
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[0.72rem] font-medium ring-1",
                           row.linkType === "symlink"
                             ? "bg-success/10 text-success-foreground ring-success/20"
                             : "bg-warning/10 text-warning-foreground ring-warning/20"
@@ -659,17 +708,25 @@ export function SkillDetailSidebar({
                 })}
               </p>
             ) : (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {skillCollections.map((collection) => (
-                  <span
-                    key={collection.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary ring-1 ring-primary/20"
-                    title={collection.description ?? collection.name}
-                  >
-                    <Tag className="size-2.5" />
-                    {collection.name}
-                  </span>
-                ))}
+              <div className="space-y-2">
+                {skillCollections.length === 0 ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {t("detail.collectionsEmpty")}
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {skillCollections.map((collection) => (
+                      <span
+                        key={collection.id}
+                        className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[0.72rem] font-medium text-primary-text ring-1 ring-primary/20"
+                        title={collection.description ?? collection.name}
+                      >
+                        <Tag className="size-2.5" />
+                        {collection.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <Button
                   ref={addToCollectionButtonRef}
                   variant="ghost"
@@ -684,6 +741,12 @@ export function SkillDetailSidebar({
               </div>
             )}
           </section>
+
+          <SkillDetailFileTree
+            entries={directoryTree}
+            isLoading={isDirectoryLoading}
+            onOpenPath={onOpenFileTreePath}
+          />
         </>
       ) : null}
     </aside>

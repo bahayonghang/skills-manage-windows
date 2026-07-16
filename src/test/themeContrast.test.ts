@@ -5,6 +5,14 @@ import { describe, expect, it } from "vitest";
 
 const INDEX_CSS = readFileSync(resolve(process.cwd(), "src/index.css"), "utf8");
 const MIN_NORMAL_TEXT_CONTRAST = 4.5;
+const THEMES = [
+  "mocha",
+  "macchiato",
+  "frappe",
+  "latte",
+  "claude-light",
+  "claude-dark",
+] as const;
 const LIGHT_THEMES = ["latte", "claude-light"] as const;
 const ACCENTS = [
   "rosewater",
@@ -23,7 +31,7 @@ const ACCENTS = [
   "lavender",
 ] as const;
 
-type ThemeName = (typeof LIGHT_THEMES)[number];
+type ThemeName = (typeof THEMES)[number];
 type AccentName = (typeof ACCENTS)[number];
 
 function cssBlock(selector: string) {
@@ -43,6 +51,23 @@ function cssVariable(block: string, name: string) {
     throw new Error(`Missing hex variable ${name}`);
   }
   return match[1].toLowerCase();
+}
+
+function resolvedCssVariable(block: string, name: string): string {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = block.match(new RegExp(`${escaped}\\s*:\\s*([^;]+)\\s*;`));
+  const value = match?.[1]?.trim();
+  if (!value) {
+    throw new Error(`Missing variable ${name}`);
+  }
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+    return value.toLowerCase();
+  }
+  const reference = value.match(/^var\((--[^)]+)\)$/)?.[1];
+  if (!reference) {
+    throw new Error(`Unsupported variable value ${name}: ${value}`);
+  }
+  return resolvedCssVariable(block, reference);
 }
 
 function hexToRgb(hex: string) {
@@ -85,7 +110,7 @@ function expectContrast(
   );
 }
 
-function lightThemeTokens(theme: ThemeName) {
+function themeTokens(theme: ThemeName) {
   const block = cssBlock(`[data-theme="${theme}"]`);
   return {
     background: cssVariable(block, "--background"),
@@ -96,6 +121,9 @@ function lightThemeTokens(theme: ThemeName) {
     primary: cssVariable(block, "--primary"),
     primaryText: cssVariable(block, "--primary-text"),
     primaryForeground: cssVariable(block, "--primary-foreground"),
+    successForeground: resolvedCssVariable(block, "--success-foreground"),
+    warningForeground: resolvedCssVariable(block, "--warning-foreground"),
+    infoForeground: resolvedCssVariable(block, "--info-foreground"),
   };
 }
 
@@ -113,10 +141,10 @@ describe("theme contrast tokens", () => {
     );
   });
 
-  it.each(LIGHT_THEMES)(
-    "%s keeps core semantic text tokens readable on light surfaces",
+  it.each(THEMES)(
+    "%s keeps inspector labels and semantic states readable",
     (theme) => {
-      const tokens = lightThemeTokens(theme);
+      const tokens = themeTokens(theme);
 
       expectContrast(
         tokens.foreground,
@@ -153,13 +181,21 @@ describe("theme contrast tokens", () => {
         tokens.primary,
         `${theme} primary foreground on primary`
       );
+      for (const [name, color] of [
+        ["success", tokens.successForeground],
+        ["warning", tokens.warningForeground],
+        ["info", tokens.infoForeground],
+      ] as const) {
+        expectContrast(color, tokens.background, `${theme} ${name} on background`);
+        expectContrast(color, tokens.card, `${theme} ${name} on card`);
+      }
     }
   );
 
   it.each(LIGHT_THEMES)(
     "%s accent overrides keep readable primary text on light surfaces",
     (theme) => {
-      const { background, card } = lightThemeTokens(theme);
+      const { background, card } = themeTokens(theme);
 
       for (const accent of ACCENTS) {
         const primaryText = accentPrimaryText(theme, accent);
