@@ -25,7 +25,7 @@ export function HeroSection({
   const showReviewCta = uncategorizedCount > 0;
   const pillTone =
     scanState === "error"
-      ? "border-destructive/30 bg-destructive/10 text-destructive"
+      ? "border-destructive/30 bg-destructive/10 text-destructive-text"
       : scanState === "refreshing"
         ? "border-primary/35 bg-primary/15 text-primary-text"
         : "border-success/35 bg-success/10 text-success-foreground";

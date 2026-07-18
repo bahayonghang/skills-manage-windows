@@ -349,8 +349,7 @@ export function AppearanceSettingsSection({
           />
           <div className="flex min-h-16 items-center justify-between gap-4 rounded-lg bg-muted/35 px-4 py-3 ring-1 ring-border/60">
             <span
-              className="font-display font-semibold tabular-nums"
-              style={{ fontSize: `${prefs.scale}rem` }}
+              className="font-display text-base font-semibold tabular-nums"
             >
               {t("settings.appearance.scaleSpecimen")}
             </span>

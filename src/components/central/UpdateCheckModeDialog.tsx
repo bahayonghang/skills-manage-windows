@@ -116,7 +116,7 @@ export function UpdateCheckModeDialog({
               </div>
               {error ? (
                 <div
-                  className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                  className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive-text"
                   data-testid="update-check-mode-error"
                   role="alert"
                 >
@@ -306,7 +306,7 @@ function ModeCard({
             ))}
           </span>
           {disabledReason ? (
-            <span className="mt-2 block text-xs text-destructive">
+            <span className="mt-2 block text-xs text-destructive-text">
               {disabledReason}
             </span>
           ) : null}

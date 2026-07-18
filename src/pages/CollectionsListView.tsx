@@ -463,7 +463,7 @@ export function CollectionsListView() {
                       size="sm"
                       onClick={handleDelete}
                       disabled={isDeleting}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                      className="text-destructive-text hover:text-destructive-text hover:bg-destructive/10 border-destructive/30"
                     >
                       {isDeleting ? (
                         <Loader2 className="size-3.5 animate-spin" />

@@ -54,7 +54,7 @@ export function ScanDirectoriesSettingsSection({
       }
     >
         {scanDirError && (
-          <p className="text-xs text-destructive mb-3" role="alert">
+          <p className="text-xs text-destructive-text mb-3" role="alert">
             {scanDirError}
           </p>
         )}

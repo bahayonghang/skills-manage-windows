@@ -363,7 +363,7 @@ function OperationLogsPanel() {
       </div>
 
       {error && (
-        <div className="mx-5 mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div className="mx-5 mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive-text">
           {error}
         </div>
       )}

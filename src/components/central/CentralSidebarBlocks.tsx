@@ -299,7 +299,7 @@ function RepoTrailingActions({
             event.stopPropagation();
             onDelete(repository);
           }}
-          className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive-text"
         >
           <Trash2 className="size-3" />
         </button>

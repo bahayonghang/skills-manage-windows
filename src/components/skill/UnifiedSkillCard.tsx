@@ -477,7 +477,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                 className={cn(
                   "shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ring-1",
                   statusAccent === "error"
-                    ? "bg-destructive/10 text-destructive ring-destructive/30"
+                    ? "bg-destructive/10 text-destructive-text ring-destructive/30"
                     : "bg-warning/10 text-warning-foreground ring-warning/30"
                 )}
               >
@@ -785,7 +785,7 @@ function CardActionButton({
       className={cn(
         "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-[scale,background-color,color] active:not-disabled:scale-[0.96] disabled:cursor-default disabled:opacity-50",
         danger
-          ? "hover:bg-destructive/10 hover:text-destructive"
+          ? "hover:bg-destructive/10 hover:text-destructive-text"
           : "hover:bg-accent/40 hover:text-primary",
       )}
     >

@@ -175,7 +175,7 @@ export function BatchDeleteCentralSkillsDialog({
 
           <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm">
             <div className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive-text" />
               <div className="min-w-0">
                 <div className="font-medium text-foreground">
                   {dangerTitle ??
@@ -300,7 +300,7 @@ export function BatchDeleteCentralSkillsDialog({
           )}
 
           {error && (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-destructive-text" role="alert">
               {error}
             </p>
           )}

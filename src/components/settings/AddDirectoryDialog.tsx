@@ -88,7 +88,7 @@ export function AddDirectoryDialog({
           {/* Path field */}
           <div className="space-y-1.5">
             <label htmlFor="dir-path" className="text-sm font-medium">
-              {t("addDir.pathLabel")} <span className="text-destructive">*</span>
+              {t("addDir.pathLabel")} <span className="text-destructive-text">*</span>
             </label>
             <Input
               id="dir-path"
@@ -103,7 +103,7 @@ export function AddDirectoryDialog({
               autoFocus
             />
             {validationError && (
-              <p className="text-xs text-destructive" role="alert">
+              <p className="text-xs text-destructive-text" role="alert">
                 {validationError}
               </p>
             )}
@@ -111,7 +111,7 @@ export function AddDirectoryDialog({
 
           {/* Backend error */}
           {error && (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-destructive-text" role="alert">
               {error}
             </p>
           )}

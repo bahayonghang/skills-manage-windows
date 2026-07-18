@@ -231,13 +231,13 @@ function GitHubRepoImportUrlInputBlock({
         </div>
       ) : null}
       {previewError ? (
-        <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text">
           <div className="flex items-start gap-2">
             <AlertCircle className="mt-0.5 size-4 shrink-0" />
             <div className="space-y-2">
               <span className="block">{normalizeMessage(previewError)}</span>
               {looksLikeGitHubAuthGuidance(previewError) ? (
-                <span className="block text-xs text-destructive/90">
+                <span className="block text-xs text-destructive-text">
                   {looksLikeConfiguredGitHubTokenFailure(previewError)
                     ? t("marketplace.githubPatConfiguredFailureHint")
                     : t("marketplace.githubPatSettingsHint")}
@@ -640,7 +640,7 @@ function GitHubRepoImportSshPasswordRepairPanel({
                 "text-xs",
                 sshPasswordRepairMessage.type === "success"
                   ? "text-primary"
-                  : "text-destructive",
+                  : "text-destructive-text",
               )}
               role="status"
             >

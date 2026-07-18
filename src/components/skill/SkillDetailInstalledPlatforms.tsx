@@ -63,7 +63,7 @@ export function InstalledPlatformList({
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  className="size-6 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 focus-visible:text-destructive group-hover:opacity-100 group-focus-within:opacity-100"
+                  className="size-6 text-muted-foreground opacity-0 transition-opacity hover:text-destructive-text focus:opacity-100 focus-visible:text-destructive-text group-hover:opacity-100 group-focus-within:opacity-100"
                   aria-label={removeLabel}
                   title={removeLabel}
                   onClick={() =>

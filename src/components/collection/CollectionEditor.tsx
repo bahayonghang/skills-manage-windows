@@ -100,7 +100,7 @@ export function CollectionEditor({
           {/* Name field */}
           <div className="space-y-1.5">
             <label htmlFor="collection-name" className="text-sm font-medium">
-              {t("collectionEditor.nameLabel")} <span className="text-destructive">*</span>
+              {t("collectionEditor.nameLabel")} <span className="text-destructive-text">*</span>
             </label>
             <Input
               id="collection-name"
@@ -114,7 +114,7 @@ export function CollectionEditor({
               autoFocus
             />
             {validationError && (
-              <p className="text-xs text-destructive" role="alert">
+              <p className="text-xs text-destructive-text" role="alert">
                 {validationError}
               </p>
             )}
@@ -136,7 +136,7 @@ export function CollectionEditor({
 
           {/* Backend error */}
           {error && (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-destructive-text" role="alert">
               {error}
             </p>
           )}

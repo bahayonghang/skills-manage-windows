@@ -13,7 +13,6 @@ const THEMES = [
   "claude-light",
   "claude-dark",
 ] as const;
-const LIGHT_THEMES = ["latte", "claude-light"] as const;
 const ACCENTS = [
   "rosewater",
   "flamingo",
@@ -41,6 +40,13 @@ function cssBlock(selector: string) {
     throw new Error(`Missing CSS selector: ${selector}`);
   }
   return match.groups.body;
+}
+
+function optionalCssBlock(selector: string) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return INDEX_CSS.match(
+    new RegExp(`${escaped}\\s*\\{(?<body>[^}]*)\\}`, "m"),
+  )?.groups?.body;
 }
 
 function cssVariable(block: string, name: string) {
@@ -126,6 +132,12 @@ function themeTokens(theme: ThemeName) {
     primary: cssVariable(block, "--primary"),
     primaryText: cssVariable(block, "--primary-text"),
     primaryForeground: cssVariable(block, "--primary-foreground"),
+    destructive: cssVariable(block, "--destructive"),
+    destructiveForeground: cssVariable(block, "--destructive-foreground"),
+    destructiveText: resolvedCssVariable(
+      block,
+      "--destructive-text",
+    ),
     successForeground: resolvedCssVariable(block, "--success-foreground"),
     warningForeground: resolvedCssVariable(block, "--warning-foreground"),
     infoForeground: resolvedCssVariable(block, "--info-foreground"),
@@ -133,9 +145,19 @@ function themeTokens(theme: ThemeName) {
 }
 
 function accentPrimaryText(theme: ThemeName, accent: AccentName) {
-  return cssVariable(
-    cssBlock(`[data-theme="${theme}"][data-accent="${accent}"]`),
-    "--primary-text"
+  const override = optionalCssBlock(
+    `[data-theme="${theme}"][data-accent="${accent}"]`,
+  );
+  if (override?.includes("--primary-text")) {
+    return cssVariable(override, "--primary-text");
+  }
+
+  // Dark themes use the global accent rule, whose --primary-text resolves to
+  // the theme-local Catppuccin token. Light themes provide explicit readable
+  // overrides above; this fallback models the real CSS cascade for all 6x14.
+  return resolvedCssVariable(
+    cssBlock(`[data-theme="${theme}"]`),
+    `--ctp-${accent}`,
   );
 }
 
@@ -186,7 +208,13 @@ describe("theme contrast tokens", () => {
         tokens.primary,
         `${theme} primary foreground on primary`
       );
+      expectContrast(
+        tokens.destructiveForeground,
+        tokens.destructive,
+        `${theme} destructive foreground on destructive`
+      );
       for (const [name, color] of [
+        ["destructive", tokens.destructiveText],
         ["success", tokens.successForeground],
         ["warning", tokens.warningForeground],
         ["info", tokens.infoForeground],
@@ -224,24 +252,30 @@ describe("theme contrast tokens", () => {
     }
   );
 
-  it.each(LIGHT_THEMES)(
-    "%s accent overrides keep readable primary text on light surfaces",
+  it.each(THEMES)(
+    "%s accent overrides keep readable primary text on application surfaces",
     (theme) => {
-      const { background, card } = themeTokens(theme);
+      const { background, card, popover, sidebar } = themeTokens(theme);
+      const failures: string[] = [];
 
       for (const accent of ACCENTS) {
         const primaryText = accentPrimaryText(theme, accent);
-        expectContrast(
-          primaryText,
-          background,
-          `${theme}/${accent} primary text on background`
-        );
-        expectContrast(
-          primaryText,
-          card,
-          `${theme}/${accent} primary text on card`
-        );
+        for (const [surfaceName, surfaceColor] of [
+          ["background", background],
+          ["card", card],
+          ["popover", popover],
+          ["sidebar", sidebar],
+        ] as const) {
+          const ratio = contrastRatio(primaryText, surfaceColor);
+          if (ratio < MIN_NORMAL_TEXT_CONTRAST) {
+            failures.push(
+              `${theme}/${accent} primary text on ${surfaceName}: ${ratio.toFixed(3)}:1`,
+            );
+          }
+        }
       }
+
+      expect(failures, failures.join("\n")).toEqual([]);
     }
   );
 });

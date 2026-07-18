@@ -20,7 +20,7 @@ export const statusChipClass: Record<StatusTone, string> = {
   success: "border-success/30 bg-success/10 text-success-foreground",
   warning: "border-warning/30 bg-warning/10 text-warning-foreground",
   info: "border-info/30 bg-info/10 text-info-foreground",
-  error: "border-destructive/30 bg-destructive/10 text-destructive",
+  error: "border-destructive/30 bg-destructive/10 text-destructive-text",
 };
 
 /** 无边框 tint（仅底色 + 前景文字）。 */
@@ -28,7 +28,7 @@ export const statusSoftClass: Record<StatusTone, string> = {
   success: "bg-success/10 text-success-foreground",
   warning: "bg-warning/10 text-warning-foreground",
   info: "bg-info/10 text-info-foreground",
-  error: "bg-destructive/10 text-destructive",
+  error: "bg-destructive/10 text-destructive-text",
 };
 
 /** 纯前景文字色（无底色）。 */
@@ -36,7 +36,7 @@ export const statusTextClass: Record<StatusTone, string> = {
   success: "text-success-foreground",
   warning: "text-warning-foreground",
   info: "text-info-foreground",
-  error: "text-destructive",
+  error: "text-destructive-text",
 };
 
 /** 状态点 / 图标 swatch 的实心填充（其上无文字叠加）。 */

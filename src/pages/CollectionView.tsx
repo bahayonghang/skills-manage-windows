@@ -293,7 +293,7 @@ export function CollectionView() {
   if (error && !currentDetail) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-        <p className="text-sm text-destructive">{error}</p>
+        <p className="text-sm text-destructive-text">{error}</p>
         <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
           {t("collection.goBack")}
         </Button>
@@ -366,7 +366,7 @@ export function CollectionView() {
               onClick={handleDelete}
               disabled={isDeleting}
               aria-label={t("collection.deleteLabel")}
-              className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+              className="text-destructive-text hover:text-destructive-text hover:bg-destructive/10 border-destructive/30"
             >
               {isDeleting ? (
                 <Loader2 className="size-3.5 animate-spin" />
@@ -379,7 +379,7 @@ export function CollectionView() {
         </div>
 
         {deleteError && (
-          <p className="text-xs text-destructive mt-2" role="alert">
+          <p className="text-xs text-destructive-text mt-2" role="alert">
             {deleteError}
           </p>
         )}

@@ -200,6 +200,8 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-text: var(--destructive-text);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
@@ -305,6 +307,8 @@
   --accent: #585b70;
   --accent-foreground: #cdd6f4;
   --destructive: #f38ba8;
+  --destructive-foreground: #181825;
+  --destructive-text: var(--ctp-red);
   /* 语义状态 success/warning/info（error 复用 destructive） */
   --success: var(--ctp-green);
   --success-foreground: var(--ctp-green);
@@ -377,6 +381,8 @@
   --accent: #5b6078;
   --accent-foreground: #cad3f5;
   --destructive: #ed8796;
+  --destructive-foreground: #1e2030;
+  --destructive-text: var(--ctp-red);
   /* 语义状态 success/warning/info（error 复用 destructive） */
   --success: var(--ctp-green);
   --success-foreground: var(--ctp-green);
@@ -449,6 +455,8 @@
   --accent: #626880;
   --accent-foreground: #c6d0f5;
   --destructive: #e78284;
+  --destructive-foreground: #292c3c;
+  --destructive-text: var(--ctp-red);
   /* 语义状态 success/warning/info（error 复用 destructive） */
   --success: var(--ctp-green);
   --success-foreground: var(--ctp-green);
@@ -521,6 +529,8 @@
   --accent: #acb0be;
   --accent-foreground: #4c4f69;
   --destructive: #d20f39;
+  --destructive-foreground: #fbfaff;
+  --destructive-text: #b90a2f;
   /* 语义状态：浅色主题 -foreground 取更深值，已验 ≥4.5:1 on /10 tint */
   --success: var(--ctp-green);
   --success-foreground: #2e6f1e;
@@ -591,6 +601,8 @@
   --accent: #e8e0d2;
   --accent-foreground: #141413;
   --destructive: #c64545;
+  --destructive-foreground: #faf9f5;
+  --destructive-text: #a13333;
   /* 语义状态：浅色主题 -foreground 取更深值，已验 ≥4.5:1 on /10 tint */
   --success: var(--ctp-green);
   --success-foreground: #1f6a3a;
@@ -661,6 +673,8 @@
   --accent: #3d3d3a;
   --accent-foreground: #faf9f5;
   --destructive: #c64545;
+  --destructive-foreground: #faf9f5;
+  --destructive-text: #dd6868;
   /* 语义状态 success/warning/info（error 复用 destructive） */
   --success: var(--ctp-green);
   --success-foreground: var(--ctp-green);
@@ -876,6 +890,19 @@
 }
 [data-theme="claude-light"][data-accent="lavender"] {
   --primary-text: #a35038;
+}
+
+/* Claude Dark's base mauve/red/maroon accents remain unchanged for fills,
+   rings, and identity. Only ordinary accent text uses lighter AA variants on
+   background/card/popover/sidebar surfaces. */
+[data-theme="claude-dark"][data-accent="mauve"] {
+  --primary-text: #aa8b9f;
+}
+[data-theme="claude-dark"][data-accent="red"] {
+  --primary-text: #dd6868;
+}
+[data-theme="claude-dark"][data-accent="maroon"] {
+  --primary-text: #ca7258;
 }
 
 [data-theme="latte"][data-accent="mauve"],

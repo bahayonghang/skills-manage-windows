@@ -17,7 +17,7 @@ function ratio(count: number, total: number) {
 function logStatusClass(status: string) {
   switch (status) {
     case "failed":
-      return "border-destructive/30 bg-destructive/10 text-destructive";
+      return "border-destructive/30 bg-destructive/10 text-destructive-text";
     case "partial":
     case "cancelled":
       return "border-primary/30 bg-primary/10 text-primary-text";

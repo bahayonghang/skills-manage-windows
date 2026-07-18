@@ -70,7 +70,7 @@ export function GitHubImportFileTree({
         data-testid="github-import-file-tree-error"
         role="alert"
       >
-        <div className="flex max-w-md items-start gap-2 text-sm text-destructive">
+        <div className="flex max-w-md items-start gap-2 text-sm text-destructive-text">
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
           <span>{t("marketplace.githubImportFileManifestError")}</span>
         </div>

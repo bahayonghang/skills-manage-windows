@@ -210,7 +210,7 @@ export function GitHubRepoImportConfirmSummary({
             </div>
 
             {blockingConflict ? (
-              <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive-text">
                 {t("marketplace.resolveConflictsBeforeImport")}
               </div>
             ) : (

@@ -565,7 +565,7 @@ export function SkillDetailView({
         {!isLoading && error && (
           <div className="flex h-full items-center justify-center">
             <div className="space-y-2 text-center">
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-sm text-destructive-text">{error}</p>
               <Button
                 variant="outline"
                 size="sm"

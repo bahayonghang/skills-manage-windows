@@ -54,7 +54,7 @@ function formatRuntimeDate(value?: string | null): string {
 function runtimeLevelClass(level?: string | null): string {
   switch (level) {
     case "error":
-      return "border-destructive/30 bg-destructive/10 text-destructive";
+      return "border-destructive/30 bg-destructive/10 text-destructive-text";
     case "warn":
       return "border-warning/30 bg-warning/10 text-warning-foreground";
     case "debug":
@@ -320,7 +320,7 @@ export function RuntimeLogsPanel() {
       </div>
 
       {error && (
-        <div className="mx-5 mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div className="mx-5 mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive-text">
           {error}
         </div>
       )}

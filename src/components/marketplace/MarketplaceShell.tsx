@@ -522,7 +522,7 @@ export function MarketplaceShell({
             </form>
 
             {skillsShError ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive-text">
                 {skillsShError}
               </div>
             ) : null}

@@ -251,7 +251,7 @@ function ProjectList({
                     onClick={() => onRequestRemove(project)}
                     aria-label={t("projects.menuRemove")}
                     title={t("projects.menuRemove")}
-                    className="p-1 rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive cursor-pointer"
+                    className="p-1 rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive-text cursor-pointer"
                   >
                     <Trash2 className="size-3" />
                   </button>

@@ -98,7 +98,7 @@ export function InlineConfirmAction({
           disabled={disabled || isLoading}
           aria-label={confirmLabel}
           className={cn(
-            "focus-ring inline-flex h-8 items-center justify-center rounded-md px-2.5 text-xs font-medium transition-colors text-destructive bg-destructive/10 hover:bg-destructive/15 disabled:opacity-50 disabled:cursor-default",
+            "focus-ring inline-flex h-8 items-center justify-center rounded-md px-2.5 text-xs font-medium transition-colors text-destructive-text bg-destructive/10 hover:bg-destructive/15 disabled:opacity-50 disabled:cursor-default",
             className,
           )}
         >
@@ -120,7 +120,7 @@ export function InlineConfirmAction({
           title={idleTitle ?? idleAriaLabel}
           aria-label={idleAriaLabel}
           className={cn(
-            "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:cursor-default",
+            "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors text-muted-foreground hover:text-destructive-text hover:bg-destructive/10 disabled:opacity-50 disabled:cursor-default",
             className,
           )}
         >

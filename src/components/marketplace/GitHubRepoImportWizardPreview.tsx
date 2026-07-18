@@ -148,7 +148,7 @@ export function GitHubRepoImportPreviewWorkspace({
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
       {blockingFileManifest ? (
         <div
-          className="flex shrink-0 items-start gap-2 border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+          className="flex shrink-0 items-start gap-2 border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive-text"
           data-testid="github-import-file-manifest-blocker"
           role="alert"
         >
@@ -667,7 +667,7 @@ function GitHubRepoImportPreviewDetailPane({
               </div>
             ) : markdownEntry.status === "error" ? (
               <div className="flex flex-col items-center gap-3 py-10 text-center">
-                <AlertCircle className="size-6 text-destructive" />
+                <AlertCircle className="size-6 text-destructive-text" />
                 <div className="text-sm text-muted-foreground">
                   {t("marketplace.githubImportMarkdownError")}
                 </div>
@@ -763,7 +763,7 @@ function GitHubRepoImportPreviewDetailPane({
                   {aiSummary.summary}
                 </div>
               ) : aiSummary?.error ? (
-                <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive-text">
                   {aiSummary.error}
                 </div>
               ) : selectedPreviewSkill.description ? (

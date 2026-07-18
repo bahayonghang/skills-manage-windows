@@ -155,7 +155,7 @@ function SyncItemCard({ item }: { item: LocalRemoteSyncItemPreview }) {
         })}
       </div>
       {item.error ? (
-        <p className="mt-2 text-xs text-destructive" role="alert">
+        <p className="mt-2 text-xs text-destructive-text" role="alert">
           {item.error}
         </p>
       ) : null}
@@ -279,7 +279,7 @@ export function LocalRemoteSyncDialog({
           ) : null}
 
           {error ? (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-destructive-text" role="alert">
               {error}
             </p>
           ) : null}

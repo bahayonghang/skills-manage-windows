@@ -107,7 +107,7 @@ export function SkillCardMeta({
             updateStatus.status === "update_available"
               ? "bg-primary/10 text-primary ring-primary/20"
               : updateStatus.status === "error"
-                ? "bg-destructive/10 text-destructive ring-destructive/20"
+                ? "bg-destructive/10 text-destructive-text ring-destructive/20"
                 : updateStatus.status === "remote_missing"
                   ? "bg-warning/10 text-warning-foreground ring-warning/30"
                   : "bg-muted text-muted-foreground ring-border",

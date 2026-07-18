@@ -240,7 +240,7 @@ function SettledAiTagPanel({
             className={cn(
               "rounded-lg border p-2.5 text-xs leading-relaxed",
               job.status === "failed"
-                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                ? "border-destructive/30 bg-destructive/10 text-destructive-text"
                 : "border-warning/30 bg-warning/10 text-warning-foreground",
             )}
           >
@@ -398,7 +398,7 @@ function StatusPill({ status, t }: { status: AiTagItemStatus; t: TFunction }) {
         status === "succeeded" &&
           "bg-success/10 text-success-foreground ring-success/20",
         status === "failed" &&
-          "bg-destructive/10 text-destructive ring-destructive/20",
+          "bg-destructive/10 text-destructive-text ring-destructive/20",
         status === "cancelled" &&
           "bg-warning/10 text-warning-foreground ring-warning/20",
       )}
@@ -481,7 +481,7 @@ function getProgressPercent(job: AiTagJob): number {
 
 function getSettledIcon(status: AiTagJob["status"]) {
   if (status === "failed") {
-    return <XCircle className="size-3.5 text-destructive" />;
+    return <XCircle className="size-3.5 text-destructive-text" />;
   }
   if (status === "cancelled") {
     return <AlertTriangle className="size-3.5 text-warning-foreground" />;

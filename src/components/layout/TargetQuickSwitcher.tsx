@@ -191,7 +191,7 @@ export function TargetQuickSwitcher() {
             )}
 
             {error && (
-              <div className="px-3 pb-2 text-xs text-destructive">
+              <div className="px-3 pb-2 text-xs text-destructive-text">
                 {error}
               </div>
             )}

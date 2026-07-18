@@ -282,7 +282,7 @@ function StatusBanner({
       className={cn(
         "mb-4 flex items-start gap-2 rounded-md border px-3 py-2 text-sm",
         tone === "error"
-          ? "border-destructive/35 bg-destructive/10 text-destructive"
+          ? "border-destructive/35 bg-destructive/10 text-destructive-text"
           : "border-warning/35 bg-warning/10 text-warning-foreground",
       )}
     >

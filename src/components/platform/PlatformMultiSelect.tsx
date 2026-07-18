@@ -195,7 +195,7 @@ export function InstallFailureList({
   failures: InstallFailureItem[];
 }) {
   return (
-    <ul className="max-h-32 space-y-0.5 overflow-auto text-xs text-destructive">
+    <ul className="max-h-32 space-y-0.5 overflow-auto text-xs text-destructive-text">
       {failures.map((failure) => (
         <li key={failure.key}>{failure.label}</li>
       ))}

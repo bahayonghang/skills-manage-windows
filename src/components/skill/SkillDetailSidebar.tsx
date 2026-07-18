@@ -404,7 +404,7 @@ export function SkillDetailSidebar({
                     className={cn(
                       "size-3.5 shrink-0",
                       visibleUpdateStatus === "checking" && "animate-spin",
-                      visibleUpdateStatus === "error" && "text-destructive",
+                      visibleUpdateStatus === "error" && "text-destructive-text",
                     )}
                   />
                   <span>
@@ -460,7 +460,7 @@ export function SkillDetailSidebar({
                 )}
                 {updateStatus?.error && (
                   <p className="flex items-start gap-1.5 text-xs leading-relaxed text-foreground">
-                    <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                    <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive-text" />
                     <span className="min-w-0 break-words">{updateStatus.error}</span>
                   </p>
                 )}

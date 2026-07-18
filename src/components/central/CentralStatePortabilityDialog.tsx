@@ -457,7 +457,7 @@ export function CentralStatePortabilityDialog({
                 prettyLabel={t("central.portabilityPrettyJson")}
               />
               {exportPrettyError && (
-                <div className="text-xs text-destructive">
+                <div className="text-xs text-destructive-text">
                   {t("central.portabilityPrettyError", {
                     error: exportPrettyError,
                   })}
@@ -533,7 +533,7 @@ export function CentralStatePortabilityDialog({
                 className="min-h-28 font-mono text-xs"
               />
               {importFormatError && (
-                <div className="text-xs text-destructive">
+                <div className="text-xs text-destructive-text">
                   {t("central.portabilityPrettyError", {
                     error: importFormatError,
                   })}
@@ -710,7 +710,7 @@ export function CentralStatePortabilityDialog({
                   {lastImportResult &&
                     lastImportResult.failedSkills.length > 0 && (
                       <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                        <div className="text-sm font-medium text-destructive">
+                        <div className="text-sm font-medium text-destructive-text">
                           {t("central.portabilityImportFailuresTitle", {
                             count: lastImportResult.failedSkills.length,
                           })}

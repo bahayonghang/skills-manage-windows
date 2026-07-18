@@ -162,7 +162,7 @@ export function LocalArchiveImportWizard({
         {step === "choose" && (
           <div className="flex flex-col items-center gap-4 py-8">
             {previewError && (
-              <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive-text">
                 <AlertCircle className="size-4 shrink-0" />
                 <span>{previewError}</span>
               </div>
@@ -189,7 +189,7 @@ export function LocalArchiveImportWizard({
         {step === "preview" && skill && preview && (
           <div className="flex flex-col gap-4">
             {importError && (
-              <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive-text">
                 <AlertCircle className="size-4 shrink-0" />
                 <span>{importError}</span>
               </div>

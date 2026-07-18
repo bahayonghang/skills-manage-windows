@@ -57,6 +57,7 @@ const ARBITRARY_TEXT_UTILITY = /text-\[[^\]]+\]/;
 // Focused sub-patterns for clearer failure messages.
 const ARBITRARY_TEXT_SIZE = /text-\[(?:[0-9]+(?:\.[0-9]+)?(?:px|rem|em)|0?\.[0-9]+(?:px|rem|em)|calc\([^)]*\)|clamp\([^)]*\))\]/;
 const ARBITRARY_TEXT_COLOR = /text-\[#[0-9a-fA-F]+\]/;
+const INLINE_FONT_SIZE = /\bfontSize\s*:/;
 
 describe("typography contract", () => {
   it("scans at least one production TS/TSX file", () => {
@@ -124,6 +125,15 @@ describe("typography contract", () => {
     );
     // viewport units (vw/vh/vmin/vmax) are not part of the root-scale contract
     expect(indexCss).not.toMatch(/font-size:\s*[^;]*v(w|h|min|max)/);
+  });
+
+  it("forbids component-level inline font-size bypasses", () => {
+    const offenders: string[] = [];
+    for (const file of PRODUCTION_FILES) {
+      const { path, content } = readProductionFile(file);
+      if (INLINE_FONT_SIZE.test(content)) offenders.push(path);
+    }
+    expect(offenders, `Expected zero inline fontSize bypasses`).toEqual([]);
   });
 });
 

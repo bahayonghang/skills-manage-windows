@@ -207,7 +207,7 @@ export function AiSettingsSection({
                 </p>
               ) : null}
               {revealError ? (
-                <p className="text-destructive">
+                <p className="text-destructive-text">
                   {t("settings.aiApiKeyRevealFailed", { error: revealError })}
                 </p>
               ) : null}
@@ -354,7 +354,7 @@ function secretStorageTone(state: SecretStorageState) {
     case "session":
       return "bg-warning/10 text-warning-foreground";
     case "unreadable":
-      return "bg-destructive/10 text-destructive";
+      return "bg-destructive/10 text-destructive-text";
     case "missing":
     default:
       return "bg-muted text-muted-foreground";
@@ -494,7 +494,7 @@ function AiSaveStatusRow({
           {t("settings.aiSaveSaved")}
         </span>
       ) : aiSaveStatus === "error" ? (
-        <span className="text-destructive">
+        <span className="text-destructive-text">
           {t("settings.aiSaveError", { error: aiSaveError ?? "" })}
         </span>
       ) : null}
@@ -613,7 +613,7 @@ function AiTestResultPanel({
 
   return (
     <div
-      className={`text-xs rounded-md px-3 py-2 space-y-1.5 ${aiTestResult.ok ? "bg-success/10 text-success-foreground" : "bg-destructive/10 text-destructive"}`}
+      className={`text-xs rounded-md px-3 py-2 space-y-1.5 ${aiTestResult.ok ? "bg-success/10 text-success-foreground" : "bg-destructive/10 text-destructive-text"}`}
     >
       <p>
         {aiTestResult.ok ? "✓ " : "✕ "}

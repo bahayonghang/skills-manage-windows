@@ -286,7 +286,7 @@ function FilterChip({
       className={cn(
         "inline-flex min-h-6 items-center gap-1 rounded-lg border px-1.5 py-0.5 font-mono",
         filter.negated
-          ? "border-destructive/40 bg-destructive/10 text-destructive"
+          ? "border-destructive/40 bg-destructive/10 text-destructive-text"
           : "border-primary/30 bg-primary/10 text-primary",
       )}
     >

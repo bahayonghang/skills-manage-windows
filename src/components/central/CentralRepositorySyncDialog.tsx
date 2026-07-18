@@ -445,7 +445,7 @@ export function CentralRepositorySyncDialog({
             {renderActiveTab()}
           </div>
           {error && (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-destructive-text" role="alert">
               {error}
             </p>
           )}

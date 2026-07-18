@@ -125,7 +125,7 @@ export function DeleteCentralSkillDialog({
 
           <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm">
             <div className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive-text" />
               <div className="min-w-0">
                 <div className="font-medium text-foreground">{t("central.deleteCentralRequired")}</div>
                 <div className="mt-1 truncate text-xs text-muted-foreground">
@@ -206,7 +206,7 @@ export function DeleteCentralSkillDialog({
           )}
 
           {error && (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-destructive-text" role="alert">
               {error}
             </p>
           )}
