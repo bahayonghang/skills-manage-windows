@@ -73,7 +73,7 @@ export function GitHubRepoImportWizardHeader({
       <DialogHeader>
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pr-10">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
-            <DialogTitle className="flex items-center gap-2 text-[1.05rem]">
+            <DialogTitle className="flex items-center gap-2 text-base">
               <GitBranch className="size-5" />
               <span>{t("marketplace.githubImportTitle")}</span>
             </DialogTitle>
@@ -83,7 +83,7 @@ export function GitHubRepoImportWizardHeader({
               })}
             </DialogDescription>
           </div>
-          <div className="flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-2 text-ui-meta text-muted-foreground">
             <span className="rounded-full border border-border/70 bg-muted/20 px-2.5 py-1 font-medium">
               {t("marketplace.githubImportHeaderLauncher", {
                 launcher: launcherLabel,
@@ -94,7 +94,7 @@ export function GitHubRepoImportWizardHeader({
       </DialogHeader>
 
       <div
-        className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] text-muted-foreground"
+        className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 text-ui-meta text-muted-foreground"
         data-testid="github-import-flat-stepper"
       >
         {(["input", "preview", "confirm", "result"] as WizardStep[]).map(
@@ -114,13 +114,13 @@ export function GitHubRepoImportWizardHeader({
                     isActive
                       ? "border-primary/40 bg-primary/10 text-primary"
                       : isComplete
-                        ? "border-primary/20 bg-primary/5 text-primary/80"
+                        ? "border-primary/20 bg-primary/5 text-primary-text"
                         : "border-border/70 bg-muted/20 text-muted-foreground",
                   )}
                 >
                   <span
                     className={cn(
-                      "flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                      "flex size-4 shrink-0 items-center justify-center rounded-full text-ui-micro font-semibold",
                       isActive || isComplete
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground",
@@ -280,19 +280,19 @@ function GitHubRepoImportPreviewToolbar({
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
         <div className="min-w-0 space-y-1.5">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
               {t("marketplace.githubImportToolbarLabel")}
             </span>
             <span className="truncate text-sm font-semibold">
               {preview.repo.owner}/{preview.repo.repo}
             </span>
             {preview.repo.branch ? (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                 {preview.repo.branch}
               </span>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui-meta text-muted-foreground">
             <span>
               {t("marketplace.githubImportFoundSkills", {
                 count: preview.skills.length,
@@ -303,13 +303,13 @@ function GitHubRepoImportPreviewToolbar({
                 count: selectedSkillsCount,
               })}
             </span>
-            <span className="truncate text-muted-foreground/90">
+            <span className="truncate text-muted-foreground">
               {preview.repo.normalizedUrl}
             </span>
           </div>
           {isRemoteLikeTarget(activeTarget) && preview.previewWorkspaceId ? (
             <div
-              className="text-[11px] text-primary"
+              className="text-xs text-primary"
               data-testid="github-import-remote-workspace-hint"
             >
               {t("marketplace.githubImportRemoteWorkspaceHint")}

@@ -72,7 +72,7 @@ export function SkillUsageTable({
         </div>
       </div>
 
-      <div className="grid grid-cols-[minmax(8rem,1fr)_3.5rem_4.5rem_2rem] gap-2 border-b border-border px-3 py-2 text-[11px] text-muted-foreground md:grid-cols-[minmax(9rem,1fr)_5.5rem_4rem_4rem_6rem_5rem_2rem]">
+      <div className="grid grid-cols-[minmax(8rem,1fr)_3.5rem_4.5rem_2rem] gap-2 border-b border-border px-3 py-2 text-ui-meta text-muted-foreground md:grid-cols-[minmax(9rem,1fr)_5.5rem_4rem_4rem_6rem_5rem_2rem]">
         <span>{t("skillUsage.columns.skill")}</span>
         <span className="hidden md:block">{t("skillUsage.columns.match")}</span>
         <span className="text-right">{t("skillUsage.columns.calls")}</span>
@@ -108,7 +108,7 @@ export function SkillUsageTable({
                   <span className="block truncate text-sm font-medium text-foreground">
                     {item.skill}
                   </span>
-                  <span className="mt-0.5 block text-[11px] text-muted-foreground md:hidden">
+                  <span className="mt-0.5 block text-ui-meta text-muted-foreground md:hidden">
                     {t(`skillUsage.match.${item.matchStatus}`)} · {item.projects}{" "}
                     {t("skillUsage.projectsShort")}
                   </span>

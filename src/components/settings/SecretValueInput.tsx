@@ -130,7 +130,7 @@ export function SecretValueInput({
           value={displayValue}
           placeholder={displayPlaceholder}
           readOnly={isShowingSavedValue}
-          className="pr-10 font-mono text-sm placeholder:text-muted-foreground/80"
+          className="pr-10 font-mono text-sm placeholder:text-muted-foreground"
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
         />

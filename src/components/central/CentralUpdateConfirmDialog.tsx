@@ -152,7 +152,7 @@ export function CentralUpdateConfirmDialog({
                               {skill.description}
                             </span>
                           )}
-                          <span className="block space-y-1 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                          <span className="block space-y-1 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-ui-meta leading-relaxed text-muted-foreground">
                             <span className="block break-all">
                               {state.source_path ?? skill?.source_path
                                 ? t("central.updateConfirmSourcePath", {

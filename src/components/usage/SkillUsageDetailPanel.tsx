@@ -157,7 +157,7 @@ function DetailMetric({
 }) {
   return (
     <div className="min-w-0 px-3 py-2.5">
-      <dt className="truncate text-[11px] text-muted-foreground">{label}</dt>
+      <dt className="truncate text-ui-meta text-muted-foreground">{label}</dt>
       <dd className="mt-0.5 truncate text-sm font-medium tabular-nums text-foreground">
         {typeof value === "number" ? value.toLocaleString() : value}
       </dd>

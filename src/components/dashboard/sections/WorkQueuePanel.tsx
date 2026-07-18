@@ -74,7 +74,7 @@ export function WorkQueuePanel({
                   aria-selected={active}
                   onClick={() => setFilter(option.key)}
                   className={cn(
-                    "focus-ring min-h-10 rounded-full px-3 py-1 text-[0.7rem] font-medium",
+                    "focus-ring min-h-10 rounded-full px-3 py-1 text-xs font-medium",
                     dashboardControlMotion,
                     active
                       ? "bg-primary/15 text-primary-text"

@@ -91,7 +91,7 @@ export function GitHubRepoImportConfirmSummary({
                 key={key}
                 className="rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5"
               >
-                <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   {label}
                 </div>
                 <div className="mt-1 text-2xl font-semibold leading-tight">
@@ -129,7 +129,7 @@ export function GitHubRepoImportConfirmSummary({
                     >
                       <div className="min-w-0">
                         <div className="font-medium">{skill.skillName}</div>
-                        <div className="mt-1 text-[11px] text-muted-foreground">
+                        <div className="mt-1 text-ui-meta text-muted-foreground">
                           {skill.sourcePath}
                         </div>
                       </div>
@@ -258,7 +258,7 @@ export function GitHubRepoImportResultHub({
                 <div className="text-base font-semibold">
                   {t("marketplace.githubImportSuccessTitle")}
                 </div>
-                <span className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium">
+                <span className="rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium">
                   {importResult.repo.owner}/{importResult.repo.repo}
                 </span>
               </div>
@@ -299,7 +299,7 @@ export function GitHubRepoImportResultHub({
                 >
                   <div className="min-w-0">
                     <div className="font-medium">{skill.skillName}</div>
-                    <code className="mt-1 inline-flex rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                    <code className="mt-1 inline-flex rounded bg-muted px-2 py-1 text-ui-meta text-muted-foreground">
                       {skill.importedSkillId}
                     </code>
                   </div>
@@ -392,7 +392,7 @@ export function GitHubRepoImportResultHub({
 function ResultMetricCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border border-border/70 bg-card/80 px-4 py-3">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
       <div className="mt-2 text-2xl font-semibold">{value}</div>

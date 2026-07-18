@@ -406,7 +406,7 @@ function OperationLogsPanel() {
             <div ref={rowsContainerRef}>
               {groups.map((group) => (
                 <div key={group.key}>
-                  <div className="border-b border-border/70 bg-muted/30 px-3 py-1.5 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
+                  <div className="border-b border-border/70 bg-muted/30 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     {t(`logs.groups.${group.key}`)} · {group.entries.length}
                   </div>
                   {group.entries.map((entry) => (

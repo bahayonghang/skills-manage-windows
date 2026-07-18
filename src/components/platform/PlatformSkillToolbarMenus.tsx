@@ -51,7 +51,7 @@ export function PlatformSkillSortMenu({
           >
             <ArrowUpDown className="size-3.5" />
             <span className="hidden text-xs sm:inline">{fieldLabel}</span>
-            <span aria-hidden className="text-[10px] text-muted-foreground">
+            <span aria-hidden className="text-ui-micro text-muted-foreground">
               {sortDirection === "asc" ? "↑" : "↓"}
             </span>
           </Button>
@@ -76,7 +76,7 @@ export function PlatformSkillSortMenu({
                     )}
                   >
                     <span>{field.label}</span>
-                    <span className="ml-auto text-[11px] text-muted-foreground">
+                    <span className="ml-auto text-ui-meta text-muted-foreground">
                       {direction.label}
                     </span>
                     {active && <Check className="size-3" aria-hidden />}
@@ -176,5 +176,5 @@ function menuItemClassName(extra?: string | false): string {
 }
 
 function menuLabelClassName(): string {
-  return "px-2 pt-1 pb-0.5 text-[11px] uppercase tracking-wide text-muted-foreground/80";
+  return "px-2 pt-1 pb-0.5 text-xs uppercase tracking-wide text-muted-foreground";
 }

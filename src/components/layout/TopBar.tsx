@@ -120,7 +120,7 @@ export function TopBar({ onSearchClick, onShortcutsClick }: TopBarProps) {
             </span>
             <ShortcutHint
               shortcut="mod+k"
-              className="hidden rounded border border-border/50 px-1 py-0.5 text-[11px] text-muted-foreground/60 sm:inline-flex"
+              className="hidden rounded border border-border/50 px-1 py-0.5 text-ui-meta text-muted-foreground sm:inline-flex"
             />
           </button>
         </div>

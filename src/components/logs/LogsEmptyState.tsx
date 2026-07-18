@@ -19,7 +19,7 @@ export function LogsEmptyState({
       className="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center"
       data-testid="logs-empty-state"
     >
-      <Inbox className="size-10 text-muted-foreground/60" />
+      <Inbox className="size-10 text-muted-foreground" />
       <p className="text-sm text-muted-foreground">{t("logs.empty")}</p>
       {hasFilters && (
         <Button variant="outline" size="sm" onClick={onResetFilters}>

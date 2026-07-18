@@ -12,7 +12,7 @@ import type { PreviewTab } from "./skillDetailViewTypes";
 
 export function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-2 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
       {children}
     </div>
   );
@@ -29,7 +29,7 @@ export function MetadataRow({
 }) {
   return (
     <div className="space-y-0.5">
-      <div className="text-[0.72rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+      <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </div>
       <div className="flex min-w-0 items-start gap-1.5 break-all font-mono text-xs leading-relaxed text-foreground">
@@ -51,7 +51,7 @@ export function SourceOriginBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[0.72rem] font-medium ring-1",
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1",
         isPlugin
           ? "bg-warning/10 text-warning-foreground ring-warning/20"
           : "bg-info/10 text-info-foreground ring-info/20",
@@ -76,7 +76,7 @@ export function ReadOnlySourceBadge() {
   const { t, i18n } = useTranslation();
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[0.72rem] font-medium text-muted-foreground ring-1 ring-border/70">
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-border/70">
       <Lock className="size-3 shrink-0" />
       {t("detail.readOnlySource", {
         defaultValue: i18n.language.startsWith("zh")
@@ -212,7 +212,7 @@ export function TabToggle({ activeTab, onChange }: TabToggleProps) {
 export const inspectorCardClassName =
   "min-w-0 space-y-3 overflow-x-hidden rounded-lg bg-muted/20 p-3 ring-1 ring-border/70";
 export const inspectorFieldLabelClassName =
-  "text-[0.72rem] font-medium uppercase tracking-[0.12em] text-muted-foreground";
+  "text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground";
 export const inspectorSelectClassName =
   "w-full min-w-0 rounded-md border border-input bg-background px-2 py-1.5 text-xs focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 export const inspectorActionButtonClassName = "w-full justify-center";

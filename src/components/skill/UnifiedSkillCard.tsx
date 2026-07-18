@@ -475,7 +475,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
             {statusChipLabel && (
               <span
                 className={cn(
-                  "shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium ring-1",
+                  "shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ring-1",
                   statusAccent === "error"
                     ? "bg-destructive/10 text-destructive ring-destructive/30"
                     : "bg-warning/10 text-warning-foreground ring-warning/30"
@@ -688,7 +688,7 @@ function UnifiedSkillCardComponent(props: UnifiedSkillCardProps) {
                   <span
                     data-testid={`skill-card-linked-summary-${platformIcons.skillId}`}
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground",
+                      "inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground",
                       "group-hover/skill-card:hidden group-focus-within/skill-card:hidden",
                     )}
                   >
@@ -809,7 +809,7 @@ function SkillCardSummary({
   return (
     <div className="relative">
       {label && (
-        <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-[11px] font-medium leading-none text-primary/85">
+        <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-xs font-medium leading-none text-primary-text">
           {label}
         </span>
       )}
@@ -818,7 +818,7 @@ function SkillCardSummary({
         data-truncated={isTruncated ? "true" : "false"}
         title={text}
         className={cn(
-          "text-pretty break-words text-xs leading-relaxed text-muted-foreground/90",
+          "text-pretty break-words text-xs leading-relaxed text-muted-foreground",
           lineClamp === 3 ? "line-clamp-3" : "line-clamp-2",
           label && "inline",
         )}

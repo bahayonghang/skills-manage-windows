@@ -168,7 +168,7 @@ export function GitHubRepoImportPreviewWorkspace({
                   <div className="text-sm font-semibold">
                     {t("marketplace.githubImportSelectionTitle")}
                   </div>
-                  <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     {preview.skills.length}
                   </span>
                 </div>
@@ -186,7 +186,7 @@ export function GitHubRepoImportPreviewWorkspace({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-7 gap-1 rounded-md px-2 text-[11px]"
+                  className="h-7 gap-1 rounded-md px-2 text-ui-meta"
                   onClick={onSelectAll}
                   disabled={allSkillsSelected}
                 >
@@ -197,7 +197,7 @@ export function GitHubRepoImportPreviewWorkspace({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 gap-1 rounded-md px-2 text-[11px]"
+                  className="h-7 gap-1 rounded-md px-2 text-ui-meta"
                   onClick={onDeselectAll}
                   disabled={noSkillsSelected}
                 >
@@ -223,12 +223,12 @@ export function GitHubRepoImportPreviewWorkspace({
                 {section.label ? (
                   <div className="flex items-center justify-between gap-3 px-1 pt-1">
                     <div
-                      className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                      className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                       data-testid="github-import-skill-group-title"
                     >
                       {section.label}
                     </div>
-                    <span className="shrink-0 rounded-full border border-border/70 bg-background/80 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    <span className="shrink-0 rounded-full border border-border/70 bg-background/80 px-1.5 py-0.5 text-ui-micro font-medium text-muted-foreground">
                       {section.skills.length}
                     </span>
                   </div>
@@ -305,7 +305,7 @@ export function GitHubRepoImportPreviewWorkspace({
                                       variant={isCurrent ? "default" : "ghost"}
                                       size="sm"
                                       className={cn(
-                                        "h-7 rounded-md px-2.5 text-[11px]",
+                                        "h-7 rounded-md px-2.5 text-ui-meta",
                                         isCurrent
                                           ? "shadow-sm"
                                           : "text-muted-foreground hover:text-foreground",
@@ -441,12 +441,12 @@ function GitHubRepoImportPreviewDetailPane({
                 <div className="min-w-0 truncate text-base font-semibold">
                   {selectedPreviewSkill.skillName}
                 </div>
-                <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-ui-meta text-muted-foreground">
                   {selectedPreviewSkill.skillId}
                 </code>
                 <span
                   className={cn(
-                    "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                    "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
                     statusBadgeClassName,
                   )}
                 >
@@ -510,7 +510,7 @@ function GitHubRepoImportPreviewDetailPane({
                 </Button>
               </div>
             )}
-            <div className="mt-1 break-all text-[11px] text-muted-foreground">
+            <div className="mt-1 break-all text-ui-meta text-muted-foreground">
               {!isRenameEditing ? (
                 <>
                   {selectedPreviewSkill.sourcePath}
@@ -652,7 +652,7 @@ function GitHubRepoImportPreviewDetailPane({
           <div data-testid="github-import-detail-panel-overview">
             {browserMode ? (
               <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
-                <FileQuestion className="size-6 text-muted-foreground/70" />
+                <FileQuestion className="size-6 text-muted-foreground" />
                 <span>
                   {t("marketplace.githubImportMarkdownBrowserFallback")}
                 </span>
@@ -687,7 +687,7 @@ function GitHubRepoImportPreviewDetailPane({
               </div>
             ) : !markdownEntry.content?.trim() ? (
               <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
-                <FileQuestion className="size-6 text-muted-foreground/70" />
+                <FileQuestion className="size-6 text-muted-foreground" />
                 <span>{t("marketplace.githubImportMarkdownEmpty")}</span>
               </div>
             ) : (

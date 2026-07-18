@@ -41,7 +41,7 @@ function OriginNavItem({
       className={cn(
         "focus-ring flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
         // 子项文本与父项标题（px-2.5 + size-3.5 图标 + gap-2）左对齐
-        isChild && "pl-8 text-[13px]",
+        isChild && "pl-8 text-xs",
         isSelected
           ? "bg-primary/15 font-medium text-foreground"
           : "text-muted-foreground hover:bg-muted/40",
@@ -52,7 +52,7 @@ function OriginNavItem({
           aria-hidden="true"
           className={cn(
             "size-3.5 shrink-0",
-            isSelected ? "text-primary" : "text-muted-foreground/70",
+            isSelected ? "text-primary" : "text-muted-foreground",
           )}
         />
       )}

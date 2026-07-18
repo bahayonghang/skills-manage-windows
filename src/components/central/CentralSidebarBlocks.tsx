@@ -38,7 +38,7 @@ function RepoUpdateBadge({ count, t }: { count: number; t: TFunction }) {
     <span
       data-testid="repo-update-badge"
       title={t("central.v2.repoUpdateBadge", { count })}
-      className="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums font-medium text-warning-foreground"
+      className="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 font-mono text-ui-micro tabular-nums font-medium text-warning-foreground"
     >
       {count}
     </span>
@@ -74,7 +74,7 @@ export function RepositorySectionBlock({
 
   return (
     <div data-testid={`repo-source-${section.kind}`} className="space-y-1">
-      <div className="px-2 pt-2 text-[11px] font-medium tracking-normal text-muted-foreground/70">
+      <div className="px-2 pt-2 text-xs font-medium tracking-normal text-muted-foreground">
         {sectionLabel}
       </div>
       {section.groups.map((group) => {
@@ -192,7 +192,7 @@ function OwnerGroup({
         <Caret className="size-3 shrink-0" />
         <FolderGit2 className="size-3.5 shrink-0 text-info" />
         <span className="min-w-0 flex-1 truncate font-medium">{owner}</span>
-        <span className="shrink-0 rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
+        <span className="shrink-0 rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-ui-micro tabular-nums">
           {totalCount}
         </span>
       </button>
@@ -370,7 +370,7 @@ export function TagGroupBlock({
           style={group?.color ? { backgroundColor: group.color } : undefined}
         />
         <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
-        <span className="shrink-0 rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
+        <span className="shrink-0 rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-ui-micro tabular-nums">
           {totalCount}
         </span>
       </button>
@@ -429,7 +429,7 @@ export function SidebarTagRow({
         )
       }
       onClick={(e) => e.stopPropagation()}
-      className="ml-1 rounded-md border border-border/60 bg-background px-1 py-0.5 text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+      className="ml-1 rounded-md border border-border/60 bg-background px-1 py-0.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
     >
       <option value="">
         {t ? t("central.v2.tagGroupsAssignNone") : "None"}
@@ -450,7 +450,7 @@ export function SidebarTagRow({
       icon={
         <Tag
           className={
-            indentLevel === 1 ? "size-3 text-muted-foreground/70" : "size-3.5"
+            indentLevel === 1 ? "size-3 text-muted-foreground" : "size-3.5"
           }
         />
       }

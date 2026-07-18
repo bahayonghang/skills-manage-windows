@@ -332,7 +332,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           </div>
           <div className="mt-0.5 flex min-w-0 items-center gap-2">
             <p
-              className="truncate text-[11px] text-muted-foreground/70"
+              className="truncate text-ui-meta text-muted-foreground"
               title={centralSkillsDir}
             >
               {centralSkillsDir}
@@ -341,7 +341,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 shrink-0 gap-1 rounded-lg px-2 text-[11px] transition-[scale,background-color,color] active:scale-[0.96]"
+              className="h-7 shrink-0 gap-1 rounded-lg px-2 text-ui-meta transition-[scale,background-color,color] active:scale-[0.96]"
               disabled={centralStoreLocation.disabled}
               onClick={centralStoreLocation.onOpen}
               title={centralStoreLocation.disabledReason}
@@ -396,7 +396,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
             {updateAvailableSkillCount > 0 && (
               <span
                 data-testid="central-update-count-chip"
-                className="ml-1.5 inline-flex items-center rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning-foreground ring-1 ring-warning/30"
+                className="ml-1.5 inline-flex items-center rounded-full bg-warning/15 px-1.5 py-0.5 text-ui-micro font-semibold text-warning-foreground ring-1 ring-warning/30"
               >
                 +{updateAvailableSkillCount}
               </span>

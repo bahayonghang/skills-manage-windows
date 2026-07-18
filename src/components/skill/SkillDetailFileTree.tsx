@@ -214,7 +214,7 @@ export function SkillDetailFileTree({
 
   return (
     <section aria-label={t("detail.fileTreeTitle")} aria-busy={isLoading}>
-      <div className="mb-2 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {t("detail.fileTreeTitle")}
       </div>
       <div className={cn("min-w-0", isLoading && "opacity-70")}>

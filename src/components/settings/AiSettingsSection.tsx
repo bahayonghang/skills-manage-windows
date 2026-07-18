@@ -113,7 +113,7 @@ export function AiSettingsSection({
               </p>
             </div>
             <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${secretStorageTone(aiApiKeyState.storageState)}`}
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${secretStorageTone(aiApiKeyState.storageState)}`}
             >
               {aiApiKeyState.configured ||
               aiApiKeyState.storageState === "unreadable"
@@ -158,7 +158,7 @@ export function AiSettingsSection({
                     href={providerApiKeyUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary-text"
                     aria-label={t("settings.aiApiKeyGetLinkAria", {
                       provider: currentProviderLabel,
                     })}
@@ -457,7 +457,7 @@ function AiProtocolPicker({
             className={`rounded-md border px-3 py-2 text-left text-xs transition-colors ${protocol === item.id ? "bg-primary/15 border-primary text-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}
           >
             <span className="block font-medium">{t(item.labelKey)}</span>
-            <span className="mt-1 block text-[11px] text-muted-foreground">
+            <span className="mt-1 block text-ui-meta text-muted-foreground">
               {t(item.descriptionKey)}
             </span>
           </button>
@@ -635,7 +635,7 @@ function AiTestResultPanel({
             {t("settings.aiTestDetails")}
           </button>
           {showAiTestDetails && (
-            <pre className="mt-1 text-[11px] leading-4 font-mono text-muted-foreground whitespace-pre-wrap break-all bg-muted/30 rounded-md p-2 max-h-32 overflow-auto">
+            <pre className="mt-1 text-ui-meta leading-4 font-mono text-muted-foreground whitespace-pre-wrap break-all bg-muted/30 rounded-md p-2 max-h-32 overflow-auto">
               {aiTestResult.details}
             </pre>
           )}

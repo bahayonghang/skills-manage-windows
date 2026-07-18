@@ -57,7 +57,7 @@ function PageHeader({
                   {from.pageLabel}
                 </Link>
               </li>
-              <li aria-hidden="true" className="text-muted-foreground/60 shrink-0">
+              <li aria-hidden="true" className="text-muted-foreground shrink-0">
                 ›
               </li>
               <li className="min-w-0 truncate text-foreground font-medium">

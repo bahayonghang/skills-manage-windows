@@ -122,7 +122,7 @@ export function CentralGroupedSkillList({
               >
                 <Caret className="size-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">{group.label}</span>
-                <span className="shrink-0 rounded-md border border-border/80 bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+                <span className="shrink-0 rounded-md border border-border/80 bg-muted/60 px-1.5 py-0.5 font-mono text-ui-micro tabular-nums text-muted-foreground">
                   {group.skills.length}
                 </span>
               </button>

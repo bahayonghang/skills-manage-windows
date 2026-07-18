@@ -123,7 +123,7 @@ export function LogsListRow({
       />
       <span className="flex flex-col" title={iso}>
         <span className="text-xs text-foreground">{relative}</span>
-        <span className="font-mono text-[0.68rem] text-muted-foreground">
+        <span className="font-mono text-ui-meta text-muted-foreground">
           {absolute}
         </span>
       </span>
@@ -150,7 +150,7 @@ export function LogsListRow({
           {entry.summary}
         </span>
         {subjectLabel && (
-          <span className="block truncate text-[0.68rem] text-muted-foreground/80">
+          <span className="block truncate text-ui-meta text-muted-foreground">
             {subjectLabel}
           </span>
         )}

@@ -61,7 +61,7 @@ export function ToolbarMoreMenu({
               {activeTaskCount > 0 && (
                 <span
                   data-testid="central-toolbar-task-center-badge"
-                  className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary ring-1 ring-primary/30"
+                  className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary/15 px-1.5 text-ui-micro font-semibold text-primary ring-1 ring-primary/30"
                 >
                   {activeTaskCount}
                 </span>
@@ -144,7 +144,7 @@ export function ToolbarSortMenu({
           >
             <ArrowUpDown className="size-3.5" />
             <span className="text-xs">{currentFieldLabel}</span>
-            <span aria-hidden className="text-[10px] text-muted-foreground">
+            <span aria-hidden className="text-ui-micro text-muted-foreground">
               {sortDir === "asc" ? "↑" : "↓"}
             </span>
           </Button>
@@ -164,7 +164,7 @@ export function ToolbarSortMenu({
                     className={menuItemClassName(active && "bg-accent/60 text-accent-foreground")}
                   >
                     <span>{field.label}</span>
-                    <span className="ml-auto text-[11px] text-muted-foreground">{dir.label}</span>
+                    <span className="ml-auto text-ui-meta text-muted-foreground">{dir.label}</span>
                     {active && <Check className="size-3" aria-hidden />}
                   </MenuPrimitive.Item>
                 );
@@ -390,7 +390,7 @@ export function ToolbarViewMenu({
                     className={menuItemClassName(Boolean(installedPlatformId) && "bg-accent/60 text-accent-foreground")}
                   >
                     <span>{t("central.toolbarViewInstalledPlatform")}</span>
-                    <span aria-hidden className="ml-auto text-[10px] text-muted-foreground">▸</span>
+                    <span aria-hidden className="ml-auto text-ui-micro text-muted-foreground">▸</span>
                   </MenuPrimitive.SubmenuTrigger>
                   <MenuPrimitive.Portal>
                     <MenuPrimitive.Positioner align="start" sideOffset={4} className="z-50 outline-none">

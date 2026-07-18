@@ -85,7 +85,7 @@ function RuntimeLineRow({
       <div className="font-mono text-muted-foreground">#{line.lineNumber}</div>
       <div>
         <span
-          className={`inline-flex rounded-full border px-2 py-0.5 font-mono text-[0.68rem] uppercase ${runtimeLevelClass(
+          className={`inline-flex rounded-full border px-2 py-0.5 font-mono text-xs uppercase ${runtimeLevelClass(
             line.level
           )}`}
         >

@@ -88,7 +88,7 @@ export function SkillDetailPreview({
         </div>
       ) : activeTab === "raw" ? (
         <pre
-          className="whitespace-pre-wrap break-words p-6 font-mono text-[12px] leading-5 text-foreground/80"
+          className="whitespace-pre-wrap break-words p-6 font-mono text-ui-meta leading-5 text-foreground"
           role="tabpanel"
           aria-label={t("detail.rawSource")}
         >
@@ -155,7 +155,7 @@ export function SkillDetailPreview({
                       {t("detail.showDetails")}
                     </button>
                     {showErrorDetails && (
-                      <pre className="scrollbar-subtle mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted/30 p-2 font-mono text-[11px] leading-4 text-muted-foreground">
+                      <pre className="scrollbar-subtle mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted/30 p-2 font-mono text-ui-meta leading-4 text-muted-foreground">
                         {explanationErrorInfo?.details || explanationError}
                       </pre>
                     )}
@@ -189,7 +189,7 @@ export function SkillDetailPreview({
               </div>
             ) : (
               <div className="space-y-3 rounded-lg border border-dashed border-border p-8 text-center">
-                <Bot className="mx-auto size-8 text-muted-foreground/60" />
+                <Bot className="mx-auto size-8 text-muted-foreground" />
                 <div>
                   <p className="text-sm font-medium">
                     {t("detail.noExplanationTitle")}

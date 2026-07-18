@@ -25,5 +25,5 @@ export function menuItemClassName(extra?: string | false): string {
 }
 
 export function menuLabelClassName(): string {
-  return "px-2 pt-1 pb-0.5 text-[11px] uppercase tracking-wide text-muted-foreground/80";
+  return "px-2 pt-1 pb-0.5 text-xs uppercase tracking-wide text-muted-foreground";
 }

@@ -424,7 +424,7 @@ export function CollectionView() {
               <p className="text-sm font-medium text-muted-foreground">
                 {t("collection.noSkillsTitle")}
               </p>
-              <p className="text-xs text-muted-foreground/70">
+              <p className="text-xs text-muted-foreground">
                 {t("collection.noSkillsDesc")}
               </p>
             </div>

@@ -61,7 +61,7 @@ export function CentralTopFilters({
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border/60 bg-background/70 px-4 py-2 sm:px-6">
       {/* 来源段 ─────────────────────────────────────────────── */}
-      <span className="shrink-0 text-[11px] font-medium text-muted-foreground/70">
+      <span className="shrink-0 text-xs font-medium text-muted-foreground">
         {t("central.topFilterSourceLabel")}
       </span>
       <div className="flex shrink-0 items-center gap-1">
@@ -97,7 +97,7 @@ export function CentralTopFilters({
       {/* 标签段 ─────────────────────────────────────────────── */}
       {sortedTags.length > 0 && (
         <>
-          <span className="shrink-0 text-[11px] font-medium text-muted-foreground/70">
+          <span className="shrink-0 text-xs font-medium text-muted-foreground">
             {t("central.topFilterTagsLabel")}
           </span>
           <div className="scrollbar-subtle flex min-w-[140px] flex-1 flex-nowrap items-center gap-1 overflow-x-auto py-0.5">

@@ -154,7 +154,7 @@ export function TargetQuickSwitcher() {
                       <span
                         className={cn(
                           "truncate text-sm font-medium",
-                          isActive ? "text-foreground" : "text-foreground/90",
+                          isActive ? "text-foreground" : "text-foreground",
                         )}
                       >
                         {target.kind === "local"
@@ -162,12 +162,12 @@ export function TargetQuickSwitcher() {
                           : target.label}
                       </span>
                       {isActive && (
-                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
+                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
                           {t("targets.active")}
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    <div className="mt-0.5 truncate text-ui-meta text-muted-foreground">
                       {describeTarget(target)}
                     </div>
                   </div>
@@ -175,7 +175,7 @@ export function TargetQuickSwitcher() {
                     {isSwitching ? (
                       <Loader2 className="size-3.5 animate-spin text-primary" />
                     ) : !isActive ? (
-                      <span className="text-[11px] text-muted-foreground">
+                      <span className="text-ui-meta text-muted-foreground">
                         {t("targets.quickSwitch.useThis")}
                       </span>
                     ) : null}
@@ -185,13 +185,13 @@ export function TargetQuickSwitcher() {
             })}
 
             {targets.length <= 1 && (
-              <div className="px-3 py-2 text-[11px] text-muted-foreground">
+              <div className="px-3 py-2 text-ui-meta text-muted-foreground">
                 {t("targets.quickSwitch.empty")}
               </div>
             )}
 
             {error && (
-              <div className="px-3 pb-2 text-[11px] text-destructive">
+              <div className="px-3 pb-2 text-xs text-destructive">
                 {error}
               </div>
             )}

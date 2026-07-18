@@ -73,7 +73,7 @@ function NavItem({
             {count !== undefined && count > 0 && (
               <span
                 className={cn(
-                  "text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded-full shrink-0",
+                  "text-ui-micro font-mono tabular-nums px-1.5 py-0.5 rounded-full shrink-0",
                   isActive
                     ? "bg-sidebar-primary-foreground/25 text-sidebar-primary-foreground ring-1 ring-sidebar-primary-foreground/25"
                     : "bg-muted/60 text-muted-foreground",
@@ -303,7 +303,7 @@ export function Sidebar() {
             {lobsterAgents.length > 0 && (
               <>
                 {expanded ? (
-                  <div className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider px-2.5 pt-2 pb-1">
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-2.5 pt-2 pb-1">
                     {t("sidebar.categoryLobster")}
                   </div>
                 ) : (
@@ -329,7 +329,7 @@ export function Sidebar() {
             {codingAgents.length > 0 && (
               <>
                 {expanded ? (
-                  <div className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider px-2.5 pt-2 pb-1">
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-2.5 pt-2 pb-1">
                     {t("sidebar.categoryCoding")}
                   </div>
                 ) : (

@@ -85,7 +85,7 @@ function SyncFlowSteps() {
           key={step}
           className="rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
         >
-          <span className="mr-2 inline-grid size-5 place-items-center rounded-full border border-primary/30 bg-primary/10 text-[0.68rem] font-semibold text-primary">
+          <span className="mr-2 inline-grid size-5 place-items-center rounded-full border border-primary/30 bg-primary/10 text-xs font-semibold text-primary">
             {index + 1}
           </span>
           {step}

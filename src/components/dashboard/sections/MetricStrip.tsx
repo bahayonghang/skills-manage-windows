@@ -57,7 +57,7 @@ function MetricItem({
       >
         {value}
       </span>
-      <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="min-w-0 truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
     </button>

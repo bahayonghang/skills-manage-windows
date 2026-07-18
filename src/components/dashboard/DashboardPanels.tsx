@@ -97,7 +97,7 @@ export function StatusTile({
         {icon}
       </span>
       <div className="min-w-0">
-        <div className="text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {label}
         </div>
         <div className="mt-1 truncate text-sm font-semibold">{value}</div>
@@ -215,7 +215,7 @@ export function LogRow({
       <div className="flex shrink-0 items-center gap-2">
         <span
           className={cn(
-            "rounded-md border px-2 py-0.5 text-[0.68rem] font-medium",
+            "rounded-md border px-2 py-0.5 text-xs font-medium",
             logStatusClass(entry.status),
           )}
         >

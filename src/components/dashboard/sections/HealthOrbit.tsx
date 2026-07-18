@@ -61,7 +61,7 @@ function MiniStat({ label, value, testId }: MiniProps) {
       data-testid={testId}
       className="rounded-xl border border-border/65 bg-card/45 px-3 py-2.5 shadow-[0_0_0_1px_color-mix(in_oklch,var(--border)_54%,transparent)]"
     >
-      <div className="text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
       <div className="mt-1 font-display text-xl font-semibold tabular-nums">
@@ -138,7 +138,7 @@ export function HealthOrbit({
       <div className="relative z-10 flex h-full flex-col gap-4">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {t("dashboard.readiness.label")}
             </div>
             <div
@@ -151,7 +151,7 @@ export function HealthOrbit({
                 } as CSSProperties
               }
             >
-              <span className="font-display text-[3.35rem] font-semibold leading-none tabular-nums">
+              <span className="font-display text-display-score font-semibold leading-none tabular-nums">
                 {score}
               </span>
               <span className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -161,7 +161,7 @@ export function HealthOrbit({
           </div>
           <span
             className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-wide",
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide",
               STATUS_CLASS[status],
             )}
           >

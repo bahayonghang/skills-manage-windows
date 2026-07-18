@@ -156,7 +156,7 @@ function PlatformInstallStatusGroups({
 
     return (
       <div className="flex items-center gap-1">
-        <span className="w-12 shrink-0 text-[0.72rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        <span className="w-12 shrink-0 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
           {categoryLabel}
         </span>
         <div className="flex flex-wrap items-center gap-0.5">
@@ -214,7 +214,7 @@ function SourceMetadataSection({
       <SectionLabel>{t("detail.metadata")}</SectionLabel>
       <div className="space-y-2.5">
         <div className="space-y-0.5">
-          <div className="text-[0.72rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
             {t("common.platform")}
           </div>
           <div className="inline-flex items-center gap-1 break-all font-mono text-xs leading-relaxed text-foreground">
@@ -223,7 +223,7 @@ function SourceMetadataSection({
           </div>
         </div>
         <div className="space-y-0.5">
-          <div className="text-[0.72rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
             {t("common.project")}
           </div>
           <div className="inline-flex items-center gap-1 break-all font-mono text-xs leading-relaxed text-foreground">
@@ -232,7 +232,7 @@ function SourceMetadataSection({
           </div>
         </div>
         <div className="space-y-0.5">
-          <div className="text-[0.72rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
             {t("common.filePath")}
           </div>
           <button
@@ -570,7 +570,7 @@ export function SkillDetailSidebar({
                 {detail.tags.map((tag) => (
                   <span
                     key={tag.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[0.72rem] font-medium text-muted-foreground ring-1 ring-border/70"
+                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-border/70"
                     title={tag.description ?? tag.name}
                   >
                     <Tag className="size-2.5" />
@@ -676,13 +676,13 @@ export function SkillDetailSidebar({
                         >
                           {row.projectName}
                         </div>
-                        <div className="truncate text-[0.72rem] text-muted-foreground">
+                        <div className="truncate text-ui-meta text-muted-foreground">
                           {row.agentDisplayName}
                         </div>
                       </div>
                       <span
                         className={cn(
-                          "shrink-0 rounded-full px-1.5 py-0.5 text-[0.72rem] font-medium ring-1",
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ring-1",
                           row.linkType === "symlink"
                             ? "bg-success/10 text-success-foreground ring-success/20"
                             : "bg-warning/10 text-warning-foreground ring-warning/20"
@@ -718,7 +718,7 @@ export function SkillDetailSidebar({
                     {skillCollections.map((collection) => (
                       <span
                         key={collection.id}
-                        className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[0.72rem] font-medium text-primary-text ring-1 ring-primary/20"
+                        className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary-text ring-1 ring-primary/20"
                         title={collection.description ?? collection.name}
                       >
                         <Tag className="size-2.5" />

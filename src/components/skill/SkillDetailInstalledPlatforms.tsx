@@ -29,7 +29,7 @@ export function InstalledPlatformList({
       data-testid="detail-installed-platforms"
       className="mt-2 space-y-1.5 rounded-lg border border-border/60 bg-background/70 p-2"
     >
-      <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
         {t("detail.installedPlatforms")}
       </div>
       <ul className="space-y-1">
@@ -54,7 +54,7 @@ export function InstalledPlatformList({
                 <div className="truncate text-xs font-medium text-foreground">
                   {row.displayName}
                 </div>
-                <div className="truncate text-[11px] text-muted-foreground">
+                <div className="truncate text-ui-meta text-muted-foreground">
                   {row.linkType}
                 </div>
               </div>

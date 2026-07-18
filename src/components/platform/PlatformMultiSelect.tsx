@@ -168,7 +168,7 @@ export function PlatformMultiSelectGrid({
               >
                 <div className="truncate text-sm">{displayName}</div>
                 {isUniversalPlatformTarget(target) && (
-                  <div className="truncate text-[11px] text-muted-foreground">
+                  <div className="truncate text-ui-meta text-muted-foreground">
                     {getPlatformTargetMemberNames(target).join(", ")}
                   </div>
                 )}
