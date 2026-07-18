@@ -369,6 +369,9 @@ pub fn run() {
             commands::github_import::import_github_repo_skills,
             commands::github_import::fetch_github_skill_markdown,
             commands::github_import::discard_github_repo_preview_workspace,
+            // Local archive (ZIP) import
+            commands::local_archive_import::preview_local_skill_archive,
+            commands::local_archive_import::import_local_skill_archive,
             // Projects (项目级 skill 管理)
             commands::projects::pick_project_folder,
             commands::projects::add_project,

@@ -12,6 +12,7 @@ pub mod central_store_location;
 pub mod central_updates;
 pub mod github_import;
 pub mod installation;
+pub mod local_archive_import;
 pub mod local_remote_sync;
 pub mod marketplace;
 pub mod obsidian;

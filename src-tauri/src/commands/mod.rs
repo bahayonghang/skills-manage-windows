@@ -7,6 +7,7 @@ pub mod central_updates;
 pub mod collections;
 pub mod github_import;
 pub mod linker;
+pub mod local_archive_import;
 pub mod local_remote_sync;
 pub mod logs;
 pub mod marketplace;

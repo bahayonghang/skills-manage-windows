@@ -21,9 +21,21 @@ pub const DEFAULT_COPY_ENTRIES: usize = 20_000;
 #[derive(Debug, thiserror::Error)]
 #[error("{label} exceeds the resource budget ({actual} bytes > {limit} bytes).")]
 pub struct BudgetExceeded {
-    label: String,
-    actual: u64,
-    limit: u64,
+    pub(crate) label: String,
+    pub(crate) actual: u64,
+    pub(crate) limit: u64,
+}
+
+impl BudgetExceeded {
+    /// Construct a `BudgetExceeded` for callers that need to build the error
+    /// directly (e.g. aggregate checks in local archive import).
+    pub fn new(label: impl Into<String>, actual: u64, limit: u64) -> Self {
+        Self {
+            label: label.into(),
+            actual,
+            limit,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

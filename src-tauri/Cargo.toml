@@ -46,6 +46,9 @@ urlencoding = "2"
 tempfile = "3"
 fs2 = "0.4"
 clap = { version = "4", features = ["derive"] }
+# Local archive (ZIP) skill import: pure-Rust reader, no shell extraction.
+# License: MIT OR Apache-2.0. Used by `services::local_archive_import`.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
