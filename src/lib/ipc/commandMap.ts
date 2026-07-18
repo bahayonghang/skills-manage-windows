@@ -74,6 +74,7 @@ export const IPC_COMMANDS = {
   list_platform_paths: command<undefined, PlatformPathMap>(),
   scan_all_skills: command<undefined, ScanResult>(),
   get_skill_counts_summary: command<undefined, SkillCountsSummary>(),
+  mark_import_intent_frontend_ready: command<undefined, void>(),
   set_agent_enabled: command<
     { agentId: string; isEnabled: boolean },
     AgentWithStatus

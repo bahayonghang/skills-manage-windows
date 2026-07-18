@@ -688,6 +688,13 @@
     "deletedFound": "Found {{skillCount}} removed skill(s); {{rowCount}} platform copy/copies can be cleaned",
     "deletedScanError": "Failed to scan removed skills: {{error}}"
   },
+  "importIntent": {
+    "pendingTitle": "Pending GitHub import ({{count}})",
+    "closeCurrentFirst": "Close the current import wizard before opening the next request.",
+    "pendingDescription": "Open the next request or discard it without changing your current import.",
+    "openPending": "Open next",
+    "discard": "Discard"
+  },
   "central": {
     "title": "Central Skills",
     "scope": "Private central library",

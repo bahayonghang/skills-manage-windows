@@ -20,6 +20,7 @@ import {
   useMarketplaceViewModel,
 } from "@/pages/marketplaceViewModel";
 import type { GitHubSkillImportSelection, SkillWithLinks } from "@/types";
+import { useImportIntentBindings } from "@/stores/importIntentStore";
 
 export function MarketplaceView() {
   const { t } = useTranslation();
@@ -71,8 +72,7 @@ export function MarketplaceView() {
   const [previewStatus, setPreviewStatus] = useState<MarketplacePreviewStatus>({
     kind: "idle",
   });
-  const [isGitHubImportOpen, setIsGitHubImportOpen] = useState(false);
-  const [githubRepoUrl, setGitHubRepoUrl] = useState("");
+  const { githubRepoUrl, isGitHubImportOpen, setGithubRepoUrl, setIsGitHubImportOpen } = useImportIntentBindings();
   const detailTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -279,7 +279,7 @@ export function MarketplaceView() {
 
   function handleResetGitHubImport() {
     resetGitHubImport();
-    setGitHubRepoUrl("");
+    setGithubRepoUrl("");
   }
 
   return (
@@ -316,7 +316,7 @@ export function MarketplaceView() {
       selectedTag={selectedTag}
       setActiveTab={setActiveTab}
       setDetailSkill={setDetailSkill}
-      setGithubRepoUrl={setGitHubRepoUrl}
+      setGithubRepoUrl={setGithubRepoUrl}
       setIsGitHubImportOpen={setIsGitHubImportOpen}
       setPublisherSearch={setPublisherSearch}
       setRecommendedSearch={setRecommendedSearch}

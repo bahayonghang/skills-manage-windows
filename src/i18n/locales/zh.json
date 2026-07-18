@@ -688,6 +688,13 @@
     "deletedFound": "发现 {{skillCount}} 个已删除技能，可清理 {{rowCount}} 个平台副本",
     "deletedScanError": "检测已删除技能失败：{{error}}"
   },
+  "importIntent": {
+    "pendingTitle": "待处理 GitHub 导入（{{count}}）",
+    "closeCurrentFirst": "请先关闭当前导入向导，再打开下一条请求。",
+    "pendingDescription": "可以打开下一条请求，或在不修改当前导入的情况下将其丢弃。",
+    "openPending": "打开下一条",
+    "discard": "丢弃"
+  },
   "central": {
     "title": "中央技能库",
     "scope": "私有中央库",

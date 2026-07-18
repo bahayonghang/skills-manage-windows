@@ -12,3 +12,4 @@
 - [语义字号与 no-growth 排版契约](./typography-tokens.md)
 - [Settings 页面结构约定](./settings-structure.md)
 - [Skill Usage 状态与交互契约](./skill-usage-state.md)
+- [Import Intent Controller Contract](./import-intent-controller.md)
