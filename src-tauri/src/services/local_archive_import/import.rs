@@ -161,17 +161,19 @@ pub(crate) async fn import_local_skill_archive_impl(
                 "target directory already exists for skill id '{final_skill_id}'"
             )));
         }
-        existing_backup = Some(match backup_existing_skill_dir(&central_root, &target_dir) {
-            Ok(backup) => backup,
-            Err(error) => {
-                discard_staging_dir(&staging_path).await;
-                return Err(error);
-            }
-        });
+        existing_backup = Some(
+            match backup_existing_skill_dir(&central_root, &target_dir) {
+                Ok(backup) => backup,
+                Err(error) => {
+                    discard_staging_dir(&staging_path).await;
+                    return Err(error);
+                }
+            },
+        );
     }
 
     if let Err(error) = std::fs::rename(&staging_path, &target_dir) {
-        restore_or_cleanup_target_dir(&target_dir, existing_backup.take()).await;
+        restore_or_cleanup_target_dir(&target_dir, existing_backup.take()).await?;
         discard_staging_dir(&staging_path).await;
         return Err(LocalArchiveImportError::Io(error));
     }
@@ -192,7 +194,7 @@ pub(crate) async fn import_local_skill_archive_impl(
         fs_updated_at: None,
     };
     if let Err(error) = db::upsert_skill(pool, &db_skill).await {
-        restore_or_cleanup_target_dir(&target_dir, existing_backup.take()).await;
+        restore_or_cleanup_target_dir(&target_dir, existing_backup.take()).await?;
         return Err(LocalArchiveImportError::Db(error));
     }
 
@@ -258,7 +260,9 @@ fn sanitize_skill_id(raw: &str) -> Result<String, LocalArchiveImportError> {
     }
     let sanitized = sanitized.trim_matches('-').to_string();
     if sanitized.is_empty() {
-        return Err(LocalArchiveImportError::InvalidSkillIdentifier(raw.to_string()));
+        return Err(LocalArchiveImportError::InvalidSkillIdentifier(
+            raw.to_string(),
+        ));
     }
     Ok(sanitized)
 }
@@ -278,77 +282,167 @@ async fn stage_archive(
     let skill_md_owned = skill_md_relative.to_string();
     crate::fs_util::run_blocking_fs_with(
         "stage local skill archive",
-        move || stage_archive_blocking(&archive_bytes_owned, &files_owned, &staging_path_owned, &root_owned, &skill_md_owned, budget),
+        move || {
+            stage_archive_blocking(
+                &archive_bytes_owned,
+                &files_owned,
+                &staging_path_owned,
+                &root_owned,
+                &skill_md_owned,
+                budget,
+            )
+        },
         task_join,
-    ).await
+    )
+    .await
 }
 
-fn stage_archive_blocking(archive_bytes: &[u8], files: &[CandidateFile], staging_path: &Path, root_directory: &str, skill_md_relative: &str, budget: ResourceBudget) -> Result<(), LocalArchiveImportError> {
+fn stage_archive_blocking(
+    archive_bytes: &[u8],
+    files: &[CandidateFile],
+    staging_path: &Path,
+    root_directory: &str,
+    skill_md_relative: &str,
+    budget: ResourceBudget,
+) -> Result<(), LocalArchiveImportError> {
     use std::io::Read;
     let cursor = std::io::Cursor::new(archive_bytes.to_vec());
-    let mut zip = zip::ZipArchive::new(cursor).map_err(|e| LocalArchiveImportError::ArchiveReadFailed(format!("reopen zip: {e}")))?;
-    let mut entry_lookup: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut zip = zip::ZipArchive::new(cursor)
+        .map_err(|e| LocalArchiveImportError::ArchiveReadFailed(format!("reopen zip: {e}")))?;
+    let mut entry_lookup: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for index in 0..zip.len() {
-        let entry = zip.by_index_raw(index).map_err(|e| LocalArchiveImportError::ArchiveReadFailed(format!("entry {index}: {e}")))?;
+        let entry = zip.by_index_raw(index).map_err(|e| {
+            LocalArchiveImportError::ArchiveReadFailed(format!("entry {index}: {e}"))
+        })?;
         entry_lookup.insert(entry.name().to_string(), index);
     }
-    let prefix = if root_directory.is_empty() { String::new() } else { format!("{}/", root_directory) };
+    let prefix = if root_directory.is_empty() {
+        String::new()
+    } else {
+        format!("{}/", root_directory)
+    };
     for file in files {
         let raw_name = format!("{}{}", prefix, file.path);
-        let entry_index = *entry_lookup.get(&raw_name).ok_or_else(|| LocalArchiveImportError::Internal(format!("staging: entry for '{}' not found", file.path)))?;
-        let mut entry = zip.by_index(entry_index).map_err(|e| LocalArchiveImportError::ArchiveReadFailed(format!("open entry: {e}")))?;
-        if entry.is_dir() { continue; }
+        let entry_index = *entry_lookup.get(&raw_name).ok_or_else(|| {
+            LocalArchiveImportError::Internal(format!(
+                "staging: entry for '{}' not found",
+                file.path
+            ))
+        })?;
+        let mut entry = zip
+            .by_index(entry_index)
+            .map_err(|e| LocalArchiveImportError::ArchiveReadFailed(format!("open entry: {e}")))?;
+        if entry.is_dir() {
+            continue;
+        }
         let dest = staging_path.join(&file.path);
-        if let Some(parent) = dest.parent() { std::fs::create_dir_all(parent).map_err(LocalArchiveImportError::Io)?; }
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent).map_err(LocalArchiveImportError::Io)?;
+        }
         let mut buf = Vec::with_capacity(entry.size() as usize);
-        entry.read_to_end(&mut buf).map_err(|e| LocalArchiveImportError::ArchiveReadFailed(format!("read '{}': {e}", file.path)))?;
-        budget.reject_file_read_size(&file.path, buf.len() as u64).map_err(LocalArchiveImportError::BudgetExceeded)?;
-        std::fs::write(&dest, &buf).map_err(|e| LocalArchiveImportError::Internal(format!("write '{}': {e}", file.path)))?;
+        entry.read_to_end(&mut buf).map_err(|e| {
+            LocalArchiveImportError::ArchiveReadFailed(format!("read '{}': {e}", file.path))
+        })?;
+        budget
+            .reject_file_read_size(&file.path, buf.len() as u64)
+            .map_err(LocalArchiveImportError::BudgetExceeded)?;
+        std::fs::write(&dest, &buf).map_err(|e| {
+            LocalArchiveImportError::Internal(format!("write '{}': {e}", file.path))
+        })?;
     }
     let skill_md_path = staging_path.join(skill_md_relative);
-    let content = std::fs::read_to_string(&skill_md_path).map_err(|e| LocalArchiveImportError::SkillFrontmatterMissing(format!("staged SKILL.md: {e}")))?;
+    let content = std::fs::read_to_string(&skill_md_path).map_err(|e| {
+        LocalArchiveImportError::SkillFrontmatterMissing(format!("staged SKILL.md: {e}"))
+    })?;
     if crate::services::scanner::extract_frontmatter_block(&content).is_none() {
-        return Err(LocalArchiveImportError::SkillFrontmatterMissing("no frontmatter".to_string()));
+        return Err(LocalArchiveImportError::SkillFrontmatterMissing(
+            "no frontmatter".to_string(),
+        ));
     }
     Ok(())
 }
 
 async fn central_skills_root(pool: &DbPool) -> Result<PathBuf, LocalArchiveImportError> {
-    let central = db::get_agent_by_id(pool, "central").await?.ok_or_else(|| LocalArchiveImportError::Internal("central agent missing".to_string()))?;
+    let central = db::get_agent_by_id(pool, "central")
+        .await?
+        .ok_or_else(|| LocalArchiveImportError::Internal("central agent missing".to_string()))?;
     Ok(PathBuf::from(central.global_skills_dir))
 }
 
 fn create_unique_work_dir(parent: &Path, prefix: &str) -> Result<PathBuf, LocalArchiveImportError> {
     let path = parent.join(format!("{prefix}{}", Uuid::new_v4()));
-    std::fs::create_dir_all(&path).map_err(|e| LocalArchiveImportError::Internal(format!("staging dir: {e}")))?;
+    std::fs::create_dir_all(&path)
+        .map_err(|e| LocalArchiveImportError::Internal(format!("staging dir: {e}")))?;
     Ok(path)
 }
 
-fn backup_existing_skill_dir(central_root: &Path, target_dir: &Path) -> Result<PathBuf, LocalArchiveImportError> {
+fn backup_existing_skill_dir(
+    central_root: &Path,
+    target_dir: &Path,
+) -> Result<PathBuf, LocalArchiveImportError> {
     let backup = central_root.join(format!(".skillport-backup-{}", Uuid::new_v4()));
-    std::fs::rename(target_dir, &backup).map_err(|e| LocalArchiveImportError::Internal(format!("backup: {e}")))?;
+    std::fs::rename(target_dir, &backup)
+        .map_err(|e| LocalArchiveImportError::Internal(format!("backup: {e}")))?;
     Ok(backup)
 }
 
 async fn discard_staging_dir(staging_path: &Path) {
     let p = staging_path.to_path_buf();
-    let _ = crate::fs_util::run_blocking_fs_with("archive staging cleanup", move || { let _ = std::fs::remove_dir_all(&p); Ok::<(), LocalArchiveImportError>(()) }, task_join).await;
+    let _ = crate::fs_util::run_blocking_fs_with(
+        "archive staging cleanup",
+        move || {
+            let _ = std::fs::remove_dir_all(&p);
+            Ok::<(), LocalArchiveImportError>(())
+        },
+        task_join,
+    )
+    .await;
 }
 
-async fn restore_or_cleanup_target_dir(target_dir: &Path, backup: Option<PathBuf>) {
+async fn restore_or_cleanup_target_dir(
+    target_dir: &Path,
+    backup: Option<PathBuf>,
+) -> Result<(), LocalArchiveImportError> {
     let t = target_dir.to_path_buf();
-    let _ = crate::fs_util::run_blocking_fs_with("archive target restore", move || {
-        if t.exists() {
-            let _ = std::fs::remove_dir_all(&t);
-        } else if let Some(b) = backup {
-            let _ = std::fs::rename(&b, &t);
-        }
-        Ok::<(), LocalArchiveImportError>(())
-    }, task_join).await;
+    crate::fs_util::run_blocking_fs_with(
+        "archive target restore",
+        move || {
+            if t.exists() {
+                std::fs::remove_dir_all(&t).map_err(|source| {
+                    LocalArchiveImportError::RollbackFailed {
+                        stage: "remove replacement target",
+                        source,
+                    }
+                })?;
+            }
+            if let Some(b) = backup {
+                std::fs::rename(&b, &t).map_err(|source| {
+                    LocalArchiveImportError::RollbackFailed {
+                        stage: "restore previous target",
+                        source,
+                    }
+                })?;
+            }
+            Ok(())
+        },
+        task_join,
+    )
+    .await
 }
 
 async fn drop_existing_backup(backup: Option<PathBuf>) {
-    let _ = crate::fs_util::run_blocking_fs_with("archive backup cleanup", move || { if let Some(b) = backup { let _ = std::fs::remove_dir_all(&b); } Ok::<(), LocalArchiveImportError>(()) }, task_join).await;
+    let _ = crate::fs_util::run_blocking_fs_with(
+        "archive backup cleanup",
+        move || {
+            if let Some(b) = backup {
+                let _ = std::fs::remove_dir_all(&b);
+            }
+            Ok::<(), LocalArchiveImportError>(())
+        },
+        task_join,
+    )
+    .await;
 }
 
 #[cfg(test)]

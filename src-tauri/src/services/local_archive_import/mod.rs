@@ -14,7 +14,8 @@
 //! - [`import`] re-verifies the fingerprint, stages the archive under a
 //!   unique work directory, acquires the Central mutation guard, backs up
 //!   the existing skill on overwrite, atomically swaps the target
-//!   directory, updates the database, and records a redacted Operation Log.
+//!   directory, and updates the database. The command boundary records the
+//!   redacted Operation Log after the typed service result is known.
 //!
 //! Invariants enforced across the module:
 //! - No Central, staging, database, or Operation Log mutation occurs

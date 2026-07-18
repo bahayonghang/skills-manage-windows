@@ -13,8 +13,9 @@ use std::path::Path;
 /// Local skill archive import error envelope.
 ///
 /// The `code` string is stable for each variant and is what the frontend IPC
-/// layer surfaces; messages may wrap lower-level causes but never include
-/// absolute user-directory paths.
+/// layer surfaces. Internal Display messages may retain diagnostic context;
+/// commands must use [`LocalArchiveImportError::to_ipc_error`] so those
+/// details never cross IPC or enter user-visible text.
 #[derive(Debug, thiserror::Error)]
 pub enum LocalArchiveImportError {
     #[error("archive_not_found: {0}")]
@@ -59,6 +60,13 @@ pub enum LocalArchiveImportError {
     #[error("central_mutation: {0}")]
     CentralMutation(#[from] crate::services::central_mutation::CentralMutationError),
 
+    #[error("rollback_failed: {stage}: {source}")]
+    RollbackFailed {
+        stage: &'static str,
+        #[source]
+        source: io::Error,
+    },
+
     #[error("remote_target_unsupported: local ZIP import is disabled for active remote target")]
     RemoteTargetUnsupported,
 
@@ -85,8 +93,39 @@ impl LocalArchiveImportError {
             Self::Io(_) => "io",
             Self::Db(_) => "db",
             Self::CentralMutation(_) => "central_mutation",
+            Self::RollbackFailed { .. } => "rollback_failed",
             Self::RemoteTargetUnsupported => "remote_target_unsupported",
             Self::Internal(_) => "internal",
+        }
+    }
+
+    /// Serialize a locale-neutral IPC error without attacker-controlled or
+    /// machine-local details. The frontend maps the code through i18n.
+    pub fn to_ipc_error(&self) -> String {
+        format!("local_archive.{}:{}", self.code(), self.safe_summary())
+    }
+
+    fn safe_summary(&self) -> &'static str {
+        match self {
+            Self::ArchiveNotFound(_) => "The selected archive was not found.",
+            Self::ArchiveReadFailed(_) => "The selected archive could not be read.",
+            Self::ArchiveChangedSincePreview { .. } => {
+                "The archive changed after it was previewed."
+            }
+            Self::AmbiguousArchiveLayout(_) => "The archive layout is ambiguous.",
+            Self::NoSkillManifest(_) => "The archive does not contain an importable skill.",
+            Self::InvalidArchiveEntry { .. } => "The archive contains an unsafe path.",
+            Self::UnsupportedArchiveEntry { .. } => "The archive contains an unsupported entry.",
+            Self::BudgetExceeded(_) => "The archive exceeds the import resource limits.",
+            Self::PathConflict(_) => "The selected destination conflicts with existing data.",
+            Self::SkillFrontmatterMissing(_) => "The skill manifest metadata is invalid.",
+            Self::InvalidSkillIdentifier(_) => "The requested skill identifier is invalid.",
+            Self::Io(_) => "A filesystem operation failed.",
+            Self::Db(_) => "The skill database could not be updated.",
+            Self::CentralMutation(_) => "Central is busy with another change.",
+            Self::RollbackFailed { .. } => "The previous skill could not be restored.",
+            Self::RemoteTargetUnsupported => "Local ZIP import is unavailable for remote targets.",
+            Self::Internal(_) => "The local archive import failed.",
         }
     }
 }

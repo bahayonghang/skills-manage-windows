@@ -105,20 +105,31 @@ pub(crate) fn build_inventory(
     budget: ResourceBudget,
 ) -> Result<ZipInventory, LocalArchiveImportError> {
     let cursor = std::io::Cursor::new(archive_bytes);
-    let mut zip = ZipArchive::new(cursor)
-        .map_err(|e| LocalArchiveImportError::ArchiveReadFailed(format!("open zip: {e}")))?;
+    let mut zip = ZipArchive::new(cursor).map_err(|error| match error {
+        zip::result::ZipError::UnsupportedArchive(reason) => {
+            LocalArchiveImportError::UnsupportedArchiveEntry {
+                path: "archive".to_string(),
+                reason: reason.to_string(),
+            }
+        }
+        other => LocalArchiveImportError::ArchiveReadFailed(format!("open zip: {other}")),
+    })?;
 
     let total_entries = zip.len();
     if total_entries > budget.archive_files {
-        return Err(LocalArchiveImportError::BudgetExceeded(BudgetExceeded::new(
-            "ZIP archive entries",
-            total_entries as u64,
-            budget.archive_files as u64,
-        )));
+        return Err(LocalArchiveImportError::BudgetExceeded(
+            BudgetExceeded::new(
+                "ZIP archive entries",
+                total_entries as u64,
+                budget.archive_files as u64,
+            ),
+        ));
     }
 
     let archive_byte_len = archive_bytes.len() as u64;
-    budget.reject_archive_size(archive_byte_len).map_err(map_budget)?;
+    budget
+        .reject_archive_size(archive_byte_len)
+        .map_err(map_budget)?;
 
     let mut entries: Vec<ZipInventoryEntry> = Vec::with_capacity(total_entries);
     let mut total_expanded_bytes: u64 = 0;
@@ -129,9 +140,15 @@ pub(crate) fn build_inventory(
     let mut seen_dirs_lower: HashSet<String> = HashSet::new();
 
     for index in 0..total_entries {
-        let entry = zip
-            .by_index_raw(index)
-            .map_err(|e| LocalArchiveImportError::ArchiveReadFailed(format!("entry {index}: {e}")))?;
+        let entry = zip.by_index_raw(index).map_err(|error| match error {
+            zip::result::ZipError::UnsupportedArchive(reason) => {
+                LocalArchiveImportError::UnsupportedArchiveEntry {
+                    path: format!("entry #{index}"),
+                    reason: reason.to_string(),
+                }
+            }
+            other => LocalArchiveImportError::ArchiveReadFailed(format!("entry {index}: {other}")),
+        })?;
 
         let raw_name = entry.name().to_string();
         let is_dir = entry.is_dir();
@@ -204,8 +221,12 @@ pub(crate) fn build_inventory(
         let compressed_len = entry.compressed_size();
         total_compressed = total_compressed.saturating_add(compressed_len);
 
-        budget.reject_archive_entry_size(&normalized, byte_len).map_err(map_budget)?;
-        budget.reject_file_read_size(&normalized, byte_len).map_err(map_budget)?;
+        budget
+            .reject_archive_entry_size(&normalized, byte_len)
+            .map_err(map_budget)?;
+        budget
+            .reject_file_read_size(&normalized, byte_len)
+            .map_err(map_budget)?;
 
         total_expanded_bytes = total_expanded_bytes.saturating_add(byte_len);
         if total_expanded_bytes > budget.archive_expanded_bytes {
@@ -389,10 +410,45 @@ mod tests {
         let mut buf = std::io::Cursor::new(Vec::new());
         let mut writer = ZipWriter::new(&mut buf);
         for name in entries {
-            writer.add_directory::<&str, ()>(*name, Default::default()).unwrap();
+            writer
+                .add_directory::<&str, ()>(*name, Default::default())
+                .unwrap();
         }
         writer.finish().unwrap();
         buf.into_inner()
+    }
+
+    fn make_zip_with_options(
+        name: &str,
+        content: &[u8],
+        options: zip::write::SimpleFileOptions,
+    ) -> Vec<u8> {
+        let mut buf = std::io::Cursor::new(Vec::new());
+        let mut writer = ZipWriter::new(&mut buf);
+        writer.start_file(name, options).unwrap();
+        writer.write_all(content).unwrap();
+        writer.finish().unwrap();
+        buf.into_inner()
+    }
+
+    fn mutate_header_u16(bytes: &mut [u8], signature: [u8; 4], offset: usize, value: u16) {
+        let mut index = 0;
+        while index + offset + 2 <= bytes.len() {
+            if bytes[index..].starts_with(&signature) {
+                bytes[index + offset..index + offset + 2].copy_from_slice(&value.to_le_bytes());
+            }
+            index += 1;
+        }
+    }
+
+    fn mutate_header_u32(bytes: &mut [u8], signature: [u8; 4], offset: usize, value: u32) {
+        let mut index = 0;
+        while index + offset + 4 <= bytes.len() {
+            if bytes[index..].starts_with(&signature) {
+                bytes[index + offset..index + offset + 4].copy_from_slice(&value.to_le_bytes());
+            }
+            index += 1;
+        }
     }
 
     #[test]
@@ -401,7 +457,108 @@ mod tests {
         let inv = build_inventory(&bytes, ResourceBudget::default_skill()).unwrap();
         assert_eq!(inv.entries.len(), 1);
         assert!(inv.entries[0].is_skill_md);
-        assert_eq!(inv.total_expanded_bytes, b"---\nname: my-skill\n---\nbody".len() as u64);
+        assert_eq!(
+            inv.total_expanded_bytes,
+            b"---\nname: my-skill\n---\nbody".len() as u64
+        );
+    }
+
+    #[test]
+    fn accepts_explicit_directory_entries() {
+        let bytes = make_dir_zip(&["references/"]);
+        let inv = build_inventory(&bytes, ResourceBudget::default_skill()).unwrap();
+        assert!(inv.entries.is_empty());
+    }
+
+    #[test]
+    fn rejects_symlink_entry() {
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        let mut bytes = make_zip_with_options("linked-skill", b"SKILL.md", options);
+        let central_header = [0x50, 0x4b, 0x01, 0x02];
+        mutate_header_u16(&mut bytes, central_header, 4, 0x0314);
+        mutate_header_u32(&mut bytes, central_header, 38, 0o120777_u32 << 16);
+        let err = build_inventory(&bytes, ResourceBudget::default_skill()).unwrap_err();
+        assert_eq!(err.code(), "unsupported_archive_entry");
+    }
+
+    #[test]
+    fn rejects_encrypted_entry() {
+        let mut bytes = make_zip(&[("SKILL.md", b"---\nname: x\n---\n")]);
+        mutate_header_u16(&mut bytes, [0x50, 0x4b, 0x03, 0x04], 6, 1);
+        mutate_header_u16(&mut bytes, [0x50, 0x4b, 0x01, 0x02], 8, 1);
+        let err = build_inventory(&bytes, ResourceBudget::default_skill()).unwrap_err();
+        assert_eq!(err.code(), "unsupported_archive_entry");
+    }
+
+    #[test]
+    fn rejects_unsupported_compression_method() {
+        let mut bytes = make_zip(&[("SKILL.md", b"---\nname: x\n---\n")]);
+        mutate_header_u16(&mut bytes, [0x50, 0x4b, 0x03, 0x04], 8, 99);
+        mutate_header_u16(&mut bytes, [0x50, 0x4b, 0x01, 0x02], 10, 99);
+        let err = build_inventory(&bytes, ResourceBudget::default_skill()).unwrap_err();
+        assert!(
+            matches!(
+                err.code(),
+                "unsupported_archive_entry" | "archive_read_failed"
+            ),
+            "unexpected error: {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_archive_byte_budget() {
+        let bytes = make_zip(&[("SKILL.md", b"---\nname: x\n---\n")]);
+        let mut budget = ResourceBudget::default_skill();
+        budget.archive_bytes = bytes.len() as u64 - 1;
+        let err = build_inventory(&bytes, budget).unwrap_err();
+        assert_eq!(err.code(), "budget_exceeded");
+    }
+
+    #[test]
+    fn rejects_archive_file_count_budget() {
+        let bytes = make_zip(&[("SKILL.md", b"---\nname: x\n---\n"), ("README.md", b"x")]);
+        let mut budget = ResourceBudget::default_skill();
+        budget.archive_files = 1;
+        let err = build_inventory(&bytes, budget).unwrap_err();
+        assert_eq!(err.code(), "budget_exceeded");
+    }
+
+    #[test]
+    fn rejects_entry_and_file_read_budgets() {
+        let bytes = make_zip(&[("SKILL.md", &[b'x'; 64])]);
+        let mut entry_budget = ResourceBudget::default_skill();
+        entry_budget.archive_entry_bytes = 63;
+        assert_eq!(
+            build_inventory(&bytes, entry_budget).unwrap_err().code(),
+            "budget_exceeded"
+        );
+
+        let mut file_budget = ResourceBudget::default_skill();
+        file_budget.file_bytes = 63;
+        assert_eq!(
+            build_inventory(&bytes, file_budget).unwrap_err().code(),
+            "budget_exceeded"
+        );
+    }
+
+    #[test]
+    fn rejects_expanded_byte_budget() {
+        let bytes = make_zip(&[("SKILL.md", &[b'x'; 64])]);
+        let mut budget = ResourceBudget::default_skill();
+        budget.archive_expanded_bytes = 63;
+        let err = build_inventory(&bytes, budget).unwrap_err();
+        assert_eq!(err.code(), "budget_exceeded");
+    }
+
+    #[test]
+    fn rejects_excessive_compression_ratio() {
+        let content = vec![0_u8; 512 * 1024];
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        let bytes = make_zip_with_options("SKILL.md", &content, options);
+        let err = build_inventory(&bytes, ResourceBudget::default_skill()).unwrap_err();
+        assert_eq!(err.code(), "budget_exceeded");
     }
 
     #[test]
@@ -454,7 +611,9 @@ mod tests {
         // A file entry named "a" collides with directory "a/".
         let mut buf = std::io::Cursor::new(Vec::new());
         let mut writer = ZipWriter::new(&mut buf);
-        writer.add_directory::<&str, ()>("a/", Default::default()).unwrap();
+        writer
+            .add_directory::<&str, ()>("a/", Default::default())
+            .unwrap();
         let opts = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Stored);
         writer.start_file("a", opts).unwrap();
