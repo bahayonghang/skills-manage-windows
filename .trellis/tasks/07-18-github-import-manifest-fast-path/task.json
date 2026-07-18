@@ -3,7 +3,7 @@
   "name": "github-import-manifest-fast-path",
   "title": "GitHub 导入清单快路径与性能基线",
   "description": "为 GitHub 导入增加基于 tree manifest 的候选发现与选中子树下载快路径，保留 archive 回退和现有安全契约，并建立可复现性能基线。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

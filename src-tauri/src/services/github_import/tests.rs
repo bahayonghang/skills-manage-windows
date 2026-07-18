@@ -2690,4 +2690,290 @@ metadata:
             .iter()
             .any(|request| request.contains("GET /mirror")));
     }
+
+    // ── Tree manifest fast-path parser (Commit 1 of task
+    // `07-18-github-import-manifest-fast-path`). Parity/fallback tests that
+    // require mock HTTP (F2-F8) land in Commit 2 with the dispatcher; these
+    // cover the pure parser surface so the acquisition-layer primitive is
+    // fully specified before it is wired into preview/import.
+    mod tree_manifest_parser {
+        use super::*;
+        use super::super::tree_manifest::{classify_tree_entry, parse_tree_response, RepositoryFileKind};
+        use crate::services::resource_budget::{ResourceBudget, DEFAULT_TREE_ENTRIES};
+
+        fn sample_repo() -> GitHubRepoRef {
+            GitHubRepoRef {
+                owner: "owner".to_string(),
+                repo: "repo".to_string(),
+                branch: "main".to_string(),
+                normalized_url: "https://github.com/owner/repo".to_string(),
+            }
+        }
+
+        fn tree_entry(path: &str, mode: &str, type_field: &str, size: Option<u64>) -> String {
+            let size_json = match size {
+                Some(size) => format!(",\"size\":{size}"),
+                None => String::new(),
+            };
+            format!(
+                "{{\"path\":\"{path}\",\"mode\":\"{mode}\",\"type\":\"{type_field}\"{size_json}}}"
+            )
+        }
+
+        fn tree_response(entries: &[String], truncated: bool) -> String {
+            let joined = entries.join(",");
+            format!(
+                "{{\"sha\":\"abc\",\"url\":\"https://api.github.com/\",\"tree\":[{joined}],\"truncated\":{truncated}}}",
+                truncated = truncated
+            )
+        }
+
+        #[test]
+        fn classify_regular_blob_modes_are_regular() {
+            assert_eq!(
+                classify_tree_entry("100644", "blob"),
+                Some(RepositoryFileKind::RegularBlob)
+            );
+            assert_eq!(
+                classify_tree_entry("100755", "blob"),
+                Some(RepositoryFileKind::RegularBlob)
+            );
+        }
+
+        #[test]
+        fn classify_symlink_and_gitlink_are_skipped_kinds() {
+            assert_eq!(
+                classify_tree_entry("120000", "blob"),
+                Some(RepositoryFileKind::SymlinkBlob)
+            );
+            assert_eq!(
+                classify_tree_entry("160000", "commit"),
+                Some(RepositoryFileKind::Gitlink)
+            );
+        }
+
+        #[test]
+        fn classify_tree_node_returns_none_like_archive_is_file_filter() {
+            assert_eq!(classify_tree_entry("040000", "tree"), None);
+        }
+
+        #[test]
+        fn classify_unknown_mode_falls_back_to_other() {
+            assert_eq!(
+                classify_tree_entry("100000", "blob"),
+                Some(RepositoryFileKind::Other)
+            );
+            assert_eq!(
+                classify_tree_entry("040000", "blob"),
+                Some(RepositoryFileKind::Other)
+            );
+            assert_eq!(
+                classify_tree_entry("100644", "commit"),
+                Some(RepositoryFileKind::Other)
+            );
+        }
+
+        #[test]
+        fn parse_regular_blob_entries_builds_manifest() {
+            let body = tree_response(
+                &[
+                    tree_entry("SKILL.md", "100644", "blob", Some(40)),
+                    tree_entry("README.md", "100644", "blob", Some(12)),
+                    tree_entry("references/guide.md", "100755", "blob", Some(8)),
+                    // Directory node — skipped, like archive's is_file() filter.
+                    tree_entry("references", "040000", "tree", None),
+                ],
+                false,
+            );
+            let manifest = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect("regular blobs parse");
+
+            assert_eq!(
+                manifest.regular_files.iter().map(|f| f.repo_path.as_str()).collect::<Vec<_>>(),
+                vec!["README.md", "SKILL.md", "references/guide.md"]
+            );
+            assert_eq!(manifest.regular_files[0].byte_len, 12);
+            assert_eq!(manifest.regular_files[1].byte_len, 40);
+            assert_eq!(manifest.regular_files[2].byte_len, 8);
+            assert_eq!(manifest.regular_total_bytes(), 60);
+            assert_eq!(manifest.regular_files.len(), manifest.regular_paths().count());
+        }
+
+        #[test]
+        fn parse_symlink_and_gitlink_are_recorded_in_skipped_not_regular() {
+            let body = tree_response(
+                &[
+                    tree_entry("SKILL.md", "100644", "blob", Some(40)),
+                    // symlink blob — must NOT become a candidate or raw download.
+                    tree_entry("link", "120000", "blob", Some(11)),
+                    // submodule gitlink — must NOT become a candidate.
+                    tree_entry("vendor/submod", "160000", "commit", None),
+                ],
+                false,
+            );
+            let manifest = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect("symlink/gitlink parse");
+
+            let regular: Vec<_> = manifest
+                .regular_files
+                .iter()
+                .map(|f| f.repo_path.as_str())
+                .collect();
+            assert_eq!(regular, vec!["SKILL.md"]);
+            let skipped_kinds: Vec<_> = manifest
+                .skipped
+                .iter()
+                .map(|f| (f.repo_path.as_str(), f.kind))
+                .collect();
+            assert_eq!(
+                skipped_kinds,
+                vec![
+                    ("link", RepositoryFileKind::SymlinkBlob),
+                    ("vendor/submod", RepositoryFileKind::Gitlink),
+                ]
+            );
+        }
+
+        #[test]
+        fn parse_truncated_tree_returns_typed_fallback_error() {
+            let body = tree_response(&[tree_entry("SKILL.md", "100644", "blob", Some(40))], true);
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("truncated tree should error");
+            assert!(matches!(error, GithubImportError::TreeManifestTruncated));
+        }
+
+        #[test]
+        fn parse_regular_blob_without_size_returns_typed_integrity_error() {
+            let body = tree_response(
+                &[tree_entry("SKILL.md", "100644", "blob", None)],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("missing size should error");
+            assert!(
+                matches!(error, GithubImportError::TreeManifestEntryMissingSize(ref path) if path == "SKILL.md")
+            );
+        }
+
+        #[test]
+        fn parse_unknown_mode_returns_typed_unsupported_fallback_error() {
+            let body = tree_response(
+                &[
+                    tree_entry("SKILL.md", "100644", "blob", Some(40)),
+                    tree_entry("weird.txt", "100000", "blob", Some(7)),
+                ],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("unknown mode should error");
+            match error {
+                GithubImportError::TreeManifestUnsupportedMode { path, mode } => {
+                    assert_eq!(path, "weird.txt");
+                    assert_eq!(mode, "100000");
+                }
+                other => panic!("expected TreeManifestUnsupportedMode, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn parse_over_entry_budget_returns_typed_budget_error() {
+            let mut entries = Vec::new();
+            for index in 0..(DEFAULT_TREE_ENTRIES + 1) {
+                let path = format!("file{index}.md");
+                entries.push(tree_entry(&path, "100644", "blob", Some(1)));
+            }
+            let body = tree_response(&entries, false);
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("entry budget should error");
+            assert!(
+                matches!(error, GithubImportError::TreeManifestEntryBudgetExceeded(limit) if limit == DEFAULT_TREE_ENTRIES)
+            );
+        }
+
+        #[test]
+        fn parse_over_expanded_byte_budget_returns_budget_error() {
+            // Use a budget with tiny expanded-byte limit so summed sizes overflow.
+            let budget = ResourceBudget {
+                archive_expanded_bytes: 10,
+                ..ResourceBudget::default_skill()
+            };
+            let body = tree_response(
+                &[tree_entry("SKILL.md", "100644", "blob", Some(40))],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), budget)
+                .expect_err("byte budget should error");
+            assert!(matches!(error, GithubImportError::Budget(_)));
+        }
+
+        #[test]
+        fn parse_over_response_body_budget_returns_budget_error() {
+            let budget = ResourceBudget {
+                tree_response_bytes: 16,
+                ..ResourceBudget::default_skill()
+            };
+            let body = tree_response(
+                &[tree_entry("SKILL.md", "100644", "blob", Some(40))],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), budget)
+                .expect_err("response budget should error");
+            assert!(matches!(error, GithubImportError::Budget(_)));
+        }
+
+        #[test]
+        fn parse_malformed_json_returns_parse_error() {
+            let body = "{ not valid json ";
+            let error = parse_tree_response(body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("malformed json should error");
+            assert!(matches!(error, GithubImportError::Parse(_)));
+        }
+
+        #[test]
+        fn parse_rejects_unsafe_repo_path_through_shared_path_policy() {
+            // Traversal segment — must be rejected by the shared `normalize_repo_path`
+            // (same path policy as the archive parser's `is_safe_repo_relative_path`).
+            let body = tree_response(
+                &[tree_entry("../escape.md", "100644", "blob", Some(40))],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("traversal path should error");
+            assert!(matches!(error, GithubImportError::UnsupportedRepoPath(_)));
+        }
+
+        #[test]
+        fn parse_strips_leading_trailing_slash_in_repo_path() {
+            // GitHub tree paths may arrive with leading slashes for some
+            // mirror responses; `normalize_repo_path` must collapse them so
+            // downstream discovery sees a canonical relative path.
+            let body = tree_response(
+                &[tree_entry("/skills/demo/SKILL.md", "100644", "blob", Some(40))],
+                false,
+            );
+            let manifest = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect("leading slash normalizes");
+            assert_eq!(
+                manifest.regular_files[0].repo_path,
+                "skills/demo/SKILL.md"
+            );
+        }
+
+        #[test]
+        fn parse_duplicate_path_returns_integrity_error() {
+            let body = tree_response(
+                &[
+                    tree_entry("SKILL.md", "100644", "blob", Some(40)),
+                    tree_entry("SKILL.md", "100644", "blob", Some(40)),
+                ],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("duplicate path should error");
+            // Duplicate is surfaced via the `MissingSize` integrity path
+            // (archive parser would have silently overwritten the HashMap
+            // entry; we fail closed to expose upstream anomalies).
+            assert!(matches!(error, GithubImportError::TreeManifestEntryMissingSize(_)));
+        }
+    }
 }
