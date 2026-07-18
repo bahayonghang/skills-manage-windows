@@ -17,6 +17,7 @@ import {
 } from "@/components/central/CentralSkillsShellMenus";
 import { SkillImportLauncher } from "@/components/central/SkillImportLauncher";
 import { LocalArchiveImportWizard } from "@/components/central/LocalArchiveImportWizard";
+import { useLocalArchiveImportStore } from "@/stores/localArchiveImportSlice";
 import { CentralProgressTopLine } from "@/components/central/CentralProgressTopLine";
 import { countActiveCentralTasks } from "@/components/central/centralTaskCenterHelpers";
 import { TaskCenterDrawer } from "@/components/central/TaskCenterDrawer";
@@ -33,7 +34,7 @@ import {
 } from "@/components/central/CentralTopFilters";
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 import { cn } from "@/lib/utils";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { groupSkillsByMode } from "@/lib/centralGrouping";
 import type { FacetCounts } from "@/lib/centralFacetCounts";
 import { sanitizeSelectedTagIds } from "@/lib/centralTags";
@@ -217,7 +218,9 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   } = props;
 
   const openUpdateCenter = useUpdateCenterStore((s) => s.openDialog);
-  const [isLocalArchiveImportOpen, setIsLocalArchiveImportOpen] = useState(false);
+  const openLocalArchiveImport = useLocalArchiveImportStore(
+    (state) => state.openWizard,
+  );
   const selectedTagIds = useMemo(
     () =>
       tags.length > 0 ? sanitizeSelectedTagIds(viewState.tags, tags) : viewState.tags,
@@ -361,7 +364,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
               if (intent === "github") {
                 setIsGitHubImportOpen(true);
               } else if (intent === "local_zip") {
-                setIsLocalArchiveImportOpen(true);
+                openLocalArchiveImport();
               }
             }}
           />
@@ -579,8 +582,6 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       <CentralSkillDialogs {...dialogs} t={t} />
 
       <LocalArchiveImportWizard
-        open={isLocalArchiveImportOpen}
-        onOpenChange={setIsLocalArchiveImportOpen}
         t={t}
         onAfterImportSuccess={async () => {
           await dialogs.loadCentralSkills();

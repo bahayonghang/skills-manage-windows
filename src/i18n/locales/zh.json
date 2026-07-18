@@ -56,6 +56,26 @@
       "tls": "AI 服务端点 TLS 或证书校验失败。",
       "network": "AI 网络请求失败。",
       "empty_response": "模型没有返回可显示的解释正文。"
+    },
+    "local_archive": {
+      "archive_not_found": "未找到所选 ZIP 压缩包。",
+      "archive_read_failed": "无法读取所选 ZIP 压缩包。",
+      "archive_changed_since_preview": "ZIP 压缩包在预览后发生变化，请重新选择并检查更新后的内容。",
+      "ambiguous_archive_layout": "ZIP 压缩包中存在多个可能的技能根目录。",
+      "no_skill_manifest": "ZIP 压缩包中没有可导入的 SKILL.md。",
+      "invalid_archive_entry": "ZIP 压缩包中包含不安全的路径。",
+      "unsupported_archive_entry": "ZIP 压缩包中包含不支持的文件类型或压缩方式。",
+      "budget_exceeded": "ZIP 压缩包超过安全导入限制。",
+      "path_conflict": "所选技能 id 与中央技能库中的现有数据冲突。",
+      "skill_frontmatter_missing": "SKILL.md 元数据缺失或无效。",
+      "invalid_skill_identifier": "请输入有效的技能 id。",
+      "io": "导入 ZIP 压缩包时文件系统操作失败。",
+      "db": "中央技能库无法保存导入的技能元数据。",
+      "central_mutation": "中央技能库正在执行其他变更，请稍后重试。",
+      "rollback_failed": "无法自动恢复原有中央技能。",
+      "remote_target_unsupported": "SSH 和 WSL 目标不支持本地 ZIP 导入。",
+      "internal": "本地 ZIP 导入失败。",
+      "unknown": "本地 ZIP 导入失败，请重试或检查操作日志。"
     }
   },
   "targets": {

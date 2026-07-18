@@ -1,4 +1,8 @@
-import { invoke, isTauriRuntime } from "@/lib/ipc";
+import type { TFunction } from "i18next";
+import { create } from "zustand";
+
+import { invoke } from "@/lib/ipc";
+import { parseBackendError } from "@/lib/backendError";
 import type {
   ArchiveFingerprint,
   LocalArchiveImportResolution,
@@ -6,16 +10,15 @@ import type {
   LocalArchivePreview,
 } from "@/types";
 
-/** State machine for the local archive import wizard. */
 export type LocalArchiveImportStep =
-  | "choose" // user is picking a file
-  | "preview" // preview loaded, awaiting confirm
-  | "importing" // import in flight
-  | "result"; // import result (or error) shown
+  | "choose"
+  | "preview"
+  | "importing"
+  | "result";
 
-export interface LocalArchiveImportState {
+export interface LocalArchiveImportData {
+  isOpen: boolean;
   step: LocalArchiveImportStep;
-  /** Absolute archive path on the local machine. Never returned to UI. */
   archivePath: string | null;
   preview: LocalArchivePreview | null;
   previewError: string | null;
@@ -23,10 +26,24 @@ export interface LocalArchiveImportState {
   importResult: LocalArchiveImportResult | null;
   importError: string | null;
   isImporting: boolean;
+  resolution: LocalArchiveImportResolution;
+  renamedSkillId: string;
 }
 
-export function createInitialLocalArchiveImportState(): LocalArchiveImportState {
+export interface LocalArchiveImportStore extends LocalArchiveImportData {
+  openWizard: () => void;
+  closeWizard: () => void;
+  previewArchive: (archivePath: string) => Promise<LocalArchivePreview>;
+  reportPreviewFailure: (error: unknown) => void;
+  importArchive: () => Promise<LocalArchiveImportResult>;
+  setResolution: (resolution: LocalArchiveImportResolution) => void;
+  setRenamedSkillId: (renamedSkillId: string) => void;
+  reset: () => void;
+}
+
+export function createInitialLocalArchiveImportState(): LocalArchiveImportData {
   return {
+    isOpen: false,
     step: "choose",
     archivePath: null,
     preview: null,
@@ -35,57 +52,118 @@ export function createInitialLocalArchiveImportState(): LocalArchiveImportState 
     importResult: null,
     importError: null,
     isImporting: false,
+    resolution: "overwrite",
+    renamedSkillId: "",
   };
 }
 
-/**
- * Invoke the preview IPC command. Returns the preview DTO or throws on error.
- * The absolute `archivePath` is passed to the backend but never stored in the
- * preview DTO; the DTO only carries the archive basename.
- */
-export async function previewLocalSkillArchive(
-  archivePath: string,
-): Promise<LocalArchivePreview> {
-  if (!isTauriRuntime()) {
-    throw new Error(
-      "Desktop-only feature: local ZIP preview is available in the Tauri app.",
-    );
-  }
-  return invoke<LocalArchivePreview>("preview_local_skill_archive", {
-    archivePath,
-  });
+function localArchiveErrorCode(error: unknown): string {
+  const code = parseBackendError(error).code;
+  return code?.startsWith("local_archive.")
+    ? code
+    : "local_archive.unknown";
 }
 
-/**
- * Invoke the import IPC command. The caller must pass the `expectedFingerprint`
- * returned by preview so the backend can verify the archive is byte-identical.
- */
-export async function importLocalSkillArchive(
+export function formatLocalArchiveError(
+  errorCode: string | null,
+  t: TFunction,
+): string | null {
+  if (!errorCode) return null;
+  const fallback = t("backendErrors.local_archive.unknown");
+  return t(`backendErrors.${errorCode}`, { defaultValue: fallback });
+}
+
+async function previewLocalSkillArchive(
+  archivePath: string,
+): Promise<LocalArchivePreview> {
+  return invoke("preview_local_skill_archive", { archivePath });
+}
+
+async function importLocalSkillArchive(
   archivePath: string,
   expectedFingerprint: ArchiveFingerprint,
   resolution: LocalArchiveImportResolution,
   renamedSkillId?: string,
 ): Promise<LocalArchiveImportResult> {
-  if (!isTauriRuntime()) {
-    throw new Error(
-      "Desktop-only feature: local ZIP import is available in the Tauri app.",
-    );
-  }
-  const payload: {
-    archivePath: string;
-    expectedFingerprint: ArchiveFingerprint;
-    resolution: LocalArchiveImportResolution;
-    renamedSkillId?: string;
-  } = {
+  return invoke("import_local_skill_archive", {
     archivePath,
     expectedFingerprint,
     resolution,
-  };
-  if (renamedSkillId) {
-    payload.renamedSkillId = renamedSkillId;
-  }
-  return invoke<LocalArchiveImportResult>(
-    "import_local_skill_archive",
-    payload,
-  );
+    renamedSkillId,
+  });
 }
+
+export const useLocalArchiveImportStore = create<LocalArchiveImportStore>()(
+  (set, get) => ({
+    ...createInitialLocalArchiveImportState(),
+
+    openWizard: () => set({ ...createInitialLocalArchiveImportState(), isOpen: true }),
+
+    closeWizard: () => set(createInitialLocalArchiveImportState()),
+
+    reset: () => set(createInitialLocalArchiveImportState()),
+
+    setResolution: (resolution) =>
+      set({
+        resolution,
+        importError: null,
+        ...(resolution === "rename" ? {} : { renamedSkillId: "" }),
+      }),
+
+    setRenamedSkillId: (renamedSkillId) => set({ renamedSkillId, importError: null }),
+
+    reportPreviewFailure: (error) =>
+      set({
+        previewError: localArchiveErrorCode(error),
+        isPreviewLoading: false,
+        step: "choose",
+      }),
+
+    previewArchive: async (archivePath) => {
+      set({
+        archivePath,
+        preview: null,
+        previewError: null,
+        importResult: null,
+        importError: null,
+        isPreviewLoading: true,
+      });
+      try {
+        const preview = await previewLocalSkillArchive(archivePath);
+        set({ preview, step: "preview", resolution: "overwrite" });
+        return preview;
+      } catch (error) {
+        set({ previewError: localArchiveErrorCode(error), step: "choose" });
+        throw error;
+      } finally {
+        set({ isPreviewLoading: false });
+      }
+    },
+
+    importArchive: async () => {
+      const { archivePath, preview, resolution, renamedSkillId } = get();
+      if (!archivePath || !preview) {
+        const error = new Error("local_archive.unknown:Import preview is missing.");
+        set({ importError: "local_archive.unknown" });
+        throw error;
+      }
+
+      set({ isImporting: true, importError: null, step: "importing" });
+      try {
+        const result = await importLocalSkillArchive(
+          archivePath,
+          preview.fingerprint,
+          resolution,
+          resolution === "rename" ? renamedSkillId.trim() || undefined : undefined,
+        );
+        set({ importResult: result, step: "result" });
+        return result;
+      } catch (error) {
+        set({ importError: localArchiveErrorCode(error), step: "preview" });
+        throw error;
+      } finally {
+        set({ isImporting: false });
+      }
+    },
+  }),
+);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -7,6 +7,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { TFunction } from "i18next";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,136 +19,107 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioItem } from "@/components/ui/radio-group";
+import { GitHubImportFileTree } from "@/components/marketplace/GitHubImportFileTree";
+import type { LocalArchiveImportResolution } from "@/types";
 import {
-  RadioGroup,
-  RadioItem,
-} from "@/components/ui/radio-group";
-import type {
-  LocalArchiveImportResolution,
-  LocalArchivePreview,
-  LocalArchivePreviewSkill,
-} from "@/types";
-import {
-  importLocalSkillArchive,
-  previewLocalSkillArchive,
+  formatLocalArchiveError,
+  useLocalArchiveImportStore,
 } from "@/stores/localArchiveImportSlice";
 
 export interface LocalArchiveImportWizardProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   t: TFunction;
-  /** Called after a successful import so the parent can refresh Central. */
   onAfterImportSuccess: () => Promise<void>;
 }
 
-type WizardStep = "choose" | "preview" | "importing" | "result";
-
 /**
- * Local ZIP skill archive import wizard.
- *
- * State machine: `choose -> preview -> importing -> result`.
- *
- * The wizard only writes to Central after the user confirms and the backend
- * has re-verified the archive fingerprint (SHA-256 + byte length) matches
- * the one returned by preview. Any mismatch fails with
- * `archive_changed_since_preview` before staging or Central mutation.
+ * Local ZIP import surface. The Zustand controller owns the full business
+ * state machine; this component only chooses a file, dispatches actions, and
+ * renders the current state.
  */
 export function LocalArchiveImportWizard({
-  open,
-  onOpenChange,
   t,
   onAfterImportSuccess,
 }: LocalArchiveImportWizardProps) {
-  const [step, setStep] = useState<WizardStep>("choose");
-  const [archivePath, setArchivePath] = useState<string | null>(null);
-  const [preview, setPreview] = useState<LocalArchivePreview | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [resolution, setResolution] =
-    useState<LocalArchiveImportResolution>("overwrite");
-  const [renamedSkillId, setRenamedSkillId] = useState("");
+  const isOpen = useLocalArchiveImportStore((state) => state.isOpen);
+  const step = useLocalArchiveImportStore((state) => state.step);
+  const preview = useLocalArchiveImportStore((state) => state.preview);
+  const previewError = useLocalArchiveImportStore((state) => state.previewError);
+  const importError = useLocalArchiveImportStore((state) => state.importError);
+  const isPreviewLoading = useLocalArchiveImportStore(
+    (state) => state.isPreviewLoading,
+  );
+  const isImporting = useLocalArchiveImportStore((state) => state.isImporting);
+  const resolution = useLocalArchiveImportStore((state) => state.resolution);
+  const renamedSkillId = useLocalArchiveImportStore(
+    (state) => state.renamedSkillId,
+  );
+  const closeWizard = useLocalArchiveImportStore((state) => state.closeWizard);
+  const previewArchive = useLocalArchiveImportStore(
+    (state) => state.previewArchive,
+  );
+  const reportPreviewFailure = useLocalArchiveImportStore(
+    (state) => state.reportPreviewFailure,
+  );
+  const importArchive = useLocalArchiveImportStore((state) => state.importArchive);
+  const setResolution = useLocalArchiveImportStore(
+    (state) => state.setResolution,
+  );
+  const setRenamedSkillId = useLocalArchiveImportStore(
+    (state) => state.setRenamedSkillId,
+  );
 
-  // Reset state when the dialog closes.
-  useEffect(() => {
-    if (!open) {
-      setStep("choose");
-      setArchivePath(null);
-      setPreview(null);
-      setPreviewError(null);
-      setIsPreviewLoading(false);
-      setIsImporting(false);
-      setImportError(null);
-      setResolution("overwrite");
-      setRenamedSkillId("");
-    }
-  }, [open]);
+  const previewErrorMessage = formatLocalArchiveError(previewError, t);
+  const importErrorMessage = formatLocalArchiveError(importError, t);
+  const skill = preview?.skills[0] ?? null;
 
   const handleChooseArchive = useCallback(async () => {
-    setPreviewError(null);
-    setIsPreviewLoading(true);
     try {
-      const { open: openFilePicker } = await import(
-        "@tauri-apps/plugin-dialog"
-      );
-      const selected = await openFilePicker({
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
         multiple: false,
         filters: [{ name: "ZIP", extensions: ["zip"] }],
       });
-      if (!selected || typeof selected !== "string") {
-        // User cancelled the file picker.
-        setIsPreviewLoading(false);
-        return;
-      }
-      setArchivePath(selected);
-      const result = await previewLocalSkillArchive(selected);
-      setPreview(result);
-      setStep("preview");
-      // Default resolution based on conflict.
-      const skill = result.skills[0];
-      if (skill?.conflict) {
-        setResolution("overwrite");
-      } else {
-        setResolution("overwrite");
-      }
-    } catch (err) {
-      setPreviewError(String(err));
-    } finally {
-      setIsPreviewLoading(false);
+      if (!selected || typeof selected !== "string") return;
+      await previewArchive(selected);
+    } catch (error) {
+      reportPreviewFailure(error);
+      const message = formatLocalArchiveError(
+        useLocalArchiveImportStore.getState().previewError,
+        t,
+      );
+      if (message) toast.error(message);
     }
-  }, []);
+  }, [previewArchive, reportPreviewFailure, t]);
 
   const handleImport = useCallback(async () => {
-    if (!archivePath || !preview) return;
-    setIsImporting(true);
-    setImportError(null);
-    setStep("importing");
     try {
-      const finalResolution =
-        resolution === "rename" && renamedSkillId.trim()
-          ? ("rename" as LocalArchiveImportResolution)
-          : resolution;
-      await importLocalSkillArchive(
-        archivePath,
-        preview.fingerprint,
-        finalResolution,
-        finalResolution === "rename" ? renamedSkillId.trim() : undefined,
+      await importArchive();
+    } catch {
+      const message = formatLocalArchiveError(
+        useLocalArchiveImportStore.getState().importError,
+        t,
       );
-      setStep("result");
-      await onAfterImportSuccess();
-    } catch (err) {
-      setImportError(String(err));
-      setStep("preview");
-    } finally {
-      setIsImporting(false);
+      if (message) toast.error(message);
+      return;
     }
-  }, [archivePath, preview, resolution, renamedSkillId, onAfterImportSuccess]);
 
-  const skill: LocalArchivePreviewSkill | null = preview?.skills[0] ?? null;
+    try {
+      await onAfterImportSuccess();
+    } catch {
+      toast.error(t("central.refreshError", {
+        error: t("backendErrors.local_archive.unknown"),
+      }));
+    }
+  }, [importArchive, onAfterImportSuccess, t]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) closeWizard();
+      }}
+    >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -161,10 +133,10 @@ export function LocalArchiveImportWizard({
 
         {step === "choose" && (
           <div className="flex flex-col items-center gap-4 py-8">
-            {previewError && (
+            {previewErrorMessage && (
               <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive-text">
                 <AlertCircle className="size-4 shrink-0" />
-                <span>{previewError}</span>
+                <span>{previewErrorMessage}</span>
               </div>
             )}
             <Button
@@ -188,21 +160,21 @@ export function LocalArchiveImportWizard({
 
         {step === "preview" && skill && preview && (
           <div className="flex flex-col gap-4">
-            {importError && (
+            {importErrorMessage && (
               <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive-text">
                 <AlertCircle className="size-4 shrink-0" />
-                <span>{importError}</span>
+                <span>{importErrorMessage}</span>
               </div>
             )}
             <div className="rounded-lg border border-border/60 p-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">{skill.skillName}</p>
-                  <p className="text-xs text-muted-foreground">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{skill.skillName}</p>
+                  <p className="truncate text-xs text-muted-foreground">
                     id: {skill.skillId}
                   </p>
                 </div>
-                <span className="text-xs text-muted-foreground">
+                <span className="max-w-48 truncate text-xs text-muted-foreground">
                   {preview.archiveDisplayName}
                 </span>
               </div>
@@ -211,13 +183,12 @@ export function LocalArchiveImportWizard({
                   {skill.description}
                 </p>
               )}
-              <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>
-                  {t("central.localArchiveWizard.fileCount")}:{" "}
-                  {skill.fileCount}
+                  {t("central.localArchiveWizard.fileCount")}: {skill.fileCount}
                 </span>
                 <span>
-                  {t("central.localArchiveWizard.totalBytes")}:{" "}
+                  {t("central.localArchiveWizard.totalBytes")}: {" "}
                   {skill.totalExpandedBytes} bytes
                 </span>
               </div>
@@ -236,10 +207,17 @@ export function LocalArchiveImportWizard({
               </div>
             )}
 
+            <div className="h-56 min-h-0 overflow-hidden rounded-lg border border-border/60 p-3">
+              <GitHubImportFileTree
+                files={skill.files}
+                rootName={skill.rootDirectory || skill.skillId}
+              />
+            </div>
+
             <RadioGroup
               value={resolution}
-              onValueChange={(v) =>
-                setResolution(v as LocalArchiveImportResolution)
+              onValueChange={(value) =>
+                setResolution(value as LocalArchiveImportResolution)
               }
               className="flex flex-col gap-2"
             >
@@ -258,7 +236,7 @@ export function LocalArchiveImportWizard({
               {resolution === "rename" && (
                 <Input
                   value={renamedSkillId}
-                  onChange={(e) => setRenamedSkillId(e.target.value)}
+                  onChange={(event) => setRenamedSkillId(event.target.value)}
                   placeholder={t("central.localArchiveWizard.renamePlaceholder")}
                   className="mt-1"
                   data-testid="local-archive-rename-input"
@@ -294,18 +272,21 @@ export function LocalArchiveImportWizard({
 
         <DialogFooter>
           {step === "choose" && (
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" onClick={closeWizard}>
               {t("common.cancel")}
             </Button>
           )}
           {step === "preview" && (
             <>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
+              <Button variant="outline" onClick={closeWizard}>
                 {t("common.cancel")}
               </Button>
               <Button
                 onClick={handleImport}
-                disabled={isImporting}
+                disabled={
+                  isImporting ||
+                  (resolution === "rename" && renamedSkillId.trim().length === 0)
+                }
                 data-testid="local-archive-import-confirm"
               >
                 {t("central.localArchiveWizard.import")}
@@ -313,9 +294,7 @@ export function LocalArchiveImportWizard({
             </>
           )}
           {step === "result" && (
-            <Button onClick={() => onOpenChange(false)}>
-              {t("common.close")}
-            </Button>
+            <Button onClick={closeWizard}>{t("common.close")}</Button>
           )}
         </DialogFooter>
       </DialogContent>

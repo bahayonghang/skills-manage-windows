@@ -1,5 +1,6 @@
 import type {
   AgentWithStatus,
+  ArchiveFingerprint,
   BatchUninstallSkillRequest,
   BatchUninstallSkillResult,
   BootstrapSnapshot,
@@ -12,6 +13,9 @@ import type {
   OperationLogEntry,
   OperationLogFilter,
   OperationLogPage,
+  LocalArchiveImportResolution,
+  LocalArchiveImportResult,
+  LocalArchivePreview,
   PlatformPathMap,
   RuntimeLogClearRequest,
   RuntimeLogFile,
@@ -75,6 +79,19 @@ export const IPC_COMMANDS = {
   scan_all_skills: command<undefined, ScanResult>(),
   get_skill_counts_summary: command<undefined, SkillCountsSummary>(),
   mark_import_intent_frontend_ready: command<undefined, void>(),
+  preview_local_skill_archive: command<
+    { archivePath: string },
+    LocalArchivePreview
+  >(),
+  import_local_skill_archive: command<
+    {
+      archivePath: string;
+      expectedFingerprint: ArchiveFingerprint;
+      resolution: LocalArchiveImportResolution;
+      renamedSkillId?: string;
+    },
+    LocalArchiveImportResult
+  >(),
   set_agent_enabled: command<
     { agentId: string; isEnabled: boolean },
     AgentWithStatus
@@ -292,7 +309,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "install_marketplace_skill",
   "install_skill_to_agent",
   "install_skill_to_project",
-  "import_local_skill_archive",
   "keep_remote_missing_central_skills",
   "list_projects",
   "list_projects_using_skill",
@@ -302,7 +318,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "preview_delete_central_skills",
   "preview_delete_skill_repository",
   "preview_github_repo_import",
-  "preview_local_skill_archive",
   "preview_local_remote_sync",
   "preview_skillport_state_import",
   "read_skills_sh_file",

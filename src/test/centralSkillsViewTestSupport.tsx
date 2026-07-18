@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-li
 import { MemoryRouter } from "react-router-dom";
 import { CentralSkillsView as CentralSkillsViewComponent } from "../pages/CentralSkillsView";
 import { useImportIntentStore } from "@/stores/importIntentStore";
+import { useLocalArchiveImportStore } from "@/stores/localArchiveImportSlice";
 import type {
   AgentWithStatus,
   SkillDetail,
@@ -717,6 +718,7 @@ export const settingsStore = useSettingsStore;
 
 export function resetCentralSkillsViewTestState() {
   useImportIntentStore.getState().resetForTest();
+  useLocalArchiveImportStore.getState().reset();
   vi.clearAllMocks();
   // 重置 jsdom URL：CentralSkillsView 用 useCentralViewStateUrl 把 viewState（搜索/筛选/排序）写到 location.search，
   // 测试间共享 jsdom 的 window.location 会导致前一个 case 的搜索文本污染下一个 case 的初始 state。

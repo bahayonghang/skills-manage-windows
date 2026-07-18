@@ -56,6 +56,26 @@
       "tls": "TLS or certificate validation failed for the AI provider endpoint.",
       "network": "The AI network request failed.",
       "empty_response": "The model returned no displayable explanation text."
+    },
+    "local_archive": {
+      "archive_not_found": "The selected ZIP archive was not found.",
+      "archive_read_failed": "The selected ZIP archive could not be read.",
+      "archive_changed_since_preview": "The ZIP archive changed after preview. Choose it again and review the updated contents.",
+      "ambiguous_archive_layout": "The ZIP archive contains more than one possible skill root.",
+      "no_skill_manifest": "The ZIP archive does not contain an importable SKILL.md.",
+      "invalid_archive_entry": "The ZIP archive contains an unsafe path.",
+      "unsupported_archive_entry": "The ZIP archive contains an unsupported file type or compression method.",
+      "budget_exceeded": "The ZIP archive exceeds the safe import limits.",
+      "path_conflict": "The selected skill id conflicts with existing Central data.",
+      "skill_frontmatter_missing": "The SKILL.md metadata is missing or invalid.",
+      "invalid_skill_identifier": "Enter a valid skill id.",
+      "io": "A filesystem operation failed while importing the ZIP archive.",
+      "db": "Central could not save the imported skill metadata.",
+      "central_mutation": "Central is busy with another change. Try again shortly.",
+      "rollback_failed": "The previous Central skill could not be restored automatically.",
+      "remote_target_unsupported": "Local ZIP import is unavailable for SSH and WSL targets.",
+      "internal": "The local ZIP import failed.",
+      "unknown": "The local ZIP import failed. Try again or inspect the Operation Logs."
     }
   },
   "targets": {
