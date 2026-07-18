@@ -1482,6 +1482,32 @@
         "disabledNoRepository": "当前没有可同步的 GitHub 仓库。"
       },
       "syncConfirmTitle": "确认增量和删减检查"
+    },
+    "addSkillLauncher": {
+      "label": "添加技能",
+      "menuLabel": "导入来源",
+      "github": "GitHub 仓库",
+      "githubDesc": "从 GitHub 仓库导入技能",
+      "localZip": "本地 ZIP 压缩包",
+      "localZipDesc": "预览并导入 .zip 技能包",
+      "localZipRemoteDisabled": "远程目标不可用"
+    },
+    "localArchiveWizard": {
+      "title": "导入本地 ZIP 技能",
+      "description": "预览压缩包内容，确认后写入中央技能库。",
+      "chooseFile": "选择 .zip 文件",
+      "chooseFileHint": "仅支持包含单个 SKILL.md 的 .zip 文件。",
+      "fileCount": "文件数",
+      "totalBytes": "总计",
+      "conflictDetected": "中央技能库中已存在相同 id 的技能。",
+      "conflictDesc": "已有技能：{{existingId}}",
+      "resolutionOverwrite": "覆盖已有技能",
+      "resolutionRename": "使用新 id 导入",
+      "resolutionSkip": "跳过此次导入",
+      "renamePlaceholder": "新技能-id",
+      "importing": "导入中...",
+      "import": "导入到中央技能库",
+      "importSuccess": "技能导入成功。"
     }
   },
   "installDialog": {

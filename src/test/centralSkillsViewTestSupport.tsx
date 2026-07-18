@@ -787,3 +787,23 @@ export function cleanupCentralSkillsViewTestState() {
   cleanup();
   vi.restoreAllMocks();
 }
+
+/**
+ * Open the GitHub import wizard via the unified "Add Skill" launcher.
+ *
+ * After the launcher replaced the standalone GitHub import button, tests
+ * that need to open the wizard must click the launcher and then select the
+ * GitHub intent from the dropdown.
+ */
+export async function openGitHubImportViaLauncher(
+  screen: typeof import("@testing-library/react")["screen"],
+) {
+  const { fireEvent } = await import("@testing-library/react");
+  fireEvent.click(screen.getByTestId("central-add-skill-launcher"));
+  const githubItem = await screen.findByTestId(
+    "central-add-skill-github",
+    {},
+    { timeout: 3000 },
+  );
+  fireEvent.click(githubItem);
+}

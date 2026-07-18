@@ -1482,6 +1482,32 @@
         "disabledNoRepository": "No syncable GitHub repository is available."
       },
       "syncConfirmTitle": "Confirm incremental and removal check"
+    },
+    "addSkillLauncher": {
+      "label": "Add Skill",
+      "menuLabel": "Import from",
+      "github": "GitHub Repository",
+      "githubDesc": "Import skills from a GitHub repo",
+      "localZip": "Local ZIP Archive",
+      "localZipDesc": "Preview and import a .zip skill package",
+      "localZipRemoteDisabled": "Not available for remote targets"
+    },
+    "localArchiveWizard": {
+      "title": "Import Local ZIP Skill",
+      "description": "Preview the archive, then write it to Central after confirmation.",
+      "chooseFile": "Choose .zip file",
+      "chooseFileHint": "Only .zip files with a single SKILL.md are supported.",
+      "fileCount": "Files",
+      "totalBytes": "Total",
+      "conflictDetected": "A Central skill with the same id already exists.",
+      "conflictDesc": "Existing skill: {{existingId}}",
+      "resolutionOverwrite": "Overwrite the existing skill",
+      "resolutionRename": "Import under a different id",
+      "resolutionSkip": "Skip this import",
+      "renamePlaceholder": "new-skill-id",
+      "importing": "Importing...",
+      "import": "Import to Central",
+      "importSuccess": "Skill imported successfully."
     }
   },
   "installDialog": {

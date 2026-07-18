@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import * as S from "./centralSkillsViewTestSupport";
 
 const { ASYNC_UI_TIMEOUT_MS, renderCentralSkillsView } = S;
@@ -40,7 +40,7 @@ describe("CentralSkillsView GitHub import result", () => {
       },
     });
 
-    fireEvent.click(screen.getByTestId("central-github-import-open"));
+    await S.openGitHubImportViaLauncher(screen);
 
     const dialog = await screen.findByRole(
       "dialog",

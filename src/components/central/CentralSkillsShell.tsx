@@ -2,7 +2,6 @@ import type { ComponentProps, ReactNode } from "react";
 import {
   ActivityIcon,
   Download,
-  GitBranch,
   ListChecks,
   MapPin,
   RefreshCw,
@@ -16,6 +15,8 @@ import {
   ToolbarViewMenu,
   ToolbarMoreMenu,
 } from "@/components/central/CentralSkillsShellMenus";
+import { SkillImportLauncher } from "@/components/central/SkillImportLauncher";
+import { LocalArchiveImportWizard } from "@/components/central/LocalArchiveImportWizard";
 import { CentralProgressTopLine } from "@/components/central/CentralProgressTopLine";
 import { countActiveCentralTasks } from "@/components/central/centralTaskCenterHelpers";
 import { TaskCenterDrawer } from "@/components/central/TaskCenterDrawer";
@@ -32,7 +33,7 @@ import {
 } from "@/components/central/CentralTopFilters";
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 import { cn } from "@/lib/utils";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { groupSkillsByMode } from "@/lib/centralGrouping";
 import type { FacetCounts } from "@/lib/centralFacetCounts";
 import { sanitizeSelectedTagIds } from "@/lib/centralTags";
@@ -216,6 +217,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   } = props;
 
   const openUpdateCenter = useUpdateCenterStore((s) => s.openDialog);
+  const [isLocalArchiveImportOpen, setIsLocalArchiveImportOpen] = useState(false);
   const selectedTagIds = useMemo(
     () =>
       tags.length > 0 ? sanitizeSelectedTagIds(viewState.tags, tags) : viewState.tags,
@@ -351,16 +353,18 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           </div>
         </div>
         <div className="flex w-full min-w-0 flex-col items-stretch gap-2 min-[521px]:flex-row min-[521px]:flex-wrap min-[521px]:items-center xl:w-auto xl:justify-end">
-          {/* 核心入口：GitHub 导入 ─────────────────────────────────── */}
-          <Button
-            variant="outline"
-            className="h-9 rounded-xl pl-3 pr-3.5 transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
-            onClick={() => setIsGitHubImportOpen(true)}
-            data-testid="central-github-import-open"
-          >
-            <GitBranch className="size-3.5" />
-            {t("marketplace.githubImportSecondaryCta")}
-          </Button>
+          {/* 统一入口：添加技能（GitHub / 本地 ZIP）───────────── */}
+          <SkillImportLauncher
+            t={t}
+            isRemoteTarget={dialogs.activeTarget.kind !== "local"}
+            onOpenIntent={(intent) => {
+              if (intent === "github") {
+                setIsGitHubImportOpen(true);
+              } else if (intent === "local_zip") {
+                setIsLocalArchiveImportOpen(true);
+              }
+            }}
+          />
 
           {/* 入口：更新中心（聚合可更新 / 新增 / 已删除 / 平台冗余）─── */}
           <Button
@@ -573,6 +577,15 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       </div>
 
       <CentralSkillDialogs {...dialogs} t={t} />
+
+      <LocalArchiveImportWizard
+        open={isLocalArchiveImportOpen}
+        onOpenChange={setIsLocalArchiveImportOpen}
+        t={t}
+        onAfterImportSuccess={async () => {
+          await dialogs.loadCentralSkills();
+        }}
+      />
 
       <BulkActionBar
         selectedCount={bulkBar.selectedCount}

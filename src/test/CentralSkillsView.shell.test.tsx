@@ -21,7 +21,7 @@ describe("CentralSkillsView shell（V2 markup）", () => {
     renderCentralSkillsView();
     expect(screen.getByText("中央技能库")).toBeInTheDocument();
     expect(screen.getByText("/Users/test/.skillsmanage/skills/")).toBeInTheDocument();
-    expect(screen.getByTestId("central-github-import-open")).toHaveTextContent("从 GitHub 导入");
+    expect(screen.getByTestId("central-add-skill-launcher")).toHaveTextContent("添加技能");
     expect(screen.getByTestId("central-check-updates")).toBeInTheDocument();
     expect(screen.getByTestId("central-toolbar-more")).toBeInTheDocument();
   });

@@ -34,9 +34,9 @@ describe("CentralSkillsView overview（V2 markup）", () => {
     await waitFor(() => expect(mockExportSkillportState).toHaveBeenCalled());
   });
 
-  it("在顶部直接暴露 GitHub 导入入口", () => {
+  it("在顶部直接暴露添加技能入口", () => {
     renderCentralSkillsView();
-    expect(screen.getByTestId("central-github-import-open")).toHaveTextContent("从 GitHub 导入");
+    expect(screen.getByTestId("central-add-skill-launcher")).toHaveTextContent("添加技能");
   });
 
   it("搜索框可输入并触发列表过滤（按名称）", async () => {
