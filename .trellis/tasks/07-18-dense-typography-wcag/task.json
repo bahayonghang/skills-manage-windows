@@ -3,7 +3,7 @@
   "name": "dense-typography-wcag",
   "title": "高密度排版 Token 与 WCAG 治理",
   "description": "审计高密度界面的任意字号与对比度，建立语义排版 token 和例外契约，并按真实影响迁移关键区域。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

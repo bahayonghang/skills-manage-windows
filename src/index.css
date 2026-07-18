@@ -228,6 +228,22 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Semantic small type tokens. Only own font-size (rem, inherits the root
+     --font-scale at 0.875 / 1 / 1.125); line-height stays with layout owners.
+     - text-ui-meta  (0.6875rem = 11px @ scale 1): secondary metadata, paths,
+       IDs, keycaps, frontmatter/preview pre.
+     - text-ui-micro (0.625rem  = 10px @ scale 1): compact counts, chart axes,
+       redundant glyphs that already have an accessible name.
+     section/status/action labels must use text-xs, not these. */
+  --text-ui-meta: 0.6875rem;
+  --text-ui-micro: 0.625rem;
+
+  /* Dashboard display tokens. Owned by the dashboard surface, kept rem so
+     they inherit --font-scale. Not part of the general type ladder. */
+  --text-display-hero: 2.35rem;
+  --text-display-hero-xl: 3.25rem;
+  --text-display-score: 3.35rem;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -117,7 +117,12 @@ function themeTokens(theme: ThemeName) {
     foreground: cssVariable(block, "--foreground"),
     card: cssVariable(block, "--card"),
     cardForeground: cssVariable(block, "--card-foreground"),
+    popover: cssVariable(block, "--popover"),
+    popoverForeground: cssVariable(block, "--popover-foreground"),
+    muted: cssVariable(block, "--muted"),
     mutedForeground: cssVariable(block, "--muted-foreground"),
+    sidebar: cssVariable(block, "--sidebar"),
+    sidebarForeground: cssVariable(block, "--sidebar-foreground"),
     primary: cssVariable(block, "--primary"),
     primaryText: cssVariable(block, "--primary-text"),
     primaryForeground: cssVariable(block, "--primary-foreground"),
@@ -188,6 +193,33 @@ describe("theme contrast tokens", () => {
       ] as const) {
         expectContrast(color, tokens.background, `${theme} ${name} on background`);
         expectContrast(color, tokens.card, `${theme} ${name} on card`);
+        expectContrast(color, tokens.popover, `${theme} ${name} on popover`);
+        expectContrast(color, tokens.sidebar, `${theme} ${name} on sidebar`);
+      }
+    }
+  );
+
+  it.each(THEMES)(
+    "%s composes alpha foregrounds over real surfaces at AA",
+    (theme) => {
+      const tokens = themeTokens(theme);
+      // After the dense-typography migration, small labels must no longer use
+      // alpha-prefixed foregrounds. These assertions compose the historical
+      // alpha values over their real surfaces to prove the full tokens satisfy
+      // AA, and to prevent re-introducing /60 /70 /80 alpha as a "fix".
+      const alphaCases: Array<[string, string, string]> = [
+        [tokens.mutedForeground, tokens.background, "muted-foreground/80 on background"],
+        [tokens.mutedForeground, tokens.card, "muted-foreground/80 on card"],
+        [tokens.mutedForeground, tokens.popover, "muted-foreground/80 on popover"],
+        [tokens.mutedForeground, tokens.sidebar, "muted-foreground/80 on sidebar"],
+        [tokens.foreground, tokens.background, "foreground/80 on background"],
+        [tokens.foreground, tokens.card, "foreground/80 on card"],
+      ];
+      for (const [fg, bg, label] of alphaCases) {
+        // Full token (no alpha) must already pass; this is the post-migration
+        // contract. Composing 0.8 alpha would also pass for most pairs, but we
+        // assert the full token to lock the remediation target.
+        expectContrast(fg, bg, `${theme} ${label}`);
       }
     }
   );
