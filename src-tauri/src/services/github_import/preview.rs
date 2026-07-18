@@ -149,6 +149,11 @@ pub(super) enum TreeFastPathOutcome {
     Fallback(tree_manifest::FallbackReason),
 }
 
+pub(super) struct TreeCandidateInspection {
+    pub(super) inspected: InspectedGitHubRepoSkills,
+    pub(super) fetched_files: HashMap<String, Vec<u8>>,
+}
+
 /// Build preview candidates and repository file manifests from the Git tree
 /// API fast-path.
 ///
@@ -177,65 +182,82 @@ pub(super) async fn try_build_preview_from_tree_manifest(
     // attachment (same ordering as `snapshot_preview_repository_files`).
     let repository_files = manifest_to_preview_repository_files(&manifest);
 
-    let plugin_discovery =
-        match build_tree_plugin_discovery(client, &manifest, repo, source_path, auth).await {
-            Ok(discovery) => discovery,
-            Err(error) => return Ok(map_acquisition_error_to_outcome(error)),
-        };
-
-    let manifests = match discover_skill_manifests_from_paths_with_plugin_discovery(
-        manifest.regular_paths(),
-        source_path,
-        &plugin_discovery,
-    ) {
-        Ok(manifests) => manifests,
-        Err(error) => return Ok(map_acquisition_error_to_outcome(error)),
-    };
-
-    let direct_endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
-    let mut candidates = Vec::with_capacity(manifests.len());
-    let mut seen_names = HashSet::new();
-    for skill_manifest in manifests {
-        let skill_md_url = raw_file_url(direct_endpoint, repo, &skill_manifest.skill_md_path);
-        let raw = match fetch_raw_bytes(client, &skill_md_url, auth).await {
-            Ok(bytes) => bytes,
-            Err(error) => return Ok(map_acquisition_error_to_outcome(error)),
-        };
-        if let Err(budget_error) = ResourceBudget::default_skill()
-            .reject_file_read_size(&skill_manifest.skill_md_path, raw.len() as u64)
+    let inspection =
+        match inspect_tree_candidates_from_manifest(client, &manifest, repo, source_path, auth)
+            .await
         {
-            return Ok(map_acquisition_error_to_outcome(GithubImportError::Budget(
-                budget_error,
-            )));
-        }
-        let candidate = match build_remote_skill_candidate(
-            repo,
-            &skill_manifest,
-            raw,
-            direct_endpoint,
-        ) {
-            Ok(candidate) => candidate,
-            Err(invalid) => {
-                // Hint-derived invalid candidates are dropped silently
-                // (additive hints must not suppress recursive discovery).
-                if skill_manifest.from_manifest_hint {
-                    continue;
-                }
-                return Err(GithubImportError::InvalidCandidate(invalid.detail));
-            }
+            Ok(inspection) => inspection,
+            Err(error) => return Ok(map_acquisition_error_to_outcome(error)),
         };
-        if is_generic_remote_skill_candidate(&candidate) {
-            continue;
-        }
-        if !seen_names.insert(candidate.skill_name.clone()) {
-            continue;
-        }
-        candidates.push(candidate);
+    if let Some(invalid) = inspection.inspected.invalid_candidates.first() {
+        return Err(GithubImportError::InvalidCandidate(invalid.detail.clone()));
     }
+    let candidates = inspection.inspected.valid_candidates;
 
     Ok(TreeFastPathOutcome::Ready {
         candidates,
         repository_files,
+    })
+}
+
+pub(super) async fn inspect_tree_candidates_from_manifest(
+    client: &reqwest::Client,
+    manifest: &tree_manifest::RepositoryManifest,
+    repo: &GitHubRepoRef,
+    source_path: Option<&str>,
+    auth: Option<&str>,
+) -> Result<TreeCandidateInspection, GithubImportError> {
+    let (plugin_discovery, mut fetched_files) =
+        build_tree_plugin_discovery(client, manifest, repo, source_path, auth).await?;
+    let manifests = discover_skill_manifests_from_paths_with_plugin_discovery(
+        manifest.regular_paths(),
+        source_path,
+        &plugin_discovery,
+    )?;
+    let direct_endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
+    let mut valid_candidates = Vec::with_capacity(manifests.len());
+    let mut invalid_candidates = Vec::new();
+    let mut seen_names = HashSet::new();
+
+    for skill_manifest in manifests {
+        let raw = if let Some(bytes) = fetched_files.get(&skill_manifest.skill_md_path) {
+            bytes.clone()
+        } else {
+            let url = raw_file_url(direct_endpoint, repo, &skill_manifest.skill_md_path);
+            let bytes = fetch_raw_bytes(client, &url, auth).await?;
+            fetched_files.insert(skill_manifest.skill_md_path.clone(), bytes.clone());
+            bytes
+        };
+        ResourceBudget::default_skill()
+            .reject_file_read_size(&skill_manifest.skill_md_path, raw.len() as u64)
+            .map_err(GithubImportError::Budget)?;
+
+        match build_remote_skill_candidate(repo, &skill_manifest, raw, direct_endpoint) {
+            Ok(candidate) => {
+                if is_generic_remote_skill_candidate(&candidate) {
+                    continue;
+                }
+                if seen_names.insert(candidate.skill_name.clone()) {
+                    valid_candidates.push(candidate);
+                }
+            }
+            Err(invalid) if skill_manifest.from_manifest_hint => {
+                let _ = invalid;
+            }
+            Err(invalid) => invalid_candidates.push(invalid_candidate_from_manifest(
+                &skill_manifest,
+                &invalid.detail,
+            )),
+        }
+    }
+
+    Ok(TreeCandidateInspection {
+        inspected: InspectedGitHubRepoSkills {
+            repo: repo.clone(),
+            valid_candidates,
+            invalid_candidates,
+        },
+        fetched_files,
     })
 }
 
@@ -289,27 +311,29 @@ async fn build_tree_plugin_discovery(
     repo: &GitHubRepoRef,
     source_path: Option<&str>,
     auth: Option<&str>,
-) -> Result<PluginManifestDiscovery, GithubImportError> {
+) -> Result<(PluginManifestDiscovery, HashMap<String, Vec<u8>>), GithubImportError> {
     let base_path = effective_source_root(source_path)?;
     let plugin_json_path = join_repo_path(&base_path, ".claude-plugin/plugin.json")?;
     let marketplace_json_path = join_repo_path(&base_path, ".claude-plugin/marketplace.json")?;
 
     let plugin_json =
         fetch_optional_manifest_bytes(client, manifest, &plugin_json_path, repo, auth).await?;
-    let marketplace_json = fetch_optional_manifest_bytes(
-        client,
-        manifest,
-        &marketplace_json_path,
-        repo,
-        auth,
-    )
-    .await?;
+    let marketplace_json =
+        fetch_optional_manifest_bytes(client, manifest, &marketplace_json_path, repo, auth).await?;
 
-    Ok(plugin_manifest_discovery_from_manifest_bytes(
+    let discovery = plugin_manifest_discovery_from_manifest_bytes(
         &base_path,
         plugin_json.as_deref(),
         marketplace_json.as_deref(),
-    ))
+    );
+    let mut fetched_files = HashMap::new();
+    if let Some(bytes) = plugin_json {
+        fetched_files.insert(plugin_json_path, bytes);
+    }
+    if let Some(bytes) = marketplace_json {
+        fetched_files.insert(marketplace_json_path, bytes);
+    }
+    Ok((discovery, fetched_files))
 }
 
 /// Fetch an optional plugin manifest file's raw bytes. Returns `None` when the
@@ -346,30 +370,29 @@ pub(crate) async fn preview_github_repo_import_with_auth(
     // the existing archive path; domain failures (invalid candidate) are
     // surfaced directly because archive acquisition would produce the same
     // domain error (discovery + frontmatter interpretation are shared).
-    let (candidates, repository_files) =
-        match try_build_preview_from_tree_manifest(
-            &client,
-            &resolved.repo,
-            resolved.source_path.as_deref(),
-            auth,
-        )
-        .await
-        {
-            Ok(TreeFastPathOutcome::Ready {
-                candidates,
-                repository_files,
-            }) => (candidates, repository_files),
-            Ok(TreeFastPathOutcome::Fallback(_)) => {
-                let snapshot = download_repo_snapshot(&client, &resolved.repo, auth).await?;
-                let candidates = build_repo_skill_candidates_from_snapshot_at_path(
-                    &resolved.repo,
-                    &snapshot,
-                    resolved.source_path.as_deref(),
-                )?;
-                (candidates, snapshot_preview_repository_files(&snapshot))
-            }
-            Err(error) => return Err(error),
-        };
+    let (candidates, repository_files) = match try_build_preview_from_tree_manifest(
+        &client,
+        &resolved.repo,
+        resolved.source_path.as_deref(),
+        auth,
+    )
+    .await
+    {
+        Ok(TreeFastPathOutcome::Ready {
+            candidates,
+            repository_files,
+        }) => (candidates, repository_files),
+        Ok(TreeFastPathOutcome::Fallback(_)) => {
+            let snapshot = download_repo_snapshot(&client, &resolved.repo, auth).await?;
+            let candidates = build_repo_skill_candidates_from_snapshot_at_path(
+                &resolved.repo,
+                &snapshot,
+                resolved.source_path.as_deref(),
+            )?;
+            (candidates, snapshot_preview_repository_files(&snapshot))
+        }
+        Err(error) => return Err(error),
+    };
 
     let mut skills = build_preview_skills(pool, &candidates).await?;
 

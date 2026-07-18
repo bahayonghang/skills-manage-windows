@@ -1,3 +1,4 @@
+use super::tree_import::{try_prepare_tree_import, TreeImportOutcome};
 use super::*;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) async fn import_github_repo_skills_impl(
@@ -31,12 +32,30 @@ pub(crate) async fn import_github_repo_skills_with_auth(
     );
     let resolved = resolve_repo_source(repo_url, auth).await?;
     let client = github_client()?;
-    let snapshot = download_repo_snapshot(&client, &resolved.repo, auth).await?;
-    let candidates = build_repo_skill_candidates_from_snapshot_at_path(
+    let (snapshot, candidates) = match try_prepare_tree_import(
+        &client,
         &resolved.repo,
-        &snapshot,
         resolved.source_path.as_deref(),
-    )?;
+        &selections,
+        auth,
+        false,
+    )
+    .await?
+    {
+        TreeImportOutcome::Ready {
+            snapshot,
+            inspected,
+        } => (snapshot, inspected.valid_candidates),
+        TreeImportOutcome::Fallback(_reason) => {
+            let snapshot = download_repo_snapshot(&client, &resolved.repo, auth).await?;
+            let candidates = build_repo_skill_candidates_from_snapshot_at_path(
+                &resolved.repo,
+                &snapshot,
+                resolved.source_path.as_deref(),
+            )?;
+            (snapshot, candidates)
+        }
+    };
     if candidates.is_empty() {
         return Err(GithubImportError::NoImportableSkills);
     }
@@ -159,12 +178,30 @@ pub(crate) async fn import_github_repo_skills_partially_with_auth(
 
     let resolved = resolve_repo_source(repo_url, auth).await?;
     let client = github_client()?;
-    let snapshot = download_repo_snapshot(&client, &resolved.repo, auth).await?;
-    let inspected = inspect_repo_skill_candidates_from_snapshot_at_path(
+    let (snapshot, inspected) = match try_prepare_tree_import(
+        &client,
         &resolved.repo,
-        &snapshot,
         resolved.source_path.as_deref(),
-    )?;
+        &selections,
+        auth,
+        true,
+    )
+    .await?
+    {
+        TreeImportOutcome::Ready {
+            snapshot,
+            inspected,
+        } => (snapshot, inspected),
+        TreeImportOutcome::Fallback(_reason) => {
+            let snapshot = download_repo_snapshot(&client, &resolved.repo, auth).await?;
+            let inspected = inspect_repo_skill_candidates_from_snapshot_at_path(
+                &resolved.repo,
+                &snapshot,
+                resolved.source_path.as_deref(),
+            )?;
+            (snapshot, inspected)
+        }
+    };
 
     let central_root = central_skills_root(pool).await?;
     std::fs::create_dir_all(&central_root)

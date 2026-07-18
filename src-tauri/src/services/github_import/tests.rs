@@ -2987,6 +2987,7 @@ metadata:
     // the behavioral acceptance criteria.
     mod tree_fast_path_dispatcher {
         use super::*;
+        use super::super::tree_import::{download_tree_selection, plan_tree_selection};
         use super::super::preview::{
             manifest_to_preview_repository_files, map_acquisition_error_to_outcome,
             snapshot_preview_repository_files, TreeFastPathOutcome,
@@ -2996,7 +2997,7 @@ metadata:
             plugin_manifest_discovery_from_snapshot,
         };
         use super::super::tree_manifest::{
-            fallback_reason_for, FallbackReason, RepositoryFileKind,
+            fallback_reason_for, AcquisitionMode, FallbackReason, RepositoryFileKind,
             RepositoryFileMeta, RepositoryManifest,
         };
 
@@ -3170,6 +3171,10 @@ metadata:
                 fallback_reason_for(
                     &GithubImportError::TreeManifestEntryMissingSize("p".to_string())
                 ),
+                Some(FallbackReason::Integrity)
+            );
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::Parse("bad tree json".to_string())),
                 Some(FallbackReason::Integrity)
             );
         }
@@ -3407,6 +3412,142 @@ metadata:
             let mut snapshot_paths = snapshot.files.keys().cloned().collect::<Vec<_>>();
             snapshot_paths.sort();
             assert_eq!(manifest_paths, snapshot_paths);
+        }
+
+        #[test]
+        fn tree_import_plan_downloads_only_selected_subtree_union() {
+            let snapshot = multi_skill_snapshot();
+            let repo = sample_repo();
+            let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
+            let candidates = archive_candidates(&repo, &snapshot, None);
+            let selections = candidates
+                .iter()
+                .filter(|candidate| candidate.source_path != ".")
+                .take(2)
+                .map(|candidate| GitHubSkillImportSelection {
+                    source_path: candidate.source_path.clone(),
+                    resolution: DuplicateResolution::Overwrite,
+                    renamed_skill_id: None,
+                })
+                .collect::<Vec<_>>();
+
+            let plan = plan_tree_selection(&manifest, &candidates, &selections)
+                .expect("selected subtree plan");
+
+            assert_eq!(plan.mode, AcquisitionMode::TreeRaw);
+            let planned_paths = plan
+                .files
+                .iter()
+                .map(|file| file.repo_path.as_str())
+                .collect::<Vec<_>>();
+            assert!(!planned_paths.is_empty());
+            assert_eq!(
+                planned_paths.len(),
+                planned_paths.iter().collect::<HashSet<_>>().len(),
+                "overlapping selections must download each repo file once"
+            );
+            assert!(planned_paths.iter().all(|path| selections.iter().any(|selection| {
+                repo_file_relative_to_source(path, &selection.source_path).is_some()
+            })));
+        }
+
+        #[test]
+        fn tree_import_plan_routes_root_skill_to_archive() {
+            let snapshot = root_repo_snapshot();
+            let repo = sample_repo();
+            let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
+            let candidates = archive_candidates(&repo, &snapshot, None);
+            let selections = vec![GitHubSkillImportSelection {
+                source_path: ".".to_string(),
+                resolution: DuplicateResolution::Overwrite,
+                renamed_skill_id: None,
+            }];
+
+            let plan = plan_tree_selection(&manifest, &candidates, &selections)
+                .expect("root plan");
+
+            assert_eq!(plan.mode, AcquisitionMode::Archive);
+            assert_eq!(plan.fallback_reason, Some(FallbackReason::Threshold));
+        }
+
+        #[test]
+        fn tree_import_plan_avoids_raw_request_amplification() {
+            let repo = sample_repo();
+            let mut regular_files = vec![RepositoryFileMeta::new(
+                "skills/demo/SKILL.md",
+                32,
+                RepositoryFileKind::RegularBlob,
+            )];
+            regular_files.extend((0..65).map(|index| RepositoryFileMeta::new(
+                &format!("skills/demo/references/{index}.md"),
+                16,
+                RepositoryFileKind::RegularBlob,
+            )));
+            let manifest = RepositoryManifest {
+                repo,
+                regular_files,
+                skipped: Vec::new(),
+            };
+            let candidates = vec![RemoteSkillCandidate {
+                source_path: "skills/demo".to_string(),
+                skill_id: "demo".to_string(),
+                skill_name: "Demo".to_string(),
+                description: None,
+                plugin_name: None,
+                root_directory: "skills".to_string(),
+                skill_directory_name: "demo".to_string(),
+                download_url: "https://example.invalid/SKILL.md".to_string(),
+            }];
+            let selections = vec![GitHubSkillImportSelection {
+                source_path: "skills/demo".to_string(),
+                resolution: DuplicateResolution::Overwrite,
+                renamed_skill_id: None,
+            }];
+
+            let plan = plan_tree_selection(&manifest, &candidates, &selections)
+                .expect("amplified plan");
+
+            assert_eq!(plan.mode, AcquisitionMode::Archive);
+            assert_eq!(plan.fallback_reason, Some(FallbackReason::Threshold));
+        }
+
+        #[test]
+        fn raw_size_mismatch_is_an_integrity_fallback() {
+            let error = GithubImportError::RepoFileSizeMismatch {
+                path: "skills/demo/SKILL.md".to_string(),
+                expected: 10,
+                actual: 9,
+            };
+            assert_eq!(fallback_reason_for(&error), Some(FallbackReason::Integrity));
+        }
+
+        #[tokio::test]
+        async fn tree_import_reuses_already_fetched_candidate_metadata() {
+            let repo = sample_repo();
+            let bytes = sample_frontmatter("demo", "demo skill").into_bytes();
+            let plan = super::super::tree_import::TreeSelectionPlan {
+                mode: AcquisitionMode::TreeRaw,
+                fallback_reason: None,
+                files: vec![RepositoryFileMeta::new(
+                    "skills/demo/SKILL.md",
+                    bytes.len() as u64,
+                    RepositoryFileKind::RegularBlob,
+                )],
+                selected_bytes: bytes.len() as u64,
+            };
+            let fetched = HashMap::from([("skills/demo/SKILL.md".to_string(), bytes.clone())]);
+
+            let snapshot = download_tree_selection(
+                &github_client().expect("client"),
+                &repo,
+                &plan,
+                None,
+                fetched,
+            )
+            .await
+            .expect("metadata-only selection needs no network request");
+
+            assert_eq!(snapshot.files.get("skills/demo/SKILL.md"), Some(&bytes));
         }
 
         // `try_fetch_tree_manifest` reachability is enforced by `cargo check`

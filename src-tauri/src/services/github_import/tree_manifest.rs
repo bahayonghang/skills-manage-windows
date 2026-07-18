@@ -73,7 +73,9 @@ impl RepositoryManifest {
     /// Regular-blob paths, suitable for feeding into
     /// `discover_skill_manifests_from_paths_with_plugin_discovery`.
     pub(super) fn regular_paths(&self) -> impl Iterator<Item = &str> {
-        self.regular_files.iter().map(|file| file.repo_path.as_str())
+        self.regular_files
+            .iter()
+            .map(|file| file.repo_path.as_str())
     }
 
     /// Sum of regular-blob byte lengths. Used by the dispatcher's cost model
@@ -81,10 +83,7 @@ impl RepositoryManifest {
     /// Commit 3 (import cost decision) reads this; preview does not.
     #[allow(dead_code)]
     pub(super) fn regular_total_bytes(&self) -> u64 {
-        self.regular_files
-            .iter()
-            .map(|file| file.byte_len)
-            .sum()
+        self.regular_files.iter().map(|file| file.byte_len).sum()
     }
 }
 
@@ -349,7 +348,10 @@ pub(super) fn fallback_reason_for(error: &GithubImportError) -> Option<FallbackR
         GithubImportError::Budget(_)
         | GithubImportError::TreeManifestEntryBudgetExceeded(_)
         | GithubImportError::TreeManifestSizeOverflow => Some(FallbackReason::Budget),
-        GithubImportError::TreeManifestEntryMissingSize(_) => Some(FallbackReason::Integrity),
+        GithubImportError::TreeManifestEntryMissingSize(_)
+        | GithubImportError::RepoFileGone(_)
+        | GithubImportError::Parse(_)
+        | GithubImportError::RepoFileSizeMismatch { .. } => Some(FallbackReason::Integrity),
         // Domain errors (invalid candidate, no importable skills, path policy
         // violations on candidate discovery) are not acquisition fallbacks —
         // archive would produce the same domain failure.

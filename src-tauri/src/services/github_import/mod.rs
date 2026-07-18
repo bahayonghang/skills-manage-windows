@@ -36,6 +36,7 @@ mod remote;
 mod source;
 #[cfg(test)]
 mod tests;
+mod tree_import;
 mod tree_manifest;
 mod types;
 

@@ -21,6 +21,39 @@ pub(super) async fn fetch_raw_bytes(
     url: &str,
     auth_token: Option<&str>,
 ) -> Result<Vec<u8>, GithubImportError> {
+    fetch_raw_bytes_with_budget(client, url, auth_token, RawBytesBudget::Metadata).await
+}
+
+pub(super) async fn fetch_raw_repo_file(
+    client: &reqwest::Client,
+    url: &str,
+    auth_token: Option<&str>,
+) -> Result<Vec<u8>, GithubImportError> {
+    fetch_raw_bytes_with_budget(client, url, auth_token, RawBytesBudget::RepositoryFile).await
+}
+
+#[derive(Clone, Copy)]
+enum RawBytesBudget {
+    Metadata,
+    RepositoryFile,
+}
+
+async fn fetch_raw_bytes_with_budget(
+    client: &reqwest::Client,
+    url: &str,
+    auth_token: Option<&str>,
+    budget_kind: RawBytesBudget,
+) -> Result<Vec<u8>, GithubImportError> {
+    let (failure_prefix, operation) = match budget_kind {
+        RawBytesBudget::Metadata => (
+            "Failed to download skill metadata",
+            "downloading skill metadata",
+        ),
+        RawBytesBudget::RepositoryFile => (
+            "Failed to download repository file",
+            "downloading repository file",
+        ),
+    };
     let response = send_github_request_with_fallback(
         client,
         GitHubFetchSurface::Raw,
@@ -31,7 +64,7 @@ pub(super) async fn fetch_raw_bytes(
                 url.to_string()
             }
         },
-        "Failed to download skill metadata",
+        failure_prefix,
         auth_token,
     )
     .await?;
@@ -44,30 +77,35 @@ pub(super) async fn fetch_raw_bytes(
         return Err(GithubImportError::RepoFileGone(url.to_string()));
     }
     if !response.status().is_success() {
-        return Err(
-            classify_github_denial_response(response, "downloading skill metadata")
-                .await
-                .unwrap_or_else(|| {
-                    GithubImportError::Http("Failed to download skill metadata.".to_string())
-                }),
-        );
+        return Err(classify_github_denial_response(response, operation)
+            .await
+            .unwrap_or_else(|| GithubImportError::Http(format!("{}.", failure_prefix))));
     }
 
     let budget = ResourceBudget::default_skill();
     if let Some(content_length) = response.content_length() {
-        budget
-            .reject_file_read_size(url, content_length)
-            .map_err(GithubImportError::Budget)?;
+        reject_raw_bytes_budget(budget, budget_kind, url, content_length)?;
     }
 
     let bytes = response
         .bytes()
         .await
         .map_err(|e| GithubImportError::Http(format!("Failed to read skill metadata: {}", e)))?;
-    budget
-        .reject_file_read_size(url, bytes.len() as u64)
-        .map_err(GithubImportError::Budget)?;
+    reject_raw_bytes_budget(budget, budget_kind, url, bytes.len() as u64)?;
     Ok(bytes.to_vec())
+}
+
+fn reject_raw_bytes_budget(
+    budget: ResourceBudget,
+    budget_kind: RawBytesBudget,
+    path: &str,
+    size: u64,
+) -> Result<(), GithubImportError> {
+    match budget_kind {
+        RawBytesBudget::Metadata => budget.reject_file_read_size(path, size),
+        RawBytesBudget::RepositoryFile => budget.reject_archive_entry_size(path, size),
+    }
+    .map_err(GithubImportError::Budget)
 }
 
 #[derive(Debug, Clone)]

@@ -122,6 +122,113 @@ GitHubSkillPreview {
 }
 ```
 
+## Scenario: Selected-Subtree TreeRaw Import
+
+### 1. Scope / Trigger
+
+Apply this contract when local GitHub import acquisition changes after preview.
+SSH/WSL preview workspaces keep their existing remote archive flow.
+
+### 2. Signatures
+
+```rust
+async fn try_prepare_tree_import(
+    client: &reqwest::Client,
+    repo: &GitHubRepoRef,
+    source_path: Option<&str>,
+    selections: &[GitHubSkillImportSelection],
+    auth: Option<&str>,
+    allow_invalid_candidates: bool,
+) -> Result<TreeImportOutcome, GithubImportError>;
+
+fn plan_tree_selection(
+    manifest: &RepositoryManifest,
+    candidates: &[RemoteSkillCandidate],
+    selections: &[GitHubSkillImportSelection],
+) -> Result<TreeSelectionPlan, GithubImportError>;
+```
+
+`TreeImportOutcome` is internal and is either a fully prepared snapshot plus
+fresh candidate inspection or a typed archive fallback reason. It is never
+serialized or persisted.
+
+### 3. Contracts
+
+- Re-fetch the recursive tree at confirm time and rediscover candidates; never
+  trust frontend file lists or source paths without backend validation.
+- Build a stable, deduplicated union of regular files under non-skipped selected
+  source paths. Root source `.` routes to archive acquisition.
+- Reuse plugin manifest and candidate `SKILL.md` bytes already fetched during
+  current-operation discovery. Download each remaining selected blob once with
+  bounded concurrency.
+- Validate every raw response against tree byte size plus shared single-file and
+  aggregate resource budgets. Missing or changed files are integrity fallbacks.
+- Complete tree/raw or archive acquisition before Central directory creation,
+  staging, mutation locking, target swap or DB persistence. Acquisition failure
+  cannot leave Central filesystem or database state behind.
+- Keep full and partial import DTOs, selection resolution, progress events,
+  source metadata and remote-target behavior unchanged.
+
+Initial policy: TreeRaw is limited to non-root selections of at most 64 regular
+files and 8 MiB selected bytes, downloaded with concurrency 8. Exceeding any
+limit selects the archive path with `FallbackReason::Threshold`; these values
+are internal policy, not frontend or persistence contracts.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| One nested skill | Download only that source subtree |
+| Overlapping multi-selection | Download the file union once |
+| Root skill | Use archive |
+| More than 64 selected files or more than 8 MiB | Use archive |
+| Candidate/plugin metadata belongs to selection | Reuse bytes; no duplicate raw request |
+| Raw 404 or tree/raw byte-size mismatch | Integrity fallback before staging |
+| Denial, transport or budget failure | Typed archive fallback; preserve actionable final error |
+| Partial import includes invalid selection | Report existing per-skill failure and import valid selections only |
+
+### 5. Good / Base / Bad Cases
+
+- Good: two nested selected skills overlap in a shared subtree; the planner
+  emits a stable union and each repository file is fetched once.
+- Base: a root skill or a 65-file nested selection selects archive before any
+  Central directory or staging path is created.
+- Bad: begin staging after candidate metadata succeeds, then discover a raw 404
+  halfway through selected files. This can leave partial filesystem state and
+  is forbidden; all acquisition must finish first.
+
+### 6. Tests Required
+
+- Planner tests for nested union, overlap dedupe, root and threshold routing.
+- Metadata reuse and byte-size mismatch fallback tests.
+- Existing full/partial archive import, staging rollback, Central update and
+  remote workspace tests must remain green.
+- Full gate: `just ci`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```rust
+for selection in selections {
+    download_and_stage_subtree(selection).await?;
+}
+```
+
+This trusts frontend selection order, redownloads overlaps and crosses into
+Central mutation before acquisition is complete.
+
+#### Correct
+
+```rust
+let plan = plan_tree_selection(&manifest, &fresh_candidates, &selections)?;
+let snapshot = download_tree_selection(client, repo, &plan, auth, metadata).await?;
+import_github_repo_skills_from_snapshot(pool, repo, &snapshot, /* ... */).await
+```
+
+The complete selected snapshot is validated first, then the existing atomic
+staging/persistence pipeline runs unchanged.
+
 ## Scenario: Repository-Level Singular Skill Directory
 
 ### 1. Scope / Trigger

@@ -177,3 +177,85 @@ and import remain a bottleneck, Commit 4 (conditional) will add a ≤4-entry,
 - [ ] Selected subtree import + bounded raw downloader — Commit 3.
 - [ ] Acquisition diagnostics + before/after metrics — Commit 3.
 - [ ] Spec update (`github-import-preview-contract.md` acquisition scenario) — Commit 3.
+
+## 8. Commit 3 selected-subtree import result
+
+The import dispatcher now uses the same parsed tree and candidate metadata as
+preview, validates the frontend selection against the freshly discovered
+candidates, and prepares a deduplicated `GitHubRepoSnapshot` containing only
+the selected source-path union. Candidate `SKILL.md` and plugin manifest bytes
+already fetched during discovery are reused by the downloader rather than
+requested a second time.
+
+The initial TreeRaw policy is deliberately bounded:
+
+| Bound | Value | Reason |
+| --- | ---: | --- |
+| Concurrent raw requests | 8 | Below the shared 10 QPS host limiter and small enough to keep cancellation/fallback bounded |
+| Maximum selected raw files | 64 | Caps per-file request amplification at a predictable level; F2/F3 nested fixtures remain below it |
+| Maximum selected raw bytes | 8 MiB | Keeps the selected-subtree case materially below the 128 MiB archive budget |
+| Root skill | Archive | A root selection is the whole repository, so per-file raw requests have no acquisition advantage |
+
+This is not SkillKit's fixed 300-file constant. The decision combines selected
+scope, request count and selected bytes. Any threshold hit records
+`FallbackReason::Threshold` and uses the existing archive path before Central
+directory creation or mutation locking.
+
+### Deterministic before/after matrix
+
+`A` is one full archive request, `T` one recursive tree request, `M` the number
+of present plugin manifest files (0-2), `C` the discovered candidate
+`SKILL.md` count, and `S` the selected regular-file union. `S-meta` files that
+were already fetched as candidate/plugin metadata are reused and are not
+requested twice.
+
+| Fixture | Before preview/import | After preview | After import | Byte boundary / outcome |
+| --- | --- | --- | --- | --- |
+| F1 root skill | `A + A` | `T + M + C` | `A` | root selection intentionally archives |
+| F2 nested skill | `A + A` | `T + M + C` | `T + M + C + (S-meta)` | only selected subtree bytes |
+| F3 multi-skill | `A + A` | `T + M + C` | same formula with deduplicated union | overlaps downloaded once |
+| F4 plugin manifest | `A + A` | `T + M + C` | metadata reused in `S` | `pluginName` remains preview-only |
+| F5 private/PAT | `A + A` | direct authenticated `T/raw` | direct authenticated `T/raw` or typed archive fallback | PAT never sent to mirrors |
+| F6 rate limit | `A + A` | typed denial then archive policy | typed denial then archive policy | final denial remains actionable |
+| F7 truncated tree | `A + A` | `T + A` | `T + A` | `Truncated` fallback |
+| F8 mirror failure | archive mirror attempts | tree mirror attempts then archive | same | typed transport summary |
+| F9 symlink 120000 | included only as tar non-file | skipped by tree | no raw request | parity: excluded |
+| F10 gitlink 160000 | absent/non-file | skipped by tree | no raw request | parity: excluded |
+| F11 missing size | `A + A` | `T + A` | `T + A` | `Integrity` fallback |
+| F12 unknown mode | `A + A` | `T + A` | `T + A` | `Unsupported` fallback |
+| F13 >2048 tree entries | `A + A` | `T + A` | `T + A` | `Budget` fallback |
+| F14 selected bytes over policy | `A + A` | tree preview remains valid | `T + A` | `Threshold` or resource-budget fallback |
+
+Deterministic CI evidence after Commit 3:
+
+- `cargo test services::github_import`: 109 passed in 3.99 s on the local
+  Windows checkout. The focused 15-test tree dispatcher/parser slice completes
+  in approximately 0.01 s after compilation.
+- planner tests prove nested union/deduplication, root archive routing, the
+  64-request amplification bound, metadata reuse and raw size-integrity
+  fallback.
+- `cargo clippy -- -D warnings`: passed.
+- acquisition debug events record mode, fallback stage/reason, planned request
+  count, selected bytes and elapsed milliseconds without persisting data or
+  exposing PAT values.
+
+These timings are local deterministic test-suite evidence, not public GitHub
+network performance. Live-network latency and peak RSS remain **not measured**
+and are not claimed as a pass.
+
+## 9. Cache decision after import integration
+
+No metadata cache was added. Import performs one bounded tree request and
+reuses candidate/plugin bytes within that operation; the dominant double full
+archive download has been removed for supported nested selections. There is no
+evidence that a 4-entry/10-minute process cache is needed, and adding it would
+introduce PAT/target invalidation risk without a measured acceptance benefit.
+
+Commit 3 checklist:
+
+- [x] Selected subtree planner + deduplicated raw downloader.
+- [x] Candidate/plugin metadata reuse and raw size integrity validation.
+- [x] TreeRaw/archive dispatch for full and partial local imports before Central mutation.
+- [x] Acquisition diagnostics and deterministic before/after model.
+- [x] Backend acquisition/import contract update.
+- [ ] Public-network wall-time and peak RSS measurements (optional evidence; not a CI pass condition).

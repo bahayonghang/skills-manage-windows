@@ -155,10 +155,7 @@ pub enum GithubImportError {
     /// gitlink). Falling back to archive keeps parity with the tar regular
     /// file filter.
     #[error("GitHub repository tree entry '{path}' has unsupported mode '{mode}'.")]
-    TreeManifestUnsupportedMode {
-        path: String,
-        mode: String,
-    },
+    TreeManifestUnsupportedMode { path: String, mode: String },
 
     /// The recursive Git tree response exceeded the tree-entry budget. The
     /// dispatcher falls back to archive (which has its own larger file budget).
@@ -206,6 +203,15 @@ pub enum GithubImportError {
 
     #[error("Repository file '{0}' is no longer available in the archive.")]
     RepoFileGone(String),
+
+    #[error(
+        "Repository file '{path}' changed size while it was being downloaded (expected {expected} bytes, received {actual} bytes)."
+    )]
+    RepoFileSizeMismatch {
+        path: String,
+        expected: u64,
+        actual: u64,
+    },
 
     #[error("Failed to determine imported file parent directory.")]
     ImportParentDirUnknown,
