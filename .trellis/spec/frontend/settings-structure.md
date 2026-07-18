@@ -7,6 +7,7 @@
 - `SettingsView` 只渲染当前页面一个 `h1` 与 description，不再添加通用 Settings banner。
 - `SettingsSideNav` 是桌面纵向、窄窗口横向滚动的扁平导航；active item 使用 `aria-current="page"`。
 - 页面内容使用受约束的单一内容列；不得以装饰卡片包住整个 section 或导航项。
+- `activePageId` 变化时必须把 Settings 自有的可滚动 `<main>` 归零，不能把 Appearance 底部等旧 scrollTop 带到下一页。只有显式 legacy hash（如 `#remote-targets-section`）或 `section=remote-targets` query 才在归零后调用 `scrollIntoView`；普通 `/settings/connections` 不自动跳过页面标题。
 
 ## Shared Section 契约
 
@@ -39,7 +40,7 @@ interface SettingsSectionProps {
 
 ## Tests Required
 
-- `SettingsView.test.tsx` 锁定单一 `h1`、扁平导航、section 折叠持久化、Appearance 控件和非 Appearance 业务行为。
+- `SettingsView.test.tsx` 锁定单一 `h1`、扁平导航、section 折叠持久化、Appearance 控件、切页 scrollTop 归零、legacy anchor 仍滚动和非 Appearance 业务行为。
 - 视觉变更检查 900x600、1200x800、1440x900、440x900；自动化工具不可用时必须明确记录未验证项，不得声明通过。
 
 ## Wrong vs Correct

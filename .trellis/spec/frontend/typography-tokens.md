@@ -28,26 +28,30 @@
 - 所有语义字号 token 在 `src/index.css` 的 `@theme inline` 边界用 `rem` 声明，只定义 `font-size`，不覆盖 `line-height`；`leading-*` 继续由拥有布局语义的组件控制。
 - 根级 `font-size: calc(16px * var(--font-scale))`（0.875 / 1 / 1.125 三档）驱动全部 rem token；不得新增 viewport 驱动字号、运行时 DOM 扫描或组件内字号计算。
 - 默认 Scale=1 时 `text-ui-meta`（11px）与 `text-ui-micro`（10px）保持迁移前几何，避免机械放大造成密度回退；只有从微型文本提升为真正 label/body 的角色才允许有依据地增大。
+- 固定高度虚拟化消费者通过 `subscribeAppliedFontScale()` / `getAppliedFontScale()` 订阅已应用 Scale，不读取 computed style、不扫描 DOM。Central 只在 `centralVirtualItemHeight()` 中维护 list/grid、comfortable/compact 的高度映射；不得把该修正扩散成通用动态测量 virtualizer，也不得改变阈值或 overscan。
 
 ## 4. No-growth contract
 
 - 生产 `src/**/*.ts(x)`（排除 `src/test/**`）禁止整个 `text-[...]` arbitrary 家族：包括 `text-[Npx]`、`text-[Nrem]`、`text-[Nem]`、`text-[calc(...)]`、`text-[clamp(...)]` 与 arbitrary `text-[#hex]` 颜色。
 - 不保留按文件/行号或按数值的 allowlist；确需保留的 deliberate display 几何也必须使用命名语义 token（如 `text-display-*`），不得继续写 arbitrary class。
 - 颜色必须通过 theme token / named utility 表达，不能借 arbitrary syntax 绕过字号或颜色契约。
+- 生产 TS/TSX 同时禁止 inline `fontSize`；scale specimen 直接使用 `text-base` 并自然继承根字号，不能把 `scale rem` 再叠加到已缩放 root 上。
 - 守卫由 `src/test/typographyContract.test.ts` 在 CI 期读取源码实现，不进入生产 bundle，不增加运行时 observer / resize listener / 扫描逻辑。
 
 ## 5. Contrast contract
 
 - 承载标签、状态、路径、错误、来源、操作或用户决策的小字，在实际 `background` / `card` / `popover` / `sidebar` / 状态 surface 上达到 WCAG 2.1 AA 普通文本 4.5:1。
-- 有意义文本默认不使用 `/60` `/70` `/80` 透明前景色；`primary` 用于填充/强调，普通 accent 文本使用已测的 `text-primary-text`；`success` / `warning` / `info` / `destructive` 使用现有 semantic foreground，不新增硬编码组件色。
+- 有意义文本默认不使用 `/60` `/70` `/80` 透明前景色；`primary` 用于填充/强调，普通 accent 文本使用已测的 `text-primary-text`；`success` / `warning` / `info` 使用现有 semantic foreground，不新增硬编码组件色。
+- Destructive 分为两个角色：普通 surface 上的错误文字/图标使用 `text-destructive-text`；`bg-destructive` 填充上的反色文字使用 `text-destructive-foreground`。不得用填充色 `text-destructive` 直接承载小字错误信息。
 - `disabled` 或纯装饰例外必须同时具有不可操作语义/等价 label 并记录在任务 research 决策表；不建立按行号 allowlist。
 - 测试基线为 `src/test/themeContrast.test.ts`（六主题×14 accent×核心前景/背景/card/popover/sidebar/muted/alpha 合成），新治理扩展该测试，不引入第二套颜色或字体模型。
 
 ## 6. Tests Required
 
-- `src/test/typographyContract.test.ts`：扫描生产 TS/TSX，断言无任何 `text-[...]`、无 arbitrary size/color、`--text-ui-meta`/`--text-ui-micro` 存在、无 viewport 字号。
+- `src/test/typographyContract.test.ts`：扫描生产 TS/TSX，断言无任何 `text-[...]`、无 arbitrary size/color、无 inline `fontSize`、`--text-ui-meta`/`--text-ui-micro` 存在、无 viewport 字号。
 - `src/test/fontContract.test.ts`：token 在 `@theme inline` 用 rem 声明、不覆盖 line-height、阶梯 `micro < meta < xs`、由根 `--font-scale` 驱动。
-- `src/test/themeContrast.test.ts`：六主题×14 accent 在 background/card/popover/sidebar/muted 上满足 AA；alpha 前景与真实 surface 合成后满足 AA。
+- `src/test/themeContrast.test.ts`：六主题×14 accent 在 background/card/popover/sidebar/muted 上满足 AA；alpha 前景与真实 surface 合成后满足 AA；`destructive-text` 在四类普通 surface 上通过，`destructive-foreground` 在 destructive fill 上通过。
+- `src/test/centralSkillGrid.test.ts`：三档 Scale 下锁定 Central list/grid、comfortable/compact 固定高度映射；真实浏览器另验相邻边界、scroll overflow 与首末项可达。
 - 改动后至少运行定向 Vitest、`pnpm typecheck`、`pnpm lint`、`pnpm build` 与 `just ci`。
 
 ## 7. Wrong vs Correct
@@ -59,7 +63,11 @@
 // Wrong: 用 arbitrary color 绕过颜色契约
 <span className="text-[#a6adc8]">label</span>
 
+// Wrong: 把填充色直接用于普通 surface 上的错误文字
+<span className="text-xs text-destructive">Failed</span>
+
 // Correct: 次要路径用 meta + 完整已测 foreground；状态/section label 至少 text-xs
 <span className="font-mono text-ui-meta text-muted-foreground">{path}</span>
 <span className="text-xs font-medium text-muted-foreground">Source</span>
+<span className="text-xs text-destructive-text">Failed</span>
 ```

@@ -142,3 +142,12 @@ Delta 解释：planning 与 task-start 均为同日快照，数量基本一致�
 | 2.35rem / 3.35rem Dashboard display | 2 | Dashboard 命名 component utility（不污染全局 ladder） |
 
 所有数值型 arbitrary `text-[...]` 命中最终降为 0，由 `typographyContract.test.ts` 守卫。
+
+## 7. Completion audit（2026-07-18）
+
+- 生产 TS/TSX `text-[...]`：0。
+- 动态 `text-${...}` / arbitrary rem、em、calc、clamp、color：0；inline `fontSize`：0。
+- 22 个历史 alpha-risk 所在文件复查：当前风险命中 0；所有 22 项仍按第 4 节结论使用完整 foreground。
+- 普通 surface 上的错误文字从填充色 `text-destructive` 迁到 `text-destructive-text`；3 个 `bg-destructive` 反色场景保留 `text-destructive-foreground`。
+- 六主题×14 accent 的 `primary-text` 在 background/card/popover/sidebar 上完整遍历；另覆盖 destructive fill 与 destructive/success/warning/info 普通 surface。Claude Dark 的 mauve/red/maroon 仅增加可读 `primary-text` override，填充/ring 身份不变。
+- computed style、三档 Scale、Central >60 list/>40 grid、三视口和真实 Tauri GitHub preview 证据见 [visual-validation.md](./visual-validation.md)。
