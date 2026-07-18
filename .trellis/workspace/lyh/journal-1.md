@@ -1855,3 +1855,38 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 47: 完成 SkillPort GitHub 导入深链
+
+**Date**: 2026-07-18
+**Task**: 完成 SkillPort GitHub 导入深链
+**Branch**: `dev`
+
+### Summary
+
+实现严格深链 parser、8 条 native/frontend FIFO、Windows single-instance cold/warm 生命周期与前端统一 import intent controller；通过 just ci 和真实 NSIS 安装、scheme、cold/warm、单进程与前台聚焦验收。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0bcf6701` | (see git log) |
+| `02f3d749` | (see git log) |
+| `b0f10498` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

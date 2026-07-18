@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 46
+- **Total Sessions**: 47
 - **Last Active**: 2026-07-18
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1857 | Active |
+| `journal-1.md` | ~1892 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 47 | 2026-07-18 | 完成 SkillPort GitHub 导入深链 | `0bcf6701`, `02f3d749`, `b0f10498` | `dev` |
 | 46 | 2026-07-18 | 完成高密度排版 WCAG 与虚拟化验收 | `addbf867`, `5c693ccf`, `9f44fc80`, `0cbb06ba` | `dev` |
 | 45 | 2026-07-18 | 完成 GitHub 导入清单快路径 | `d10f3e7a4c97571f330d69366e3a563238904ea8` | `dev` |
 | 44 | 2026-07-16 | 完成更新检查仓库进度反馈 | `21b79e97` | `dev` |
