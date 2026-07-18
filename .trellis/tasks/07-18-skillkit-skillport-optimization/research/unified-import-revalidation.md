@@ -77,4 +77,4 @@ Tauri dev 编译并运行 `target\debug\skillport.exe`，WebView2 CDP 页面为 
 
 ## 生命周期边界
 
-统一 ZIP 子任务的产品、测试、spec 与证据已经满足归档条件。归档该子任务后，父任务达到 4/4；父任务本身继续保持 `planning`，等待用户对最终跨子任务验收结论作出归档指令。
+统一 ZIP 子任务的产品、测试、spec 与证据满足归档条件，并已通过 `94548fee` 重新归档。父任务现为 `planning [4/4 done]`，最终跨子任务验收已通过；父任务本身继续保持 planning，等待用户明确的归档指令。

@@ -8,13 +8,13 @@
 
 2026-07-18 首轮父任务验收发现统一 ZIP 导入存在 overwrite rollback、Operation Log、Zustand 状态所有权、测试和错误脱敏/i18n 缺口。用户授权后，原 `07-18-unified-skill-import` 子任务从 archive 恢复并只启动一次；没有创建第五个任务，其他三个归档子任务未修改。
 
-上述缺口现已修复并通过定向测试、全量 `just ci` 和真实 Tauri Operation Logs / Skill Detail 视觉复核。统一 ZIP 子任务已满足提交和归档条件；在该子任务归档前，父任务仍暂不可归档。子任务归档后，父任务将达到 4/4，并可进入用户授权的最终归档动作。
+上述缺口现已修复并通过定向测试、全量 `just ci` 和真实 Tauri Operation Logs / Skill Detail 视觉复核。统一 ZIP 子任务已通过 `94548fee` 重新归档，父任务当前为 `planning [4/4 done]`。最终跨子任务验收通过，父任务可以归档；本轮没有执行父任务 archive，等待用户明确指令。
 
 ## AC 对照
 
 | 父任务 AC | 状态 | 证据 |
 | --- | --- | --- |
-| 四个子任务完成审批、实施、验证和归档 | Pending lifecycle | TreeRaw、排版和 deep-link 已归档；统一 ZIP 的代码与验收已 green，等待本轮原子提交和归档。 |
+| 四个子任务完成审批、实施、验证和归档 | Passed | TreeRaw、排版和 deep-link 保持原归档；统一 ZIP 修复提交完成并由 `94548fee` 重新归档。 |
 | 统一入口复用 GitHub wizard，GitHub/ZIP 预览后写入 | Passed | `SkillImportLauncher` 只分发 intent；GitHub 继续使用现有 wizard；ZIP preview 只读，import 只由显式确认触发。 |
 | TreeRaw 快路径与 archive 回退保持既有契约 | Passed | 归档子任务证据记录 15 个 `tree_fast_path` 测试、parity、selected-subtree union、typed fallback 和无 cache 决策。 |
 | 深链只传递 intent，Windows cold/warm 可用 | Passed | 归档证据包含真实 NSIS scheme、cold/warm 预填、同一 PID 和窗口恢复/聚焦；native handler 不执行 Preview/Confirm/import。 |
@@ -68,6 +68,6 @@ just ci (confirmation run)
 
 ## 生命周期边界
 
-1. 按后端、前端、Trellis/验收证据原子提交本轮修复。
-2. 归档 `07-18-unified-skill-import` 并记录 journal。
-3. 父任务继续保持 `planning`；只在用户明确授权父任务归档后执行 archive。
+1. 后端、前端、Trellis/验收证据已按原子边界提交。
+2. `07-18-unified-skill-import` 已归档；本轮 journal 在最终父任务状态同步后记录。
+3. 父任务继续保持 `planning [4/4 done]`；只在用户明确授权父任务归档后执行 archive。
