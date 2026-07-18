@@ -80,7 +80,7 @@ pub(crate) use remote::{
 pub(crate) use source::{
     build_repo_skill_candidates_from_snapshot_at_path, fetch_repo_skill_candidates_from_source,
     inspect_github_repo_skills_with_auth, inspect_repo_skill_candidates_from_snapshot_at_path,
-    repo_file_relative_to_source, resolve_repo_source,
+    normalize_github_source_url, repo_file_relative_to_source, resolve_repo_source,
 };
 pub use types::{
     DuplicateResolution, GitHubImportProgressPayload, GitHubImportProgressPhase, GitHubPatState,

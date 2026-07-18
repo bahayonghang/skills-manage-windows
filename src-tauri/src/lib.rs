@@ -24,6 +24,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use tauri::{Emitter, Manager};
+use tauri_plugin_deep_link::DeepLinkExt;
 
 /// Event name emitted on the main webview when the legacy central skills
 /// migration progresses through start → completed/failed states. Front-end
@@ -129,10 +130,100 @@ impl AiTagJobRegistry {
     }
 }
 
+fn focus_main_window(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        tracing::warn!(
+            code = "main_window_unavailable",
+            "Could not focus the main window"
+        );
+        return;
+    };
+
+    if window.is_minimized().unwrap_or(false) && window.unminimize().is_err() {
+        tracing::warn!(
+            code = "main_window_unminimize_failed",
+            "Could not restore the main window"
+        );
+    }
+    if window.show().is_err() {
+        tracing::warn!(
+            code = "main_window_show_failed",
+            "Could not show the main window"
+        );
+    }
+    if window.set_focus().is_err() {
+        tracing::warn!(
+            code = "main_window_focus_failed",
+            "Could not focus the main window"
+        );
+    }
+    #[cfg(target_os = "windows")]
+    if !force_windows_foreground(&window) {
+        tracing::warn!(
+            code = "main_window_foreground_failed",
+            "Could not bring the main window to the foreground"
+        );
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn force_windows_foreground(window: &tauri::WebviewWindow) -> bool {
+    unsafe extern "system" {
+        fn GetForegroundWindow() -> isize;
+        fn GetWindowThreadProcessId(window: isize, process_id: *mut u32) -> u32;
+        fn AttachThreadInput(attach: u32, attach_to: u32, value: i32) -> i32;
+        fn BringWindowToTop(window: isize) -> i32;
+        fn SetForegroundWindow(window: isize) -> i32;
+        fn SetFocus(window: isize) -> isize;
+        fn GetCurrentThreadId() -> u32;
+    }
+
+    let Ok(handle) = window.hwnd() else {
+        return false;
+    };
+    let target = handle.0 as isize;
+
+    // Windows normally rejects focus stealing across input queues. Temporarily
+    // attach to the foreground queue so a user-initiated URI activation can
+    // restore the already-running primary window.
+    unsafe {
+        let foreground = GetForegroundWindow();
+        let foreground_thread = GetWindowThreadProcessId(foreground, std::ptr::null_mut());
+        let current_thread = GetCurrentThreadId();
+        let attached = foreground_thread != 0
+            && foreground_thread != current_thread
+            && AttachThreadInput(current_thread, foreground_thread, 1) != 0;
+        let brought_to_top = BringWindowToTop(target) != 0;
+        let focused = SetForegroundWindow(target) != 0;
+        SetFocus(target);
+        if attached {
+            AttachThreadInput(current_thread, foreground_thread, 0);
+        }
+        brought_to_top && focused && GetForegroundWindow() == target
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 #[allow(deprecated)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(services::deep_link::ImportIntentState::default())
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            focus_main_window(app);
+
+            let state = app.state::<services::deep_link::ImportIntentState>();
+            match services::deep_link::parse_import_intent_from_argv(&argv).and_then(|intent| {
+                services::deep_link::submit_import_intent(app, state.inner(), intent)
+            }) {
+                Ok(()) => {}
+                Err(error) => tracing::warn!(
+                    code = error.code(),
+                    argument_count = argv.len(),
+                    "Rejected warm-instance import intent"
+                ),
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
@@ -141,6 +232,29 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             logging::init_file_logging().map_err(std::io::Error::other)?;
+
+            match app.deep_link().get_current() {
+                Ok(Some(urls)) => {
+                    let state = app.state::<services::deep_link::ImportIntentState>();
+                    for url in urls {
+                        if let Err(error) = services::deep_link::submit_import_deep_link(
+                            app.handle(),
+                            state.inner(),
+                            url.as_str(),
+                        ) {
+                            tracing::warn!(
+                                code = error.code(),
+                                "Rejected cold-start import intent"
+                            );
+                        }
+                    }
+                }
+                Ok(None) => {}
+                Err(_) => tracing::warn!(
+                    code = "deep_link_current_unavailable",
+                    "Could not inspect the cold-start deep link"
+                ),
+            }
 
             let db_dir = paths::app_data_dir();
             fs::create_dir_all(&db_dir).expect("Failed to create ~/.skillsmanage directory");
@@ -236,6 +350,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::deep_link::mark_import_intent_frontend_ready,
             commands::bootstrap::get_bootstrap_snapshot,
             commands::bootstrap::get_skill_counts_summary,
             commands::app_runtime::get_app_runtime_info,

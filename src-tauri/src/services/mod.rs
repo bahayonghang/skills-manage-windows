@@ -10,6 +10,7 @@ pub mod central_mutation;
 pub mod central_skills;
 pub mod central_store_location;
 pub mod central_updates;
+pub mod deep_link;
 pub mod github_import;
 pub mod installation;
 pub mod local_archive_import;

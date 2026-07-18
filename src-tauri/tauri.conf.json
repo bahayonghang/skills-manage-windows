@@ -89,6 +89,13 @@
     "createUpdaterArtifacts": false
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "skillport"
+        ]
+      }
+    },
     "sql": {
       "preload": []
     },
