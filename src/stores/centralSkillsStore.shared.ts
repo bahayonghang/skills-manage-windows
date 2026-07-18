@@ -86,8 +86,11 @@ export const BROWSER_FIXTURE_AGENTS: AgentWithStatus[] = [
   },
 ];
 
-export const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
-  {
+const BROWSER_FIXTURE_SKILL_COUNT = 72;
+const BROWSER_FIXTURE_LONG_WINDOWS_PATH =
+  "C:\\Users\\fixture-user\\Documents\\SkillPort Validation Workspace\\deeply-nested-project\\.agents\\skills";
+
+const BROWSER_FIXTURE_PRIMARY_SKILL: SkillWithLinks = {
     id: "fixture-central-skill",
     name: "fixture-central-skill",
     description: "Browser validation fixture for Central and drawer entry flows.",
@@ -111,7 +114,37 @@ export const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
     repository: BROWSER_UNKNOWN_REPOSITORY,
     tags: [BROWSER_TAGS[0]],
     is_source_unknown: true,
-  },
+};
+
+function createDenseBrowserFixtureSkill(index: number): SkillWithLinks {
+  const paddedIndex = String(index).padStart(2, "0");
+  const skillName =
+    index % 3 === 0
+      ? `中文高密度排版验证技能-${paddedIndex}`
+      : `dense-typography-validation-skill-with-a-deliberately-long-name-${paddedIndex}`;
+  const canonicalPath = `${BROWSER_FIXTURE_LONG_WINDOWS_PATH}\\${skillName}`;
+
+  return {
+    ...BROWSER_FIXTURE_PRIMARY_SKILL,
+    id: `fixture-central-skill-${paddedIndex}`,
+    name: skillName,
+    description:
+      index % 2 === 0
+        ? "用于验证中文元数据、状态标签、长路径以及三档字号缩放下卡片布局不会重叠或截断。"
+        : "Browser fixture with deliberately long English metadata for validating dense card layout, truncation, and fixed-height virtualization across every supported font scale.",
+    file_path: `${canonicalPath}\\SKILL.md`,
+    canonical_path: canonicalPath,
+    linked_agents: index % 2 === 0 ? ["claude-code", "cursor"] : ["claude-code"],
+    tags: index % 4 === 0 ? BROWSER_TAGS : [BROWSER_TAGS[index % BROWSER_TAGS.length]],
+  };
+}
+
+export const BROWSER_FIXTURE_SKILLS: SkillWithLinks[] = [
+  BROWSER_FIXTURE_PRIMARY_SKILL,
+  ...Array.from(
+    { length: BROWSER_FIXTURE_SKILL_COUNT - 1 },
+    (_, offset) => createDenseBrowserFixtureSkill(offset + 1),
+  ),
 ];
 
 export function createIdleAiTagJob(): AiTagJob {

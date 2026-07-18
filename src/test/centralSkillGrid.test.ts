@@ -4,6 +4,7 @@ import {
   CENTRAL_SKILL_CARD_GRID_GAP,
   CENTRAL_SKILL_CARD_MAX_COLUMNS,
   CENTRAL_SKILL_CARD_MIN_WIDTH,
+  centralVirtualItemHeight,
   centralSkillCardGridTemplateColumns,
 } from "@/lib/centralSkillGrid";
 
@@ -15,5 +16,20 @@ describe("Central skill card grid sizing", () => {
     expect(centralSkillCardGridTemplateColumns()).toBe(
       "repeat(auto-fill, minmax(min(100%, max(220px, calc((100% - 48px) / 4))), 1fr))",
     );
+  });
+
+  it("keeps fixed virtual rows tall enough at every supported font scale", () => {
+    expect(centralVirtualItemHeight("list", "comfortable", 0.875)).toBe(196);
+    expect(centralVirtualItemHeight("list", "comfortable", 1)).toBe(196);
+    expect(centralVirtualItemHeight("list", "comfortable", 1.125)).toBe(196);
+    expect(centralVirtualItemHeight("list", "compact", 0.875)).toBe(168);
+    expect(centralVirtualItemHeight("list", "compact", 1)).toBe(168);
+    expect(centralVirtualItemHeight("list", "compact", 1.125)).toBe(184);
+    expect(centralVirtualItemHeight("grid", "comfortable", 0.875)).toBe(192);
+    expect(centralVirtualItemHeight("grid", "comfortable", 1)).toBe(192);
+    expect(centralVirtualItemHeight("grid", "comfortable", 1.125)).toBe(232);
+    expect(centralVirtualItemHeight("grid", "compact", 0.875)).toBe(172);
+    expect(centralVirtualItemHeight("grid", "compact", 1)).toBe(184);
+    expect(centralVirtualItemHeight("grid", "compact", 1.125)).toBe(208);
   });
 });

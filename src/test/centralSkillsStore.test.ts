@@ -281,14 +281,21 @@ describe("centralSkillsStore", () => {
 
     expect(invoke).not.toHaveBeenCalled();
     const state = useCentralSkillsStore.getState();
-    expect(state.skills).toEqual([
+    expect(state.skills).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "fixture-central-skill",
         linked_agents: ["claude-code", "cursor"],
         shared_root_agents: [],
         is_source_unknown: true,
       }),
-    ]);
+    ]));
+    expect(state.skills.length).toBeGreaterThan(60);
+    expect(
+      state.skills.some((skill) => skill.name.includes("中文高密度排版验证技能")),
+    ).toBe(true);
+    expect(
+      state.skills.some((skill) => skill.canonical_path?.startsWith("C:\\Users\\")),
+    ).toBe(true);
     expect(state.agents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "claude-code" }),
