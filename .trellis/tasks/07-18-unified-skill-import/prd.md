@@ -6,12 +6,13 @@
 
 ## Background
 
-- 当前 Central 头部直接打开 `GitHubRepoImportWizard`（`src/components/central/CentralSkillsShell.tsx:354`）。
+- 当前 Central 头部已通过 `SkillImportLauncher` 分发 GitHub / local ZIP intent（`src/components/central/CentralSkillsShell.tsx:357`）；GitHub 仍打开现有 `GitHubRepoImportWizard`。
 - GitHub 状态已由 Zustand slice 管理，Preview 与 Import 分别通过 typed IPC command（`src/stores/marketplaceStore.githubImportSlice.ts:41`、`:115`）。
 - Tauri dialog 插件已经存在于前后端依赖和 capability 中（`package.json:36`、`src-tauri/Cargo.toml:21`、`src-tauri/capabilities/default.json:9`）。
-- 当前 Rust 依赖没有 ZIP reader；实施需新增生产依赖，必须在任务启动前确认版本与许可。
-- `src-tauri/Cargo.toml:40` 已直接依赖 `sha2 = "0.10"`，可复用 SHA-256 为 preview/import 建立内容一致性，不需要再引入哈希依赖。
+- 已审批的直接依赖为 `zip = "2"`（关闭默认 feature，仅启用 `deflate`），当前 lock 为 `2.4.2`；本轮修复不新增生产依赖。
+- `src-tauri/Cargo.toml:42` 已直接依赖 `sha2 = "0.10"`，preview/import 继续复用 SHA-256 内容一致性，不引入第二个哈希依赖。
 - SkillKit 的 ZIP 实现直接 `extractAllTo` 后寻找 `SKILL.md`（`ref/skillkit/apps/desktop/electron/installer.ts:894`），缺少 SkillPort 所需的预算、路径冲突与原子持久化边界，只能借鉴交互入口，不能复制实现。
+- 该子任务曾于 2026-07-18 归档；父任务最终验收在 2026-07-19 确认 overwrite DB 失败不会恢复 backup、ZIP import 未写 Operation Log、前端与端到端测试缺失、错误可能回显本地路径且未走 i18n，以及 ZIP 状态机仍由组件本地 state 持有。任务随后按原范围恢复并启动一次进入 `in_progress`，只修复这些原始契约缺口，不扩大产品范围。
 
 ## Requirements
 
@@ -20,6 +21,7 @@
 - Central 主操作显示“添加技能”，通过紧凑 menu/source picker 提供“GitHub 仓库”和“本地 ZIP”两种 intent。
 - GitHub intent 直接打开现有 `GitHubRepoImportWizard`，不得再包一层 modal、复制 wizard 状态或改变 Preview → Confirm → Result 行为。
 - 来源 router 必须是可复用的前端状态边界，为后续 deep-link prefill 提供单一入口。
+- ZIP wizard 的 step、preview、conflict、pending/error/result 状态必须由独立 Zustand store/controller 持有；组件只负责文件选择和渲染，不直接持有第二套业务状态机。
 
 ### R2. ZIP 选择与预览
 
@@ -54,19 +56,22 @@
 
 - 入口和 ZIP wizard 使用现有 Button/Menu/Dialog/FileTree 组件、lucide icon、focus-ring 和调度台 token；不新增 SkillCard 实现或嵌套卡片。
 - loading、空、冲突、错误、取消、成功状态均可键盘操作；所有用户文本同步中英文。
+- Backend 只向前端返回稳定 error code 与安全摘要；本地绝对路径、恶意 ZIP entry、数据库/IO payload 不得进入 IPC、日志或用户可见文本。前端通过共享 backend-error parser 映射中英文 i18n，未知错误使用安全通用文案。
 
 ## Acceptance Criteria
 
-- [ ] Central 只有一个“添加技能”主入口；选择 GitHub 后现有 wizard 的 Preview/Confirm/Result 和测试语义保持不变。
-- [ ] 本地根 skill ZIP 与单包装目录 ZIP 均能预览完整文件树，并在确认前无文件系统/数据库写入。
-- [ ] Preview 返回 SHA-256 + byte length；未变化 archive 可导入，preview 后内容或长度变化会在任何 staging/Central/DB 写入前以 `archive_changed_since_preview` 失败。
-- [ ] 多 skill、无 `SKILL.md`、路径穿越、绝对路径、重复/大小写冲突、symlink、加密条目、超预算和高压缩比 fixture 均 fail closed。
-- [ ] overwrite/rename/skip 三种冲突结果正确；写入失败会恢复旧目录并清理 staging/backup。
-- [ ] 成功导入刷新 Central，记录经过脱敏的 Operation Log；平台安装仍走现有链路。
-- [ ] archive 来源 skill 没有 GitHub repository assignment，更新检查稳定显示 unsupported/unknown source，不产生 remote-missing 或仓库加载错误。
-- [ ] SSH/WSL 下 ZIP 有明确 disabled 说明，GitHub remote import 无回归。
-- [ ] 前端测试覆盖 source picker、取消、preview、冲突、错误、成功和 remote disabled；Rust 测试覆盖 ZIP 解析安全矩阵与原子回滚。
-- [ ] `pnpm typecheck`、`pnpm lint`、相关 Vitest、相关 Rust tests、`cargo clippy -- -D warnings`、`git diff --check` 和 `just ci` 通过。
+- [x] Central 只有一个“添加技能”主入口；选择 GitHub 后现有 wizard 的 Preview/Confirm/Result 和测试语义保持不变。
+- [x] 本地根 skill ZIP 与单包装目录 ZIP 均能预览完整文件树，并在确认前无文件系统/数据库写入。
+- [x] Preview 返回 SHA-256 + byte length；未变化 archive 可导入，preview 后内容或长度变化会在任何 staging/Central/DB 写入前以 `archive_changed_since_preview` 失败。
+- [x] 多 skill、无 `SKILL.md`、路径穿越、绝对路径、重复/大小写冲突、symlink、加密条目、超预算和高压缩比 fixture 均 fail closed。
+- [x] overwrite/rename/skip 三种冲突结果正确；写入失败会恢复旧目录并清理 staging/backup。
+- [x] 成功导入刷新 Central，记录经过脱敏的 Operation Log；平台安装仍走现有链路。
+- [x] archive 来源 skill 没有 GitHub repository assignment，更新检查稳定显示 unsupported/unknown source，不产生 remote-missing 或仓库加载错误。
+- [x] SSH/WSL 下 ZIP 有明确 disabled 说明，GitHub remote import 无回归。
+- [x] 前端测试覆盖 source picker、取消、preview、冲突、错误、成功和 remote disabled；Rust 测试覆盖 ZIP 解析安全矩阵与原子回滚。
+- [x] ZIP 业务状态由单一 Zustand store/controller 持有；组件不直接调用 IPC adapter，也不维护平行的 preview/import 状态机。
+- [x] ZIP 错误通过稳定 code 映射中英文 i18n；IPC、Operation Log 和 UI 均不回显本地绝对路径、恶意 entry/payload 或底层 DB/IO 文本。
+- [x] `pnpm typecheck`、`pnpm lint`、相关 Vitest、相关 Rust tests、`cargo clippy -- -D warnings`、`git diff --check` 和 `just ci` 通过。
 
 ## Out of Scope
 

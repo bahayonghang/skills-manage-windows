@@ -14,7 +14,8 @@
 - SkillKit 是 Electron + React 18 + better-sqlite3；SkillPort 是 Tauri + React 19 + Zustand + SQLite。
 - SkillPort 已有虚拟化列表/网格、分组、保存视图、批量操作、GitHub 导入预览文件树、插件分组、远程目标、资源预算、并发扫描、事务化持久化和完整测试。这些能力不因对标而降级。
 - 所有关键判断与证据见 `research/skillkit-skillport-comparison.md`。
-- 当前阶段只做研究与规划，不修改 `src/`、`src-tauri/`、依赖或打包配置，不启动父任务或任何子任务。
+- 四个子任务曾于 2026-07-18 全部归档；2026-07-19 最终验收后，`07-18-unified-skill-import` 已恢复为 `planning` 以修复原始契约缺口，其他三个子任务保持归档。父任务继续保持 `planning`，只承载最终跨子任务验收，不启动、不承载产品代码。
+- 父任务验收结果与命令证据见 `research/final-cross-child-acceptance.md`。当前统一 ZIP 导入仍有原子恢复、Operation Log、Zustand 状态所有权、前端/端到端测试和错误脱敏/i18n 缺口，因此父任务尚不可归档。
 
 ## Requirements
 
@@ -57,19 +58,19 @@
 
 ## Cross-Child Acceptance Criteria
 
-- [ ] 4 个子任务分别通过审批、实施、验证和归档。
-- [ ] 统一入口没有复制或包裹现有 GitHub wizard 的状态机，GitHub 与 ZIP 都保持“预览后写入”。
-- [ ] GitHub 快路径在受支持场景减少整包下载，且所有失败在任何 Central 写入前回退 archive；现有 DTO、selection、路径与持久化契约不变。
-- [ ] 深链不携带凭据、文件路径、冲突决策或目标平台，不绕过预览与确认；Windows 冷启动和已运行实例均可用。
-- [ ] 排版治理保留调度台密度、6 主题和 14 accent，并用实测对比度与 0.875/1/1.125 字号缩放验证，而非机械放大全局字号。
-- [ ] 每个子任务最终通过定向测试、`git diff --check` 和 `just ci`；涉及打包的深链任务额外通过 Windows `pnpm tauri build` 并验证安装产物。
-- [ ] 父任务完成最终跨子任务回归，确认 Central、Marketplace、Usage、Operation Logs、远程目标和技能详情无语义或视觉回退。
+- [ ] 4 个子任务分别通过审批、实施、验证和归档。统一 ZIP 子任务因约定测试与行为缺口已恢复为 `planning`；其他三项保持归档。
+- [x] 统一入口没有复制或包裹现有 GitHub wizard 的状态机，GitHub 与 ZIP 都保持“预览后写入”。
+- [x] GitHub 快路径在受支持场景减少整包下载，且所有失败在任何 Central 写入前回退 archive；现有 DTO、selection、路径与持久化契约不变。
+- [x] 深链不携带凭据、文件路径、冲突决策或目标平台，不绕过预览与确认；Windows 冷启动和已运行实例均可用。
+- [x] 排版治理保留调度台密度、6 主题和 14 accent，并用实测对比度与 0.875/1/1.125 字号缩放验证，而非机械放大全局字号。
+- [ ] 每个子任务最终通过定向测试、`git diff --check` 和 `just ci`；涉及打包的深链任务额外通过 Windows `pnpm tauri build` 并验证安装产物。统一 ZIP 导入缺少约定的前端状态覆盖与后端原子回滚集成测试。
+- [ ] 父任务完成最终跨子任务回归，确认 Central、Marketplace、Usage、Operation Logs、远程目标和技能详情无语义或视觉回退。现有跨表面测试通过，但 ZIP overwrite 回滚、持久化 Operation Log、错误脱敏/i18n 和 Operation Logs/技能详情最终视觉证据仍未闭环。
 
 ## Planning Readiness
 
 - [x] SkillKit 与 SkillPort 的功能、架构、界面和性能证据已盘点。
 - [x] 候选项已形成采纳/拒绝矩阵并记录价值、成本、风险与验证方式。
-- [x] 4 个可独立验收的 Trellis 子任务已创建，均保持 `planning`。
+- [x] 4 个可独立验收的 Trellis 子任务已定义依赖并分别实施；统一 ZIP 子任务在最终验收后按原范围重新打开，父任务始终保持 `planning`。
 - [x] 父任务和每个子任务均具备 `prd.md`、`design.md`、`implement.md`。
 - [x] 最终 PRD 已完成收敛检查，无临时问题、重复事实或无证据的通过结论。
 
@@ -79,4 +80,4 @@
 - 复制 SkillKit 品牌、文案、资产或视觉语言。
 - 把 session-only Recent installs 移植到 SkillPort；现有持久化 Operation Logs 是更强的机制。
 - 搬运同步文件系统扫描、逐行非事务写入、React `key` 强制重挂载、原生 `confirm`、巨型 CSS 或手绘 SVG 图标。
-- 本规划阶段的任何产品代码、依赖、数据库 schema、打包或发布变更。
+- 由父任务直接承载任何产品代码、依赖、数据库 schema、打包或发布变更；这些变更只能由明确的执行范围拥有。

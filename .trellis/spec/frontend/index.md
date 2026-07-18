@@ -13,3 +13,4 @@
 - [Settings 页面结构约定](./settings-structure.md)
 - [Skill Usage 状态与交互契约](./skill-usage-state.md)
 - [Import Intent Controller Contract](./import-intent-controller.md)
+- [Local Archive Import Controller Contract](./local-archive-import-controller.md)
