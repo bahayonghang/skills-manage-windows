@@ -374,3 +374,152 @@ const files = repositoryFiles.filter((file) => file.path.startsWith(sourcePath))
 let path = repo_file_relative_to_source(&file.repo_path, &skill.source_path)?;
 skill.files = Some(mapped_and_sorted_files);
 ```
+
+## Scenario: Tree Manifest Acquisition Fast-Path
+
+### 1. Scope / Trigger
+
+Update this scenario when the GitHub import preview acquisition path
+changes how it obtains repository files (tree API vs archive tarball),
+the fallback matrix, or the parity contract between the two acquisition
+modes.
+
+### 2. Signatures
+
+The fast-path owns internal acquisition types that are never serialized
+to the frontend or persisted into Central:
+
+```rust
+pub(super) struct RepositoryFileMeta {
+    pub repo_path: String,
+    pub byte_len: u64,
+    pub kind: RepositoryFileKind, // RegularBlob | SymlinkBlob | Gitlink | Other
+}
+pub(super) struct RepositoryManifest { /* regular_files, skipped */ }
+pub(crate) enum AcquisitionMode { TreeRaw, Archive }
+pub(crate) enum FallbackReason {
+    Truncated, Unsupported, Denied, Transport, Budget, Integrity, Threshold,
+}
+```
+
+The preview dispatcher entry point keeps its existing signature and DTO:
+
+```rust
+pub(crate) async fn preview_github_repo_import_with_auth(
+    pool: &DbPool,
+    repo_url: &str,
+    auth: Option<&str>,
+) -> Result<GitHubRepoPreview, GithubImportError>;
+```
+
+### 3. Contracts
+
+- Preview acquisition tries the recursive Git tree API
+  (`/repos/{owner}/{repo}/git/trees/{branch}?recursive=1`) first. On
+  success, candidates and preview file manifests are built from the
+  parsed tree without downloading the tarball.
+- The tree parser classifies entries by Git mode/type: `100644` /
+  `100755` blob → `RegularBlob` (candidate + raw download);
+  `120000` symlink blob and `160000` gitlink → skipped (matching the
+  archive `is_file()` filter); `040000` tree node → skipped; unknown
+  mode/type → typed `UnsupportedMode` fallback.
+- Candidate discovery, plugin manifest interpretation, frontmatter
+  parsing, source-path mapping, preview skill construction, and file
+  manifest attachment are shared with the archive path. The tree path
+  feeds `regular_paths()` into
+  `discover_skill_manifests_from_paths_with_plugin_discovery`; the
+  archive path feeds `snapshot.files.keys()`. The output candidate /
+  preview file sets must be equivalent for the same fixture.
+- Raw blob bytes (candidate `SKILL.md`, optional `.claude-plugin/*`
+  manifests) are fetched through `fetch_raw_bytes`, bounded by the
+  default skill `file_bytes` budget, reusing the shared mirror/PAT
+  fallback boundary.
+- Acquisition failures fall back to the existing archive path. The
+  fallback matrix: `TreeManifestTruncated` → `Truncated`;
+  `TreeManifestUnsupportedMode` → `Unsupported`; `RateLimited` /
+  `AccessDenied` → `Denied`; `Http` / `RepoNotFound` → `Transport`;
+  `Budget` / `TreeManifestEntryBudgetExceeded` /
+  `TreeManifestSizeOverflow` → `Budget`; `TreeManifestEntryMissingSize`
+  → `Integrity`.
+- Domain errors (invalid candidate, no importable skills) are NOT
+  acquisition fallbacks — the archive path would surface the same
+  domain failure, so the dispatcher returns them directly.
+- Once acquisition produces candidates, no Central mutation begins
+  until the existing staging/atomic import path takes over. The
+  fast-path does not write partial state.
+- SSH/WSL remote preview keeps its existing remote-workspace
+  acquisition; the tree fast-path applies only to the local
+  (non-remote) preview path.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Nested skill repo, tree API available | Preview built from tree manifest; no tarball request |
+| Tree response `truncated: true` | Typed `Truncated` fallback → archive acquisition |
+| Unknown mode/type entry | Typed `UnsupportedMode` fallback → archive acquisition |
+| Regular blob missing `size` | Typed `MissingSize` fallback → archive acquisition |
+| Tree entries exceed `tree_entries` budget | `Budget` fallback → archive |
+| Tree response body exceeds `tree_response_bytes` | `Budget` fallback before serde allocation |
+| Raw blob 404 after tree listed it | `RepoFileGone` → `Transport` fallback (integrity gap) |
+| 401/403/429 on tree or raw | `Denied` fallback → archive (or final denial) |
+| 5xx / mirror transport failure | `Transport` fallback → archive |
+| Invalid candidate `SKILL.md` (bad frontmatter/UTF-8) | Domain error surfaced directly; no fallback |
+| Plugin manifest missing in tree | Continue with no grouping (parity with archive) |
+| Plugin manifest raw fetch fails | Acquisition fallback (archive reads it from tarball) |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a nested skill repo with `skills/demo/SKILL.md` and
+  `skills/demo/references/g.md`; the tree fast-path returns the same
+  candidate and `GitHubSkillPreviewFile` set as the archive path,
+  without downloading the tarball.
+- Base: a root `SKILL.md` repo; tree fast-path and archive produce
+  identical preview output.
+- Bad: the tree fast-path swallows a `RateLimited` denial and returns
+  `NoImportableSkills` instead of falling back to archive; or the
+  tree path treats a `120000` symlink blob as a candidate while the
+  archive path excludes it.
+
+### 6. Tests Required
+
+- Pure parser tests for `parse_tree_response` (truncated, missing size,
+  unknown mode, budget, malformed JSON, unsafe path, duplicate path,
+  symlink/gitlink skip).
+- Parity tests proving tree vs archive produce identical
+  `RemoteSkillCandidate`, `PreviewRepositoryFile`, discovery manifests,
+  and `GitHubSkillPreviewFile` sets for shared fixtures (root, nested,
+  multi-skill, namespaced, plugin, symlink, gitlink).
+- Fallback classification matrix tests for `fallback_reason_for` and
+  `map_acquisition_error_to_outcome` covering every acquisition variant.
+- Plugin manifest bytes-path parity test proving
+  `plugin_manifest_discovery_from_manifest_bytes` matches
+  `plugin_manifest_discovery_from_snapshot` for the same fixture.
+- Existing archive preview, candidate, file manifest, selection, and
+  import tests must not regress.
+- Full gate: `just ci`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```rust
+// Treating a 120000 symlink blob as a candidate breaks parity with
+// the archive parser's is_file() filter.
+if entry_type == "blob" {
+    candidates.push(entry.path);
+}
+```
+
+#### Correct
+
+```rust
+let kind = classify_tree_entry(&entry.mode, &entry.entry_type);
+if kind == Some(RepositoryFileKind::RegularBlob) {
+    regular_files.push(/* ... */);
+} else if matches!(kind, Some(SymlinkBlob) | Some(Gitlink)) {
+    skipped.push(/* diagnostics only */);
+} else if kind == Some(Other) {
+    return Err(GithubImportError::TreeManifestUnsupportedMode { /* .. */ });
+}
+```

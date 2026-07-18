@@ -6,6 +6,21 @@ pub(crate) async fn fetch_raw_text(
     url: &str,
     auth_token: Option<&str>,
 ) -> Result<String, GithubImportError> {
+    let bytes = fetch_raw_bytes(client, url, auth_token).await?;
+    String::from_utf8(bytes)
+        .map_err(|e| GithubImportError::Parse(format!("Skill metadata is not valid UTF-8: {}", e)))
+}
+
+/// Download a single raw blob as bytes through the shared GitHub/mirror fallback
+/// boundary. Used by the tree fast-path to fetch candidate `SKILL.md` and plugin
+/// manifest bytes without materializing the full archive. Bounded by the default
+/// skill `file_bytes` budget (single-file cap, distinct from the archive's
+/// expanded-byte cap).
+pub(super) async fn fetch_raw_bytes(
+    client: &reqwest::Client,
+    url: &str,
+    auth_token: Option<&str>,
+) -> Result<Vec<u8>, GithubImportError> {
     let response = send_github_request_with_fallback(
         client,
         GitHubFetchSurface::Raw,
@@ -21,6 +36,13 @@ pub(crate) async fn fetch_raw_text(
     )
     .await?;
 
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        // 404 on a raw blob whose path the tree manifest listed is an
+        // integrity gap. The dispatcher maps `RepoFileGone` to an acquisition
+        // fallback (archive re-fetch). For optional plugin manifests, the
+        // tree fast-path caller treats `RepoFileGone` as "manifest absent".
+        return Err(GithubImportError::RepoFileGone(url.to_string()));
+    }
     if !response.status().is_success() {
         return Err(
             classify_github_denial_response(response, "downloading skill metadata")
@@ -45,8 +67,7 @@ pub(crate) async fn fetch_raw_text(
     budget
         .reject_file_read_size(url, bytes.len() as u64)
         .map_err(GithubImportError::Budget)?;
-    String::from_utf8(bytes.to_vec())
-        .map_err(|e| GithubImportError::Parse(format!("Skill metadata is not valid UTF-8: {}", e)))
+    Ok(bytes.to_vec())
 }
 
 #[derive(Debug, Clone)]

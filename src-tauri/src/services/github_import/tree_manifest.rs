@@ -22,13 +22,6 @@
 //! are simply absent from the tar regular-file set), keeping the candidate/
 //! preview/file-manifest output equivalent.
 
-// The dispatcher integration lands in Commit 2; until then the parser is only
-// exercised by `#[cfg(test)]` table tests. CI clippy runs without `--tests`,
-// so the non-test build would otherwise flag these acquisition primitives as
-// dead code. Remove this allow when the dispatcher wires `parse_tree_response`
-// into `preview_github_repo_import_with_auth`.
-#![allow(dead_code)]
-
 use crate::services::resource_budget::ResourceBudget;
 
 use super::*;
@@ -65,8 +58,14 @@ pub(super) struct RepositoryFileMeta {
 /// only (never serialized to the frontend or Central).
 #[derive(Debug, Clone)]
 pub(super) struct RepositoryManifest {
+    /// Commit 3 (import cost model + diagnostics) reads the repo ref to
+    /// attribute acquisition decisions; preview only needs `regular_files`.
+    #[allow(dead_code)]
     pub(super) repo: GitHubRepoRef,
     pub(super) regular_files: Vec<RepositoryFileMeta>,
+    /// Symlink/gitlink diagnostics. Commit 3 records these in acquisition
+    /// telemetry; preview does not read them.
+    #[allow(dead_code)]
     pub(super) skipped: Vec<RepositoryFileMeta>,
 }
 
@@ -79,6 +78,8 @@ impl RepositoryManifest {
 
     /// Sum of regular-blob byte lengths. Used by the dispatcher's cost model
     /// (`tree_raw_cost = request_overhead * file_count + selected_bytes`).
+    /// Commit 3 (import cost decision) reads this; preview does not.
+    #[allow(dead_code)]
     pub(super) fn regular_total_bytes(&self) -> u64 {
         self.regular_files
             .iter()
@@ -89,9 +90,10 @@ impl RepositoryManifest {
 
 /// Acquisition strategy chosen by the dispatcher. `TreeRaw` downloads only the
 /// selected subtree's raw blobs; `Archive` falls back to the existing tarball
-/// path. Kept in the acquisition module so the dispatcher (Commit 2) can return
-/// it from its cost decision without re-deriving the variant.
+/// path. Kept in the acquisition module so the Commit 3 import dispatcher can
+/// return it from its cost decision without re-deriving the variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub(crate) enum AcquisitionMode {
     TreeRaw,
     Archive,
@@ -118,6 +120,9 @@ pub(crate) enum FallbackReason {
     Integrity,
     /// `GithubImportError::TreeManifestEntryMissingSize` or cost model picked
     /// archive as cheaper for the selection (e.g. root scope, many files).
+    /// Constructed by the Commit 3 import cost decision; preview never
+    /// selects `Threshold` (it always tries TreeRaw then falls back).
+    #[allow(dead_code)]
     Threshold,
 }
 
@@ -261,6 +266,95 @@ pub(super) fn parse_tree_response(
         regular_files,
         skipped,
     })
+}
+
+/// Fetch the recursive Git tree manifest through the shared GitHub/mirror
+/// fallback boundary and parse it with [`parse_tree_response`].
+///
+/// This is the acquisition-layer entry point the preview dispatcher calls
+/// before deciding between TreeRaw and Archive. It performs no DB, no
+/// Central write, and no candidate discovery — it only obtains the typed
+/// `RepositoryManifest` (or a typed fallback error).
+pub(super) async fn try_fetch_tree_manifest(
+    client: &reqwest::Client,
+    repo: &GitHubRepoRef,
+    auth_token: Option<&str>,
+) -> Result<RepositoryManifest, GithubImportError> {
+    let response = send_github_request_with_fallback(
+        client,
+        GitHubFetchSurface::Api,
+        |endpoint| {
+            github_endpoint_url(
+                endpoint,
+                GitHubFetchSurface::Api,
+                &format!(
+                    "/repos/{}/{}/git/trees/{}?recursive=1",
+                    repo.owner, repo.repo, repo.branch
+                ),
+            )
+        },
+        "Failed to fetch GitHub repository tree",
+        auth_token,
+    )
+    .await?;
+
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        // resolve_repo_source already confirmed the repo exists; a tree 404
+        // means the branch/ref is unreadable. The archive fallback will also
+        // 404 (→ `ArchiveUnavailable`), so surface a typed transport fallback.
+        return Err(GithubImportError::RepoNotFound);
+    }
+    if !response.status().is_success() {
+        let status = response.status();
+        return Err(
+            classify_github_denial_response(response, "fetching the repository tree")
+                .await
+                .unwrap_or_else(|| {
+                    GithubImportError::Http(format!(
+                        "Failed to fetch GitHub repository tree: HTTP {}",
+                        status
+                    ))
+                }),
+        );
+    }
+
+    let budget = ResourceBudget::default_skill();
+    if let Some(content_length) = response.content_length() {
+        budget
+            .reject_tree_response_size(content_length)
+            .map_err(GithubImportError::Budget)?;
+    }
+
+    let body = response
+        .text()
+        .await
+        .map_err(|e| GithubImportError::Http(format!("Failed to read repository tree: {}", e)))?;
+    parse_tree_response(&body, repo, budget)
+}
+
+/// Classify an acquisition-layer error into a [`FallbackReason`] so the
+/// dispatcher can record why it switched from TreeRaw to Archive. Returns
+/// `None` for domain errors (e.g. `InvalidCandidate`) that the archive path
+/// would surface identically — those do **not** trigger fallback.
+pub(super) fn fallback_reason_for(error: &GithubImportError) -> Option<FallbackReason> {
+    match error {
+        GithubImportError::TreeManifestTruncated => Some(FallbackReason::Truncated),
+        GithubImportError::TreeManifestUnsupportedMode { .. } => Some(FallbackReason::Unsupported),
+        GithubImportError::RateLimited(_) | GithubImportError::AccessDenied(_) => {
+            Some(FallbackReason::Denied)
+        }
+        GithubImportError::Http(_) | GithubImportError::RepoNotFound => {
+            Some(FallbackReason::Transport)
+        }
+        GithubImportError::Budget(_)
+        | GithubImportError::TreeManifestEntryBudgetExceeded(_)
+        | GithubImportError::TreeManifestSizeOverflow => Some(FallbackReason::Budget),
+        GithubImportError::TreeManifestEntryMissingSize(_) => Some(FallbackReason::Integrity),
+        // Domain errors (invalid candidate, no importable skills, path policy
+        // violations on candidate discovery) are not acquisition fallbacks —
+        // archive would produce the same domain failure.
+        _ => None,
+    }
 }
 
 #[cfg(test)]

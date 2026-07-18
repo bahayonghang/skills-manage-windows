@@ -409,7 +409,7 @@ pub(super) fn invalid_candidate_from_manifest(
     }
 }
 
-fn is_generic_remote_skill_candidate(candidate: &RemoteSkillCandidate) -> bool {
+pub(super) fn is_generic_remote_skill_candidate(candidate: &RemoteSkillCandidate) -> bool {
     candidate.source_path != "." && candidate.skill_id == "skill"
 }
 
@@ -457,7 +457,7 @@ find . -type f -iname 'SKILL.md' -print | sed 's#^\./##'
         .collect()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SnapshotSkillManifest {
     pub(super) source_path: String,
     pub(super) root_directory: String,
