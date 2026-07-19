@@ -101,7 +101,7 @@ export const UnifiedSkillCardFooter = memo(function UnifiedSkillCardFooter({
       data-testid="card-footer"
       className="mt-auto flex items-center justify-between gap-2 border-t border-border/50 pt-2"
     >
-      <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-1.5 text-ui-meta text-muted-foreground">
         {repoName && (
           <span className="flex min-w-0 items-center gap-1">
             <span

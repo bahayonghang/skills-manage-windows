@@ -45,7 +45,7 @@ export function CustomPlatformsSettingsSection({
       }
     >
         {platformError && (
-          <p className="text-xs text-destructive mb-3" role="alert">
+          <p className="text-xs text-destructive-text mb-3" role="alert">
             {platformError}
           </p>
         )}

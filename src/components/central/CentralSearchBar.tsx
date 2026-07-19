@@ -107,7 +107,7 @@ export function CentralSearchBar({
   return (
     <div data-testid="central-search-bar-v2" className="flex flex-col gap-2">
       <div className="relative flex w-full items-center">
-        <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground/80" />
+        <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" />
         <Input
           id={inputId}
           value={value}
@@ -133,7 +133,7 @@ export function CentralSearchBar({
               data-testid="central-open-palette"
               onClick={onOpenPalette}
               aria-label={t("central.v2.commandPaletteOpen")}
-              className="focus-ring inline-flex h-7 items-center gap-1 rounded-lg border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground transition-[scale,background-color,border-color,color] hover:border-border hover:bg-muted/40 hover:text-foreground active:scale-[0.96]"
+              className="focus-ring inline-flex h-7 items-center gap-1 rounded-lg border border-border/80 bg-background px-1.5 py-0.5 font-mono text-xs text-muted-foreground transition-[scale,background-color,border-color,color] hover:border-border hover:bg-muted/40 hover:text-foreground active:scale-[0.96]"
             >
               <ShortcutHint shortcut="mod+k" />
             </button>
@@ -144,7 +144,7 @@ export function CentralSearchBar({
       {hasAnyChip && (
         <div
           data-testid="central-search-chip-row"
-          className="flex flex-wrap items-center gap-1.5 text-pretty text-[11px]"
+          className="flex flex-wrap items-center gap-1.5 text-pretty text-ui-meta"
         >
           {queryAst.filters.map((filter, idx) => (
             <FilterChip
@@ -286,7 +286,7 @@ function FilterChip({
       className={cn(
         "inline-flex min-h-6 items-center gap-1 rounded-lg border px-1.5 py-0.5 font-mono",
         filter.negated
-          ? "border-destructive/40 bg-destructive/10 text-destructive"
+          ? "border-destructive/40 bg-destructive/10 text-destructive-text"
           : "border-primary/30 bg-primary/10 text-primary",
       )}
     >

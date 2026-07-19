@@ -137,6 +137,36 @@ pub enum GithubImportError {
     #[error("Remote GitHub preview returned an invalid file manifest.")]
     RemotePreviewInvalidFileManifest,
 
+    // ── Tree manifest acquisition (fast-path) ───────────────────────────────
+    /// Recursive Git tree API response had `truncated: true`. The dispatcher
+    /// must fall back to archive acquisition; archive reads the full tarball
+    /// so truncation does not affect candidate/preview parity.
+    #[error("GitHub repository tree response was truncated; falling back to archive.")]
+    TreeManifestTruncated,
+
+    /// A regular blob entry in the Git tree response is missing its `size`
+    /// field. Raw download budgeting requires a known size, so the dispatcher
+    /// falls back to archive.
+    #[error("GitHub repository tree entry '{0}' is missing a byte size.")]
+    TreeManifestEntryMissingSize(String),
+
+    /// The Git tree response contains a mode/type combination the TreeRaw
+    /// fast-path cannot classify (neither a regular blob, symlink blob, nor
+    /// gitlink). Falling back to archive keeps parity with the tar regular
+    /// file filter.
+    #[error("GitHub repository tree entry '{path}' has unsupported mode '{mode}'.")]
+    TreeManifestUnsupportedMode { path: String, mode: String },
+
+    /// The recursive Git tree response exceeded the tree-entry budget. The
+    /// dispatcher falls back to archive (which has its own larger file budget).
+    #[error("GitHub repository tree exceeds the resource budget (more than {0} entries).")]
+    TreeManifestEntryBudgetExceeded(usize),
+
+    /// Summed regular-blob sizes in the tree response overflowed `u64`. Treated
+    /// as a budget/integrity failure so the dispatcher falls back to archive.
+    #[error("GitHub repository tree expanded contents size overflowed.")]
+    TreeManifestSizeOverflow,
+
     // ── Import staging / execution ───────────────────────────────────────────
     #[error("Select at least one skill to import.")]
     NoSelections,
@@ -173,6 +203,15 @@ pub enum GithubImportError {
 
     #[error("Repository file '{0}' is no longer available in the archive.")]
     RepoFileGone(String),
+
+    #[error(
+        "Repository file '{path}' changed size while it was being downloaded (expected {expected} bytes, received {actual} bytes)."
+    )]
+    RepoFileSizeMismatch {
+        path: String,
+        expected: u64,
+        actual: u64,
+    },
 
     #[error("Failed to determine imported file parent directory.")]
     ImportParentDirUnknown,

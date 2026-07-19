@@ -2,7 +2,6 @@ import type { ComponentProps, ReactNode } from "react";
 import {
   ActivityIcon,
   Download,
-  GitBranch,
   ListChecks,
   MapPin,
   RefreshCw,
@@ -16,6 +15,9 @@ import {
   ToolbarViewMenu,
   ToolbarMoreMenu,
 } from "@/components/central/CentralSkillsShellMenus";
+import { SkillImportLauncher } from "@/components/central/SkillImportLauncher";
+import { LocalArchiveImportWizard } from "@/components/central/LocalArchiveImportWizard";
+import { useLocalArchiveImportStore } from "@/stores/localArchiveImportSlice";
 import { CentralProgressTopLine } from "@/components/central/CentralProgressTopLine";
 import { countActiveCentralTasks } from "@/components/central/centralTaskCenterHelpers";
 import { TaskCenterDrawer } from "@/components/central/TaskCenterDrawer";
@@ -216,6 +218,9 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   } = props;
 
   const openUpdateCenter = useUpdateCenterStore((s) => s.openDialog);
+  const openLocalArchiveImport = useLocalArchiveImportStore(
+    (state) => state.openWizard,
+  );
   const selectedTagIds = useMemo(
     () =>
       tags.length > 0 ? sanitizeSelectedTagIds(viewState.tags, tags) : viewState.tags,
@@ -330,7 +335,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           </div>
           <div className="mt-0.5 flex min-w-0 items-center gap-2">
             <p
-              className="truncate text-[11px] text-muted-foreground/70"
+              className="truncate text-ui-meta text-muted-foreground"
               title={centralSkillsDir}
             >
               {centralSkillsDir}
@@ -339,7 +344,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 shrink-0 gap-1 rounded-lg px-2 text-[11px] transition-[scale,background-color,color] active:scale-[0.96]"
+              className="h-7 shrink-0 gap-1 rounded-lg px-2 text-ui-meta transition-[scale,background-color,color] active:scale-[0.96]"
               disabled={centralStoreLocation.disabled}
               onClick={centralStoreLocation.onOpen}
               title={centralStoreLocation.disabledReason}
@@ -351,16 +356,18 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           </div>
         </div>
         <div className="flex w-full min-w-0 flex-col items-stretch gap-2 min-[521px]:flex-row min-[521px]:flex-wrap min-[521px]:items-center xl:w-auto xl:justify-end">
-          {/* 核心入口：GitHub 导入 ─────────────────────────────────── */}
-          <Button
-            variant="outline"
-            className="h-9 rounded-xl pl-3 pr-3.5 transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
-            onClick={() => setIsGitHubImportOpen(true)}
-            data-testid="central-github-import-open"
-          >
-            <GitBranch className="size-3.5" />
-            {t("marketplace.githubImportSecondaryCta")}
-          </Button>
+          {/* 统一入口：添加技能（GitHub / 本地 ZIP）───────────── */}
+          <SkillImportLauncher
+            t={t}
+            isRemoteTarget={dialogs.activeTarget.kind !== "local"}
+            onOpenIntent={(intent) => {
+              if (intent === "github") {
+                setIsGitHubImportOpen(true);
+              } else if (intent === "local_zip") {
+                openLocalArchiveImport();
+              }
+            }}
+          />
 
           {/* 入口：更新中心（聚合可更新 / 新增 / 已删除 / 平台冗余）─── */}
           <Button
@@ -392,7 +399,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
             {updateAvailableSkillCount > 0 && (
               <span
                 data-testid="central-update-count-chip"
-                className="ml-1.5 inline-flex items-center rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning-foreground ring-1 ring-warning/30"
+                className="ml-1.5 inline-flex items-center rounded-full bg-warning/15 px-1.5 py-0.5 text-ui-micro font-semibold text-warning-foreground ring-1 ring-warning/30"
               >
                 +{updateAvailableSkillCount}
               </span>
@@ -573,6 +580,13 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
       </div>
 
       <CentralSkillDialogs {...dialogs} t={t} />
+
+      <LocalArchiveImportWizard
+        t={t}
+        onAfterImportSuccess={async () => {
+          await dialogs.loadCentralSkills();
+        }}
+      />
 
       <BulkActionBar
         selectedCount={bulkBar.selectedCount}

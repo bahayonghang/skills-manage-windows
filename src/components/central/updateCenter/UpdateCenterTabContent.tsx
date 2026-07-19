@@ -168,7 +168,7 @@ function FailedRepositoriesPanel({
           <div className="text-sm font-medium">
             {repositorySources.get(item.repositoryId)?.label ?? item.repositoryId}
           </div>
-          <p className="mt-1 text-xs text-destructive">{item.error}</p>
+          <p className="mt-1 text-xs text-destructive-text">{item.error}</p>
         </div>
       ))}
     </div>

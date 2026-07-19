@@ -53,7 +53,7 @@ export function BatchDeletePlatformSkillsDialog({
         <DialogBody className="space-y-4">
           <div className="rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-sm">
             <div className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive-text" />
               <div className="space-y-1">
                 <div className="font-medium text-foreground">
                   {t("platform.batchDeleteDialogWarningTitle")}

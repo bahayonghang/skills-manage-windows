@@ -14,6 +14,11 @@ import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
+import {
+  menuPopupClassName,
+  menuItemClassName,
+  menuLabelClassName,
+} from "@/components/central/centralMenuClassNames";
 
 export function ToolbarMoreMenu({
   t,
@@ -56,7 +61,7 @@ export function ToolbarMoreMenu({
               {activeTaskCount > 0 && (
                 <span
                   data-testid="central-toolbar-task-center-badge"
-                  className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary ring-1 ring-primary/30"
+                  className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary/15 px-1.5 text-ui-micro font-semibold text-primary ring-1 ring-primary/30"
                 >
                   {activeTaskCount}
                 </span>
@@ -84,7 +89,6 @@ export function ToolbarMoreMenu({
   );
 }
 import type { CentralInstalledSkillsQuickFilterProps } from "@/components/central/CentralInstalledSkillsQuickFilter";
-import { cn } from "@/lib/utils";
 import type { CentralViewState, GroupByMode } from "@/lib/centralViewState";
 import {
   getInstalledFilterPlatformId,
@@ -140,7 +144,7 @@ export function ToolbarSortMenu({
           >
             <ArrowUpDown className="size-3.5" />
             <span className="text-xs">{currentFieldLabel}</span>
-            <span aria-hidden className="text-[10px] text-muted-foreground">
+            <span aria-hidden className="text-ui-micro text-muted-foreground">
               {sortDir === "asc" ? "↑" : "↓"}
             </span>
           </Button>
@@ -160,7 +164,7 @@ export function ToolbarSortMenu({
                     className={menuItemClassName(active && "bg-accent/60 text-accent-foreground")}
                   >
                     <span>{field.label}</span>
-                    <span className="ml-auto text-[11px] text-muted-foreground">{dir.label}</span>
+                    <span className="ml-auto text-ui-meta text-muted-foreground">{dir.label}</span>
                     {active && <Check className="size-3" aria-hidden />}
                   </MenuPrimitive.Item>
                 );
@@ -386,7 +390,7 @@ export function ToolbarViewMenu({
                     className={menuItemClassName(Boolean(installedPlatformId) && "bg-accent/60 text-accent-foreground")}
                   >
                     <span>{t("central.toolbarViewInstalledPlatform")}</span>
-                    <span aria-hidden className="ml-auto text-[10px] text-muted-foreground">▸</span>
+                    <span aria-hidden className="ml-auto text-ui-micro text-muted-foreground">▸</span>
                   </MenuPrimitive.SubmenuTrigger>
                   <MenuPrimitive.Portal>
                     <MenuPrimitive.Positioner align="start" sideOffset={4} className="z-50 outline-none">
@@ -446,23 +450,4 @@ function resolvePlatformTitle(agent: PlatformTarget, t: TFunction): string {
   return getPlatformTargetTitleHint(agent) || resolvePlatformDisplay(agent, t);
 }
 
-function menuPopupClassName(extra?: string): string {
-  return cn(
-    "min-w-[200px] rounded-xl bg-popover p-1 text-sm text-popover-foreground shadow-[0_0_0_1px_color-mix(in_srgb,var(--foreground)_10%,transparent),0_16px_40px_-18px_color-mix(in_srgb,var(--background)_85%,transparent)] outline-none",
-    "data-[starting-style]:animate-in data-[starting-style]:fade-in-0 data-[starting-style]:zoom-in-95",
-    "data-[ending-style]:animate-out data-[ending-style]:fade-out-0 data-[ending-style]:zoom-out-95",
-    "animation-duration-100",
-    extra
-  );
-}
 
-function menuItemClassName(extra?: string | false): string {
-  return cn(
-    "flex min-h-8 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 outline-none transition-[background-color,color] data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
-    extra
-  );
-}
-
-function menuLabelClassName(): string {
-  return "px-2 pt-1 pb-0.5 text-[11px] uppercase tracking-wide text-muted-foreground/80";
-}

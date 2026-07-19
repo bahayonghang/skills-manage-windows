@@ -2690,4 +2690,868 @@ metadata:
             .iter()
             .any(|request| request.contains("GET /mirror")));
     }
+
+    // ── Tree manifest fast-path parser (Commit 1 of task
+    // `07-18-github-import-manifest-fast-path`). Parity/fallback tests that
+    // require mock HTTP (F2-F8) land in Commit 2 with the dispatcher; these
+    // cover the pure parser surface so the acquisition-layer primitive is
+    // fully specified before it is wired into preview/import.
+    mod tree_manifest_parser {
+        use super::*;
+        use super::super::tree_manifest::{classify_tree_entry, parse_tree_response, RepositoryFileKind};
+        use crate::services::resource_budget::{ResourceBudget, DEFAULT_TREE_ENTRIES};
+
+        fn sample_repo() -> GitHubRepoRef {
+            GitHubRepoRef {
+                owner: "owner".to_string(),
+                repo: "repo".to_string(),
+                branch: "main".to_string(),
+                normalized_url: "https://github.com/owner/repo".to_string(),
+            }
+        }
+
+        fn tree_entry(path: &str, mode: &str, type_field: &str, size: Option<u64>) -> String {
+            let size_json = match size {
+                Some(size) => format!(",\"size\":{size}"),
+                None => String::new(),
+            };
+            format!(
+                "{{\"path\":\"{path}\",\"mode\":\"{mode}\",\"type\":\"{type_field}\"{size_json}}}"
+            )
+        }
+
+        fn tree_response(entries: &[String], truncated: bool) -> String {
+            let joined = entries.join(",");
+            format!(
+                "{{\"sha\":\"abc\",\"url\":\"https://api.github.com/\",\"tree\":[{joined}],\"truncated\":{truncated}}}",
+                truncated = truncated
+            )
+        }
+
+        #[test]
+        fn classify_regular_blob_modes_are_regular() {
+            assert_eq!(
+                classify_tree_entry("100644", "blob"),
+                Some(RepositoryFileKind::RegularBlob)
+            );
+            assert_eq!(
+                classify_tree_entry("100755", "blob"),
+                Some(RepositoryFileKind::RegularBlob)
+            );
+        }
+
+        #[test]
+        fn classify_symlink_and_gitlink_are_skipped_kinds() {
+            assert_eq!(
+                classify_tree_entry("120000", "blob"),
+                Some(RepositoryFileKind::SymlinkBlob)
+            );
+            assert_eq!(
+                classify_tree_entry("160000", "commit"),
+                Some(RepositoryFileKind::Gitlink)
+            );
+        }
+
+        #[test]
+        fn classify_tree_node_returns_none_like_archive_is_file_filter() {
+            assert_eq!(classify_tree_entry("040000", "tree"), None);
+        }
+
+        #[test]
+        fn classify_unknown_mode_falls_back_to_other() {
+            assert_eq!(
+                classify_tree_entry("100000", "blob"),
+                Some(RepositoryFileKind::Other)
+            );
+            assert_eq!(
+                classify_tree_entry("040000", "blob"),
+                Some(RepositoryFileKind::Other)
+            );
+            assert_eq!(
+                classify_tree_entry("100644", "commit"),
+                Some(RepositoryFileKind::Other)
+            );
+        }
+
+        #[test]
+        fn parse_regular_blob_entries_builds_manifest() {
+            let body = tree_response(
+                &[
+                    tree_entry("SKILL.md", "100644", "blob", Some(40)),
+                    tree_entry("README.md", "100644", "blob", Some(12)),
+                    tree_entry("references/guide.md", "100755", "blob", Some(8)),
+                    // Directory node — skipped, like archive's is_file() filter.
+                    tree_entry("references", "040000", "tree", None),
+                ],
+                false,
+            );
+            let manifest = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect("regular blobs parse");
+
+            assert_eq!(
+                manifest.regular_files.iter().map(|f| f.repo_path.as_str()).collect::<Vec<_>>(),
+                vec!["README.md", "SKILL.md", "references/guide.md"]
+            );
+            assert_eq!(manifest.regular_files[0].byte_len, 12);
+            assert_eq!(manifest.regular_files[1].byte_len, 40);
+            assert_eq!(manifest.regular_files[2].byte_len, 8);
+            assert_eq!(manifest.regular_total_bytes(), 60);
+            assert_eq!(manifest.regular_files.len(), manifest.regular_paths().count());
+        }
+
+        #[test]
+        fn parse_symlink_and_gitlink_are_recorded_in_skipped_not_regular() {
+            let body = tree_response(
+                &[
+                    tree_entry("SKILL.md", "100644", "blob", Some(40)),
+                    // symlink blob — must NOT become a candidate or raw download.
+                    tree_entry("link", "120000", "blob", Some(11)),
+                    // submodule gitlink — must NOT become a candidate.
+                    tree_entry("vendor/submod", "160000", "commit", None),
+                ],
+                false,
+            );
+            let manifest = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect("symlink/gitlink parse");
+
+            let regular: Vec<_> = manifest
+                .regular_files
+                .iter()
+                .map(|f| f.repo_path.as_str())
+                .collect();
+            assert_eq!(regular, vec!["SKILL.md"]);
+            let skipped_kinds: Vec<_> = manifest
+                .skipped
+                .iter()
+                .map(|f| (f.repo_path.as_str(), f.kind))
+                .collect();
+            assert_eq!(
+                skipped_kinds,
+                vec![
+                    ("link", RepositoryFileKind::SymlinkBlob),
+                    ("vendor/submod", RepositoryFileKind::Gitlink),
+                ]
+            );
+        }
+
+        #[test]
+        fn parse_truncated_tree_returns_typed_fallback_error() {
+            let body = tree_response(&[tree_entry("SKILL.md", "100644", "blob", Some(40))], true);
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("truncated tree should error");
+            assert!(matches!(error, GithubImportError::TreeManifestTruncated));
+        }
+
+        #[test]
+        fn parse_regular_blob_without_size_returns_typed_integrity_error() {
+            let body = tree_response(
+                &[tree_entry("SKILL.md", "100644", "blob", None)],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("missing size should error");
+            assert!(
+                matches!(error, GithubImportError::TreeManifestEntryMissingSize(ref path) if path == "SKILL.md")
+            );
+        }
+
+        #[test]
+        fn parse_unknown_mode_returns_typed_unsupported_fallback_error() {
+            let body = tree_response(
+                &[
+                    tree_entry("SKILL.md", "100644", "blob", Some(40)),
+                    tree_entry("weird.txt", "100000", "blob", Some(7)),
+                ],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("unknown mode should error");
+            match error {
+                GithubImportError::TreeManifestUnsupportedMode { path, mode } => {
+                    assert_eq!(path, "weird.txt");
+                    assert_eq!(mode, "100000");
+                }
+                other => panic!("expected TreeManifestUnsupportedMode, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn parse_over_entry_budget_returns_typed_budget_error() {
+            let mut entries = Vec::new();
+            for index in 0..(DEFAULT_TREE_ENTRIES + 1) {
+                let path = format!("file{index}.md");
+                entries.push(tree_entry(&path, "100644", "blob", Some(1)));
+            }
+            let body = tree_response(&entries, false);
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("entry budget should error");
+            assert!(
+                matches!(error, GithubImportError::TreeManifestEntryBudgetExceeded(limit) if limit == DEFAULT_TREE_ENTRIES)
+            );
+        }
+
+        #[test]
+        fn parse_over_expanded_byte_budget_returns_budget_error() {
+            // Use a budget with tiny expanded-byte limit so summed sizes overflow.
+            let budget = ResourceBudget {
+                archive_expanded_bytes: 10,
+                ..ResourceBudget::default_skill()
+            };
+            let body = tree_response(
+                &[tree_entry("SKILL.md", "100644", "blob", Some(40))],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), budget)
+                .expect_err("byte budget should error");
+            assert!(matches!(error, GithubImportError::Budget(_)));
+        }
+
+        #[test]
+        fn parse_over_response_body_budget_returns_budget_error() {
+            let budget = ResourceBudget {
+                tree_response_bytes: 16,
+                ..ResourceBudget::default_skill()
+            };
+            let body = tree_response(
+                &[tree_entry("SKILL.md", "100644", "blob", Some(40))],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), budget)
+                .expect_err("response budget should error");
+            assert!(matches!(error, GithubImportError::Budget(_)));
+        }
+
+        #[test]
+        fn parse_malformed_json_returns_parse_error() {
+            let body = "{ not valid json ";
+            let error = parse_tree_response(body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("malformed json should error");
+            assert!(matches!(error, GithubImportError::Parse(_)));
+        }
+
+        #[test]
+        fn parse_rejects_unsafe_repo_path_through_shared_path_policy() {
+            // Traversal segment — must be rejected by the shared `normalize_repo_path`
+            // (same path policy as the archive parser's `is_safe_repo_relative_path`).
+            let body = tree_response(
+                &[tree_entry("../escape.md", "100644", "blob", Some(40))],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("traversal path should error");
+            assert!(matches!(error, GithubImportError::UnsupportedRepoPath(_)));
+        }
+
+        #[test]
+        fn parse_strips_leading_trailing_slash_in_repo_path() {
+            // GitHub tree paths may arrive with leading slashes for some
+            // mirror responses; `normalize_repo_path` must collapse them so
+            // downstream discovery sees a canonical relative path.
+            let body = tree_response(
+                &[tree_entry("/skills/demo/SKILL.md", "100644", "blob", Some(40))],
+                false,
+            );
+            let manifest = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect("leading slash normalizes");
+            assert_eq!(
+                manifest.regular_files[0].repo_path,
+                "skills/demo/SKILL.md"
+            );
+        }
+
+        #[test]
+        fn parse_duplicate_path_returns_integrity_error() {
+            let body = tree_response(
+                &[
+                    tree_entry("SKILL.md", "100644", "blob", Some(40)),
+                    tree_entry("SKILL.md", "100644", "blob", Some(40)),
+                ],
+                false,
+            );
+            let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                .expect_err("duplicate path should error");
+            // Duplicate is surfaced via the `MissingSize` integrity path
+            // (archive parser would have silently overwritten the HashMap
+            // entry; we fail closed to expose upstream anomalies).
+            assert!(matches!(error, GithubImportError::TreeManifestEntryMissingSize(_)));
+        }
+    }
+
+    // ── Tree fast-path dispatcher integration (Commit 2 of task
+    // `07-18-github-import-manifest-fast-path`). Covers the parity contract
+    // (tree vs archive produce identical candidate/preview/repository-file
+    // output for the same fixture) and the fallback classification matrix
+    // (F5–F8, F11–F14). Full HTTP-level dispatch tests (mock tree/raw/archive
+    // servers) require an injectable endpoint seam planned with the Commit 3
+    // diagnostics/import work; the pure parity + classifier tests here cover
+    // the behavioral acceptance criteria.
+    mod tree_fast_path_dispatcher {
+        use super::*;
+        use super::super::tree_import::{download_tree_selection, plan_tree_selection};
+        use super::super::preview::{
+            manifest_to_preview_repository_files, map_acquisition_error_to_outcome,
+            snapshot_preview_repository_files, TreeFastPathOutcome,
+        };
+        use super::super::plugin_manifest::{
+            effective_source_root, plugin_manifest_discovery_from_manifest_bytes,
+            plugin_manifest_discovery_from_snapshot,
+        };
+        use super::super::tree_manifest::{
+            fallback_reason_for, AcquisitionMode, FallbackReason, RepositoryFileKind,
+            RepositoryFileMeta, RepositoryManifest,
+        };
+
+        fn sample_repo() -> GitHubRepoRef {
+            GitHubRepoRef {
+                owner: "owner".to_string(),
+                repo: "repo".to_string(),
+                branch: "main".to_string(),
+                normalized_url: "https://github.com/owner/repo".to_string(),
+            }
+        }
+
+        fn direct_endpoint() -> &'static GitHubMirrorEndpoint {
+            GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint")
+        }
+
+        /// Build the `RepositoryManifest` a real `git/trees?recursive=1` call
+        /// would return for the same fixture snapshot: every regular archive
+        /// file becomes a `RegularBlob` with its byte length, mirroring the
+        /// archive parser's `is_file()` filter.
+        fn tree_manifest_from_snapshot(
+            repo: &GitHubRepoRef,
+            snapshot: &GitHubRepoSnapshot,
+        ) -> RepositoryManifest {
+            let regular_files = snapshot
+                .files
+                .iter()
+                .map(|(path, bytes)| RepositoryFileMeta {
+                    repo_path: path.clone(),
+                    byte_len: bytes.len() as u64,
+                    kind: RepositoryFileKind::RegularBlob,
+                })
+                .collect::<Vec<_>>();
+            RepositoryManifest {
+                repo: repo.clone(),
+                regular_files,
+                skipped: Vec::new(),
+            }
+        }
+
+        /// Re-implement the archive candidate path's discovery + candidate
+        /// construction so the tree path can be compared against it without
+        /// touching HTTP or the DB.
+        fn archive_candidates(
+            repo: &GitHubRepoRef,
+            snapshot: &GitHubRepoSnapshot,
+            source_path: Option<&str>,
+        ) -> Vec<RemoteSkillCandidate> {
+            build_repo_skill_candidates_from_snapshot_at_path(repo, snapshot, source_path)
+                .expect("archive candidates")
+        }
+
+        /// Re-implement the tree fast-path's candidate construction (the HTTP-free
+        /// core of `try_build_preview_from_tree_manifest`) using snapshot bytes
+        /// as the simulated raw fetch. This must match `archive_candidates`
+        /// exactly because discovery + frontmatter + filter are shared.
+        fn tree_candidates(
+            repo: &GitHubRepoRef,
+            snapshot: &GitHubRepoSnapshot,
+            manifest: &RepositoryManifest,
+            source_path: Option<&str>,
+        ) -> Vec<RemoteSkillCandidate> {
+            let plugin_discovery =
+                plugin_manifest_discovery_from_snapshot(snapshot, source_path)
+                    .expect("plugin discovery");
+            let manifests =
+                discover_skill_manifests_from_paths_with_plugin_discovery(
+                    manifest.regular_paths(),
+                    source_path,
+                    &plugin_discovery,
+                )
+                .expect("tree discovery");
+            let endpoint = direct_endpoint();
+            let mut candidates = Vec::with_capacity(manifests.len());
+            let mut seen_names = HashSet::new();
+            for skill_manifest in manifests {
+                let raw = snapshot
+                    .files
+                    .get(&skill_manifest.skill_md_path)
+                    .expect("snapshot has skill md")
+                    .clone();
+                let candidate =
+                    build_remote_skill_candidate(repo, &skill_manifest, raw, endpoint)
+                        .expect("tree candidate");
+                if is_generic_remote_skill_candidate(&candidate) {
+                    continue;
+                }
+                if !seen_names.insert(candidate.skill_name.clone()) {
+                    continue;
+                }
+                candidates.push(candidate);
+            }
+            candidates
+        }
+
+        /// Build preview skills (without DB conflict lookup) for parity checks.
+        fn preview_skills_without_conflicts(
+            candidates: &[RemoteSkillCandidate],
+        ) -> Vec<GitHubSkillPreview> {
+            candidates
+                .iter()
+                .map(|candidate| GitHubSkillPreview {
+                    source_path: candidate.source_path.clone(),
+                    skill_id: candidate.skill_id.clone(),
+                    skill_name: candidate.skill_name.clone(),
+                    description: candidate.description.clone(),
+                    plugin_name: candidate.plugin_name.clone(),
+                    root_directory: candidate.root_directory.clone(),
+                    skill_directory_name: candidate.skill_directory_name.clone(),
+                    download_url: candidate.download_url.clone(),
+                    conflict: None,
+                    files: None,
+                })
+                .collect()
+        }
+
+        #[test]
+        fn fallback_matrix_classifies_acquisition_errors() {
+            // F7 — truncated tree.
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::TreeManifestTruncated),
+                Some(FallbackReason::Truncated)
+            );
+            // F12 — unsupported mode.
+            assert_eq!(
+                fallback_reason_for(
+                    &GithubImportError::TreeManifestUnsupportedMode {
+                        path: "x".to_string(),
+                        mode: "100000".to_string(),
+                    }
+                ),
+                Some(FallbackReason::Unsupported)
+            );
+            // F5/F6 — rate limit + access denial (parity).
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::RateLimited("rl".to_string())),
+                Some(FallbackReason::Denied)
+            );
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::AccessDenied("denied".to_string())),
+                Some(FallbackReason::Denied)
+            );
+            // F8 — transport / mirror failure.
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::Http("transport".to_string())),
+                Some(FallbackReason::Transport)
+            );
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::RepoNotFound),
+                Some(FallbackReason::Transport)
+            );
+            // F13/F14 — budget (entry count, expanded bytes, response body).
+            assert_eq!(
+                fallback_reason_for(
+                    &GithubImportError::TreeManifestEntryBudgetExceeded(10)
+                ),
+                Some(FallbackReason::Budget)
+            );
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::TreeManifestSizeOverflow),
+                Some(FallbackReason::Budget)
+            );
+            assert!(matches!(
+                fallback_reason_for(&GithubImportError::Budget(
+                    crate::services::resource_budget::BudgetExceeded::new("tree", 1, 0)
+                )),
+                Some(FallbackReason::Budget)
+            ));
+            // F11 — missing size integrity gap.
+            assert_eq!(
+                fallback_reason_for(
+                    &GithubImportError::TreeManifestEntryMissingSize("p".to_string())
+                ),
+                Some(FallbackReason::Integrity)
+            );
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::Parse("bad tree json".to_string())),
+                Some(FallbackReason::Integrity)
+            );
+        }
+
+        #[test]
+        fn fallback_matrix_does_not_swallow_domain_errors() {
+            // Invalid candidate is a domain error — archive would produce the
+            // same failure, so the dispatcher must NOT fall back.
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::InvalidCandidate(
+                    "bad frontmatter".to_string()
+                )),
+                None
+            );
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::NoImportableSkills),
+                None
+            );
+        }
+
+        #[test]
+        fn map_acquisition_error_to_outcome_falls_back_for_acquisition_errors() {
+            let outcome = map_acquisition_error_to_outcome(GithubImportError::TreeManifestTruncated);
+            assert!(matches!(
+                outcome,
+                TreeFastPathOutcome::Fallback(FallbackReason::Truncated)
+            ));
+            let outcome = map_acquisition_error_to_outcome(GithubImportError::RateLimited(
+                "rl".to_string(),
+            ));
+            assert!(matches!(
+                outcome,
+                TreeFastPathOutcome::Fallback(FallbackReason::Denied)
+            ));
+        }
+
+        #[test]
+        fn map_acquisition_error_to_outcome_routes_domain_errors_to_safe_fallback() {
+            // Domain errors are not recognized by the classifier; the helper
+            // cannot return `Err` (it would change every call site), so it
+            // encodes them as a Transport fallback. The dispatcher's archive
+            // re-acquisition then re-surfaces the real domain error.
+            let outcome = map_acquisition_error_to_outcome(GithubImportError::InvalidCandidate(
+                "bad".to_string(),
+            ));
+            assert!(matches!(
+                outcome,
+                TreeFastPathOutcome::Fallback(FallbackReason::Transport)
+            ));
+        }
+
+        #[test]
+        fn manifest_repository_files_match_snapshot_repository_files() {
+            for snapshot in [
+                root_repo_snapshot(),
+                root_package_snapshot(),
+                multi_skill_snapshot(),
+                namespaced_skill_snapshot(),
+                content_skills_snapshot(),
+            ] {
+                let repo = sample_repo();
+                let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
+                let mut tree_files = manifest_to_preview_repository_files(&manifest);
+                let mut archive_files = snapshot_preview_repository_files(&snapshot);
+                // `snapshot_preview_repository_files` preserves HashMap order
+                // while `manifest_to_preview_repository_files` sorts; downstream
+                // `attach_preview_file_manifests` re-sorts per skill, so only
+                // content parity (sorted) is required.
+                tree_files.sort_by(|a, b| a.repo_path.cmp(&b.repo_path));
+                archive_files.sort_by(|a, b| a.repo_path.cmp(&b.repo_path));
+                assert_eq!(
+                    tree_files, archive_files,
+                    "tree and archive repository file sets must match for parity"
+                );
+            }
+        }
+
+        #[test]
+        fn tree_discovery_matches_archive_discovery_for_fixtures() {
+            for snapshot in [
+                root_repo_snapshot(),
+                root_package_snapshot(),
+                multi_skill_snapshot(),
+                namespaced_skill_snapshot(),
+                content_skills_snapshot(),
+            ] {
+                let repo = sample_repo();
+                let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
+                let plugin_discovery =
+                    plugin_manifest_discovery_from_snapshot(&snapshot, None)
+                        .expect("plugin discovery");
+                let tree_manifests =
+                    discover_skill_manifests_from_paths_with_plugin_discovery(
+                        manifest.regular_paths(),
+                        None,
+                        &plugin_discovery,
+                    )
+                    .expect("tree discovery");
+                let archive_manifests =
+                    discover_skill_manifests_from_paths_with_plugin_discovery(
+                        snapshot.files.keys().map(String::as_str),
+                        None,
+                        &plugin_discovery,
+                    )
+                    .expect("archive discovery");
+                assert_eq!(
+                    tree_manifests, archive_manifests,
+                    "discovery input set must be identical for tree and archive"
+                );
+            }
+        }
+
+        #[test]
+        fn tree_candidates_match_archive_candidates_for_fixtures() {
+            for snapshot in [
+                root_repo_snapshot(),
+                root_package_snapshot(),
+                multi_skill_snapshot(),
+                namespaced_skill_snapshot(),
+                content_skills_snapshot(),
+            ] {
+                let repo = sample_repo();
+                let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
+                let archive = archive_candidates(&repo, &snapshot, None);
+                let tree = tree_candidates(&repo, &snapshot, &manifest, None);
+                assert_eq!(
+                    tree, archive,
+                    "tree fast-path candidates must match archive candidates"
+                );
+            }
+        }
+
+        #[test]
+        fn tree_preview_file_manifests_match_archive_for_fixtures() {
+            for snapshot in [
+                root_repo_snapshot(),
+                root_package_snapshot(),
+                multi_skill_snapshot(),
+                namespaced_skill_snapshot(),
+                content_skills_snapshot(),
+            ] {
+                let repo = sample_repo();
+                let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
+                let candidates = archive_candidates(&repo, &snapshot, None);
+                let mut tree_skills = preview_skills_without_conflicts(&candidates);
+                let mut archive_skills = preview_skills_without_conflicts(&candidates);
+                attach_preview_file_manifests(
+                    &mut tree_skills,
+                    &manifest_to_preview_repository_files(&manifest),
+                )
+                .expect("tree attach");
+                attach_preview_file_manifests(
+                    &mut archive_skills,
+                    &snapshot_preview_repository_files(&snapshot),
+                )
+                .expect("archive attach");
+                assert_eq!(
+                    tree_skills, archive_skills,
+                    "preview file manifests must match between tree and archive"
+                );
+            }
+        }
+
+        #[test]
+        fn plugin_discovery_bytes_path_matches_snapshot_path() {
+            // The tree fast-path re-derives plugin discovery from raw bytes via
+            // `plugin_manifest_discovery_from_manifest_bytes`; it must match the
+            // archive path's `plugin_manifest_discovery_from_snapshot` for the
+            // same fixture bytes.
+            let snapshot = repo_snapshot(&[
+                (
+                    ".claude-plugin/plugin.json",
+                    r#"{"name":"demo","skills":["skills/a/SKILL.md"]}"#.to_string(),
+                ),
+                (
+                    "skills/a/SKILL.md",
+                    sample_frontmatter("a", "a skill"),
+                ),
+                (
+                    "skills/b/SKILL.md",
+                    sample_frontmatter("b", "b skill"),
+                ),
+            ]);
+            let repo = sample_repo();
+            let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
+
+            let base_path = effective_source_root(None).expect("base path");
+            let plugin_json_path =
+                join_repo_path(&base_path, ".claude-plugin/plugin.json").expect("join");
+            let marketplace_path =
+                join_repo_path(&base_path, ".claude-plugin/marketplace.json").expect("join");
+
+            let plugin_json = manifest
+                .regular_paths()
+                .any(|p| p == plugin_json_path)
+                .then(|| snapshot.files.get(&plugin_json_path).cloned())
+                .flatten();
+            let marketplace = manifest
+                .regular_paths()
+                .any(|p| p == marketplace_path)
+                .then(|| snapshot.files.get(&marketplace_path).cloned())
+                .flatten();
+
+            let bytes_discovery = plugin_manifest_discovery_from_manifest_bytes(
+                &base_path,
+                plugin_json.as_deref(),
+                marketplace.as_deref(),
+            );
+            let snapshot_discovery =
+                plugin_manifest_discovery_from_snapshot(&snapshot, None).expect("snapshot discovery");
+            assert_eq!(
+                bytes_discovery.explicit_skill_paths,
+                snapshot_discovery.explicit_skill_paths
+            );
+            assert_eq!(
+                bytes_discovery.plugin_by_source_path,
+                snapshot_discovery.plugin_by_source_path
+            );
+        }
+
+        #[test]
+        fn tree_manifest_from_snapshot_excludes_no_archive_files() {
+            // Sanity: the parity helper converts every archive regular file to
+            // a RegularBlob — so the fixture must produce a manifest whose
+            // regular path set equals the archive file key set.
+            let snapshot = multi_skill_snapshot();
+            let repo = sample_repo();
+            let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
+            let mut manifest_paths = manifest
+                .regular_files
+                .iter()
+                .map(|f| f.repo_path.clone())
+                .collect::<Vec<_>>();
+            manifest_paths.sort();
+            let mut snapshot_paths = snapshot.files.keys().cloned().collect::<Vec<_>>();
+            snapshot_paths.sort();
+            assert_eq!(manifest_paths, snapshot_paths);
+        }
+
+        #[test]
+        fn tree_import_plan_downloads_only_selected_subtree_union() {
+            let snapshot = multi_skill_snapshot();
+            let repo = sample_repo();
+            let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
+            let candidates = archive_candidates(&repo, &snapshot, None);
+            let selections = candidates
+                .iter()
+                .filter(|candidate| candidate.source_path != ".")
+                .take(2)
+                .map(|candidate| GitHubSkillImportSelection {
+                    source_path: candidate.source_path.clone(),
+                    resolution: DuplicateResolution::Overwrite,
+                    renamed_skill_id: None,
+                })
+                .collect::<Vec<_>>();
+
+            let plan = plan_tree_selection(&manifest, &candidates, &selections)
+                .expect("selected subtree plan");
+
+            assert_eq!(plan.mode, AcquisitionMode::TreeRaw);
+            let planned_paths = plan
+                .files
+                .iter()
+                .map(|file| file.repo_path.as_str())
+                .collect::<Vec<_>>();
+            assert!(!planned_paths.is_empty());
+            assert_eq!(
+                planned_paths.len(),
+                planned_paths.iter().collect::<HashSet<_>>().len(),
+                "overlapping selections must download each repo file once"
+            );
+            assert!(planned_paths.iter().all(|path| selections.iter().any(|selection| {
+                repo_file_relative_to_source(path, &selection.source_path).is_some()
+            })));
+        }
+
+        #[test]
+        fn tree_import_plan_routes_root_skill_to_archive() {
+            let snapshot = root_repo_snapshot();
+            let repo = sample_repo();
+            let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
+            let candidates = archive_candidates(&repo, &snapshot, None);
+            let selections = vec![GitHubSkillImportSelection {
+                source_path: ".".to_string(),
+                resolution: DuplicateResolution::Overwrite,
+                renamed_skill_id: None,
+            }];
+
+            let plan = plan_tree_selection(&manifest, &candidates, &selections)
+                .expect("root plan");
+
+            assert_eq!(plan.mode, AcquisitionMode::Archive);
+            assert_eq!(plan.fallback_reason, Some(FallbackReason::Threshold));
+        }
+
+        #[test]
+        fn tree_import_plan_avoids_raw_request_amplification() {
+            let repo = sample_repo();
+            let mut regular_files = vec![RepositoryFileMeta::new(
+                "skills/demo/SKILL.md",
+                32,
+                RepositoryFileKind::RegularBlob,
+            )];
+            regular_files.extend((0..65).map(|index| RepositoryFileMeta::new(
+                &format!("skills/demo/references/{index}.md"),
+                16,
+                RepositoryFileKind::RegularBlob,
+            )));
+            let manifest = RepositoryManifest {
+                repo,
+                regular_files,
+                skipped: Vec::new(),
+            };
+            let candidates = vec![RemoteSkillCandidate {
+                source_path: "skills/demo".to_string(),
+                skill_id: "demo".to_string(),
+                skill_name: "Demo".to_string(),
+                description: None,
+                plugin_name: None,
+                root_directory: "skills".to_string(),
+                skill_directory_name: "demo".to_string(),
+                download_url: "https://example.invalid/SKILL.md".to_string(),
+            }];
+            let selections = vec![GitHubSkillImportSelection {
+                source_path: "skills/demo".to_string(),
+                resolution: DuplicateResolution::Overwrite,
+                renamed_skill_id: None,
+            }];
+
+            let plan = plan_tree_selection(&manifest, &candidates, &selections)
+                .expect("amplified plan");
+
+            assert_eq!(plan.mode, AcquisitionMode::Archive);
+            assert_eq!(plan.fallback_reason, Some(FallbackReason::Threshold));
+        }
+
+        #[test]
+        fn raw_size_mismatch_is_an_integrity_fallback() {
+            let error = GithubImportError::RepoFileSizeMismatch {
+                path: "skills/demo/SKILL.md".to_string(),
+                expected: 10,
+                actual: 9,
+            };
+            assert_eq!(fallback_reason_for(&error), Some(FallbackReason::Integrity));
+        }
+
+        #[tokio::test]
+        async fn tree_import_reuses_already_fetched_candidate_metadata() {
+            let repo = sample_repo();
+            let bytes = sample_frontmatter("demo", "demo skill").into_bytes();
+            let plan = super::super::tree_import::TreeSelectionPlan {
+                mode: AcquisitionMode::TreeRaw,
+                fallback_reason: None,
+                files: vec![RepositoryFileMeta::new(
+                    "skills/demo/SKILL.md",
+                    bytes.len() as u64,
+                    RepositoryFileKind::RegularBlob,
+                )],
+                selected_bytes: bytes.len() as u64,
+            };
+            let fetched = HashMap::from([("skills/demo/SKILL.md".to_string(), bytes.clone())]);
+
+            let snapshot = download_tree_selection(
+                &github_client().expect("client"),
+                &repo,
+                &plan,
+                None,
+                fetched,
+            )
+            .await
+            .expect("metadata-only selection needs no network request");
+
+            assert_eq!(snapshot.files.get("skills/demo/SKILL.md"), Some(&bytes));
+        }
+
+        // `try_fetch_tree_manifest` reachability is enforced by `cargo check`
+        // (non-test build) which fails on dead code now that the
+        // `#![allow(dead_code)]` was removed from `tree_manifest.rs`.
+    }
 }

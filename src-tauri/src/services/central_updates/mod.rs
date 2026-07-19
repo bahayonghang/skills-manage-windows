@@ -38,5 +38,8 @@ pub(crate) use repository_sync::{
     apply_central_repository_sync_impl, check_central_repository_sync_impl,
     collect_remote_added_skills,
 };
-pub(crate) use snapshots::{prepare_snapshots_for_repo_refs_with_policy, repo_cache_key};
+pub(crate) use snapshots::{
+    prepare_snapshots_for_repo_refs_with_policy, repo_cache_key, SnapshotProgressEvent,
+    SnapshotProgressReporter, SnapshotProgressStatus,
+};
 pub(crate) use types::{PreparedSkillUpdate, RemoteSkillLoadError, SnapshotCachePolicy};

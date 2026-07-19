@@ -24,7 +24,7 @@ export function sshCredentialStatusClass(status: string | null) {
     case "session":
       return "border-warning/40 bg-warning/10 text-warning-foreground";
     case "unreadable":
-      return "border-destructive/40 bg-destructive/10 text-destructive";
+      return "border-destructive/40 bg-destructive/10 text-destructive-text";
     default:
       return "border-muted-foreground/30 bg-muted text-muted-foreground";
   }

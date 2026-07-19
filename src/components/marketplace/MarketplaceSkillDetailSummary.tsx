@@ -28,7 +28,7 @@ export function MarketplaceSkillDetailSummary({
           {downloadUrl ?? skill.downloadUrl}
         </div>
         {skill.remoteKind === "skills_sh" ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-ui-meta text-muted-foreground">
             <span className="inline-flex items-center gap-1 rounded-full bg-muted/50 px-2 py-0.5">
               <Download className="size-3" />
               {t("marketplace.skillsShInstalls", { count: skill.installs ?? 0 })}

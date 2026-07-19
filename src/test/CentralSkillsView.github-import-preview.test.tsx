@@ -50,7 +50,7 @@ describe("CentralSkillsView GitHub import preview", () => {
       },
     });
 
-    fireEvent.click(screen.getByTestId("central-github-import-open"));
+    await S.openGitHubImportViaLauncher(screen);
     const dialog = await screen.findByRole("dialog", {
       name: /GitHub import wizard/i,
     }, { timeout: ASYNC_UI_TIMEOUT_MS });

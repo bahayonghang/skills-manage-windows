@@ -344,11 +344,26 @@ export function applyBodyFont(
   );
 }
 
+let appliedFontScale = DEFAULT_THEMED_FONT_PREFERENCES.scale;
+const fontScaleListeners = new Set<() => void>();
+
+export function getAppliedFontScale(): number {
+  return appliedFontScale;
+}
+
+export function subscribeAppliedFontScale(listener: () => void): () => void {
+  fontScaleListeners.add(listener);
+  return () => fontScaleListeners.delete(listener);
+}
+
 export function applyFontScale(scale: number) {
   const html = getHtml();
   if (!html) return;
   const clamped = Math.min(Math.max(scale, 0.75), 1.5);
   html.style.setProperty("--font-scale", String(clamped));
+  if (clamped === appliedFontScale) return;
+  appliedFontScale = clamped;
+  for (const listener of fontScaleListeners) listener();
 }
 
 export function applyFontPreferences(prefs: FontPreferences) {

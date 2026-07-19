@@ -12,6 +12,35 @@ export type SkillRefreshScopeKind = "all" | "skills" | "repositories" | "platfor
 export type SkillRefreshMode = "regular" | "sync";
 export type SkillRefreshCachePolicy = "use_fresh" | "bypass";
 
+export type SkillUpdateInventoryProgressStatus =
+  | "started"
+  | "repository_started"
+  | "repository_completed"
+  | "repository_failed"
+  | "finalizing";
+
+export interface SkillUpdateInventoryProgressPayload {
+  operationId: string;
+  status: SkillUpdateInventoryProgressStatus;
+  total: number;
+  completed: number;
+  repositoryKey?: string | null;
+  repositoryName?: string | null;
+}
+
+export interface ActiveRefreshRepository {
+  key: string;
+  name: string;
+}
+
+export interface SkillUpdateInventoryRefreshProgress {
+  operationId: string;
+  phase: "preparing" | "checking" | "finalizing";
+  total: number;
+  completed: number;
+  activeRepositories: ActiveRefreshRepository[];
+}
+
 export interface SkillRefreshScope {
   kind: SkillRefreshScopeKind;
   mode?: SkillRefreshMode;

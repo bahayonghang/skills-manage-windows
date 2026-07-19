@@ -21,9 +21,18 @@ describe("CentralSkillsView shell（V2 markup）", () => {
     renderCentralSkillsView();
     expect(screen.getByText("中央技能库")).toBeInTheDocument();
     expect(screen.getByText("/Users/test/.skillsmanage/skills/")).toBeInTheDocument();
-    expect(screen.getByTestId("central-github-import-open")).toHaveTextContent("从 GitHub 导入");
+    expect(screen.getByTestId("central-add-skill-launcher")).toHaveTextContent("添加技能");
     expect(screen.getByTestId("central-check-updates")).toBeInTheDocument();
     expect(screen.getByTestId("central-toolbar-more")).toBeInTheDocument();
+  });
+
+  it("从统一入口打开本地 ZIP wizard", async () => {
+    renderCentralSkillsView();
+    fireEvent.click(screen.getByTestId("central-add-skill-launcher"));
+    fireEvent.click(await screen.findByTestId("central-add-skill-local-zip"));
+    expect(
+      await screen.findByRole("dialog", { name: "导入本地 ZIP 技能" }),
+    ).toBeInTheDocument();
   });
 
   it("「⋯ 更多」menu 展开后只保留任务中心 / 平台管理 / 状态导入导出", async () => {

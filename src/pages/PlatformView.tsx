@@ -561,7 +561,7 @@ export function PlatformView() {
       {/* Header */}
       <div className="border-b border-border px-6 py-4">
         <div className="flex items-center gap-2.5">
-          <PlatformIcon agentId={agent.id} className="size-6 text-primary/70" size={24} />
+          <PlatformIcon agentId={agent.id} className="size-6 text-primary-text" size={24} />
           <h1 className="text-xl font-semibold">{platformDisplayName}</h1>
         </div>
         {isUniversalPage && (

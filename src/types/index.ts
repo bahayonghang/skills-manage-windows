@@ -743,3 +743,14 @@ export type {
   TagGroup,
   ViewMode,
 } from "./centralV2";
+
+// ─── Local Archive (ZIP) Import ─────────────────────────────────────────────
+export type {
+  ArchiveFingerprint,
+  LocalArchiveImportResolution,
+  LocalArchiveImportResult,
+  LocalArchivePreview,
+  LocalArchivePreviewFile,
+  LocalArchivePreviewSkill,
+  LocalSkillConflict,
+} from "./localArchiveImport";

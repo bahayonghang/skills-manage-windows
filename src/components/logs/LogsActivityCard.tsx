@@ -68,7 +68,7 @@ export function LogsActivityCard({
             );
           })}
         </div>
-        <div className="flex items-center justify-between text-[0.68rem] text-muted-foreground">
+        <div className="flex items-center justify-between text-ui-meta text-muted-foreground">
           <span>{t("logs.activity.less")}</span>
           <span>{t("logs.activity.more")}</span>
         </div>

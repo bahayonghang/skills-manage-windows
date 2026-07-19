@@ -152,7 +152,7 @@ export function SkillFrontmatterCard({ data, raw, className }: SkillFrontmatterC
                 )}
               </div>
               {summaryVersion && (
-                <span className="inline-flex items-center rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-[11px] font-medium tracking-wide text-foreground/80">
+                <span className="inline-flex items-center rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs font-medium tracking-wide text-foreground">
                   v{summaryVersion}
                 </span>
               )}
@@ -161,7 +161,7 @@ export function SkillFrontmatterCard({ data, raw, className }: SkillFrontmatterC
 
           {additionalEntries.length > 0 && (
             <section className="space-y-3 border-t border-border/60 pt-4">
-              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 {t("detail.frontmatterAdditional")}
               </div>
               <div className="space-y-3">
@@ -175,7 +175,7 @@ export function SkillFrontmatterCard({ data, raw, className }: SkillFrontmatterC
       ) : (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">{t("detail.frontmatterRawFallback")}</p>
-          <pre className="overflow-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-background/70 p-3 text-[12px] leading-5 text-foreground/80">
+          <pre className="overflow-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-background/70 p-3 text-ui-meta leading-5 text-foreground">
             {trimmedRaw}
           </pre>
         </div>

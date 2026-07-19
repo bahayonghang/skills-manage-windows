@@ -43,6 +43,7 @@ import {
 import { useCentralUpdateCheckModeController } from "@/pages/centralUpdateCheckModeController";
 import { useCentralAiTagDashboardView } from "@/pages/centralAiTagDashboardView";
 import { useCentralBatchUninstallView } from "@/pages/centralBatchUninstallView";
+import { useImportIntentBindings } from "@/stores/importIntentStore";
 
 export function CentralSkillsView() {
   const { t } = useTranslation();
@@ -153,12 +154,11 @@ export function CentralSkillsView() {
     useState(false);
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isGitHubImportOpen, setIsGitHubImportOpen] = useState(false);
+  const { githubRepoUrl, isGitHubImportOpen, setGithubRepoUrl, setIsGitHubImportOpen } = useImportIntentBindings();
   const [isPlatformManageOpen, setIsPlatformManageOpen] = useState(false);
   const [isPortabilityOpen, setIsPortabilityOpen] = useState(false);
   const [isCategorizeDrawerOpen, setIsCategorizeDrawerOpen] = useState(false);
   const [isTaskCenterOpen, setIsTaskCenterOpen] = useState(false);
-  const [githubRepoUrl, setGitHubRepoUrl] = useState("");
   const contentRef = useRef<HTMLDivElement | null>(null);
   const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const hasMarkedCentralListReady = useRef(false);
@@ -558,7 +558,7 @@ export function CentralSkillsView() {
     selectedSkillIds,
     skills,
     setDrawerSkillId,
-    setGithubRepoUrl: setGitHubRepoUrl,
+    setGithubRepoUrl,
     setIsBatchInstallDialogOpen,
     setIsDialogOpen,
     setIsDrawerOpen,

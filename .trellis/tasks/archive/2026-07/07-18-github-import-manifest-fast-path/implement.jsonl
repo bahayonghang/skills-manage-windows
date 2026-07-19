@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/github-import-preview-contract.md", "reason": "Added Tree Manifest Acquisition Fast-Path scenario: signatures, parity contract, fallback matrix, validation/error matrix, tests required. Commit 2 dispatcher integration contract."}
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}

@@ -45,7 +45,7 @@ export function CompactCardMoreMenu({
             <MenuPrimitive.Item
               onClick={onDeleteFromCentral}
               data-testid={`delete-central-skill-${skillName}`}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-destructive outline-none data-[highlighted]:bg-destructive/10"
+              className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-destructive-text outline-none data-[highlighted]:bg-destructive/10"
             >
               <Trash2 className="size-3.5 shrink-0" />
               {t("central.deleteSkill")}

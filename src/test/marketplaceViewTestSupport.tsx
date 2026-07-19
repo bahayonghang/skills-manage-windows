@@ -615,6 +615,7 @@ vi.mock("@/stores/skillStore", () => ({
 }));
 
 import { MarketplaceView as MarketplaceViewComponent } from "@/pages/MarketplaceView";
+import { useImportIntentStore } from "@/stores/importIntentStore";
 import * as tauriBridgeModule from "@/lib/ipc";
 import { useTargetStore as targetStoreHook } from "@/stores/targetStore";
 
@@ -639,6 +640,7 @@ export function renderMarketplaceView() {
 }
 
 export function resetMarketplaceViewTestState() {
+  useImportIntentStore.getState().resetForTest();
   mockLoadRegistries.mockReset();
   mockLoadPreviewSkills.mockReset();
   mockGetNormalizedRegistryIdentity.mockReset();

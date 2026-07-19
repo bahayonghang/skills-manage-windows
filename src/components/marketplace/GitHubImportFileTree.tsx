@@ -70,7 +70,7 @@ export function GitHubImportFileTree({
         data-testid="github-import-file-tree-error"
         role="alert"
       >
-        <div className="flex max-w-md items-start gap-2 text-sm text-destructive">
+        <div className="flex max-w-md items-start gap-2 text-sm text-destructive-text">
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
           <span>{t("marketplace.githubImportFileManifestError")}</span>
         </div>
@@ -93,7 +93,7 @@ export function GitHubImportFileTree({
       className="flex h-full min-h-0 flex-col"
       data-testid="github-import-file-tree"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3 text-ui-meta text-muted-foreground">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 tabular-nums">
           <span>
             {model.fileCount === 1
@@ -160,7 +160,7 @@ export function GitHubImportFileTree({
                 <span className="min-w-0 flex-1 truncate" title={node.path}>
                   {node.name}
                 </span>
-                <span className="shrink-0 pl-2 text-[10px] tabular-nums text-muted-foreground">
+                <span className="shrink-0 pl-2 text-ui-micro tabular-nums text-muted-foreground">
                   {isDirectory
                     ? node.descendantFileCount === 1
                       ? t("marketplace.githubImportDirectoryFileCountOne")

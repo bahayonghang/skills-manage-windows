@@ -63,7 +63,7 @@ export function SkillCardMeta({
             days: 30,
             defaultValue: `${usageBadge} calls in last 30 days`,
           })}
-          className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+          className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
         >
           <span className="tabular-nums">
             {t("skillUsage.badge.countShort", { count: usageBadge })}
@@ -71,7 +71,7 @@ export function SkillCardMeta({
           <span aria-hidden="true" className="text-primary/45">
             ·
           </span>
-          <span className="tabular-nums text-primary/80">
+          <span className="tabular-nums text-primary-text">
             {t("skillUsage.badge.periodShort", { days: 30 })}
           </span>
         </span>
@@ -103,11 +103,11 @@ export function SkillCardMeta({
       {updateStatus && updateStatus.status !== "up_to_date" && (
         <span
           className={cn(
-            "inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium ring-1",
+            "inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium ring-1",
             updateStatus.status === "update_available"
               ? "bg-primary/10 text-primary ring-primary/20"
               : updateStatus.status === "error"
-                ? "bg-destructive/10 text-destructive ring-destructive/20"
+                ? "bg-destructive/10 text-destructive-text ring-destructive/20"
                 : updateStatus.status === "remote_missing"
                   ? "bg-warning/10 text-warning-foreground ring-warning/30"
                   : "bg-muted text-muted-foreground ring-border",
@@ -125,7 +125,7 @@ export function SkillCardMeta({
               ? `skill-card-duplicate-badge-${inventorySkillId}`
               : undefined
           }
-          className="inline-flex items-center rounded-full bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning-foreground ring-1 ring-warning/30"
+          className="inline-flex items-center rounded-full bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning-foreground ring-1 ring-warning/30"
         >
           {t("central.updateCenter.badges.duplicate")}
         </span>
@@ -137,7 +137,7 @@ export function SkillCardMeta({
               ? `skill-card-orphan-badge-${inventorySkillId}`
               : undefined
           }
-          className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border"
+          className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-border"
         >
           {t("central.updateCenter.badges.orphan")}
         </span>
@@ -148,7 +148,7 @@ export function SkillCardMeta({
           {tags.slice(0, 2).map((tag) => (
             <span
               key={tag.key}
-              className="text-[11px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded"
+              className="text-ui-meta bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded"
             >
               {tag.label}
             </span>

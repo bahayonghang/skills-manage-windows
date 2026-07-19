@@ -122,7 +122,7 @@ export function GitHubPatSettingsSection({
           <p
             className={
               effectiveMessage.type === "error"
-                ? "text-sm text-destructive"
+                ? "text-sm text-destructive-text"
                 : "text-sm text-success-foreground"
             }
             role="status"
@@ -193,7 +193,7 @@ function githubPatStorageTone(state: SecretStorageState) {
     case "session":
       return "border-warning/40 bg-warning/10 text-warning-foreground";
     case "unreadable":
-      return "border-destructive/40 bg-destructive/10 text-destructive";
+      return "border-destructive/40 bg-destructive/10 text-destructive-text";
     case "missing":
     default:
       return "border-border bg-background text-muted-foreground";

@@ -105,7 +105,7 @@ export function CentralInstalledSkillsQuickFilter({
       </select>
       {hasFilter && (
         <>
-          <span className="rounded-md border border-border/70 bg-background px-2 py-1 text-[11px] text-muted-foreground">
+          <span className="rounded-md border border-border/70 bg-background px-2 py-1 text-ui-meta text-muted-foreground">
             {t("central.installedSkillsFilterResult", { count: filteredCount })}
           </span>
           <Button

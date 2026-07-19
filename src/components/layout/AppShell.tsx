@@ -7,6 +7,7 @@ import { TopBar } from "./TopBar";
 import { GlobalSearchDialog } from "./GlobalSearchDialog";
 import { ShortcutsSheet } from "./ShortcutsSheet";
 import { UpdateCenterDialog } from "@/components/central/UpdateCenterDialog";
+import { ImportIntentController } from "@/components/import/ImportIntentController";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useTargetStore } from "@/stores/targetStore";
@@ -200,6 +201,7 @@ export function AppShell() {
         onOpenChange={setIsShortcutsOpen}
       />
       <UpdateCenterDialog />
+      <ImportIntentController />
     </div>
   );
 }

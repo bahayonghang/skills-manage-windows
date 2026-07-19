@@ -110,11 +110,11 @@ export function RemoteTargetRow({
               <span className="min-w-0 max-w-full truncate text-sm font-medium">
                 {targetTitle(target, t)}
               </span>
-              <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+              <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
                 {targetKindLabel(target, t)}
               </span>
               {isActive && (
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
                   {t("targets.active")}
                 </span>
               )}
@@ -127,7 +127,7 @@ export function RemoteTargetRow({
             </div>
             {isRemoteLikeTarget(target) && target.cacheDbPath && (
               <div
-                className="mt-0.5 break-all font-mono text-[11px] leading-5 text-muted-foreground/80"
+                className="mt-0.5 break-all font-mono text-ui-meta leading-5 text-muted-foreground"
                 title={target.cacheDbPath}
               >
                 {target.cacheDbPath}
@@ -278,13 +278,13 @@ function PasswordRepairRow({
       <div className="flex flex-wrap items-center gap-2">
         <span
           title={credentialStatusLabel}
-          className={`rounded-full border px-2 py-0.5 text-[11px] ${sshCredentialStatusClass(credentialStatus)}`}
+          className={`rounded-full border px-2 py-0.5 text-xs ${sshCredentialStatusClass(credentialStatus)}`}
         >
           {credentialStatusLabel}
         </span>
         {credentialError ? (
           <span
-            className="break-all text-[11px] text-muted-foreground"
+            className="break-all text-ui-meta text-muted-foreground"
             title={credentialError}
           >
             {credentialError}
@@ -682,7 +682,7 @@ export function WslTargetForm({
           ) : null}
         </div>
         {distributionError ? (
-          <p className="text-xs text-destructive">{distributionError}</p>
+          <p className="text-xs text-destructive-text">{distributionError}</p>
         ) : distributions.length === 0 && !isLoadingDistributions ? (
           <p className="text-xs text-muted-foreground">
             {t("targets.wslListManualEmpty")}

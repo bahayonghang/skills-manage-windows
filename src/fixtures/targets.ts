@@ -8,6 +8,21 @@ const LOCAL_TARGET: TargetSummary = {
   isActive: true,
 };
 
+const LONG_PATH_SSH_TARGET: TargetSummary = {
+  id: "ssh-browser-long-path",
+  kind: "ssh",
+  label: "Windows typography validation workstation with a long label",
+  host: "typography-validation.internal.example",
+  username: "fixture-user",
+  port: 22,
+  authMethod: "key",
+  remoteHome:
+    "C:\\Users\\fixture-user\\Documents\\SkillPort Validation Workspace\\deeply-nested-project\\.agents\\skills",
+  remoteOs: "Windows 11",
+  credentialStatus: "stored",
+  isActive: false,
+};
+
 const BROWSER_FIXTURE_WSL_DISTRIBUTIONS: WslDistributionSummary[] = [
   {
     name: "Ubuntu-24.04",
@@ -22,7 +37,7 @@ const WSL_ONLY_ERROR = "WSL targets are available only in the Tauri app.";
 
 export function registerTargetFixtures(): void {
   registerIpcFixtures({
-    list_targets: () => [LOCAL_TARGET],
+    list_targets: () => [LOCAL_TARGET, LONG_PATH_SSH_TARGET],
     list_wsl_distributions: () => BROWSER_FIXTURE_WSL_DISTRIBUTIONS,
     // 建远程目标依赖真实 SSH/WSL，浏览器演示态保持「仅桌面可用」语义
     create_ssh_target: () => Promise.reject(SSH_ONLY_ERROR),

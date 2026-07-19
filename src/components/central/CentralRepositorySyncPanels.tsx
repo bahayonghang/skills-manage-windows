@@ -89,7 +89,7 @@ export function RepositorySyncSummary({
         count: remoteMissingCount,
       }),
       value: remoteMissingCount,
-      className: "border-destructive/20 bg-destructive/10 text-destructive",
+      className: "border-destructive/20 bg-destructive/10 text-destructive-text",
     },
     {
       key: "failed",
@@ -200,7 +200,7 @@ export function DeletePreviewBlock({
   return (
     <div className="mt-3 space-y-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3">
       <div>
-        <div className="text-xs font-medium uppercase tracking-wide text-destructive">
+        <div className="text-xs font-medium uppercase tracking-wide text-destructive-text">
           {t("central.repositorySyncDeletePreviewTitle")}
         </div>
         <div className="mt-1 break-all text-xs text-muted-foreground">

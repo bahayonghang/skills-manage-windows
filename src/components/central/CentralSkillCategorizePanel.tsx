@@ -125,7 +125,7 @@ export function CentralSkillCategorizePanel({
           <span
             className={cn(
               "font-medium",
-              selectedSkillCount > 0 ? "text-primary" : "text-foreground/70",
+              selectedSkillCount > 0 ? "text-primary" : "text-foreground",
             )}
           >
             {t("central.selectedSkillSummary", { count: selectedSkillCount })}
@@ -136,7 +136,7 @@ export function CentralSkillCategorizePanel({
               "font-medium",
               manualSelectedTagIds.length > 0
                 ? "text-primary"
-                : "text-foreground/70",
+                : "text-foreground",
             )}
           >
             {t("central.pendingTagSummary", {
@@ -171,13 +171,13 @@ export function CentralSkillCategorizePanel({
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
                 categorizeTab === tab
                   ? "border-primary/35 bg-background text-primary shadow-sm ring-1 ring-primary/15"
-                  : "border-transparent text-foreground/60 hover:border-border/80 hover:bg-background/80 hover:text-foreground",
+                  : "border-transparent text-foreground hover:border-border/80 hover:bg-background/80 hover:text-foreground",
               )}
             >
               {tabIcons[tab]}
               <span>{t(`central.categorizeTab.${tab}`)}</span>
               {tab === "review" && aiTagReviews.length > 0 && (
-                <span className="ml-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-warning/15 px-1.5 text-[10px] font-semibold text-warning-foreground ring-1 ring-warning/30">
+                <span className="ml-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-warning/15 px-1.5 text-ui-micro font-semibold text-warning-foreground ring-1 ring-warning/30">
                   {aiTagReviews.length}
                 </span>
               )}
@@ -213,7 +213,7 @@ export function CentralSkillCategorizePanel({
                       "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                       selected
                         ? "border-primary/70 bg-primary/15 text-primary shadow-sm ring-1 ring-primary/20"
-                        : "border-border bg-background text-foreground/75 hover:border-primary/40 hover:text-foreground",
+                        : "border-border bg-background text-foreground hover:border-primary/40 hover:text-foreground",
                     )}
                   >
                     {selected && <Check className="size-3" />}
@@ -243,12 +243,12 @@ export function CentralSkillCategorizePanel({
         {categorizeTab === "review" && (
           <div className="space-y-3">
             {aiTagReviews.length > 0 && manualSelectedTagIds.length === 0 && (
-              <div className="rounded-xl bg-muted/20 p-3 text-xs text-foreground/75 ring-1 ring-border/90">
+              <div className="rounded-xl bg-muted/20 p-3 text-xs text-foreground ring-1 ring-border/90">
                 {t("central.reviewReplaceNeedsTags")}
               </div>
             )}
             {aiTagReviews.length === 0 ? (
-              <div className="rounded-xl bg-muted/20 p-4 text-center text-xs text-foreground/70 ring-1 ring-border/90">
+              <div className="rounded-xl bg-muted/20 p-4 text-center text-xs text-foreground ring-1 ring-border/90">
                 {t("central.reviewEmpty")}
               </div>
             ) : (
@@ -262,7 +262,7 @@ export function CentralSkillCategorizePanel({
                       <div className="truncate text-sm font-medium">
                         {review.skill_name}
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-foreground/70">
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-foreground">
                         <span className="rounded-full bg-muted px-2 py-0.5">
                           {review.tag.name}
                         </span>
@@ -271,7 +271,7 @@ export function CentralSkillCategorizePanel({
                     </div>
                     <AlertTriangle className="size-4 shrink-0 text-warning-foreground" />
                   </div>
-                  <p className="mt-2 text-xs leading-relaxed text-foreground/75">
+                  <p className="mt-2 text-xs leading-relaxed text-foreground">
                     {review.reason}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -313,7 +313,7 @@ export function CentralSkillCategorizePanel({
               className={cn(
                 "w-full",
                 isManualActionDisabled
-                  ? "border border-dashed border-border bg-muted/30 text-foreground/60 shadow-none"
+                  ? "border border-dashed border-border bg-muted/30 text-foreground shadow-none"
                   : "shadow-sm",
               )}
               disabled={isManualActionDisabled}
@@ -325,7 +325,7 @@ export function CentralSkillCategorizePanel({
             </Button>
             {manualDisabledReason && (
               <p
-                className="mt-2 text-xs leading-relaxed text-foreground/75"
+                className="mt-2 text-xs leading-relaxed text-foreground"
                 data-testid="categorize-action-reason"
               >
                 {manualDisabledReason}
@@ -339,7 +339,7 @@ export function CentralSkillCategorizePanel({
               className={cn(
                 "w-full",
                 isAiActionDisabled
-                  ? "border border-dashed border-border bg-muted/30 text-foreground/60 shadow-none"
+                  ? "border border-dashed border-border bg-muted/30 text-foreground shadow-none"
                   : "shadow-sm",
               )}
               disabled={isAiActionDisabled}
@@ -351,7 +351,7 @@ export function CentralSkillCategorizePanel({
             </Button>
             {aiDisabledReason && (
               <p
-                className="mt-2 text-xs leading-relaxed text-foreground/75"
+                className="mt-2 text-xs leading-relaxed text-foreground"
                 data-testid="categorize-action-reason"
               >
                 {aiDisabledReason}
@@ -360,7 +360,7 @@ export function CentralSkillCategorizePanel({
           </>
         )}
         {categorizeTab === "review" && (
-          <p className="text-xs leading-relaxed text-foreground/70">
+          <p className="text-xs leading-relaxed text-foreground">
             {t("central.reviewApplyHint")}
           </p>
         )}

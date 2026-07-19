@@ -68,7 +68,7 @@ export function FacetItem({
         className="flex min-h-7 min-w-0 flex-1 items-center gap-2 text-left"
       >
         {icon ? (
-          <span className="grid size-4 shrink-0 place-items-center text-muted-foreground/80">
+          <span className="grid size-4 shrink-0 place-items-center text-muted-foreground">
             {icon}
           </span>
         ) : null}
@@ -78,7 +78,7 @@ export function FacetItem({
       {typeof count === "number" && (
         <span
           className={cn(
-            "shrink-0 rounded-md border bg-background px-1.5 py-0.5 font-mono text-[10px] tabular-nums",
+            "shrink-0 rounded-md border bg-background px-1.5 py-0.5 font-mono text-ui-micro tabular-nums",
             active
               ? "border-primary/30 text-foreground"
               : "border-border/80 text-muted-foreground",

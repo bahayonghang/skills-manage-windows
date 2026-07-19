@@ -32,12 +32,12 @@ function KeyCombo({ combo }: { combo: string }) {
           {index > 0 && (
             <span
               aria-hidden="true"
-              className="text-[11px] text-muted-foreground"
+              className="text-ui-meta text-muted-foreground"
             >
               +
             </span>
           )}
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-muted px-1.5 font-mono text-[11px] leading-none text-foreground ring-1 ring-border">
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-muted px-1.5 font-mono text-xs leading-none text-foreground ring-1 ring-border">
             {token}
           </span>
         </Fragment>
@@ -67,7 +67,7 @@ export function ShortcutsSheet({ open, onOpenChange }: ShortcutsSheetProps) {
         <DialogBody className="space-y-4">
           {SHORTCUT_GROUPS.map((group) => (
             <section key={group.id} aria-label={t(group.titleKey)}>
-              <h3 className="text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t(group.titleKey)}
               </h3>
               <ul className="mt-1.5">

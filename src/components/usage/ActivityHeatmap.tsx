@@ -67,7 +67,7 @@ export function ActivityHeatmap({
     >
       <div className="overflow-x-auto pb-1">
         <div className={cn("min-w-[22rem]", !compact && "px-1")}>
-          <div className="ml-9 grid grid-cols-16 gap-1 text-[10px] text-muted-foreground">
+          <div className="ml-9 grid grid-cols-16 gap-1 text-ui-micro text-muted-foreground">
             {monthLabels.map((label, index) => (
               <span
                 key={`${label}-${index}`}
@@ -78,7 +78,7 @@ export function ActivityHeatmap({
             ))}
           </div>
           <div className="mt-1 flex gap-2">
-            <div className="grid w-7 shrink-0 grid-rows-7 items-center text-[10px] text-muted-foreground">
+            <div className="grid w-7 shrink-0 grid-rows-7 items-center text-ui-micro text-muted-foreground">
               {weekdayLabels.map((label, index) => (
                 <span key={`${label}-${index}`}>{label}</span>
               ))}
@@ -136,7 +136,7 @@ export function ActivityHeatmap({
           </div>
         </div>
       </div>
-      <div className="mt-2 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+      <div className="mt-2 flex items-center justify-end gap-1.5 text-ui-micro text-muted-foreground">
         <span>{t("skillUsage.heatmap.less")}</span>
         {([0, 1, 2, 3, 4, 5] as const).map((level) => (
           <span

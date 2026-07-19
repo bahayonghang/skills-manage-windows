@@ -1720,3 +1720,240 @@ Implemented preview-only Claude plugin manifest grouping for GitHub import, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 43: 优化技能详情页视觉层级
+
+**Date**: 2026-07-16
+**Task**: 优化技能详情页视觉层级
+**Branch**: `dev`
+
+### Summary
+
+重排技能详情侧栏的信息层级，补齐文件类型、更新状态和平台安装状态的语义与无障碍线索，并完成六主题对比度、完整 CI 与 Tauri 视觉验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6fbe92d2` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 44: 完成更新检查仓库进度反馈
+
+**Date**: 2026-07-16
+**Task**: 完成更新检查仓库进度反馈
+**Branch**: `dev`
+
+### Summary
+
+为 Central 更新检查增加真实仓库级进度、全部活跃 owner/repo 列表、可靠事件清理和失败重试反馈；补齐跨层契约与测试，并通过 just ci 和 Windows Tauri 手动验收。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `21b79e97` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 45: 完成 GitHub 导入清单快路径
+
+**Date**: 2026-07-18
+**Task**: 完成 GitHub 导入清单快路径
+**Branch**: `dev`
+
+### Summary
+
+完成本地 GitHub 导入的选中子树 TreeRaw acquisition、有界 raw 下载、archive 回退、完整性校验、可观测诊断与后端合同；just ci 全绿后提交并归档子任务。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d10f3e7a4c97571f330d69366e3a563238904ea8` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 46: 完成高密度排版 WCAG 与虚拟化验收
+
+**Date**: 2026-07-18
+**Task**: 完成高密度排版 WCAG 与虚拟化验收
+**Branch**: `dev`
+
+### Summary
+
+补齐六主题十四 accent 与 destructive 对比度语义，修正 Central 三档字号固定高度虚拟化和 Settings 切页滚动，保存 browser/Tauri 视觉证据并通过 focused Vitest、build 与 just ci。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `addbf867` | (see git log) |
+| `5c693ccf` | (see git log) |
+| `9f44fc80` | (see git log) |
+| `0cbb06ba` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 47: 完成 SkillPort GitHub 导入深链
+
+**Date**: 2026-07-18
+**Task**: 完成 SkillPort GitHub 导入深链
+**Branch**: `dev`
+
+### Summary
+
+实现严格深链 parser、8 条 native/frontend FIFO、Windows single-instance cold/warm 生命周期与前端统一 import intent controller；通过 just ci 和真实 NSIS 安装、scheme、cold/warm、单进程与前台聚焦验收。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0bcf6701` | (see git log) |
+| `02f3d749` | (see git log) |
+| `b0f10498` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 48: 统一 ZIP 导入验收修复与父任务最终复核
+
+**Date**: 2026-07-19
+**Task**: 统一 ZIP 导入验收修复与父任务最终复核
+**Branch**: `dev`
+
+### Summary
+
+修复本地 ZIP overwrite 回滚、持久化 Operation Log、错误脱敏/i18n 与 Zustand controller，补齐 Rust/前端测试和真实 Tauri 视觉证据；重新归档 unified-skill-import，父任务保持 planning 4/4 并通过最终跨子任务验收。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `151ea7ab` | (see git log) |
+| `5dccb3a8` | (see git log) |
+| `188c78ca` | (see git log) |
+| `e7308ba` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 49: 归档 SkillKit 与 SkillPort 优化父任务
+
+**Date**: 2026-07-19
+**Task**: 归档 SkillKit 与 SkillPort 优化父任务
+**Branch**: `dev`
+
+### Summary
+
+父任务 4/4 子任务均已归档，Cross-Child AC 与真实 Tauri 验收证据齐全；本次直接归档 planning 父任务，未启动任务、未修改产品代码、未推送远端。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

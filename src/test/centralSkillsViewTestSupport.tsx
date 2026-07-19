@@ -3,6 +3,8 @@ import { vi } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { CentralSkillsView as CentralSkillsViewComponent } from "../pages/CentralSkillsView";
+import { useImportIntentStore } from "@/stores/importIntentStore";
+import { useLocalArchiveImportStore } from "@/stores/localArchiveImportSlice";
 import type {
   AgentWithStatus,
   SkillDetail,
@@ -11,6 +13,7 @@ import type {
   SkillWithLinks,
   TargetSummary,
 } from "../types";
+import type { SkillUpdateInventoryRefreshProgress } from "../types/skillUpdateInventory";
 
 const mockedToast = vi.hoisted(() => ({
   success: vi.fn(),
@@ -41,6 +44,7 @@ const mockedUpdateCenter = vi.hoisted(() => {
     state: {
       inventory: null,
       isRefreshing: false,
+      refreshProgress: null as SkillUpdateInventoryRefreshProgress | null,
       isApplying: false,
       lastRefreshedAt: null,
       isDialogOpen: false,
@@ -513,6 +517,11 @@ export const mockUseSkillDetailStore = vi.mocked(useSkillDetailStore);
 export const mockRefreshUpdateInventory = mockedUpdateCenter.refresh;
 export const mockOpenUpdateCenterDialog = mockedUpdateCenter.openDialog;
 export const mockEmptyUpdateInventory = mockedUpdateCenter.emptyInventory;
+export function setMockUpdateCenterProgress(
+  progress: SkillUpdateInventoryRefreshProgress | null,
+) {
+  mockedUpdateCenter.state.refreshProgress = progress;
+}
 export const localTarget: TargetSummary = {
   id: "local",
   kind: "local",
@@ -708,6 +717,8 @@ export const tauriBridge = tauriBridgeModule;
 export const settingsStore = useSettingsStore;
 
 export function resetCentralSkillsViewTestState() {
+  useImportIntentStore.getState().resetForTest();
+  useLocalArchiveImportStore.getState().reset();
   vi.clearAllMocks();
   // 重置 jsdom URL：CentralSkillsView 用 useCentralViewStateUrl 把 viewState（搜索/筛选/排序）写到 location.search，
   // 测试间共享 jsdom 的 window.location 会导致前一个 case 的搜索文本污染下一个 case 的初始 state。
@@ -744,6 +755,7 @@ export function resetCentralSkillsViewTestState() {
   mockKeepRemoteMissingSkills.mockResolvedValue([]);
   mockBatchUninstallSkillsFromAgent.mockResolvedValue({ succeeded: [], failed: [] });
   mockRefreshUpdateInventory.mockResolvedValue(mockEmptyUpdateInventory);
+  mockedUpdateCenter.state.refreshProgress = null;
   mockOpenUpdateCenterDialog.mockClear();
   mockPreviewCentralStoreLocationChange.mockResolvedValue({
     sourcePath: "/Users/test/.skillsmanage/skills",
@@ -778,4 +790,24 @@ export function resetCentralSkillsViewTestState() {
 export function cleanupCentralSkillsViewTestState() {
   cleanup();
   vi.restoreAllMocks();
+}
+
+/**
+ * Open the GitHub import wizard via the unified "Add Skill" launcher.
+ *
+ * After the launcher replaced the standalone GitHub import button, tests
+ * that need to open the wizard must click the launcher and then select the
+ * GitHub intent from the dropdown.
+ */
+export async function openGitHubImportViaLauncher(
+  screen: typeof import("@testing-library/react")["screen"],
+) {
+  const { fireEvent } = await import("@testing-library/react");
+  fireEvent.click(screen.getByTestId("central-add-skill-launcher"));
+  const githubItem = await screen.findByTestId(
+    "central-add-skill-github",
+    {},
+    { timeout: 3000 },
+  );
+  fireEvent.click(githubItem);
 }

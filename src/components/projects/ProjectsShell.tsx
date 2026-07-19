@@ -210,7 +210,7 @@ function ProjectList({
                   {isScanning ? (
                     <Loader2 className="size-3 shrink-0 animate-spin" />
                   ) : (
-                    <span className="text-[10px] font-mono tabular-nums text-muted-foreground shrink-0">
+                    <span className="text-ui-micro font-mono tabular-nums text-muted-foreground shrink-0">
                       {project.skillCount}
                     </span>
                   )}
@@ -251,7 +251,7 @@ function ProjectList({
                     onClick={() => onRequestRemove(project)}
                     aria-label={t("projects.menuRemove")}
                     title={t("projects.menuRemove")}
-                    className="p-1 rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive cursor-pointer"
+                    className="p-1 rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive-text cursor-pointer"
                   >
                     <Trash2 className="size-3" />
                   </button>
@@ -281,7 +281,7 @@ function ProjectCliSidebar({
   return (
     <aside className="w-44 shrink-0 border-r border-border bg-muted/10 flex flex-col">
       <div className="px-3 py-2 border-b border-border">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {t("projects.cliSidebarTitle")}
         </p>
       </div>
@@ -317,7 +317,7 @@ function ProjectCliSidebar({
                 <Folder className="size-3.5 shrink-0 text-muted-foreground" />
               )}
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              <span className="rounded-full bg-background/80 px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-muted-foreground">
+              <span className="rounded-full bg-background/80 px-1.5 py-0.5 text-ui-micro font-mono tabular-nums text-muted-foreground">
                 {item.count}
               </span>
             </button>
@@ -495,7 +495,7 @@ function SkillPanel({
                     >
                       {platformName}
                     </h3>
-                    <span className="rounded-full bg-background/80 px-2 py-0.5 text-[10px] font-mono tabular-nums text-muted-foreground">
+                    <span className="rounded-full bg-background/80 px-2 py-0.5 text-ui-micro font-mono tabular-nums text-muted-foreground">
                       {t("projects.platformSkillCount", {
                         count: group.skills.length,
                       })}

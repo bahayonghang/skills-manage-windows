@@ -565,7 +565,7 @@ export function SkillDetailView({
         {!isLoading && error && (
           <div className="flex h-full items-center justify-center">
             <div className="space-y-2 text-center">
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-sm text-destructive-text">{error}</p>
               <Button
                 variant="outline"
                 size="sm"
@@ -580,7 +580,7 @@ export function SkillDetailView({
         {!isLoading && !error && isBrowserFallback && (
           <div className="flex h-full items-center justify-center">
             <div className="max-w-md space-y-3 px-6 text-center">
-              <Bot className="mx-auto size-8 text-muted-foreground/60" />
+              <Bot className="mx-auto size-8 text-muted-foreground" />
               <div className="space-y-1">
                 <p className="text-sm font-medium">{t("detail.browserFallbackTitle")}</p>
                 <p className="text-sm text-muted-foreground">{t("detail.browserFallbackDesc")}</p>

@@ -1,5 +1,6 @@
 import type {
   AgentWithStatus,
+  ArchiveFingerprint,
   BatchUninstallSkillRequest,
   BatchUninstallSkillResult,
   BootstrapSnapshot,
@@ -12,6 +13,9 @@ import type {
   OperationLogEntry,
   OperationLogFilter,
   OperationLogPage,
+  LocalArchiveImportResolution,
+  LocalArchiveImportResult,
+  LocalArchivePreview,
   PlatformPathMap,
   RuntimeLogClearRequest,
   RuntimeLogFile,
@@ -74,6 +78,20 @@ export const IPC_COMMANDS = {
   list_platform_paths: command<undefined, PlatformPathMap>(),
   scan_all_skills: command<undefined, ScanResult>(),
   get_skill_counts_summary: command<undefined, SkillCountsSummary>(),
+  mark_import_intent_frontend_ready: command<undefined, void>(),
+  preview_local_skill_archive: command<
+    { archivePath: string },
+    LocalArchivePreview
+  >(),
+  import_local_skill_archive: command<
+    {
+      archivePath: string;
+      expectedFingerprint: ArchiveFingerprint;
+      resolution: LocalArchiveImportResolution;
+      renamedSkillId?: string;
+    },
+    LocalArchiveImportResult
+  >(),
   set_agent_enabled: command<
     { agentId: string; isEnabled: boolean },
     AgentWithStatus

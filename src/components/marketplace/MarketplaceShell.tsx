@@ -360,7 +360,7 @@ export function MarketplaceShell({
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(event) => event.stopPropagation()}
-                            className="text-[11px] text-primary hover:underline shrink-0"
+                            className="text-xs text-primary hover:underline shrink-0"
                           >
                             {repo.url}
                           </a>
@@ -429,7 +429,7 @@ export function MarketplaceShell({
                                 <div className="min-w-0 flex-1">
                                   <div className="text-xs font-medium truncate">{skill.name}</div>
                                   {skill.description && (
-                                    <div className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
+                                    <div className="text-ui-meta text-muted-foreground line-clamp-1 mt-0.5">
                                       {skill.description}
                                     </div>
                                   )}
@@ -454,7 +454,7 @@ export function MarketplaceShell({
                                         event.currentTarget
                                       );
                                     }}
-                                    className="h-8 min-w-8 px-2 text-xs md:h-6 md:min-w-0 md:text-[11px]"
+                                    className="h-8 min-w-8 px-2 text-xs md:h-6 md:min-w-0 md:text-ui-meta"
                                   >
                                     <FileText className="size-3" />
                                     <span>Detail</span>
@@ -467,7 +467,7 @@ export function MarketplaceShell({
                                       void onInstallPreviewSkill(skill);
                                     }}
                                     disabled={previewInstallingIds.has(skill.name)}
-                                    className="h-8 min-w-8 px-2 text-xs md:h-6 md:min-w-0 md:text-[11px]"
+                                    className="h-8 min-w-8 px-2 text-xs md:h-6 md:min-w-0 md:text-ui-meta"
                                   >
                                     {previewInstallingIds.has(skill.name) ? (
                                       <Loader2 className="size-3 animate-spin" />
@@ -522,7 +522,7 @@ export function MarketplaceShell({
             </form>
 
             {skillsShError ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive-text">
                 {skillsShError}
               </div>
             ) : null}

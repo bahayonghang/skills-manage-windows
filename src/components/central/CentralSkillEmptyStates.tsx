@@ -38,7 +38,7 @@ export function CentralSkillFirstVisitEmptyState() {
       </div>
       <div className="flex flex-col gap-3 items-center">
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-xl px-4 py-3 max-w-xs text-left border border-border">
-          <FolderOpen className="size-4 shrink-0 text-primary/60" />
+          <FolderOpen className="size-4 shrink-0 text-primary-text" />
           <span>
             {t("empty.createHint")}{" "}
             <code className="font-mono">{exampleSkillPath}</code>

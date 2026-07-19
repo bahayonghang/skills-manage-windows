@@ -94,7 +94,7 @@ export function statusTone(status: SkillportStateSkillPreview["status"]) {
   if (status === "conflict")
     return "border-warning/40 bg-warning/10 text-warning-foreground";
   if (status === "missing")
-    return "border-destructive/40 bg-destructive/10 text-destructive";
+    return "border-destructive/40 bg-destructive/10 text-destructive-text";
   if (status === "duplicate_skipped")
     return "border-info/40 bg-info/10 text-info-foreground";
   return "border-muted-foreground/30 bg-muted text-muted-foreground";

@@ -1,4 +1,4 @@
-import { useMemo, type RefObject } from "react";
+import { useMemo, useSyncExternalStore, type RefObject } from "react";
 import type { TFunction } from "i18next";
 
 import {
@@ -15,33 +15,18 @@ import {
   CENTRAL_SKILL_CARD_GRID_GAP,
   CENTRAL_SKILL_CARD_MAX_COLUMNS,
   CENTRAL_SKILL_CARD_MIN_WIDTH,
+  centralVirtualItemHeight,
   centralSkillCardGridTemplateColumns,
 } from "@/lib/centralSkillGrid";
+import {
+  getAppliedFontScale,
+  subscribeAppliedFontScale,
+} from "@/lib/displayFont";
 import type { PlatformTarget } from "@/lib/platformTargetGroups";
 import type { ViewDensity, ViewMode } from "@/lib/centralViewState";
 import { getRepoDotColor } from "@/lib/tagColor";
 import { cn } from "@/lib/utils";
 import type { CentralSkillUpdateState, SkillWithLinks } from "@/types";
-
-// 卡片高度常量 —— 必须与 UnifiedSkillCard 的 min-h 保持一致，
-// 否则虚拟列表会出现间隙或重叠。
-const LIST_ITEM_HEIGHT_COMFORTABLE = 196;
-const LIST_ITEM_HEIGHT_COMPACT = 148;
-// grid 卡含 footer 分隔区（repo·调用数｜平台点）+ 底部 tag 行；高度贴合内容，消除中部死白。
-const GRID_ITEM_HEIGHT_COMFORTABLE = 192;
-const GRID_ITEM_HEIGHT_COMPACT = 172;
-
-function listItemHeight(density: ViewDensity): number {
-  return density === "compact"
-    ? LIST_ITEM_HEIGHT_COMPACT
-    : LIST_ITEM_HEIGHT_COMFORTABLE;
-}
-
-function gridItemHeight(density: ViewDensity): number {
-  return density === "compact"
-    ? GRID_ITEM_HEIGHT_COMPACT
-    : GRID_ITEM_HEIGHT_COMFORTABLE;
-}
 
 export function CentralSkillListContent({
   availableInstallAgents,
@@ -112,6 +97,11 @@ export function CentralSkillListContent({
     [sortedSkills],
   );
   const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
+  const fontScale = useSyncExternalStore(
+    subscribeAppliedFontScale,
+    getAppliedFontScale,
+    () => 1,
+  );
 
   // 搜索激活时强制 list 单列（更易扫读结果）；其他场景遵循 viewMode。
   const effectiveView: ViewMode = isSearchActive ? "list" : viewMode;
@@ -188,7 +178,7 @@ export function CentralSkillListContent({
         sortedSkills.length > 60 ? (
           <VirtualizedList
             items={sortedSkills}
-            itemHeight={listItemHeight(cardDensity)}
+            itemHeight={centralVirtualItemHeight("list", cardDensity, fontScale)}
             itemGap={12}
             overscan={8}
             scrollContainerRef={contentRef}
@@ -203,7 +193,7 @@ export function CentralSkillListContent({
       ) : sortedSkills.length > 40 ? (
         <VirtualizedGrid
           items={sortedSkills}
-          itemHeight={gridItemHeight(cardDensity)}
+          itemHeight={centralVirtualItemHeight("grid", cardDensity, fontScale)}
           rowGap={CENTRAL_SKILL_CARD_GRID_GAP}
           columnGap={CENTRAL_SKILL_CARD_GRID_GAP}
           overscanRows={3}

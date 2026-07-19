@@ -72,7 +72,7 @@ async fn read_remote_optional_manifest_file(
     Some(raw)
 }
 
-fn plugin_manifest_discovery_from_manifest_bytes(
+pub(super) fn plugin_manifest_discovery_from_manifest_bytes(
     base_path: &str,
     plugin_json: Option<&[u8]>,
     marketplace_json: Option<&[u8]>,
@@ -257,7 +257,7 @@ fn manifest_source_path(base_path: &str, local_path: &str) -> Result<String, Git
     })
 }
 
-fn effective_source_root(source_path: Option<&str>) -> Result<String, GithubImportError> {
+pub(super) fn effective_source_root(source_path: Option<&str>) -> Result<String, GithubImportError> {
     source_path
         .map(normalize_repo_path)
         .transpose()

@@ -196,6 +196,7 @@ export function SettingsView() {
     [location.hash, location.pathname, location.search],
   );
   const activePage = getSettingsPageById(activePageId);
+  const settingsContentRef = useRef<HTMLElement | null>(null);
   const settingsSubpath = normalizeSettingsSubpath(location.pathname);
   const isKnownSettingsSubpath =
     !settingsSubpath || isSettingsPageId(settingsSubpath);
@@ -377,7 +378,21 @@ export function SettingsView() {
   );
 
   useEffect(() => {
+    if (!settingsContentRef.current) return;
+    settingsContentRef.current.scrollTop = 0;
+  }, [activePageId]);
+
+  useEffect(() => {
     if (!activePage.sectionIds.includes("remote-targets")) return;
+    const requestedSection =
+      location.hash.replace(/^#/, "") ||
+      new URLSearchParams(location.search).get("section");
+    if (
+      requestedSection !== "remote-targets" &&
+      requestedSection !== "remote-targets-section"
+    ) {
+      return;
+    }
 
     window.requestAnimationFrame(() => {
       document
@@ -446,7 +461,10 @@ export function SettingsView() {
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <SettingsSideNav activePageId={activePageId} />
-        <main className="min-h-0 flex-1 overflow-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-7 xl:px-10">
+        <main
+          ref={settingsContentRef}
+          className="min-h-0 flex-1 overflow-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-7 xl:px-10"
+        >
           <div className="mx-auto w-full max-w-6xl space-y-7">
             <header className="border-b border-border/70 pb-5">
               <div className="flex items-start gap-2.5">

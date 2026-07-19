@@ -134,7 +134,7 @@ export function PlatformDialog({
           {/* Display name field */}
           <div className="space-y-1.5">
             <label htmlFor="platform-name" className="text-sm font-medium">
-              {t("platformDialog.nameLabel")} <span className="text-destructive">*</span>
+              {t("platformDialog.nameLabel")} <span className="text-destructive-text">*</span>
             </label>
             <Input
               id="platform-name"
@@ -160,7 +160,7 @@ export function PlatformDialog({
               autoFocus
             />
             {nameError && (
-              <p className="text-xs text-destructive" role="alert">
+              <p className="text-xs text-destructive-text" role="alert">
                 {nameError}
               </p>
             )}
@@ -169,7 +169,7 @@ export function PlatformDialog({
           {/* Global skills dir field */}
           <div className="space-y-1.5">
             <label htmlFor="platform-dir" className="text-sm font-medium">
-              {t("platformDialog.dirLabel")} <span className="text-destructive">*</span>
+              {t("platformDialog.dirLabel")} <span className="text-destructive-text">*</span>
             </label>
             <Input
               id="platform-dir"
@@ -183,7 +183,7 @@ export function PlatformDialog({
               disabled={isSubmitting}
             />
             {dirError && (
-              <p className="text-xs text-destructive" role="alert">
+              <p className="text-xs text-destructive-text" role="alert">
                 {dirError}
               </p>
             )}
@@ -222,7 +222,7 @@ export function PlatformDialog({
 
           {/* Backend error */}
           {error && (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-destructive-text" role="alert">
               {error}
             </p>
           )}

@@ -56,6 +56,26 @@
       "tls": "AI 服务端点 TLS 或证书校验失败。",
       "network": "AI 网络请求失败。",
       "empty_response": "模型没有返回可显示的解释正文。"
+    },
+    "local_archive": {
+      "archive_not_found": "未找到所选 ZIP 压缩包。",
+      "archive_read_failed": "无法读取所选 ZIP 压缩包。",
+      "archive_changed_since_preview": "ZIP 压缩包在预览后发生变化，请重新选择并检查更新后的内容。",
+      "ambiguous_archive_layout": "ZIP 压缩包中存在多个可能的技能根目录。",
+      "no_skill_manifest": "ZIP 压缩包中没有可导入的 SKILL.md。",
+      "invalid_archive_entry": "ZIP 压缩包中包含不安全的路径。",
+      "unsupported_archive_entry": "ZIP 压缩包中包含不支持的文件类型或压缩方式。",
+      "budget_exceeded": "ZIP 压缩包超过安全导入限制。",
+      "path_conflict": "所选技能 id 与中央技能库中的现有数据冲突。",
+      "skill_frontmatter_missing": "SKILL.md 元数据缺失或无效。",
+      "invalid_skill_identifier": "请输入有效的技能 id。",
+      "io": "导入 ZIP 压缩包时文件系统操作失败。",
+      "db": "中央技能库无法保存导入的技能元数据。",
+      "central_mutation": "中央技能库正在执行其他变更，请稍后重试。",
+      "rollback_failed": "无法自动恢复原有中央技能。",
+      "remote_target_unsupported": "SSH 和 WSL 目标不支持本地 ZIP 导入。",
+      "internal": "本地 ZIP 导入失败。",
+      "unknown": "本地 ZIP 导入失败，请重试或检查操作日志。"
     }
   },
   "targets": {
@@ -688,6 +708,13 @@
     "deletedFound": "发现 {{skillCount}} 个已删除技能，可清理 {{rowCount}} 个平台副本",
     "deletedScanError": "检测已删除技能失败：{{error}}"
   },
+  "importIntent": {
+    "pendingTitle": "待处理 GitHub 导入（{{count}}）",
+    "closeCurrentFirst": "请先关闭当前导入向导，再打开下一条请求。",
+    "pendingDescription": "可以打开下一条请求，或在不修改当前导入的情况下将其丢弃。",
+    "openPending": "打开下一条",
+    "discard": "丢弃"
+  },
   "central": {
     "title": "中央技能库",
     "scope": "私有中央库",
@@ -1176,6 +1203,7 @@
     "updateFailed": "失败 {{count}}",
     "updateStatus": {
       "not_checked": "未检查",
+      "checking": "检查中",
       "up_to_date": "已是最新",
       "update_available": "有更新",
       "unsupported": "不支持",
@@ -1456,6 +1484,15 @@
       "note": "这里只执行检查并打开更新中心；新增导入、远端删除和更新应用仍需要在更新中心里再次确认。",
       "confirm": "开始检查",
       "confirming": "检查中…",
+      "progress": {
+        "scope": "当前范围：{{scope}}。",
+        "preparing": "正在准备仓库检查…",
+        "checking": "已检查 {{completed}} / {{total}} 个仓库",
+        "finalizing": "正在整理检查结果…",
+        "activeRepositories": "正在检查的仓库",
+        "aria": "更新检查进度：已完成 {{completed}} / {{total}} 个仓库",
+        "ariaPreparing": "正在准备更新检查"
+      },
       "inlineLabel": "更新模式",
       "inlineHint": "点击检查时会先确认本次使用的模式。",
       "regular": {
@@ -1472,6 +1509,32 @@
         "disabledNoRepository": "当前没有可同步的 GitHub 仓库。"
       },
       "syncConfirmTitle": "确认增量和删减检查"
+    },
+    "addSkillLauncher": {
+      "label": "添加技能",
+      "menuLabel": "导入来源",
+      "github": "GitHub 仓库",
+      "githubDesc": "从 GitHub 仓库导入技能",
+      "localZip": "本地 ZIP 压缩包",
+      "localZipDesc": "预览并导入 .zip 技能包",
+      "localZipRemoteDisabled": "远程目标不可用"
+    },
+    "localArchiveWizard": {
+      "title": "导入本地 ZIP 技能",
+      "description": "预览压缩包内容，确认后写入中央技能库。",
+      "chooseFile": "选择 .zip 文件",
+      "chooseFileHint": "仅支持包含单个 SKILL.md 的 .zip 文件。",
+      "fileCount": "文件数",
+      "totalBytes": "总计",
+      "conflictDetected": "中央技能库中已存在相同 id 的技能。",
+      "conflictDesc": "已有技能：{{existingId}}",
+      "resolutionOverwrite": "覆盖已有技能",
+      "resolutionRename": "使用新 id 导入",
+      "resolutionSkip": "跳过此次导入",
+      "renamePlaceholder": "新技能-id",
+      "importing": "导入中...",
+      "import": "导入到中央技能库",
+      "importSuccess": "技能导入成功。"
     }
   },
   "installDialog": {
@@ -1515,6 +1578,7 @@
     "installedOn": "安装于",
     "installed": "已安装",
     "collections": "技能集合",
+    "collectionsEmpty": "尚未加入技能集。",
     "addToCollection": "加入技能集",
     "projectsUsingSkill": "已装在哪些项目",
     "projectsUsingSkillRegion": "已装在哪些项目",
@@ -1581,7 +1645,10 @@
     "uninstallPlatformConfirm": "删除平台安装",
     "fileTreeTitle": "文件树",
     "fileTreeLoading": "正在加载文件树...",
-    "fileTreeEmpty": "当前技能没有可展示的文件。"
+    "fileTreeEmpty": "当前技能没有可展示的文件。",
+    "expandDirectory": "展开 {{name}}",
+    "collapseDirectory": "折叠 {{name}}",
+    "openTreePath": "打开 {{name}}"
   },
   "collection": {
     "edit": "编辑",

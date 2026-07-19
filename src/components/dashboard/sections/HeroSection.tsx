@@ -25,7 +25,7 @@ export function HeroSection({
   const showReviewCta = uncategorizedCount > 0;
   const pillTone =
     scanState === "error"
-      ? "border-destructive/30 bg-destructive/10 text-destructive"
+      ? "border-destructive/30 bg-destructive/10 text-destructive-text"
       : scanState === "refreshing"
         ? "border-primary/35 bg-primary/15 text-primary-text"
         : "border-success/35 bg-success/10 text-success-foreground";
@@ -40,7 +40,7 @@ export function HeroSection({
         <div className="inline-flex items-center gap-2 self-start rounded-full border border-border/70 bg-card/60 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-wide",
+              "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide",
               pillTone,
             )}
           >
@@ -49,10 +49,10 @@ export function HeroSection({
           </span>
           <span>{t("dashboard.hero.eyebrow")}</span>
         </div>
-        <h1 className="font-display text-balance text-[2.35rem] font-semibold leading-[1.08] sm:text-[3rem] xl:text-[3.25rem]">
+        <h1 className="font-display text-balance text-display-hero font-semibold leading-[1.08] sm:text-5xl xl:text-display-hero-xl">
           {t("dashboard.hero.title")}
         </h1>
-        <p className="max-w-[42rem] text-pretty text-sm leading-6 text-muted-foreground sm:text-[0.95rem] sm:leading-7">
+        <p className="max-w-[42rem] text-pretty text-sm leading-6 text-muted-foreground sm:text-sm sm:leading-7">
           {t("dashboard.hero.description")}
         </p>
         <div className="flex flex-wrap gap-2 pt-1">

@@ -908,10 +908,26 @@ describe("SettingsView", () => {
 
   it("maps legacy settings links to the matching settings page", async () => {
     setupMocks();
+    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
     renderSettingsView("/settings#remote-targets-section");
 
     expect(await screen.findByRole("heading", { name: "连接与同步" })).toBeTruthy();
     expect(screen.getByText("新增 SSH 目标")).toBeTruthy();
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+  });
+
+  it("keeps the plain connections page at the top", async () => {
+    setupMocks();
+    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
+    renderSettingsView("/settings/appearance");
+
+    const settingsContent = screen.getByRole("main");
+    settingsContent.scrollTop = 300;
+    fireEvent.click(screen.getByRole("button", { name: "连接与同步" }));
+
+    expect(await screen.findByRole("heading", { name: "连接与同步" })).toBeTruthy();
+    expect(settingsContent.scrollTop).toBe(0);
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
   it("maps Central update mode hashes to Skill Sources", async () => {

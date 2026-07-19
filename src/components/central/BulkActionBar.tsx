@@ -120,7 +120,7 @@ export function BulkActionBar({
           variant="outline"
           onClick={onBatchDelete}
           disabled={isDeleting}
-          className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          className="border-destructive/30 text-destructive-text hover:bg-destructive/10 hover:text-destructive-text"
           data-testid="bulk-bar-batch-delete"
         >
           <Trash2 className="size-3.5" />

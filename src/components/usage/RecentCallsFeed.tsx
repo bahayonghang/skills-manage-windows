@@ -55,7 +55,7 @@ export function RecentCallsFeed({
             <span className="block truncate text-sm text-foreground hover:text-primary">
               {call.skill}
             </span>
-            <span className="block truncate text-[11px] text-muted-foreground">
+            <span className="block truncate text-ui-meta text-muted-foreground">
               {call.source}
             </span>
           </button>

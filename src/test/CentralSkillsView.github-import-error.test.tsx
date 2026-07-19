@@ -48,7 +48,7 @@ describe("CentralSkillsView GitHub import error", () => {
       },
     });
 
-    fireEvent.click(screen.getByTestId("central-github-import-open"));
+    await S.openGitHubImportViaLauncher(screen);
     const dialog = await screen.findByRole(
       "dialog",
       { name: /GitHub import wizard/i },

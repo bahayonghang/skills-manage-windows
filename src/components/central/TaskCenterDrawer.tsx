@@ -175,7 +175,7 @@ function TaskRow({
           className={cn(
             "grid size-7 shrink-0 place-items-center rounded-full ring-1",
             hasFailed
-              ? "bg-destructive/10 text-destructive ring-destructive/20"
+              ? "bg-destructive/10 text-destructive-text ring-destructive/20"
               : isCompleted
                 ? "bg-success/10 text-success-foreground ring-success/20"
                 : "bg-primary/10 text-primary ring-primary/20",
@@ -216,7 +216,7 @@ function TaskRow({
         <p
           className={cn(
             "mt-2 text-xs",
-            hasFailed ? "text-destructive" : "text-warning-foreground",
+            hasFailed ? "text-destructive-text" : "text-warning-foreground",
           )}
         >
           {error}
@@ -238,7 +238,7 @@ function StatusBadge({
   return (
     <span
       className={cn(
-        "rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "rounded-full px-2 py-0.5 text-xs font-medium",
         tone === "running" &&
           "bg-primary/10 text-primary ring-1 ring-primary/20",
         tone === "ok" &&
@@ -246,7 +246,7 @@ function StatusBadge({
         tone === "warn" &&
           "bg-warning/10 text-warning-foreground ring-1 ring-warning/20",
         tone === "fail" &&
-          "bg-destructive/10 text-destructive ring-1 ring-destructive/20",
+          "bg-destructive/10 text-destructive-text ring-1 ring-destructive/20",
       )}
     >
       {label}
@@ -443,7 +443,7 @@ function UpdateTaskRow({
           <span
             className={cn(
               job.failed > 0 &&
-                "rounded-full bg-destructive/10 px-1.5 text-destructive",
+                "rounded-full bg-destructive/10 px-1.5 text-destructive-text",
             )}
           >
             {t("central.updateFailed", { count: job.failed })}

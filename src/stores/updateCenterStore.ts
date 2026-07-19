@@ -1,7 +1,8 @@
 import { create } from "zustand";
 
-import { invoke, isTauriRuntime } from "@/lib/ipc";
+import { invoke, isTauriRuntime, listen } from "@/lib/ipc";
 import type {
+  ActiveRefreshRepository,
   DeletedPlatformCopyGroup,
   ForceRepositoryMirrorRequest,
   ForceRepositoryMirrorResult,
@@ -13,6 +14,8 @@ import type {
   SkillUpdateApplyResult,
   SkillUpdateDecisions,
   SkillRefreshContext,
+  SkillUpdateInventoryProgressPayload,
+  SkillUpdateInventoryRefreshProgress,
   SkillUpdateInventory,
 } from "@/types/skillUpdateInventory";
 import { normalizeRefreshContext } from "@/lib/updateCenterRefreshScope";
@@ -48,9 +51,96 @@ export type UpdateCenterTab =
   | "deletedPlatformCopies"
   | "orphans";
 
+const UPDATE_INVENTORY_PROGRESS_EVENT = "central://skill-update-inventory-progress";
+let refreshOperationSequence = 0;
+
+function createRefreshOperationId(): string {
+  refreshOperationSequence += 1;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `inventory-refresh-${Date.now()}-${refreshOperationSequence}`
+  );
+}
+
+function clampProgress(value: number, total: number): number {
+  const normalized = Math.max(0, value);
+  return total > 0 ? Math.min(normalized, total) : 0;
+}
+
+function addActiveRepository(
+  repositories: ActiveRefreshRepository[],
+  repository: ActiveRefreshRepository,
+): ActiveRefreshRepository[] {
+  const existingIndex = repositories.findIndex((item) => item.key === repository.key);
+  if (existingIndex < 0) return [...repositories, repository];
+  return repositories.map((item, index) => (index === existingIndex ? repository : item));
+}
+
+function removeActiveRepository(
+  repositories: ActiveRefreshRepository[],
+  repositoryKey: string,
+): ActiveRefreshRepository[] {
+  return repositories.filter((item) => item.key !== repositoryKey);
+}
+
+export function mergeInventoryRefreshProgress(
+  current: SkillUpdateInventoryRefreshProgress,
+  payload: SkillUpdateInventoryProgressPayload,
+): SkillUpdateInventoryRefreshProgress {
+  const total = Math.max(0, payload.total);
+  const completed = clampProgress(payload.completed, total);
+  if (payload.status === "started") {
+    return {
+      ...current,
+      phase: "checking",
+      total,
+      completed,
+      activeRepositories: [],
+    };
+  }
+  if (payload.status === "finalizing") {
+    return {
+      ...current,
+      phase: "finalizing",
+      total,
+      completed,
+      activeRepositories: [],
+    };
+  }
+
+  const repositoryKey = payload.repositoryKey ?? "";
+  const repositoryName = payload.repositoryName ?? "";
+  if (!repositoryKey) {
+    return { ...current, phase: "checking", total, completed };
+  }
+  if (payload.status === "repository_started" && repositoryName) {
+    return {
+      ...current,
+      phase: "checking",
+      total,
+      completed,
+      activeRepositories: addActiveRepository(current.activeRepositories, {
+        key: repositoryKey,
+        name: repositoryName,
+      }),
+    };
+  }
+  return {
+    ...current,
+    phase: "checking",
+    total,
+    completed,
+    activeRepositories: removeActiveRepository(
+      current.activeRepositories,
+      repositoryKey,
+    ),
+  };
+}
+
 interface UpdateCenterState {
   inventory: SkillUpdateInventory | null;
   isRefreshing: boolean;
+  refreshProgress: SkillUpdateInventoryRefreshProgress | null;
   isApplying: boolean;
   isForcing: boolean;
   lastRefreshedAt: string | null;
@@ -115,6 +205,7 @@ function emptyApplyResult(): SkillUpdateApplyResult {
 export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   inventory: null,
   isRefreshing: false,
+  refreshProgress: null,
   isApplying: false,
   isForcing: false,
   lastRefreshedAt: null,
@@ -125,7 +216,19 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   error: null,
 
   async refresh(scope) {
-    set({ isRefreshing: true, error: null });
+    const operationId = createRefreshOperationId();
+    set({
+      isRefreshing: true,
+      error: null,
+      refreshProgress: {
+        operationId,
+        phase: "preparing",
+        total: 0,
+        completed: 0,
+        activeRepositories: [],
+      },
+    });
+    let unlisten: (() => void) | undefined;
     try {
       if (!isTauriRuntime()) {
         const inventory = emptyInventory();
@@ -133,12 +236,29 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
           inventory,
           lastRefreshedAt: new Date().toISOString(),
           isRefreshing: false,
+          refreshProgress: null,
         });
         return inventory;
       }
+      unlisten = await listen<SkillUpdateInventoryProgressPayload>(
+        UPDATE_INVENTORY_PROGRESS_EVENT,
+        (event) => {
+          if (event.payload.operationId !== operationId) return;
+          set((state) => {
+            const current = state.refreshProgress;
+            if (!current || current.operationId !== operationId) return state;
+            return {
+              refreshProgress: mergeInventoryRefreshProgress(current, event.payload),
+            };
+          });
+        },
+      );
       const inventory = await invoke<SkillUpdateInventory>(
         "refresh_skill_update_inventory",
-        { scope: { ...scope, cachePolicy: scope.cachePolicy ?? "bypass" } },
+        {
+          scope: { ...scope, cachePolicy: scope.cachePolicy ?? "bypass" },
+          operationId,
+        },
       );
       set({
         inventory,
@@ -149,6 +269,17 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     } catch (err) {
       set({ error: String(err), isRefreshing: false });
       throw err;
+    } finally {
+      try {
+        unlisten?.();
+      } catch {
+        // Listener disposal must not replace the completed refresh result.
+      }
+      set((state) =>
+        state.refreshProgress?.operationId === operationId
+          ? { refreshProgress: null }
+          : state,
+      );
     }
   },
 

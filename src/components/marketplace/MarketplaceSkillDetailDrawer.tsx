@@ -104,7 +104,7 @@ export function MarketplaceSkillDetailDrawer({
                   {skill.name}
                 </h1>
                 {skill.installed ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                     <CheckCircle2 className="size-3.5" />
                     {t("marketplace.installed")}
                   </span>
@@ -116,7 +116,7 @@ export function MarketplaceSkillDetailDrawer({
                 </p>
               ) : null}
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-1 text-xs text-muted-foreground">
               <FileText className="size-3.5" />
               {t("detail.preview")}
             </span>
@@ -151,13 +151,13 @@ export function MarketplaceSkillDetailDrawer({
                 className="w-full shrink-0 border-t border-border overflow-y-auto p-4 space-y-5 md:w-64 md:border-t-0 md:border-l"
               >
                 <section>
-                  <div className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/80 mb-2">
+                  <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
                     {t("detail.metadata")}
                   </div>
                   <div className="space-y-2.5">
                     {skill.remoteKind === "skills_sh" ? (
                       <div className="space-y-0.5">
-                        <div className="text-[11px] text-muted-foreground/70 uppercase tracking-wider">
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider">
                           {t("marketplace.skillsShInstallSource")}
                         </div>
                         <div className="font-mono text-xs text-foreground break-all leading-relaxed">
@@ -166,7 +166,7 @@ export function MarketplaceSkillDetailDrawer({
                       </div>
                     ) : null}
                     <div className="space-y-0.5">
-                      <div className="text-[11px] text-muted-foreground/70 uppercase tracking-wider">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider">
                         {t("marketplace.previewSourceLabel")}
                       </div>
                       <div className="font-mono text-xs text-foreground break-all leading-relaxed inline-flex items-center gap-1">
@@ -176,7 +176,7 @@ export function MarketplaceSkillDetailDrawer({
                     </div>
                     {skill.publisher ? (
                       <div className="space-y-0.5">
-                        <div className="text-[11px] text-muted-foreground/70 uppercase tracking-wider">
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider">
                           {t("marketplace.previewPublisher")}
                         </div>
                         <div className="font-mono text-xs text-foreground break-all leading-relaxed inline-flex items-center gap-1">
@@ -186,7 +186,7 @@ export function MarketplaceSkillDetailDrawer({
                       </div>
                     ) : null}
                     <div className="space-y-0.5">
-                      <div className="text-[11px] text-muted-foreground/70 uppercase tracking-wider">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider">
                         {t("marketplace.previewRuntime")}
                       </div>
                       <div className="font-mono text-xs text-foreground break-all leading-relaxed inline-flex items-center gap-1">
@@ -205,7 +205,7 @@ export function MarketplaceSkillDetailDrawer({
                       onOpenPath={openFileTreePath}
                     />
                     {selectedFilePath ? (
-                      <div className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
+                      <div className="mt-2 break-all font-mono text-ui-meta text-muted-foreground">
                         {selectedFilePath}
                       </div>
                     ) : null}
@@ -213,7 +213,7 @@ export function MarketplaceSkillDetailDrawer({
                 ) : null}
 
                 <section>
-                  <div className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/80 mb-2">
+                  <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
                     {t("detail.installStatus")}
                   </div>
                   <Button onClick={onInstall} disabled={isInstalling || skill.installed} className="w-full">

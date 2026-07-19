@@ -11,6 +11,11 @@ pub const DEFAULT_ARCHIVE_ENTRY_BYTES: u64 = 32 * 1024 * 1024;
 pub const DEFAULT_FILE_BYTES: u64 = 1024 * 1024;
 pub const DEFAULT_TREE_DEPTH: usize = 8;
 pub const DEFAULT_TREE_ENTRIES: usize = 2_048;
+/// Upper bound for the raw Git tree API JSON response body. Sized so a
+/// recursive tree of `DEFAULT_TREE_ENTRIES` regular blobs (each ~120 bytes of
+/// JSON) fits comfortably, while a runaway response is rejected before
+/// unbounded memory allocation. See `reject_tree_response_size`.
+pub const DEFAULT_TREE_RESPONSE_BYTES: u64 = 16 * 1024 * 1024;
 pub const DEFAULT_COPY_BYTES: u64 = 256 * 1024 * 1024;
 pub const DEFAULT_COPY_ENTRIES: usize = 20_000;
 
@@ -21,9 +26,21 @@ pub const DEFAULT_COPY_ENTRIES: usize = 20_000;
 #[derive(Debug, thiserror::Error)]
 #[error("{label} exceeds the resource budget ({actual} bytes > {limit} bytes).")]
 pub struct BudgetExceeded {
-    label: String,
-    actual: u64,
-    limit: u64,
+    pub(crate) label: String,
+    pub(crate) actual: u64,
+    pub(crate) limit: u64,
+}
+
+impl BudgetExceeded {
+    /// Construct a `BudgetExceeded` for callers that need to build the error
+    /// directly (e.g. aggregate checks in local archive import).
+    pub fn new(label: impl Into<String>, actual: u64, limit: u64) -> Self {
+        Self {
+            label: label.into(),
+            actual,
+            limit,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +52,7 @@ pub struct ResourceBudget {
     pub file_bytes: u64,
     pub tree_depth: usize,
     pub tree_entries: usize,
+    pub tree_response_bytes: u64,
     pub copy_bytes: u64,
     pub copy_entries: usize,
 }
@@ -51,6 +69,7 @@ impl Default for ResourceBudget {
             file_bytes: DEFAULT_FILE_BYTES,
             tree_depth: DEFAULT_TREE_DEPTH,
             tree_entries: DEFAULT_TREE_ENTRIES,
+            tree_response_bytes: DEFAULT_TREE_RESPONSE_BYTES,
             copy_bytes: DEFAULT_COPY_BYTES,
             copy_entries: DEFAULT_COPY_ENTRIES,
         }
@@ -88,6 +107,24 @@ impl ResourceBudget {
 
     pub fn reject_copy_file_size(self, path: &str, size: u64) -> Result<(), BudgetExceeded> {
         reject_over_limit(&format!("Copied file '{path}'"), size, self.copy_bytes)
+    }
+
+    /// Bound the number of entries in a recursive Git tree response. Exceeding
+    /// this indicates a repository too large for the TreeRaw fast-path; the
+    /// dispatcher falls back to archive acquisition.
+    pub fn reject_tree_entries(self, count: usize) -> Result<(), BudgetExceeded> {
+        let count_u64 = u64::try_from(count).unwrap_or(u64::MAX);
+        reject_over_limit("GitHub repository tree entries", count_u64, self.tree_entries as u64)
+    }
+
+    /// Bound the raw Git tree API JSON response body before serde parsing, so a
+    /// runaway or adversarial response cannot allocate unbounded memory.
+    pub fn reject_tree_response_size(self, size: u64) -> Result<(), BudgetExceeded> {
+        reject_over_limit(
+            "GitHub repository tree API response",
+            size,
+            self.tree_response_bytes,
+        )
     }
 }
 

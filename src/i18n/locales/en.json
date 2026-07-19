@@ -56,6 +56,26 @@
       "tls": "TLS or certificate validation failed for the AI provider endpoint.",
       "network": "The AI network request failed.",
       "empty_response": "The model returned no displayable explanation text."
+    },
+    "local_archive": {
+      "archive_not_found": "The selected ZIP archive was not found.",
+      "archive_read_failed": "The selected ZIP archive could not be read.",
+      "archive_changed_since_preview": "The ZIP archive changed after preview. Choose it again and review the updated contents.",
+      "ambiguous_archive_layout": "The ZIP archive contains more than one possible skill root.",
+      "no_skill_manifest": "The ZIP archive does not contain an importable SKILL.md.",
+      "invalid_archive_entry": "The ZIP archive contains an unsafe path.",
+      "unsupported_archive_entry": "The ZIP archive contains an unsupported file type or compression method.",
+      "budget_exceeded": "The ZIP archive exceeds the safe import limits.",
+      "path_conflict": "The selected skill id conflicts with existing Central data.",
+      "skill_frontmatter_missing": "The SKILL.md metadata is missing or invalid.",
+      "invalid_skill_identifier": "Enter a valid skill id.",
+      "io": "A filesystem operation failed while importing the ZIP archive.",
+      "db": "Central could not save the imported skill metadata.",
+      "central_mutation": "Central is busy with another change. Try again shortly.",
+      "rollback_failed": "The previous Central skill could not be restored automatically.",
+      "remote_target_unsupported": "Local ZIP import is unavailable for SSH and WSL targets.",
+      "internal": "The local ZIP import failed.",
+      "unknown": "The local ZIP import failed. Try again or inspect the Operation Logs."
     }
   },
   "targets": {
@@ -688,6 +708,13 @@
     "deletedFound": "Found {{skillCount}} removed skill(s); {{rowCount}} platform copy/copies can be cleaned",
     "deletedScanError": "Failed to scan removed skills: {{error}}"
   },
+  "importIntent": {
+    "pendingTitle": "Pending GitHub import ({{count}})",
+    "closeCurrentFirst": "Close the current import wizard before opening the next request.",
+    "pendingDescription": "Open the next request or discard it without changing your current import.",
+    "openPending": "Open next",
+    "discard": "Discard"
+  },
   "central": {
     "title": "Central Skills",
     "scope": "Private central library",
@@ -1176,6 +1203,7 @@
     "updateFailed": "{{count}} failed",
     "updateStatus": {
       "not_checked": "Not checked",
+      "checking": "Checking",
       "up_to_date": "Up to date",
       "update_available": "Update available",
       "unsupported": "Unsupported",
@@ -1456,6 +1484,15 @@
       "note": "This only checks and opens Update Center. Imports, removals, and update application still require another explicit decision there.",
       "confirm": "Start check",
       "confirming": "Checking…",
+      "progress": {
+        "scope": "Current scope: {{scope}}.",
+        "preparing": "Preparing repository check…",
+        "checking": "Checked {{completed}} / {{total}} repositories",
+        "finalizing": "Finalizing check results…",
+        "activeRepositories": "Repositories being checked",
+        "aria": "Update check progress: {{completed}} of {{total}} repositories completed",
+        "ariaPreparing": "Preparing update check"
+      },
       "inlineLabel": "Update mode",
       "inlineHint": "Each check opens a confirmation with the selected mode.",
       "regular": {
@@ -1472,6 +1509,32 @@
         "disabledNoRepository": "No syncable GitHub repository is available."
       },
       "syncConfirmTitle": "Confirm incremental and removal check"
+    },
+    "addSkillLauncher": {
+      "label": "Add Skill",
+      "menuLabel": "Import from",
+      "github": "GitHub Repository",
+      "githubDesc": "Import skills from a GitHub repo",
+      "localZip": "Local ZIP Archive",
+      "localZipDesc": "Preview and import a .zip skill package",
+      "localZipRemoteDisabled": "Not available for remote targets"
+    },
+    "localArchiveWizard": {
+      "title": "Import Local ZIP Skill",
+      "description": "Preview the archive, then write it to Central after confirmation.",
+      "chooseFile": "Choose .zip file",
+      "chooseFileHint": "Only .zip files with a single SKILL.md are supported.",
+      "fileCount": "Files",
+      "totalBytes": "Total",
+      "conflictDetected": "A Central skill with the same id already exists.",
+      "conflictDesc": "Existing skill: {{existingId}}",
+      "resolutionOverwrite": "Overwrite the existing skill",
+      "resolutionRename": "Import under a different id",
+      "resolutionSkip": "Skip this import",
+      "renamePlaceholder": "new-skill-id",
+      "importing": "Importing...",
+      "import": "Import to Central",
+      "importSuccess": "Skill imported successfully."
     }
   },
   "installDialog": {
@@ -1515,6 +1578,7 @@
     "installedOn": "Installed",
     "installed": "installed",
     "collections": "Collections",
+    "collectionsEmpty": "Not in a collection yet.",
     "addToCollection": "Add to collection",
     "projectsUsingSkill": "Projects using this skill",
     "projectsUsingSkillRegion": "Projects using this skill",
@@ -1581,7 +1645,10 @@
     "uninstallPlatformConfirm": "Remove platform install",
     "fileTreeTitle": "File tree",
     "fileTreeLoading": "Loading file tree...",
-    "fileTreeEmpty": "No files available for this skill."
+    "fileTreeEmpty": "No files available for this skill.",
+    "expandDirectory": "Expand {{name}}",
+    "collapseDirectory": "Collapse {{name}}",
+    "openTreePath": "Open {{name}}"
   },
   "collection": {
     "edit": "Edit",

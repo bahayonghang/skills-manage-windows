@@ -76,7 +76,7 @@ export function AgentsPanel({
                         <span className="truncate text-sm font-medium">
                           {label}
                         </span>
-                        <span className="hidden rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
+                        <span className="hidden rounded border border-border bg-muted/40 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:inline">
                           {agent.is_enabled
                             ? t("dashboard.agents.enabled")
                             : t("dashboard.agents.hidden")}

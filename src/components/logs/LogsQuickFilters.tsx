@@ -63,7 +63,7 @@ export function LogsQuickFilters({ filter, onApply }: LogsQuickFiltersProps) {
       aria-label={t("logs.quickFilters.label")}
       className="flex flex-wrap items-center gap-2"
     >
-      <span className="text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {t("logs.quickFilters.label")}
       </span>
       <QuickChip

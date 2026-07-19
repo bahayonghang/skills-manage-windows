@@ -55,7 +55,7 @@ function statusVisual(status: string): IconVisual {
         className: "bg-success/10 text-success-foreground",
       };
     case "failed":
-      return { icon: XCircle, className: "bg-destructive/10 text-destructive" };
+      return { icon: XCircle, className: "bg-destructive/10 text-destructive-text" };
     case "partial":
       return {
         icon: AlertCircle,
@@ -71,7 +71,7 @@ function statusVisual(status: string): IconVisual {
 function levelVisual(level: string): IconVisual {
   switch (level) {
     case "error":
-      return { icon: XCircle, className: "text-destructive" };
+      return { icon: XCircle, className: "text-destructive-text" };
     case "warn":
       return { icon: AlertTriangle, className: "text-warning-foreground" };
     default:
@@ -123,7 +123,7 @@ export function LogsListRow({
       />
       <span className="flex flex-col" title={iso}>
         <span className="text-xs text-foreground">{relative}</span>
-        <span className="font-mono text-[0.68rem] text-muted-foreground">
+        <span className="font-mono text-ui-meta text-muted-foreground">
           {absolute}
         </span>
       </span>
@@ -150,12 +150,12 @@ export function LogsListRow({
           {entry.summary}
         </span>
         {subjectLabel && (
-          <span className="block truncate text-[0.68rem] text-muted-foreground/80">
+          <span className="block truncate text-ui-meta text-muted-foreground">
             {subjectLabel}
           </span>
         )}
         {hasError && (
-          <span className="mt-1 line-clamp-2 block rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs text-destructive">
+          <span className="mt-1 line-clamp-2 block rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs text-destructive-text">
             <span className="font-medium">{t("logs.errorInline")}</span>
             <span className="ml-1">{entry.errorSummary}</span>
           </span>

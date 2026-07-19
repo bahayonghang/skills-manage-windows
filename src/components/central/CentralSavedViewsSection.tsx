@@ -91,7 +91,7 @@ export function CentralSavedViewsSection({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-6 text-destructive hover:text-destructive"
+                  className="size-6 text-destructive-text hover:text-destructive-text"
                   aria-label={t("central.v2.savedViewsDelete")}
                   title={t("central.v2.savedViewsDelete")}
                   onClick={(e) => {

@@ -1,0 +1,8 @@
+$ tauri "dev"
+     Running BeforeDevCommand (`pnpm dev`)
+$ node scripts/dev-server.mjs
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+        Info Watching D:\Documents\Code\Agents\skills-manage-windows\src-tauri for changes...
+[1m[92m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`dev` profile [unoptimized]]8;;\ target(s) in 4.03s
+[1m[92m     Running[0m `target\debug\skillport.exe`
+       Error The "beforeDevCommand" terminated with a non-zero status code.

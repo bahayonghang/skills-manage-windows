@@ -45,7 +45,7 @@ export function FacetSection({
 
   return (
     <section data-testid={testId}>
-      <div className="sticky top-0 z-10 -mx-3 flex items-center gap-1.5 border-b border-border/40 bg-background/90 px-4 py-2 text-[11px] font-medium tracking-normal text-muted-foreground shadow-[0_1px_0_color-mix(in_srgb,var(--foreground)_3%,transparent)] backdrop-blur-md">
+      <div className="sticky top-0 z-10 -mx-3 flex items-center gap-1.5 border-b border-border/40 bg-background/90 px-4 py-2 text-xs font-medium tracking-normal text-muted-foreground shadow-[0_1px_0_color-mix(in_srgb,var(--foreground)_3%,transparent)] backdrop-blur-md">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
@@ -53,10 +53,10 @@ export function FacetSection({
           aria-expanded={expanded}
         >
           <Caret className="size-3 shrink-0" />
-          {icon ? <span className="text-muted-foreground/80">{icon}</span> : null}
+          {icon ? <span className="text-muted-foreground">{icon}</span> : null}
           <span className="truncate">{title}</span>
           {typeof count === "number" && (
-            <span className="ml-auto rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-[10px] tabular-nums normal-case">
+            <span className="ml-auto rounded-md border border-border/80 bg-background px-1.5 py-0.5 font-mono text-ui-micro tabular-nums normal-case">
               {count}
             </span>
           )}

@@ -120,7 +120,7 @@ export function OperationLogDetailDrawer({
                   {entry.summary}
                 </div>
                 {entry.errorSummary && (
-                  <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                  <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive-text">
                     {entry.errorSummary}
                   </div>
                 )}

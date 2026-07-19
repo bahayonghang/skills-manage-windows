@@ -20,7 +20,7 @@ type SourceMetaRowKey = "repository" | "path" | "url" | "cache" | "hash";
 const ROW_STYLE = {
   container: "bg-muted/35 ring-border/60",
   label: "text-muted-foreground",
-  value: "text-foreground/90",
+  value: "text-foreground",
 };
 
 function clean(value?: string | null): string | null {
@@ -81,7 +81,7 @@ export function SourceMeta({
   if (rows.length === 0) return null;
 
   return (
-    <dl className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-[11px] leading-5">
+    <dl className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-ui-meta leading-5">
       {rows.map((row) => (
         <div
           key={row.key}

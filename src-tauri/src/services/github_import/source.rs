@@ -136,6 +136,24 @@ pub(super) fn parse_github_source(url: &str) -> Result<ParsedGitHubSource, Githu
     })
 }
 
+/// Normalize a source using the same owner/repository/branch/subpath parser as
+/// GitHub preview and import, without performing network access.
+pub(crate) fn normalize_github_source_url(url: &str) -> Result<String, GithubImportError> {
+    let parsed = parse_github_source(url)?;
+    let mut normalized = format!("https://github.com/{}/{}", parsed.owner, parsed.repo);
+
+    if let Some(branch) = parsed.branch {
+        normalized.push_str("/tree/");
+        normalized.push_str(&branch);
+    }
+    if let Some(source_path) = parsed.source_path {
+        normalized.push('/');
+        normalized.push_str(&source_path);
+    }
+
+    Ok(normalized)
+}
+
 pub(super) fn is_github_shorthand_source(value: &str) -> bool {
     let mut segments = value.split('/').filter(|segment| !segment.is_empty());
     let Some(owner) = segments.next() else {
@@ -409,7 +427,7 @@ pub(super) fn invalid_candidate_from_manifest(
     }
 }
 
-fn is_generic_remote_skill_candidate(candidate: &RemoteSkillCandidate) -> bool {
+pub(super) fn is_generic_remote_skill_candidate(candidate: &RemoteSkillCandidate) -> bool {
     candidate.source_path != "." && candidate.skill_id == "skill"
 }
 
@@ -457,7 +475,7 @@ find . -type f -iname 'SKILL.md' -print | sed 's#^\./##'
         .collect()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SnapshotSkillManifest {
     pub(super) source_path: String,
     pub(super) root_directory: String,

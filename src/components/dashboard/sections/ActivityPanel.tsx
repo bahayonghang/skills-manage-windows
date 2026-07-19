@@ -87,17 +87,17 @@ export function ActivityPanel({
               />
             </svg>
           ) : (
-            <div className="grid h-20 place-items-center rounded-xl border border-dashed border-border/60 text-[0.7rem] text-muted-foreground">
+            <div className="grid h-20 place-items-center rounded-xl border border-dashed border-border/60 text-ui-meta text-muted-foreground">
               {t("dashboard.sparkline.empty")}
             </div>
           )}
         </div>
-        <div className="flex items-center justify-between gap-3 text-[0.68rem] text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 text-ui-meta text-muted-foreground">
           <span>{t("dashboard.activity.less")}</span>
           <span>{t("dashboard.activity.more")}</span>
         </div>
         <div className="border-t border-border/70 pt-4">
-          <div className="mb-2 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("dashboard.activity.topTags")}
           </div>
           {topTags.length > 0 ? (

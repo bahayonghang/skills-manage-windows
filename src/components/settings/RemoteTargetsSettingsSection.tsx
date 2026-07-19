@@ -152,7 +152,7 @@ export function RemoteTargetsSettingsSection({
       <div className="space-y-4">
         {targetMessage && (
           <p
-            className={`text-xs ${targetMessage.type === "success" ? "text-primary" : "text-destructive"}`}
+            className={`text-xs ${targetMessage.type === "success" ? "text-primary" : "text-destructive-text"}`}
             role="status"
           >
             {targetMessage.text}

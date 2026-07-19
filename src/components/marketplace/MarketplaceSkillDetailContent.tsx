@@ -114,7 +114,7 @@ export function MarketplaceSkillDetailContent({
       ) : contentError ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
           <div className="space-y-3">
-            <p className="text-sm text-destructive">{contentError}</p>
+            <p className="text-sm text-destructive-text">{contentError}</p>
             <Button variant="outline" size="sm" onClick={onRetryContent}>
               {t("common.retry")}
             </Button>
@@ -155,7 +155,7 @@ export function MarketplaceSkillDetailContent({
               {t("detail.explanationStreaming")}
             </div>
           ) : explanationError ? (
-            <div className="whitespace-pre-wrap text-sm leading-relaxed text-destructive">
+            <div className="whitespace-pre-wrap text-sm leading-relaxed text-destructive-text">
               {explanationError}
             </div>
           ) : (

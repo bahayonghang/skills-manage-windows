@@ -380,7 +380,7 @@ function ExpandedSidebarContent({
                   ? t("central.v2.sidebarCollapseAllGroups")
                   : t("central.v2.sidebarExpandAllGroups")}
               </span>
-              <span className="mt-0.5 block truncate text-[11px] font-medium text-muted-foreground">
+              <span className="mt-0.5 block truncate text-ui-meta font-medium text-muted-foreground">
                 {isOverlay
                   ? t("central.v2.sidebarHoverHint")
                   : t("central.v2.sidebarBulkExpansionHint")}
@@ -442,7 +442,7 @@ function ExpandedSidebarContent({
             >
               <div className="px-1 pb-1">
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/70" />
+                  <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="search"
                     data-testid="sidebar-repository-search"
@@ -458,7 +458,7 @@ function ExpandedSidebarContent({
                     }}
                     aria-label={t("central.v2.repositorySearchLabel")}
                     placeholder={t("central.v2.repositorySearchPlaceholder")}
-                    className="h-8 w-full rounded-lg border border-border/70 bg-background py-1 pl-7 pr-8 text-xs text-foreground outline-none transition-[background-color,border-color,box-shadow] placeholder:text-muted-foreground/60 hover:border-border focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
+                    className="h-8 w-full rounded-lg border border-border/70 bg-background py-1 pl-7 pr-8 text-xs text-foreground outline-none transition-[background-color,border-color,box-shadow] placeholder:text-muted-foreground hover:border-border focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
                   />
                   {isRepositorySearchActive && (
                     <button
@@ -474,7 +474,7 @@ function ExpandedSidebarContent({
                 </div>
               </div>
               {filteredRepositorySections.length === 0 ? (
-                <p className="px-2 text-[11px] text-muted-foreground">
+                <p className="px-2 text-ui-meta text-muted-foreground">
                   {t(
                     isRepositorySearchActive
                       ? "central.v2.repositorySearchEmpty"
@@ -522,11 +522,11 @@ function ExpandedSidebarContent({
             <button
               type="button"
               onClick={onClearAll}
-              className="focus-ring w-full rounded-lg border border-border/70 bg-background px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-[scale,background-color,border-color,color] hover:border-border hover:bg-muted/40 hover:text-foreground active:scale-[0.96]"
+              className="focus-ring w-full rounded-lg border border-border/70 bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-[scale,background-color,border-color,color] hover:border-border hover:bg-muted/40 hover:text-foreground active:scale-[0.96]"
             >
               {t("central.v2.selectionClear")}
             </button>
-            <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
+            <p className="mt-1.5 text-center text-ui-meta text-muted-foreground">
               {t("central.v2.selectionApplied", {
                 count: selectedReposCount + selectedTagsCount,
               })}
@@ -606,7 +606,7 @@ function RailIndicator({
     <span
       title={title}
       className={cn(
-        "grid size-9 place-items-center rounded-xl text-muted-foreground/70 transition-[background-color,color]",
+        "grid size-9 place-items-center rounded-xl text-muted-foreground transition-[background-color,color]",
         active && "text-primary",
       )}
     >

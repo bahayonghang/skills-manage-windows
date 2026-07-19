@@ -446,7 +446,7 @@ export function UpdateCenterDialog() {
 
           <div className="min-h-[20rem] rounded-xl border border-border p-4 text-sm">
             {error ? (
-              <p className="mb-2 text-xs text-destructive" role="alert">
+              <p className="mb-2 text-xs text-destructive-text" role="alert">
                 {error}
               </p>
             ) : null}

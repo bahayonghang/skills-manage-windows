@@ -16,7 +16,7 @@ use crate::db::{AgentSkillObservation, Skill, SkillInstallation, SkillUpdateStat
 use crate::services::central_skills::BatchDeleteCentralSkillRequest;
 use crate::services::central_updates;
 use crate::services::central_updates::repo_cache_key;
-use crate::services::central_updates::CentralFs;
+use crate::services::central_updates::{CentralFs, SnapshotProgressStatus};
 use crate::services::github_import::GitHubRepoRef;
 use crate::services::github_import::GitHubRepoSnapshot;
 use crate::targets::ActiveTarget;
@@ -25,7 +25,28 @@ use chrono::Utc;
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
+
+async fn refresh_skill_update_inventory_impl(
+    pool: &DbPool,
+    fs: &CentralFs,
+    auth_token: Option<&str>,
+    client: &reqwest::Client,
+    snapshots_cache: &CentralUpdateSnapshotCache,
+    scope: SkillRefreshScope,
+) -> Result<SkillUpdateInventory, CentralUpdatesError> {
+    super::refresh_skill_update_inventory_impl(
+        pool,
+        fs,
+        auth_token,
+        client,
+        snapshots_cache,
+        scope,
+        None,
+    )
+    .await
+}
 
 /*
  * ========================================================================
@@ -309,6 +330,35 @@ async fn refresh_returns_empty_inventory_on_empty_db() {
     assert!(inventory.failed_repositories.is_empty());
     // generated_at is a legal RFC3339 timestamp.
     chrono::DateTime::parse_from_rfc3339(&inventory.generated_at).expect("rfc3339");
+}
+
+#[tokio::test]
+async fn refresh_progress_finishes_after_the_snapshot_stage() {
+    let pool = setup_test_db().await;
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let recorded = Arc::clone(&events);
+    let progress: SnapshotProgressReporter = Arc::new(move |event| {
+        recorded.lock().unwrap().push(event);
+    });
+
+    super::refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &CentralUpdateSnapshotCache::default(),
+        scope_all(),
+        Some(progress),
+    )
+    .await
+    .unwrap();
+
+    let events = events.lock().unwrap();
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].status, SnapshotProgressStatus::Started);
+    assert_eq!(events[1].status, SnapshotProgressStatus::Finalizing);
+    assert_eq!(events[1].total, 0);
+    assert_eq!(events[1].completed, 0);
 }
 
 #[tokio::test]
