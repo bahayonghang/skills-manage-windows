@@ -429,7 +429,7 @@ mod tests {
         db::assign_skill_tags(
             &pool,
             &["frontend-design".to_string()],
-            &[tag.id.clone()],
+            std::slice::from_ref(&tag.id),
             "manual",
             None,
             None,
@@ -495,7 +495,7 @@ mod tests {
         db::assign_skill_tags(
             &pool,
             &["full".to_string()],
-            &[tag.id.clone()],
+            std::slice::from_ref(&tag.id),
             "manual",
             None,
             None,

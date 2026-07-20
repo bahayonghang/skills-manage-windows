@@ -320,7 +320,7 @@ mod tests {
                 .join(sess_uuid);
             std::fs::create_dir_all(&sess_path).unwrap();
 
-            let updates = vec![
+            let updates = [
                 // 合法 skill — review
                 r#"{"timestamp":1700000000.5,"params":{"sessionId":"sid-real","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"<command-name>review</command-name>"}}}}"#,
                 // BUILTINS — clear, 过滤
@@ -329,7 +329,7 @@ mod tests {
             .join("\n");
             std::fs::write(sess_path.join("updates.jsonl"), updates).unwrap();
 
-            let chat = vec![
+            let chat = [
                 // 已在 updates 出现过的 review — 应被去重
                 r#"{"type":"user","content":"<command-name>review</command-name>"}"#,
                 // 新 skill — facts，应保留，使用 session ts 回退

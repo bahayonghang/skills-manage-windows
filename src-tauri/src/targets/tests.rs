@@ -1,6 +1,6 @@
 use super::*;
 #[cfg(test)]
-pub(super) mod tests {
+pub(super) mod suite {
     use super::*;
     use std::path::Path;
 

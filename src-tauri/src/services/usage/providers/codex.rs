@@ -203,7 +203,7 @@ mod tests {
         let inner = sessions.join("2024").join("01");
         fs::create_dir_all(&inner).unwrap();
 
-        let session = vec![
+        let session = [
             r#"{"type":"session_meta","timestamp":"2024-01-15T10:00:00.000Z","payload":{"cwd":"/work/app","id":"sess-A"}}"#,
             // 二次 session_meta（fork）—— 应当被忽略
             r#"{"type":"session_meta","timestamp":"2024-01-15T10:05:00.000Z","payload":{"cwd":"/parent","id":"parent-id"}}"#,

@@ -179,7 +179,8 @@ pub(crate) fn resolve_candidate(
         .find(|e| {
             (root_directory.is_empty() && e.path.eq_ignore_ascii_case("SKILL.md"))
                 || (!root_directory.is_empty()
-                    && e.path.eq_ignore_ascii_case(&format!("{}/SKILL.md", root_directory)))
+                    && e.path
+                        .eq_ignore_ascii_case(&format!("{}/SKILL.md", root_directory)))
         })
         .ok_or_else(|| {
             LocalArchiveImportError::Internal(format!(
@@ -188,8 +189,9 @@ pub(crate) fn resolve_candidate(
         })?;
 
     let content = read_entry_content(archive_bytes, skill_md_entry.path.as_str())?;
-    let frontmatter = parse_skill_frontmatter(&content)
-        .ok_or_else(|| LocalArchiveImportError::SkillFrontmatterMissing(skill_md_relative.clone()))?;
+    let frontmatter = parse_skill_frontmatter(&content).ok_or_else(|| {
+        LocalArchiveImportError::SkillFrontmatterMissing(skill_md_relative.clone())
+    })?;
 
     let skill_id = sanitize_skill_id(&frontmatter.name)?;
 
@@ -245,14 +247,13 @@ fn read_entry_content(
 ) -> Result<String, LocalArchiveImportError> {
     use std::io::Read;
     let cursor = std::io::Cursor::new(archive_bytes.to_vec());
-    let mut zip = zip::ZipArchive::new(cursor).map_err(|e| {
-        LocalArchiveImportError::ArchiveReadFailed(format!("reopen zip: {e}"))
-    })?;
+    let mut zip = zip::ZipArchive::new(cursor)
+        .map_err(|e| LocalArchiveImportError::ArchiveReadFailed(format!("reopen zip: {e}")))?;
     let mut found_index: Option<usize> = None;
     for index in 0..zip.len() {
-        let entry = zip
-            .by_index_raw(index)
-            .map_err(|e| LocalArchiveImportError::ArchiveReadFailed(format!("entry {index}: {e}")))?;
+        let entry = zip.by_index_raw(index).map_err(|e| {
+            LocalArchiveImportError::ArchiveReadFailed(format!("entry {index}: {e}"))
+        })?;
         if entry.name() == entry_path && !entry.is_dir() {
             found_index = Some(index);
             break;
@@ -268,11 +269,9 @@ fn read_entry_content(
     entry.read_to_end(&mut buf).map_err(|e| {
         LocalArchiveImportError::ArchiveReadFailed(format!("read entry '{entry_path}': {e}"))
     })?;
-    String::from_utf8(buf).map_err(|e| {
-        LocalArchiveImportError::UnsupportedArchiveEntry {
-            path: entry_path.to_string(),
-            reason: format!("SKILL.md is not valid UTF-8: {e}"),
-        }
+    String::from_utf8(buf).map_err(|e| LocalArchiveImportError::UnsupportedArchiveEntry {
+        path: entry_path.to_string(),
+        reason: format!("SKILL.md is not valid UTF-8: {e}"),
     })
 }
 
@@ -294,7 +293,9 @@ fn sanitize_skill_id(raw: &str) -> Result<String, LocalArchiveImportError> {
     }
     let sanitized = sanitized.trim_matches('-').to_string();
     if sanitized.is_empty() {
-        return Err(LocalArchiveImportError::InvalidSkillIdentifier(raw.to_string()));
+        return Err(LocalArchiveImportError::InvalidSkillIdentifier(
+            raw.to_string(),
+        ));
     }
     Ok(sanitized)
 }
@@ -309,8 +310,8 @@ mod tests {
         let mut buf = std::io::Cursor::new(Vec::new());
         let mut writer = ZipWriter::new(&mut buf);
         for (name, content) in files {
-            let opts = SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored);
+            let opts =
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
             writer.start_file(*name, opts).unwrap();
             writer.write_all(content).unwrap();
         }

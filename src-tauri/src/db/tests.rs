@@ -1316,7 +1316,7 @@ async fn test_init_prunes_obsolete_builtin_skill_tags_only() {
     .unwrap();
     assign_skill_tags(
         &pool,
-        &[skill.id.clone()],
+        std::slice::from_ref(&skill.id),
         &[
             "programming-agent-engineering".to_string(),
             custom.id.clone(),
