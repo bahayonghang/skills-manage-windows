@@ -41,12 +41,12 @@
 
 ## 跨子任务验收（parent 收口）
 
-- [ ] 两个 child 分别通过 `just ci` 并归档。
-- [ ] `.trellis/spec/backend/central-skill-tags.md` 与最终实现一致：内置 tag
+- [x] 两个 child 分别通过 `just ci` 并归档。
+- [x] `.trellis/spec/backend/central-skill-tags.md` 与最终实现一致：内置 tag
       清单、候选规则、新 tag review 契约、UI 可见性规则、升级测试矩阵全部更新。
-- [ ] 集成冒烟：升级路径（带自定义同名 tag 的旧库）启动不失败；AI 打标一轮后，
+- [x] 集成冒烟：升级路径（带自定义同名 tag 的旧库）启动不失败；AI 打标一轮后，
       复用建议直接生效/进 review，新 tag 建议仅在接受后出现在 tag 列表。
-- [ ] 无 UI 噪音回归：空内置 tag 不出现在中央库顶部筛选栏（Vitest 覆盖在 child A）。
+- [x] 无 UI 噪音回归：空内置 tag 不出现在中央库顶部筛选栏（Vitest 覆盖在 child A）。
 
 ## 非目标
 
