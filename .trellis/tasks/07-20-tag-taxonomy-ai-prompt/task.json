@@ -1,0 +1,29 @@
+{
+  "id": "tag-taxonomy-ai-prompt",
+  "name": "tag-taxonomy-ai-prompt",
+  "title": "优化技能 tag 分类与 AI 打标提示词",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-07-20",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-20-tag-builtin-taxonomy",
+    "07-20-ai-new-tag-review"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
