@@ -106,3 +106,39 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 54: Dashboard 首页优化：驾驶舱重组 + 三个聚合 IPC + 去玻璃模糊
+
+**Date**: 2026-07-20
+**Task**: Dashboard 首页优化：驾驶舱重组 + 三个聚合 IPC + 去玻璃模糊
+**Branch**: `dev`
+
+### Summary
+
+按评审后的 Trellis 方案完成 Dashboard 首页优化：删除 Hero 营销块改紧凑状态头；工作队列去 tab 横排 4 项（0 值可见）；Readiness 瘦身；平台迷你条形；Activity 改为后端真实 14 天柱状图（get_daily_operation_counts，本地日+零填充）；新增 get_central_top_tags（is_central 限定）；暴露 get_dashboard_central_summary 并落实三个刷新触发点（挂载/scanGeneration/更新完成回调）；surface-glass 去 backdrop-filter；i18n 删 78 死键；新增 dashboard-data-contract spec。just ci 全绿（前端 1411 + Rust 897），12 张视觉矩阵截图存档任务 research/。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c2f45ebe` | (see git log) |
+| `f31908cf` | (see git log) |
+| `b6f1028a` | (see git log) |
+| `e813ee9e` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

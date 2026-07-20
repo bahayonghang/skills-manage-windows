@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 53
+- **Total Sessions**: 54
 - **Last Active**: 2026-07-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~108 | Active |
+| `journal-2.md` | ~144 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 54 | 2026-07-20 | Dashboard 首页优化：驾驶舱重组 + 三个聚合 IPC + 去玻璃模糊 | `c2f45ebe`, `f31908cf`, `b6f1028a`, `e813ee9e` | `dev` |
 | 53 | 2026-07-20 | 完成标签 taxonomy 与 AI 提议父任务验收 | `0196def5` | `dev` |
 | 52 | 2026-07-20 | 完成 AI 新标签 proposal/review 子任务 | `12d546f6` | `dev` |
 | 51 | 2026-07-20 | 完成内置标签 taxonomy 子任务 | `52a03268`, `9fcd428e`, `c6324407` | `dev` |
