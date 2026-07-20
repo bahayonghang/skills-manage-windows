@@ -164,4 +164,57 @@ describe("CentralSkillsView categorize（V2 markup）", () => {
     expect(within(result).getByText("code-reviewer")).toBeInTheDocument();
     expect(within(result).getByText("已取消")).toBeInTheDocument();
   });
+
+  it("复核 tab 标识 proposal 并沿用接受与跳过操作", async () => {
+    renderCentralSkillsView({
+      centralOverrides: {
+        aiTagReviews: [
+          {
+            skill_id: "frontend-design",
+            skill_name: "frontend-design",
+            tag: {
+              id: "security-audit",
+              name: "安全审计",
+              description: "Security auditing workflows.",
+              is_builtin: false,
+              created_at: "2026-07-20T00:00:00Z",
+              updated_at: "2026-07-20T00:00:00Z",
+            },
+            confidence: 0.95,
+            reason: "缺少现有分类",
+            suggested_at: "2026-07-20T00:00:00Z",
+            updated_at: "2026-07-20T00:00:00Z",
+            is_proposal: true,
+          },
+        ],
+      },
+    });
+    fireEvent.click(screen.getAllByLabelText("选择技能")[0]);
+    fireEvent.click(await screen.findByTestId("bulk-bar-open-categorize"));
+    const surface = await screen.findByRole(
+      "dialog",
+      { name: "批量分类" },
+      { timeout: 5_000 },
+    );
+    const categorize = within(surface);
+    fireEvent.click(await categorize.findByRole("tab", { name: /^复核/ }));
+
+    expect(await categorize.findByText("AI 新建标签")).toBeInTheDocument();
+    expect(categorize.getByText("安全审计")).toBeInTheDocument();
+    expect(
+      categorize.getByText("Security auditing workflows."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(categorize.getByRole("button", { name: "接受" }));
+    await waitFor(() =>
+      expect(S.mockAcceptAiTagReview).toHaveBeenCalledWith(
+        "frontend-design",
+        ["security-audit"],
+      ),
+    );
+    fireEvent.click(categorize.getByRole("button", { name: "跳过" }));
+    await waitFor(() =>
+      expect(S.mockSkipAiTagReview).toHaveBeenCalledWith("frontend-design"),
+    );
+  });
 });

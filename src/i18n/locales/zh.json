@@ -1107,6 +1107,7 @@
     "aiTagLowConfidence": "待复核 {{count}}",
     "viewFailuresAndReviews": "查看失败 / 待复核",
     "reviewEmpty": "暂无低置信度 AI 建议。",
+    "reviewProposalBadge": "AI 新建标签",
     "reviewAccept": "接受",
     "reviewChange": "用已选标签替换",
     "reviewSkip": "跳过",

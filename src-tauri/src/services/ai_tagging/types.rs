@@ -21,10 +21,27 @@ pub struct SkillTagSuggestion {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillTagProposal {
+    pub skill_id: String,
+    pub tag_id: String,
+    pub proposed_name: String,
+    pub proposed_description: Option<String>,
+    pub confidence: f64,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedAiSuggestions {
+    pub(crate) suggestions: Vec<SkillTagSuggestion>,
+    pub(crate) proposals: Vec<SkillTagProposal>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillTagSuggestionResult {
     pub skill_id: String,
     pub skill_name: Option<String>,
     pub suggestions: Vec<SkillTagSuggestion>,
+    pub proposals: Vec<SkillTagProposal>,
     pub succeeded: bool,
     pub error: Option<String>,
     pub low_confidence_count: usize,
@@ -56,6 +73,8 @@ pub struct AiTagProgressPayload {
     pub failed: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggestions: Option<Vec<SkillTagSuggestion>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proposals: Option<Vec<SkillTagProposal>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     pub low_confidence_count: usize,
@@ -109,7 +128,18 @@ pub(crate) struct RawAiTagSuggestion {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct RawAiTagSuggestionEnvelope {
+    #[serde(default)]
     pub(crate) tags: Vec<RawAiTagSuggestion>,
+    #[serde(default)]
+    pub(crate) new_tag: Option<RawAiNewTagSuggestion>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RawAiNewTagSuggestion {
+    pub(crate) name: String,
+    pub(crate) description: Option<String>,
+    pub(crate) confidence: Option<f64>,
+    pub(crate) reason: Option<String>,
 }
 
 pub(crate) struct AiTagRunningNotifier<F>
@@ -148,6 +178,7 @@ where
             succeeded: snapshot.succeeded,
             failed: snapshot.failed,
             suggestions: None,
+            proposals: None,
             error: None,
             low_confidence_count: snapshot.low_confidence_count,
         });

@@ -320,10 +320,20 @@ export interface SkillTagSuggestion {
   reason: string;
 }
 
+export interface SkillTagProposal {
+  skill_id: string;
+  tag_id: string;
+  proposed_name: string;
+  proposed_description?: string;
+  confidence: number;
+  reason: string;
+}
+
 export interface SkillTagSuggestionResult {
   skill_id: string;
   skill_name?: string;
   suggestions: SkillTagSuggestion[];
+  proposals: SkillTagProposal[];
   succeeded?: boolean;
   error?: string;
   low_confidence_count?: number;
@@ -337,6 +347,7 @@ export interface SkillAiTagReview {
   reason: string;
   suggested_at: string;
   updated_at: string;
+  is_proposal: boolean;
 }
 
 export type AiTagItemStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -367,6 +378,7 @@ export interface AiTagProgressPayload {
   failed: number;
   lowConfidenceCount?: number;
   suggestions?: SkillTagSuggestion[];
+  proposals?: SkillTagProposal[];
   error?: string;
 }
 

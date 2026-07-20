@@ -22,8 +22,9 @@
 `resolve_proposal(candidates, raw_new_tag) -> Resolved`：
 
 - name trim；空或超长（>12 个中文字符/等长）→ 丢弃。
-- `proposal_tag_id = normalize_repository_component(name)`（与
-  `create_skill_tag` 同源，保证接受时 id 一致）。
+- `proposal_tag_id` 与 `create_skill_tag` 共用 `derive_skill_tag_id(name)`：ASCII
+  归一化 slug 非空时使用 slug；中文等非 ASCII 名称若 slug 为空，则使用
+  `tag-` + trimmed name 的 SHA-256 前 16 位十六进制，保证跨 skill/process 稳定。
 - 撞已有候选（id 相等或 name 相等，trim 比较）→ 降级为该已有 tag 的普通复用
   建议（confidence 沿用 proposal 的）。
 - 否则 → 合法 proposal。每 skill 至多 1 个（模型输出即单个字段，天然满足）。
@@ -43,13 +44,13 @@ pending 查询 `JOIN skill_tags`。改动：
   JOIN 不到且无 proposed_name 的孤儿行过滤掉（现状即防御）。
 - `replace_pending_ai_tag_reviews` 中「tag 必须存在」的校验对 proposal 行放开
   （proposed_name 非空即合法）。
-- 同批同名归并：proposal_tag_id 由归一化 name 决定，天然按
+- 同批同名归并：proposal_tag_id 由稳定 name 派生规则决定，天然按
   PK(skill_id, tag_id) 去重跨 skill 共享同一 tag_id。
 
 ## 4. 接受/跳过（tags_repo.rs）
 
 - `create_skill_tag` 原子化：`INSERT ... ON CONFLICT(name) DO NOTHING` 后按
-  name SELECT 返回（消除先查后插竞态）；归一化 id 与异名已有 tag 撞 id →
+  name SELECT 返回（消除先查后插竞态）；派生 id 与异名已有 tag 撞 id →
   现有空 id 分支扩展为「撞 id 也回退 UUID」（INSERT 前查 id 或捕获 id 冲突）。
 - `accept_ai_tag_reviews`：对每个 tag_id，若 `skill_tags` 无此行且 review 行带
   proposed_name → 先 `create_skill_tag(proposed_name, proposed_description)`；

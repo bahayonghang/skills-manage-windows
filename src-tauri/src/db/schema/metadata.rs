@@ -205,6 +205,21 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    ensure_column(
+        pool,
+        "skill_ai_tag_reviews",
+        "proposed_name",
+        "ALTER TABLE skill_ai_tag_reviews ADD COLUMN proposed_name TEXT",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "skill_ai_tag_reviews",
+        "proposed_description",
+        "ALTER TABLE skill_ai_tag_reviews ADD COLUMN proposed_description TEXT",
+    )
+    .await?;
+
     sqlx::query("DROP INDEX IF EXISTS idx_skill_ai_tag_reviews_status")
         .execute(pool)
         .await?;

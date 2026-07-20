@@ -82,6 +82,33 @@ async fn test_init_adds_performance_timestamp_columns_and_indexes() {
     assert!(update_state_indexes.contains(&"idx_skill_update_states_status_skill".to_string()));
 }
 
+#[tokio::test]
+async fn test_init_upgrades_ai_review_proposal_columns() {
+    // 豁免 test_support::mem_pool：本测试手工搭建 legacy schema 验证迁移。
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    sqlx::query(
+        "CREATE TABLE skill_ai_tag_reviews (
+            skill_id TEXT NOT NULL,
+            tag_id TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            reason TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            suggested_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (skill_id, tag_id)
+        )",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    init_database(&pool).await.unwrap();
+
+    let columns = table_columns(&pool, "skill_ai_tag_reviews").await;
+    assert!(columns.contains(&"proposed_name".to_string()));
+    assert!(columns.contains(&"proposed_description".to_string()));
+}
+
 async fn table_columns(pool: &DbPool, table: &str) -> Vec<String> {
     sqlx::query(&format!("PRAGMA table_info({table})"))
         .fetch_all(pool)
@@ -802,7 +829,13 @@ async fn test_delete_skill() {
     replace_pending_ai_tag_reviews(
         &pool,
         "to-delete",
-        &[(tag.id.clone(), 0.42, "review".to_string())],
+        &[PendingAiTagReviewInput {
+            tag_id: tag.id.clone(),
+            confidence: 0.42,
+            reason: "review".to_string(),
+            proposed_name: None,
+            proposed_description: None,
+        }],
     )
     .await
     .unwrap();
@@ -1449,12 +1482,20 @@ async fn test_init_prunes_obsolete_builtin_skill_tags_only() {
         &pool,
         &skill.id,
         &[
-            (
-                "programming-agent-engineering".to_string(),
-                0.8,
-                "旧默认分类".to_string(),
-            ),
-            (custom.id.clone(), 0.8, "自定义分类".to_string()),
+            PendingAiTagReviewInput {
+                tag_id: "programming-agent-engineering".to_string(),
+                confidence: 0.8,
+                reason: "旧默认分类".to_string(),
+                proposed_name: None,
+                proposed_description: None,
+            },
+            PendingAiTagReviewInput {
+                tag_id: custom.id.clone(),
+                confidence: 0.8,
+                reason: "自定义分类".to_string(),
+                proposed_name: None,
+                proposed_description: None,
+            },
         ],
     )
     .await
@@ -1779,6 +1820,182 @@ async fn test_assign_skill_tags_supports_multi_tag_binding() {
     let ids = tags.iter().map(|tag| tag.id.as_str()).collect::<Vec<_>>();
     assert!(ids.contains(&custom.id.as_str()));
     assert!(ids.contains(&UNCATEGORIZED_TAG_ID));
+}
+
+#[tokio::test]
+async fn test_create_skill_tag_is_atomic_for_concurrent_same_name() {
+    let (pool, _dir) = crate::test_support::file_pool().await;
+    let (left, right) = tokio::join!(
+        create_skill_tag(&pool, "并发分类", Some("left"), None),
+        create_skill_tag(&pool, "并发分类", Some("right"), None),
+    );
+    let left = left.unwrap();
+    let right = right.unwrap();
+
+    assert_eq!(left.id, right.id);
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM skill_tags WHERE name = ?")
+        .bind("并发分类")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn test_create_skill_tag_falls_back_when_normalized_id_is_taken() {
+    let pool = setup_test_db().await;
+    let existing = create_skill_tag(&pool, "collision-name", None, None)
+        .await
+        .unwrap();
+
+    let created = create_skill_tag(&pool, "collision name", None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(existing.id, "collision-name");
+    assert_ne!(created.id, existing.id);
+    assert_eq!(created.name, "collision name");
+}
+
+#[tokio::test]
+async fn test_proposal_review_round_trip_does_not_create_tag() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("proposal-skill", "Proposal Skill", true);
+    upsert_skill(&pool, &skill).await.unwrap();
+    let proposal_id = derive_skill_tag_id("新领域");
+
+    replace_pending_ai_tag_reviews(
+        &pool,
+        &skill.id,
+        &[PendingAiTagReviewInput {
+            tag_id: proposal_id.clone(),
+            confidence: 0.91,
+            reason: "缺少现有分类".to_string(),
+            proposed_name: Some("新领域".to_string()),
+            proposed_description: Some("A new workflow category.".to_string()),
+        }],
+    )
+    .await
+    .unwrap();
+
+    assert!(get_skill_tag_by_name(&pool, "新领域")
+        .await
+        .unwrap()
+        .is_none());
+    let reviews = get_pending_ai_tag_reviews(&pool).await.unwrap();
+    assert_eq!(reviews.len(), 1);
+    assert!(reviews[0].is_proposal);
+    assert_eq!(reviews[0].tag.id, proposal_id);
+    assert_eq!(reviews[0].tag.name, "新领域");
+    assert_eq!(
+        reviews[0].tag.description.as_deref(),
+        Some("A new workflow category.")
+    );
+}
+
+#[tokio::test]
+async fn test_pending_reviews_filter_orphans_without_proposal_metadata() {
+    let pool = setup_test_db().await;
+    let now = Utc::now().to_rfc3339();
+    sqlx::query(
+        "INSERT INTO skill_ai_tag_reviews
+         (skill_id, tag_id, confidence, reason, status, suggested_at, updated_at)
+         VALUES ('orphan-skill', 'missing-tag', 0.5, 'orphan', 'pending', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    assert!(get_pending_ai_tag_reviews(&pool).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn test_accepting_same_name_proposals_reuses_one_tag_for_multiple_skills() {
+    let pool = setup_test_db().await;
+    let proposal_id = derive_skill_tag_id("安全审计");
+    for skill_id in ["proposal-a", "proposal-b"] {
+        upsert_skill(&pool, &make_skill(skill_id, skill_id, true))
+            .await
+            .unwrap();
+        replace_pending_ai_tag_reviews(
+            &pool,
+            skill_id,
+            &[PendingAiTagReviewInput {
+                tag_id: proposal_id.clone(),
+                confidence: 0.95,
+                reason: "安全工作流".to_string(),
+                proposed_name: Some("安全审计".to_string()),
+                proposed_description: Some("Security auditing workflows.".to_string()),
+            }],
+        )
+        .await
+        .unwrap();
+    }
+
+    accept_ai_tag_reviews(&pool, "proposal-a", std::slice::from_ref(&proposal_id))
+        .await
+        .unwrap();
+    accept_ai_tag_reviews(&pool, "proposal-b", std::slice::from_ref(&proposal_id))
+        .await
+        .unwrap();
+
+    let created = get_skill_tag_by_name(&pool, "安全审计")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!created.is_builtin);
+    assert_eq!(created.id, proposal_id);
+    for skill_id in ["proposal-a", "proposal-b"] {
+        let tags = get_skill_tags_for_skill(&pool, skill_id).await.unwrap();
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].id, created.id);
+    }
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM skill_tags WHERE name = '安全审计'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn test_skipping_proposal_leaves_no_tag_or_link() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("proposal-skip", "Proposal Skip", true);
+    upsert_skill(&pool, &skill).await.unwrap();
+    let proposal_id = derive_skill_tag_id("临时分类");
+    replace_pending_ai_tag_reviews(
+        &pool,
+        &skill.id,
+        &[PendingAiTagReviewInput {
+            tag_id: proposal_id,
+            confidence: 0.88,
+            reason: "待确认".to_string(),
+            proposed_name: Some("临时分类".to_string()),
+            proposed_description: Some("Temporary workflows.".to_string()),
+        }],
+    )
+    .await
+    .unwrap();
+
+    skip_ai_tag_reviews(&pool, &skill.id).await.unwrap();
+
+    assert!(get_skill_tag_by_name(&pool, "临时分类")
+        .await
+        .unwrap()
+        .is_none());
+    assert!(get_skill_tags_for_skill(&pool, &skill.id)
+        .await
+        .unwrap()
+        .is_empty());
+    let status: String = sqlx::query_scalar(
+        "SELECT status FROM skill_ai_tag_reviews WHERE skill_id = 'proposal-skip'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "skipped");
 }
 
 #[tokio::test]

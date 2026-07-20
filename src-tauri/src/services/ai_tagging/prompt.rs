@@ -2,19 +2,20 @@ use reqwest::Client;
 use serde_json::Value;
 
 use crate::{
-    db::{Skill, SkillTag, UNCATEGORIZED_TAG_ID},
+    db::{derive_skill_tag_id, Skill, SkillTag, UNCATEGORIZED_TAG_ID},
     services::ai_provider,
 };
 
 use super::error::AiTaggingError;
 use super::types::{
-    AiTaggingContext, RawAiTagSuggestion, RawAiTagSuggestionEnvelope, SkillTagSuggestion,
+    AiTaggingContext, RawAiTagSuggestion, RawAiTagSuggestionEnvelope, ResolvedAiSuggestions,
+    SkillTagProposal, SkillTagSuggestion,
 };
 
 pub(crate) async fn suggest_skill_tags_for_skill(
     context: &AiTaggingContext,
     skill: &Skill,
-) -> Result<Vec<SkillTagSuggestion>, AiTaggingError> {
+) -> Result<ResolvedAiSuggestions, AiTaggingError> {
     let content = skill
         .content
         .clone()
@@ -36,7 +37,7 @@ pub(crate) async fn suggest_skill_tags_for_skill(
     )
     .await?;
     let parsed = parse_ai_tag_suggestions(&raw)?;
-    map_ai_suggestions(&skill.id, &context.tags, parsed)
+    resolve_ai_suggestions(&skill.id, &context.tags, parsed)
 }
 
 pub(crate) fn build_tagging_prompt(
@@ -61,12 +62,14 @@ pub(crate) fn build_tagging_prompt(
     let summary = content.chars().take(4_000).collect::<String>();
 
     format!(
-        "你是 SkillPort 的本地分类器。请只从候选标签中选择 0 到 3 个标签。\n\
-         只能输出候选列表中的 tag id，不要输出名称、翻译、同义词或新标签。\n\
-         优先复用最具体的已有 custom 标签；只有强匹配时 confidence 才能 >= 0.7。\n\
-         没有明确匹配时返回 {{\"tags\":[]}}，不要为了凑数选择宽泛默认标签。\n\
+        "你是 SkillPort 的本地分类器。优先从候选标签中选择 0 到 3 个最具体的已有标签。\n\
+         tags 只能输出候选列表中的 tag id；custom 标签优先于宽泛 built-in 标签。\n\
+         仅当技能明确属于候选中不存在的类别时，才可额外提议 1 个 new_tag。\n\
+         已有标签能覆盖时禁止提议；不确定时不要提议；不得输出系统 fallback 标签。\n\
+         new_tag.name 不超过 12 个中文字符或等长英文短语，description 使用一句英文。\n\
+         只有强匹配时 confidence 才能 >= 0.7；无匹配且无提议时返回 {{\"tags\":[]}}。\n\
          输出必须是 JSON，不要解释额外文本。\n\
-         JSON 格式：{{\"tags\":[{{\"tag\":\"候选标签ID\",\"confidence\":0.0,\"reason\":\"不超过20字\"}}]}}\n\n\
+         JSON 格式：{{\"tags\":[{{\"tag\":\"候选标签ID\",\"confidence\":0.0,\"reason\":\"不超过20字\"}}],\"new_tag\":{{\"name\":\"新标签\",\"description\":\"English sentence.\",\"confidence\":0.0,\"reason\":\"不超过20字\"}}}}\n\n\
          候选标签：\n{candidates}\n\n\
          Skill 名称：{name}\n\
          Description：{}\n\
@@ -171,7 +174,7 @@ fn extract_ai_response_text(
 
 pub(crate) fn parse_ai_tag_suggestions(
     raw: &str,
-) -> Result<Vec<RawAiTagSuggestion>, AiTaggingError> {
+) -> Result<RawAiTagSuggestionEnvelope, AiTaggingError> {
     let cleaned = raw
         .trim()
         .trim_start_matches("```json")
@@ -180,10 +183,13 @@ pub(crate) fn parse_ai_tag_suggestions(
         .trim();
 
     if let Ok(envelope) = serde_json::from_str::<RawAiTagSuggestionEnvelope>(cleaned) {
-        return Ok(envelope.tags);
+        return Ok(envelope);
     }
     if let Ok(list) = serde_json::from_str::<Vec<RawAiTagSuggestion>>(cleaned) {
-        return Ok(list);
+        return Ok(RawAiTagSuggestionEnvelope {
+            tags: list,
+            new_tag: None,
+        });
     }
 
     let start = cleaned
@@ -200,16 +206,97 @@ pub(crate) fn parse_ai_tag_suggestions(
         })?;
     let json_slice = &cleaned[start..=end];
     serde_json::from_str::<RawAiTagSuggestionEnvelope>(json_slice)
-        .map(|envelope| envelope.tags)
-        .or_else(|_| serde_json::from_str::<Vec<RawAiTagSuggestion>>(json_slice))
+        .or_else(|_| {
+            serde_json::from_str::<Vec<RawAiTagSuggestion>>(json_slice).map(|tags| {
+                RawAiTagSuggestionEnvelope {
+                    tags,
+                    new_tag: None,
+                }
+            })
+        })
         .map_err(|e| AiTaggingError::Parse(format!("Failed to parse AI tagging JSON: {}", e)))
 }
 
+pub(crate) fn resolve_ai_suggestions(
+    skill_id: &str,
+    tags: &[SkillTag],
+    raw: RawAiTagSuggestionEnvelope,
+) -> Result<ResolvedAiSuggestions, AiTaggingError> {
+    let mut suggestions = map_known_ai_suggestions(skill_id, tags, raw.tags);
+    let mut proposals = Vec::new();
+
+    if let Some(proposal) = raw.new_tag {
+        let name = proposal.name.trim();
+        let weighted_len = name
+            .chars()
+            .map(|ch| if ch.is_ascii() { 1 } else { 2 })
+            .sum::<usize>();
+        if !name.is_empty() && weighted_len <= 24 {
+            let tag_id = derive_skill_tag_id(name);
+            let collision = tags
+                .iter()
+                .find(|tag| tag.id == tag_id || tag.name.trim().eq_ignore_ascii_case(name));
+            let confidence = proposal.confidence.unwrap_or(0.6).clamp(0.0, 1.0);
+            let reason = proposal
+                .reason
+                .unwrap_or_else(|| "AI 建议新分类".to_string());
+            if let Some(tag) = collision {
+                if tag.id != UNCATEGORIZED_TAG_ID
+                    && !suggestions.iter().any(|item| item.tag.id == tag.id)
+                {
+                    suggestions.push(SkillTagSuggestion {
+                        skill_id: skill_id.to_string(),
+                        tag: tag.clone(),
+                        confidence,
+                        reason,
+                    });
+                }
+            } else {
+                proposals.push(SkillTagProposal {
+                    skill_id: skill_id.to_string(),
+                    tag_id,
+                    proposed_name: name.to_string(),
+                    proposed_description: proposal
+                        .description
+                        .map(|description| description.trim().to_string())
+                        .filter(|description| !description.is_empty()),
+                    confidence,
+                    reason,
+                });
+            }
+        }
+    }
+
+    if suggestions.is_empty() && proposals.is_empty() {
+        suggestions = fallback_ai_suggestion(skill_id, tags)?;
+    }
+
+    Ok(ResolvedAiSuggestions {
+        suggestions,
+        proposals,
+    })
+}
+
+#[cfg(test)]
 pub(crate) fn map_ai_suggestions(
     skill_id: &str,
     tags: &[SkillTag],
     raw: Vec<RawAiTagSuggestion>,
 ) -> Result<Vec<SkillTagSuggestion>, AiTaggingError> {
+    let suggestions = map_known_ai_suggestions(skill_id, tags, raw);
+
+    if suggestions.is_empty() {
+        return fallback_ai_suggestion(skill_id, tags);
+    }
+
+    Ok(suggestions)
+}
+
+fn map_known_ai_suggestions(
+    skill_id: &str,
+    tags: &[SkillTag],
+    raw: Vec<RawAiTagSuggestion>,
+) -> Vec<SkillTagSuggestion> {
     let mut suggestions = Vec::new();
     for item in raw {
         let key = item.tag.trim();
@@ -232,19 +319,22 @@ pub(crate) fn map_ai_suggestions(
         });
     }
 
-    if suggestions.is_empty() {
-        let fallback = tags
-            .iter()
-            .find(|tag| tag.id == UNCATEGORIZED_TAG_ID)
-            .cloned()
-            .ok_or(AiTaggingError::NoUsableCandidateTags)?;
-        suggestions.push(SkillTagSuggestion {
-            skill_id: skill_id.to_string(),
-            tag: fallback,
-            confidence: 0.2,
-            reason: "未命中候选大类".to_string(),
-        });
-    }
+    suggestions
+}
 
-    Ok(suggestions)
+fn fallback_ai_suggestion(
+    skill_id: &str,
+    tags: &[SkillTag],
+) -> Result<Vec<SkillTagSuggestion>, AiTaggingError> {
+    let fallback = tags
+        .iter()
+        .find(|tag| tag.id == UNCATEGORIZED_TAG_ID)
+        .cloned()
+        .ok_or(AiTaggingError::NoUsableCandidateTags)?;
+    Ok(vec![SkillTagSuggestion {
+        skill_id: skill_id.to_string(),
+        tag: fallback,
+        confidence: 0.2,
+        reason: "未命中候选大类".to_string(),
+    }])
 }

@@ -263,6 +263,11 @@ export function CentralSkillCategorizePanel({
                         {review.skill_name}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-foreground">
+                        {review.is_proposal && (
+                          <span className="rounded-md bg-accent px-2 py-0.5 font-medium text-accent-foreground">
+                            {t("central.reviewProposalBadge")}
+                          </span>
+                        )}
                         <span className="rounded-full bg-muted px-2 py-0.5">
                           {review.tag.name}
                         </span>
@@ -274,6 +279,11 @@ export function CentralSkillCategorizePanel({
                   <p className="mt-2 text-xs leading-relaxed text-foreground">
                     {review.reason}
                   </p>
+                  {review.is_proposal && review.tag.description && (
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      {review.tag.description}
+                    </p>
+                  )}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
                       size="sm"

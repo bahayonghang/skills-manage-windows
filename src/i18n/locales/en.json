@@ -1107,6 +1107,7 @@
     "aiTagLowConfidence": "{{count}} to review",
     "viewFailuresAndReviews": "View failures / review",
     "reviewEmpty": "No low-confidence AI suggestions.",
+    "reviewProposalBadge": "AI-proposed tag",
     "reviewAccept": "Accept",
     "reviewChange": "Replace with selected tags",
     "reviewSkip": "Skip",

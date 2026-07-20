@@ -41,8 +41,8 @@ AI 打标提示词改为「优先复用已有 tag，允许提议新 tag」；新
   proposal 归并为同一 proposal 身份，接受任一后其余接受操作幂等复用同一 tag。
 - proposal 与已有 tag 撞 name（或撞候选 id）→ 降级为对该已有 tag 的普通复用建议，
   不作为 proposal 存储。
-- tag 创建路径改为原子（数据库层 ON CONFLICT，消除先查后插竞态）；归一化 id 与
-  异名已有 tag 撞 id 时回退随机 id。
+- tag 创建路径改为原子（数据库层 ON CONFLICT，消除先查后插竞态）；ASCII slug
+  为空时用稳定 digest id，派生 id 与异名已有 tag 撞 id 时回退 UUID。
 - 已知限制（记录即可）：批量任务候选快照任务开始加载一次，批内 proposal 不进入
   后续请求的候选；靠归一化归并保证不产生重复 tag。
 
@@ -53,14 +53,14 @@ AI 打标提示词改为「优先复用已有 tag，允许提议新 tag」；新
 
 ## Acceptance Criteria
 
-- [ ] 单测覆盖响应解析：纯复用 / 纯提议 / 混合 / 空 / 旧格式（无 new_tag）。
-- [ ] 提议阶段后 `skill_tags` 无新行；pending review 可见 proposal 信息。
-- [ ] 接受后：tag 创建（is_builtin=0）+ 链接建立；同名重复接受不产生重复 tag。
-- [ ] 跳过后：无 tag 行、无链接，review 状态正确。
-- [ ] 撞名 proposal 降级为复用建议，有单测。
-- [ ] 并发同名创建幂等（原子路径单测）。
-- [ ] 前端 review 面板最小适配：proposal 正常展示与接受/跳过（Vitest）。
-- [ ] spec 更新完成；`just ci` 全绿。
+- [x] 单测覆盖响应解析：纯复用 / 纯提议 / 混合 / 空 / 旧格式（无 new_tag）。
+- [x] 提议阶段后 `skill_tags` 无新行；pending review 可见 proposal 信息。
+- [x] 接受后：tag 创建（is_builtin=0）+ 链接建立；同名重复接受不产生重复 tag。
+- [x] 跳过后：无 tag 行、无链接，review 状态正确。
+- [x] 撞名 proposal 降级为复用建议，有单测。
+- [x] 并发同名创建幂等（原子路径单测）。
+- [x] 前端 review 面板最小适配：proposal 正常展示与接受/跳过（Vitest）。
+- [x] spec 更新完成；`just ci` 全绿。
 
 ## 非目标
 
