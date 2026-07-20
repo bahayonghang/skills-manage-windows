@@ -3,6 +3,7 @@ import { BROWSER_PLATFORM_PATHS } from "@/lib/platformPathPolicy";
 import type {
   AgentWithStatus,
   BootstrapSnapshot,
+  CentralTopTag,
   DashboardCentralSummary,
   ScanResult,
 } from "@/types";
@@ -145,6 +146,12 @@ const BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY: DashboardCentralSummary = {
   sourceRepositories: [],
 };
 
+const BROWSER_FIXTURE_TOP_TAGS: CentralTopTag[] = [
+  { id: "web", name: "Web", count: 3 },
+  { id: "docs", name: "Docs", count: 2 },
+  { id: "automation", name: "Automation", count: 1 },
+];
+
 const BROWSER_FIXTURE_BOOTSTRAP: BootstrapSnapshot = {
   agents: BROWSER_FIXTURE_AGENTS,
   cachedSkillCounts: BROWSER_FIXTURE_COUNTS.skills_by_agent,
@@ -157,6 +164,9 @@ const BROWSER_FIXTURE_BOOTSTRAP: BootstrapSnapshot = {
 export function registerPlatformFixtures(): void {
   registerIpcFixtures({
     get_bootstrap_snapshot: () => BROWSER_FIXTURE_BOOTSTRAP,
+    get_dashboard_central_summary: () => BROWSER_FIXTURE_DASHBOARD_CENTRAL_SUMMARY,
+    get_central_top_tags: ({ limit }) =>
+      BROWSER_FIXTURE_TOP_TAGS.slice(0, Math.max(1, limit)),
     list_platform_paths: () => BROWSER_PLATFORM_PATHS,
     scan_all_skills: () => BROWSER_FIXTURE_COUNTS,
     get_skill_counts_summary: () => ({

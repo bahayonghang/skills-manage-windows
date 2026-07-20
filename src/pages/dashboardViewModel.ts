@@ -1,8 +1,7 @@
 import { useMemo } from "react";
 import type { TFunction } from "i18next";
 
-import { isTauriRuntime } from "@/lib/ipc";
-import { isRemoteLikeTarget, isWslTarget } from "@/lib/targetKind";
+import { isRemoteLikeTarget } from "@/lib/targetKind";
 import {
   DEFAULT_PLATFORM_CATEGORY_VISIBILITY,
   type PlatformCategoryVisibility,
@@ -12,27 +11,24 @@ import {
   type PlatformTarget,
 } from "@/lib/platformTargetGroups";
 import {
-  buildActivitySummary,
-  buildTopTags,
   EMPTY_DASHBOARD_CENTRAL_SUMMARY,
   formatDateTime,
   RECENT_LOG_LIMIT,
+  ACTIVITY_DAY_COUNT,
+  TOP_TAG_LIMIT,
 } from "@/pages/dashboardUtils";
 import type {
   AgentWithStatus,
+  CentralTopTag,
+  DailyOperationCount,
   DashboardCentralSummary,
   DashboardReadiness,
   OperationLogEntry,
-  SkillRepositoryWithStats,
-  SkillTag,
-  SkillWithLinks,
   TargetSummary,
 } from "@/types";
 
 export interface DashboardQueueItem {
   key: string;
-  /** 用于 dashboard work queue tab 过滤；mockup 的 All/Review/Metadata 三态。 */
-  kind: "review" | "metadata";
   label: string;
   count: number;
   description: string;
@@ -43,294 +39,213 @@ export interface DashboardActiveJobSummary {
   total: number;
 }
 
+const EMPTY_READINESS: DashboardReadiness = {
+  score: 0,
+  categorizedRatio: 0,
+  describedRatio: 0,
+  sourcedRatio: 0,
+  installHealthRatio: 0,
+};
+
 export interface DashboardViewModel {
   activeJob: DashboardActiveJobSummary | null;
-  activeQueueItems: DashboardQueueItem[];
-  activity: ReturnType<typeof buildActivitySummary>;
-  aiReviewCount: number;
-  centralPath: string;
   centralTotal: number;
-  enabledTargets: PlatformTarget[];
-  hasLoadError: string | null;
-  healthSummary: string;
+  dailyCounts: DailyOperationCount[];
+  dailyCountsError: string | null;
+  enabledTargetsCount: number;
+  isDailyCountsLoading: boolean;
   isLogsLoading: boolean;
-  isPlatformLoading: boolean;
-  isPlatformRefreshing: boolean;
+  isTopTagsLoading: boolean;
   lastScanLabel: string;
   loadError: string | null;
   logTotal: number;
   queueItems: DashboardQueueItem[];
   readiness: DashboardReadiness;
   recentLogs: OperationLogEntry[];
-  registriesCount: number;
-  resolvedCollectionCount: number;
-  resolvedTarget: TargetSummary;
+  retryDailyCounts: () => void;
+  retryTopTags: () => void;
   scanState: string;
   scanStateLabel: string;
-  sourceRepositoryCount: number;
   skillsByAgent: Record<string, number>;
-  sparkline: { points: number[]; max: number };
-  targetDescription: string;
-  targetLabel: string;
+  sourceRepositoryCount: number;
+  topTags: CentralTopTag[];
+  topTagsError: string | null;
   quickMigratePath: string;
   quickMigrateDescription: string;
-  topTags: ReturnType<typeof buildTopTags>;
-  uncategorizedCount: number;
-  unassignedSourceCount: number;
-  updatesAvailable: number;
   visiblePlatformTargets: PlatformTarget[];
-}
-
-function getResolvedTarget(activeTarget: TargetSummary | undefined, t: TFunction) {
-  return (
-    activeTarget ?? {
-      id: "local",
-      kind: "local" as const,
-      label: t("targets.local"),
-      isActive: true,
-    }
-  );
-}
-
-function resolveCentralPath(agents: AgentWithStatus[]): string {
-  return agents.find((agent) => agent.id === "central")?.global_skills_dir ?? "";
 }
 
 export function useDashboardViewModel({
   t,
   platformAgents,
   skillsByAgent,
-  collectionCount,
   dashboardCentralSummary,
   categoryVisibility,
   lastScanAt,
   scanState,
   isPlatformLoading,
   isPlatformRefreshing,
-  centralSkills,
-  repositories,
-  aiTagReviews,
+  topTags,
+  isTopTagsLoading,
+  topTagsError,
+  loadTopTags,
   aiTagJob,
-  updateStatuses,
   updateJob,
   centralError,
-  collections,
-  collectionsError,
-  registries,
-  marketplaceError,
   logEntries,
   logTotal,
   isLogsLoading,
   logsError,
+  dailyCounts,
+  isDailyCountsLoading,
+  dailyCountsError,
+  loadDailyCounts,
   activeTarget,
   targets,
 }: {
   t: TFunction;
   platformAgents: AgentWithStatus[];
   skillsByAgent: Record<string, number>;
-  collectionCount: number;
   dashboardCentralSummary: DashboardCentralSummary | null | undefined;
   categoryVisibility: PlatformCategoryVisibility | null | undefined;
   lastScanAt: string | null | undefined;
   scanState: string | null | undefined;
   isPlatformLoading: boolean;
   isPlatformRefreshing: boolean;
-  centralSkills: SkillWithLinks[];
-  repositories: SkillRepositoryWithStats[];
-  aiTagReviews: Array<{ skill_id: string }>;
+  topTags: CentralTopTag[];
+  isTopTagsLoading: boolean;
+  topTagsError: string | null;
+  loadTopTags: (limit?: number) => Promise<void>;
   aiTagJob: { status: string; completed: number; total: number } | null | undefined;
-  updateStatuses: Record<string, { status?: string | null }>;
   updateJob: { status: string; completed: number; total: number } | null | undefined;
   centralError: string | null | undefined;
-  collections: Array<{ id: string }>;
-  collectionsError: string | null | undefined;
-  registries: Array<{ id: string }>;
-  marketplaceError: string | null | undefined;
   logEntries: OperationLogEntry[];
   logTotal: number;
   isLogsLoading: boolean;
   logsError: string | null | undefined;
+  dailyCounts: DailyOperationCount[];
+  isDailyCountsLoading: boolean;
+  dailyCountsError: string | null;
+  loadDailyCounts: (days: number) => Promise<void>;
   activeTarget: TargetSummary | undefined;
   targets: TargetSummary[];
-}) {
-  const resolvedSummary = dashboardCentralSummary ?? EMPTY_DASHBOARD_CENTRAL_SUMMARY;
+}): DashboardViewModel {
+  // 计数口径唯一来源：后端聚合的 dashboardCentralSummary（R4d）。
+  const summary = dashboardCentralSummary ?? EMPTY_DASHBOARD_CENTRAL_SUMMARY;
   const resolvedCategoryVisibility =
     categoryVisibility ?? DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
-  const resolvedTarget = getResolvedTarget(activeTarget, t);
 
   const visiblePlatformTargets = useMemo(
     () => getPlatformTargetGroups(platformAgents, resolvedCategoryVisibility),
     [platformAgents, resolvedCategoryVisibility],
   );
+  const enabledTargetsCount = useMemo(
+    () => visiblePlatformTargets.filter((agent) => agent.is_enabled).length,
+    [visiblePlatformTargets],
+  );
 
-  const centralPath = resolveCentralPath(platformAgents);
   const centralTotal =
-    centralSkills.length > 0
-      ? centralSkills.length
-      : resolvedSummary.centralSkillCount || skillsByAgent.central || 0;
-  const resolvedCollectionCount =
-    collections.length > 0 ? collections.length : collectionCount;
-  const enabledTargets = visiblePlatformTargets.filter((agent) => agent.is_enabled);
-  const hasCentralSkillData = centralSkills.length > 0;
-  const updatesAvailable = hasCentralSkillData
-    ? centralSkills.filter(
-        (skill) => updateStatuses[skill.id]?.status === "update_available",
-      ).length
-    : resolvedSummary.updatesAvailable;
-  const aiReviewCount =
-    aiTagReviews.length > 0 ? aiTagReviews.length : resolvedSummary.aiReviewCount;
-  const uncategorizedCount = hasCentralSkillData
-    ? centralSkills.filter((skill) => {
-        const skillTags = (skill.tags ?? []) as SkillTag[];
-        return (
-          skillTags.length === 0 ||
-          skillTags.some((tag) => tag.id === "uncategorized")
-        );
-      }).length
-    : resolvedSummary.uncategorizedCount;
-  const unassignedSourceCount = hasCentralSkillData
-    ? centralSkills.filter(
-        (skill) => skill.is_source_unknown || skill.repository?.is_unknown,
-      ).length
-    : resolvedSummary.unassignedSourceCount;
-  const sourceRepositoryCount =
-    repositories.length > 0
-      ? repositories.length
-      : resolvedSummary.sourceRepositories.length;
-  const targetDescription = isRemoteLikeTarget(resolvedTarget)
-    ? [
-        isWslTarget(resolvedTarget)
-          ? resolvedTarget.distribution
-          : resolvedTarget.username && resolvedTarget.host
-            ? `${resolvedTarget.username}@${resolvedTarget.host}`
-            : resolvedTarget.host,
-        resolvedTarget.remoteHome,
-      ]
-        .filter(Boolean)
-        .join(" / ")
-    : t("targets.localDescription");
-  const targetLabel = isRemoteLikeTarget(resolvedTarget)
-    ? resolvedTarget.label
-    : t("targets.local");
-  const quickMigrateTarget = isRemoteLikeTarget(resolvedTarget)
-    ? resolvedTarget
-    : targets.find(isRemoteLikeTarget);
-  const hasRemoteSyncTarget =
-    Boolean(quickMigrateTarget);
+    summary.centralSkillCount > 0
+      ? summary.centralSkillCount
+      : skillsByAgent.central || 0;
+  const sourceRepositoryCount = summary.sourceRepositories.length;
+
+  const quickMigrateTarget =
+    activeTarget && isRemoteLikeTarget(activeTarget)
+      ? activeTarget
+      : targets.find(isRemoteLikeTarget);
+  const hasRemoteSyncTarget = Boolean(quickMigrateTarget);
   const quickMigratePath = hasRemoteSyncTarget
     ? "/settings/connections?action=local-remote-sync&section=remote-targets"
     : "/settings/connections";
   const quickMigrateDescription = hasRemoteSyncTarget
     ? t("dashboard.hero.ctaQuickMigrateRemoteDesc", {
-        target: quickMigrateTarget?.label ?? targetLabel,
+        target: quickMigrateTarget?.label ?? t("targets.local"),
       })
     : t("dashboard.hero.ctaQuickMigrateSetupDesc");
+
   const scanStateLabel =
     isPlatformLoading || isPlatformRefreshing
       ? t("dashboard.scanState.loading")
       : t(`dashboard.scanState.${scanState ?? "idle"}`);
-  const lastScanLabel = formatDateTime(lastScanAt, t("dashboard.neverScanned"));
+  const lastScanLabel = useMemo(
+    () => formatDateTime(lastScanAt, t("dashboard.neverScanned")),
+    [lastScanAt, t],
+  );
+
   const activeJob =
     aiTagJob?.status === "running"
       ? { completed: aiTagJob.completed, total: aiTagJob.total }
       : updateJob?.status === "running"
         ? { completed: updateJob.completed, total: updateJob.total }
         : null;
-  const activity = useMemo(() => buildActivitySummary(logEntries), [logEntries]);
-  const topTags = useMemo(() => buildTopTags(centralSkills), [centralSkills]);
-  const recentLogs = logEntries.slice(0, RECENT_LOG_LIMIT);
-  const loadError =
-    centralError ??
-    collectionsError ??
-    logsError ??
-    (isTauriRuntime() ? marketplaceError ?? null : null);
-  const queueItems: DashboardQueueItem[] = [
-    {
-      key: "updates",
-      kind: "review",
-      label: t("dashboard.queue.updates"),
-      count: updatesAvailable,
-      description: t("dashboard.queue.updatesDesc"),
-    },
-    {
-      key: "ai",
-      kind: "review",
-      label: t("dashboard.queue.aiReviews"),
-      count: aiReviewCount,
-      description: t("dashboard.queue.aiReviewsDesc"),
-    },
-    {
-      key: "uncategorized",
-      kind: "metadata",
-      label: t("dashboard.queue.uncategorized"),
-      count: uncategorizedCount,
-      description: t("dashboard.queue.uncategorizedDesc"),
-    },
-    {
-      key: "unassigned",
-      kind: "metadata",
-      label: t("dashboard.queue.unassigned"),
-      count: unassignedSourceCount,
-      description: t("dashboard.queue.unassignedDesc"),
-    },
-  ];
-  const activeQueueItems = queueItems.filter((item) => item.count > 0);
-  const readiness = resolvedSummary.readiness ?? {
-    score: 0,
-    categorizedRatio: 0,
-    describedRatio: 0,
-    sourcedRatio: 0,
-    installHealthRatio: 0,
-  };
-  const sparkline = {
-    points: activity.buckets.map((bucket) => bucket.count),
-    max: activity.max,
-  };
-  const healthSummary =
-    centralTotal > 0
-      ? t("dashboard.health.summary", {
-          aiReviewCount,
-          centralTotal,
-          sourceRepositoryCount,
-          uncategorizedCount,
-        })
-      : t("dashboard.health.emptySummary");
+
+  const recentLogs = useMemo(
+    () => logEntries.slice(0, RECENT_LOG_LIMIT),
+    [logEntries],
+  );
+
+  const loadError = centralError ?? logsError ?? null;
+
+  const queueItems: DashboardQueueItem[] = useMemo(
+    () => [
+      {
+        key: "updates",
+        label: t("dashboard.queue.updates"),
+        count: summary.updatesAvailable,
+        description: t("dashboard.queue.updatesDesc"),
+      },
+      {
+        key: "ai",
+        label: t("dashboard.queue.aiReviews"),
+        count: summary.aiReviewCount,
+        description: t("dashboard.queue.aiReviewsDesc"),
+      },
+      {
+        key: "uncategorized",
+        label: t("dashboard.queue.uncategorized"),
+        count: summary.uncategorizedCount,
+        description: t("dashboard.queue.uncategorizedDesc"),
+      },
+      {
+        key: "unassigned",
+        label: t("dashboard.queue.unassigned"),
+        count: summary.unassignedSourceCount,
+        description: t("dashboard.queue.unassignedDesc"),
+      },
+    ],
+    [t, summary],
+  );
 
   return {
     activeJob,
-    activeQueueItems,
-    activity,
-    aiReviewCount,
-    centralPath,
     centralTotal,
-    enabledTargets,
-    hasLoadError: loadError,
-    healthSummary,
+    dailyCounts,
+    dailyCountsError,
+    enabledTargetsCount,
+    isDailyCountsLoading,
     isLogsLoading,
-    isPlatformLoading,
-    isPlatformRefreshing,
+    isTopTagsLoading,
     lastScanLabel,
     loadError,
     logTotal,
     queueItems,
-    readiness,
+    readiness: summary.readiness ?? EMPTY_READINESS,
     recentLogs,
-    registriesCount: registries.length,
-    resolvedCollectionCount,
-    resolvedTarget,
+    retryDailyCounts: () => {
+      void loadDailyCounts(ACTIVITY_DAY_COUNT);
+    },
+    retryTopTags: () => {
+      void loadTopTags(TOP_TAG_LIMIT);
+    },
     scanState: scanState ?? "idle",
     scanStateLabel,
-    sourceRepositoryCount,
     skillsByAgent,
-    sparkline,
-    targetDescription,
-    targetLabel,
+    sourceRepositoryCount,
+    topTags,
+    topTagsError,
     quickMigratePath,
     quickMigrateDescription,
-    topTags,
-    uncategorizedCount,
-    unassignedSourceCount,
-    updatesAvailable,
     visiblePlatformTargets,
   };
 }

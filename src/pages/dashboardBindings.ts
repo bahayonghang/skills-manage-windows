@@ -1,11 +1,15 @@
 import { useEffect, useRef } from "react";
 
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
-import { useCollectionStore } from "@/stores/collectionStore";
-import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import { useOperationLogStore } from "@/stores/operationLogStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useTargetStore } from "@/stores/targetStore";
+import { ACTIVITY_DAY_COUNT, TOP_TAG_LIMIT } from "@/pages/dashboardUtils";
+
+/** Activity 图表窗口天数：与后端恰好返回的本地日桶数一致。 */
+const ACTIVITY_CHART_DAYS = ACTIVITY_DAY_COUNT;
+/** TopTags 面板展示条数。 */
+const TOP_TAGS_LIMIT = TOP_TAG_LIMIT;
 
 type DashboardLogQuery = {
   limit: number;
@@ -23,22 +27,29 @@ async function noopUnsubscribeFactory() {
 export function useDashboardBindings() {
   const platformAgents = usePlatformStore((state) => state.agents) ?? [];
   const skillsByAgent = usePlatformStore((state) => state.skillsByAgent) ?? {};
-  const collectionCount = usePlatformStore((state) => state.collectionCount) ?? 0;
   const dashboardCentralSummary = usePlatformStore(
     (state) => state.dashboardCentralSummary,
   );
-  const categoryVisibility = usePlatformStore((state) => state.categoryVisibility);
+  const categoryVisibility = usePlatformStore(
+    (state) => state.categoryVisibility,
+  );
   const lastScanAt = usePlatformStore((state) => state.lastScanAt);
   const scanState = usePlatformStore((state) => state.scanState);
+  const scanGeneration =
+    usePlatformStore((state) => state.scanGeneration) ?? 0;
   const isPlatformLoading = usePlatformStore((state) => state.isLoading) ?? false;
   const isPlatformRefreshing =
     usePlatformStore((state) => state.isRefreshing) ?? false;
+  const topTags = usePlatformStore((state) => state.topTags) ?? [];
+  const isTopTagsLoading =
+    usePlatformStore((state) => state.isTopTagsLoading) ?? false;
+  const topTagsError = usePlatformStore((state) => state.topTagsError);
+  const refreshDashboardSummary =
+    usePlatformStore((state) => state.refreshDashboardSummary) ?? noopAsync;
+  const loadTopTags =
+    usePlatformStore((state) => state.loadTopTags) ?? noopAsync;
 
-  const centralSkills = useCentralSkillsStore((state) => state.skills) ?? [];
-  const repositories = useCentralSkillsStore((state) => state.repositories) ?? [];
-  const aiTagReviews = useCentralSkillsStore((state) => state.aiTagReviews) ?? [];
   const aiTagJob = useCentralSkillsStore((state) => state.aiTagJob);
-  const updateStatuses = useCentralSkillsStore((state) => state.updateStatuses) ?? {};
   const updateJob = useCentralSkillsStore((state) => state.updateJob);
   const centralError = useCentralSkillsStore((state) => state.error);
   const subscribeAiTagProgress =
@@ -48,20 +59,6 @@ export function useDashboardBindings() {
     useCentralSkillsStore((state) => state.subscribeUpdateProgress) ??
     noopUnsubscribeFactory;
 
-  const collections = useCollectionStore((state) => state.collections) ?? [];
-  const isCollectionsLoading =
-    useCollectionStore((state) => state.isLoading) ?? false;
-  const collectionsError = useCollectionStore((state) => state.error);
-  const loadCollections =
-    useCollectionStore((state) => state.loadCollections) ?? noopAsync;
-
-  const registries = useMarketplaceStore((state) => state.registries) ?? [];
-  const isMarketplaceLoading =
-    useMarketplaceStore((state) => state.isLoading) ?? false;
-  const marketplaceError = useMarketplaceStore((state) => state.error);
-  const loadRegistries =
-    useMarketplaceStore((state) => state.loadRegistries) ?? noopAsync;
-
   const logEntries = useOperationLogStore((state) => state.entries) ?? [];
   const logTotal = useOperationLogStore((state) => state.total) ?? 0;
   const isLogsLoading = useOperationLogStore((state) => state.isLoading) ?? false;
@@ -69,6 +66,14 @@ export function useDashboardBindings() {
   const loadLogs =
     useOperationLogStore((state) => state.loadLogs) ??
     (async (_query: DashboardLogQuery) => undefined);
+  const dailyCounts = useOperationLogStore((state) => state.dailyCounts) ?? [];
+  const isDailyCountsLoading =
+    useOperationLogStore((state) => state.isDailyCountsLoading) ?? false;
+  const dailyCountsError = useOperationLogStore(
+    (state) => state.dailyCountsError,
+  );
+  const loadDailyCounts =
+    useOperationLogStore((state) => state.loadDailyCounts) ?? noopAsync;
 
   const activeTarget = useTargetStore((state) => state.activeTarget);
   const targets = useTargetStore((state) => state.targets) ?? [];
@@ -76,92 +81,69 @@ export function useDashboardBindings() {
   return {
     platformAgents,
     skillsByAgent,
-    collectionCount,
     dashboardCentralSummary,
     categoryVisibility,
     lastScanAt,
     scanState,
+    scanGeneration,
     isPlatformLoading,
     isPlatformRefreshing,
-    centralSkills,
-    repositories,
-    aiTagReviews,
+    topTags,
+    isTopTagsLoading,
+    topTagsError,
+    refreshDashboardSummary,
+    loadTopTags,
     aiTagJob,
-    updateStatuses,
     updateJob,
     centralError,
     subscribeAiTagProgress,
     subscribeUpdateProgress,
-    collections,
-    isCollectionsLoading,
-    collectionsError,
-    loadCollections,
-    registries,
-    isMarketplaceLoading,
-    marketplaceError,
-    loadRegistries,
     logEntries,
     logTotal,
     isLogsLoading,
     logsError,
     loadLogs,
+    dailyCounts,
+    isDailyCountsLoading,
+    dailyCountsError,
+    loadDailyCounts,
     activeTarget,
     targets,
   };
 }
 
 export function useDashboardBootstrap({
-  collectionsLength,
-  isCollectionsLoading,
-  loadCollections,
-  registriesLength,
-  isMarketplaceLoading,
-  loadRegistries,
+  refreshDashboardSummary,
+  loadTopTags,
+  loadDailyCounts,
   loadLogs,
   subscribeAiTagProgress,
   subscribeUpdateProgress,
+  scanGeneration,
   recentLogLimit,
 }: {
-  collectionsLength: number;
-  isCollectionsLoading: boolean;
-  loadCollections: () => Promise<void>;
-  registriesLength: number;
-  isMarketplaceLoading: boolean;
-  loadRegistries: () => Promise<void>;
+  refreshDashboardSummary: () => Promise<void>;
+  loadTopTags: (limit?: number) => Promise<void>;
+  loadDailyCounts: (days: number) => Promise<void>;
   loadLogs: (query: DashboardLogQuery) => Promise<unknown>;
   subscribeAiTagProgress: () => Promise<() => void>;
   subscribeUpdateProgress: () => Promise<() => void>;
+  scanGeneration: number;
   recentLogLimit: number;
 }) {
-  const requestedCollectionsRef = useRef(false);
-  const requestedRegistriesRef = useRef(false);
+  const requestedChartsRef = useRef(false);
   const requestedLogsRef = useRef(false);
+  const lastScanGenerationRef = useRef<number | null>(null);
 
+  // 挂载：summary + 两个图表 + 最近日志各拉一次（ref 防重入）。
   useEffect(() => {
-    if (
-      requestedCollectionsRef.current ||
-      isCollectionsLoading ||
-      collectionsLength > 0
-    ) {
-      return;
-    }
+    if (requestedChartsRef.current) return;
 
-    requestedCollectionsRef.current = true;
-    void loadCollections();
-  }, [collectionsLength, isCollectionsLoading, loadCollections]);
-
-  useEffect(() => {
-    if (
-      requestedRegistriesRef.current ||
-      isMarketplaceLoading ||
-      registriesLength > 0
-    ) {
-      return;
-    }
-
-    requestedRegistriesRef.current = true;
-    void loadRegistries();
-  }, [isMarketplaceLoading, loadRegistries, registriesLength]);
+    requestedChartsRef.current = true;
+    void refreshDashboardSummary();
+    void loadTopTags(TOP_TAGS_LIMIT);
+    void loadDailyCounts(ACTIVITY_CHART_DAYS);
+  }, [refreshDashboardSummary, loadTopTags, loadDailyCounts]);
 
   useEffect(() => {
     if (requestedLogsRef.current) return;
@@ -169,6 +151,21 @@ export function useDashboardBootstrap({
     requestedLogsRef.current = true;
     void loadLogs({ limit: recentLogLimit, offset: 0 });
   }, [loadLogs, recentLogLimit]);
+
+  // scanGeneration 变化（重扫完成）后 summary / topTags / dailyCounts 过期，
+  // 全部重载；首次渲染只记录基线，避免与挂载加载重复。
+  useEffect(() => {
+    if (lastScanGenerationRef.current === null) {
+      lastScanGenerationRef.current = scanGeneration;
+      return;
+    }
+    if (lastScanGenerationRef.current === scanGeneration) return;
+
+    lastScanGenerationRef.current = scanGeneration;
+    void refreshDashboardSummary();
+    void loadTopTags(TOP_TAGS_LIMIT);
+    void loadDailyCounts(ACTIVITY_CHART_DAYS);
+  }, [scanGeneration, refreshDashboardSummary, loadTopTags, loadDailyCounts]);
 
   useEffect(() => {
     let aiUnsubscribe: (() => void) | undefined;

@@ -7,15 +7,6 @@ import type { DashboardReadiness } from "@/types";
 
 interface HealthOrbitProps {
   readiness: DashboardReadiness;
-  centralTotal: number;
-  sourceRepositoryCount: number;
-  enabledAgentsCount: number;
-}
-
-interface MiniProps {
-  label: string;
-  value: number | string;
-  testId?: string;
 }
 
 interface FactorProps {
@@ -55,28 +46,12 @@ function getReadinessStatus(score: number): ReadinessStatus {
   return "triage";
 }
 
-function MiniStat({ label, value, testId }: MiniProps) {
-  return (
-    <div
-      data-testid={testId}
-      className="rounded-xl border border-border/65 bg-card/45 px-3 py-2.5 shadow-[0_0_0_1px_color-mix(in_oklch,var(--border)_54%,transparent)]"
-    >
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-1 font-display text-xl font-semibold tabular-nums">
-        {value}
-      </div>
-    </div>
-  );
-}
-
 function FactorRail({ label, value, tone }: FactorProps) {
   const safeValue = Math.max(0, Math.min(1, value));
   const percent = toPercent(safeValue);
 
   return (
-    <div className="readiness-rail rounded-xl border border-border/55 bg-card/40 px-3 py-2.5 shadow-[0_0_0_1px_color-mix(in_oklch,var(--border)_44%,transparent)]">
+    <div className="py-1.5">
       <div className="flex items-center justify-between gap-3">
         <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">
           {label}
@@ -98,12 +73,7 @@ function FactorRail({ label, value, tone }: FactorProps) {
   );
 }
 
-export function HealthOrbit({
-  readiness,
-  centralTotal,
-  sourceRepositoryCount,
-  enabledAgentsCount,
-}: HealthOrbitProps) {
+export function HealthOrbit({ readiness }: HealthOrbitProps) {
   const { t } = useTranslation();
   const score = Math.max(0, Math.min(100, Math.round(readiness.score)));
   const status = getReadinessStatus(score);
@@ -175,28 +145,12 @@ export function HealthOrbit({
         </p>
 
         <div
-          className="grid gap-2"
+          className="grid gap-1"
           aria-label={t("dashboard.readiness.factors.ariaLabel")}
         >
           {factors.map((factor) => (
             <FactorRail key={factor.label} {...factor} />
           ))}
-        </div>
-
-        <div className="grid w-full grid-cols-3 gap-2">
-          <MiniStat
-            label={t("dashboard.readiness.miniCentral")}
-            value={centralTotal}
-          />
-          <MiniStat
-            label={t("dashboard.readiness.miniSources")}
-            value={sourceRepositoryCount}
-          />
-          <MiniStat
-            testId="dashboard-metric-targets"
-            label={t("dashboard.readiness.miniAgents")}
-            value={enabledAgentsCount}
-          />
         </div>
       </div>
     </section>

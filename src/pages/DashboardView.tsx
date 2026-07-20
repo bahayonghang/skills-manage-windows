@@ -12,15 +12,13 @@ export function DashboardView() {
   const bindings = useDashboardBindings();
 
   useDashboardBootstrap({
-    collectionsLength: bindings.collections.length,
-    isCollectionsLoading: bindings.isCollectionsLoading,
-    loadCollections: bindings.loadCollections,
-    registriesLength: bindings.registries.length,
-    isMarketplaceLoading: bindings.isMarketplaceLoading,
-    loadRegistries: bindings.loadRegistries,
+    refreshDashboardSummary: bindings.refreshDashboardSummary,
+    loadTopTags: bindings.loadTopTags,
+    loadDailyCounts: bindings.loadDailyCounts,
     loadLogs: bindings.loadLogs,
     subscribeAiTagProgress: bindings.subscribeAiTagProgress,
     subscribeUpdateProgress: bindings.subscribeUpdateProgress,
+    scanGeneration: bindings.scanGeneration,
     recentLogLimit: RECENT_LOG_LIMIT,
   });
 

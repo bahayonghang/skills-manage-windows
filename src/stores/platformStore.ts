@@ -11,6 +11,7 @@ import {
 import {
   AgentWithStatus,
   BootstrapSnapshot,
+  CentralTopTag,
   CustomAgentConfig,
   DashboardCentralSummary,
   PlatformPathMap,
@@ -45,6 +46,10 @@ let initializePromise: Promise<void> | null = null;
 let backgroundRefreshPromise: Promise<void> | null = null;
 let refreshToken = 0;
 let refreshRunId = 0;
+// latest-wins 令牌：summary / topTags 各自独立，旧响应不得覆盖新结果；
+// resetForTargetChange 时自增使在途请求失效。
+let dashboardSummaryToken = 0;
+let topTagsToken = 0;
 
 function buildAgentCounts(
   agents: AgentWithStatus[],
@@ -136,6 +141,10 @@ interface PlatformState {
   isRefreshing: boolean;
   scanGeneration?: number;
   error: string | null;
+  /** Central 技能 Top tags（随 target 切换重置，重扫后需重载）。 */
+  topTags: CentralTopTag[];
+  isTopTagsLoading: boolean;
+  topTagsError: string | null;
 
   // Actions
   initialize: () => Promise<void>;
@@ -143,6 +152,10 @@ interface PlatformState {
   refreshScanInBackground: () => Promise<void>;
   rescan: () => Promise<void>;
   refreshCounts: () => Promise<void>;
+  /** 轻量刷新 dashboardCentralSummary（挂载 / scanGeneration 变化 / 更新检查完成后调用）。 */
+  refreshDashboardSummary: () => Promise<void>;
+  /** 加载 Central Top tags（latest-wins，失败写 topTagsError 供面板重试）。 */
+  loadTopTags: (limit?: number) => Promise<void>;
   resetForTargetChange: () => void;
   setCategoryVisibility: (
     category: PlatformCategoryKey,
@@ -174,6 +187,9 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   isRefreshing: false,
   scanGeneration: 0,
   error: null,
+  topTags: [],
+  isTopTagsLoading: false,
+  topTagsError: null,
 
   hydrateShell: async () => {
     const currentRefreshToken = refreshToken;
@@ -309,9 +325,39 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
     }
   },
 
+  refreshDashboardSummary: async () => {
+    const currentToken = ++dashboardSummaryToken;
+    try {
+      const summary = await invoke("get_dashboard_central_summary");
+      if (currentToken === dashboardSummaryToken) {
+        set({ dashboardCentralSummary: summary });
+      }
+    } catch {
+      // 后台静默刷新：失败保留旧 summary，IPC failure recorder 已记录；
+      // 下一次挂载 / scanGeneration 变化 / 更新完成会重试。
+    }
+  },
+
+  loadTopTags: async (limit = 6) => {
+    const currentToken = ++topTagsToken;
+    set({ isTopTagsLoading: true, topTagsError: null });
+    try {
+      const topTags = await invoke("get_central_top_tags", { limit });
+      if (currentToken === topTagsToken) {
+        set({ topTags: topTags ?? [], isTopTagsLoading: false });
+      }
+    } catch (err) {
+      if (currentToken === topTagsToken) {
+        set({ topTagsError: String(err), isTopTagsLoading: false });
+      }
+    }
+  },
+
   resetForTargetChange: () => {
     refreshToken += 1;
     refreshRunId += 1;
+    dashboardSummaryToken += 1;
+    topTagsToken += 1;
     initializePromise = null;
     backgroundRefreshPromise = null;
     set((state) => ({
@@ -325,6 +371,9 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
       isRefreshing: false,
       isLoading: true,
       error: null,
+      topTags: [],
+      isTopTagsLoading: false,
+      topTagsError: null,
       scanGeneration: (state.scanGeneration ?? 0) + 1,
     }));
   },

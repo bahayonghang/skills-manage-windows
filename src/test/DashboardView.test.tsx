@@ -5,33 +5,20 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import i18n from "@/i18n";
 import { DashboardView } from "@/pages/DashboardView";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
-import { useCollectionStore } from "@/stores/collectionStore";
-import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import { useOperationLogStore } from "@/stores/operationLogStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useTargetStore } from "@/stores/targetStore";
 import type {
   AgentWithStatus,
-  CentralSkillUpdateState,
-  Collection,
+  CentralTopTag,
+  DailyOperationCount,
   OperationLogEntry,
-  SkillRegistry,
   SkillRepositoryWithStats,
-  SkillTag,
-  SkillWithLinks,
   TargetSummary,
 } from "@/types";
 
 vi.mock("@/stores/centralSkillsStore", () => ({
   useCentralSkillsStore: vi.fn(),
-}));
-
-vi.mock("@/stores/collectionStore", () => ({
-  useCollectionStore: vi.fn(),
-}));
-
-vi.mock("@/stores/marketplaceStore", () => ({
-  useMarketplaceStore: vi.fn(),
 }));
 
 vi.mock("@/stores/operationLogStore", () => ({
@@ -47,19 +34,16 @@ vi.mock("@/stores/targetStore", () => ({
 }));
 
 const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
-const mockUseCollectionStore = vi.mocked(useCollectionStore);
-const mockUseMarketplaceStore = vi.mocked(useMarketplaceStore);
 const mockUseOperationLogStore = vi.mocked(useOperationLogStore);
 const mockUsePlatformStore = vi.mocked(usePlatformStore);
 const mockUseTargetStore = vi.mocked(useTargetStore);
 
-const mockLoadCentralSkills = vi.fn();
 const mockSubscribeAiTagProgress = vi.fn();
 const mockSubscribeUpdateProgress = vi.fn();
-const mockLoadCollections = vi.fn();
-const mockLoadRegistries = vi.fn();
-const mockSyncRegistry = vi.fn();
 const mockLoadLogs = vi.fn();
+const mockLoadDailyCounts = vi.fn();
+const mockRefreshDashboardSummary = vi.fn();
+const mockLoadTopTags = vi.fn();
 
 const agents: AgentWithStatus[] = [
   {
@@ -105,109 +89,28 @@ const repositories: SkillRepositoryWithStats[] = [
     skill_count: 2,
     unknown_skill_count: 0,
   },
-  {
-    id: "local-unknown",
-    name: "Local / Unknown",
-    source_type: "local",
-    pinned: false,
-    is_unknown: true,
-    created_at: "2026-04-10T00:00:00Z",
-    updated_at: "2026-04-10T00:00:00Z",
-    skill_count: 1,
-    unknown_skill_count: 1,
-  },
 ];
 
-const tags: SkillTag[] = [
-  {
-    id: "frontend",
-    name: "Frontend",
-    is_builtin: true,
-    created_at: "2026-04-10T00:00:00Z",
-    updated_at: "2026-04-10T00:00:00Z",
-  },
-  {
-    id: "uncategorized",
-    name: "Uncategorized",
-    is_builtin: true,
-    created_at: "2026-04-10T00:00:00Z",
-    updated_at: "2026-04-10T00:00:00Z",
-  },
-];
+function localDateKey(offsetDays: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - offsetDays);
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
 
-const skills: SkillWithLinks[] = [
-  {
-    id: "frontend-design",
-    name: "frontend-design",
-    description: "Build frontend interfaces",
-    file_path: "~/.skillsmanage/skills/frontend-design/SKILL.md",
-    canonical_path: "~/.skillsmanage/skills/frontend-design",
-    is_central: true,
-    scanned_at: "2026-04-10T00:00:00Z",
-    linked_agents: ["codex"],
-    shared_root_agents: [],
-    repository: repositories[0],
-    tags: [tags[0]],
-    is_source_unknown: false,
-  },
-  {
-    id: "code-reviewer",
-    name: "code-reviewer",
-    description: "Review code",
-    file_path: "~/.skillsmanage/skills/code-reviewer/SKILL.md",
-    canonical_path: "~/.skillsmanage/skills/code-reviewer",
-    is_central: true,
-    scanned_at: "2026-04-10T00:00:00Z",
-    linked_agents: [],
-    shared_root_agents: [],
-    repository: repositories[1],
-    tags: [],
-    is_source_unknown: true,
-  },
-  {
-    id: "writer",
-    name: "writer",
-    description: "Write prose",
-    file_path: "~/.skillsmanage/skills/writer/SKILL.md",
-    canonical_path: "~/.skillsmanage/skills/writer",
-    is_central: true,
-    scanned_at: "2026-04-10T00:00:00Z",
-    linked_agents: ["claude-code"],
-    shared_root_agents: [],
-    repository: repositories[0],
-    tags: [tags[1]],
-    is_source_unknown: false,
-  },
-];
+/** 14 个本地日桶（升序、含今天），总计 5 次操作。 */
+const dailyCounts: DailyOperationCount[] = Array.from(
+  { length: 14 },
+  (_, index) => ({
+    date: localDateKey(13 - index),
+    count: index === 13 ? 3 : index === 10 ? 2 : 0,
+  }),
+);
 
-const updateStatuses: Record<string, CentralSkillUpdateState> = {
-  "frontend-design": {
-    skill_id: "frontend-design",
-    source_type: "github",
-    status: "update_available",
-  },
-};
-
-const collections: Collection[] = [
-  {
-    id: "frontend-kit",
-    name: "Frontend Kit",
-    created_at: "2026-04-10T00:00:00Z",
-    updated_at: "2026-04-10T00:00:00Z",
-  },
-];
-
-const registries: SkillRegistry[] = [
-  {
-    id: "official",
-    name: "Official",
-    source_type: "github",
-    url: "https://github.com/openai/skills",
-    is_builtin: true,
-    is_enabled: true,
-    last_synced: "2026-04-10T00:00:00Z",
-    created_at: "2026-04-10T00:00:00Z",
-  },
+const topTags: CentralTopTag[] = [
+  { id: "web", name: "Web", count: 3 },
+  { id: "docs", name: "Docs", count: 2 },
 ];
 
 const logs: OperationLogEntry[] = [
@@ -242,8 +145,6 @@ const wslTarget: TargetSummary = {
 };
 
 let centralState: Record<string, unknown>;
-let collectionState: Record<string, unknown>;
-let marketplaceState: Record<string, unknown>;
 let operationLogState: Record<string, unknown>;
 let platformState: Record<string, unknown>;
 let targetState: Record<string, unknown>;
@@ -259,11 +160,11 @@ function LocationProbe() {
 }
 
 function renderDashboard() {
-  render(
+  return render(
     <MemoryRouter initialEntries={["/dashboard"]}>
       <DashboardView />
       <LocationProbe />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
@@ -271,14 +172,6 @@ function installStoreMocks() {
   mockUseCentralSkillsStore.mockImplementation((selector?: unknown) => {
     if (typeof selector === "function") return selector(centralState);
     return centralState;
-  });
-  mockUseCollectionStore.mockImplementation((selector?: unknown) => {
-    if (typeof selector === "function") return selector(collectionState);
-    return collectionState;
-  });
-  mockUseMarketplaceStore.mockImplementation((selector?: unknown) => {
-    if (typeof selector === "function") return selector(marketplaceState);
-    return marketplaceState;
   });
   mockUseOperationLogStore.mockImplementation((selector?: unknown) => {
     if (typeof selector === "function") return selector(operationLogState);
@@ -299,74 +192,24 @@ describe("DashboardView", () => {
     vi.clearAllMocks();
     await i18n.changeLanguage("en");
 
-    mockLoadCentralSkills.mockResolvedValue(undefined);
     mockSubscribeAiTagProgress.mockResolvedValue(() => {});
     mockSubscribeUpdateProgress.mockResolvedValue(() => {});
-    mockLoadCollections.mockResolvedValue(undefined);
-    mockLoadRegistries.mockResolvedValue(undefined);
-    mockSyncRegistry.mockResolvedValue(undefined);
     mockLoadLogs.mockResolvedValue({
       entries: logs,
       total: logs.length,
       limit: 5,
       offset: 0,
     });
+    mockLoadDailyCounts.mockResolvedValue(undefined);
+    mockRefreshDashboardSummary.mockResolvedValue(undefined);
+    mockLoadTopTags.mockResolvedValue(undefined);
 
     centralState = {
-      skills,
-      agents,
-      repositories,
-      tags,
-      aiTagReviews: [
-        {
-          skill_id: "writer",
-          skill_name: "writer",
-          tag: tags[0],
-          confidence: 0.76,
-          reason: "Looks like writing support",
-          suggested_at: "2026-04-10T00:00:00Z",
-          updated_at: "2026-04-10T00:00:00Z",
-        },
-      ],
-      aiTagJob: {
-        jobId: null,
-        status: "idle",
-        total: 0,
-        completed: 0,
-        succeeded: 0,
-        failed: 0,
-        lowConfidenceCount: 0,
-        items: {},
-      },
-      updateStatuses,
-      updateJob: {
-        phase: null,
-        status: "idle",
-        total: 0,
-        completed: 0,
-        succeeded: 0,
-        failed: 0,
-        skipped: 0,
-        items: {},
-      },
-      isLoading: false,
+      aiTagJob: { status: "idle", total: 0, completed: 0 },
+      updateJob: { status: "idle", total: 0, completed: 0 },
       error: null,
-      loadCentralSkills: mockLoadCentralSkills,
       subscribeAiTagProgress: mockSubscribeAiTagProgress,
       subscribeUpdateProgress: mockSubscribeUpdateProgress,
-    };
-    collectionState = {
-      collections,
-      isLoading: false,
-      error: null,
-      loadCollections: mockLoadCollections,
-    };
-    marketplaceState = {
-      registries,
-      isLoading: false,
-      error: null,
-      loadRegistries: mockLoadRegistries,
-      syncRegistry: mockSyncRegistry,
     };
     operationLogState = {
       entries: logs,
@@ -374,6 +217,10 @@ describe("DashboardView", () => {
       isLoading: false,
       error: null,
       loadLogs: mockLoadLogs,
+      dailyCounts,
+      isDailyCountsLoading: false,
+      dailyCountsError: null,
+      loadDailyCounts: mockLoadDailyCounts,
     };
     platformState = {
       agents,
@@ -382,13 +229,12 @@ describe("DashboardView", () => {
         codex: 2,
         "claude-code": 1,
       },
-      collectionCount: collections.length,
       dashboardCentralSummary: {
         centralSkillCount: 3,
         updatesAvailable: 1,
         aiReviewCount: 1,
         uncategorizedCount: 2,
-        unassignedSourceCount: 1,
+        unassignedSourceCount: 0,
         readiness: {
           score: 65,
           categorizedRatio: 0.34,
@@ -404,8 +250,14 @@ describe("DashboardView", () => {
       },
       lastScanAt: "2026-04-27T10:00:00Z",
       scanState: "idle",
+      scanGeneration: 1,
       isLoading: false,
       isRefreshing: false,
+      topTags,
+      isTopTagsLoading: false,
+      topTagsError: null,
+      refreshDashboardSummary: mockRefreshDashboardSummary,
+      loadTopTags: mockLoadTopTags,
     };
     targetState = {
       activeTarget: localTarget,
@@ -414,100 +266,162 @@ describe("DashboardView", () => {
     installStoreMocks();
   });
 
-  it("renders dashboard summaries from existing stores", () => {
+  it("renders status header, work queue and panels from the summary", () => {
     renderDashboard();
 
-    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-metric-central")).toHaveTextContent("3");
-    expect(screen.getByTestId("dashboard-metric-collections")).toHaveTextContent("1");
-    expect(screen.getByTestId("dashboard-metric-updates")).toHaveTextContent("1");
-    expect(screen.getByTestId("dashboard-metric-ai")).toHaveTextContent("1");
-    expect(screen.getByTestId("dashboard-metric-uncategorized")).toHaveTextContent("2");
-    expect(screen.getByTestId("dashboard-metric-unassigned")).toHaveTextContent("1");
-    expect(screen.getByTestId("dashboard-metric-targets")).toHaveTextContent("2");
+    // Hero 营销块已删除：不再有 h1。
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+
+    // 状态头：扫描状态 + 上次扫描 + 汇总句。
+    expect(screen.getByText(/Idle|空闲/)).toBeInTheDocument();
+    expect(screen.getByText(/Last scan:|上次扫描：/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /3 central skills · 1 sources · 2 agents enabled|中央库 3 项技能 · 1 个来源 · 已启用 2 个平台/,
+      ),
+    ).toBeInTheDocument();
+
+    // 工作队列：4 项平铺，计数来自 summary；0 值项依然可见。
+    expect(screen.getByText(/Update available|可用更新/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/AI review pending|AI 复核待处理/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Uncategorized skills|未分类技能/),
+    ).toBeInTheDocument();
+    const unassignedTile = screen.getByRole("button", {
+      name: /Unknown source|未知来源/,
+    });
+    expect(unassignedTile).toHaveTextContent("0");
+
+    // Readiness 卡（瘦身：无 mini stat 区）。
+    expect(screen.getByText("65")).toBeInTheDocument();
+    expect(screen.getByText(/Review gate|复核关口/)).toBeInTheDocument();
+
+    // Activity：SVG 柱状图（14 桶，aria 概述含总数）。
+    expect(
+      screen.getByRole("img", {
+        name: /5 operations over the last 14 days|最近 14 天共 5 次操作/,
+      }),
+    ).toBeInTheDocument();
+
+    // TopTags 与日志。
+    expect(screen.getByText("Web")).toBeInTheDocument();
+    expect(screen.getByText("Docs")).toBeInTheDocument();
+    expect(screen.getByText("Scanned 3 skills")).toBeInTheDocument();
+
     expect(screen.getByTestId("dashboard-scroll-region")).toHaveClass(
       "overflow-y-auto",
-      "scrollbar-subtle"
+      "scrollbar-subtle",
     );
-    expect(screen.getByLabelText(/Readiness factors|就绪度组成项/)).toBeInTheDocument();
-    expect(screen.getByText(/Review gate|复核关口/)).toBeInTheDocument();
-    expect(screen.getByText(/Categorized|分类完成/)).toBeInTheDocument();
-    expect(screen.getByText(/Enabled platforms|启用平台/)).toBeInTheDocument();
-    expect(screen.getByText("Scanned 3 skills")).toBeInTheDocument();
   });
 
-  it("loads local metadata without syncing registries", async () => {
-    centralState = {
-      ...centralState,
-      skills: [],
-      repositories: [],
-      tags: [],
-      aiTagReviews: [],
-      updateStatuses: {},
-    };
-    collectionState = { ...collectionState, collections: [] };
-    marketplaceState = { ...marketplaceState, registries: [] };
-    operationLogState = { ...operationLogState, entries: [], total: 0 };
-
+  it("bootstraps summary, charts and recent logs on mount", async () => {
     renderDashboard();
 
     await waitFor(() => {
-      expect(mockLoadCollections).toHaveBeenCalledTimes(1);
-      expect(mockLoadRegistries).toHaveBeenCalledTimes(1);
+      expect(mockRefreshDashboardSummary).toHaveBeenCalledTimes(1);
+      expect(mockLoadTopTags).toHaveBeenCalledWith(6);
+      expect(mockLoadDailyCounts).toHaveBeenCalledWith(14);
       expect(mockLoadLogs).toHaveBeenCalledWith({ limit: 5, offset: 0 });
     });
-    expect(mockLoadCentralSkills).not.toHaveBeenCalled();
     expect(mockSubscribeAiTagProgress).toHaveBeenCalledTimes(1);
     expect(mockSubscribeUpdateProgress).toHaveBeenCalledTimes(1);
-    expect(mockSyncRegistry).not.toHaveBeenCalled();
   });
 
-  it("navigates through quick actions only", () => {
+  it("navigates through status header actions", () => {
     renderDashboard();
 
     fireEvent.click(screen.getByTestId("dashboard-action-marketplace"));
 
     expect(screen.getByTestId("location")).toHaveTextContent("/marketplace");
-    expect(mockSyncRegistry).not.toHaveBeenCalled();
   });
 
-  it("navigates to the quick migrate settings action without syncing", () => {
+  it("navigates to the quick migrate settings action", () => {
     renderDashboard();
 
     const quickMigrate = screen.getByTestId("dashboard-action-quick-migrate");
     expect(quickMigrate).toHaveTextContent(/Quick migrate|快速迁移/);
     expect(quickMigrate).toHaveAttribute(
       "title",
-      expect.stringMatching(/Open remote sync for Ubuntu\.|打开 Ubuntu 的远程同步。/)
+      expect.stringMatching(/Open remote sync for Ubuntu\.|打开 Ubuntu 的远程同步。/),
     );
 
     fireEvent.click(quickMigrate);
 
     expect(screen.getByTestId("location")).toHaveTextContent(
-      "/settings/connections?action=local-remote-sync&section=remote-targets"
+      "/settings/connections?action=local-remote-sync&section=remote-targets",
     );
-    expect(mockSyncRegistry).not.toHaveBeenCalled();
+  });
+
+  it("reloads dashboard data when scanGeneration changes", async () => {
+    const { rerender } = renderDashboard();
+
+    await waitFor(() => {
+      expect(mockRefreshDashboardSummary).toHaveBeenCalledTimes(1);
+    });
+
+    platformState = { ...platformState, scanGeneration: 2 };
+    rerender(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <DashboardView />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(mockRefreshDashboardSummary).toHaveBeenCalledTimes(2);
+      expect(mockLoadTopTags).toHaveBeenCalledTimes(2);
+      expect(mockLoadDailyCounts).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("shows chart error state with retry while the other chart stays healthy", async () => {
+    operationLogState = {
+      ...operationLogState,
+      dailyCounts: [],
+      dailyCountsError: "logs backend down",
+    };
+
+    renderDashboard();
+
+    // 部分失败：Activity 错误占位，TopTags 正常渲染。
+    expect(
+      screen.getByText(/Couldn't load chart data|图表数据加载失败/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Web")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Retry|重试/ }));
+
+    await waitFor(() => {
+      expect(mockLoadDailyCounts).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("renders empty and error states without crashing", () => {
-    centralState = {
-      ...centralState,
-      skills: [],
-      repositories: [],
-      tags: [],
-      aiTagReviews: [],
-      updateStatuses: {},
-      error: "central offline",
+    centralState = { ...centralState, error: "central offline" };
+    operationLogState = {
+      ...operationLogState,
+      entries: [],
+      total: 0,
+      dailyCounts: [],
     };
-    operationLogState = { ...operationLogState, entries: [], total: 0 };
     platformState = {
       ...platformState,
+      topTags: [],
       dashboardCentralSummary: {
         centralSkillCount: 0,
         updatesAvailable: 0,
         aiReviewCount: 0,
         uncategorizedCount: 0,
         unassignedSourceCount: 0,
+        readiness: {
+          score: 0,
+          categorizedRatio: 0,
+          describedRatio: 0,
+          sourcedRatio: 0,
+          installHealthRatio: 0,
+        },
         sourceRepositories: [],
       },
     };
@@ -515,9 +429,16 @@ describe("DashboardView", () => {
     renderDashboard();
 
     expect(
-      screen.getByText(/Some dashboard data could not be loaded|部分 Dashboard 数据加载失败/)
+      screen.getByText(/Some dashboard data could not be loaded|部分 Dashboard 数据加载失败/),
     ).toHaveAttribute("title", "central offline");
-    expect(screen.getByText(/No recent operation logs|暂无最近操作日志/)).toBeInTheDocument();
-    expect(screen.getByText(/No Central tags yet|暂无 Central 标签/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/No recent operation logs|暂无最近操作日志/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/No Central tags yet|还没有中央库标签/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/No activity data yet|暂无活动数据/),
+    ).toBeInTheDocument();
   });
 });

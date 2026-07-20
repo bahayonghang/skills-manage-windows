@@ -73,6 +73,19 @@ export interface DashboardReadiness {
   sourcedRatio: number;
   installHealthRatio: number;
 }
+
+/** 后端按本地日历日聚合的每日操作计数（恰好窗口天数个桶，升序，含零值日）。 */
+export interface DailyOperationCount {
+  date: string;
+  count: number;
+}
+
+/** 后端聚合的 Central 技能 Top tag（仅 is_central = 1，排除 uncategorized）。 */
+export interface CentralTopTag {
+  id: string;
+  name: string;
+  count: number;
+}
 export type ClaudeSourceKind = "user" | "plugin";
 
 export interface ScannedSkill {

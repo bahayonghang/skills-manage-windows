@@ -30,6 +30,13 @@ import {
   mergeUpdateStates,
 } from "./centralSkillsStore.shared";
 import type { CentralSkillsState, CentralStoreContext } from "./centralSkillsStore.types";
+import { usePlatformStore } from "./platformStore";
+
+/** 更新类操作改变中央库状态后，让 Dashboard summary 立即失效重取（AC6）。
+ *  fire-and-forget：refreshDashboardSummary 内部已吞错，不阻塞本流程。 */
+function invalidateDashboardSummary() {
+  void usePlatformStore.getState().refreshDashboardSummary();
+}
 
 export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralStoreContext): Pick<CentralSkillsState,
   | "checkSkillUpdates"
@@ -76,6 +83,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
               }
             : state.updateJob,
       }));
+      invalidateDashboardSummary();
       return states ?? [];
     } catch (err) {
       set((state) => ({
@@ -262,6 +270,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
               }
             : state.updateJob,
       }));
+      invalidateDashboardSummary();
       return result;
     } catch (err) {
       set((state) => ({

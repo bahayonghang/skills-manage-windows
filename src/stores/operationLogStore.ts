@@ -1,12 +1,16 @@
 import { create } from "zustand";
 import { invoke } from "@/lib/ipc";
 import {
+  DailyOperationCount,
   OperationLogEntry,
   OperationLogFilter,
   OperationLogPage,
 } from "@/types";
 
 const DEFAULT_LIMIT = 100;
+
+// latest-wins 令牌：旧响应不得覆盖新结果（参照 platformStore refreshToken 模式）。
+let dailyCountsToken = 0;
 
 interface OperationLogState {
   entries: OperationLogEntry[];
@@ -18,11 +22,17 @@ interface OperationLogState {
   isClearing: boolean;
   isExporting: boolean;
   error: string | null;
+  /** Dashboard Activity 图表：后端按本地日聚合的每日计数（跨 target 语义，
+   *  与日志条目一致，不随 target 切换重置）。 */
+  dailyCounts: DailyOperationCount[];
+  isDailyCountsLoading: boolean;
+  dailyCountsError: string | null;
 
   loadLogs: (
     filter?: OperationLogFilter,
     reset?: boolean,
   ) => Promise<OperationLogPage>;
+  loadDailyCounts: (days: number) => Promise<void>;
   loadMore: () => Promise<OperationLogPage | null>;
   loadLogDetail: (logId: string) => Promise<OperationLogEntry | null>;
   setFilter: (partial: Partial<OperationLogFilter>) => void;
@@ -70,6 +80,9 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
   isClearing: false,
   isExporting: false,
   error: null,
+  dailyCounts: [],
+  isDailyCountsLoading: false,
+  dailyCountsError: null,
 
   loadLogs: async (filter, reset = true) => {
     const nextFilter = normalizeFilter({
@@ -107,8 +120,22 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
     return get().loadLogs({ offset: state.entries.length }, false);
   },
 
-  loadLogDetail: async (logId) => {
-    set({ isLoadingDetail: true, error: null });
+  loadDailyCounts: async (days) => {
+    const currentToken = ++dailyCountsToken;
+    set({ isDailyCountsLoading: true, dailyCountsError: null });
+    try {
+      const dailyCounts = await invoke("get_daily_operation_counts", { days });
+      if (currentToken === dailyCountsToken) {
+        set({ dailyCounts: dailyCounts ?? [], isDailyCountsLoading: false });
+      }
+    } catch (err) {
+      if (currentToken === dailyCountsToken) {
+        set({ dailyCountsError: String(err), isDailyCountsLoading: false });
+      }
+    }
+  },
+
+  loadLogDetail: async (logId) => {    set({ isLoadingDetail: true, error: null });
     try {
       const entry = await invoke("get_operation_log", { logId });
       set({ selectedEntry: entry, isLoadingDetail: false });

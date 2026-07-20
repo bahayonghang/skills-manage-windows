@@ -1,13 +1,18 @@
 import type { ReactNode } from "react";
 
-import { ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Loader2 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { OperationLogEntry } from "@/types";
 
-const dashboardControlMotion =
-  "transition-[scale,background-color,border-color,box-shadow,color] duration-150 ease-out active:scale-[0.96]";
+/** 模块级 formatter：避免每行日志渲染都新建 Intl.DateTimeFormat。 */
+const logTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
 function ratio(count: number, total: number) {
   if (total <= 0) return 0;
@@ -41,10 +46,43 @@ function logDotClass(status: string) {
 function formatTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return logTimeFormatter.format(date);
+}
+
+/** 图表面板的加载/失败占位（Activity / TopTags 共用，失败可重试）。 */
+export function ChartStateRow({
+  kind,
+  onRetry,
+}: {
+  kind: "loading" | "error";
+  onRetry?: () => void;
+}) {
+  const { t } = useTranslation();
+
+  if (kind === "loading") {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-border/80 bg-background px-3 py-4 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        {t("dashboard.loading")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm text-destructive-text">
+      <span className="min-w-0 truncate">{t("dashboard.chartError")}</span>
+      {onRetry && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={onRetry}
+        >
+          {t("dashboard.retry")}
+        </Button>
+      )}
+    </div>
+  );
 }
 
 export function PanelHeader({
@@ -150,42 +188,6 @@ export function ProgressRow({
         {count}
       </span>
     </div>
-  );
-}
-
-export function QueueRow({
-  label,
-  count,
-  description,
-  onClick,
-}: {
-  label: string;
-  count: number;
-  description: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "focus-ring grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-border/70 px-4 py-3 text-left first:border-t-0 hover:bg-muted/25",
-        dashboardControlMotion,
-      )}
-    >
-      <span className="grid size-9 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-sm font-semibold tabular-nums text-primary-text">
-        {count}
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-medium">{label}</span>
-        <span className="mt-1 block truncate text-xs text-muted-foreground">
-          {description}
-        </span>
-      </span>
-      <span className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-xs font-medium text-muted-foreground">
-        <ChevronRight className="size-3" />
-      </span>
-    </button>
   );
 }
 
