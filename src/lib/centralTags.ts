@@ -25,6 +25,14 @@ export function getVisibleSkillTags<T extends Pick<SkillTag, "id">>(
   return tags.filter((tag) => !isSystemTagId(tag.id));
 }
 
+export function getVisibleSkillTagsWithUsage<
+  T extends Pick<SkillTag, "id" | "is_builtin">,
+>(tags: readonly T[], counts: Readonly<Record<string, number>>): T[] {
+  return getVisibleSkillTags(tags).filter(
+    (tag) => !tag.is_builtin || (counts[tag.id] ?? 0) > 0,
+  );
+}
+
 export function sanitizeSelectedTagIds(
   selectedIds: readonly string[],
   tags: readonly Pick<SkillTag, "id">[],

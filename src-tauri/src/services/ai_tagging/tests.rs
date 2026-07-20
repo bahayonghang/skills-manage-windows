@@ -151,7 +151,7 @@ fn parses_tag_json_envelope() {
 }
 
 #[test]
-fn build_prompt_reuses_existing_candidate_ids_and_excludes_system_tags() {
+fn build_prompt_includes_all_classifiable_tags_and_excludes_uncategorized() {
     let tags = vec![
         tag(ACADEMIC_RESEARCH_WRITING_TAG_ID, "学术研究与写作"),
         custom_tag(
@@ -159,7 +159,8 @@ fn build_prompt_reuses_existing_candidate_ids_and_excludes_system_tags() {
             "文献综述",
             "Systematic literature review workflows.",
         ),
-        tag("programming-agent-engineering", "编程与 Agent 工程"),
+        tag("frontend-development", "前端开发"),
+        tag("backend-development", "后端开发"),
         tag(UNCATEGORIZED_TAG_ID, "未分类"),
     ];
 
@@ -174,9 +175,10 @@ fn build_prompt_reuses_existing_candidate_ids_and_excludes_system_tags() {
     assert!(prompt.contains("id: literature-review"));
     assert!(prompt.contains("kind: custom"));
     assert!(prompt.contains("Systematic literature review workflows."));
+    assert!(prompt.contains("id: frontend-development"));
+    assert!(prompt.contains("id: backend-development"));
     assert!(prompt.contains("只能输出候选列表中的 tag id"));
     assert!(prompt.contains("{\"tags\":[]}"));
-    assert!(!prompt.contains("programming-agent-engineering"));
     assert!(!prompt.contains("uncategorized"));
     assert!(!prompt.contains("未分类"));
 }

@@ -1288,6 +1288,124 @@ async fn test_builtin_skill_metadata_seeded_and_idempotent() {
     assert!(!tags
         .iter()
         .any(|tag| tag.id == "programming-agent-engineering"));
+
+    let expected_builtin_ids = [
+        ACADEMIC_RESEARCH_WRITING_TAG_ID,
+        "frontend-development",
+        "backend-development",
+        "devops-deployment",
+        "testing-quality",
+        "docs-writing",
+        "data-analysis",
+        "design-ui",
+        "ai-prompt-engineering",
+        "productivity-tools",
+        "office-documents",
+        UNCATEGORIZED_TAG_ID,
+    ];
+    for id in expected_builtin_ids {
+        assert!(
+            tags.iter().any(|tag| tag.id == id && tag.is_builtin),
+            "expected built-in tag {id}"
+        );
+    }
+
+    sqlx::query(
+        "UPDATE skill_tags
+         SET name = '旧后端分类', description = 'stale', color = '#000000'
+         WHERE id = 'backend-development'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    init_database(&pool).await.unwrap();
+    let refreshed = get_skill_tags(&pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|tag| tag.id == "backend-development")
+        .unwrap();
+    assert_eq!(refreshed.name, "后端开发");
+    assert_eq!(
+        refreshed.description.as_deref(),
+        Some("Server-side APIs, databases, business logic, system services.")
+    );
+    assert_eq!(refreshed.color.as_deref(), Some("#8b5cf6"));
+}
+
+#[tokio::test]
+async fn test_init_preserves_custom_tag_when_builtin_id_conflicts() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("custom-id-conflict", "Custom Id Conflict", true);
+    upsert_skill(&pool, &skill).await.unwrap();
+    let now = Utc::now().to_rfc3339();
+
+    sqlx::query("DELETE FROM skill_tags WHERE id = ?")
+        .bind("frontend-development")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "INSERT INTO skill_tags
+         (id, name, description, color, is_builtin, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?)",
+    )
+    .bind("frontend-development")
+    .bind("我的前端分类")
+    .bind("User-owned description")
+    .bind("#123456")
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assign_skill_tags(
+        &pool,
+        std::slice::from_ref(&skill.id),
+        &["frontend-development".to_string()],
+        "manual",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    init_database(&pool).await.unwrap();
+
+    let tags = get_skill_tags(&pool).await.unwrap();
+    let tag = tags
+        .iter()
+        .find(|tag| tag.id == "frontend-development")
+        .unwrap();
+    assert!(!tag.is_builtin);
+    assert_eq!(tag.name, "我的前端分类");
+    assert_eq!(tag.description.as_deref(), Some("User-owned description"));
+    let linked = get_skill_tags_for_skill(&pool, &skill.id).await.unwrap();
+    assert_eq!(linked.len(), 1);
+    assert_eq!(linked[0].id, "frontend-development");
+}
+
+#[tokio::test]
+async fn test_init_preserves_custom_tag_when_builtin_name_conflicts() {
+    let pool = setup_test_db().await;
+    sqlx::query("DELETE FROM skill_tags WHERE id = ?")
+        .bind("frontend-development")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let custom = create_skill_tag(&pool, "前端开发", Some("用户自己的分类"), None)
+        .await
+        .unwrap();
+
+    init_database(&pool).await.unwrap();
+
+    let tags = get_skill_tags(&pool).await.unwrap();
+    let preserved = tags.iter().find(|tag| tag.id == custom.id).unwrap();
+    assert!(!preserved.is_builtin);
+    assert_eq!(preserved.name, "前端开发");
+    assert_eq!(preserved.description.as_deref(), Some("用户自己的分类"));
+    assert!(!tags.iter().any(|tag| tag.id == "frontend-development"));
 }
 
 #[tokio::test]
@@ -1348,6 +1466,9 @@ async fn test_init_prunes_obsolete_builtin_skill_tags_only() {
     assert!(!tags
         .iter()
         .any(|tag| tag.id == "programming-agent-engineering"));
+    assert!(tags
+        .iter()
+        .any(|tag| tag.id == "frontend-development" && tag.is_builtin));
     assert!(tags.iter().any(|tag| tag.id == custom.id));
     let linked_tags = get_skill_tags_for_skill(&pool, &skill.id).await.unwrap();
     assert_eq!(linked_tags.len(), 1);

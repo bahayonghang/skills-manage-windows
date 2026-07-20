@@ -2,7 +2,7 @@ use reqwest::Client;
 use serde_json::Value;
 
 use crate::{
-    db::{Skill, SkillTag, ACADEMIC_RESEARCH_WRITING_TAG_ID, UNCATEGORIZED_TAG_ID},
+    db::{Skill, SkillTag, UNCATEGORIZED_TAG_ID},
     services::ai_provider,
 };
 
@@ -47,7 +47,7 @@ pub(crate) fn build_tagging_prompt(
 ) -> String {
     let candidates = tags
         .iter()
-        .filter(|tag| !tag.is_builtin || tag.id == ACADEMIC_RESEARCH_WRITING_TAG_ID)
+        .filter(|tag| tag.id != UNCATEGORIZED_TAG_ID)
         .map(|tag| {
             let kind = if tag.is_builtin { "built-in" } else { "custom" };
             let description = tag.description.as_deref().unwrap_or("无");

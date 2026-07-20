@@ -764,7 +764,6 @@ export function CentralSkillsView() {
     onOpenManual: () => handleOpenCategorizeDrawer("manual"),
     onOpenAiSuggest: () => handleOpenCategorizeDrawer("ai"),
   };
-
   const checkButtonProps = {
     disabled:
       isCheckingUpdates ||
@@ -840,6 +839,7 @@ export function CentralSkillsView() {
         onOpenChange={setCommandPaletteOpen}
         savedViews={savedViewsBridge.savedViews}
         tags={tags}
+        tagCounts={v2.facetCounts.tags}
         repositories={repositories}
         actions={paletteActions}
         onSelectSavedView={savedViewsBridge.handleApplySavedView}
