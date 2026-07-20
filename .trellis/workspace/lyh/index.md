@@ -7,8 +7,8 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-1.md`
-- **Total Sessions**: 50
+- **Active File**: `journal-2.md`
+- **Total Sessions**: 51
 - **Last Active**: 2026-07-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1994 | Active |
+| `journal-2.md` | ~42 | Active |
+| `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 51 | 2026-07-20 | 完成内置标签 taxonomy 子任务 | `52a03268`, `9fcd428e`, `c6324407` | `dev` |
 | 50 | 2026-07-20 | 完善 main 分支保护与测试流程 | `bdbb9ce15bdafd6e542d8e26b16dad6e8c19514f`, `cf759cf27946065427ca09d03f00375ea485a477`, `03128ba5d710e52f11f6f843c98fe73f58257846` | `dev` |
 | 49 | 2026-07-19 | 归档 SkillKit 与 SkillPort 优化父任务 | - | `dev` |
 | 48 | 2026-07-19 | 统一 ZIP 导入验收修复与父任务最终复核 | `151ea7ab`, `5dccb3a8`, `188c78ca`, `e7308ba` | `dev` |
