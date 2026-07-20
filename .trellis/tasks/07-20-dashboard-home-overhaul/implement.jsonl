@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层规范入口：Pre-Development Checklist 与质量门禁，Dashboard 重组必读"}
+{"file": ".trellis/spec/frontend/typography-tokens.md", "reason": "R6 样式减负涉及的字体/排版 token 约定，改 index.css 与组件类名时遵守"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "R4 新增 get_daily_operation_counts / get_central_top_tags 两个 IPC 的前端适配层写法"}
+{"file": ".trellis/spec/frontend/platform-grouping.md", "reason": "AgentsPanel 平台分组与计数口径（getPlatformTargetGroups）既有约定"}
+{"file": ".trellis/spec/frontend/async-ui-test-stability.md", "reason": "重写 DashboardView.test.tsx 时的异步 UI 测试稳定性要求"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端层规范入口：新增 db 聚合查询与 tauri command 的约定"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "just ci 门禁范围，收尾验收标准"}
