@@ -93,4 +93,4 @@ Rollback point:
 - [x] Load `trellis-check` and run the final scope/spec/quality review.
 - [x] Run `git diff --check`, inspect the complete diff, and confirm no unrelated files are included.
 - [x] Record validation evidence and remote protection readback in the task artifacts or journal.
-- [ ] Follow Trellis spec-update, commit, archive, and session-record steps; do not push, open a PR, merge, or release.
+- [x] Follow Trellis spec-update, commit, archive, and session-record steps; do not push, open a PR, merge, or release.

@@ -85,4 +85,3 @@ The current absence of protection is captured before the write. After the update
 3. Write branch protection using the keyring identity with repository-administration access.
 4. Read the policy back from GitHub and verify each required/disabled field.
 5. Inspect the final local diff and report that implementation commits were not pushed.
-
