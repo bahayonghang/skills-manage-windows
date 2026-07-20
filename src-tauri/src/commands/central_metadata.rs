@@ -9,7 +9,9 @@ use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use crate::{
-    db::{self, SkillAiTagReview, SkillRepository, SkillRepositoryWithStats, SkillTag},
+    db::{
+        self, CentralTopTag, SkillAiTagReview, SkillRepository, SkillRepositoryWithStats, SkillTag,
+    },
     services::ai_tagging,
     AppState,
 };
@@ -86,6 +88,18 @@ pub async fn set_skill_repository_pinned(
 pub async fn get_skill_tags(state: State<'_, AppState>) -> Result<Vec<SkillTag>, String> {
     let pool = state.active_db().await?;
     db::get_skill_tags(&pool).await.map_err(|e| e.to_string())
+}
+
+/// 仪表盘中央库热门标签 Top-N：`limit` 由 repo 层 clamp 到 1..=50。
+#[tauri::command]
+pub async fn get_central_top_tags(
+    state: State<'_, AppState>,
+    limit: u32,
+) -> Result<Vec<CentralTopTag>, String> {
+    let pool = state.active_db().await?;
+    db::list_central_top_tags(&pool, limit)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

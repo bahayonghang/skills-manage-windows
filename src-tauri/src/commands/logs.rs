@@ -7,7 +7,9 @@
 
 use tauri::State;
 
-use crate::db::{self, OperationLogEntry, OperationLogFilter, OperationLogPage};
+use crate::db::{
+    self, DailyOperationCount, OperationLogEntry, OperationLogFilter, OperationLogPage,
+};
 use crate::logging::{
     self, FrontendRuntimeLogPayload, RuntimeLogClearRequest, RuntimeLogFile, RuntimeLogReadRequest,
     RuntimeLogReadResult,
@@ -50,6 +52,19 @@ pub async fn export_operation_logs(
     filter: OperationLogFilter,
 ) -> Result<String, String> {
     db::export_operation_logs_json(&state.db, filter)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 仪表盘每日操作数聚合：窗口为本机今天起向前 `days - 1` 天，按本地日历日
+/// 分桶并零值填充。`days` 由 repo 层 clamp 到 1..=60。
+#[tauri::command]
+pub async fn get_daily_operation_counts(
+    state: State<'_, AppState>,
+    days: u32,
+) -> Result<Vec<DailyOperationCount>, String> {
+    let today = chrono::Local::now().date_naive();
+    db::list_daily_operation_counts(&state.db, today, days)
         .await
         .map_err(|e| e.to_string())
 }

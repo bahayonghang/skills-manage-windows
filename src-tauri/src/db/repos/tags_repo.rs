@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use uuid::Uuid;
@@ -512,4 +513,157 @@ pub async fn get_skill_tags_for_skills(
     }
 
     Ok(grouped)
+}
+
+/// 仪表盘「中央库热门标签」聚合的一行。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CentralTopTag {
+    pub id: String,
+    pub name: String,
+    pub count: u32,
+}
+
+const MAX_CENTRAL_TOP_TAGS_LIMIT: u32 = 50;
+
+/// 中央库（`is_central = 1`）技能的 tag 使用 Top-N。
+///
+/// - 只统计能 JOIN 到 central skill 的 link：非 central 副本与孤儿 link
+///   （skill_id 已不存在；link 表无外键约束）都不计入；
+/// - 排除占位 tag `uncategorized`（`UNCATEGORIZED_TAG_ID`）；
+/// - 排序 `count DESC, name ASC`，并列确定性，前端直接渲染。
+pub async fn list_central_top_tags(
+    pool: &DbPool,
+    limit: u32,
+) -> Result<Vec<CentralTopTag>, sqlx::Error> {
+    let limit = i64::from(limit.clamp(1, MAX_CENTRAL_TOP_TAGS_LIMIT));
+    let rows = sqlx::query(
+        "SELECT t.id, t.name, COUNT(*) AS count
+         FROM skill_tag_links l
+         JOIN skills s ON s.id = l.skill_id AND s.is_central = 1
+         JOIN skill_tags t ON t.id = l.tag_id
+         WHERE l.tag_id != 'uncategorized'
+         GROUP BY t.id, t.name
+         ORDER BY count DESC, t.name ASC
+         LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(CentralTopTag {
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                count: row.try_get::<i64, _>("count")?.max(0) as u32,
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{upsert_skill, UNCATEGORIZED_TAG_ID};
+    use crate::test_support::{central_skill_row, mem_pool};
+    use std::path::Path;
+
+    async fn add_skill(pool: &DbPool, id: &str, is_central: bool) {
+        let mut skill = central_skill_row(id, Path::new(&format!("/tmp/{id}")));
+        skill.is_central = is_central;
+        upsert_skill(pool, &skill).await.unwrap();
+    }
+
+    async fn link_tag(pool: &DbPool, skill_id: &str, tag_id: &str) {
+        assign_skill_tags(
+            pool,
+            &[skill_id.to_string()],
+            &[tag_id.to_string()],
+            "manual",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn central_top_tags_excludes_non_central_and_orphan_links() {
+        let pool = mem_pool().await;
+        let alpha = create_skill_tag(&pool, "alpha", None, None).await.unwrap();
+        add_skill(&pool, "central-one", true).await;
+        add_skill(&pool, "platform-copy", false).await;
+        link_tag(&pool, "central-one", &alpha.id).await;
+        link_tag(&pool, "platform-copy", &alpha.id).await;
+        // 孤儿 link：skill_id 在 skills 表不存在（link 表无外键约束）。
+        link_tag(&pool, "ghost-skill", &alpha.id).await;
+
+        let top = list_central_top_tags(&pool, 10).await.unwrap();
+
+        assert_eq!(top.len(), 1);
+        assert_eq!(top[0].id, alpha.id);
+        assert_eq!(top[0].count, 1);
+    }
+
+    #[tokio::test]
+    async fn central_top_tags_excludes_uncategorized() {
+        let pool = mem_pool().await;
+        add_skill(&pool, "central-one", true).await;
+        link_tag(&pool, "central-one", UNCATEGORIZED_TAG_ID).await;
+
+        let top = list_central_top_tags(&pool, 10).await.unwrap();
+
+        assert!(top.is_empty());
+    }
+
+    #[tokio::test]
+    async fn central_top_tags_orders_by_count_desc_then_name_asc() {
+        let pool = mem_pool().await;
+        let beta = create_skill_tag(&pool, "beta", None, None).await.unwrap();
+        let delta = create_skill_tag(&pool, "delta", None, None).await.unwrap();
+        let gamma = create_skill_tag(&pool, "gamma", None, None).await.unwrap();
+        for skill_id in ["s1", "s2", "s3"] {
+            add_skill(&pool, skill_id, true).await;
+        }
+        // 多技能共享同一 tag：gamma 计数 3。
+        for skill_id in ["s1", "s2", "s3"] {
+            link_tag(&pool, skill_id, &gamma.id).await;
+        }
+        // beta / delta 并列 2：按 name ASC（beta < delta）。
+        for skill_id in ["s1", "s2"] {
+            link_tag(&pool, skill_id, &beta.id).await;
+            link_tag(&pool, skill_id, &delta.id).await;
+        }
+
+        let top = list_central_top_tags(&pool, 10).await.unwrap();
+
+        let summary: Vec<(&str, u32)> = top
+            .iter()
+            .map(|tag| (tag.name.as_str(), tag.count))
+            .collect();
+        assert_eq!(summary, [("gamma", 3), ("beta", 2), ("delta", 2)]);
+    }
+
+    #[tokio::test]
+    async fn central_top_tags_applies_limit_and_clamps_range() {
+        let pool = mem_pool().await;
+        add_skill(&pool, "central-one", true).await;
+        for index in 0..55 {
+            let tag = create_skill_tag(&pool, &format!("tag-{index:02}"), None, None)
+                .await
+                .unwrap();
+            link_tag(&pool, "central-one", &tag.id).await;
+        }
+
+        // limit 截断生效。
+        let top3 = list_central_top_tags(&pool, 3).await.unwrap();
+        assert_eq!(top3.len(), 3);
+
+        // clamp 范围 1..=50：0 → 1，999 → 50。
+        let clamped_low = list_central_top_tags(&pool, 0).await.unwrap();
+        assert_eq!(clamped_low.len(), 1);
+        let clamped_high = list_central_top_tags(&pool, 999).await.unwrap();
+        assert_eq!(clamped_high.len(), 50);
+    }
 }
