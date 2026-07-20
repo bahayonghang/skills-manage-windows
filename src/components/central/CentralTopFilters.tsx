@@ -5,7 +5,7 @@ import type { TFunction } from "i18next";
 import { getTagColor } from "@/lib/tagColor";
 import { cn } from "@/lib/utils";
 import type { FacetCounts } from "@/lib/centralFacetCounts";
-import { getVisibleSkillTags } from "@/lib/centralTags";
+import { getVisibleSkillTagsWithUsage } from "@/lib/centralTags";
 import type { SkillTag } from "@/types";
 
 export type SourceFilterValue = "github" | "local" | "manual";
@@ -54,7 +54,10 @@ export function CentralTopFilters({
 }: CentralTopFiltersProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const selected = new Set(selectedTagIds);
-  const sortedTags = getVisibleSkillTags(tags).sort((a, b) =>
+  const sortedTags = getVisibleSkillTagsWithUsage(
+    tags,
+    facetCounts.tags,
+  ).sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
   );
 

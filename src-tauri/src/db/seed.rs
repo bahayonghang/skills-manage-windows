@@ -1,9 +1,14 @@
 //! Built-in seed data and init dispatch; runtime CRUD lives under `super::repos::*`.
 
+mod skill_tags;
+
 use chrono::Utc;
 use std::path::Path;
 
 use super::types::*;
+
+#[cfg(test)]
+pub(crate) use skill_tags::builtin_skill_tags;
 
 const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 7] = [
     "claude-code",
@@ -199,86 +204,9 @@ async fn seed_builtin_skill_metadata(pool: &DbPool) -> Result<(), sqlx::Error> {
     .await
     ?;
 
-    for (id, name, description, color) in builtin_skill_tags() {
-        sqlx::query(
-            "INSERT INTO skill_tags
-             (id, name, description, color, is_builtin, created_at, updated_at)
-             VALUES (?, ?, ?, ?, 1, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET
-               name = excluded.name,
-               description = excluded.description,
-               color = excluded.color,
-               is_builtin = excluded.is_builtin,
-               updated_at = excluded.updated_at",
-        )
-        .bind(id)
-        .bind(name)
-        .bind(description)
-        .bind(color)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await?;
-    }
-
-    prune_obsolete_builtin_skill_tags(pool).await?;
+    skill_tags::seed_builtin_skill_tags(pool, &now).await?;
 
     Ok(())
-}
-
-async fn prune_obsolete_builtin_skill_tags(pool: &DbPool) -> Result<(), sqlx::Error> {
-    let current_ids: std::collections::HashSet<&str> = builtin_skill_tags()
-        .into_iter()
-        .map(|(id, _, _, _)| id)
-        .collect();
-    let obsolete_ids: Vec<(String,)> =
-        sqlx::query_as::<_, (String,)>("SELECT id FROM skill_tags WHERE is_builtin = 1")
-            .fetch_all(pool)
-            .await?
-            .into_iter()
-            .filter(|(id,)| !current_ids.contains(id.as_str()))
-            .collect();
-    if obsolete_ids.is_empty() {
-        return Ok(());
-    }
-
-    let mut tx = pool.begin().await?;
-    for (id,) in obsolete_ids {
-        sqlx::query("DELETE FROM skill_tag_links WHERE tag_id = ?")
-            .bind(&id)
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("DELETE FROM skill_ai_tag_reviews WHERE tag_id = ?")
-            .bind(&id)
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("DELETE FROM skill_tags WHERE id = ? AND is_builtin = 1")
-            .bind(&id)
-            .execute(&mut *tx)
-            .await?;
-    }
-    tx.commit().await?;
-    Ok(())
-}
-
-pub(crate) fn builtin_skill_tags() -> Vec<(&'static str, &'static str, &'static str, &'static str)>
-{
-    vec![
-        (
-            ACADEMIC_RESEARCH_WRITING_TAG_ID,
-            "学术研究与写作",
-            "Paper search, academic writing, slides, and research workflows.",
-            "#0891b2",
-        ),
-        // System fallback retained for smart views and AI fallback, not a
-        // visible ordinary category.
-        (
-            UNCATEGORIZED_TAG_ID,
-            "未分类",
-            "Fallback category for skills that still need review.",
-            "#71717a",
-        ),
-    ]
 }
 
 /// Returns the list of built-in agents using the current user's home directory.

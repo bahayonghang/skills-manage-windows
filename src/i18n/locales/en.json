@@ -280,16 +280,8 @@
     }
   },
   "dashboard": {
-    "eyebrow": "Local operations console",
-    "title": "Dashboard",
-    "localScope": "local",
-    "description": "Review the active target, Central library health, pending queues, and recent local activity without starting background network operations.",
     "hero": {
-      "eyebrow": "Community skill cockpit",
-      "title": "Discover, review, and install AI skills without losing local control.",
-      "description": "Make the next action obvious: Central is indexed, install targets are ready, and the only blocking work is review quality rather than background network operations.",
       "ctaBrowse": "Browse Central Skills",
-      "ctaReview": "Review {{count}} uncategorized",
       "ctaMarketplace": "Open Marketplace",
       "ctaQuickMigrate": "Quick migrate",
       "ctaQuickMigrateRemoteDesc": "Open remote sync for {{target}}.",
@@ -311,86 +303,22 @@
         "described": "Descriptions",
         "sourced": "Source mapped",
         "installHealth": "Install health"
-      },
-      "miniCentral": "Central",
-      "miniSources": "Sources",
-      "miniAgents": "Agents"
-    },
-    "metricStrip": {
-      "ariaLabel": "Library metrics",
-      "central": "Central skills",
-      "centralDesc": "Canonical skills indexed under ~/.agents/skills.",
-      "aiReviews": "AI reviews",
-      "aiReviewsDesc": "Tag suggestions waiting for human acceptance.",
-      "sources": "Sources",
-      "sourcesDesc": "Repository records connected to Central entries.",
-      "collections": "Collections",
-      "collectionsDesc": "Saved skill sets for batch install flows."
-    },
-    "sparkline": {
-      "ariaLabel": "Operations trend, last 14 days",
-      "empty": "No operations yet"
+      }
     },
     "agents": {
       "title": "Enabled platforms · {{enabled}} of {{total}}",
       "description": "Where Central skills can be installed from this target.",
       "manage": "Manage",
-      "enabled": "enabled",
       "hidden": "hidden",
       "noPath": "No path configured",
       "openLabel": "Open agent {{name}}"
     },
-    "target": "Target",
-    "centralPath": "Central path",
-    "lastScan": "Last scan",
     "neverScanned": "Not scanned yet",
-    "scanStateLabel": "Scan state",
     "scanState": {
       "idle": "Idle",
       "refreshing": "Refreshing",
       "error": "Needs attention",
       "loading": "Loading"
-    },
-    "scanStateDetail": {
-      "idle": "No background operations",
-      "refreshing": "Refreshing local indexes"
-    },
-    "health": {
-      "title": "Central library health",
-      "description": "Composition of the private skills under your Central store.",
-      "openCentral": "Open library",
-      "centralUnit": "skills · central",
-      "summary": "Of {{centralTotal}} total, {{aiReviewCount}} await AI tag review, {{uncategorizedCount}} need categorization, and {{sourceRepositoryCount}} source record(s) are known.",
-      "emptySummary": "Central has no indexed skills yet. Run a scan or import skills before reviewing health.",
-      "sources": "Sources",
-      "sourcesDesc": "{{count}} Marketplace registry source(s) configured."
-    },
-    "metrics": {
-      "central": "Central library",
-      "centralDesc": "Private skills managed under the Central store.",
-      "discovered": "Discovered",
-      "discoveredDesc": "Project-level skills found outside Central.",
-      "collections": "Collections",
-      "collectionsDesc": "Saved skill sets ready for review or install.",
-      "enabledTargets": "Enabled targets",
-      "enabledTargetsDesc": "Visible platforms available from the current target.",
-      "updates": "Updates available",
-      "updatesDesc": "Central skills with newer remote source state.",
-      "aiReviews": "AI reviews",
-      "aiReviewsDesc": "Tag suggestions waiting for explicit review.",
-      "uncategorized": "Uncategorized",
-      "uncategorizedDesc": "Central skills without a concrete tag.",
-      "unassigned": "Unassigned source",
-      "unassignedDesc": "Skills still attached to unknown source metadata."
-    },
-    "platforms": {
-      "title": "Enabled platforms · {{enabled}} of {{total}}",
-      "description": "Where Central skills can be installed from this target.",
-      "manage": "Manage",
-      "enabled": "enabled",
-      "hidden": "hidden",
-      "noPath": "No path configured",
-      "openLabel": "Open platform {{name}}"
     },
     "loadWarning": "Some dashboard data could not be loaded.",
     "workQueues": "Work queues",
@@ -403,14 +331,7 @@
       "uncategorized": "Uncategorized skills",
       "uncategorizedDesc": "Assign tags from the Central categorize panel.",
       "unassigned": "Unknown source",
-      "unassignedDesc": "Attach skills to a repository source when known.",
-      "empty": "No pending Central review queue right now.",
-      "tabs": {
-        "ariaLabel": "Queue filters",
-        "all": "All",
-        "review": "Review",
-        "metadata": "Metadata"
-      }
+      "unassignedDesc": "Attach skills to a repository source when known."
     },
     "activeJobs": "Active job",
     "jobProgress": "{{completed}} / {{total}} complete",
@@ -419,24 +340,26 @@
     "viewAllLogs": "View all logs",
     "loadingLogs": "Loading recent logs...",
     "noRecentLogs": "No recent operation logs.",
-    "sourceCoverage": "Source coverage",
-    "sourceCoverageDesc": "{{count}} marketplace registry source(s) configured",
-    "loadingCentral": "Loading Central metadata...",
-    "noSources": "No repository metadata yet.",
-    "platformCoverage": "Platform coverage",
-    "platformCoverageDesc": "Current visible targets and their cached skill counts.",
-    "quickActions": "Quick actions",
-    "quickActionsDesc": "Shortcuts into existing reviewable workflows.",
-    "quickActionsNote": "Dashboard shortcuts only navigate; they do not import, sync, update, tag, or delete.",
     "activity": {
       "title": "Activity · last 14 days",
       "description": "Install, uninstall, scan, and review operations from recent local logs.",
       "logs": "Logs",
       "ops": "ops",
-      "less": "less",
-      "more": "more",
-      "topTags": "Top tags · central",
-      "noTags": "No Central tags yet."
+      "chartAria": "{{total}} operations over the last {{days}} days",
+      "barTitle": "{{date}}: {{count}} ops",
+      "empty": "No activity data yet."
+    },
+    "statusHeader": {
+      "lastScan": "Last scan: {{time}}",
+      "summary": "{{central}} central skills · {{sources}} sources · {{agents}} agents enabled"
+    },
+    "loading": "Loading…",
+    "chartError": "Couldn't load chart data",
+    "retry": "Retry",
+    "topTags": {
+      "title": "Top tags · Central",
+      "description": "Most used tags across your Central skills.",
+      "empty": "No Central tags yet."
     }
   },
   "logs": {
@@ -1107,6 +1030,7 @@
     "aiTagLowConfidence": "{{count}} to review",
     "viewFailuresAndReviews": "View failures / review",
     "reviewEmpty": "No low-confidence AI suggestions.",
+    "reviewProposalBadge": "AI-proposed tag",
     "reviewAccept": "Accept",
     "reviewChange": "Replace with selected tags",
     "reviewSkip": "Skip",

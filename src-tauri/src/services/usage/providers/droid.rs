@@ -161,7 +161,7 @@ mod tests {
             let sessions = dir.path().join(".factory").join("sessions");
             fs::create_dir_all(&sessions).unwrap();
 
-            let session = vec![
+            let session = [
                 r#"{"type":"session_start","id":"sess-D","cwd":"/repo","timestamp":"2024-02-01T08:00:00.000Z"}"#,
                 // skill 触发文本
                 r#"{"type":"message","timestamp":"2024-02-01T08:05:00.000Z","message":{"content":[{"type":"tool_result","content":"Skill \"git-commit\" is now active. Doing things..."}]}}"#,

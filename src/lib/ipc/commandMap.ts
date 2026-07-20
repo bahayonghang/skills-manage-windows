@@ -4,9 +4,12 @@ import type {
   BatchUninstallSkillRequest,
   BatchUninstallSkillResult,
   BootstrapSnapshot,
+  CentralTopTag,
   CreateSshTargetRequest,
   CreateWslTargetRequest,
   CustomAgentConfig,
+  DailyOperationCount,
+  DashboardCentralSummary,
   DirectoryTreeEntry,
   ObsidianSkill,
   ObsidianVault,
@@ -78,6 +81,7 @@ export const IPC_COMMANDS = {
   list_platform_paths: command<undefined, PlatformPathMap>(),
   scan_all_skills: command<undefined, ScanResult>(),
   get_skill_counts_summary: command<undefined, SkillCountsSummary>(),
+  get_dashboard_central_summary: command<undefined, DashboardCentralSummary>(),
   mark_import_intent_frontend_ready: command<undefined, void>(),
   preview_local_skill_archive: command<
     { archivePath: string },
@@ -105,6 +109,7 @@ export const IPC_COMMANDS = {
   // ── platform skills ───────────────────────────────────────────────────────
   get_skills_by_agent: command<{ agentId: string }, ScannedSkill[]>(),
   get_central_skills: command<undefined, SkillWithLinks[]>(),
+  get_central_top_tags: command<{ limit: number }, CentralTopTag[]>(),
   uninstall_skill_from_agent: command<
     { skillId: string; agentId: string; rowId?: string },
     void
@@ -180,6 +185,7 @@ export const IPC_COMMANDS = {
   get_operation_log: command<{ logId: string }, OperationLogEntry | null>(),
   clear_operation_logs: command<{ filter: OperationLogFilter }, number>(),
   export_operation_logs: command<{ filter: OperationLogFilter }, string>(),
+  get_daily_operation_counts: command<{ days: number }, DailyOperationCount[]>(),
   // ── runtime logs ──────────────────────────────────────────────────────────
   list_runtime_log_files: command<undefined, RuntimeLogFile[]>(),
   read_runtime_log_file: command<

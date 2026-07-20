@@ -17,6 +17,7 @@ const chains = [
       { name: "lint", command: "pnpm", args: ["lint"] },
       { name: "sizecheck", command: "pnpm", args: ["sizecheck"] },
       { name: "test", command: "pnpm", args: ["test"] },
+      { name: "build", command: "pnpm", args: ["build"] },
     ],
   },
   {
@@ -24,12 +25,26 @@ const chains = [
     steps: [
       { name: "entrypoints", command: "pnpm", args: ["entrypointcheck"] },
       {
+        name: "fmt",
+        command: "cargo",
+        args: [
+          "fmt",
+          "--manifest-path",
+          "src-tauri/Cargo.toml",
+          "--all",
+          "--",
+          "--check",
+        ],
+      },
+      {
         name: "clippy",
         command: "cargo",
         args: [
           "clippy",
           "--manifest-path",
           "src-tauri/Cargo.toml",
+          "--all-targets",
+          "--locked",
           "--",
           "-D",
           "warnings",
@@ -38,7 +53,7 @@ const chains = [
       {
         name: "test",
         command: "cargo",
-        args: ["test", "--manifest-path", "src-tauri/Cargo.toml"],
+        args: ["test", "--manifest-path", "src-tauri/Cargo.toml", "--locked"],
       },
     ],
   },

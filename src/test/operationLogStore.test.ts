@@ -45,6 +45,9 @@ function resetStore() {
     isClearing: false,
     isExporting: false,
     error: null,
+    dailyCounts: [],
+    isDailyCountsLoading: false,
+    dailyCountsError: null,
   });
 }
 
@@ -110,5 +113,66 @@ describe("operationLogStore", () => {
     expect(invoke).toHaveBeenCalledWith("export_operation_logs", {
       filter: { action: "scan.all", limit: 100, offset: 0 },
     });
+  });
+
+  it("loads daily operation counts for the dashboard activity chart", async () => {
+    const buckets = [
+      { date: "2026-07-19", count: 2 },
+      { date: "2026-07-20", count: 5 },
+    ];
+    vi.mocked(invoke).mockResolvedValueOnce(buckets);
+
+    await useOperationLogStore.getState().loadDailyCounts(14);
+
+    expect(invoke).toHaveBeenCalledWith("get_daily_operation_counts", {
+      days: 14,
+    });
+    expect(useOperationLogStore.getState().dailyCounts).toEqual(buckets);
+    expect(useOperationLogStore.getState().isDailyCountsLoading).toBe(false);
+    expect(useOperationLogStore.getState().dailyCountsError).toBeNull();
+  });
+
+  it("stores dailyCountsError on failure and keeps previous buckets", async () => {
+    const previous = [{ date: "2026-07-20", count: 1 }];
+    useOperationLogStore.setState({ dailyCounts: previous });
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("backend down"));
+
+    await useOperationLogStore.getState().loadDailyCounts(14);
+
+    expect(useOperationLogStore.getState().dailyCounts).toEqual(previous);
+    expect(useOperationLogStore.getState().isDailyCountsLoading).toBe(false);
+    expect(useOperationLogStore.getState().dailyCountsError).toBe(
+      "Error: backend down",
+    );
+  });
+
+  it("discards stale loadDailyCounts responses (latest-wins)", async () => {
+    let resolveFirst!: (value: { date: string; count: number }[]) => void;
+    let resolveSecond!: (value: { date: string; count: number }[]) => void;
+    vi.mocked(invoke)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+
+    const first = useOperationLogStore.getState().loadDailyCounts(14);
+    const second = useOperationLogStore.getState().loadDailyCounts(14);
+
+    const staleBuckets = [{ date: "2026-07-01", count: 1 }];
+    const freshBuckets = [{ date: "2026-07-02", count: 2 }];
+    resolveSecond(freshBuckets);
+    await second;
+    resolveFirst(staleBuckets);
+    await first;
+
+    expect(useOperationLogStore.getState().dailyCounts).toEqual(freshBuckets);
   });
 });

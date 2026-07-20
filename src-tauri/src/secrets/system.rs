@@ -643,16 +643,9 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
     struct MockProtector {
         fail_protect: bool,
-    }
-
-    impl Default for MockProtector {
-        fn default() -> Self {
-            Self {
-                fail_protect: false,
-            }
-        }
     }
 
     impl SecretProtector for MockProtector {

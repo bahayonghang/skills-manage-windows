@@ -14,8 +14,8 @@ sync-version:
 # ========================================================================
 # 目标：
 # 1) 先同步版本元数据
-# 2) 并行运行 Web 链（typecheck -> lint -> sizecheck -> test）
-# 3) 并行运行 Rust 链（clippy -> test）
+# 2) 并行运行 Web 链（typecheck -> lint -> sizecheck -> test -> build）
+# 3) 并行运行 Rust 链（entrypoints -> fmt -> clippy -> test）
 ci: sync-version
     node scripts/run-ci.mjs
 

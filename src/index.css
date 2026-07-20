@@ -1303,12 +1303,12 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Dashboard 玻璃态层 — PR2 设计系统增量
+   Dashboard 表面层 — PR2 设计系统增量（去玻璃模糊，见 07-20-dashboard-home-overhaul）
    ═══════════════════════════════════════════════════════════════════════════
    - --font-display / --font-body：用户可在 Settings 切换的字体（默认 Geist / JBM）
    - --font-scale：基础字号缩放（0.875 / 1 / 1.125）
    - html[data-display-font='...']：按 key 切换字体族；自定义走内联 style 注入
-   - .surface-glass / .surface-glass-strong：dashboard 卡片背景层
+   - .surface-glass：dashboard 卡片背景层（无 backdrop-filter，保 WebView2 滚动性能）
    - .bg-orbit：Dashboard <main> 装饰径向背景
    - .readiness-card / .readiness-score-plaque：Dashboard 质量控制面板
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -1363,7 +1363,9 @@ html[data-body-font="system"] {
   font-family: var(--font-body);
 }
 
-/* ── 玻璃态卡片层（基于现有 --card token，不引入 OKLCH 字面值） ─────────── */
+/* ── Dashboard 表面卡片层（基于现有 --card token，不引入 OKLCH 字面值） ──────
+   刻意不使用 backdrop-filter：8 张卡片 × blur(22px) 是 Windows WebView2
+   滚动掉帧的主因（任务 07-20-dashboard-home-overhaul 实测结论）。 */
 
 .surface-glass {
   background: linear-gradient(
@@ -1375,22 +1377,6 @@ html[data-body-font="system"] {
   box-shadow:
     inset 0 1px 0 color-mix(in oklch, var(--foreground) 5%, transparent),
     var(--shadow-orbit);
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
-}
-
-.surface-glass-strong {
-  background: linear-gradient(
-    145deg,
-    color-mix(in oklch, var(--card) 96%, white 6%),
-    color-mix(in oklch, var(--card) 88%, transparent 8%)
-  );
-  border: 1px solid color-mix(in oklch, var(--border) 96%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklch, var(--foreground) 8%, transparent),
-    0 28px 90px color-mix(in oklch, var(--background) 80%, transparent);
-  backdrop-filter: blur(30px) saturate(160%);
-  -webkit-backdrop-filter: blur(30px) saturate(160%);
 }
 
 .bg-orbit {
@@ -1412,14 +1398,6 @@ html[data-body-font="system"] {
     );
 }
 
-.dashboard-hero-glow {
-  background: radial-gradient(
-    circle,
-    color-mix(in oklch, var(--primary) 24%, transparent),
-    transparent 70%
-  );
-}
-
 [data-theme="latte"] .surface-glass,
 [data-theme="claude-light"] .surface-glass {
   background: linear-gradient(
@@ -1431,23 +1409,6 @@ html[data-body-font="system"] {
   box-shadow:
     inset 0 1px 0 color-mix(in oklch, white 32%, transparent),
     0 14px 34px color-mix(in oklch, var(--foreground) 8%, transparent);
-  backdrop-filter: blur(14px) saturate(112%);
-  -webkit-backdrop-filter: blur(14px) saturate(112%);
-}
-
-[data-theme="latte"] .surface-glass-strong,
-[data-theme="claude-light"] .surface-glass-strong {
-  background: linear-gradient(
-    145deg,
-    color-mix(in oklch, var(--card) 98%, white 2%),
-    color-mix(in oklch, var(--card) 94%, var(--background) 6%)
-  );
-  border-color: color-mix(in oklch, var(--border) 96%, var(--foreground) 6%);
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklch, white 42%, transparent),
-    0 22px 54px color-mix(in oklch, var(--foreground) 11%, transparent);
-  backdrop-filter: blur(18px) saturate(120%);
-  -webkit-backdrop-filter: blur(18px) saturate(120%);
 }
 
 [data-theme="latte"] .bg-orbit,
@@ -1468,16 +1429,6 @@ html[data-body-font="system"] {
       color-mix(in oklch, var(--background) 98%, var(--foreground) 2%),
       var(--background)
     );
-}
-
-[data-theme="latte"] .dashboard-hero-glow,
-[data-theme="claude-light"] .dashboard-hero-glow {
-  background: radial-gradient(
-    circle,
-    color-mix(in oklch, var(--primary) 12%, transparent),
-    transparent 72%
-  );
-  opacity: 0.34;
 }
 
 /* ── Dashboard readiness control panel ───────────────────────────────────── */
@@ -1610,27 +1561,4 @@ html[data-body-font="system"] {
   box-shadow:
     inset 0 1px 0 color-mix(in oklch, white 36%, transparent),
     0 10px 26px color-mix(in oklch, var(--foreground) 8%, transparent);
-}
-
-.readiness-rail {
-  position: relative;
-  overflow: hidden;
-}
-
-.readiness-rail::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    120deg,
-    transparent,
-    color-mix(in oklch, var(--foreground) 5%, transparent),
-    transparent
-  );
-  opacity: 0.28;
-}
-
-.readiness-rail > * {
-  position: relative;
 }

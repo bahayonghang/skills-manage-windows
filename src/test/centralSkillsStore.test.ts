@@ -18,6 +18,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCentralSkillsStore } from "../stores/centralSkillsStore";
+import { usePlatformStore } from "../stores/platformStore";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -1482,5 +1483,72 @@ describe("centralSkillsStore", () => {
     expect(invoke).toHaveBeenCalledWith("cancel_ai_tag_job", { jobId: "job-1" });
     expect(useCentralSkillsStore.getState().isSuggestingTags).toBe(true);
     expect(useCentralSkillsStore.getState().aiTagJob.status).toBe("cancelled");
+  });
+
+  it("refreshes dashboard central summary after checking skill updates (AC6)", async () => {
+    const summary = {
+      centralSkillCount: 5,
+      updatesAvailable: 1,
+      aiReviewCount: 0,
+      uncategorizedCount: 0,
+      unassignedSourceCount: 0,
+      readiness: {
+        score: 80,
+        categorizedRatio: 1,
+        describedRatio: 1,
+        sourcedRatio: 1,
+        installHealthRatio: 0.6,
+      },
+      sourceRepositories: [],
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(mockUpdateStates)
+      .mockResolvedValueOnce(summary);
+
+    await useCentralSkillsStore.getState().checkSkillUpdates(["frontend-design"]);
+
+    expect(invoke).toHaveBeenCalledWith("get_dashboard_central_summary");
+    await vi.waitFor(() => {
+      expect(usePlatformStore.getState().dashboardCentralSummary).toEqual(
+        summary,
+      );
+    });
+  });
+
+  it("refreshes dashboard central summary after applying skill updates (AC6)", async () => {
+    const summary = {
+      centralSkillCount: 4,
+      updatesAvailable: 0,
+      aiReviewCount: 0,
+      uncategorizedCount: 0,
+      unassignedSourceCount: 0,
+      readiness: {
+        score: 100,
+        categorizedRatio: 1,
+        describedRatio: 1,
+        sourcedRatio: 1,
+        installHealthRatio: 1,
+      },
+      sourceRepositories: [],
+    };
+    const updateResult = {
+      succeeded: ["frontend-design"],
+      failed: [],
+      skipped: [],
+      states: mockUpdateStates,
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(updateResult)
+      .mockResolvedValueOnce(mockSkills)
+      .mockResolvedValueOnce(summary);
+
+    await useCentralSkillsStore.getState().updateSkills(["frontend-design"]);
+
+    expect(invoke).toHaveBeenCalledWith("get_dashboard_central_summary");
+    await vi.waitFor(() => {
+      expect(usePlatformStore.getState().dashboardCentralSummary).toEqual(
+        summary,
+      );
+    });
   });
 });

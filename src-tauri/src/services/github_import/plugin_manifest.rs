@@ -257,7 +257,9 @@ fn manifest_source_path(base_path: &str, local_path: &str) -> Result<String, Git
     })
 }
 
-pub(super) fn effective_source_root(source_path: Option<&str>) -> Result<String, GithubImportError> {
+pub(super) fn effective_source_root(
+    source_path: Option<&str>,
+) -> Result<String, GithubImportError> {
     source_path
         .map(normalize_repo_path)
         .transpose()

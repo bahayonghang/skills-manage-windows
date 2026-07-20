@@ -333,7 +333,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let claude_home = dir.path();
 
-        let history = vec![
+        let history = [
             // 合法 skill 调用
             r#"{"display":"/review","project":"/p1","sessionId":"hsess1","timestamp":1700000000000}"#,
             // BUILTINS 命中 — 应当过滤
@@ -356,7 +356,7 @@ mod tests {
         let proj_dir = claude_home.join("projects").join("-tmp-myproj");
         fs::create_dir_all(&proj_dir).unwrap();
 
-        let session = vec![
+        let session = [
             // session 起始：含 cwd 给 project 字段
             r#"{"type":"summary","cwd":"/tmp/myproj","timestamp":"2023-11-14T22:13:20.000Z"}"#,
             // 真正的 Skill tool_use

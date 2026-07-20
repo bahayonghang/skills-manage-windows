@@ -11,6 +11,7 @@
 - [字体偏好与中文 fallback 契约](./font-preferences.md)
 - [语义字号与 no-growth 排版契约](./typography-tokens.md)
 - [Settings 页面结构约定](./settings-structure.md)
+- [Dashboard 数据契约](./dashboard-data-contract.md)
 - [Skill Usage 状态与交互契约](./skill-usage-state.md)
 - [Import Intent Controller Contract](./import-intent-controller.md)
 - [Local Archive Import Controller Contract](./local-archive-import-controller.md)

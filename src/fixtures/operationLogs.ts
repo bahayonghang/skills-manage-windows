@@ -1,5 +1,6 @@
 import { registerIpcFixtures } from "@/lib/ipc";
 import type {
+  DailyOperationCount,
   OperationLogEntry,
   OperationLogFilter,
   OperationLogPage,
@@ -116,11 +117,38 @@ function fixturePage(filter: OperationLogFilter): OperationLogPage {
   };
 }
 
+// 合成演示数据：窗口语义与后端一致（本地今天向前 days-1 天，升序，零值填充）。
+const FIXTURE_DAILY_PATTERN = [0, 2, 0, 0, 5, 1, 0, 0, 3, 0, 1, 0, 2, 4];
+
+function formatLocalDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function fixtureDailyOperationCounts(days: number): DailyOperationCount[] {
+  const safeDays = Math.max(1, Math.min(60, Math.trunc(days) || 14));
+  const today = new Date();
+  const buckets: DailyOperationCount[] = [];
+  for (let index = 0; index < safeDays; index += 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (safeDays - 1 - index));
+    buckets.push({
+      date: formatLocalDateKey(date),
+      count: FIXTURE_DAILY_PATTERN[index % FIXTURE_DAILY_PATTERN.length],
+    });
+  }
+  return buckets;
+}
+
 export function registerOperationLogFixtures(): void {
   registerIpcFixtures({
     list_operation_logs: ({ filter }) => fixturePage(filter),
     get_operation_log: ({ logId }) =>
       fixtureLogEntries.find((item) => item.id === logId) ?? null,
+    get_daily_operation_counts: ({ days }) =>
+      fixtureDailyOperationCounts(days),
     clear_operation_logs: ({ filter }) =>
       fixtureLogEntries.filter((entry) =>
         matchesFixture(entry, normalizeFilter(filter)),

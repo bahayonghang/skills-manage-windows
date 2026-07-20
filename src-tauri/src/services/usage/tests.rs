@@ -85,6 +85,9 @@ fn write_claude_fixture(dir: &TempDir) {
     std::fs::write(dir.path().join("history.jsonl"), history).unwrap();
 }
 
+// The guard intentionally serializes process-wide environment changes for the
+// complete async test; no task spawned by this test acquires the same lock.
+#[allow(clippy::await_holding_lock)]
 #[tokio::test]
 async fn refresh_scans_then_caches_within_ttl_then_force_rescans() {
     let _guard = ENV_LOCK.lock().unwrap();

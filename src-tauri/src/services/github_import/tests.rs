@@ -1,6 +1,6 @@
 use super::*;
 #[cfg(test)]
-pub(super) mod tests {
+pub(super) mod suite {
     use super::*;
     use crate::secrets::{
         MockSecretStore, SecretError, SecretStorageState, SecretStore, GITHUB_PAT_SECRET_KEY,
@@ -541,7 +541,7 @@ metadata:
 
     #[test]
     fn remote_preview_file_manifest_parser_is_stable_and_budgeted() {
-        let output = "references/guide.md\05\0SKILL.md\012\0";
+        let output = "references/guide.md\x005\x00SKILL.md\x0012\x00";
         let files = parse_remote_preview_repository_files(output).expect("parse manifest");
 
         assert_eq!(
@@ -565,11 +565,11 @@ metadata:
     #[test]
     fn remote_preview_file_manifest_parser_rejects_malformed_or_duplicate_records() {
         assert!(matches!(
-            parse_remote_preview_repository_files("SKILL.md\012"),
+            parse_remote_preview_repository_files("SKILL.md\x0012"),
             Err(GithubImportError::RemotePreviewInvalidFileManifest)
         ));
         assert!(matches!(
-            parse_remote_preview_repository_files("SKILL.md\012\0SKILL.md\012\0"),
+            parse_remote_preview_repository_files("SKILL.md\x0012\x00SKILL.md\x0012\x00"),
             Err(GithubImportError::RemotePreviewInvalidFileManifest)
         ));
         assert!(matches!(
@@ -581,7 +581,7 @@ metadata:
     #[tokio::test]
     async fn remote_preview_file_inventory_uses_one_fake_runner_script_call() {
         let runner = Arc::new(crate::test_support::FakeRunner::new());
-        runner.push_success("SKILL.md\012\0references/guide.md\05\0");
+        runner.push_success("SKILL.md\x0012\x00references/guide.md\x005\x00");
         let connection =
             ConnectedRemoteTarget::Ssh(crate::targets::ConnectedSshTarget::for_tests_with_runner(
                 crate::targets::RemoteTargetConfig {
@@ -2697,8 +2697,10 @@ metadata:
     // cover the pure parser surface so the acquisition-layer primitive is
     // fully specified before it is wired into preview/import.
     mod tree_manifest_parser {
+        use super::super::tree_manifest::{
+            classify_tree_entry, parse_tree_response, RepositoryFileKind,
+        };
         use super::*;
-        use super::super::tree_manifest::{classify_tree_entry, parse_tree_response, RepositoryFileKind};
         use crate::services::resource_budget::{ResourceBudget, DEFAULT_TREE_ENTRIES};
 
         fn sample_repo() -> GitHubRepoRef {
@@ -2785,18 +2787,26 @@ metadata:
                 ],
                 false,
             );
-            let manifest = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
-                .expect("regular blobs parse");
+            let manifest =
+                parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                    .expect("regular blobs parse");
 
             assert_eq!(
-                manifest.regular_files.iter().map(|f| f.repo_path.as_str()).collect::<Vec<_>>(),
+                manifest
+                    .regular_files
+                    .iter()
+                    .map(|f| f.repo_path.as_str())
+                    .collect::<Vec<_>>(),
                 vec!["README.md", "SKILL.md", "references/guide.md"]
             );
             assert_eq!(manifest.regular_files[0].byte_len, 12);
             assert_eq!(manifest.regular_files[1].byte_len, 40);
             assert_eq!(manifest.regular_files[2].byte_len, 8);
             assert_eq!(manifest.regular_total_bytes(), 60);
-            assert_eq!(manifest.regular_files.len(), manifest.regular_paths().count());
+            assert_eq!(
+                manifest.regular_files.len(),
+                manifest.regular_paths().count()
+            );
         }
 
         #[test]
@@ -2811,8 +2821,9 @@ metadata:
                 ],
                 false,
             );
-            let manifest = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
-                .expect("symlink/gitlink parse");
+            let manifest =
+                parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                    .expect("symlink/gitlink parse");
 
             let regular: Vec<_> = manifest
                 .regular_files
@@ -2844,10 +2855,7 @@ metadata:
 
         #[test]
         fn parse_regular_blob_without_size_returns_typed_integrity_error() {
-            let body = tree_response(
-                &[tree_entry("SKILL.md", "100644", "blob", None)],
-                false,
-            );
+            let body = tree_response(&[tree_entry("SKILL.md", "100644", "blob", None)], false);
             let error = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
                 .expect_err("missing size should error");
             assert!(
@@ -2897,10 +2905,7 @@ metadata:
                 archive_expanded_bytes: 10,
                 ..ResourceBudget::default_skill()
             };
-            let body = tree_response(
-                &[tree_entry("SKILL.md", "100644", "blob", Some(40))],
-                false,
-            );
+            let body = tree_response(&[tree_entry("SKILL.md", "100644", "blob", Some(40))], false);
             let error = parse_tree_response(&body, &sample_repo(), budget)
                 .expect_err("byte budget should error");
             assert!(matches!(error, GithubImportError::Budget(_)));
@@ -2912,10 +2917,7 @@ metadata:
                 tree_response_bytes: 16,
                 ..ResourceBudget::default_skill()
             };
-            let body = tree_response(
-                &[tree_entry("SKILL.md", "100644", "blob", Some(40))],
-                false,
-            );
+            let body = tree_response(&[tree_entry("SKILL.md", "100644", "blob", Some(40))], false);
             let error = parse_tree_response(&body, &sample_repo(), budget)
                 .expect_err("response budget should error");
             assert!(matches!(error, GithubImportError::Budget(_)));
@@ -2948,15 +2950,18 @@ metadata:
             // mirror responses; `normalize_repo_path` must collapse them so
             // downstream discovery sees a canonical relative path.
             let body = tree_response(
-                &[tree_entry("/skills/demo/SKILL.md", "100644", "blob", Some(40))],
+                &[tree_entry(
+                    "/skills/demo/SKILL.md",
+                    "100644",
+                    "blob",
+                    Some(40),
+                )],
                 false,
             );
-            let manifest = parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
-                .expect("leading slash normalizes");
-            assert_eq!(
-                manifest.regular_files[0].repo_path,
-                "skills/demo/SKILL.md"
-            );
+            let manifest =
+                parse_tree_response(&body, &sample_repo(), ResourceBudget::default_skill())
+                    .expect("leading slash normalizes");
+            assert_eq!(manifest.regular_files[0].repo_path, "skills/demo/SKILL.md");
         }
 
         #[test]
@@ -2973,7 +2978,10 @@ metadata:
             // Duplicate is surfaced via the `MissingSize` integrity path
             // (archive parser would have silently overwritten the HashMap
             // entry; we fail closed to expose upstream anomalies).
-            assert!(matches!(error, GithubImportError::TreeManifestEntryMissingSize(_)));
+            assert!(matches!(
+                error,
+                GithubImportError::TreeManifestEntryMissingSize(_)
+            ));
         }
     }
 
@@ -2986,20 +2994,20 @@ metadata:
     // diagnostics/import work; the pure parity + classifier tests here cover
     // the behavioral acceptance criteria.
     mod tree_fast_path_dispatcher {
-        use super::*;
-        use super::super::tree_import::{download_tree_selection, plan_tree_selection};
-        use super::super::preview::{
-            manifest_to_preview_repository_files, map_acquisition_error_to_outcome,
-            snapshot_preview_repository_files, TreeFastPathOutcome,
-        };
         use super::super::plugin_manifest::{
             effective_source_root, plugin_manifest_discovery_from_manifest_bytes,
             plugin_manifest_discovery_from_snapshot,
         };
+        use super::super::preview::{
+            manifest_to_preview_repository_files, map_acquisition_error_to_outcome,
+            snapshot_preview_repository_files, TreeFastPathOutcome,
+        };
+        use super::super::tree_import::{download_tree_selection, plan_tree_selection};
         use super::super::tree_manifest::{
             fallback_reason_for, AcquisitionMode, FallbackReason, RepositoryFileKind,
             RepositoryFileMeta, RepositoryManifest,
         };
+        use super::*;
 
         fn sample_repo() -> GitHubRepoRef {
             GitHubRepoRef {
@@ -3060,16 +3068,14 @@ metadata:
             manifest: &RepositoryManifest,
             source_path: Option<&str>,
         ) -> Vec<RemoteSkillCandidate> {
-            let plugin_discovery =
-                plugin_manifest_discovery_from_snapshot(snapshot, source_path)
-                    .expect("plugin discovery");
-            let manifests =
-                discover_skill_manifests_from_paths_with_plugin_discovery(
-                    manifest.regular_paths(),
-                    source_path,
-                    &plugin_discovery,
-                )
-                .expect("tree discovery");
+            let plugin_discovery = plugin_manifest_discovery_from_snapshot(snapshot, source_path)
+                .expect("plugin discovery");
+            let manifests = discover_skill_manifests_from_paths_with_plugin_discovery(
+                manifest.regular_paths(),
+                source_path,
+                &plugin_discovery,
+            )
+            .expect("tree discovery");
             let endpoint = direct_endpoint();
             let mut candidates = Vec::with_capacity(manifests.len());
             let mut seen_names = HashSet::new();
@@ -3079,9 +3085,8 @@ metadata:
                     .get(&skill_manifest.skill_md_path)
                     .expect("snapshot has skill md")
                     .clone();
-                let candidate =
-                    build_remote_skill_candidate(repo, &skill_manifest, raw, endpoint)
-                        .expect("tree candidate");
+                let candidate = build_remote_skill_candidate(repo, &skill_manifest, raw, endpoint)
+                    .expect("tree candidate");
                 if is_generic_remote_skill_candidate(&candidate) {
                     continue;
                 }
@@ -3123,12 +3128,10 @@ metadata:
             );
             // F12 — unsupported mode.
             assert_eq!(
-                fallback_reason_for(
-                    &GithubImportError::TreeManifestUnsupportedMode {
-                        path: "x".to_string(),
-                        mode: "100000".to_string(),
-                    }
-                ),
+                fallback_reason_for(&GithubImportError::TreeManifestUnsupportedMode {
+                    path: "x".to_string(),
+                    mode: "100000".to_string(),
+                }),
                 Some(FallbackReason::Unsupported)
             );
             // F5/F6 — rate limit + access denial (parity).
@@ -3151,9 +3154,7 @@ metadata:
             );
             // F13/F14 — budget (entry count, expanded bytes, response body).
             assert_eq!(
-                fallback_reason_for(
-                    &GithubImportError::TreeManifestEntryBudgetExceeded(10)
-                ),
+                fallback_reason_for(&GithubImportError::TreeManifestEntryBudgetExceeded(10)),
                 Some(FallbackReason::Budget)
             );
             assert_eq!(
@@ -3168,9 +3169,9 @@ metadata:
             ));
             // F11 — missing size integrity gap.
             assert_eq!(
-                fallback_reason_for(
-                    &GithubImportError::TreeManifestEntryMissingSize("p".to_string())
-                ),
+                fallback_reason_for(&GithubImportError::TreeManifestEntryMissingSize(
+                    "p".to_string()
+                )),
                 Some(FallbackReason::Integrity)
             );
             assert_eq!(
@@ -3197,14 +3198,14 @@ metadata:
 
         #[test]
         fn map_acquisition_error_to_outcome_falls_back_for_acquisition_errors() {
-            let outcome = map_acquisition_error_to_outcome(GithubImportError::TreeManifestTruncated);
+            let outcome =
+                map_acquisition_error_to_outcome(GithubImportError::TreeManifestTruncated);
             assert!(matches!(
                 outcome,
                 TreeFastPathOutcome::Fallback(FallbackReason::Truncated)
             ));
-            let outcome = map_acquisition_error_to_outcome(GithubImportError::RateLimited(
-                "rl".to_string(),
-            ));
+            let outcome =
+                map_acquisition_error_to_outcome(GithubImportError::RateLimited("rl".to_string()));
             assert!(matches!(
                 outcome,
                 TreeFastPathOutcome::Fallback(FallbackReason::Denied)
@@ -3263,23 +3264,20 @@ metadata:
             ] {
                 let repo = sample_repo();
                 let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
-                let plugin_discovery =
-                    plugin_manifest_discovery_from_snapshot(&snapshot, None)
-                        .expect("plugin discovery");
-                let tree_manifests =
-                    discover_skill_manifests_from_paths_with_plugin_discovery(
-                        manifest.regular_paths(),
-                        None,
-                        &plugin_discovery,
-                    )
-                    .expect("tree discovery");
-                let archive_manifests =
-                    discover_skill_manifests_from_paths_with_plugin_discovery(
-                        snapshot.files.keys().map(String::as_str),
-                        None,
-                        &plugin_discovery,
-                    )
-                    .expect("archive discovery");
+                let plugin_discovery = plugin_manifest_discovery_from_snapshot(&snapshot, None)
+                    .expect("plugin discovery");
+                let tree_manifests = discover_skill_manifests_from_paths_with_plugin_discovery(
+                    manifest.regular_paths(),
+                    None,
+                    &plugin_discovery,
+                )
+                .expect("tree discovery");
+                let archive_manifests = discover_skill_manifests_from_paths_with_plugin_discovery(
+                    snapshot.files.keys().map(String::as_str),
+                    None,
+                    &plugin_discovery,
+                )
+                .expect("archive discovery");
                 assert_eq!(
                     tree_manifests, archive_manifests,
                     "discovery input set must be identical for tree and archive"
@@ -3349,14 +3347,8 @@ metadata:
                     ".claude-plugin/plugin.json",
                     r#"{"name":"demo","skills":["skills/a/SKILL.md"]}"#.to_string(),
                 ),
-                (
-                    "skills/a/SKILL.md",
-                    sample_frontmatter("a", "a skill"),
-                ),
-                (
-                    "skills/b/SKILL.md",
-                    sample_frontmatter("b", "b skill"),
-                ),
+                ("skills/a/SKILL.md", sample_frontmatter("a", "a skill")),
+                ("skills/b/SKILL.md", sample_frontmatter("b", "b skill")),
             ]);
             let repo = sample_repo();
             let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
@@ -3383,8 +3375,8 @@ metadata:
                 plugin_json.as_deref(),
                 marketplace.as_deref(),
             );
-            let snapshot_discovery =
-                plugin_manifest_discovery_from_snapshot(&snapshot, None).expect("snapshot discovery");
+            let snapshot_discovery = plugin_manifest_discovery_from_snapshot(&snapshot, None)
+                .expect("snapshot discovery");
             assert_eq!(
                 bytes_discovery.explicit_skill_paths,
                 snapshot_discovery.explicit_skill_paths
@@ -3446,9 +3438,11 @@ metadata:
                 planned_paths.iter().collect::<HashSet<_>>().len(),
                 "overlapping selections must download each repo file once"
             );
-            assert!(planned_paths.iter().all(|path| selections.iter().any(|selection| {
-                repo_file_relative_to_source(path, &selection.source_path).is_some()
-            })));
+            assert!(planned_paths
+                .iter()
+                .all(|path| selections.iter().any(|selection| {
+                    repo_file_relative_to_source(path, &selection.source_path).is_some()
+                })));
         }
 
         #[test]
@@ -3463,8 +3457,7 @@ metadata:
                 renamed_skill_id: None,
             }];
 
-            let plan = plan_tree_selection(&manifest, &candidates, &selections)
-                .expect("root plan");
+            let plan = plan_tree_selection(&manifest, &candidates, &selections).expect("root plan");
 
             assert_eq!(plan.mode, AcquisitionMode::Archive);
             assert_eq!(plan.fallback_reason, Some(FallbackReason::Threshold));
@@ -3478,11 +3471,13 @@ metadata:
                 32,
                 RepositoryFileKind::RegularBlob,
             )];
-            regular_files.extend((0..65).map(|index| RepositoryFileMeta::new(
-                &format!("skills/demo/references/{index}.md"),
-                16,
-                RepositoryFileKind::RegularBlob,
-            )));
+            regular_files.extend((0..65).map(|index| {
+                RepositoryFileMeta::new(
+                    &format!("skills/demo/references/{index}.md"),
+                    16,
+                    RepositoryFileKind::RegularBlob,
+                )
+            }));
             let manifest = RepositoryManifest {
                 repo,
                 regular_files,
@@ -3504,8 +3499,8 @@ metadata:
                 renamed_skill_id: None,
             }];
 
-            let plan = plan_tree_selection(&manifest, &candidates, &selections)
-                .expect("amplified plan");
+            let plan =
+                plan_tree_selection(&manifest, &candidates, &selections).expect("amplified plan");
 
             assert_eq!(plan.mode, AcquisitionMode::Archive);
             assert_eq!(plan.fallback_reason, Some(FallbackReason::Threshold));

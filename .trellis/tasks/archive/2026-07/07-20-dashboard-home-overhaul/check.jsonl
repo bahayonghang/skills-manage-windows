@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "验收门禁：check 阶段必须覆盖的 lint/typecheck/test/clippy 范围"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层质量核对清单，重组改动需逐项过"}
+{"file": ".trellis/spec/frontend/typography-tokens.md", "reason": "核对样式改动是否符合排版 token 约定"}
+{"file": ".trellis/spec/backend/index.md", "reason": "核对新增 db 查询与 command 是否符合后端约定"}

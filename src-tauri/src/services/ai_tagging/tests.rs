@@ -1,6 +1,6 @@
 use super::{
     build_tagging_prompt, bulk_suggest_skill_tags_impl, map_ai_suggestions,
-    parse_ai_tag_suggestions, AiTagProgressPayload, AiTagProgressStatus,
+    parse_ai_tag_suggestions, resolve_ai_suggestions, AiTagProgressPayload, AiTagProgressStatus,
 };
 use crate::db::{
     self, DbPool, Skill, SkillTag, ACADEMIC_RESEARCH_WRITING_TAG_ID, UNCATEGORIZED_TAG_ID,
@@ -146,12 +146,59 @@ fn parses_tag_json_envelope() {
         r#"{"tags":[{"tag":"academic-research-writing","confidence":0.91,"reason":"研究写作"}]}"#,
     )
     .expect("parse");
-    assert_eq!(parsed.len(), 1);
-    assert_eq!(parsed[0].tag, ACADEMIC_RESEARCH_WRITING_TAG_ID);
+    assert_eq!(parsed.tags.len(), 1);
+    assert_eq!(parsed.tags[0].tag, ACADEMIC_RESEARCH_WRITING_TAG_ID);
+    assert!(parsed.new_tag.is_none());
 }
 
 #[test]
-fn build_prompt_reuses_existing_candidate_ids_and_excludes_system_tags() {
+fn parses_proposal_mixed_empty_and_legacy_responses() {
+    let proposal = parse_ai_tag_suggestions(
+        r#"{"tags":[],"new_tag":{"name":"安全审计","description":"Security audits.","confidence":0.9,"reason":"缺少分类"}}"#,
+    )
+    .expect("proposal");
+    assert!(proposal.tags.is_empty());
+    assert_eq!(proposal.new_tag.unwrap().name, "安全审计");
+
+    let mixed = parse_ai_tag_suggestions(
+        r#"{"tags":[{"tag":"frontend-development"}],"new_tag":{"name":"WebGL","description":"WebGL workflows."}}"#,
+    )
+    .expect("mixed");
+    assert_eq!(mixed.tags.len(), 1);
+    assert!(mixed.new_tag.is_some());
+
+    let empty = parse_ai_tag_suggestions(r#"{"tags":[]}"#).expect("empty");
+    assert!(empty.tags.is_empty());
+    assert!(empty.new_tag.is_none());
+
+    let legacy = parse_ai_tag_suggestions(
+        r#"[{"tag":"backend-development","confidence":0.8,"reason":"后端"}]"#,
+    )
+    .expect("legacy");
+    assert_eq!(legacy.tags[0].tag, "backend-development");
+    assert!(legacy.new_tag.is_none());
+}
+
+#[test]
+fn proposal_name_or_id_collision_downgrades_to_existing_suggestion() {
+    let tags = vec![
+        custom_tag("security-audit", "安全审计", "Security audits."),
+        tag(UNCATEGORIZED_TAG_ID, "未分类"),
+    ];
+    let parsed = parse_ai_tag_suggestions(
+        r#"{"tags":[],"new_tag":{"name":" 安全审计 ","description":"Duplicate.","confidence":0.92,"reason":"安全"}}"#,
+    )
+    .expect("parse");
+
+    let resolved = resolve_ai_suggestions("skill-a", &tags, parsed).expect("resolve");
+    assert!(resolved.proposals.is_empty());
+    assert_eq!(resolved.suggestions.len(), 1);
+    assert_eq!(resolved.suggestions[0].tag.id, "security-audit");
+    assert_eq!(resolved.suggestions[0].confidence, 0.92);
+}
+
+#[test]
+fn build_prompt_includes_all_classifiable_tags_and_excludes_uncategorized() {
     let tags = vec![
         tag(ACADEMIC_RESEARCH_WRITING_TAG_ID, "学术研究与写作"),
         custom_tag(
@@ -159,7 +206,8 @@ fn build_prompt_reuses_existing_candidate_ids_and_excludes_system_tags() {
             "文献综述",
             "Systematic literature review workflows.",
         ),
-        tag("programming-agent-engineering", "编程与 Agent 工程"),
+        tag("frontend-development", "前端开发"),
+        tag("backend-development", "后端开发"),
         tag(UNCATEGORIZED_TAG_ID, "未分类"),
     ];
 
@@ -174,9 +222,10 @@ fn build_prompt_reuses_existing_candidate_ids_and_excludes_system_tags() {
     assert!(prompt.contains("id: literature-review"));
     assert!(prompt.contains("kind: custom"));
     assert!(prompt.contains("Systematic literature review workflows."));
+    assert!(prompt.contains("id: frontend-development"));
+    assert!(prompt.contains("id: backend-development"));
     assert!(prompt.contains("只能输出候选列表中的 tag id"));
     assert!(prompt.contains("{\"tags\":[]}"));
-    assert!(!prompt.contains("programming-agent-engineering"));
     assert!(!prompt.contains("uncategorized"));
     assert!(!prompt.contains("未分类"));
 }
@@ -190,7 +239,7 @@ fn maps_unknown_ai_tags_to_uncategorized() {
     let parsed =
         parse_ai_tag_suggestions(r#"{"tags":[{"tag":"不存在","confidence":0.8,"reason":"测试"}]}"#)
             .expect("parse");
-    let mapped = map_ai_suggestions("skill-a", &tags, parsed).expect("map");
+    let mapped = map_ai_suggestions("skill-a", &tags, parsed.tags).expect("map");
     assert_eq!(mapped[0].tag.id, UNCATEGORIZED_TAG_ID);
     assert_eq!(mapped[0].confidence, 0.2);
 }
@@ -202,7 +251,7 @@ fn maps_empty_ai_tags_to_uncategorized() {
         tag(UNCATEGORIZED_TAG_ID, "未分类"),
     ];
     let parsed = parse_ai_tag_suggestions(r#"{"tags":[]}"#).expect("parse");
-    let mapped = map_ai_suggestions("skill-a", &tags, parsed).expect("map");
+    let mapped = map_ai_suggestions("skill-a", &tags, parsed.tags).expect("map");
     assert_eq!(mapped[0].tag.id, UNCATEGORIZED_TAG_ID);
     assert_eq!(mapped[0].confidence, 0.2);
 }
@@ -217,7 +266,7 @@ fn ignores_uncategorized_returned_by_model_as_primary_tag() {
         r#"{"tags":[{"tag":"uncategorized","confidence":0.95,"reason":"模型直返"}]}"#,
     )
     .expect("parse");
-    let mapped = map_ai_suggestions("skill-a", &tags, parsed).expect("map");
+    let mapped = map_ai_suggestions("skill-a", &tags, parsed.tags).expect("map");
     assert_eq!(mapped[0].tag.id, UNCATEGORIZED_TAG_ID);
     assert_eq!(mapped[0].confidence, 0.2);
 }
@@ -285,6 +334,44 @@ async fn bulk_ai_tagging_emits_progress_limits_parallelism_and_continues_on_fail
     assert!(tags
         .iter()
         .any(|tag| tag.id == ACADEMIC_RESEARCH_WRITING_TAG_ID));
+}
+
+#[tokio::test]
+async fn proposal_is_persisted_for_review_without_tag_or_fallback_link() {
+    let pool = setup_test_db().await;
+    let secrets = test_ai_secret();
+    let response = r#"{"tags":[],"new_tag":{"name":"Security","description":"Security auditing workflows.","confidence":0.95,"reason":"安全审计"}}"#;
+    let (api_url, _current, _max_seen) = spawn_ai_server(response, false).await;
+    configure_ai(&pool, &api_url).await;
+    db::upsert_skill(&pool, &make_skill("proposal-skill", "Proposal Skill"))
+        .await
+        .expect("skill");
+
+    let results = bulk_suggest_skill_tags_impl(
+        &pool,
+        &secrets,
+        vec!["proposal-skill".to_string()],
+        "job-proposal".to_string(),
+        Arc::new(AtomicBool::new(false)),
+        |_| {},
+    )
+    .await
+    .expect("bulk");
+
+    assert_eq!(results[0].proposals.len(), 1);
+    assert_eq!(results[0].low_confidence_count, 1);
+    assert!(db::get_skill_tag_by_name(&pool, "Security")
+        .await
+        .unwrap()
+        .is_none());
+    assert!(db::get_skill_tags_for_skill(&pool, "proposal-skill")
+        .await
+        .unwrap()
+        .is_empty());
+    let reviews = db::get_pending_ai_tag_reviews(&pool).await.unwrap();
+    assert_eq!(reviews.len(), 1);
+    assert!(reviews[0].is_proposal);
+    assert_eq!(reviews[0].tag.name, "Security");
 }
 
 #[tokio::test]

@@ -35,11 +35,12 @@ pnpm tauri build
 
 ## justfile 约定
 
-- `just ci`：跑前端 `typecheck`、`lint`，以及 Rust `cargo clippy`。
+- `just ci`：并行跑前端 `typecheck`、`lint`、`sizecheck`、Vitest、生产构建，以及 Rust entrypoint 契约、`fmt --check`、全 targets Clippy、测试；Cargo 检查使用锁文件。
 - `just dev`：直接启动 Tauri 开发模式。
 - `just build`：跑 `pnpm tauri build`，然后把 `src-tauri/target/release/bundle/nsis/` 里最新的 Windows 安装包复制到根目录 `outputs/`。
 - `just install`：跑 `just build`，然后以 passive 模式运行根目录 `outputs/` 里的最新 NSIS 安装包。
 - 改 CI 或发布流程时，优先保持 `just ci` 和 GitHub Actions 的检查项一致，避免本地和远端两套标准。
+- GitHub Actions 的 `just-ci` 在指向 `main` 的 PR、`main` / `dev` push、手动触发和 release 上运行；跨平台 smoke package 只在手动触发或 release 上运行。
 
 ## 修改约束
 
@@ -53,7 +54,7 @@ pnpm tauri build
 - 任何任务收尾前，至少跑一遍 `just ci` 并确认通过；如果失败，先修到通过再宣布完成。
 - 前端改动：默认跑 `pnpm typecheck && pnpm lint`
 - 交互或状态相关改动：按改动范围补跑对应的 Vitest 用例
-- Rust 改动：默认跑 `cargo clippy -- -D warnings`
+- Rust 改动：默认跑 `cargo fmt --all -- --check`、`cargo clippy --all-targets --locked -- -D warnings` 和 `cargo test --locked`
 - 涉及平台文件系统差异的 Rust 变更：按需要补跑对应平台的定向测试
 - 打包或发布改动：至少在 Windows 上跑通 `pnpm tauri build`，并确认安装产物实际生成
 

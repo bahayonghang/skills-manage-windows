@@ -32,22 +32,20 @@ The Vite dev server runs on port `24200` during local development.
 
 ## Validation before opening a pull request
 
-Run the relevant checks locally before you submit a PR:
+Run the complete local gate before you submit a PR:
 
 ```bash
-pnpm test
-pnpm sizecheck
-pnpm typecheck
-pnpm lint
-cd src-tauri && cargo test
-cd src-tauri && cargo clippy -- -D warnings
+just ci
 ```
+
+This runs frontend type checking, linting, source-size contracts, Vitest, and the production build in parallel with Rust entrypoint contracts, formatting, all-target Clippy, and locked tests. GitHub runs the same gate as the required `just-ci` check for pull requests targeting `main`.
 
 - Keep production source files under `src/` and `src-tauri/src/` at or below 800 lines whenever practical.
 - The repository currently carries a small frozen allowlist of oversized production files; `pnpm sizecheck` fails if a new file crosses 800 lines or if an allowlisted file grows further.
 - Components must not call Tauri `invoke()` directly. Route IPC through stores or service-layer helpers so UI code stays testable and platform boundaries remain explicit.
 
 If your change touches UI behavior, include screenshots or a short screen recording in the pull request.
+If your change touches packaging or release automation, also run `pnpm tauri build` on Windows and confirm the expected bundle exists.
 
 ## Pull request guidelines
 

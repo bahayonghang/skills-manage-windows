@@ -27,7 +27,9 @@ use crate::{
 pub use error::AiTaggingError;
 use prompt::suggest_skill_tags_for_skill;
 #[cfg(test)]
-pub(crate) use prompt::{build_tagging_prompt, map_ai_suggestions, parse_ai_tag_suggestions};
+pub(crate) use prompt::{
+    build_tagging_prompt, map_ai_suggestions, parse_ai_tag_suggestions, resolve_ai_suggestions,
+};
 use rate_limit::{get_ai_tag_rate_settings, is_ai_rate_limit_error};
 pub(crate) use types::AI_TAG_PROGRESS_EVENT;
 use types::{
@@ -35,7 +37,8 @@ use types::{
     AI_TAG_AUTO_APPLY_CONFIDENCE,
 };
 pub use types::{
-    AiTagProgressPayload, AiTagProgressStatus, SkillTagSuggestion, SkillTagSuggestionResult,
+    AiTagProgressPayload, AiTagProgressStatus, SkillTagProposal, SkillTagSuggestion,
+    SkillTagSuggestionResult,
 };
 
 pub async fn suggest_skill_tags_for_skill_id(
@@ -94,6 +97,7 @@ where
         succeeded: 0,
         failed: 0,
         suggestions: None,
+        proposals: None,
         error: None,
         low_confidence_count: 0,
     });
@@ -134,6 +138,7 @@ where
                 succeeded: snapshot.succeeded,
                 failed: snapshot.failed,
                 suggestions: Some(result.suggestions.clone()),
+                proposals: Some(result.proposals.clone()),
                 error: result.error.clone(),
                 low_confidence_count: snapshot.low_confidence_count,
             });
@@ -160,6 +165,7 @@ where
         succeeded: snapshot.succeeded,
         failed: snapshot.failed,
         suggestions: None,
+        proposals: None,
         error: if run_control.is_cancelled() {
             Some("AI tagging canceled".to_string())
         } else {
@@ -261,6 +267,7 @@ where
             skill_id,
             skill_name: None,
             suggestions: Vec::new(),
+            proposals: Vec::new(),
             succeeded: false,
             error: Some(error.to_string()),
             low_confidence_count: 0,
@@ -294,8 +301,8 @@ where
         control.wait_for_rate_limit().await?;
     }
 
-    let suggestions = match suggest_skill_tags_for_skill(context, &skill).await {
-        Ok(suggestions) => suggestions,
+    let resolved = match suggest_skill_tags_for_skill(context, &skill).await {
+        Ok(resolved) => resolved,
         Err(error) => {
             if run_control
                 .as_ref()
@@ -309,21 +316,29 @@ where
             return Err(error);
         }
     };
-    let (auto_apply, pending_review): (Vec<_>, Vec<_>) = suggestions
+    let (auto_apply, pending_review): (Vec<_>, Vec<_>) = resolved
+        .suggestions
         .iter()
         .cloned()
         .partition(|suggestion| suggestion.confidence >= AI_TAG_AUTO_APPLY_CONFIDENCE);
 
     persist_ai_suggestions(&context.pool, skill_id, &auto_apply).await?;
-    persist_ai_review_suggestions(&context.pool, skill_id, &pending_review).await?;
+    persist_ai_review_suggestions(
+        &context.pool,
+        skill_id,
+        &pending_review,
+        &resolved.proposals,
+    )
+    .await?;
 
     Ok(SkillTagSuggestionResult {
         skill_id: skill_id.to_string(),
         skill_name: Some(skill.name),
-        suggestions,
+        suggestions: resolved.suggestions,
+        proposals: resolved.proposals.clone(),
         succeeded: true,
         error: None,
-        low_confidence_count: pending_review.len(),
+        low_confidence_count: pending_review.len() + resolved.proposals.len(),
     })
 }
 
@@ -350,17 +365,29 @@ async fn persist_ai_review_suggestions(
     pool: &DbPool,
     skill_id: &str,
     suggestions: &[SkillTagSuggestion],
+    proposals: &[SkillTagProposal],
 ) -> Result<(), AiTaggingError> {
-    let rows = suggestions
+    let mut rows = suggestions
         .iter()
-        .map(|suggestion| {
-            (
-                suggestion.tag.id.clone(),
-                suggestion.confidence,
-                suggestion.reason.clone(),
-            )
+        .map(|suggestion| db::PendingAiTagReviewInput {
+            tag_id: suggestion.tag.id.clone(),
+            confidence: suggestion.confidence,
+            reason: suggestion.reason.clone(),
+            proposed_name: None,
+            proposed_description: None,
         })
         .collect::<Vec<_>>();
+    rows.extend(
+        proposals
+            .iter()
+            .map(|proposal| db::PendingAiTagReviewInput {
+                tag_id: proposal.tag_id.clone(),
+                confidence: proposal.confidence,
+                reason: proposal.reason.clone(),
+                proposed_name: Some(proposal.proposed_name.clone()),
+                proposed_description: proposal.proposed_description.clone(),
+            }),
+    );
     db::replace_pending_ai_tag_reviews(pool, skill_id, &rows).await?;
     Ok(())
 }

@@ -211,6 +211,14 @@ pub async fn get_skill_counts_summary(
 }
 
 #[tauri::command]
+pub async fn get_dashboard_central_summary(
+    state: State<'_, AppState>,
+) -> Result<DashboardCentralSummary, String> {
+    let pool = state.active_db().await?;
+    get_dashboard_central_summary_impl(&pool).await
+}
+
+#[tauri::command]
 pub async fn get_bootstrap_snapshot(
     state: State<'_, AppState>,
 ) -> Result<BootstrapSnapshot, String> {
@@ -429,7 +437,7 @@ mod tests {
         db::assign_skill_tags(
             &pool,
             &["frontend-design".to_string()],
-            &[tag.id.clone()],
+            std::slice::from_ref(&tag.id),
             "manual",
             None,
             None,
@@ -495,7 +503,7 @@ mod tests {
         db::assign_skill_tags(
             &pool,
             &["full".to_string()],
-            &[tag.id.clone()],
+            std::slice::from_ref(&tag.id),
             "manual",
             None,
             None,

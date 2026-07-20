@@ -73,6 +73,19 @@ export interface DashboardReadiness {
   sourcedRatio: number;
   installHealthRatio: number;
 }
+
+/** 后端按本地日历日聚合的每日操作计数（恰好窗口天数个桶，升序，含零值日）。 */
+export interface DailyOperationCount {
+  date: string;
+  count: number;
+}
+
+/** 后端聚合的 Central 技能 Top tag（仅 is_central = 1，排除 uncategorized）。 */
+export interface CentralTopTag {
+  id: string;
+  name: string;
+  count: number;
+}
 export type ClaudeSourceKind = "user" | "plugin";
 
 export interface ScannedSkill {
@@ -320,10 +333,20 @@ export interface SkillTagSuggestion {
   reason: string;
 }
 
+export interface SkillTagProposal {
+  skill_id: string;
+  tag_id: string;
+  proposed_name: string;
+  proposed_description?: string;
+  confidence: number;
+  reason: string;
+}
+
 export interface SkillTagSuggestionResult {
   skill_id: string;
   skill_name?: string;
   suggestions: SkillTagSuggestion[];
+  proposals: SkillTagProposal[];
   succeeded?: boolean;
   error?: string;
   low_confidence_count?: number;
@@ -337,6 +360,7 @@ export interface SkillAiTagReview {
   reason: string;
   suggested_at: string;
   updated_at: string;
+  is_proposal: boolean;
 }
 
 export type AiTagItemStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -367,6 +391,7 @@ export interface AiTagProgressPayload {
   failed: number;
   lowConfidenceCount?: number;
   suggestions?: SkillTagSuggestion[];
+  proposals?: SkillTagProposal[];
   error?: string;
 }
 

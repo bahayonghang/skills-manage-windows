@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   AgentWithStatus,
   BootstrapSnapshot,
+  CentralTopTag,
+  DashboardCentralSummary,
   PlatformPathMap,
   SkillCountsSummary,
 } from "../types";
@@ -128,6 +130,7 @@ describe("platformStore", () => {
       platformPaths: {},
       skillsByAgent: {},
       collectionCount: 0,
+      dashboardCentralSummary: undefined,
       categoryVisibility: {
         coding: true,
         lobster: false,
@@ -138,6 +141,9 @@ describe("platformStore", () => {
       isRefreshing: false,
       scanGeneration: 0,
       error: null,
+      topTags: [],
+      isTopTagsLoading: false,
+      topTagsError: null,
     });
   });
 
@@ -554,5 +560,82 @@ describe("platformStore", () => {
     await expect(
       usePlatformStore.getState().removeCustomAgent("nonexistent"),
     ).rejects.toThrow("Not found");
+  });
+
+  it("refreshDashboardSummary updates only dashboardCentralSummary", async () => {
+    const summary: DashboardCentralSummary = {
+      centralSkillCount: 7,
+      updatesAvailable: 2,
+      aiReviewCount: 1,
+      uncategorizedCount: 3,
+      unassignedSourceCount: 0,
+      readiness: {
+        score: 72,
+        categorizedRatio: 0.6,
+        describedRatio: 0.9,
+        sourcedRatio: 0.8,
+        installHealthRatio: 0.7,
+      },
+      sourceRepositories: [],
+    };
+    mockIpcCommand("get_dashboard_central_summary", summary);
+
+    await usePlatformStore.getState().refreshDashboardSummary();
+
+    expect(ipcInvokeCalls("get_dashboard_central_summary")).toHaveLength(1);
+    expect(usePlatformStore.getState().dashboardCentralSummary).toEqual(
+      summary,
+    );
+    // 不触碰 skillsByAgent / scanState 等其它计数字段。
+    expect(usePlatformStore.getState().skillsByAgent).toEqual({});
+    expect(usePlatformStore.getState().scanState).toBe("idle");
+  });
+
+  it("loadTopTags stores tags and surfaces failures for panel retry", async () => {
+    const tags: CentralTopTag[] = [{ id: "web", name: "Web", count: 3 }];
+    mockIpcCommand("get_central_top_tags", tags);
+
+    await usePlatformStore.getState().loadTopTags(6);
+
+    expect(ipcInvokeCalls("get_central_top_tags")[0].args).toEqual({
+      limit: 6,
+    });
+    expect(usePlatformStore.getState().topTags).toEqual(tags);
+    expect(usePlatformStore.getState().topTagsError).toBeNull();
+
+    mockIpcCommand("get_central_top_tags", () =>
+      Promise.reject(new Error("tags backend down")),
+    );
+    await usePlatformStore.getState().loadTopTags(6);
+
+    // 失败保留旧数据，错误供面板展示重试入口。
+    expect(usePlatformStore.getState().topTags).toEqual(tags);
+    expect(usePlatformStore.getState().topTagsError).toContain(
+      "tags backend down",
+    );
+    expect(usePlatformStore.getState().isTopTagsLoading).toBe(false);
+  });
+
+  it("resetForTargetChange clears topTags and discards in-flight responses", async () => {
+    let resolvePending!: (value: CentralTopTag[]) => void;
+    mockIpcCommand(
+      "get_central_top_tags",
+      () =>
+        new Promise<CentralTopTag[]>((resolve) => {
+          resolvePending = resolve;
+        }),
+    );
+
+    const pending = usePlatformStore.getState().loadTopTags(6);
+    usePlatformStore.getState().resetForTargetChange();
+
+    expect(usePlatformStore.getState().topTags).toEqual([]);
+    expect(usePlatformStore.getState().topTagsError).toBeNull();
+
+    resolvePending([{ id: "web", name: "Web", count: 3 }]);
+    await pending;
+
+    // 在途响应晚于 reset 到达，必须被 latest-wins 令牌丢弃。
+    expect(usePlatformStore.getState().topTags).toEqual([]);
   });
 });

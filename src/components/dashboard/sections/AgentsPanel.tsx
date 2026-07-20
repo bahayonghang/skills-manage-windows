@@ -57,6 +57,14 @@ export function AgentsPanel({
               const countAgentId = getPlatformTargetCountAgentId(agent);
               const pathHint = getPlatformTargetPathHint(agent);
               const label = getPlatformTargetLabel(agent, t, "short");
+              const count = skillsByAgent[countAgentId] ?? 0;
+              const maxCount = Math.max(
+                1,
+                ...visiblePlatformTargets.map(
+                  (target) =>
+                    skillsByAgent[getPlatformTargetCountAgentId(target)] ?? 0,
+                ),
+              );
 
               return (
                 <li key={agent.id}>
@@ -76,18 +84,31 @@ export function AgentsPanel({
                         <span className="truncate text-sm font-medium">
                           {label}
                         </span>
-                        <span className="hidden rounded border border-border bg-muted/40 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:inline">
-                          {agent.is_enabled
-                            ? t("dashboard.agents.enabled")
-                            : t("dashboard.agents.hidden")}
-                        </span>
+                        {!agent.is_enabled && (
+                          <span className="hidden rounded border border-border bg-muted/40 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:inline">
+                            {t("dashboard.agents.hidden")}
+                          </span>
+                        )}
                       </span>
                       <span className="mt-1 block truncate text-xs text-muted-foreground">
                         {pathHint || t("dashboard.agents.noPath")}
                       </span>
                     </span>
-                    <span className="font-display text-sm font-semibold tabular-nums">
-                      {skillsByAgent[countAgentId] ?? 0}
+                    <span className="flex w-20 items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
+                      >
+                        <span
+                          className="block h-full origin-left rounded-full bg-primary"
+                          style={{
+                            transform: `scaleX(${Math.min(1, count / maxCount)})`,
+                          }}
+                        />
+                      </span>
+                      <span className="font-display text-sm font-semibold tabular-nums">
+                        {count}
+                      </span>
                     </span>
                     <ChevronRight className="size-4 text-muted-foreground" />
                   </button>

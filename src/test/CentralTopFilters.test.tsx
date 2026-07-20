@@ -68,6 +68,44 @@ describe("CentralTopFilters", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("隐藏空内置标签并显示已有技能的内置标签", () => {
+    renderFilters({
+      tags: [
+        ...tags,
+        {
+          id: "frontend-development",
+          name: "前端开发",
+          is_builtin: true,
+          created_at: "",
+          updated_at: "",
+        },
+        {
+          id: "backend-development",
+          name: "后端开发",
+          is_builtin: true,
+          created_at: "",
+          updated_at: "",
+        },
+      ],
+      facetCounts: {
+        ...facetCounts,
+        tags: {
+          ...facetCounts.tags,
+          "frontend-development": 0,
+          "backend-development": 2,
+        },
+      },
+    });
+
+    expect(
+      screen.queryByTestId("top-filter-tag-frontend-development"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("top-filter-tag-backend-development"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("top-filter-tag-t1")).toBeInTheDocument();
+  });
+
   it("点击来源 pill 切换来源", async () => {
     const onToggleSource = vi.fn();
     renderFilters({ onToggleSource });

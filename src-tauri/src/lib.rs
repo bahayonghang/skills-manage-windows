@@ -353,6 +353,7 @@ pub fn run() {
             commands::deep_link::mark_import_intent_frontend_ready,
             commands::bootstrap::get_bootstrap_snapshot,
             commands::bootstrap::get_skill_counts_summary,
+            commands::bootstrap::get_dashboard_central_summary,
             commands::app_runtime::get_app_runtime_info,
             // Targets
             commands::targets::list_targets,
@@ -374,6 +375,7 @@ pub fn run() {
             commands::logs::get_operation_log,
             commands::logs::clear_operation_logs,
             commands::logs::export_operation_logs,
+            commands::logs::get_daily_operation_counts,
             commands::logs::list_runtime_log_files,
             commands::logs::read_runtime_log_file,
             commands::logs::export_runtime_log_file,
@@ -415,6 +417,7 @@ pub fn run() {
             commands::central_metadata::assign_skills_to_repository,
             commands::central_metadata::set_skill_repository_pinned,
             commands::central_metadata::get_skill_tags,
+            commands::central_metadata::get_central_top_tags,
             commands::central_metadata::create_skill_tag,
             commands::central_metadata::assign_skill_tags,
             commands::central_metadata::unassign_skill_tags,

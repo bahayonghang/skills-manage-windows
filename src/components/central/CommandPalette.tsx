@@ -12,7 +12,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { useHotkey } from "@/hooks/useHotkey";
-import { getVisibleSkillTags } from "@/lib/centralTags";
+import { getVisibleSkillTagsWithUsage } from "@/lib/centralTags";
 import type { SavedView, SkillRepositoryWithStats, SkillTag } from "@/types";
 
 export interface CommandPaletteAction {
@@ -29,6 +29,7 @@ export interface CommandPaletteProps {
 
   savedViews: SavedView[];
   tags: SkillTag[];
+  tagCounts: Readonly<Record<string, number>>;
   repositories: SkillRepositoryWithStats[];
   actions: CommandPaletteAction[];
 
@@ -48,6 +49,7 @@ export function CommandPalette({
   onOpenChange,
   savedViews,
   tags,
+  tagCounts,
   repositories,
   actions,
   onSelectSavedView,
@@ -59,7 +61,7 @@ export function CommandPalette({
   useHotkey("mod+k", () => onOpenChange(!open));
 
   const visibleSavedViews = savedViews.slice(0, 8);
-  const visibleTags = getVisibleSkillTags(tags).slice(0, 8);
+  const visibleTags = getVisibleSkillTagsWithUsage(tags, tagCounts).slice(0, 8);
   const visibleRepositories = repositories.slice(0, 8);
 
   function handleSelect(callback: () => void) {

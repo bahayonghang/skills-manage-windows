@@ -205,7 +205,7 @@ just build
 just install
 ```
 
-- `just ci` 会并行运行前端链（`typecheck` → `lint` → `sizecheck` → `test`）与 Rust 链（`cargo clippy` → `cargo test`）。
+- `just ci` 会并行运行前端链（`typecheck` → `lint` → `sizecheck` → `test` → 生产 `build`）与 Rust 链（entrypoint 契约 → `fmt --check` → 全 targets `clippy` → 锁文件 `test`）。
 - `just dev` 会直接启动 Tauri 开发应用。
 - `just build` 会按当前平台构建桌面应用，并把最新打包产物复制到 `outputs/`（Windows 为 `.exe`，macOS 为 `.app` + `.dmg`，Linux 为 `.AppImage`/`.deb`）。
 - `just install` 会构建 Windows NSIS 安装包、复制到 `outputs/`，并以 passive 模式运行安装器；在 macOS 上会显示提醒并改为运行 `just build`。
@@ -221,13 +221,10 @@ Vite 开发服务器默认使用 `24200` 端口。
 ### 验证命令
 
 ```bash
-pnpm test
-pnpm sizecheck
-pnpm typecheck
-pnpm lint
-cd src-tauri && cargo test
-cd src-tauri && cargo clippy -- -D warnings
+just ci
 ```
+
+GitHub 会在指向 `main` 的 PR、`main` 或 `dev` push、手动触发和 release 发布时运行同一套 `just-ci` 门禁。跨平台 smoke package 只在手动触发和 release 发布时运行。
 
 ## 项目结构
 

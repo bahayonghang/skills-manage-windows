@@ -361,6 +361,16 @@ pub struct SkillAiTagReview {
     pub reason: String,
     pub suggested_at: String,
     pub updated_at: String,
+    pub is_proposal: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingAiTagReviewInput {
+    pub tag_id: String,
+    pub confidence: f64,
+    pub reason: String,
+    pub proposed_name: Option<String>,
+    pub proposed_description: Option<String>,
 }
 
 // ─── Scan Directory ──────────────────────────────────────────────────────────

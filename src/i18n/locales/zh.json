@@ -280,16 +280,8 @@
     }
   },
   "dashboard": {
-    "eyebrow": "本地操作控制台",
-    "title": "Dashboard",
-    "localScope": "本机",
-    "description": "查看当前目标、中央库状态、待处理队列和最近本地操作，不在后台启动网络任务。",
     "hero": {
-      "eyebrow": "技能管理驾驶舱",
-      "title": "发现、复核、安装 AI 技能，全程在本地受控。",
-      "description": "下一步动作一目了然：Central 已索引、安装目标已就绪，唯一阻塞工作是复核质量，而非后台网络任务。",
       "ctaBrowse": "浏览中央技能",
-      "ctaReview": "复核 {{count}} 个未分类",
       "ctaMarketplace": "打开市场",
       "ctaQuickMigrate": "快速迁移",
       "ctaQuickMigrateRemoteDesc": "打开 {{target}} 的远程同步。",
@@ -311,86 +303,22 @@
         "described": "描述完整",
         "sourced": "来源映射",
         "installHealth": "安装健康"
-      },
-      "miniCentral": "中央",
-      "miniSources": "来源",
-      "miniAgents": "Agents"
-    },
-    "metricStrip": {
-      "ariaLabel": "技能库指标",
-      "central": "中央技能",
-      "centralDesc": "已索引到 ~/.agents/skills 的规范化技能。",
-      "aiReviews": "AI 复核",
-      "aiReviewsDesc": "等待人工确认的标签建议。",
-      "sources": "来源",
-      "sourcesDesc": "连接到中央条目的仓库记录。",
-      "collections": "技能集合",
-      "collectionsDesc": "用于批量安装流程的已保存集合。"
-    },
-    "sparkline": {
-      "ariaLabel": "最近 14 天操作趋势",
-      "empty": "暂无操作"
+      }
     },
     "agents": {
       "title": "启用平台 · {{enabled}} / {{total}}",
       "description": "当前目标下中央技能可安装到的位置。",
       "manage": "管理",
-      "enabled": "启用",
       "hidden": "隐藏",
       "noPath": "尚未配置路径",
       "openLabel": "打开 Agent {{name}}"
     },
-    "target": "目标",
-    "centralPath": "中央库路径",
-    "lastScan": "上次扫描",
     "neverScanned": "尚未扫描",
-    "scanStateLabel": "扫描状态",
     "scanState": {
       "idle": "空闲",
       "refreshing": "刷新中",
       "error": "需要处理",
       "loading": "加载中"
-    },
-    "scanStateDetail": {
-      "idle": "没有后台任务",
-      "refreshing": "正在刷新本地索引"
-    },
-    "health": {
-      "title": "中央库健康度",
-      "description": "当前 Central 私有技能库的组成状态。",
-      "openCentral": "打开中央库",
-      "centralUnit": "skills · central",
-      "summary": "共 {{centralTotal}} 个技能，其中 {{aiReviewCount}} 个等待 AI 标签复核，{{uncategorizedCount}} 个需要分类，已记录 {{sourceRepositoryCount}} 个来源。",
-      "emptySummary": "Central 尚未索引任何技能。请先扫描或导入技能，再查看健康状态。",
-      "sources": "来源",
-      "sourcesDesc": "已配置 {{count}} 个 Marketplace 注册表来源。"
-    },
-    "metrics": {
-      "central": "中央库",
-      "centralDesc": "中央存储下托管的私有技能。",
-      "discovered": "已发现",
-      "discoveredDesc": "中央库之外发现的项目级技能。",
-      "collections": "技能集合",
-      "collectionsDesc": "可复查或安装的已保存技能集。",
-      "enabledTargets": "启用目标",
-      "enabledTargetsDesc": "当前目标下可见的平台。",
-      "updates": "可用更新",
-      "updatesDesc": "远端来源状态更新的中央技能。",
-      "aiReviews": "AI 复核",
-      "aiReviewsDesc": "等待明确复核的标签建议。",
-      "uncategorized": "未分类",
-      "uncategorizedDesc": "尚未分配具体标签的中央技能。",
-      "unassigned": "未知来源",
-      "unassignedDesc": "仍挂在未知来源元数据下的技能。"
-    },
-    "platforms": {
-      "title": "启用平台 · {{enabled}} / {{total}}",
-      "description": "当前目标下 Central 技能可安装到的位置。",
-      "manage": "管理",
-      "enabled": "启用",
-      "hidden": "隐藏",
-      "noPath": "尚未配置路径",
-      "openLabel": "打开平台 {{name}}"
     },
     "loadWarning": "部分 Dashboard 数据加载失败。",
     "workQueues": "待处理队列",
@@ -403,14 +331,7 @@
       "uncategorized": "未分类技能",
       "uncategorizedDesc": "在中央分类面板中分配标签。",
       "unassigned": "未知来源",
-      "unassignedDesc": "来源明确后关联到对应仓库。",
-      "empty": "当前没有待处理的中央复核队列。",
-      "tabs": {
-        "ariaLabel": "队列过滤",
-        "all": "全部",
-        "review": "复核",
-        "metadata": "元数据"
-      }
+      "unassignedDesc": "来源明确后关联到对应仓库。"
     },
     "activeJobs": "运行中任务",
     "jobProgress": "已完成 {{completed}} / {{total}}",
@@ -419,24 +340,26 @@
     "viewAllLogs": "查看全部日志",
     "loadingLogs": "正在加载最近日志...",
     "noRecentLogs": "暂无最近操作日志。",
-    "sourceCoverage": "来源覆盖",
-    "sourceCoverageDesc": "已配置 {{count}} 个 Marketplace 注册表来源",
-    "loadingCentral": "正在加载中央库元数据...",
-    "noSources": "暂无仓库元数据。",
-    "platformCoverage": "平台覆盖",
-    "platformCoverageDesc": "当前可见目标及缓存技能数量。",
-    "quickActions": "快捷入口",
-    "quickActionsDesc": "跳转到现有可复核工作流。",
-    "quickActionsNote": "Dashboard 快捷入口只负责跳转，不会导入、同步、更新、打标签或删除。",
     "activity": {
       "title": "最近 14 天活动",
       "description": "来自最近本地日志的安装、卸载、扫描和复核操作。",
       "logs": "日志",
       "ops": "次操作",
-      "less": "少",
-      "more": "多",
-      "topTags": "热门标签 · central",
-      "noTags": "暂无 Central 标签。"
+      "chartAria": "最近 {{days}} 天共 {{total}} 次操作",
+      "barTitle": "{{date}}：{{count}} 次操作",
+      "empty": "暂无活动数据。"
+    },
+    "statusHeader": {
+      "lastScan": "上次扫描：{{time}}",
+      "summary": "中央库 {{central}} 项技能 · {{sources}} 个来源 · 已启用 {{agents}} 个平台"
+    },
+    "loading": "加载中…",
+    "chartError": "图表数据加载失败",
+    "retry": "重试",
+    "topTags": {
+      "title": "热门标签 · 中央库",
+      "description": "中央库技能中使用最多的标签分布。",
+      "empty": "还没有中央库标签。"
     }
   },
   "logs": {
@@ -1107,6 +1030,7 @@
     "aiTagLowConfidence": "待复核 {{count}}",
     "viewFailuresAndReviews": "查看失败 / 待复核",
     "reviewEmpty": "暂无低置信度 AI 建议。",
+    "reviewProposalBadge": "AI 新建标签",
     "reviewAccept": "接受",
     "reviewChange": "用已选标签替换",
     "reviewSkip": "跳过",

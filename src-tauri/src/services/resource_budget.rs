@@ -114,7 +114,11 @@ impl ResourceBudget {
     /// dispatcher falls back to archive acquisition.
     pub fn reject_tree_entries(self, count: usize) -> Result<(), BudgetExceeded> {
         let count_u64 = u64::try_from(count).unwrap_or(u64::MAX);
-        reject_over_limit("GitHub repository tree entries", count_u64, self.tree_entries as u64)
+        reject_over_limit(
+            "GitHub repository tree entries",
+            count_u64,
+            self.tree_entries as u64,
+        )
     }
 
     /// Bound the raw Git tree API JSON response body before serde parsing, so a

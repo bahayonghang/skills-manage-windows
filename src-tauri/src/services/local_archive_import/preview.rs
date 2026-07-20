@@ -134,8 +134,8 @@ mod tests {
         let mut buf = std::io::Cursor::new(Vec::new());
         let mut writer = ZipWriter::new(&mut buf);
         for (name, content) in files {
-            let opts = SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored);
+            let opts =
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
             writer.start_file(*name, opts).unwrap();
             writer.write_all(content).unwrap();
         }
@@ -147,8 +147,9 @@ mod tests {
     async fn preview_root_skill_has_no_central_conflict_in_empty_db() {
         let pool = crate::test_support::mem_pool().await;
         let bytes = make_zip(&[("SKILL.md", b"---\nname: My Skill\n---\nbody")]);
-        let preview =
-            build_preview_from_bytes(&pool, &bytes, "my-skill.zip".to_string()).await.unwrap();
+        let preview = build_preview_from_bytes(&pool, &bytes, "my-skill.zip".to_string())
+            .await
+            .unwrap();
         assert_eq!(preview.skills.len(), 1);
         let skill = &preview.skills[0];
         assert_eq!(skill.skill_id, "my-skill");
@@ -168,8 +169,9 @@ mod tests {
             ("demo/SKILL.md", b"---\nname: Demo\n---\nbody"),
             ("demo/assets/x.txt", b"hi"),
         ]);
-        let preview =
-            build_preview_from_bytes(&pool, &bytes, "demo.zip".to_string()).await.unwrap();
+        let preview = build_preview_from_bytes(&pool, &bytes, "demo.zip".to_string())
+            .await
+            .unwrap();
         let skill = &preview.skills[0];
         assert_eq!(skill.root_directory, "demo");
         assert_eq!(skill.skill_id, "demo");
@@ -198,11 +200,15 @@ mod tests {
         };
         crate::db::upsert_skill(&pool, &existing).await.unwrap();
         let bytes = make_zip(&[("SKILL.md", b"---\nname: Existing\n---\nbody")]);
-        let preview =
-            build_preview_from_bytes(&pool, &bytes, "existing.zip".to_string()).await.unwrap();
+        let preview = build_preview_from_bytes(&pool, &bytes, "existing.zip".to_string())
+            .await
+            .unwrap();
         let skill = &preview.skills[0];
         assert_eq!(skill.skill_id, "existing");
-        let conflict = skill.conflict.as_ref().expect("conflict should be reported");
+        let conflict = skill
+            .conflict
+            .as_ref()
+            .expect("conflict should be reported");
         assert_eq!(conflict.existing_skill_id, "existing");
     }
 }
