@@ -36,7 +36,7 @@
 - 不保留按文件/行号或按数值的 allowlist；确需保留的 deliberate display 几何也必须使用命名语义 token（如 `text-display-*`），不得继续写 arbitrary class。
 - 颜色必须通过 theme token / named utility 表达，不能借 arbitrary syntax 绕过字号或颜色契约。
 - 生产 TS/TSX 同时禁止 inline `fontSize`；scale specimen 直接使用 `text-base` 并自然继承根字号，不能把 `scale rem` 再叠加到已缩放 root 上。
-- 守卫由 `src/test/typographyContract.test.ts` 在 CI 期读取源码实现，不进入生产 bundle，不增加运行时 observer / resize listener / 扫描逻辑。
+- 守卫由 `src/test/contracts/typographyContract.test.ts` 在 CI 期读取源码实现，不进入生产 bundle，不增加运行时 observer / resize listener / 扫描逻辑。
 
 ## 5. Contrast contract
 
@@ -44,14 +44,14 @@
 - 有意义文本默认不使用 `/60` `/70` `/80` 透明前景色；`primary` 用于填充/强调，普通 accent 文本使用已测的 `text-primary-text`；`success` / `warning` / `info` 使用现有 semantic foreground，不新增硬编码组件色。
 - Destructive 分为两个角色：普通 surface 上的错误文字/图标使用 `text-destructive-text`；`bg-destructive` 填充上的反色文字使用 `text-destructive-foreground`。不得用填充色 `text-destructive` 直接承载小字错误信息。
 - `disabled` 或纯装饰例外必须同时具有不可操作语义/等价 label 并记录在任务 research 决策表；不建立按行号 allowlist。
-- 测试基线为 `src/test/themeContrast.test.ts`（六主题×14 accent×核心前景/背景/card/popover/sidebar/muted/alpha 合成），新治理扩展该测试，不引入第二套颜色或字体模型。
+- 测试基线为 `src/test/contracts/themeContrast.test.ts`（六主题×14 accent×核心前景/背景/card/popover/sidebar/muted/alpha 合成），新治理扩展该测试，不引入第二套颜色或字体模型。
 
 ## 6. Tests Required
 
-- `src/test/typographyContract.test.ts`：扫描生产 TS/TSX，断言无任何 `text-[...]`、无 arbitrary size/color、无 inline `fontSize`、`--text-ui-meta`/`--text-ui-micro` 存在、无 viewport 字号。
-- `src/test/fontContract.test.ts`：token 在 `@theme inline` 用 rem 声明、不覆盖 line-height、阶梯 `micro < meta < xs`、由根 `--font-scale` 驱动。
-- `src/test/themeContrast.test.ts`：六主题×14 accent 在 background/card/popover/sidebar/muted 上满足 AA；alpha 前景与真实 surface 合成后满足 AA；`destructive-text` 在四类普通 surface 上通过，`destructive-foreground` 在 destructive fill 上通过。
-- `src/test/centralSkillGrid.test.ts`：三档 Scale 下锁定 Central list/grid、comfortable/compact 固定高度映射；真实浏览器另验相邻边界、scroll overflow 与首末项可达。
+- `src/test/contracts/typographyContract.test.ts`：扫描生产 TS/TSX，断言无任何 `text-[...]`、无 arbitrary size/color、无 inline `fontSize`、`--text-ui-meta`/`--text-ui-micro` 存在、无 viewport 字号。
+- `src/test/contracts/fontContract.test.ts`：token 在 `@theme inline` 用 rem 声明、不覆盖 line-height、阶梯 `micro < meta < xs`、由根 `--font-scale` 驱动。
+- `src/test/contracts/themeContrast.test.ts`：六主题×14 accent 在 background/card/popover/sidebar/muted 上满足 AA；alpha 前景与真实 surface 合成后满足 AA；`destructive-text` 在四类普通 surface 上通过，`destructive-foreground` 在 destructive fill 上通过。
+- `src/test/lib/centralSkillGrid.test.ts`：三档 Scale 下锁定 Central list/grid、comfortable/compact 固定高度映射；真实浏览器另验相邻边界、scroll overflow 与首末项可达。
 - 改动后至少运行定向 Vitest、`pnpm typecheck`、`pnpm lint`、`pnpm build` 与 `just ci`。
 
 ## 7. Wrong vs Correct

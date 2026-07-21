@@ -3,7 +3,7 @@
  *
  * 新增平台需要加入 Universal 分组或默认启用列表时，只改本文件；
  * 三份有序列表（global / project / install）由登记表推导，
- * 行为由 src/test/platformRegistry.test.ts 锁定。
+ * 行为由 src/test/lib/platformRegistry.test.ts 锁定。
  */
 
 export interface UniversalPlatformRegistration {

@@ -36,7 +36,7 @@ export type UnifiedSkillCardProps =
 
 ## 约定 3：互斥负例是活文档，必须随场景演进维护
 
-**What**：`src/test/unifiedSkillCardVariants.test.tsx` 持有每场景最小正例 + 跨场景 `@ts-expect-error` 负例（带中文描述）。`pnpm typecheck` 双向强制：互斥失效时 directive 报 Unused 错误。新增场景 / 移动 prop 归属时同步增删负例。
+**What**：`src/test/components/skill/unifiedSkillCardVariants.test.tsx` 持有每场景最小正例 + 跨场景 `@ts-expect-error` 负例（带中文描述）。`pnpm typecheck` 双向强制：互斥失效时 directive 报 Unused 错误。新增场景 / 移动 prop 归属时同步增删负例。
 
 **Why**：类型互斥是本约定的核心交付物，负例是它唯一的回归探测器。
 

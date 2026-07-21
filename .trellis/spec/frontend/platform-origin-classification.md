@@ -48,7 +48,7 @@ import { getPlatformSkillOrigin } from "@/lib/platformSkillViewModel";
 const origin = getPlatformSkillOrigin(skill);
 ```
 
-**测试锁**：`src/test/platformSkillViewModel.test.ts` 锁分类规则、聚合守恒（central + standalone = total；repo 桶之和 + unassigned = centralCount）、standalone 带 repo 指派不计入 repo 桶、管线顺序（origin 在 tab 后搜索前）。
+**测试锁**：`src/test/lib/platformSkillViewModel.test.ts` 锁分类规则、聚合守恒（central + standalone = total；repo 桶之和 + unassigned = centralCount）、standalone 带 repo 指派不计入 repo 桶、管线顺序（origin 在 tab 后搜索前）。
 
 ## 约定 2（Gotcha）：`installed_at` 不是「SkillPort 装的」信号
 

@@ -88,11 +88,11 @@ saveBodyChineseFallback(mode, key, custom): Promise<void>;
 
 ## 6. Tests Required
 
-- `src/test/themeStore.test.ts`：六个 flavor 到 light/dark 的完整映射。
-- `src/test/displayFont.test.ts`：默认值、三种 fallback、v1 双份迁移、部分/非法 v2、并发编辑保护、mode 隔离、安全字体链与全局 Scale。
+- `src/test/stores/themeStore.test.ts`：六个 flavor 到 light/dark 的完整映射。
+- `src/test/lib/displayFont.test.ts`：默认值、三种 fallback、v1 双份迁移、部分/非法 v2、并发编辑保护、mode 隔离、安全字体链与全局 Scale。
 - 并发编辑测试必须分别覆盖读取阶段和迁移写回阶段，并断言未编辑字段仍从持久化结果合并、同 key 的最新用户值最终落盘。
-- `src/test/SettingsView.test.tsx`：亮/暗 editor、当前标识、不切 Theme、Custom 渐进显示、mode-specific key 写入、specimen 与可访问名称。
-- `src/test/fontContract.test.ts`：CSS token 生效且没有 fallback `@font-face` 声明。
+- `src/test/pages/SettingsView.test.tsx`：亮/暗 editor、当前标识、不切 Theme、Custom 渐进显示、mode-specific key 写入、specimen 与可访问名称。
+- `src/test/contracts/fontContract.test.ts`：CSS token 生效且没有 fallback `@font-face` 声明。
 - 改动后至少运行定向 Vitest、`pnpm build` 与 `just ci`。
 
 ## 7. Wrong vs Correct

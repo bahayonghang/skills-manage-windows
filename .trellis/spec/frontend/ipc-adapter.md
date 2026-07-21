@@ -22,7 +22,7 @@ import { invoke, listen } from "@/lib/ipc";
 
 **What**：`src/lib/ipc/commandMap.ts` 的 `IPC_COMMANDS` 按命令名登记 args/result 类型（`command<Args, Result>()` 幻影值模式，单一来源同时供类型推导与运行时枚举）。`invoke` 双 overload：命令 ∈ map → 按名推导，无需写泛型；未类型化命令走 `invoke<T>(command, args?)` 兼容 overload。
 
-**新增 IPC 命令的操作**：优先在 `IPC_COMMANDS` 加一行类型化条目；确有理由暂缓时登记进 `UNTYPED_IPC_COMMANDS` 允许清单。`src/test/ipcCommandCoverage.test.ts` 强制：全仓 invoke 字面量 ∈ map ∪ 清单、清单零僵尸条目、命令类型化后必须离开清单（只减不增）、map ≥ 40。
+**新增 IPC 命令的操作**：优先在 `IPC_COMMANDS` 加一行类型化条目；确有理由暂缓时登记进 `UNTYPED_IPC_COMMANDS` 允许清单。`src/test/contracts/ipcCommandCoverage.test.ts` 强制：全仓 invoke 字面量 ∈ map ∪ 清单、清单零僵尸条目、命令类型化后必须离开清单（只减不增）、map ≥ 40。
 
 **Wrong vs Correct**：
 
@@ -40,7 +40,7 @@ const skills = await invoke("get_skills_by_agent", { agentId });
 
 **行为语义**：
 
-- 未注册命令 reject `IpcFixtureMissingError`（fail loud，缺口可定位；`src/test/browserFixtures.test.ts` 安全网驱动各 store 主加载路径常驻验证）。
+- 未注册命令 reject `IpcFixtureMissingError`（fail loud，缺口可定位；`src/test/fixtures/browserFixtures.test.ts` 安全网驱动各 store 主加载路径常驻验证）。
 - 桌面限定操作（卸载、SSH/WSL 目标创建等）在 fixture 侧 reject **原字符串**（Tauri 命令错误即 string），store `String(err)` 后 error 文案与桌面一致。
 - 有状态域（tagGroups / savedViews）用模块级内存数据集实现 CRUD，store 仍按真实路径 refetch。
 
@@ -48,7 +48,7 @@ const skills = await invoke("get_skills_by_agent", { agentId });
 
 ## 约定 4：测试按命令名 mock，不按调用次序打桩
 
-**What**：`src/test/setup.ts` 已把 `__TAURI_INTERNALS__.invoke` 换成命令路由 dispatcher。测试用 `src/test/ipcMock.ts` 的 `mockIpcCommand(command, handlerOrValue)` / `mockIpcCommands(map)` 注册响应，用 `ipcInvokeCalls(command)` / `ipcInvokedCommands()` 断言调用 —— 与 invoke 发生次序解耦。
+**What**：`src/test/support/setup.ts` 已把 `__TAURI_INTERNALS__.invoke` 换成命令路由 dispatcher。测试用 `src/test/support/ipcMock.ts` 的 `mockIpcCommand(command, handlerOrValue)` / `mockIpcCommands(map)` 注册响应，用 `ipcInvokeCalls(command)` / `ipcInvokedCommands()` 断言调用 —— 与 invoke 发生次序解耦。
 
 **模式语义**：注册过任一 handler 的测试进入严格模式（未注册命令 reject 并列出已注册命令名）；未注册任何 handler 时宽松（resolve `undefined`，兼容存量顺序桩文件）。`afterEach` 全局自动 `resetIpcMock()`。
 

@@ -77,7 +77,7 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 
 ## 6. Tests Required
 
-- `pnpm vitest run src/test/ciWorkflowContract.test.ts`
+- `pnpm vitest run src/test/contracts/ciWorkflowContract.test.ts`
   - Parse YAML 1.2; assert event branches, stable job name, shared entrypoint, Rust components, and every package guard.
 - `just ci`
   - Assert the complete frontend and Rust chains pass from their shared local/remote entrypoint.
