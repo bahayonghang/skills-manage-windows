@@ -181,6 +181,7 @@ describe("centralSkillsStore", () => {
       },
       aiTaggingAvailable: false,
       isLoading: false,
+      isRefreshingList: false,
       isInstalling: false,
       isDeleting: false,
       isMetadataUpdating: false,
@@ -208,6 +209,7 @@ describe("centralSkillsStore", () => {
     expect(state.portabilityJob.status).toBe("idle");
     expect(state.aiTaggingAvailable).toBe(false);
     expect(state.isLoading).toBe(false);
+    expect(state.isRefreshingList).toBe(false);
     expect(state.isInstalling).toBe(false);
     expect(state.isDeleting).toBe(false);
     expect(state.isMetadataUpdating).toBe(false);
@@ -273,6 +275,104 @@ describe("centralSkillsStore", () => {
     const state = useCentralSkillsStore.getState();
     expect(state.error).toContain("DB error");
     expect(state.isLoading).toBe(false);
+  });
+
+  it("rethrows on failure when throwOnError is true and still writes store error", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("DB error"));
+
+    await expect(
+      useCentralSkillsStore.getState().loadCentralSkills({ throwOnError: true })
+    ).rejects.toThrow("DB error");
+
+    const state = useCentralSkillsStore.getState();
+    expect(state.error).toContain("DB error");
+    expect(state.isLoading).toBe(false);
+    expect(state.isRefreshingList).toBe(false);
+  });
+
+  it("refreshes in place via isRefreshingList when skills already exist", async () => {
+    useCentralSkillsStore.setState({ skills: mockSkills });
+    let resolveSkills: ((value: SkillWithLinks[]) => void) | undefined;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "get_central_skills") {
+        return new Promise<SkillWithLinks[]>((resolve) => {
+          resolveSkills = resolve;
+        });
+      }
+      return [];
+    });
+
+    const pending = useCentralSkillsStore.getState().loadCentralSkills();
+
+    // 入口同步分流：isLoading 保持 false，旧列表内容保留。
+    const refreshingState = useCentralSkillsStore.getState();
+    expect(refreshingState.isRefreshingList).toBe(true);
+    expect(refreshingState.isLoading).toBe(false);
+    expect(refreshingState.skills).toEqual(mockSkills);
+
+    resolveSkills?.([mockSkills[1]]);
+    await pending;
+
+    const state = useCentralSkillsStore.getState();
+    expect(state.isRefreshingList).toBe(false);
+    expect(state.isLoading).toBe(false);
+    expect(state.skills).toEqual([mockSkills[1]]);
+  });
+
+  it("keeps using isLoading for the initial empty-store load", async () => {
+    let resolveSkills: ((value: SkillWithLinks[]) => void) | undefined;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "get_central_skills") {
+        return new Promise<SkillWithLinks[]>((resolve) => {
+          resolveSkills = resolve;
+        });
+      }
+      return [];
+    });
+
+    const pending = useCentralSkillsStore.getState().loadCentralSkills();
+
+    const loadingState = useCentralSkillsStore.getState();
+    expect(loadingState.isLoading).toBe(true);
+    expect(loadingState.isRefreshingList).toBe(false);
+
+    resolveSkills?.(mockSkills);
+    await pending;
+
+    const state = useCentralSkillsStore.getState();
+    expect(state.isLoading).toBe(false);
+    expect(state.skills).toEqual(mockSkills);
+  });
+
+  it("applies only the latest loadCentralSkills result when requests overlap", async () => {
+    const secondSkills = [mockSkills[1]];
+    let getCentralSkillsCalls = 0;
+    let resolveFirstSkills: ((value: SkillWithLinks[]) => void) | undefined;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "get_central_skills") {
+        getCentralSkillsCalls += 1;
+        if (getCentralSkillsCalls === 1) {
+          return new Promise<SkillWithLinks[]>((resolve) => {
+            resolveFirstSkills = resolve;
+          });
+        }
+        return secondSkills;
+      }
+      return [];
+    });
+
+    const first = useCentralSkillsStore.getState().loadCentralSkills();
+    const second = useCentralSkillsStore.getState().loadCentralSkills();
+
+    // 后到请求先完成，结果生效。
+    await second;
+    expect(useCentralSkillsStore.getState().skills).toEqual(secondSkills);
+
+    // 先到请求更晚完成，其过期写入被 latest-wins 门控丢弃。
+    resolveFirstSkills?.(mockSkills);
+    await first;
+    expect(useCentralSkillsStore.getState().skills).toEqual(secondSkills);
+    expect(useCentralSkillsStore.getState().isLoading).toBe(false);
   });
 
   it("returns deterministic browser fixture data when Tauri runtime is unavailable", async () => {

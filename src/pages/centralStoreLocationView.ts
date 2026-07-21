@@ -12,7 +12,7 @@ interface CentralStoreLocationControlsOptions {
 }
 
 interface CentralStoreLocationAppliedOptions {
-  loadCentralSkills: () => Promise<void>;
+  loadCentralSkills: (options?: { throwOnError?: boolean }) => Promise<void>;
   refreshCounts: () => Promise<void>;
   t: TFunction;
 }

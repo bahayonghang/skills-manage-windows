@@ -25,7 +25,9 @@ async function loadAiApiKeyState(): Promise<AiApiKeyState | null> {
   }
 }
 
-export function createCentralListSlice({ set, getGeneration }: CentralStoreContext): Pick<
+let loadRequestId = 0;
+
+export function createCentralListSlice({ set, get, getGeneration }: CentralStoreContext): Pick<
   CentralSkillsState,
   "loadCentralSkills" | "previewCentralStoreLocationChange" | "applyCentralStoreLocationChange"
 > {
@@ -33,12 +35,25 @@ export function createCentralListSlice({ set, getGeneration }: CentralStoreConte
   /**
    * Load all Central Skills with per-platform link status, along with the
    * list of all registered agents. Called when navigating to /central.
+   *
+   * 默认吞错只写 store error（约 15 个 fire-and-forget 调用点依赖此语义）；
+   * 显式传 `{ throwOnError: true }` 时 rethrow，由可见 UI 调用方负责 toast。
+   * latest-wins：只有最新一次请求的 set 生效，被覆盖请求的写入全部丢弃
+   * （rethrow 不受门控，调用方拿自己这次请求的真实结果）。
    */
-  loadCentralSkills: async () => {
+  loadCentralSkills: async (options?: { throwOnError?: boolean }) => {
+    const requestId = ++loadRequestId;
     const generation = getGeneration();
-    set({ isLoading: true, error: null });
+    // 已有列表数据时走后台刷新态，保留旧内容；空数据维持整页加载空态。
+    if (get().skills.length > 0) {
+      set({ isRefreshingList: true, error: null });
+    } else {
+      set({ isLoading: true, error: null });
+    }
     if (!isTauriRuntime()) {
-      set(createCentralBrowserFixtureState());
+      if (requestId === loadRequestId && generation === getGeneration()) {
+        set(createCentralBrowserFixtureState());
+      }
       return;
     }
     try {
@@ -51,7 +66,7 @@ export function createCentralListSlice({ set, getGeneration }: CentralStoreConte
         invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
         loadAiApiKeyState(),
       ]);
-      if (generation === getGeneration()) {
+      if (requestId === loadRequestId && generation === getGeneration()) {
         set({
           skills: skills ?? [],
           agents: agents ?? [],
@@ -61,11 +76,15 @@ export function createCentralListSlice({ set, getGeneration }: CentralStoreConte
           updateStatuses: indexUpdateStates(updateStates ?? []),
           aiTaggingAvailable: !!aiApiKeyState?.configured,
           isLoading: false,
+          isRefreshingList: false,
         });
       }
     } catch (err) {
-      if (generation === getGeneration()) {
-        set({ error: String(err), isLoading: false });
+      if (requestId === loadRequestId && generation === getGeneration()) {
+        set({ error: String(err), isLoading: false, isRefreshingList: false });
+      }
+      if (options?.throwOnError) {
+        throw err;
       }
     }
   },

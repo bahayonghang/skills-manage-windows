@@ -199,7 +199,7 @@ export function CentralSkillDialogs({
   isResolvingRemoteMissing: boolean;
   isUpdatingSkills: boolean;
   isUpdateConfirmDialogOpen: boolean;
-  loadCentralSkills: () => Promise<void>;
+  loadCentralSkills: (options?: { throwOnError?: boolean }) => Promise<void>;
   pendingUpdateStates: CentralSkillUpdateState[];
   previewSkillportStateImport: (json: string) => Promise<SkillportStateImportPreview>;
   remoteMissingError: string | null;

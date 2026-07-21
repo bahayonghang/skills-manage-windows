@@ -599,15 +599,6 @@ export function useCentralSkillsActions({
     }
   }
 
-  async function handleRefresh() {
-    try {
-      await refreshCounts();
-      await loadCentralSkills();
-    } catch (err) {
-      toast.error(t("central.refreshError", { error: String(err) }));
-    }
-  }
-
   // ── 卡上标签增删（central 方案C） ──
   async function handleAddSkillTag(skillId: string, tagId: string) {
     if (!assignSkillTags) return;
@@ -661,7 +652,6 @@ export function useCentralSkillsActions({
     handleInstall,
     handleInstallClick,
     handleOpenDrawer,
-    handleRefresh,
     handleSelectCurrentFilter,
     handleSelectUncategorized,
     handleSkipReview,

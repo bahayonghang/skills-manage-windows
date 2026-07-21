@@ -14,6 +14,7 @@ const {
   mockBatchInstallSkills,
   mockBatchUninstallSkillsFromAgent,
   mockLoadBatchDeletePreview,
+  mockLoadCentralSkills,
   mockDeleteCentralSkills,
   mockCheckSkillUpdates,
   mockCheckRepositorySync,
@@ -643,6 +644,105 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     await waitFor(() => {
       expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
     });
+  });
+
+  it("检查成功后先自动重取列表再打开 Update Center，更新状态可见生效", async () => {
+    const { centralState } = renderCentralSkillsView();
+    // 模拟重取把检查后的更新状态写回 store（真实 store 的行为）；
+    // 组件后续重渲染时 mock selector 会读到新值。
+    mockLoadCentralSkills.mockImplementation(async () => {
+      centralState.updateStatuses = {
+        "frontend-design": {
+          skill_id: "frontend-design",
+          source_type: "github",
+          status: "update_available",
+        },
+      };
+    });
+
+    fireEvent.click(screen.getByTestId("central-check-updates"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
+
+    await waitFor(() => {
+      expect(mockOpenUpdateCenterDialog).toHaveBeenCalledWith("updatable", {
+        skillIds: ["code-reviewer", "frontend-design"],
+        mode: "regular",
+      });
+    });
+
+    // 自动重取（throwOnError 路径）必须先于打开 Update Center。
+    const autoRefreshCallIndex = mockLoadCentralSkills.mock.calls.findIndex(
+      (args) => (args[0] as { throwOnError?: boolean } | undefined)?.throwOnError === true,
+    );
+    expect(autoRefreshCallIndex).toBeGreaterThanOrEqual(0);
+    const autoRefreshOrder = mockLoadCentralSkills.mock.invocationCallOrder[autoRefreshCallIndex]!;
+    const openOrder = mockOpenUpdateCenterDialog.mock.invocationCallOrder[0]!;
+    expect(autoRefreshOrder).toBeLessThan(openOrder);
+
+    // 列表 updateStatuses 可见更新：出现可更新 chip（断言 UI 结果而非仅调用）。
+    expect(await screen.findByTestId("central-update-count-chip")).toHaveTextContent("+1");
+  });
+
+  it("检查后列表重取失败仍按原参数打开 Update Center，只报 refreshError", async () => {
+    renderCentralSkillsView();
+    // 挂载那次无参调用已消费默认实现；reject 只用于 throwOnError 路径的下一次调用。
+    mockLoadCentralSkills.mockRejectedValueOnce(new Error("list read failed"));
+
+    fireEvent.click(screen.getByTestId("central-check-updates"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("刷新失败: Error: list read failed");
+    });
+    expect(mockOpenUpdateCenterDialog).toHaveBeenCalledWith("updatable", {
+      skillIds: ["code-reviewer", "frontend-design"],
+      mode: "regular",
+    });
+    expect(toast.error).not.toHaveBeenCalledWith(
+      expect.stringContaining("检查更新失败"),
+    );
+    // 检查本身成功：无内联错误，弹窗按成功路径关闭。
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("手动刷新列表重取失败时报 refreshError toast，计数刷新仍并行执行", async () => {
+    renderCentralSkillsView();
+    mockLoadCentralSkills.mockRejectedValueOnce(new Error("disk gone"));
+
+    fireEvent.click(screen.getByTestId("central-refresh-skills"));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("刷新失败: Error: disk gone");
+    });
+    expect(mockRescan).toHaveBeenCalled();
+  });
+
+  it("计数刷新失败不阻断列表重取，且同样给出失败反馈", async () => {
+    renderCentralSkillsView();
+    mockRescan.mockRejectedValueOnce(new Error("counts failed"));
+
+    fireEvent.click(screen.getByTestId("central-refresh-skills"));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("刷新失败: Error: counts failed");
+    });
+    expect(mockLoadCentralSkills).toHaveBeenCalledWith({ throwOnError: true });
+  });
+
+  it("刷新中按钮禁用，重复点击不触发第二次请求", async () => {
+    renderCentralSkillsView({ centralOverrides: { isRefreshingList: true } });
+
+    const button = screen.getByTestId("central-refresh-skills");
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+
+    // 只有挂载时那一次无参加载，没有新的列表/计数请求。
+    await waitFor(() => {
+      expect(mockLoadCentralSkills).toHaveBeenCalledTimes(1);
+    });
+    expect(mockRescan).not.toHaveBeenCalled();
   });
 
   it("shows all active repositories while the confirmed check is running", async () => {

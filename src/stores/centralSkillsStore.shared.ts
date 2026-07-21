@@ -390,6 +390,7 @@ export function createCentralBrowserFixtureState() {
     portabilityJob: createIdlePortabilityJob(),
     aiTaggingAvailable: false,
     isLoading: false,
+    isRefreshingList: false,
     error: null,
   };
 }
@@ -407,6 +408,7 @@ export function createCentralSkillsInitialState() {
     portabilityJob: createIdlePortabilityJob(),
     aiTaggingAvailable: false,
     isLoading: false,
+    isRefreshingList: false,
     isInstalling: false,
     isDeleting: false,
     isMetadataUpdating: false,

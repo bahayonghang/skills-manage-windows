@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import {
   cleanupCentralSkillsViewTestState,
+  mockLoadCentralSkills,
+  mockRescan,
   renderCentralSkillsView,
   resetCentralSkillsViewTestState,
 } from "./centralSkillsViewTestSupport";
@@ -63,6 +65,41 @@ describe("CentralSkillsView shell（V2 markup）", () => {
       },
     });
     expect(screen.getByTestId("central-update-count-chip")).toHaveTextContent("+1");
+  });
+
+  // ─── 手动刷新按钮 ─────────────────────────────────────────────
+
+  it("工具栏渲染手动刷新按钮（title/aria-label 复用 central.refresh）", async () => {
+    renderCentralSkillsView();
+    const button = await screen.findByTestId("central-refresh-skills");
+    await waitFor(() => {
+      expect(button).toHaveAttribute("title", "刷新中央技能库");
+    });
+    expect(button).toHaveAttribute("aria-label", "刷新中央技能库");
+    expect(button).not.toBeDisabled();
+  });
+
+  it("点击刷新按钮并行触发列表重取与计数刷新", async () => {
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByTestId("central-refresh-skills"));
+
+    await waitFor(() => {
+      expect(mockLoadCentralSkills).toHaveBeenCalledWith({ throwOnError: true });
+    });
+    await waitFor(() => {
+      expect(mockRescan).toHaveBeenCalled();
+    });
+  });
+
+  it("刷新中按钮禁用且图标旋转", async () => {
+    renderCentralSkillsView({ centralOverrides: { isRefreshingList: true } });
+
+    const button = await screen.findByTestId("central-refresh-skills");
+    await waitFor(() => {
+      expect(button).toBeDisabled();
+    });
+    expect(button.querySelector("svg")).toHaveClass("animate-spin");
   });
 
   // ─── Search + toolbar ─────────────────────────────────────────────

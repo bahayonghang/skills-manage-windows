@@ -559,6 +559,7 @@ export function buildCentralStoreState(overrides = {}) {
     },
     aiTaggingAvailable: true,
     isLoading: false,
+    isRefreshingList: false,
     isInstalling: false,
     isDeleting: false,
     isMetadataUpdating: false,
@@ -701,11 +702,14 @@ export function renderCentralSkillsView({
     return skillDetailState;
   });
 
-  return render(
+  const view = render(
     <MemoryRouter>
       <CentralSkillsViewComponent />
     </MemoryRouter>
   );
+  // 额外返回各 store state 对象：需要模拟「action 写回 store」的用例可直接改 state，
+  // 组件重渲染时 mock selector 会读到新值。
+  return { ...view, centralState, platformState, skillState, marketplaceState, skillDetailState };
 }
 
 export { render, screen, fireEvent, waitFor, cleanup, within };
@@ -733,6 +737,7 @@ export function resetCentralSkillsViewTestState() {
     ...createSettingsStoreInitialState(),
     centralUpdateCheckModeLoaded: true,
   });
+  mockLoadCentralSkills.mockResolvedValue(undefined);
   mockCheckSkillUpdates.mockResolvedValue([]);
   mockCheckRepositorySync.mockResolvedValue({
     states: [],
