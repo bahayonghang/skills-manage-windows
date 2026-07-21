@@ -566,7 +566,7 @@ async fn selected_agents(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{mem_pool, seed_central_skill};
+    use crate::test_support::mem_pool;
     use std::collections::HashMap;
 
     #[test]
@@ -586,38 +586,6 @@ mod tests {
         );
         assert!(parse_install_source("./local-skill").is_err());
         assert!(parse_install_source("https://example.com/repo").is_err());
-    }
-
-    #[tokio::test]
-    async fn list_show_and_dry_run_sync_share_stable_identity() {
-        let pool = mem_pool().await;
-        let temp = tempfile::tempdir().unwrap();
-        let skill_dir = temp.path().join("demo");
-        seed_central_skill(&pool, &skill_dir, "demo", "Demo").await;
-        let mut skill = db::get_skill_by_id(&pool, "demo").await.unwrap().unwrap();
-        skill.name = "Demo".to_string();
-        db::upsert_skill(&pool, &skill).await.unwrap();
-        let context = CliContext::new(pool, Arc::new(crate::secrets::MockSecretStore::default()));
-
-        let listed = context.list_skills().await.unwrap();
-        assert_eq!(listed[0].uid, skill.uid);
-        assert_eq!(context.show_skill(&skill.uid).await.unwrap().id, "demo");
-        assert_eq!(context.show_skill("Demo").await.unwrap().uid, skill.uid);
-
-        let plan = context
-            .sync_skills(
-                vec![skill.uid],
-                false,
-                vec!["codex".to_string()],
-                "copy",
-                true,
-            )
-            .await
-            .unwrap();
-        assert!(plan.dry_run);
-        assert_eq!(plan.plans.len(), 1);
-        assert_eq!(plan.plans[0].id, "demo");
-        assert!(plan.result.is_none());
     }
 
     #[tokio::test]

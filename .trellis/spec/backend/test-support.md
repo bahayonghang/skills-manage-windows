@@ -17,17 +17,17 @@
 ## 豁免（仅两类，现场必须带豁免注释）
 
 - **语义性**：测试需要**未 init 的裸池**（无 schema 容错、手工搭 legacy schema 验证迁移）。在案现场：`operation_log.rs`（无表容错）、`db/tests.rs`、`services/projects/tests.rs`、`services/marketplace/tests.rs`（legacy schema 迁移）。
-- **结构性**：`tests/` 下的集成测试 crate（`#[cfg(test)] pub mod test_support` 对其不可见）。在案现场：`tests/projects_e2e.rs` 保留本地 `fresh_db`/`write_skill_md`/`seed_central_skill`。
+- **结构性**：`tests/` 下的集成测试 crate（`#[cfg(test)] pub mod test_support` 对其不可见）。在案现场：`tests/common/mod.rs` 集中提供 `fresh_db`/`write_skill_md`/`seed_central_skill`，供 `projects_e2e.rs` 与 `cli_api_e2e.rs` 复用；只服务单个 integration crate 的 helper 留在该测试文件内。
 
 新增豁免现场时，在 connect 调用上方注释「豁免 test_support::…：<原因>」，并更新本清单。
 
 ## 巡检命令
 
 ```
-Grep: connect\(":memory:"\)   # 命中应仅：test_support.rs + 上述豁免清单
+Grep: connect\(":memory:"\)   # 命中应仅：test_support.rs + 上述语义豁免 + tests/common/mod.rs
 Grep: async fn setup          # 剩余定义体内不得出现 connect+init 直写
 ```
 
 ## 背景
 
-2026-07-04 架构评审：26 份手抄 setup 散布 23 文件（4 种返回类型、域域重造 seed），obsidian 域因首条测试成本畸高长期零测试。收敛后基线：`connect(":memory:")` 31 → harness 外 4（全部豁免在案）；obsidian 0 → 10 条。详见 `.trellis/tasks/archive/2026-07/07-04-rust-test-support/design.md`。
+2026-07-04 架构评审：26 份手抄 setup 散布 23 文件（4 种返回类型、域域重造 seed），obsidian 域因首条测试成本畸高长期零测试。收敛后基线：`connect(":memory:")` 31 → harness 文件外只保留在案语义豁免与 integration crate 的共享结构性豁免；obsidian 0 → 10 条。详见 `.trellis/tasks/archive/2026-07/07-04-rust-test-support/design.md`。

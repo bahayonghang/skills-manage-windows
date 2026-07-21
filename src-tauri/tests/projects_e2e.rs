@@ -7,50 +7,16 @@
 //! 引用路径走 `skillport_lib::*`（crate `[lib]` name），与 IPC 命令在生产环境
 //! 看到的 API 表面一致。
 
-use chrono::Utc;
-use sqlx::SqlitePool;
-use std::path::Path;
+mod common;
+
 use tempfile::TempDir;
 
-use skillport_lib::db::{self, DbPool, Skill};
 use skillport_lib::services::projects::{
     add_project_impl, get_project_skills_impl, install_skill_to_project_impl, list_projects_impl,
     remove_project_impl, rescan_project_impl, uninstall_skill_from_project_impl,
 };
 
-async fn fresh_db() -> DbPool {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    db::init_database(&pool).await.unwrap();
-    pool
-}
-
-fn write_skill_md(dir: &Path, name: &str, description: &str) {
-    std::fs::create_dir_all(dir).unwrap();
-    let body = format!("---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n");
-    std::fs::write(dir.join("SKILL.md"), body).unwrap();
-}
-
-async fn seed_central_skill(pool: &DbPool, canonical_dir: &Path, skill_id: &str) {
-    write_skill_md(canonical_dir, skill_id, "e2e seed");
-    let skill = Skill {
-        id: skill_id.to_string(),
-        uid: format!("{skill_id}-uid"),
-        name: skill_id.to_string(),
-        description: Some("e2e seed".to_string()),
-        file_path: canonical_dir
-            .join("SKILL.md")
-            .to_string_lossy()
-            .into_owned(),
-        canonical_path: Some(canonical_dir.to_string_lossy().into_owned()),
-        is_central: true,
-        source: None,
-        content: None,
-        scanned_at: Utc::now().to_rfc3339(),
-        fs_created_at: None,
-        fs_updated_at: None,
-    };
-    db::upsert_skill(pool, &skill).await.unwrap();
-}
+use common::{fresh_db, seed_central_skill};
 
 /// 完整链路 (copy 模式)：add → install → uninstall → remove。
 #[tokio::test]
@@ -60,7 +26,7 @@ async fn e2e_copy_full_lifecycle() {
 
     // 中央 skill 准备
     let canonical = tmp.path().join(".agents/skills/copykid");
-    seed_central_skill(&pool, &canonical, "copykid").await;
+    seed_central_skill(&pool, &canonical, "copykid", "copykid").await;
 
     // 1. add
     let project_root = tmp.path().join("proj-copy");
@@ -121,7 +87,7 @@ async fn e2e_symlink_full_lifecycle() {
     let pool = fresh_db().await;
 
     let canonical = tmp.path().join(".agents/skills/linkkid");
-    seed_central_skill(&pool, &canonical, "linkkid").await;
+    seed_central_skill(&pool, &canonical, "linkkid", "linkkid").await;
 
     let project_root = tmp.path().join("proj-link");
     std::fs::create_dir_all(&project_root).unwrap();
@@ -172,8 +138,8 @@ async fn e2e_remove_with_uninstall_clears_disk() {
 
     let canonical_a = tmp.path().join(".agents/skills/a");
     let canonical_b = tmp.path().join(".agents/skills/b");
-    seed_central_skill(&pool, &canonical_a, "a").await;
-    seed_central_skill(&pool, &canonical_b, "b").await;
+    seed_central_skill(&pool, &canonical_a, "a", "a").await;
+    seed_central_skill(&pool, &canonical_b, "b", "b").await;
 
     let project_root = tmp.path().join("proj-cleanup");
     std::fs::create_dir_all(&project_root).unwrap();
@@ -205,7 +171,7 @@ async fn e2e_remove_without_uninstall_preserves_disk() {
     let pool = fresh_db().await;
 
     let canonical = tmp.path().join(".agents/skills/keepme");
-    seed_central_skill(&pool, &canonical, "keepme").await;
+    seed_central_skill(&pool, &canonical, "keepme", "keepme").await;
 
     let project_root = tmp.path().join("proj-keep");
     std::fs::create_dir_all(&project_root).unwrap();
@@ -236,7 +202,7 @@ async fn e2e_two_projects_share_skill() {
     let pool = fresh_db().await;
 
     let canonical = tmp.path().join(".agents/skills/shared");
-    seed_central_skill(&pool, &canonical, "shared").await;
+    seed_central_skill(&pool, &canonical, "shared", "shared").await;
 
     let root_a = tmp.path().join("proj-a");
     let root_b = tmp.path().join("proj-b");
