@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 55
+- **Total Sessions**: 56
 - **Last Active**: 2026-07-21
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~178 | Active |
+| `journal-2.md` | ~212 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 56 | 2026-07-21 | 整理测试目录并补齐 Rust 集成测试 | `ca97eb07`, `2bd4de4` | `dev` |
 | 55 | 2026-07-21 | Central Skills 刷新按钮与检查后自动刷新 | `f71efc2b`, `efc7096e` | `dev` |
 | 54 | 2026-07-20 | Dashboard 首页优化：驾驶舱重组 + 三个聚合 IPC + 去玻璃模糊 | `c2f45ebe`, `f31908cf`, `b6f1028a`, `e813ee9e` | `dev` |
 | 53 | 2026-07-20 | 完成标签 taxonomy 与 AI 提议父任务验收 | `0196def5` | `dev` |

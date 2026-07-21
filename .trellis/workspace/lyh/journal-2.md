@@ -176,3 +176,37 @@ Central Skills 工具栏新增手动刷新按钮（useCentralRefreshButton hook�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 56: 整理测试目录并补齐 Rust 集成测试
+
+**Date**: 2026-07-21
+**Task**: 整理测试目录并补齐 Rust 集成测试
+**Branch**: `dev`
+
+### Summary
+
+将 127 个前端测试按源码归属迁移到子目录，补充递归串行发现回归测试，并新增 CLI 公共 API 外部 crate 集成契约与共享 fixture；完整 just ci 通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ca97eb07` | (see git log) |
+| `2bd4de4` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
