@@ -142,3 +142,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 55: Central Skills 刷新按钮与检查后自动刷新
+
+**Date**: 2026-07-21
+**Task**: Central Skills 刷新按钮与检查后自动刷新
+**Branch**: `dev`
+
+### Summary
+
+Central Skills 工具栏新增手动刷新按钮（useCentralRefreshButton hook，列表/计数并行刷新互不阻断），更新检查 Start check 成功后自动重取技能列表再打开 Update Center。store 层落地 loadCentralSkills({throwOnError}) 可选 rethrow 契约、isRefreshingList 刷新态与 requestId latest-wins 防护；列表重取失败只报 central.refreshError，不影响 Update Center 打开。经 Codex 规划审阅 6 条意见校验后补齐 design/implement；sizecheck 冻结基线约束下 D6 改为 shell 内 hook 装配、CentralSkillsView 零改动。just ci 全绿，新增 12 个测试用例；spec async-error-feedback 补两条契约。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f71efc2b` | (see git log) |
+| `efc7096e` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
