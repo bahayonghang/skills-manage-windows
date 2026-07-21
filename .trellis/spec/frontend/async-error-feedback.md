@@ -12,6 +12,8 @@
 - 可见 UI 调用方负责交互反馈：捕获错误、显示当前界面内联错误，并发出 toast。
 - 新一轮提交或关闭弹窗时必须清除上一次内联错误。
 - 成功路径不得因为失败处理改变原有导航/打开面板参数。
+- 被多处 fire-and-forget 复用的共享 loader（如 `loadCentralSkills`）不得直接改成 rethrow；用可选参数（如 `{ throwOnError?: boolean }`，默认保持吞错写 store error）让需要反馈的可见 UI 调用方显式选择 rethrow，避免给既有调用点制造 unhandled rejection。
+- 同一流程中"决定成败的主 action"与"成功后的后续同步步骤"必须分开捕获：后续步骤失败只报自己的错误 toast，不得落入主 action 的 catch 而误报、或改变打开面板的参数与时机。参考 `centralUpdateCheckModeController.handleConfirm` 的嵌套 try。
 
 ## Validation & Error Matrix
 
