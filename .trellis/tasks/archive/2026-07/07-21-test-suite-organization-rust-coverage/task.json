@@ -1,0 +1,33 @@
+{
+  "id": "test-suite-organization-rust-coverage",
+  "name": "test-suite-organization-rust-coverage",
+  "title": "整理测试目录并补齐 Rust 集成测试",
+  "description": "按源码归属整理前端测试目录，保持 Vitest、串行测试和 just ci 的发现契约，并补齐 cli_api 外部 crate 集成测试。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": "src/test, test discovery scripts, src-tauri/tests, and test-support specs",
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-07-21",
+  "completedAt": "2026-07-21",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/test",
+    "scripts/run-vitest-sequential.mjs",
+    "vite.config.ts",
+    "src-tauri/tests",
+    "src-tauri/src/cli_api/mod.rs",
+    ".trellis/spec/backend/test-support.md"
+  ],
+  "notes": "",
+  "meta": {}
+}
