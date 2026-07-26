@@ -389,11 +389,10 @@ async fn rename_project_rejects_empty_name() {
 }
 
 #[tokio::test]
-async fn cleanup_removes_old_discover_settings() {
-    // schema init 应当清空 discovered_skills 表和 discover_scan_roots_config 设置。
+async fn current_schema_reinit_does_not_replay_legacy_cleanup() {
     let pool = setup_test_db().await;
 
-    // 模拟旧 settings 残留：先写一行，再二次 init，应被清除。
+    // Migration 1 owns this legacy cleanup and must not replay on a current DB.
     sqlx::query("INSERT INTO settings(key, value) VALUES ('discover_scan_roots_config', '{}')")
         .execute(&pool)
         .await
@@ -406,10 +405,7 @@ async fn cleanup_removes_old_discover_settings() {
     .fetch_optional(&pool)
     .await
     .unwrap();
-    assert!(
-        row.is_none(),
-        "old discover scan roots config should be gone"
-    );
+    assert_eq!(row, Some(Some("{}".to_string())));
 }
 
 #[tokio::test]

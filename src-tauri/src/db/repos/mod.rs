@@ -17,6 +17,7 @@ pub(crate) mod saved_views_repo;
 pub(crate) mod scan_dirs_repo;
 pub(crate) mod settings_repo;
 pub(crate) mod skill_relations_repo;
+pub(crate) mod skill_relations_spec;
 pub(crate) mod skills_repo;
 pub(crate) mod tag_groups_repo;
 pub(crate) mod tags_repo;

@@ -174,7 +174,14 @@ fn custom_provider_has_no_fallback() {
 
 #[tokio::test]
 async fn load_cached_skill_explanation_drops_empty_rows() {
-    let (pool, _dir) = setup_test_db().await;
+    let (pool, dir) = setup_test_db().await;
+    crate::test_support::seed_central_skill(
+        &pool,
+        &dir.path().join("defuddle"),
+        "defuddle",
+        "Test skill",
+    )
+    .await;
 
     sqlx::query(
         "INSERT INTO skill_explanations (skill_id, explanation, lang, model, created_at, updated_at)
@@ -228,7 +235,7 @@ async fn cache_skill_explanation_rejects_blank_text() {
 
 #[tokio::test]
 async fn load_cached_skill_explanation_summaries_returns_nonblank_lang_matches() {
-    let (pool, _dir) = setup_test_db().await;
+    let (pool, dir) = setup_test_db().await;
 
     for (skill_id, explanation, lang) in [
         ("defuddle", "中文解释", "zh"),
@@ -236,6 +243,13 @@ async fn load_cached_skill_explanation_summaries_returns_nonblank_lang_matches()
         ("empty-row", "   ", "zh"),
         ("english-only", "English summary", "en"),
     ] {
+        crate::test_support::seed_central_skill(
+            &pool,
+            &dir.path().join(skill_id),
+            skill_id,
+            "Test skill",
+        )
+        .await;
         sqlx::query(
             "INSERT INTO skill_explanations (skill_id, explanation, lang, model, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?)",

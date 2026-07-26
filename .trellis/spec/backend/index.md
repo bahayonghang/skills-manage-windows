@@ -22,3 +22,4 @@
 - [Import Deep-Link Lifecycle Contract](./import-deep-link-lifecycle.md)
 - [Local Archive Import Contract](./local-archive-import.md)
 - [Skill Deletion Integrity Contract](./skill-deletion-integrity.md)
+- [Versioned SQLite Migration Contract](./database-migrations.md)

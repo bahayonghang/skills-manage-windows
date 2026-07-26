@@ -7,13 +7,12 @@
 //! 回填 `datetime('now')`。SQLite 在某些构建（Apple-modified）不支持非常量
 //! DEFAULT 表达式，故拆成两步。
 
-use sqlx::Row;
+use sqlx::{Row, SqliteConnection};
 use uuid::Uuid;
 
-use crate::db::migrations::ensure_column;
-use crate::db::DbPool;
+use crate::db::migrations::versions::v1::ensure_column;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
+pub(super) async fn init(connection: &mut SqliteConnection) -> Result<(), sqlx::Error> {
     // skills：中央技能 / 平台技能的元数据合表。
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skills (
@@ -31,38 +30,36 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             fs_updated_at  TEXT
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     ensure_column(
-        pool,
+        connection,
         "skills",
         "uid",
         "ALTER TABLE skills ADD COLUMN uid TEXT",
     )
     .await?;
 
-    let mut transaction = pool.begin().await?;
     let missing_uid_rows = sqlx::query("SELECT id FROM skills WHERE uid IS NULL OR TRIM(uid) = ''")
-        .fetch_all(&mut *transaction)
+        .fetch_all(&mut *connection)
         .await?;
     for row in missing_uid_rows {
         let id = row.try_get::<String, _>("id")?;
         sqlx::query("UPDATE skills SET uid = ? WHERE id = ?")
             .bind(Uuid::new_v4().to_string())
             .bind(id)
-            .execute(&mut *transaction)
+            .execute(&mut *connection)
             .await?;
     }
-    transaction.commit().await?;
 
     sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_uid ON skills(uid)")
-        .execute(pool)
+        .execute(&mut *connection)
         .await?;
 
     let invalid_uid_count =
         sqlx::query("SELECT COUNT(*) AS count FROM skills WHERE uid IS NULL OR TRIM(uid) = ''")
-            .fetch_one(pool)
+            .fetch_one(&mut *connection)
             .await?
             .try_get::<i64, _>("count")?;
     if invalid_uid_count != 0 {
@@ -83,7 +80,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             PRIMARY KEY (skill_id, agent_id)
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await
     ?;
 
@@ -92,14 +89,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     // Drop the older single-column index on upgrade because the composite
     // prefix subsumes it.
     sqlx::query("DROP INDEX IF EXISTS idx_skill_installations_agent_id")
-        .execute(pool)
+        .execute(&mut *connection)
         .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_installations_agent_skill_id
          ON skill_installations(agent_id, skill_id)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     // agent_skill_observations：每次 agent 扫描到技能时的事实记录。
@@ -122,7 +119,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             fs_updated_at  TEXT
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await
     ?;
 
@@ -130,39 +127,39 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_agent_skill_observations_agent_id
          ON agent_skill_observations(agent_id)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_agent_skill_observations_agent_name_dir
          ON agent_skill_observations(agent_id, name, dir_path)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     ensure_column(
-        pool,
+        connection,
         "skills",
         "fs_created_at",
         "ALTER TABLE skills ADD COLUMN fs_created_at TEXT",
     )
     .await?;
     ensure_column(
-        pool,
+        connection,
         "skills",
         "fs_updated_at",
         "ALTER TABLE skills ADD COLUMN fs_updated_at TEXT",
     )
     .await?;
     ensure_column(
-        pool,
+        connection,
         "agent_skill_observations",
         "fs_created_at",
         "ALTER TABLE agent_skill_observations ADD COLUMN fs_created_at TEXT",
     )
     .await?;
     ensure_column(
-        pool,
+        connection,
         "agent_skill_observations",
         "fs_updated_at",
         "ALTER TABLE agent_skill_observations ADD COLUMN fs_updated_at TEXT",
@@ -175,7 +172,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
     //   2) UPDATE … SET created_at = datetime('now') WHERE created_at IS NULL
     // 新行始终由应用显式写入 created_at，迁移后不再需要 DEFAULT。
     let columns = sqlx::query("PRAGMA table_info(skill_installations)")
-        .fetch_all(pool)
+        .fetch_all(&mut *connection)
         .await?;
 
     let has_created_at = columns.iter().any(|row| {
@@ -186,13 +183,13 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
 
     if !has_created_at {
         sqlx::query("ALTER TABLE skill_installations ADD COLUMN created_at TEXT")
-            .execute(pool)
+            .execute(&mut *connection)
             .await?;
 
         sqlx::query(
             "UPDATE skill_installations SET created_at = datetime('now') WHERE created_at IS NULL",
         )
-        .execute(pool)
+        .execute(&mut *connection)
         .await?;
     }
 
@@ -210,21 +207,21 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             is_enabled         BOOLEAN NOT NULL DEFAULT 1
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skills_is_central
          ON skills(is_central)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skills_is_central_name
          ON skills(is_central, name)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     Ok(())

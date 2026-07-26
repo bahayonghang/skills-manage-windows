@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/skill-deletion-integrity.md","reason":"Preserve the exact seven owned relations, independent lifecycle exclusions, and predecessor repair/audit transaction."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Reuse shared pools and document only semantic legacy/tag fixture exceptions."}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Keep backup publish/restore filesystem work off the async runtime and avoid Windows AppHandle linkage hazards."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Keep repository errors compatible and avoid introducing string errors below command boundaries."}
+{"file":".trellis/spec/backend/best-effort-writes.md","reason":"Backup, restore, migration metadata, checksum, FK validation, and repair audit are correctness-critical writes."}
+{"file":".trellis/spec/backend/path-policy.md","reason":"Use canonical local and per-target database paths for backup naming and production open APIs."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Unify production open/init paths and retain one owned-relation definition across migration, repair, and tests."}
+{"file":".trellis/tasks/07-24-db-schema-versioning-fk/research/schema-versioning-live-2026-07-26.md","reason":"Use live entrypoint, release-window, schema-history, backup, and documentation evidence."}

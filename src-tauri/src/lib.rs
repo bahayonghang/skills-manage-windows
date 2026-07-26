@@ -261,21 +261,16 @@ pub fn run() {
 
             let db_dir = paths::app_data_dir();
             fs::create_dir_all(&db_dir).expect("Failed to create ~/.skillsmanage directory");
-            let db_path = paths::path_to_string(&db_dir.join("db.sqlite"));
+            let db_path = db_dir.join("db.sqlite");
 
             // Synchronously open the SQLite pool and initialize schema. These
             // are required before any IPC command can run, so they stay in
             // the setup block. Legacy migration is deferred to the background
             // (spawned below) to keep cold-start latency small.
             let pool = tauri::async_runtime::block_on(async {
-                db::create_pool(&db_path)
+                db::open_database(&db_path)
                     .await
-                    .expect("Failed to open SQLite database")
-            });
-            tauri::async_runtime::block_on(async {
-                db::init_database(&pool)
-                    .await
-                    .expect("Failed to initialize database schema")
+                    .expect("Failed to open and migrate SQLite database")
             });
 
             let secrets: Arc<dyn secrets::SecretStore> =

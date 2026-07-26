@@ -8,9 +8,9 @@
 //! 的引用 —— 那些「引用」只是 query JSON 里的字符串字面量，回放时若指向已不存在
 //! 的 repo/tag，前端会容错降级（多余的 filter 自动失效）。
 
-use crate::db::DbPool;
+use sqlx::SqliteConnection;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
+pub(super) async fn init(connection: &mut SqliteConnection) -> Result<(), sqlx::Error> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_saved_views (
             id               TEXT PRIMARY KEY,
@@ -23,14 +23,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             updated_at       TEXT NOT NULL
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_saved_views_order
          ON skill_saved_views(sort_order)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     Ok(())

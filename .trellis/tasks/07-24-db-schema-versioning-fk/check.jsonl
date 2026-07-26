@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/skill-deletion-integrity.md","reason":"Verify seven FK cascades replace runtime manual cleanup without deleting independent history."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Reject duplicated pools and require auditable legacy fixture exceptions."}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Review backup/restore filesystem operations for async and Windows safety."}
+{"file":".trellis/spec/backend/best-effort-writes.md","reason":"Ensure migration, backup, restore, checksum, FK check, and audit failures are never swallowed."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Require the complete local gate after focused migration and target tests."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Check all production DB entrypoints use one path-aware open/migration contract."}
+{"file":".trellis/tasks/07-24-db-schema-versioning-fk/research/schema-versioning-live-2026-07-26.md","reason":"Cross-check tag fixtures and current production entrypoints against live evidence."}

@@ -1,20 +1,23 @@
 # 数据模型
 
-SQLite 是唯一的持久化层。`~/.skillsmanage/db.sqlite` 启动时以 WAL 模式打开，按增量方式迁移——不存在 Diesel 风格的 migration 目录。
+SQLite 是唯一持久化层。`~/.skillsmanage/db.sqlite` 与 target cache 数据库统一通过 path-aware API 打开，并在每条连接上启用 WAL 与外键检查。
 
-## Schema 初始化顺序
+## 版本化初始化
 
 ```text
-core         skills / skill_installations / agent_skill_observations / agents
- └─ collections    collections / collection_skills
-    └─ metadata    repositories / update_states / tags / tag_links / ai_reviews
-       └─ discovery   scan_directories
-          └─ projects   projects / project_skill_installations
-             └─ settings settings / operation_logs（+6 索引）
-                └─ marketplace registries / skills / explanations（+8 ALTERs）
+以 FK 开启的 pool 打开数据库
+  -> 只读 migration preflight
+  -> 已有文件且有待迁移工作时创建并验证全库备份
+  -> migration 1：legacy baseline
+  -> orphan 盘点 / 审计 / 修复
+  -> migration 2：owned relation FK rebuild
+  -> foreign_key_check
+  -> 内置数据 seed
 ```
 
-所有 `CREATE TABLE` 都带 `IF NOT EXISTS`，增量列通过 `migrations::ensure_column` 添加，跨版本幂等。
+`schema_migrations(version, checksum, applied_at)` 记录连续且不可变的迁移。启动在写入前检查 descriptor 连续性、数据库版本断档、未来版本和 SHA-256 checksum。Migration 1 冻结 `v0.10.9` 至 `v0.10.14` 的 legacy 归一化逻辑；migration 2 重建七张 skill-owned relation 表，加入 `FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE`。Observation、project snapshot、调用历史和 usage identity cache 保持独立生命周期。
+
+任何 repair 或 migration 写入之前，有待升级的已有数据库先通过绑定路径的 `VACUUM INTO` 生成一致快照，完成 integrity check、sync 后发布为同目录 `*.pre-migration-v<source>-*.sqlite3`。升级失败会关闭私有 pool、隔离失败文件、复制备份恢复并再次校验，但本次启动仍返回失败。
 
 ## Repositories
 
@@ -45,8 +48,9 @@ Repo 收口原始 `sqlx::query()`，上层只接受 `&DbPool` 调 repo 方法。
 
 ## 迁移契约
 
-- 新增列：在 schema 的 `init.rs` 加列，并追加一个 `migrations::ensure_column`，老库就地升级。
-- 重命名：写一段 Rust 迁移做 copy + drop；SQLite 在某些发行版本上 rename column 不可靠。
-- 删除列：UI 还在读的列绝不删。按发布周期降级：先停写 → 迁移读取方 → 下一个版本再删。
+- 已发布 migration source 与 checksum 不可修改；后续 schema/data 变化必须新增连续版本。
+- 每个 migration 与自己的 `schema_migrations` 行在同一事务提交；table rebuild 必须带行数守卫与 `foreign_key_check`。
+- desktop、`skillport-cli`、SSH cache、WSL cache 统一调用 `open_database*`，生产代码禁止自行组合 raw pool 与 init。
+- 旧二进制遇到未来版本必须阻断，不做 downgrade；保留的 pre-migration snapshot 是回滚介质。
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-07-26

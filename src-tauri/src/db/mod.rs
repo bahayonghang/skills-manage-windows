@@ -20,7 +20,9 @@ mod util;
 #[cfg(test)]
 mod tests;
 
-pub use pool::*;
+pub use migrations::{open_database, open_database_for_remote_home};
+#[cfg(test)]
+pub(crate) use pool::{create_memory_pool, create_memory_pool_single_conn, create_pool};
 pub use repos::agents_repo::*;
 pub use repos::collections_repo::*;
 pub use repos::installations_repo::*;
@@ -32,7 +34,6 @@ pub use repos::repositories_repo::*;
 pub use repos::saved_views_repo::*;
 pub use repos::scan_dirs_repo::*;
 pub use repos::settings_repo::*;
-pub(crate) use repos::skill_relations_repo::delete_owned_skill_relations_missing_from_scan_keep;
 pub use repos::skill_relations_repo::{
     repair_orphan_skill_relations, OrphanRelationReport, OrphanRepairReport,
 };

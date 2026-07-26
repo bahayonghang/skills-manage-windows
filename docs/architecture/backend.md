@@ -14,7 +14,7 @@ src-tauri/src/
 ├── commands/          IPC handlers, grouped by domain
 ├── services/          Pure business logic
 ├── targets/           Local + SSH execution
-└── db/                Pool + schema + repos
+└── db/                Pool + versioned migrations + schema + repos
 ```
 
 ## AppState
@@ -94,16 +94,19 @@ Command handlers freeze one `TargetContext` before asynchronous work and pass it
 
 ```text
 db/
-├── pool.rs             create_pool() with WAL mode
+├── pool.rs             private pool factory: WAL + per-connection FK verification
 ├── types.rs            shared structs
-├── schema/             init.sql equivalents grouped by domain
-├── migrations.rs       ensure_column for incremental ALTERs
+├── schema/             frozen migration-1 legacy baseline grouped by domain
+├── migrations.rs       path-aware open, preflight, orchestration
+├── migrations/         backup/restore, version sources, focused tests
 ├── repos/              one repo per business object
 ├── seed.rs             agent registry seed
 └── tests.rs            integration-style db tests
 ```
 
 See [Data Model](./data-model.md) for the table layout.
+
+Desktop setup, `CliContext::open_default`, and `TargetRegistry::remote_db_for` all call the same `open_database*` boundary. A pool is not exposed to Tauri state or the target cache until migration, FK validation, and seed complete.
 
 ## Logging and Errors
 

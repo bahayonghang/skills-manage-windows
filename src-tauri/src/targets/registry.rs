@@ -477,9 +477,7 @@ impl TargetRegistry {
             })?;
         }
 
-        let db_path = db_path.to_string_lossy().into_owned();
-        let pool = db::create_pool(&db_path).await?;
-        db::init_database_for_remote_home(&pool, remote_home).await?;
+        let pool = db::open_database_for_remote_home(&db_path, remote_home).await?;
 
         match self.pools.lock() {
             Ok(mut pools) => {

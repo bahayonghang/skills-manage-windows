@@ -1,7 +1,7 @@
 //! `scan_directories` table CRUD — Phase 2c.
 //!
 //! Built-in scan directory seeding lives in `db/legacy.rs` and runs from
-//! `init_database_with_agents`. This file owns runtime CRUD invoked from
+//! the post-migration seed step. This file owns runtime CRUD invoked from
 //! `commands/settings.rs` / `commands/discover.rs`.
 
 use chrono::Utc;

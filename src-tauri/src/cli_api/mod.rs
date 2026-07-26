@@ -213,9 +213,8 @@ impl CliContext {
         let app_dir = crate::paths::app_data_dir();
         std::fs::create_dir_all(&app_dir)
             .map_err(|error| CliApiError::Internal(error.to_string()))?;
-        let db_path = crate::paths::path_to_string(&app_dir.join("db.sqlite"));
-        let db = db::create_pool(&db_path).await?;
-        db::init_database(&db).await?;
+        let db_path = app_dir.join("db.sqlite");
+        let db = db::open_database(&db_path).await?;
         Ok(Self {
             db,
             secrets: Arc::new(SystemSecretStore::default()),

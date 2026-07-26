@@ -1,22 +1,25 @@
 # Data Model
 
-SQLite is the single persistence layer. `~/.skillsmanage/db.sqlite` is opened in WAL mode at startup and migrated incrementally — there is no Diesel-style migration directory.
+SQLite is the single persistence layer. `~/.skillsmanage/db.sqlite` and target-cache databases are opened through one path-aware API with WAL mode and per-connection foreign-key enforcement.
 
-## Schema Init Order
+## Versioned Initialization
 
-Tables are created in dependency order so foreign keys land on existing primaries. `src-tauri/src/db/schema/mod.rs::init` runs each domain in turn:
+`schema_migrations(version, checksum, applied_at)` records contiguous immutable migrations. Startup validates the descriptor sequence, applied versions, future versions, and SHA-256 checksums before writing. The fixed order is:
 
 ```text
-core         skills / skill_installations / agent_skill_observations / agents
- └─ collections    collections / collection_skills
-    └─ metadata    repositories / update_states / tags / tag_links / ai_reviews
-       └─ discovery   scan_directories
-          └─ projects   projects / project_skill_installations
-             └─ settings settings / operation_logs (+6 indexes)
-                └─ marketplace registries / skills / explanations (+8 ALTERs)
+open pool with FK enabled
+  -> read-only migration preflight
+  -> verified whole-database backup when an existing file has pending work
+  -> migration 1 legacy baseline
+  -> orphan inventory / audit / repair
+  -> migration 2 owned-relation FK rebuild
+  -> foreign_key_check
+  -> built-in seed
 ```
 
-Every `CREATE TABLE` is wrapped in `IF NOT EXISTS` and incremental columns are added through `migrations::ensure_column` so the schema is idempotent across versions.
+Migration 1 freezes the legacy `v0.10.9` through `v0.10.14` normalization logic. Migration 2 rebuilds the seven skill-owned relation tables with `FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE`. Observations, project snapshots, call history, and usage-resolution metadata intentionally remain independent.
+
+Before any repair or migration write, an existing database with pending work is snapshotted with bound-path `VACUUM INTO`, integrity-checked, synced, and published as a sibling `*.pre-migration-v<source>-*.sqlite3`. A failed upgrade closes the private pool, quarantines the failed file, restores a copy of the backup, verifies it, and still returns the startup error.
 
 ## Repositories
 
@@ -47,8 +50,9 @@ Field details are regenerated from `src-tauri/src/db/schema/*.rs` by `scripts/bu
 
 ## Migration Contract
 
-- New columns: add to the schema `init.rs` and append a `migrations::ensure_column` call so old DBs upgrade in-place.
-- Renames: ship a Rust migration that copies + drops; SQLite cannot rename columns reliably across all builds we ship.
-- Drops: never drop a column the UI is still reading. Use a release-cycle deprecation: stop writing → migrate readers → drop in the next version.
+- Released migration sources and their checksums are immutable. Add a new contiguous descriptor for every later schema or data change.
+- Each migration and its `schema_migrations` row commit in one transaction; table rebuilds include row-count guards and `foreign_key_check`.
+- Local desktop, `skillport-cli`, SSH cache, and WSL cache must call `open_database*`; production code must not compose a raw pool with initialization.
+- Older binaries reject unknown future versions instead of attempting a downgrade. The retained pre-migration snapshot is the rollback artifact.
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-07-26

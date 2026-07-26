@@ -969,6 +969,9 @@ async fn test_get_central_skills() {
 #[tokio::test]
 async fn test_upsert_skill_update_state() {
     let pool = setup_test_db().await;
+    upsert_skill(&pool, &make_skill("central-1", "Central One", true))
+        .await
+        .unwrap();
     let state = SkillUpdateState {
         skill_id: "central-1".to_string(),
         source_type: "github".to_string(),
@@ -1232,7 +1235,11 @@ async fn delete_skills_not_in_scope_cleans_all_owned_relations_for_empty_keep_se
 
 #[tokio::test]
 async fn orphan_repair_reports_audits_and_cleans_all_owned_relations() {
-    let pool = setup_test_db().await;
+    let pool = crate::test_support::mem_pool_single_conn().await;
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&pool)
+        .await
+        .unwrap();
     insert_owned_skill_relation_rows(&pool, "orphan-z").await;
     insert_owned_skill_relation_rows(&pool, "orphan-a").await;
 
@@ -1293,7 +1300,11 @@ async fn orphan_repair_reports_audits_and_cleans_all_owned_relations() {
 
 #[tokio::test]
 async fn orphan_repair_rolls_back_when_audit_insert_fails() {
-    let pool = setup_test_db().await;
+    let pool = crate::test_support::mem_pool_single_conn().await;
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&pool)
+        .await
+        .unwrap();
     insert_owned_skill_relation_rows(&pool, "audit-failure-orphan").await;
     sqlx::query(
         "CREATE TRIGGER fail_orphan_repair_audit
@@ -1333,7 +1344,11 @@ async fn orphan_repair_rolls_back_when_audit_insert_fails() {
 
 #[tokio::test]
 async fn orphan_repair_rolls_back_audit_when_relation_delete_fails() {
-    let pool = setup_test_db().await;
+    let pool = crate::test_support::mem_pool_single_conn().await;
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&pool)
+        .await
+        .unwrap();
     insert_owned_skill_relation_rows(&pool, "delete-failure-orphan").await;
     sqlx::query(
         "CREATE TRIGGER fail_orphan_relation_delete
@@ -1368,20 +1383,25 @@ async fn orphan_repair_rolls_back_audit_when_relation_delete_fails() {
 }
 
 #[tokio::test]
-async fn init_database_repairs_owned_relation_orphans() {
-    let pool = setup_test_db().await;
+async fn init_database_rejects_orphans_after_fk_migration() {
+    let pool = crate::test_support::mem_pool_single_conn().await;
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&pool)
+        .await
+        .unwrap();
     insert_owned_skill_relation_rows(&pool, "startup-orphan").await;
 
-    init_database(&pool).await.unwrap();
+    let error = init_database(&pool).await.unwrap_err();
+    assert!(error.to_string().contains("foreign key validation failed"));
 
-    assert_owned_skill_relation_counts(&pool, "startup-orphan", 0).await;
+    assert_owned_skill_relation_counts(&pool, "startup-orphan", 1).await;
     let log_count = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM operation_logs WHERE action = 'orphan_repair'",
     )
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(log_count, 1);
+    assert_eq!(log_count, 0);
 }
 
 // ── Skill Installations ───────────────────────────────────────────────────
@@ -2375,7 +2395,11 @@ async fn test_proposal_review_round_trip_does_not_create_tag() {
 
 #[tokio::test]
 async fn test_pending_reviews_filter_orphans_without_proposal_metadata() {
-    let pool = setup_test_db().await;
+    let pool = crate::test_support::mem_pool_single_conn().await;
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&pool)
+        .await
+        .unwrap();
     let now = Utc::now().to_rfc3339();
     sqlx::query(
         "INSERT INTO skill_ai_tag_reviews

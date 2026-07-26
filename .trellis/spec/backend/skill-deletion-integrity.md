@@ -3,7 +3,7 @@
 ## 1. Scope / Trigger
 
 Use this contract whenever a code path deletes or reconciles `skills` rows,
-cleans scan-stale skill state, repairs pre-existing orphan rows, or prepares a
+cleans scan-stale skill state, repairs a pre-version-2 database, or changes the
 skill-parent FK migration.
 
 The `skills` row owns exactly these seven relations, in this stable order:
@@ -39,10 +39,6 @@ pub async fn repair_orphan_skill_relations(
     pool: &DbPool,
 ) -> Result<OrphanRepairReport, sqlx::Error>;
 
-pub(crate) async fn delete_owned_skill_relations_missing_from_scan_keep(
-    transaction: &mut Transaction<'_, Sqlite>,
-) -> Result<(), sqlx::Error>;
-
 pub(crate) async fn prune_empty_skill_repositories_in_transaction(
     transaction: &mut Transaction<'_, Sqlite>,
 ) -> Result<u64, sqlx::Error>;
@@ -65,15 +61,19 @@ pub struct OrphanRepairReport {
 
 ## 3. Contracts
 
-- The compile-time relation spec in `skill_relations_repo.rs` is the only
+- The immutable compile-time relation spec in `skill_relations_spec.rs` is the only
   source of owned table and column identifiers. Never accept those identifiers
   from input or repeat a partial table list at a call site.
-- Single deletion and keep-set reconciliation run one transaction: delete all
-  seven owned relations, delete parent skills, prune repositories, then commit.
+- Migration 2 consumes the relation spec and adds `FOREIGN KEY(skill_id)
+  REFERENCES skills(id) ON DELETE CASCADE` to all seven tables.
+- Single deletion and keep-set reconciliation run one transaction: delete only
+  parent skills, let SQLite cascade all seven owned relations, prune
+  repositories, then commit.
 - Scanner reconciliation first performs agent-scoped installation and
-  observation cleanup in its scan transaction, then invokes the shared
-  seven-relation keep-table helper before deleting parents and pruning repos.
-- Database initialization order is `schema init -> orphan repair -> seed`.
+  observation cleanup in its scan transaction, then deletes stale parents and
+  prunes repos. It never repeats the seven-table list.
+- Database initialization order is `backup -> migration 1 -> orphan repair ->
+  migration 2 FK rebuild -> foreign_key_check -> seed`.
 - Repair inventory uses explicit `LEFT JOIN skills` predicates. Its stable JSON
   contains only table names, sorted skill IDs, per-table counts, and total count;
   it contains no paths, content, credentials, or full row backups.
@@ -82,14 +82,15 @@ pub struct OrphanRepairReport {
   encoding, audit insert, seven-table deletion, and commit share one transaction.
 - A zero-row report commits without an operation log. Repeated repair is
   idempotent.
-- Whole-database backup, FK constraints, and schema versioning are separate
-  release work. The orphan audit is diagnostic evidence, not recovery data.
+- Repair is a pre-migration-2 compatibility step. Current FK-enforced databases
+  reject new owned-relation orphans; the audit remains diagnostic evidence, not
+  recovery data.
 
 ## 4. Validation & Error Matrix
 
 | Condition | Required result |
 | --- | --- |
-| Any owned-relation delete fails | Roll back relation rows, parent rows, repository pruning, and any repair audit |
+| Parent delete or DB cascade fails | Roll back parent rows, cascades, and repository pruning |
 | Operation-log insert fails | Roll back repair; do not delete orphan rows |
 | Report JSON encoding fails | Return `sqlx::Error::Encode`; do not insert audit or delete rows |
 | Inventory count is negative or overflows `u64` | Return `sqlx::Error::InvalidArgument`; do not mutate data |
@@ -103,21 +104,21 @@ string errors or best-effort logging.
 
 ## 5. Good / Base / Bad Cases
 
-- Good: deleting skill `X` removes all seven owned relations and the parent in
-  one commit; reinserting `X` starts with no inherited collection, tag, review,
-  explanation, update, source, or installation metadata.
+- Good: deleting skill `X` removes all seven owned relations through FK cascade
+  and the parent in one commit; reinserting `X` starts with no inherited
+  collection, tag, review, explanation, update, source, or installation data.
 - Base: startup finds no orphan rows, returns `totalRows=0`, writes no operation
   log, and proceeds to seed.
 - Good: startup finds orphan explanations, persists the stable report, deletes
   them, commits, and a second repair returns zero.
-- Bad: delete four familiar tables at one call site while omitting collection,
-  review, or explanation relations.
+- Bad: retain manual relation-delete loops beside the FK cascade; the two
+  ownership mechanisms will drift.
 - Bad: delete orphan rows first and write the audit afterward as best effort.
 - Bad: treat parentless observations or project snapshots as corrupt owned rows.
 
 ## 6. Tests Required
 
-- Single delete and empty/non-empty keep sets remove all seven owned relations.
+- Single delete and empty/non-empty keep sets cascade all seven owned relations.
 - Scanner stale cleanup removes all seven while preserving observations outside
   the touched-agent keep set.
 - Trigger-injected intermediate relation and audit failures prove full rollback,
@@ -126,9 +127,9 @@ string errors or best-effort logging.
   idempotent second execution.
 - Reusing a deleted skill ID does not restore owned metadata, while observation,
   project, and usage history remains.
-- FK preflight executes an explicit parent-missing `LEFT JOIN` predicate for
-  every owned relation. `PRAGMA foreign_key_check` alone is insufficient before
-  those FKs exist.
+- Legacy repair inventory executes an explicit parent-missing `LEFT JOIN`
+  predicate for every owned relation before the FKs exist. Migration 2 and
+  every completed startup additionally run `PRAGMA foreign_key_check`.
 - Minimum closeout gate is `just ci` after focused `cargo test db:: --locked`
   and `cargo test scanner --locked` checks.
 
@@ -147,13 +148,13 @@ sqlx::query("DELETE FROM skills WHERE id = ?")
     .await?;
 ```
 
-This duplicates an incomplete ownership list and can commit partial deletion.
+This duplicates an incomplete cascade that the database already owns and can
+commit parent/relation changes separately.
 
 ### Correct
 
 ```rust
 let mut transaction = pool.begin().await?;
-delete_owned_skill_relations(&mut transaction, skill_id).await?;
 sqlx::query("DELETE FROM skills WHERE id = ?")
     .bind(skill_id)
     .execute(&mut *transaction)
@@ -162,5 +163,6 @@ prune_empty_skill_repositories_in_transaction(&mut transaction).await?;
 transaction.commit().await?;
 ```
 
-All delete paths consume the shared compile-time ownership definition and keep
-their parent, relation, audit, and repository mutations atomic.
+Runtime delete paths do not consume or duplicate the relation list. The
+compile-time definition remains the source for migration, repair, and tests;
+SQLite owns runtime cascade atomicity.

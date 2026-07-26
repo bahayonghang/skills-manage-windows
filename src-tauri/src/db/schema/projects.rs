@@ -6,10 +6,10 @@
 //! 旧 Discover 表结构的清理在 `schema/discovery.rs` 里完成（drop discovered_skills
 //! 与其索引）；这里只清剩下的 `settings.discover_scan_roots_config` 一行。
 
-use super::super::migrations::ensure_column;
-use crate::db::DbPool;
+use super::super::migrations::versions::v1::ensure_column;
+use sqlx::SqliteConnection;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
+pub(super) async fn init(connection: &mut SqliteConnection) -> Result<(), sqlx::Error> {
     // projects：用户手动 add 的项目根目录。
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS projects (
@@ -21,7 +21,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             last_scanned_at TEXT
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     // project_skill_installations：项目下某个 agent 目录下登记的 skill 安装。
@@ -44,7 +44,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     let alter_specs: &[(&str, &str, &str)] = &[
@@ -70,30 +70,32 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
         ),
     ];
     for (table, column, alter_sql) in alter_specs {
-        ensure_column(pool, table, column, alter_sql).await?;
+        ensure_column(connection, table, column, alter_sql).await?;
     }
 
-    repair_extended_project_paths(pool).await?;
+    repair_extended_project_paths(connection).await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_psi_project
          ON project_skill_installations(project_id)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query("DELETE FROM settings WHERE key = 'discover_scan_roots_config'")
-        .execute(pool)
+        .execute(&mut *connection)
         .await?;
 
     Ok(())
 }
 
-async fn repair_extended_project_paths(pool: &DbPool) -> Result<(), sqlx::Error> {
+async fn repair_extended_project_paths(
+    connection: &mut SqliteConnection,
+) -> Result<(), sqlx::Error> {
     let rows = sqlx::query_as::<_, (String, String)>(
         "SELECT id, path FROM projects WHERE path LIKE '//?/%'",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
 
     for (id, path) in rows {
@@ -102,7 +104,7 @@ async fn repair_extended_project_paths(pool: &DbPool) -> Result<(), sqlx::Error>
             sqlx::query("UPDATE projects SET path = ? WHERE id = ?")
                 .bind(cleaned)
                 .bind(id)
-                .execute(pool)
+                .execute(&mut *connection)
                 .await?;
         }
     }

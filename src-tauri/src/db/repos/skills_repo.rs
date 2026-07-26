@@ -16,9 +16,6 @@ use crate::db::repos::observations_repo::get_agent_skill_observations;
 use crate::db::repos::repositories_repo::{
     get_skill_repository_assignments_for_skills, prune_empty_skill_repositories_in_transaction,
 };
-use crate::db::repos::skill_relations_repo::{
-    delete_owned_skill_relations, delete_owned_skill_relations_not_in,
-};
 use crate::db::types::{
     AgentSkillObservation, DbPool, Skill, SkillRepository, SkillRepositoryAssignment,
 };
@@ -575,10 +572,9 @@ pub async fn get_central_skills_by_ids(
         .collect())
 }
 
-/// Delete a skill and all its owned relation records in one transaction.
+/// Delete a skill; owned relations are removed by database FK cascades.
 pub async fn delete_skill(pool: &DbPool, skill_id: &str) -> Result<(), sqlx::Error> {
     let mut transaction = pool.begin().await?;
-    delete_owned_skill_relations(&mut transaction, skill_id).await?;
     sqlx::query("DELETE FROM skills WHERE id = ?")
         .bind(skill_id)
         .execute(&mut *transaction)
@@ -601,8 +597,6 @@ pub async fn delete_skills_not_in_scope(
     found_skill_ids: &[String],
 ) -> Result<(), sqlx::Error> {
     let mut transaction = pool.begin().await?;
-    delete_owned_skill_relations_not_in(&mut transaction, found_skill_ids).await?;
-
     if found_skill_ids.is_empty() {
         sqlx::query("DELETE FROM skills")
             .execute(&mut *transaction)

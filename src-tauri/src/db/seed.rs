@@ -24,25 +24,22 @@ const DEFAULT_ENABLED_PLATFORM_IDS: [&str; 7] = [
 
 /// Initialize all database tables (idempotent) and seed built-in agents.
 pub async fn init_database(pool: &DbPool) -> Result<(), sqlx::Error> {
-    init_database_with_agents(pool, builtin_agents()).await
+    super::migrations::initialize_pool(pool, builtin_agents()).await
 }
 
 pub async fn init_database_for_remote_home(
     pool: &DbPool,
     remote_home: &str,
 ) -> Result<(), sqlx::Error> {
-    init_database_with_agents(pool, builtin_agents_for_posix_home(remote_home)).await
+    super::migrations::initialize_pool(pool, builtin_agents_for_posix_home(remote_home)).await
 }
 
-async fn init_database_with_agents(
+pub(crate) async fn seed_database_with_agents(
     pool: &DbPool,
-    builtin_agents: Vec<Agent>,
+    builtin_agents: &[Agent],
 ) -> Result<(), sqlx::Error> {
-    super::schema::init(pool).await?;
-    super::repair_orphan_skill_relations(pool).await?;
-
     // Seed built-in agents (INSERT OR IGNORE so repeated init is safe)
-    seed_builtin_agents(pool, &builtin_agents).await?;
+    seed_builtin_agents(pool, builtin_agents).await?;
 
     // Seed built-in scan directories from the DB rows after upsert so user
     // customizations that are intentionally preserved (Central store path)

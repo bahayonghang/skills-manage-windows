@@ -312,7 +312,6 @@ async fn delete_scan_stale_rows(
         execute_scan_query(tx, sqlx::query(statement)).await?;
     }
 
-    db::delete_owned_skill_relations_missing_from_scan_keep(tx).await?;
     execute_scan_query(
         tx,
         sqlx::query(

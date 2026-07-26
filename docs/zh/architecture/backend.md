@@ -14,7 +14,7 @@ src-tauri/src/
 ├── commands/          按域分组的 IPC 处理函数
 ├── services/          纯业务逻辑
 ├── targets/           本地 + SSH 执行
-└── db/                Pool + schema + repos
+└── db/                Pool + 版本化 migrations + schema + repos
 ```
 
 ## AppState
@@ -94,10 +94,11 @@ services/
 
 ```text
 db/
-├── pool.rs             create_pool()，启用 WAL
+├── pool.rs             私有 pool 工厂：WAL + 每连接 FK 回读验证
 ├── types.rs            共享结构体
-├── schema/             按业务域拆分的建表语句
-├── migrations.rs       ensure_column 增量 ALTER
+├── schema/             按业务域冻结的 migration-1 legacy baseline
+├── migrations.rs       path-aware open、preflight 与编排
+├── migrations/         backup/restore、版本源与定向测试
 ├── repos/              一个业务对象一个 repo
 ├── seed.rs             agent 注册表 seed
 └── tests.rs            集成式 db 测试
@@ -105,10 +106,12 @@ db/
 
 参见[数据模型](./data-model.md)了解表布局。
 
+Desktop setup、`CliContext::open_default` 与 `TargetRegistry::remote_db_for` 全部调用同一 `open_database*` 边界；migration、FK 校验和 seed 完成前，pool 不会进入 Tauri state 或 target cache。
+
 ## 日志与错误
 
 - **操作日志。** `operation_logs` 长生命周期结构化行，显示在日志页的 Operation layer。
 - **运行时日志。** `skillport-YYYY-MM-DD.log` 短生命周期日文件，由后端 tracing 与前端诊断写入，经白名单 IPC 读取 / 导出，并按保留周期清理。
 - **错误。** 所有命令返回 `Result<T, String>`。服务把错误上下文留在内部，到 IPC 边界才坍塌为字符串。
 
-Last reviewed: 2026-06-03
+Last reviewed: 2026-07-26
