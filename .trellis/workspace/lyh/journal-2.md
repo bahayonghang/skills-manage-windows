@@ -244,3 +244,41 @@ Central Skills 工具栏新增手动刷新按钮（useCentralRefreshButton hook�
 ### Next Steps
 
 - 实施 07-24-target-context-snapshot。
+
+
+## Session 58: Close request-scoped TargetContext snapshot
+
+**Date**: 2026-07-26
+**Task**: Close request-scoped TargetContext snapshot
+**Branch**: `dev`
+
+### Summary
+
+Bound target identity, cache DB, remote resources, events, and operation logs to one owned request context; migrated split-brain command paths and documented the invariant.
+
+### Main Changes
+
+- Added TargetContext plus single-read registry/AppState resolvers and explicit db_for_target selection.
+- Migrated commands and GitHub remote workspace helpers away from paired ambient target/DB reads; preserved real SSH/WSL log IDs and labels.
+- Added barrier-based Local/SSH-A/SSH-B/WSL regression coverage, architecture grep enforcement, backend spec, and architecture docs.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0e1f70c4` | (see git log) |
+
+### Testing
+
+- [OK] cargo fmt --all -- --check
+- [OK] cargo clippy --all-targets --locked -- -D warnings
+- [OK] cargo test --locked (907 passed, 4 ignored; CLI/E2E passed)
+- [OK] just ci (web 1425 passed, 1 skipped; Rust and production build passed)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Continue with 07-24-remote-process-supervisor, which can now consume explicit TargetContext snapshots.
