@@ -382,3 +382,24 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 63: 完成数据库版本化迁移与外键级联
+
+**Date**: 2026-07-26
+**Task**: 完成数据库版本化迁移与外键级联
+**Branch**: `dev`
+
+### Summary
+
+统一 desktop、CLI 与远端缓存数据库打开边界，加入带 checksum 的两版迁移、升级前备份恢复、每连接外键强制与七张 owned relation 级联删除；五版历史 fixture、数据库定向测试和 just ci 均通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6594b85e298d24f2ce7dd3e0b24856a5c5d016f3` | (see git log) |
+
+### Status
+
+[OK] **Completed**

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 62
+- **Total Sessions**: 63
 - **Last Active**: 2026-07-26
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~384 | Active |
+| `journal-2.md` | ~405 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 63 | 2026-07-26 | 完成数据库版本化迁移与外键级联 | `6594b85e298d24f2ce7dd3e0b24856a5c5d016f3` | `dev` |
 | 62 | 2026-07-26 | 完成数据库 stale 清理事务化与 orphan 修复 | `21eb82a9` | `dev` |
 | 61 | 2026-07-26 | Renderer 权限最小化与 capability drift check | `12b9b248` | `dev` |
 | 60 | 2026-07-26 | 远端路径 canonical 边界 | `83e1ba5f` | `dev` |
