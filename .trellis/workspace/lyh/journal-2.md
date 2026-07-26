@@ -282,3 +282,24 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Next Steps
 
 - Continue with 07-24-remote-process-supervisor, which can now consume explicit TargetContext snapshots.
+
+
+## Session 59: 完成 SSH/WSL 异步进程监督
+
+**Date**: 2026-07-26
+**Task**: 完成 SSH/WSL 异步进程监督
+**Branch**: `dev`
+
+### Summary
+
+将 SSH、WSL 与 discovery 执行统一迁移到异步 ProcessRunner，增加分级 deadline、50 ms 取消适配、bounded stdout/stderr、Windows Job Object 与 Unix process-group 清理，并迁移 Central batch/remote sync 调用链。补齐真实进程与 FakeRunner 回归，修复并发测试的墙钟阈值脆弱性；Windows just ci 全量通过，Unix cross-check 因 cross-compilation libdbus pkg-config/sysroot 缺失未 live 验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `47359025` | (see git log) |
+
+### Status
+
+[OK] **Completed**
