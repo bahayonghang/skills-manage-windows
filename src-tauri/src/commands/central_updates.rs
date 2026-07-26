@@ -37,8 +37,9 @@ pub async fn check_central_skill_updates(
     state: State<'_, AppState>,
     skill_ids: Option<Vec<String>>,
 ) -> Result<Vec<SkillUpdateState>, String> {
-    let pool = state.active_db().await?;
-    let fs = CentralFs::from_active_target(state.active_target().await?)
+    let request_context = state.resolve_target_context().await?;
+    let pool = request_context.db().clone();
+    let fs = CentralFs::from_active_target(request_context.target().clone())
         .await
         .map_err(|e| e.to_string())?;
     let auth =
@@ -70,8 +71,9 @@ pub async fn check_central_repository_sync(
     repository_ids: Vec<String>,
     skill_ids: Option<Vec<String>>,
 ) -> Result<CentralRepositorySyncPreview, String> {
-    let pool = state.active_db().await?;
-    let fs = CentralFs::from_active_target(state.active_target().await?)
+    let request_context = state.resolve_target_context().await?;
+    let pool = request_context.db().clone();
+    let fs = CentralFs::from_active_target(request_context.target().clone())
         .await
         .map_err(|e| e.to_string())?;
     let auth =
@@ -103,8 +105,9 @@ pub async fn apply_central_repository_sync(
     state: State<'_, AppState>,
     decisions: CentralRepositorySyncDecisions,
 ) -> Result<CentralRepositorySyncApplyResult, String> {
-    let pool = state.active_db().await?;
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let pool = request_context.db().clone();
+    let active_target = request_context.target().clone();
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
             .await
@@ -129,8 +132,9 @@ pub async fn update_central_skills(
     state: State<'_, AppState>,
     skill_ids: Vec<String>,
 ) -> Result<CentralSkillUpdateResult, String> {
-    let pool = state.active_db().await?;
-    let fs = CentralFs::from_active_target(state.active_target().await?)
+    let request_context = state.resolve_target_context().await?;
+    let pool = request_context.db().clone();
+    let fs = CentralFs::from_active_target(request_context.target().clone())
         .await
         .map_err(|e| e.to_string())?;
     let auth =

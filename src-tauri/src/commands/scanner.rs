@@ -43,9 +43,10 @@ where
 /// SQLite. Returns a `ScanResult` with per-agent skill counts.
 #[tauri::command]
 pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     db::set_setting_best_effort(&pool, "scan_state", "refreshing").await;
     let started_at = Instant::now();
 

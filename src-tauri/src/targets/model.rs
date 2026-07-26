@@ -247,3 +247,35 @@ impl ActiveTarget {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct TargetContext {
+    target: ActiveTarget,
+    db: DbPool,
+}
+
+impl TargetContext {
+    pub(crate) fn new(target: ActiveTarget, db: DbPool) -> Self {
+        Self { target, db }
+    }
+
+    pub fn target(&self) -> &ActiveTarget {
+        &self.target
+    }
+
+    pub fn db(&self) -> &DbPool {
+        &self.db
+    }
+
+    pub fn id(&self) -> &str {
+        self.target.id()
+    }
+
+    pub fn label(&self) -> &str {
+        self.target.label()
+    }
+
+    pub fn kind(&self) -> TargetKind {
+        self.target.kind()
+    }
+}

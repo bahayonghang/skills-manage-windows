@@ -70,11 +70,15 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn active_db(&self) -> Result<DbPool, String> {
+    pub async fn resolve_target_context(&self) -> Result<targets::TargetContext, String> {
         self.targets
-            .active_db(&self.db)
+            .resolve_active_context(&self.db)
             .await
             .map_err(|e| e.to_string())
+    }
+
+    pub async fn active_db(&self) -> Result<DbPool, String> {
+        Ok(self.resolve_target_context().await?.db().clone())
     }
 
     pub async fn active_target(&self) -> Result<targets::ActiveTarget, String> {
@@ -555,6 +559,35 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_modules_do_not_mix_ambient_target_and_db_resolution() {
+        fn visit(directory: &std::path::Path, violations: &mut Vec<String>) {
+            for entry in std::fs::read_dir(directory).expect("read commands directory") {
+                let path = entry.expect("command directory entry").path();
+                if path.is_dir() {
+                    visit(&path, violations);
+                } else if path.extension().and_then(|value| value.to_str()) == Some("rs") {
+                    let source = std::fs::read_to_string(&path).expect("read command source");
+                    if source.contains("state.active_target()")
+                        && source.contains("state.active_db()")
+                    {
+                        violations.push(path.display().to_string());
+                    }
+                }
+            }
+        }
+
+        let mut violations = Vec::new();
+        visit(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/commands"),
+            &mut violations,
+        );
+        assert!(
+            violations.is_empty(),
+            "command modules must resolve one request-scoped TargetContext: {violations:?}"
+        );
+    }
 
     #[test]
     fn ai_tag_job_registry_poisoning_returns_controlled_fallbacks() {

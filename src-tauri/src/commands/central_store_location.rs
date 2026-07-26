@@ -32,9 +32,10 @@ pub async fn preview_central_store_location_change(
     state: State<'_, AppState>,
     request: CentralStoreLocationPreviewRequest,
 ) -> Result<CentralStoreLocationPreview, String> {
-    let target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let target = request_context.target().clone();
     ensure_local_target(&target).map_err(|e| e.to_string())?;
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     preview_central_store_location_change_impl(&pool, &request.target_path)
         .await
         .map_err(|e| e.to_string())
@@ -45,9 +46,10 @@ pub async fn apply_central_store_location_change(
     state: State<'_, AppState>,
     request: CentralStoreLocationApplyRequest,
 ) -> Result<CentralStoreLocationChangeResult, String> {
-    let target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let target = request_context.target().clone();
     ensure_local_target(&target).map_err(|e| e.to_string())?;
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     apply_central_store_location_change_impl(
         &pool,
         &request.target_path,

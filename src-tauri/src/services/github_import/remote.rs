@@ -451,7 +451,7 @@ fi
 }
 
 pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
-    state: &State<'_, AppState>,
+    active_target: &ActiveTarget,
     workspace_id: &str,
     repo: &GitHubRepoRef,
     source_path: &str,
@@ -464,10 +464,6 @@ pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
         return Err(GithubImportError::PreviewWorkspaceExpired);
     }
     validate_remote_markdown_workspace_repo(&workspace, repo)?;
-    let active_target = state
-        .active_target()
-        .await
-        .map_err(GithubImportError::Remote)?;
     if active_target.is_remote_like() && active_target.id() != workspace.target_id {
         return Err(GithubImportError::PreviewTargetChanged);
     }
@@ -479,7 +475,7 @@ pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
     } else {
         join_repo_path(source_path, "SKILL.md")?
     };
-    let connection = connect_remote_target(&active_target)
+    let connection = connect_remote_target(active_target)
         .await
         .map_err(|e| GithubImportError::Remote(e.to_string()))?;
     let bytes = connection
@@ -503,14 +499,11 @@ pub(super) fn validate_remote_markdown_workspace_repo(
     Ok(())
 }
 
-pub(crate) async fn discard_preview_workspace_for_active_target(
-    state: &State<'_, AppState>,
+pub(crate) async fn discard_preview_workspace_for_target(
+    active_target: &ActiveTarget,
     workspace_id: &str,
 ) {
     let Some(workspace) = take_preview_workspace(workspace_id) else {
-        return;
-    };
-    let Ok(active_target) = state.active_target().await else {
         return;
     };
     if !active_target.is_remote_like() {
@@ -519,7 +512,7 @@ pub(crate) async fn discard_preview_workspace_for_active_target(
     if active_target.id() != workspace.target_id {
         return;
     }
-    if let Ok(connection) = connect_remote_target(&active_target).await {
+    if let Ok(connection) = connect_remote_target(active_target).await {
         let _ = connection
             .remove_tree(&workspace.remote_workspace_dir)
             .await;

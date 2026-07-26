@@ -35,7 +35,8 @@ pub async fn preview_local_skill_archive(
     state: State<'_, AppState>,
     archive_path: String,
 ) -> Result<LocalArchivePreview, String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     // ZIP import is local-only for MVP. SSH/WSL targets must disable the
     // ZIP intent in the frontend; a stray call is rejected here.
     if !matches!(active_target, ActiveTarget::Local) {
@@ -43,7 +44,7 @@ pub async fn preview_local_skill_archive(
             local_archive_import::LocalArchiveImportError::RemoteTargetUnsupported.to_ipc_error(),
         );
     }
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     local_archive_import::preview_local_skill_archive_impl(&pool, &archive_path)
         .await
         .map_err(|e| e.to_ipc_error())
@@ -63,14 +64,15 @@ pub async fn import_local_skill_archive(
     resolution: LocalArchiveImportResolution,
     renamed_skill_id: Option<String>,
 ) -> Result<LocalArchiveImportResult, String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     if !matches!(active_target, ActiveTarget::Local) {
         return Err(
             local_archive_import::LocalArchiveImportError::RemoteTargetUnsupported.to_ipc_error(),
         );
     }
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let started_at = Instant::now();
     let requested_resolution = resolution.clone();
     let result = local_archive_import::import_local_skill_archive_impl(

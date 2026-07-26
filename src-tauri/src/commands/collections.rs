@@ -276,8 +276,9 @@ pub async fn batch_install_collection(
     collection_id: String,
     agent_ids: Vec<String>,
 ) -> Result<BatchInstallResult, String> {
-    let active_target = state.active_target().await?;
-    let pool = state.active_db().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
+    let pool = request_context.db().clone();
     batch_install_collection_impl(&pool, &active_target, &collection_id, &agent_ids).await
 }
 

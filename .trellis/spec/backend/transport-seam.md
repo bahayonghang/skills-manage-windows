@@ -5,7 +5,7 @@
 跨 Local/SSH/WSL 三种目标的**安装类操作**（install / uninstall 及其批量形态）：
 
 - **一份编排**：业务骨架只写一次（`services/installation/install.rs`），禁止按 transport 复制 `_impl` / `_ssh_impl` / `_remote` 平行实现。差异下沉到 `InstallTransport` 的 per-transport hook。
-- **一次解析、不再分支**：命令层用 `InstallTransport::for_target(&active_target)` 把 `ActiveTarget` 解析成 transport（SSH/WSL 在此打开一条连接，批量调用整个循环复用），之后任何代码不得再 `match ActiveTarget`。
+- **一次快照、一次解析、不再分支**：命令层先用 `resolve_target_context()` 冻结 target 与 DB，再用 `InstallTransport::for_target(context.target())` 把该 `ActiveTarget` 解析成 transport（SSH/WSL 在此打开一条连接，批量调用整个循环复用），之后任何代码不得重读 active target 或再 `match ActiveTarget`。
 - **单点拍平**：`TargetsError` 进入 installation 域只能经 `transport::transport_error`（→ `InstallationError::Remote(String)`）。禁止在各调用点各自 `.map_err(|e| ...)` 造第二种文案。
 
 ## Signatures
@@ -71,9 +71,10 @@ match active_target {
     _ => install_skill_to_agent_remote_impl(...).await,   // 第二份实现必然漂移
 }
 
-// Correct：解析一次，编排一份
-let transport = InstallTransport::for_target(&active_target).await?;
-installation::install_skill(&pool, &transport, &skill_id, &agent_id, method).await
+// Correct：冻结一个 request context，解析一次，编排一份
+let context = state.resolve_target_context().await?;
+let transport = InstallTransport::for_target(context.target()).await?;
+installation::install_skill(context.db(), &transport, &skill_id, &agent_id, method).await
 ```
 
 ## 推广边界

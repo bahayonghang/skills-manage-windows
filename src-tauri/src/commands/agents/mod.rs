@@ -351,8 +351,9 @@ pub async fn set_agent_enabled_impl(
 
 #[tauri::command]
 pub async fn get_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatus>, String> {
-    let active_target = state.active_target().await?;
-    let pool = state.active_db().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
+    let pool = request_context.db().clone();
     match active_target {
         ActiveTarget::Local => get_agents_impl(&pool).await,
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => get_agents_cached_impl(&pool).await,
@@ -363,16 +364,18 @@ pub async fn get_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatu
 pub async fn list_platform_paths(
     state: State<'_, AppState>,
 ) -> Result<std::collections::HashMap<String, ResolvedPlatformPaths>, String> {
-    let active_target = state.active_target().await?;
-    let pool = state.active_db().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
+    let pool = request_context.db().clone();
     let remote_home = active_target.remote_home();
     list_platform_paths_impl(&pool, remote_home).await
 }
 
 #[tauri::command]
 pub async fn detect_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatus>, String> {
-    let active_target = state.active_target().await?;
-    let pool = state.active_db().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
+    let pool = request_context.db().clone();
     match active_target {
         ActiveTarget::Local => detect_agents_impl(&pool).await,
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
@@ -386,9 +389,10 @@ pub async fn add_custom_agent(
     state: State<'_, AppState>,
     config: CustomAgentConfig,
 ) -> Result<AgentWithStatus, String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let remote_home = active_target.remote_home();
     let display_name = config.display_name.clone();
     let global_skills_dir = config.global_skills_dir.clone();
@@ -426,9 +430,10 @@ pub async fn update_custom_agent(
     agent_id: String,
     config: UpdateCustomAgentConfig,
 ) -> Result<AgentWithStatus, String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let remote_home = active_target.remote_home();
     let display_name = config.display_name.clone();
     let global_skills_dir = config.global_skills_dir.clone();
@@ -463,9 +468,10 @@ pub async fn remove_custom_agent(
     state: State<'_, AppState>,
     agent_id: String,
 ) -> Result<(), String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let started_at = Instant::now();
     let result = remove_custom_agent_impl(&pool, &agent_id).await;
 

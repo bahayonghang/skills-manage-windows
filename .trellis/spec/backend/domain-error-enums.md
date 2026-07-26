@@ -12,7 +12,7 @@
 ```
 db/repos/*        →  Result<T, sqlx::Error>（直接透传；repos 内非 sqlx 的业务校验/防御错误用 sqlx::Error::InvalidArgument(消息) 承载，Display 为 "{0}" 保文案逐字不变）
 services/<domain> →  Result<T, <Domain>Error>（thiserror 枚举，一域一枚举）
-commands/*        →  Result<T, String>（IPC 边界，唯一允许字符串错误的层；lib.rs `AppState::active_db`/`active_target` 作为 commands 直接辅助同属边界）
+commands/*        →  Result<T, String>（IPC 边界，唯一允许字符串错误的层；lib.rs `AppState::resolve_target_context` 及迁移期 target helper 作为 commands 直接辅助同属边界）
 ```
 
 错误枚举骨架（`services/<domain>/error.rs`，`mod.rs` 中 `mod error; pub use error::XxxError;`）：
@@ -72,7 +72,7 @@ pub enum XxxError {
 ## 5. Good/Base/Bad Cases
 
 - **Good**：`matches!(e, ScannerError::Timeout(_))` 分支处理；新失败路径加专属变体并保留原文案。
-- **Base**：commands 壳层与 lib.rs `AppState::active_db`/`active_target` 辅助是仅有的 IPC 边界字符串化点；targets 错误经 `Remote(String)` 携带 Display 文案跨入服务域。
+- **Base**：commands 壳层与 lib.rs `AppState::resolve_target_context`（含迁移期 `active_db`/`active_target`）是仅有的 IPC 边界字符串化点；targets 错误经 `Remote(String)` 携带 Display 文案跨入服务域。
 - **Bad**：新增 `Other(String)` 兜底变体；新函数返回 `Result<T, String>`；改动 `#[error(...)]` 文案；commands 层之外出现字符串错误。
 
 ## 6. Tests Required

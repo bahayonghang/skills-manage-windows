@@ -44,9 +44,10 @@ pub async fn install_skill_to_agent(
     agent_id: String,
     method: Option<String>,
 ) -> Result<InstallResult, String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let method = method.as_deref().unwrap_or("auto");
     let started_at = Instant::now();
     let result = match InstallTransport::for_target(&active_target).await {
@@ -96,9 +97,10 @@ pub async fn uninstall_skill_from_agent(
     agent_id: String,
     row_id: Option<String>,
 ) -> Result<(), String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let started_at = Instant::now();
     let result = match InstallTransport::for_target(&active_target).await {
         Ok(transport) => {
@@ -150,9 +152,10 @@ pub async fn batch_uninstall_skills_from_agent(
     agent_id: String,
     requests: Vec<BatchUninstallSkillRequest>,
 ) -> Result<BatchUninstallSkillResult, String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let started_at = Instant::now();
     let result = match InstallTransport::for_target(&active_target).await {
         Ok(transport) => {
@@ -225,9 +228,10 @@ pub async fn batch_install_to_agents(
     method: Option<String>,
 ) -> Result<BatchInstallResult, String> {
     let method = method.as_deref().unwrap_or("auto");
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let started_at = Instant::now();
     let mut succeeded = Vec::new();
     let mut skipped = Vec::new();
@@ -354,13 +358,14 @@ pub async fn batch_install_central_skills(
     project_path: Option<String>,
 ) -> Result<CentralBatchInstallResult, String> {
     let method = method.as_deref().unwrap_or("auto");
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
     let started_at = Instant::now();
     let project_path = project_path
         .map(|path| path.trim().to_string())
         .filter(|path| !path.is_empty());
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
 
     let skill_ids = installation::dedupe_ordered(skill_ids);
     let agent_ids = installation::dedupe_ordered(agent_ids);

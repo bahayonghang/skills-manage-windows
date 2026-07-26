@@ -131,6 +131,155 @@ pub(super) mod suite {
         assert_eq!(active_target_id(&pool).await.unwrap(), LOCAL_TARGET_ID);
     }
 
+    #[tokio::test]
+    async fn local_target_context_owns_matching_target_and_db() {
+        let registry = TargetRegistry::default();
+        let pool = memory_db().await;
+        db::set_setting(&pool, "context_marker", "local")
+            .await
+            .unwrap();
+
+        let context = registry.resolve_active_context(&pool).await.unwrap();
+
+        assert_eq!(context.id(), LOCAL_TARGET_ID);
+        assert_eq!(context.label(), "Local");
+        assert_eq!(context.kind(), TargetKind::Local);
+        assert_eq!(
+            db::get_setting(context.db(), "context_marker")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("local")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolved_context_keeps_owned_target_after_active_target_changes() {
+        let registry = TargetRegistry::default();
+        let pool = memory_db().await;
+        let context = registry.resolve_active_context(&pool).await.unwrap();
+
+        db::set_setting(&pool, ACTIVE_TARGET_SETTING_KEY, "missing-target")
+            .await
+            .unwrap();
+
+        assert_eq!(context.id(), LOCAL_TARGET_ID);
+        assert_eq!(context.kind(), TargetKind::Local);
+        assert!(matches!(context.target(), ActiveTarget::Local));
+        assert!(matches!(
+            registry.resolve_active_context(&pool).await,
+            Err(TargetsError::ActiveTargetMissing(id)) if id == "missing-target"
+        ));
+    }
+
+    #[tokio::test]
+    async fn explicit_target_context_preserves_ssh_and_wsl_identity() {
+        let pool = memory_db().await;
+        let ssh = password_target();
+        let wsl = wsl_target();
+        let ssh_context =
+            TargetContext::new(ActiveTarget::Ssh(Box::new(ssh.clone())), pool.clone());
+        let wsl_context = TargetContext::new(ActiveTarget::Wsl(Box::new(wsl.clone())), pool);
+
+        assert_eq!(ssh_context.id(), ssh.id);
+        assert_eq!(ssh_context.label(), ssh.label);
+        assert_eq!(ssh_context.kind(), TargetKind::Ssh);
+        assert_eq!(wsl_context.id(), wsl.id);
+        assert_eq!(wsl_context.label(), wsl.label);
+        assert_eq!(wsl_context.kind(), TargetKind::Wsl);
+    }
+
+    #[tokio::test]
+    async fn target_context_snapshot_survives_cross_target_switch_matrix() {
+        use crate::operation_log::target_context_from_active_target;
+
+        let registry = TargetRegistry::default();
+        let local_db = memory_db().await;
+        db::set_setting(&local_db, "context_marker", "local")
+            .await
+            .unwrap();
+
+        let mut ssh_a = password_target();
+        ssh_a.auth_method = SshAuthMethod::Key;
+        ssh_a.key_path = "~/.ssh/id_ed25519".to_string();
+        ssh_a.credential_key = None;
+        ssh_a.password = None;
+        let mut ssh_b = ssh_a.clone();
+        ssh_b.id = "ssh-other".to_string();
+        ssh_b.label = "Other Lab".to_string();
+        let wsl = wsl_target();
+        save_remote_targets(&local_db, &[ssh_a.clone(), ssh_b.clone()])
+            .await
+            .unwrap();
+        save_wsl_targets(&local_db, std::slice::from_ref(&wsl))
+            .await
+            .unwrap();
+
+        for (target_id, marker) in [
+            (ssh_a.id.as_str(), "ssh-a"),
+            (ssh_b.id.as_str(), "ssh-b"),
+            (wsl.id.as_str(), "wsl"),
+        ] {
+            let pool = memory_db().await;
+            db::set_setting(&pool, "context_marker", marker)
+                .await
+                .unwrap();
+            registry.insert_test_pool(target_id, pool);
+        }
+
+        for (from_id, to_id, expected_marker) in [
+            (LOCAL_TARGET_ID, ssh_a.id.as_str(), "local"),
+            (ssh_a.id.as_str(), ssh_b.id.as_str(), "ssh-a"),
+            (ssh_b.id.as_str(), wsl.id.as_str(), "ssh-b"),
+            (wsl.id.as_str(), LOCAL_TARGET_ID, "wsl"),
+        ] {
+            db::set_setting(&local_db, ACTIVE_TARGET_SETTING_KEY, from_id)
+                .await
+                .unwrap();
+            let context = registry.resolve_active_context(&local_db).await.unwrap();
+            assert_eq!(context.id(), from_id);
+
+            let ready = Arc::new(tokio::sync::Barrier::new(2));
+            let resume = Arc::new(tokio::sync::Barrier::new(2));
+            let operation_ready = ready.clone();
+            let operation_resume = resume.clone();
+            let operation = tokio::spawn(async move {
+                operation_ready.wait().await;
+                operation_resume.wait().await;
+
+                let marker = db::get_setting(context.db(), "context_marker")
+                    .await
+                    .unwrap()
+                    .unwrap();
+                let log_context = target_context_from_active_target(context.target());
+                let event_target_id = context.id().to_string();
+                (
+                    context.id().to_string(),
+                    context.label().to_string(),
+                    marker,
+                    log_context,
+                    event_target_id,
+                )
+            });
+
+            ready.wait().await;
+            db::set_setting(&local_db, ACTIVE_TARGET_SETTING_KEY, to_id)
+                .await
+                .unwrap();
+            let next_context = registry.resolve_active_context(&local_db).await.unwrap();
+            assert_eq!(next_context.id(), to_id);
+            resume.wait().await;
+
+            let (context_id, context_label, marker, log_context, event_target_id) =
+                operation.await.unwrap();
+            assert_eq!(context_id, from_id);
+            assert_eq!(marker, expected_marker);
+            assert_eq!(log_context.id, from_id);
+            assert_eq!(log_context.label.as_deref(), Some(context_label.as_str()));
+            assert_eq!(event_target_id, from_id);
+        }
+    }
+
     #[test]
     fn remote_cache_path_is_scoped_by_target_id() {
         let path = remote_cache_db_path("ssh-demo_1").unwrap();

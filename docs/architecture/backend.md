@@ -24,10 +24,10 @@ src-tauri/src/
 | Field | Purpose |
 | --- | --- |
 | `db: DbPool` | Always-local sqlite pool for the user's machine |
-| `targets: TargetRegistry` | Active target (Local / SSH) + cache of remote pools |
+| `targets: TargetRegistry` | Active target (Local / SSH / WSL) + cache of remote pools |
 | `ai_tag_jobs: AiTagJobRegistry` | Cooperative cancel flags for AI tagging tasks |
 
-`AppState::active_db()` returns the pool that matches the current target — local commands work uniformly whether the user is on the local machine or attached to an SSH host.
+Commands that need target-scoped state begin with `AppState::resolve_target_context()`. The returned owned `TargetContext` binds one `ActiveTarget` to its matching SQLite pool, so switching the active target only affects later commands; an in-flight operation keeps its original target, DB, remote-resource identity, and operation-log identity. The legacy `active_db()` and `active_target()` helpers remain for DB-only or identity-only migration paths, but a command must never combine them.
 
 ## Commands Layer
 
@@ -75,18 +75,18 @@ The split lets each service own its tests under the same module. Larger services
 
 ## Targets
 
-`targets/` abstracts execution between the local machine and an SSH host:
+`targets/` abstracts execution between the local machine, SSH hosts, and WSL distributions:
 
 | File | Role |
 | --- | --- |
-| `model.rs` | Persisted target rows |
-| `registry.rs` | Active target resolution + remote pool cache |
+| `model.rs` | Persisted target rows + owned request-scoped `TargetContext` |
+| `registry.rs` | Atomic target/DB context resolution + remote pool cache |
 | `exec.rs` | Run commands locally or via `ssh` |
 | `cred.rs` | Encrypted password storage |
 | `askpass.rs` | Password helper used by ssh |
 | `commands.rs` | IPC commands (re-exported through `commands::targets`) |
 
-The result is that services do not branch on `if remote {}`; they call `targets::exec` and let the registry route the call.
+Command handlers freeze one `TargetContext` before asynchronous work and pass its explicit target/DB into services. Services do not reread ambient `AppState`; transport-specific execution is constructed from the frozen target.
 
 ## Persistence
 
@@ -111,4 +111,4 @@ See [Data Model](./data-model.md) for the table layout.
 - **Runtime logs.** Short-lived daily files named `skillport-YYYY-MM-DD.log`. Written by backend tracing and frontend diagnostics, read/exported through whitelisted IPC helpers, and cleaned after the retention window.
 - **Errors.** All commands return `Result<T, String>`. Services bubble `String` for the IPC boundary; rich error context stays inside services until the boundary collapses it for serialization.
 
-Last reviewed: 2026-06-03
+Last reviewed: 2026-07-26

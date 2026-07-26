@@ -160,9 +160,10 @@ pub async fn add_scan_directory(
     path: String,
     label: Option<String>,
 ) -> Result<ScanDirectory, String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let remote_home = active_target.remote_home();
     let started_at = Instant::now();
     let result =
@@ -210,9 +211,10 @@ pub async fn add_scan_directory(
 /// Tauri command: remove a custom scan directory by path.
 #[tauri::command]
 pub async fn remove_scan_directory(state: State<'_, AppState>, path: String) -> Result<(), String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     with_operation_log(
         &state,
         OperationSpec::new(
@@ -250,9 +252,10 @@ pub async fn set_scan_directory_active(
     path: String,
     is_active: bool,
 ) -> Result<(), String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     with_operation_log(
         &state,
         OperationSpec::new(

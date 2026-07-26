@@ -35,6 +35,14 @@ impl TargetRegistry {
         }
     }
 
+    #[cfg(test)]
+    pub(super) fn insert_test_pool(&self, target_id: &str, pool: DbPool) {
+        self.pools
+            .lock()
+            .expect("target pool cache")
+            .insert(target_id.to_string(), pool);
+    }
+
     pub(super) fn set_session_password(
         &self,
         credential_key: &str,
@@ -358,13 +366,21 @@ impl TargetRegistry {
 
     pub async fn active_target(&self, local_db: &DbPool) -> Result<ActiveTarget, TargetsError> {
         let active_id = active_target_id(local_db).await?;
-        self.target_by_id(local_db, &active_id)
+        self.active_target_by_id(local_db, &active_id).await
+    }
+
+    async fn active_target_by_id(
+        &self,
+        local_db: &DbPool,
+        active_id: &str,
+    ) -> Result<ActiveTarget, TargetsError> {
+        self.target_by_id(local_db, active_id)
             .await
             .map_err(|error| {
                 if active_id == LOCAL_TARGET_ID {
                     error
                 } else {
-                    TargetsError::ActiveTargetMissing(active_id.clone())
+                    TargetsError::ActiveTargetMissing(active_id.to_string())
                 }
             })
     }
@@ -403,9 +419,27 @@ impl TargetRegistry {
     }
 
     pub async fn active_db(&self, local_db: &DbPool) -> Result<DbPool, TargetsError> {
-        match self.active_target(local_db).await? {
+        Ok(self.resolve_active_context(local_db).await?.db().clone())
+    }
+
+    pub async fn resolve_active_context(
+        &self,
+        local_db: &DbPool,
+    ) -> Result<TargetContext, TargetsError> {
+        let active_id = active_target_id(local_db).await?;
+        let target = self.active_target_by_id(local_db, &active_id).await?;
+        let db = self.db_for_target(local_db, &target).await?;
+        Ok(TargetContext::new(target, db))
+    }
+
+    pub async fn db_for_target(
+        &self,
+        local_db: &DbPool,
+        target: &ActiveTarget,
+    ) -> Result<DbPool, TargetsError> {
+        match target {
             ActiveTarget::Local => Ok(local_db.clone()),
-            ActiveTarget::Ssh(target) => self.remote_db(&target).await,
+            ActiveTarget::Ssh(target) => self.remote_db(target).await,
             ActiveTarget::Wsl(target) => self.remote_db_for(&target.id, &target.remote_home).await,
         }
     }

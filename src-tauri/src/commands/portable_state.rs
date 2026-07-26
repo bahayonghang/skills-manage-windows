@@ -40,10 +40,11 @@ pub async fn export_skillport_state(
     state.portable_state_cancel.store(false, Ordering::SeqCst);
     let cancel = Arc::clone(&state.portable_state_cancel);
     let started_at = Instant::now();
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
     let export_target = portable_state_target_context(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     emit_portability_progress(
         &app,
         PortabilityProgressUpdate {
@@ -139,9 +140,10 @@ pub async fn preview_skillport_state_import(
     state.portable_state_cancel.store(false, Ordering::SeqCst);
     let cancel = Arc::clone(&state.portable_state_cancel);
     let started_at = Instant::now();
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     emit_portability_progress(
         &app,
         PortabilityProgressUpdate {
@@ -261,9 +263,10 @@ pub async fn import_skillport_state(
     state.portable_state_cancel.store(false, Ordering::SeqCst);
     let cancel = Arc::clone(&state.portable_state_cancel);
     let started_at = Instant::now();
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     emit_portability_progress(
         &app,
         PortabilityProgressUpdate {

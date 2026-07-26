@@ -10,7 +10,8 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::operation_log::{
-    with_operation_log, OperationLogEvent, OperationLogTargetContext, OperationSpec,
+    target_context_from_active_target, with_operation_log, OperationLogEvent,
+    OperationLogTargetContext, OperationSpec,
 };
 use crate::services::central_updates::inventory::{
     apply_skill_update_decisions_impl, clear_skill_update_inventory_impl,
@@ -26,7 +27,6 @@ use crate::services::central_updates::{
     SnapshotProgressStatus,
 };
 use crate::services::github_import;
-use crate::targets::ActiveTarget;
 use crate::AppState;
 
 const UPDATE_INVENTORY_PROGRESS_EVENT: &str = "central://skill-update-inventory-progress";
@@ -70,8 +70,10 @@ pub async fn refresh_skill_update_inventory(
     scope: SkillRefreshScope,
     operation_id: String,
 ) -> Result<SkillUpdateInventory, String> {
-    let active_target = state.active_target().await?;
-    let target_context = update_target_context(&active_target);
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
+    let pool = request_context.db().clone();
+    let target_context = target_context_from_active_target(&active_target);
     let request_details = refresh_request_details(&scope);
     let progress_app = Arc::new(app);
     let progress: SnapshotProgressReporter = Arc::new(move |event: SnapshotProgressEvent| {
@@ -102,7 +104,6 @@ pub async fn refresh_skill_update_inventory(
             refresh_result_details,
         ),
         || async {
-            let pool = state.active_db().await?;
             let fs = CentralFs::from_active_target(active_target)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -158,8 +159,10 @@ pub async fn apply_skill_update_decisions(
     state: State<'_, AppState>,
     decisions: SkillUpdateDecisions,
 ) -> Result<SkillUpdateApplyResult, String> {
-    let active_target = state.active_target().await?;
-    let target_context = update_target_context(&active_target);
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
+    let pool = request_context.db().clone();
+    let target_context = target_context_from_active_target(&active_target);
     let request_details = apply_request_details(&decisions);
     with_operation_log(
         &state,
@@ -172,7 +175,6 @@ pub async fn apply_skill_update_decisions(
             apply_result_details,
         ),
         || async {
-            let pool = state.active_db().await?;
             let fs = CentralFs::from_active_target(active_target.clone())
                 .await
                 .map_err(|e| e.to_string())?;
@@ -207,8 +209,10 @@ pub async fn force_update_central_skills(
     state: State<'_, AppState>,
     request: ForceSkillUpdateRequest,
 ) -> Result<ForceSkillUpdateResult, String> {
-    let active_target = state.active_target().await?;
-    let target_context = update_target_context(&active_target);
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
+    let pool = request_context.db().clone();
+    let target_context = target_context_from_active_target(&active_target);
     let request_details = json!({
         "requestedSkills": request.skill_ids.len(),
         "refreshCopies": request.refresh_copy_installations,
@@ -230,7 +234,6 @@ pub async fn force_update_central_skills(
             },
         ),
         || async {
-            let pool = state.active_db().await?;
             let fs = CentralFs::from_active_target(active_target)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -264,8 +267,10 @@ pub async fn force_mirror_central_repositories(
     state: State<'_, AppState>,
     request: ForceRepositoryMirrorRequest,
 ) -> Result<ForceRepositoryMirrorResult, String> {
-    let active_target = state.active_target().await?;
-    let target_context = update_target_context(&active_target);
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
+    let pool = request_context.db().clone();
+    let target_context = target_context_from_active_target(&active_target);
     let request_details = json!({
         "requestedRepositories": request.repository_ids.len(),
         "deleteMissing": request.delete_missing,
@@ -293,7 +298,6 @@ pub async fn force_mirror_central_repositories(
             },
         ),
         || async {
-            let pool = state.active_db().await?;
             let fs = CentralFs::from_active_target(active_target.clone())
                 .await
                 .map_err(|e| e.to_string())?;
@@ -333,19 +337,6 @@ fn update_operation_event(
     OperationLogEvent::new("update_center", action, status, summary)
         .details(details)
         .duration_ms(duration_ms)
-}
-
-fn update_target_context(active_target: &ActiveTarget) -> OperationLogTargetContext {
-    let kind = match active_target {
-        ActiveTarget::Local => "local",
-        ActiveTarget::Ssh(_) => "ssh",
-        ActiveTarget::Wsl(_) => "wsl",
-    };
-    OperationLogTargetContext {
-        kind: kind.to_string(),
-        id: kind.to_string(),
-        label: None,
-    }
 }
 
 fn update_operation_spec<'a, R, ResultDetails>(
@@ -467,8 +458,8 @@ mod tests {
     }
 
     #[test]
-    fn update_target_context_records_kind_without_remote_identity() {
-        let target = ActiveTarget::Wsl(Box::new(crate::targets::WslTargetConfig {
+    fn update_target_context_records_real_remote_identity() {
+        let target = crate::targets::ActiveTarget::Wsl(Box::new(crate::targets::WslTargetConfig {
             id: "private-target-id".to_string(),
             label: "alice@example.internal".to_string(),
             distribution: "Ubuntu".to_string(),
@@ -477,11 +468,11 @@ mod tests {
             symlink_enabled: true,
         }));
 
-        let context = update_target_context(&target);
+        let context = target_context_from_active_target(&target);
 
         assert_eq!(context.kind, "wsl");
-        assert_eq!(context.id, "wsl");
-        assert!(context.label.is_none());
+        assert_eq!(context.id, "private-target-id");
+        assert_eq!(context.label.as_deref(), Some("alice@example.internal"));
     }
 }
 

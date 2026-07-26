@@ -73,8 +73,9 @@ pub async fn preview_delete_central_skills(
     state: State<'_, AppState>,
     skill_ids: Vec<String>,
 ) -> Result<BatchDeleteCentralSkillPreviewResult, String> {
-    let pool = state.active_db().await?;
-    match state.active_target().await? {
+    let request_context = state.resolve_target_context().await?;
+    let pool = request_context.db().clone();
+    match request_context.target() {
         ActiveTarget::Local => {
             central_skills::preview_delete_central_skills_impl(&pool, &skill_ids).await
         }
@@ -91,9 +92,10 @@ pub async fn delete_central_skill(
     skill_id: String,
     remove_agent_ids: Vec<String>,
 ) -> Result<DeleteCentralSkillResult, String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let started_at = Instant::now();
     let result = match &active_target {
         ActiveTarget::Local => {
@@ -145,9 +147,10 @@ pub async fn delete_central_skills(
     state: State<'_, AppState>,
     requests: Vec<BatchDeleteCentralSkillRequest>,
 ) -> Result<BatchDeleteCentralSkillResult, String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let started_at = Instant::now();
     let result = match &active_target {
         ActiveTarget::Local => central_skills::delete_central_skills_impl(&pool, &requests).await,
@@ -215,8 +218,9 @@ pub async fn preview_delete_skill_repository(
     state: State<'_, AppState>,
     repository_id: String,
 ) -> Result<DeleteSkillRepositoryPreview, String> {
-    let pool = state.active_db().await?;
-    match state.active_target().await? {
+    let request_context = state.resolve_target_context().await?;
+    let pool = request_context.db().clone();
+    match request_context.target() {
         ActiveTarget::Local => {
             central_skills::preview_delete_skill_repository_impl(&pool, &repository_id).await
         }
@@ -233,9 +237,10 @@ pub async fn delete_skill_repository(
     repository_id: String,
     requests: Vec<BatchDeleteCentralSkillRequest>,
 ) -> Result<DeleteSkillRepositoryResult, String> {
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     let started_at = Instant::now();
     let result = match &active_target {
         ActiveTarget::Local => {
@@ -341,8 +346,9 @@ pub async fn read_skill_content(
     state: State<'_, AppState>,
     skill_id: String,
 ) -> Result<String, String> {
-    let pool = state.active_db().await?;
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let pool = request_context.db().clone();
+    let active_target = request_context.target().clone();
     central_skills::read_skill_content_for_target_impl(&pool, active_target, &skill_id)
         .await
         .map_err(|e| e.to_string())
@@ -356,8 +362,9 @@ pub async fn read_file_by_path(
     agent_id: Option<String>,
     row_id: Option<String>,
 ) -> Result<String, String> {
-    let pool = state.active_db().await?;
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let pool = request_context.db().clone();
+    let active_target = request_context.target().clone();
     let access = path_access_context(skill_id, agent_id, row_id)?;
     central_skills::read_file_by_path_for_target_impl(&pool, active_target, &path, &access)
         .await
@@ -372,8 +379,9 @@ pub async fn open_in_file_manager(
     agent_id: Option<String>,
     row_id: Option<String>,
 ) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let pool = request_context.db().clone();
+    let active_target = request_context.target().clone();
     let access = path_access_context(skill_id, agent_id, row_id)?;
     central_skills::open_in_file_manager_for_target_impl(&pool, active_target, &path, &access)
         .await
@@ -388,8 +396,9 @@ pub async fn list_directory_tree(
     agent_id: Option<String>,
     row_id: Option<String>,
 ) -> Result<Vec<DirectoryTreeEntry>, String> {
-    let pool = state.active_db().await?;
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let pool = request_context.db().clone();
+    let active_target = request_context.target().clone();
     let access = path_access_context(skill_id, agent_id, row_id)?;
     central_skills::list_directory_tree_for_target_impl(&pool, active_target, &path, &access)
         .await

@@ -13,14 +13,13 @@ use std::fmt;
 use std::io::{Cursor, Read};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter};
 use tokio::time::{sleep, Duration as TokioDuration, Instant};
 use uuid::Uuid;
 
 use crate::{
     db::{self, DbPool, Skill},
     targets::{connect_remote_target, remote_join, ActiveTarget, ConnectedRemoteTarget},
-    AppState,
 };
 
 mod archive;
@@ -75,7 +74,7 @@ pub(crate) use preview::{
 pub(crate) use raw_http::{fetch_raw_text, fetch_skill_markdown};
 pub(crate) use remote::import_github_repo_skills_remote_with_auth;
 pub(crate) use remote::{
-    discard_preview_workspace_for_active_target, fetch_github_skill_markdown_from_remote_workspace,
+    discard_preview_workspace_for_target, fetch_github_skill_markdown_from_remote_workspace,
 };
 pub(crate) use source::{
     build_repo_skill_candidates_from_snapshot_at_path, fetch_repo_skill_candidates_from_source,

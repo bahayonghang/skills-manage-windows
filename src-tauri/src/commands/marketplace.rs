@@ -110,8 +110,9 @@ pub async fn install_marketplace_skill(
     state: State<'_, AppState>,
     skill_id: String,
 ) -> Result<(), String> {
-    let active_target = state.active_target().await?;
-    let pool = state.active_db().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
+    let pool = request_context.db().clone();
     marketplace::install_marketplace_skill_impl(&pool, active_target, skill_id)
         .await
         .map_err(|e| e.to_string())
@@ -172,8 +173,9 @@ pub async fn install_from_skills_sh(
     source: String,
     skill_id: String,
 ) -> Result<String, String> {
-    let active_target = state.active_target().await?;
-    let pool = state.active_db().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
+    let pool = request_context.db().clone();
     marketplace::install_from_skills_sh_impl(
         &pool,
         state.secrets.as_ref(),
