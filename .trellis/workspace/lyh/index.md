@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 61
+- **Total Sessions**: 62
 - **Last Active**: 2026-07-26
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~363 | Active |
+| `journal-2.md` | ~384 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 62 | 2026-07-26 | 完成数据库 stale 清理事务化与 orphan 修复 | `21eb82a9` | `dev` |
 | 61 | 2026-07-26 | Renderer 权限最小化与 capability drift check | `12b9b248` | `dev` |
 | 60 | 2026-07-26 | 远端路径 canonical 边界 | `83e1ba5f` | `dev` |
 | 59 | 2026-07-26 | 完成 SSH/WSL 异步进程监督 | `47359025` | `dev` |

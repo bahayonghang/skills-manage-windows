@@ -361,3 +361,24 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Next Steps
 
 - 继续 07-24-db-stale-cleanup-fix 的 planning review 与单一产品决策门禁。
+
+
+## Session 62: 完成数据库 stale 清理事务化与 orphan 修复
+
+**Date**: 2026-07-26
+**Task**: 完成数据库 stale 清理事务化与 orphan 修复
+**Branch**: `dev`
+
+### Summary
+
+集中七张 skill owned relations，事务化单删/批删/scanner 清理与 repository prune；在 schema 后 seed 前持久审计并原子修复 orphan；补齐 fault injection、ID 重用、独立历史保留与 FK preflight 回归，just ci 全绿。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `21eb82a9` | (see git log) |
+
+### Status
+
+[OK] **Completed**
