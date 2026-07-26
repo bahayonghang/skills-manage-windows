@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 59
+- **Total Sessions**: 60
 - **Last Active**: 2026-07-26
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~305 | Active |
+| `journal-2.md` | ~326 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 60 | 2026-07-26 | 远端路径 canonical 边界 | `83e1ba5f` | `dev` |
 | 59 | 2026-07-26 | 完成 SSH/WSL 异步进程监督 | `47359025` | `dev` |
 | 58 | 2026-07-26 | Close request-scoped TargetContext snapshot | `0e1f70c4` | `dev` |
 | 57 | 2026-07-26 | 完成 GitHub 网络边界与 SSRF 收敛 | `35e0c086` | `dev` |

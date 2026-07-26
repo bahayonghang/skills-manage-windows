@@ -303,3 +303,24 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 60: 远端路径 canonical 边界
+
+**Date**: 2026-07-26
+**Task**: 远端路径 canonical 边界
+**Branch**: `dev`
+
+### Summary
+
+为 Central Skills SSH/WSL 文件读取与目录入口增加 canonical containment，允许 root 内符号链接并拒绝 canonical escape；补齐 typed error、NUL 协议、SSH/WSL FakeRunner parity、路径策略规范及完整 CI 验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `83e1ba5f` | (see git log) |
+
+### Status
+
+[OK] **Completed**
