@@ -324,3 +324,40 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 61: Renderer 权限最小化与 capability drift check
+
+**Date**: 2026-07-26
+**Task**: Renderer 权限最小化与 capability drift check
+**Branch**: `dev`
+
+### Summary
+
+移除主 WebView 文件系统权限与明文 secret reveal，将 portability/Marketplace 写盘迁移到 backend，并把 capability 漂移检查纳入 required CI；归档提交 59b773e3。
+
+### Main Changes
+
+- 移除 plugin-fs、HOME/user-dir scopes 和 shell:default，仅保留 shell:allow-open。
+- 新增 portability 有界文件适配器、原子导出，以及 Marketplace backend 安装路由。
+- 删除 PAT/AI key reveal IPC/UI，新增 capability inventory 的机器契约、确定性表格和 drift gate。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `12b9b248` | (see git log) |
+
+### Testing
+
+- [OK] just ci：frontend 1438 passed / 1 skipped；Rust 926 passed / 5 ignored，integration 3/4/5 passed；typecheck、lint、capabilitycheck、sizecheck、build、fmt、Clippy passed。
+- [OK] pnpm tauri build：生成 SkillPort_0.10.14_x64-setup.exe，15137555 bytes，SHA-256 185762B273CF57ADB57E6565FCD9167060E29B0D1D63C84B0D1A17DD5AC00E5。
+- [OK] task.py validate、git diff --check、capabilitycheck 和定向 capability Vitest 6/6 通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 继续 07-24-db-stale-cleanup-fix 的 planning review 与单一产品决策门禁。
