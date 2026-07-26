@@ -150,6 +150,7 @@ pub struct RecordedCommand {
     pub program: String,
     pub args: Vec<String>,
     pub stdin: Option<Vec<u8>>,
+    pub(crate) policy: crate::targets::ProcessPolicy,
 }
 
 /// In-memory [`crate::targets::CommandRunner`]: records every command and
@@ -205,7 +206,7 @@ impl FakeRunner {
         self.responses
             .lock()
             .unwrap()
-            .push_back(FakeResponse::Error(crate::targets::RunnerError {
+            .push_back(FakeResponse::Error(crate::targets::RunnerError::Io {
                 phase,
                 source: std::io::Error::other(message.to_string()),
             }));
@@ -217,19 +218,26 @@ impl FakeRunner {
     }
 }
 
+#[async_trait::async_trait]
 impl crate::targets::CommandRunner for FakeRunner {
-    fn run(
+    async fn run(
         &self,
-        command: std::process::Command,
-        stdin: Option<&[u8]>,
+        request: crate::targets::ProcessRequest<'_>,
     ) -> Result<std::process::Output, crate::targets::RunnerError> {
+        let crate::targets::ProcessRequest {
+            command,
+            stdin,
+            policy,
+            cancellation: _,
+        } = request;
         self.calls.lock().unwrap().push(RecordedCommand {
             program: command.get_program().to_string_lossy().into_owned(),
             args: command
                 .get_args()
                 .map(|arg| arg.to_string_lossy().into_owned())
                 .collect(),
-            stdin: stdin.map(<[u8]>::to_vec),
+            stdin,
+            policy,
         });
         match self
             .responses

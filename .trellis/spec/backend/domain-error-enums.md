@@ -54,6 +54,7 @@ pub enum XxxError {
 ## 3. Contracts
 
 - **错误文本逐字保留现状英文**：`#[error(...)]` 格式串照抄原 `format!` 字符串——前端 toast 直接展示 Display 输出，文案漂移即 UI 回归。
+- targets process supervision 的 timeout/cancel/output-limit/termination-failure 使用独立 `TargetsError` typed variants；Start/WriteStdin/Wait IO 继续保留旧 Display 前缀。监督错误字段只含 transport、policy/stream/limit/trigger，不得包含 command、env 或捕获输出。
 - IPC 载荷结构体中的 `error: String` 字段（如 `FailedInstall`、`FailedCentralSkillDelete`）保持 String，构造处 `error: e.to_string()`。
 - 跨域传播：服务域之间用 `#[error(transparent)] Xxx(#[from] XxxError)`（如 `ProjectsError::Installation`、marketplace 对 `GithubImportError`）；targets 传输层错误（`TargetsError`）在调用点 `.to_string()` 包入本域 `Remote(String)` 变体。
 

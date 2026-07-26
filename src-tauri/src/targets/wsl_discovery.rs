@@ -8,9 +8,13 @@ pub async fn list_wsl_distributions_impl() -> Result<Vec<WslDistributionSummary>
 
     #[cfg(windows)]
     {
-        let output = wsl_distribution_list_command()
-            .output()
-            .map_err(|e| TargetsError::io("Failed to start wsl.exe", e))?;
+        let output = ProcessRunner
+            .run(ProcessRequest::new(
+                wsl_distribution_list_command(),
+                ProcessPolicy::probe(),
+            ))
+            .await
+            .map_err(wsl_runner_error)?;
         if !output.status.success() {
             let detail = normalize_wsl_list_output(&output.stderr);
             let detail = detail.trim();

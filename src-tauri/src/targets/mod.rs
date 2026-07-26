@@ -17,6 +17,8 @@ mod cred;
 mod error;
 mod exec;
 mod model;
+mod process_api;
+mod process_tree;
 mod registry;
 mod remote;
 mod runner;
@@ -30,6 +32,7 @@ use commands::*;
 use cred::*;
 use exec::*;
 use model::*;
+use process_api::*;
 #[cfg(test)]
 use wsl_discovery::*;
 
@@ -40,5 +43,8 @@ pub use exec::*;
 pub use model::*;
 pub use registry::TargetRegistry;
 pub use remote::*;
-pub(crate) use runner::{CommandRunner, ProcessRunner, RunnerError, RunnerPhase};
+pub(crate) use runner::{
+    CommandRunner, ProcessCancellation, ProcessPolicy, ProcessRequest, ProcessRunner, RunnerError,
+    RunnerPhase,
+};
 pub use wsl_discovery::list_wsl_distributions_impl;

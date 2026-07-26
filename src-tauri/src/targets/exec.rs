@@ -42,7 +42,9 @@ pub(super) async fn probe_ssh_target(
     target: &RemoteTargetConfig,
 ) -> Result<SshProbe, TargetsError> {
     let connection = open_ssh_target(target)?;
-    let output = connection.run_script(&remote_probe_script(), &[]).await?;
+    let output = connection
+        .run_probe_script(&remote_probe_script(), &[])
+        .await?;
     let probe = parse_ssh_probe_output(&output)?;
 
     Ok(probe)
@@ -50,7 +52,9 @@ pub(super) async fn probe_ssh_target(
 
 pub(super) async fn probe_wsl_target(target: &WslTargetConfig) -> Result<SshProbe, TargetsError> {
     let connection = open_wsl_target(target)?;
-    let output = connection.run_script(&remote_probe_script(), &[]).await?;
+    let output = connection
+        .run_probe_script(&remote_probe_script(), &[])
+        .await?;
     parse_ssh_probe_output(&output)
 }
 
@@ -124,24 +128,6 @@ impl std::fmt::Debug for ConnectedWslTarget {
             .field("target", &self.target)
             .finish_non_exhaustive()
     }
-}
-
-fn ssh_runner_error(error: RunnerError) -> TargetsError {
-    let context = match error.phase {
-        RunnerPhase::Start => "Failed to start ssh",
-        RunnerPhase::WriteStdin => "Failed to write ssh stdin",
-        RunnerPhase::Wait => "Failed to wait for ssh",
-    };
-    TargetsError::io(context, error.source)
-}
-
-fn wsl_runner_error(error: RunnerError) -> TargetsError {
-    let context = match error.phase {
-        RunnerPhase::Start => "Failed to start wsl.exe",
-        RunnerPhase::WriteStdin => "Failed to write wsl.exe stdin",
-        RunnerPhase::Wait => "Failed to wait for wsl.exe",
-    };
-    TargetsError::io(context, error.source)
 }
 
 pub fn open_wsl_target(target: &WslTargetConfig) -> Result<ConnectedWslTarget, TargetsError> {
@@ -221,7 +207,7 @@ impl ConnectedSshTarget {
         command
     }
 
-    fn remote_command_error(&self, status: ExitStatus, stderr: &[u8]) -> TargetsError {
+    pub(super) fn remote_command_error(&self, status: ExitStatus, stderr: &[u8]) -> TargetsError {
         TargetsError::RemoteCommandFailed {
             status,
             detail: self.ssh_failure_detail(stderr),
@@ -273,56 +259,6 @@ impl ConnectedSshTarget {
         Some(message)
     }
 
-    pub async fn run_script(&self, script: &str, args: &[&str]) -> Result<String, TargetsError> {
-        let output =
-            self.run_command_with_stdin(&remote_script_command(args), script.as_bytes())?;
-        String::from_utf8(output).map_err(TargetsError::RemoteStdoutNotUtf8)
-    }
-
-    pub fn run_command_with_stdin_bytes(
-        &self,
-        command: &str,
-        stdin: &[u8],
-    ) -> Result<Vec<u8>, TargetsError> {
-        self.run_command_with_stdin(command, stdin)
-    }
-
-    pub async fn run_command(&self, command: &str) -> Result<String, TargetsError> {
-        let mut process = self.base_command();
-        process.arg(command);
-        let output = self.runner.run(process, None).map_err(ssh_runner_error)?;
-        if output.status.success() {
-            String::from_utf8(output.stdout).map_err(TargetsError::RemoteStdoutNotUtf8)
-        } else {
-            Err(self.remote_command_error(output.status, &output.stderr))
-        }
-    }
-
-    fn run_command_with_stdin(&self, command: &str, stdin: &[u8]) -> Result<Vec<u8>, TargetsError> {
-        let mut process = self.base_command();
-        process.arg(command);
-        let output = self
-            .runner
-            .run(process, Some(stdin))
-            .map_err(ssh_runner_error)?;
-        if output.status.success() {
-            Ok(output.stdout)
-        } else {
-            Err(self.remote_command_error(output.status, &output.stderr))
-        }
-    }
-
-    fn run_command_bytes(&self, command: &str) -> Result<Vec<u8>, TargetsError> {
-        let mut process = self.base_command();
-        process.arg(command);
-        let output = self.runner.run(process, None).map_err(ssh_runner_error)?;
-        if output.status.success() {
-            Ok(output.stdout)
-        } else {
-            Err(self.remote_command_error(output.status, &output.stderr))
-        }
-    }
-
     pub async fn ensure_dir(&self, path: &str) -> Result<(), TargetsError> {
         if self.exists(path).await? {
             return Ok(());
@@ -334,7 +270,15 @@ impl ConnectedSshTarget {
         let command = format!("test -e {}", shell_quote(path));
         let mut process = self.base_command();
         process.arg(command);
-        let output = self.runner.run(process, None).map_err(ssh_runner_error)?;
+        let output = run_process(
+            self.runner.as_ref(),
+            process,
+            None,
+            ProcessPolicy::probe(),
+            ProcessCancellation::Never,
+            ssh_runner_error,
+        )
+        .await?;
         match output.status.code() {
             Some(0) => Ok(true),
             Some(1) => Ok(false),
@@ -352,7 +296,15 @@ impl ConnectedSshTarget {
         );
         let mut process = self.base_command();
         process.arg(command);
-        let output = self.runner.run(process, None).map_err(ssh_runner_error)?;
+        let output = run_process(
+            self.runner.as_ref(),
+            process,
+            None,
+            ProcessPolicy::probe(),
+            ProcessCancellation::Never,
+            ssh_runner_error,
+        )
+        .await?;
         match output.status.code() {
             Some(0) => {
                 let stdout =
@@ -387,11 +339,19 @@ impl ConnectedSshTarget {
             self.mkdir_p(&parent).await?;
         }
         let command = format!("cat > {}", shell_quote(path));
-        self.run_command_with_stdin(&command, bytes).map(|_| ())
+        self.run_command_with_stdin(
+            &command,
+            bytes,
+            ProcessPolicy::standard(),
+            ProcessCancellation::Never,
+        )
+        .await
+        .map(|_| ())
     }
 
     pub async fn read_file(&self, path: &str) -> Result<Vec<u8>, TargetsError> {
         self.run_command_bytes(&format!("cat {}", shell_quote(path)))
+            .await
     }
 
     pub async fn copy_dir(&self, source: &str, target: &str) -> Result<(), TargetsError> {
@@ -400,7 +360,13 @@ impl ConnectedSshTarget {
             source = shell_quote(source),
             target = shell_quote(target)
         );
-        self.run_command(&command).await.map(|_| ())
+        self.run_command_with_control(
+            &command,
+            ProcessPolicy::bulk_transfer(),
+            ProcessCancellation::Never,
+        )
+        .await
+        .map(|_| ())
     }
 
     pub async fn remove_tree(&self, path: &str) -> Result<(), TargetsError> {
@@ -455,7 +421,7 @@ impl ConnectedWslTarget {
         command
     }
 
-    fn remote_command_error(&self, status: ExitStatus, stderr: &[u8]) -> TargetsError {
+    pub(super) fn remote_command_error(&self, status: ExitStatus, stderr: &[u8]) -> TargetsError {
         TargetsError::WslCommandFailed {
             status,
             detail: self.wsl_failure_detail(stderr),
@@ -475,64 +441,6 @@ impl ConnectedWslTarget {
         }
     }
 
-    pub async fn run_script(&self, script: &str, args: &[&str]) -> Result<String, TargetsError> {
-        let mut command = self.base_command();
-        command.arg("sh").arg("-s").arg("--");
-        for arg in args {
-            command.arg(arg);
-        }
-        let output = self.run_command_process_with_stdin(command, script.as_bytes())?;
-        String::from_utf8(output).map_err(TargetsError::WslStdoutNotUtf8)
-    }
-
-    pub fn run_command_with_stdin_bytes(
-        &self,
-        command: &str,
-        stdin: &[u8],
-    ) -> Result<Vec<u8>, TargetsError> {
-        let mut process = self.base_command();
-        process.arg("sh").arg("-lc").arg(command);
-        self.run_command_process_with_stdin(process, stdin)
-    }
-
-    pub async fn run_command(&self, command: &str) -> Result<String, TargetsError> {
-        let mut process = self.base_command();
-        process.arg("sh").arg("-lc").arg(command);
-        let output = self.runner.run(process, None).map_err(wsl_runner_error)?;
-        if output.status.success() {
-            String::from_utf8(output.stdout).map_err(TargetsError::WslStdoutNotUtf8)
-        } else {
-            Err(self.remote_command_error(output.status, &output.stderr))
-        }
-    }
-
-    fn run_command_process_with_stdin(
-        &self,
-        command: Command,
-        stdin: &[u8],
-    ) -> Result<Vec<u8>, TargetsError> {
-        let output = self
-            .runner
-            .run(command, Some(stdin))
-            .map_err(wsl_runner_error)?;
-        if output.status.success() {
-            Ok(output.stdout)
-        } else {
-            Err(self.remote_command_error(output.status, &output.stderr))
-        }
-    }
-
-    fn run_command_bytes(&self, command: &str) -> Result<Vec<u8>, TargetsError> {
-        let mut process = self.base_command();
-        process.arg("sh").arg("-lc").arg(command);
-        let output = self.runner.run(process, None).map_err(wsl_runner_error)?;
-        if output.status.success() {
-            Ok(output.stdout)
-        } else {
-            Err(self.remote_command_error(output.status, &output.stderr))
-        }
-    }
-
     pub async fn ensure_dir(&self, path: &str) -> Result<(), TargetsError> {
         if self.exists(path).await? {
             return Ok(());
@@ -544,7 +452,15 @@ impl ConnectedWslTarget {
         let command = format!("test -e {}", shell_quote(path));
         let mut process = self.base_command();
         process.arg("sh").arg("-lc").arg(command);
-        let output = self.runner.run(process, None).map_err(wsl_runner_error)?;
+        let output = run_process(
+            self.runner.as_ref(),
+            process,
+            None,
+            ProcessPolicy::probe(),
+            ProcessCancellation::Never,
+            wsl_runner_error,
+        )
+        .await?;
         match output.status.code() {
             Some(0) => Ok(true),
             Some(1) => Ok(false),
@@ -562,7 +478,15 @@ impl ConnectedWslTarget {
         );
         let mut process = self.base_command();
         process.arg("sh").arg("-lc").arg(command);
-        let output = self.runner.run(process, None).map_err(wsl_runner_error)?;
+        let output = run_process(
+            self.runner.as_ref(),
+            process,
+            None,
+            ProcessPolicy::probe(),
+            ProcessCancellation::Never,
+            wsl_runner_error,
+        )
+        .await?;
         match output.status.code() {
             Some(0) => {
                 let stdout =
@@ -598,11 +522,13 @@ impl ConnectedWslTarget {
         }
         let command = format!("cat > {}", shell_quote(path));
         self.run_command_with_stdin_bytes(&command, bytes)
+            .await
             .map(|_| ())
     }
 
     pub async fn read_file(&self, path: &str) -> Result<Vec<u8>, TargetsError> {
         self.run_command_bytes(&format!("cat {}", shell_quote(path)))
+            .await
     }
 
     pub async fn copy_dir(&self, source: &str, target: &str) -> Result<(), TargetsError> {
@@ -611,7 +537,13 @@ impl ConnectedWslTarget {
             source = shell_quote(source),
             target = shell_quote(target)
         );
-        self.run_command(&command).await.map(|_| ())
+        self.run_command_with_control(
+            &command,
+            ProcessPolicy::bulk_transfer(),
+            ProcessCancellation::Never,
+        )
+        .await
+        .map(|_| ())
     }
 
     pub async fn remove_tree(&self, path: &str) -> Result<(), TargetsError> {

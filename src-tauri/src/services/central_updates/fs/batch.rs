@@ -202,7 +202,10 @@ async fn write_skill_dirs_atomic_remote(
                 }
             };
             let command = remote_batch_update_command(&batch_root);
-            match conn.run_command_with_stdin_bytes(&command, &archive) {
+            match conn
+                .run_command_with_stdin_bytes_cancellable(&command, &archive, cancel)
+                .await
+            {
                 Ok(stdout) => match parse_batch_rows(&stdout, &skill_ids, "Central write") {
                     Ok(results) => {
                         outcomes.extend(results.into_iter().map(|(skill_id, result)| {
@@ -300,7 +303,7 @@ async fn refresh_copy_installs_remote(
             .map(|copy| copy.skill_id.clone())
             .collect::<Vec<_>>();
         match conn
-            .run_script(REMOTE_BATCH_REFRESH_COPY_SCRIPT, &arg_refs)
+            .run_script_cancellable(REMOTE_BATCH_REFRESH_COPY_SCRIPT, &arg_refs, cancel)
             .await
         {
             Ok(stdout) => match parse_batch_rows(stdout.as_bytes(), &skill_ids, "Copy refresh") {

@@ -64,6 +64,26 @@ impl ConnectedRemoteTarget {
         }
     }
 
+    pub(crate) async fn run_script_cancellable(
+        &self,
+        script: &str,
+        args: &[&str],
+        cancel: Option<&std::sync::atomic::AtomicBool>,
+    ) -> Result<String, TargetsError> {
+        match self {
+            ConnectedRemoteTarget::Ssh(connection) => {
+                connection
+                    .run_script_cancellable(script, args, cancel)
+                    .await
+            }
+            ConnectedRemoteTarget::Wsl(connection) => {
+                connection
+                    .run_script_cancellable(script, args, cancel)
+                    .await
+            }
+        }
+    }
+
     pub async fn run_command(&self, command: &str) -> Result<String, TargetsError> {
         match self {
             ConnectedRemoteTarget::Ssh(connection) => connection.run_command(command).await,
@@ -71,17 +91,41 @@ impl ConnectedRemoteTarget {
         }
     }
 
-    pub fn run_command_with_stdin_bytes(
+    pub async fn run_command_with_stdin_bytes(
         &self,
         command: &str,
         stdin: &[u8],
     ) -> Result<Vec<u8>, TargetsError> {
         match self {
             ConnectedRemoteTarget::Ssh(connection) => {
-                connection.run_command_with_stdin_bytes(command, stdin)
+                connection
+                    .run_command_with_stdin_bytes(command, stdin)
+                    .await
             }
             ConnectedRemoteTarget::Wsl(connection) => {
-                connection.run_command_with_stdin_bytes(command, stdin)
+                connection
+                    .run_command_with_stdin_bytes(command, stdin)
+                    .await
+            }
+        }
+    }
+
+    pub(crate) async fn run_command_with_stdin_bytes_cancellable(
+        &self,
+        command: &str,
+        stdin: &[u8],
+        cancel: Option<&std::sync::atomic::AtomicBool>,
+    ) -> Result<Vec<u8>, TargetsError> {
+        match self {
+            ConnectedRemoteTarget::Ssh(connection) => {
+                connection
+                    .run_command_with_stdin_bytes_cancellable(command, stdin, cancel)
+                    .await
+            }
+            ConnectedRemoteTarget::Wsl(connection) => {
+                connection
+                    .run_command_with_stdin_bytes_cancellable(command, stdin, cancel)
+                    .await
             }
         }
     }

@@ -69,13 +69,13 @@ async fn cleanup_remote_root(fs: &CentralFs, root: &str) {
         .unwrap();
 }
 
+#[async_trait::async_trait]
 impl CommandRunner for CancellingRunner {
-    fn run(
+    async fn run(
         &self,
-        command: std::process::Command,
-        stdin: Option<&[u8]>,
+        request: crate::targets::ProcessRequest<'_>,
     ) -> Result<std::process::Output, RunnerError> {
-        let result = self.inner.run(command, stdin);
+        let result = self.inner.run(request).await;
         self.cancel.store(true, Ordering::SeqCst);
         result
     }
@@ -240,6 +240,9 @@ async fn remote_batch_writes_use_one_process_per_sixteen_skills() {
     let calls = runner.calls();
     assert_eq!(calls.len(), 3);
     assert!(calls.iter().all(|call| call.stdin.is_some()));
+    assert!(calls
+        .iter()
+        .all(|call| call.policy.class.label() == "bulk_transfer"));
 }
 
 #[tokio::test]

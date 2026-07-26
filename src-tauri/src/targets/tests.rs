@@ -1074,6 +1074,7 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#
             Some("test -e '/tmp/a'")
         );
         assert!(calls[0].stdin.is_none());
+        assert_eq!(calls[0].policy.class.label(), "probe");
     }
 
     #[tokio::test]
@@ -1113,6 +1114,7 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#
             calls[0].stdin.as_deref(),
             Some("printf '%s' \"$1\"".as_bytes())
         );
+        assert_eq!(calls[0].policy.class.label(), "standard");
     }
 
     #[tokio::test]
@@ -1136,6 +1138,35 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#
 
         let error = connection.run_command("true").await.unwrap_err();
         assert!(error.to_string().contains("Failed to start ssh"));
+    }
+
+    #[test]
+    fn ssh_supervision_errors_map_to_semantic_target_variants() {
+        let timeout = ssh_runner_error(RunnerError::TimedOut {
+            class: ProcessPolicy::probe().class,
+            deadline: std::time::Duration::from_secs(30),
+        });
+        assert!(matches!(
+            timeout,
+            TargetsError::ProcessTimedOut {
+                transport: "SSH",
+                class: "probe",
+                timeout_ms: 30_000,
+            }
+        ));
+
+        let overflow = wsl_runner_error(RunnerError::OutputLimitExceeded {
+            stream: super::runner::RunnerStream::Stderr,
+            limit: 512,
+        });
+        assert!(matches!(
+            overflow,
+            TargetsError::ProcessOutputLimitExceeded {
+                transport: "WSL",
+                stream: "stderr",
+                limit: 512,
+            }
+        ));
     }
 
     #[tokio::test]

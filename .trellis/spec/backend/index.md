@@ -11,6 +11,7 @@
 - [SKILL.md frontmatter 解析约定](./skill-frontmatter-parsing.md)
 - [Path Policy（路径语义单点约定）](./path-policy.md)
 - [Transport Seam（Local/SSH/WSL 操作级传输缝）](./transport-seam.md)
+- [Async Process Supervision Contract](./process-supervision.md)
 - [Request-scoped TargetContext Contract](./target-context.md)
 - [Central Update Batching Contract](./central-update-batching.md)
 - [GitHub Import Preview Contract](./github-import-preview-contract.md)
