@@ -138,12 +138,6 @@ pub enum CentralSkillsError {
     #[error("Remote path '{0}' does not exist.")]
     RemotePathMissing(String),
 
-    #[error("Refusing to traverse remote symlink path '{0}'.")]
-    RemoteSymlinkTraversalRefused(String),
-
-    #[error("Refusing to read remote symlink path '{0}'.")]
-    RemoteSymlinkReadRefused(String),
-
     #[error("Remote path '{0}' is not a directory.")]
     RemotePathNotDirectory(String),
 
@@ -170,6 +164,27 @@ pub enum CentralSkillsError {
 
     #[error("Refusing to access '{0}': parent traversal is not allowed.")]
     RemoteParentTraversal(String),
+
+    #[error("Failed to resolve the remote skill root.")]
+    RemoteCanonicalRootResolution,
+
+    #[error("The resolved remote skill root is not a directory.")]
+    RemoteCanonicalRootNotDirectory,
+
+    #[error("Failed to resolve the requested remote skill path.")]
+    RemoteCanonicalCandidateResolution,
+
+    #[error("Refusing to access a remote path outside the resolved skill root.")]
+    RemoteCanonicalEscape,
+
+    #[error("Remote canonical path resolution is unavailable.")]
+    RemoteCanonicalResolverUnavailable,
+
+    #[error("Remote canonical path resolution returned an invalid response.")]
+    RemoteCanonicalProtocol,
+
+    #[error("Remote canonical path resolution failed.")]
+    RemoteCanonicalResolution,
 
     /// A `spawn_blocking` worker failed to join.
     #[error("Failed to join {label} task: {message}")]

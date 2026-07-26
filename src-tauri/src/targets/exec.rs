@@ -122,6 +122,17 @@ pub struct ConnectedWslTarget {
     pub(super) runner: Arc<dyn CommandRunner>,
 }
 
+#[cfg(test)]
+impl ConnectedWslTarget {
+    /// Test-only constructor: no live WSL dependency, injectable runner.
+    pub(crate) fn for_tests_with_runner(
+        target: WslTargetConfig,
+        runner: Arc<dyn CommandRunner>,
+    ) -> Self {
+        Self { target, runner }
+    }
+}
+
 impl std::fmt::Debug for ConnectedWslTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ConnectedWslTarget")

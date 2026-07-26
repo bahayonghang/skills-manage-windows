@@ -9,6 +9,7 @@ mod delete;
 mod error;
 mod files;
 mod query;
+mod remote_path;
 mod types;
 
 #[cfg(test)]
