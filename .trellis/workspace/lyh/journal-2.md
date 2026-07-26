@@ -210,3 +210,37 @@ Central Skills 工具栏新增手动刷新按钮（useCentralRefreshButton hook�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 57: 完成 GitHub 网络边界与 SSRF 收敛
+
+**Date**: 2026-07-26
+**Task**: 完成 GitHub 网络边界与 SSRF 收敛
+**Branch**: `dev`
+
+### Summary
+
+将 Markdown 预览改为结构化 repo/path IPC，固定 GitHub endpoint，禁用重定向并增加超时、流式预算与远端 workspace repo 绑定。
+
+### Main Changes
+
+- 移除 renderer 控制的 downloadUrl 权威输入，统一 raw/API 请求构造与 endpoint policy。
+- 补齐 remote workspace repo mismatch、SSRF 矩阵、redirect、chunked cap+1 与 PAT mirror 回归。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `35e0c086` | (see git log) |
+
+### Testing
+
+- [OK] just ci
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 实施 07-24-target-context-snapshot。
