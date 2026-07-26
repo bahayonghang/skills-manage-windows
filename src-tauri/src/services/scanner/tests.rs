@@ -1346,6 +1346,82 @@ async fn test_rescan_removes_deleted_skills_from_db() {
         "Both skills should be in DB after first scan"
     );
 
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        "INSERT INTO skill_update_states (skill_id, source_type, status)
+         VALUES ('skill-remove', 'github', 'up_to_date')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_repositories
+         (id, name, source_type, pinned, is_unknown, created_at, updated_at)
+         VALUES ('stale-repo', 'Stale Repo', 'github', 0, 0, ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_repository_members
+         (skill_id, repository_id, added_at, updated_at)
+         VALUES ('skill-remove', 'stale-repo', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO collection_skills (collection_id, skill_id, added_at)
+         VALUES ('stale-collection', 'skill-remove', ?)",
+    )
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_tag_links (skill_id, tag_id, source, added_at)
+         VALUES ('skill-remove', 'uncategorized', 'manual', ?)",
+    )
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_ai_tag_reviews
+         (skill_id, tag_id, confidence, status, suggested_at, updated_at)
+         VALUES ('skill-remove', 'uncategorized', 0.5, 'pending', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_explanations
+         (skill_id, explanation, lang, model, created_at, updated_at)
+         VALUES ('skill-remove', 'stale', 'en', 'fixture', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO agent_skill_observations
+         (row_id, agent_id, skill_id, name, file_path, dir_path, source_kind, source_root,
+          link_type, is_read_only, scanned_at)
+         VALUES ('independent-observation', 'untouched-agent', 'skill-remove', 'Historical',
+                 '/tmp/historical/SKILL.md', '/tmp/historical', 'global', '/tmp', 'copy', 0, ?)",
+    )
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+
     // Remove "skill-remove" from disk.
     fs::remove_dir_all(tmp.path().join("skill-remove")).unwrap();
 
@@ -1378,6 +1454,38 @@ async fn test_rescan_removes_deleted_skills_from_db() {
         stale_inst.is_empty(),
         "skill-remove's installation record should be removed after rescan"
     );
+    for table in [
+        "skill_update_states",
+        "skill_repository_members",
+        "collection_skills",
+        "skill_tag_links",
+        "skill_ai_tag_reviews",
+        "skill_explanations",
+        "skill_installations",
+    ] {
+        let count = sqlx::query_scalar::<_, i64>(&format!(
+            "SELECT COUNT(*) FROM {table} WHERE skill_id = 'skill-remove'"
+        ))
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count, 0, "scanner must remove stale {table} rows");
+    }
+    let observation_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM agent_skill_observations
+         WHERE row_id = 'independent-observation'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        observation_count, 1,
+        "observations outside the touched-agent keep set must remain"
+    );
+    assert!(db::get_skill_repository_by_id(&pool, "stale-repo")
+        .await
+        .unwrap()
+        .is_none());
 }
 
 // ── Regression: is_central preserved when codex shares the central dir ───

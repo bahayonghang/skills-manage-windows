@@ -8,11 +8,16 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use sqlx::{query::Query, sqlite::SqliteArguments, FromRow, Row, Sqlite, Transaction};
+use sqlx::{
+    query::Query, sqlite::SqliteArguments, FromRow, QueryBuilder, Row, Sqlite, Transaction,
+};
 
 use crate::db::repos::observations_repo::get_agent_skill_observations;
 use crate::db::repos::repositories_repo::{
-    get_skill_repository_assignments_for_skills, prune_empty_skill_repositories,
+    get_skill_repository_assignments_for_skills, prune_empty_skill_repositories_in_transaction,
+};
+use crate::db::repos::skill_relations_repo::{
+    delete_owned_skill_relations, delete_owned_skill_relations_not_in,
 };
 use crate::db::types::{
     AgentSkillObservation, DbPool, Skill, SkillRepository, SkillRepositoryAssignment,
@@ -56,8 +61,8 @@ const UPSERT_SKILL_SQL: &str = "INSERT INTO skills
                             END,
            fs_updated_at  = CASE
                               WHEN skills.is_central = 1 AND excluded.is_central = 0 THEN skills.fs_updated_at
-                              ELSE COALESCE(excluded.fs_updated_at, skills.fs_updated_at)
-                            END";
+                             ELSE COALESCE(excluded.fs_updated_at, skills.fs_updated_at)
+                           END";
 
 fn bind_upsert_skill<'q>(
     query: Query<'q, Sqlite, SqliteArguments<'q>>,
@@ -570,41 +575,16 @@ pub async fn get_central_skills_by_ids(
         .collect())
 }
 
-/// Delete a skill and all its installation records.
+/// Delete a skill and all its owned relation records in one transaction.
 pub async fn delete_skill(pool: &DbPool, skill_id: &str) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM skill_update_states WHERE skill_id = ?")
-        .bind(skill_id)
-        .execute(pool)
-        .await?;
-    sqlx::query("DELETE FROM skill_repository_members WHERE skill_id = ?")
-        .bind(skill_id)
-        .execute(pool)
-        .await?;
-    sqlx::query("DELETE FROM collection_skills WHERE skill_id = ?")
-        .bind(skill_id)
-        .execute(pool)
-        .await?;
-    sqlx::query("DELETE FROM skill_tag_links WHERE skill_id = ?")
-        .bind(skill_id)
-        .execute(pool)
-        .await?;
-    sqlx::query("DELETE FROM skill_ai_tag_reviews WHERE skill_id = ?")
-        .bind(skill_id)
-        .execute(pool)
-        .await?;
-    sqlx::query("DELETE FROM skill_explanations WHERE skill_id = ?")
-        .bind(skill_id)
-        .execute(pool)
-        .await?;
-    sqlx::query("DELETE FROM skill_installations WHERE skill_id = ?")
-        .bind(skill_id)
-        .execute(pool)
-        .await?;
+    let mut transaction = pool.begin().await?;
+    delete_owned_skill_relations(&mut transaction, skill_id).await?;
     sqlx::query("DELETE FROM skills WHERE id = ?")
         .bind(skill_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
-    prune_empty_skill_repositories(pool).await?;
+    prune_empty_skill_repositories_in_transaction(&mut transaction).await?;
+    transaction.commit().await?;
     Ok(())
 }
 
@@ -620,80 +600,25 @@ pub async fn delete_skills_not_in_scope(
     pool: &DbPool,
     found_skill_ids: &[String],
 ) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
+    delete_owned_skill_relations_not_in(&mut transaction, found_skill_ids).await?;
+
     if found_skill_ids.is_empty() {
-        // Nothing found — delete all installation records first, then all skills.
-        sqlx::query("DELETE FROM skill_update_states")
-            .execute(pool)
+        sqlx::query("DELETE FROM skills")
+            .execute(&mut *transaction)
             .await?;
-        sqlx::query("DELETE FROM skill_repository_members")
-            .execute(pool)
-            .await?;
-        sqlx::query("DELETE FROM skill_tag_links")
-            .execute(pool)
-            .await?;
-        sqlx::query("DELETE FROM skill_installations")
-            .execute(pool)
-            .await?;
-        sqlx::query("DELETE FROM skills").execute(pool).await?;
-        prune_empty_skill_repositories(pool).await?;
-        return Ok(());
+    } else {
+        let mut builder = QueryBuilder::<Sqlite>::new("DELETE FROM skills WHERE id NOT IN (");
+        let mut separated = builder.separated(", ");
+        for skill_id in found_skill_ids {
+            separated.push_bind(skill_id);
+        }
+        separated.push_unseparated(")");
+        builder.build().execute(&mut *transaction).await?;
     }
 
-    let placeholders = found_skill_ids
-        .iter()
-        .map(|_| "?")
-        .collect::<Vec<_>>()
-        .join(",");
-
-    // Cascade: remove installation rows for skills that are no longer on disk.
-    let repo_sql = format!(
-        "DELETE FROM skill_repository_members WHERE skill_id NOT IN ({})",
-        placeholders
-    );
-    let mut repo_q = sqlx::query(&repo_sql);
-    for id in found_skill_ids {
-        repo_q = repo_q.bind(id.as_str());
-    }
-    repo_q.execute(pool).await?;
-
-    let update_state_sql = format!(
-        "DELETE FROM skill_update_states WHERE skill_id NOT IN ({})",
-        placeholders
-    );
-    let mut update_state_q = sqlx::query(&update_state_sql);
-    for id in found_skill_ids {
-        update_state_q = update_state_q.bind(id.as_str());
-    }
-    update_state_q.execute(pool).await?;
-
-    let tag_sql = format!(
-        "DELETE FROM skill_tag_links WHERE skill_id NOT IN ({})",
-        placeholders
-    );
-    let mut tag_q = sqlx::query(&tag_sql);
-    for id in found_skill_ids {
-        tag_q = tag_q.bind(id.as_str());
-    }
-    tag_q.execute(pool).await?;
-
-    let install_sql = format!(
-        "DELETE FROM skill_installations WHERE skill_id NOT IN ({})",
-        placeholders
-    );
-    let mut q = sqlx::query(&install_sql);
-    for id in found_skill_ids {
-        q = q.bind(id.as_str());
-    }
-    q.execute(pool).await?;
-
-    // Remove the stale skills themselves.
-    let skill_sql = format!("DELETE FROM skills WHERE id NOT IN ({})", placeholders);
-    let mut q2 = sqlx::query(&skill_sql);
-    for id in found_skill_ids {
-        q2 = q2.bind(id.as_str());
-    }
-    q2.execute(pool).await?;
-    prune_empty_skill_repositories(pool).await?;
+    prune_empty_skill_repositories_in_transaction(&mut transaction).await?;
+    transaction.commit().await?;
     Ok(())
 }
 

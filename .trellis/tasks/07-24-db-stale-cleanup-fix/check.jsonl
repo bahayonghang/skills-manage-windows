@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/test-support.md","reason":"Reject duplicated pool fixtures and verify fault-injection tests use an explicit documented exception only when necessary."}
+{"file":".trellis/spec/backend/best-effort-writes.md","reason":"Verify the persistent orphan audit participates in the repair transaction and is not silently dropped."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Require the current full local CI contract after focused DB/scanner tests."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Check all deletion paths consume one owned-relation definition instead of drifting SQL lists."}
+{"file":".trellis/tasks/07-24-db-stale-cleanup-fix/research/live-db-integrity-2026-07-26.md","reason":"Verify the implementation preserves independent observations and addresses the live explanation orphan."}

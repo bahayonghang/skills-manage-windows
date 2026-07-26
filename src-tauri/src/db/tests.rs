@@ -129,6 +129,215 @@ async fn table_indexes(pool: &DbPool, table: &str) -> Vec<String> {
         .collect()
 }
 
+const OWNED_SKILL_RELATION_TABLES: [&str; 7] = [
+    "skill_update_states",
+    "skill_repository_members",
+    "collection_skills",
+    "skill_tag_links",
+    "skill_ai_tag_reviews",
+    "skill_explanations",
+    "skill_installations",
+];
+
+async fn insert_owned_skill_relation_rows(pool: &DbPool, skill_id: &str) {
+    let now = Utc::now().to_rfc3339();
+    let repository_id = format!("repo-{skill_id}");
+
+    sqlx::query(
+        "INSERT INTO skill_update_states (skill_id, source_type, status) VALUES (?, 'github', 'up_to_date')",
+    )
+    .bind(skill_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_repositories
+         (id, name, source_type, pinned, is_unknown, created_at, updated_at)
+         VALUES (?, ?, 'github', 0, 0, ?, ?)",
+    )
+    .bind(&repository_id)
+    .bind(&repository_id)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_repository_members
+         (skill_id, repository_id, source_path, added_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(skill_id)
+    .bind(&repository_id)
+    .bind(format!("skills/{skill_id}"))
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO collection_skills (collection_id, skill_id, added_at) VALUES (?, ?, ?)",
+    )
+    .bind(format!("collection-{skill_id}"))
+    .bind(skill_id)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_tag_links
+         (skill_id, tag_id, source, added_at) VALUES (?, 'uncategorized', 'manual', ?)",
+    )
+    .bind(skill_id)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_ai_tag_reviews
+         (skill_id, tag_id, confidence, status, suggested_at, updated_at)
+         VALUES (?, 'uncategorized', 0.5, 'pending', ?, ?)",
+    )
+    .bind(skill_id)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_explanations
+         (skill_id, explanation, lang, model, created_at, updated_at)
+         VALUES (?, 'fixture', 'en', 'fixture-model', ?, ?)",
+    )
+    .bind(skill_id)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_installations
+         (skill_id, agent_id, installed_path, link_type, created_at)
+         VALUES (?, 'fixture-agent', ?, 'copy', ?)",
+    )
+    .bind(skill_id)
+    .bind(format!("/tmp/{skill_id}"))
+    .bind(&now)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn assert_owned_skill_relation_counts(pool: &DbPool, skill_id: &str, expected: i64) {
+    for table in OWNED_SKILL_RELATION_TABLES {
+        let count = sqlx::query_scalar::<_, i64>(&format!(
+            "SELECT COUNT(*) FROM {table} WHERE skill_id = ?"
+        ))
+        .bind(skill_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        assert_eq!(count, expected, "unexpected {table} count for {skill_id}");
+    }
+}
+
+async fn assert_no_owned_skill_relation_orphans(pool: &DbPool) {
+    for table in OWNED_SKILL_RELATION_TABLES {
+        let orphan_count = sqlx::query_scalar::<_, i64>(&format!(
+            "SELECT COUNT(*)
+             FROM {table} relation
+             LEFT JOIN skills ON skills.id = relation.skill_id
+             WHERE skills.id IS NULL"
+        ))
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            orphan_count, 0,
+            "{table} must pass the skill-parent FK preflight predicate"
+        );
+    }
+}
+
+async fn insert_independent_skill_history_rows(pool: &DbPool, skill_id: &str) {
+    let now = Utc::now().to_rfc3339();
+    sqlx::query(
+        "INSERT INTO agent_skill_observations
+         (row_id, agent_id, skill_id, name, file_path, dir_path, source_kind, source_root,
+          link_type, is_read_only, scanned_at)
+         VALUES (?, 'history-agent', ?, ?, ?, ?, 'global', '/tmp', 'copy', 0, ?)",
+    )
+    .bind(format!("observation-{skill_id}"))
+    .bind(skill_id)
+    .bind(skill_id)
+    .bind(format!("/tmp/{skill_id}/SKILL.md"))
+    .bind(format!("/tmp/{skill_id}"))
+    .bind(&now)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO projects (id, path, name, added_at) VALUES (?, ?, ?, ?)")
+        .bind(format!("project-{skill_id}"))
+        .bind(format!("/tmp/project-{skill_id}"))
+        .bind(format!("Project {skill_id}"))
+        .bind(&now)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO project_skill_installations
+         (project_id, skill_id, name, file_path, agent_id, installed_path, link_type, created_at)
+         VALUES (?, ?, ?, ?, 'history-agent', ?, 'copy', ?)",
+    )
+    .bind(format!("project-{skill_id}"))
+    .bind(skill_id)
+    .bind(skill_id)
+    .bind(format!("/tmp/project-{skill_id}/SKILL.md"))
+    .bind(format!("/tmp/project-{skill_id}"))
+    .bind(&now)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_calls
+         (target_id, skill, timestamp_ms, project, session_id, source)
+         VALUES ('local', ?, 1, 'fixture', ?, 'fixture')",
+    )
+    .bind(skill_id)
+    .bind(format!("session-{skill_id}"))
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_usage_metadata
+         (target_id, skill, match_status, resolved_skill_id, scanned_at_ms)
+         VALUES ('local', ?, 'matched', ?, 1)",
+    )
+    .bind(skill_id)
+    .bind(skill_id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn assert_independent_skill_history_rows(pool: &DbPool, skill_id: &str) {
+    for (table, column) in [
+        ("agent_skill_observations", "skill_id"),
+        ("project_skill_installations", "skill_id"),
+        ("skill_calls", "skill"),
+        ("skill_usage_metadata", "resolved_skill_id"),
+    ] {
+        let count = sqlx::query_scalar::<_, i64>(&format!(
+            "SELECT COUNT(*) FROM {table} WHERE {column} = ?"
+        ))
+        .bind(skill_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        assert_eq!(count, 1, "{table} must retain independent history");
+    }
+}
+
 fn test_operation_log_entry(
     action: &str,
     level: &str,
@@ -880,6 +1089,7 @@ async fn test_delete_skill() {
     .execute(&pool)
     .await
     .unwrap();
+    insert_independent_skill_history_rows(&pool, "to-delete").await;
 
     delete_skill(&pool, "to-delete").await.unwrap();
     let result = get_skill_by_id(&pool, "to-delete").await.unwrap();
@@ -902,6 +1112,276 @@ async fn test_delete_skill() {
             .unwrap();
         assert_eq!(count, 0, "{table} rows must be deleted");
     }
+    assert_independent_skill_history_rows(&pool, "to-delete").await;
+}
+
+#[tokio::test]
+async fn delete_skill_rolls_back_when_owned_relation_delete_fails() {
+    let pool = setup_test_db().await;
+    upsert_skill(&pool, &make_skill("rollback-skill", "Rollback Skill", true))
+        .await
+        .unwrap();
+    insert_owned_skill_relation_rows(&pool, "rollback-skill").await;
+
+    sqlx::query(
+        "CREATE TRIGGER fail_ai_review_delete
+         BEFORE DELETE ON skill_ai_tag_reviews
+         WHEN OLD.skill_id = 'rollback-skill'
+         BEGIN SELECT RAISE(ABORT, 'injected relation delete failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let error = delete_skill(&pool, "rollback-skill").await.unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("injected relation delete failure"));
+    assert!(get_skill_by_id(&pool, "rollback-skill")
+        .await
+        .unwrap()
+        .is_some());
+    assert_owned_skill_relation_counts(&pool, "rollback-skill", 1).await;
+    assert!(get_skill_repository_by_id(&pool, "repo-rollback-skill")
+        .await
+        .unwrap()
+        .is_some());
+
+    sqlx::query("DROP TRIGGER fail_ai_review_delete")
+        .execute(&pool)
+        .await
+        .unwrap();
+    delete_skill(&pool, "rollback-skill").await.unwrap();
+    assert_owned_skill_relation_counts(&pool, "rollback-skill", 0).await;
+    assert!(get_skill_repository_by_id(&pool, "repo-rollback-skill")
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
+async fn delete_skill_then_reuse_id_does_not_restore_owned_metadata() {
+    let pool = setup_test_db().await;
+    upsert_skill(&pool, &make_skill("reused-skill", "Original", true))
+        .await
+        .unwrap();
+    insert_owned_skill_relation_rows(&pool, "reused-skill").await;
+    insert_independent_skill_history_rows(&pool, "reused-skill").await;
+
+    delete_skill(&pool, "reused-skill").await.unwrap();
+    upsert_skill(&pool, &make_skill("reused-skill", "Replacement", true))
+        .await
+        .unwrap();
+
+    assert_owned_skill_relation_counts(&pool, "reused-skill", 0).await;
+    assert_independent_skill_history_rows(&pool, "reused-skill").await;
+    assert_eq!(
+        get_skill_by_id(&pool, "reused-skill")
+            .await
+            .unwrap()
+            .unwrap()
+            .name,
+        "Replacement"
+    );
+}
+
+#[tokio::test]
+async fn delete_skills_not_in_scope_cleans_all_owned_relations_for_nonempty_keep_set() {
+    let pool = setup_test_db().await;
+    for skill_id in ["keep-skill", "stale-skill"] {
+        upsert_skill(&pool, &make_skill(skill_id, skill_id, true))
+            .await
+            .unwrap();
+        insert_owned_skill_relation_rows(&pool, skill_id).await;
+    }
+    insert_independent_skill_history_rows(&pool, "stale-skill").await;
+
+    delete_skills_not_in_scope(&pool, &["keep-skill".to_string()])
+        .await
+        .unwrap();
+
+    assert_owned_skill_relation_counts(&pool, "keep-skill", 1).await;
+    assert_owned_skill_relation_counts(&pool, "stale-skill", 0).await;
+    assert!(get_skill_by_id(&pool, "keep-skill")
+        .await
+        .unwrap()
+        .is_some());
+    assert!(get_skill_by_id(&pool, "stale-skill")
+        .await
+        .unwrap()
+        .is_none());
+    assert_independent_skill_history_rows(&pool, "stale-skill").await;
+}
+
+#[tokio::test]
+async fn delete_skills_not_in_scope_cleans_all_owned_relations_for_empty_keep_set() {
+    let pool = setup_test_db().await;
+    upsert_skill(&pool, &make_skill("only-skill", "Only Skill", true))
+        .await
+        .unwrap();
+    insert_owned_skill_relation_rows(&pool, "only-skill").await;
+
+    delete_skills_not_in_scope(&pool, &[]).await.unwrap();
+
+    assert_owned_skill_relation_counts(&pool, "only-skill", 0).await;
+    assert!(get_skill_by_id(&pool, "only-skill")
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
+async fn orphan_repair_reports_audits_and_cleans_all_owned_relations() {
+    let pool = setup_test_db().await;
+    insert_owned_skill_relation_rows(&pool, "orphan-z").await;
+    insert_owned_skill_relation_rows(&pool, "orphan-a").await;
+
+    let report = repair_orphan_skill_relations(&pool).await.unwrap();
+
+    assert_eq!(report.total_rows, 14);
+    assert_eq!(report.relations.len(), OWNED_SKILL_RELATION_TABLES.len());
+    for (relation, expected_table) in report.relations.iter().zip(OWNED_SKILL_RELATION_TABLES) {
+        assert_eq!(relation.table, expected_table);
+        assert_eq!(relation.skill_ids, ["orphan-a", "orphan-z"]);
+        assert_eq!(relation.row_count, 2);
+    }
+    assert_owned_skill_relation_counts(&pool, "orphan-a", 0).await;
+    assert_owned_skill_relation_counts(&pool, "orphan-z", 0).await;
+    assert_no_owned_skill_relation_orphans(&pool).await;
+
+    let logs = list_operation_logs(
+        &pool,
+        OperationLogFilter {
+            action: Some("orphan_repair".to_string()),
+            ..OperationLogFilter::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(logs.total, 1);
+    assert_eq!(logs.entries[0].category, "database");
+    let expected_json = concat!(
+        r#"{"relations":[{"table":"skill_update_states","skillIds":["orphan-a","orphan-z"],"rowCount":2},"#,
+        r#"{"table":"skill_repository_members","skillIds":["orphan-a","orphan-z"],"rowCount":2},"#,
+        r#"{"table":"collection_skills","skillIds":["orphan-a","orphan-z"],"rowCount":2},"#,
+        r#"{"table":"skill_tag_links","skillIds":["orphan-a","orphan-z"],"rowCount":2},"#,
+        r#"{"table":"skill_ai_tag_reviews","skillIds":["orphan-a","orphan-z"],"rowCount":2},"#,
+        r#"{"table":"skill_explanations","skillIds":["orphan-a","orphan-z"],"rowCount":2},"#,
+        r#"{"table":"skill_installations","skillIds":["orphan-a","orphan-z"],"rowCount":2}],"totalRows":14}"#,
+    );
+    assert_eq!(logs.entries[0].details_json.as_deref(), Some(expected_json));
+    let audited_report: OrphanRepairReport =
+        serde_json::from_str(logs.entries[0].details_json.as_deref().unwrap()).unwrap();
+    assert_eq!(audited_report, report);
+
+    let second_report = repair_orphan_skill_relations(&pool).await.unwrap();
+    assert_eq!(
+        second_report,
+        OrphanRepairReport {
+            relations: Vec::new(),
+            total_rows: 0,
+        }
+    );
+    let log_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM operation_logs WHERE action = 'orphan_repair'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(log_count, 1, "zero-row repair must not create audit noise");
+}
+
+#[tokio::test]
+async fn orphan_repair_rolls_back_when_audit_insert_fails() {
+    let pool = setup_test_db().await;
+    insert_owned_skill_relation_rows(&pool, "audit-failure-orphan").await;
+    sqlx::query(
+        "CREATE TRIGGER fail_orphan_repair_audit
+         BEFORE INSERT ON operation_logs
+         WHEN NEW.action = 'orphan_repair'
+         BEGIN SELECT RAISE(ABORT, 'injected audit failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let error = repair_orphan_skill_relations(&pool).await.unwrap_err();
+    assert!(error.to_string().contains("injected audit failure"));
+    assert_owned_skill_relation_counts(&pool, "audit-failure-orphan", 1).await;
+    let log_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM operation_logs WHERE action = 'orphan_repair'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(log_count, 0);
+
+    sqlx::query("DROP TRIGGER fail_orphan_repair_audit")
+        .execute(&pool)
+        .await
+        .unwrap();
+    repair_orphan_skill_relations(&pool).await.unwrap();
+    assert_owned_skill_relation_counts(&pool, "audit-failure-orphan", 0).await;
+    let log_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM operation_logs WHERE action = 'orphan_repair'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(log_count, 1);
+}
+
+#[tokio::test]
+async fn orphan_repair_rolls_back_audit_when_relation_delete_fails() {
+    let pool = setup_test_db().await;
+    insert_owned_skill_relation_rows(&pool, "delete-failure-orphan").await;
+    sqlx::query(
+        "CREATE TRIGGER fail_orphan_relation_delete
+         BEFORE DELETE ON skill_ai_tag_reviews
+         WHEN OLD.skill_id = 'delete-failure-orphan'
+         BEGIN SELECT RAISE(ABORT, 'injected orphan delete failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let error = repair_orphan_skill_relations(&pool).await.unwrap_err();
+    assert!(error.to_string().contains("injected orphan delete failure"));
+    assert_owned_skill_relation_counts(&pool, "delete-failure-orphan", 1).await;
+    let log_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM operation_logs WHERE action = 'orphan_repair'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        log_count, 0,
+        "audit insert must roll back with orphan deletes"
+    );
+
+    sqlx::query("DROP TRIGGER fail_orphan_relation_delete")
+        .execute(&pool)
+        .await
+        .unwrap();
+    repair_orphan_skill_relations(&pool).await.unwrap();
+    assert_owned_skill_relation_counts(&pool, "delete-failure-orphan", 0).await;
+}
+
+#[tokio::test]
+async fn init_database_repairs_owned_relation_orphans() {
+    let pool = setup_test_db().await;
+    insert_owned_skill_relation_rows(&pool, "startup-orphan").await;
+
+    init_database(&pool).await.unwrap();
+
+    assert_owned_skill_relation_counts(&pool, "startup-orphan", 0).await;
+    let log_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM operation_logs WHERE action = 'orphan_repair'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(log_count, 1);
 }
 
 // ── Skill Installations ───────────────────────────────────────────────────

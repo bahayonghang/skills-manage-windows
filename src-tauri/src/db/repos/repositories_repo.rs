@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use sqlx::Row;
+use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::db::repos::skills_repo::upsert_skill_in_transaction;
@@ -283,19 +283,30 @@ pub async fn delete_empty_skill_repository(
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn prune_empty_skill_repositories(pool: &DbPool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
-        "DELETE FROM skill_repositories
+const PRUNE_EMPTY_SKILL_REPOSITORIES_SQL: &str = "DELETE FROM skill_repositories
          WHERE id <> ?
            AND is_unknown = 0
            AND NOT EXISTS (
              SELECT 1 FROM skill_repository_members
              WHERE repository_id = skill_repositories.id
-           )",
-    )
-    .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
-    .execute(pool)
-    .await?;
+           )";
+
+pub(crate) async fn prune_empty_skill_repositories_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query(PRUNE_EMPTY_SKILL_REPOSITORIES_SQL)
+        .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
+        .execute(&mut **transaction)
+        .await?;
+
+    Ok(result.rows_affected())
+}
+
+pub async fn prune_empty_skill_repositories(pool: &DbPool) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query(PRUNE_EMPTY_SKILL_REPOSITORIES_SQL)
+        .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
+        .execute(pool)
+        .await?;
 
     Ok(result.rows_affected())
 }

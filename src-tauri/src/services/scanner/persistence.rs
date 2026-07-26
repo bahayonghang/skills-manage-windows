@@ -291,7 +291,7 @@ async fn persist_scan_keep_tables(
 async fn delete_scan_stale_rows(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), ScannerError> {
-    let statements = [
+    let independently_scoped_statements = [
         "DELETE FROM skill_installations
          WHERE agent_id IN (SELECT agent_id FROM scan_touched_install_agents)
            AND NOT EXISTS (
@@ -306,48 +306,25 @@ async fn delete_scan_stale_rows(
              WHERE keep.agent_id = agent_skill_observations.agent_id
                AND keep.row_id = agent_skill_observations.row_id
            )",
-        "DELETE FROM skill_repository_members
-         WHERE NOT EXISTS (
-           SELECT 1 FROM scan_keep_skills keep
-           WHERE keep.skill_id = skill_repository_members.skill_id
-         )",
-        "DELETE FROM skill_update_states
-         WHERE NOT EXISTS (
-           SELECT 1 FROM scan_keep_skills keep
-           WHERE keep.skill_id = skill_update_states.skill_id
-         )",
-        "DELETE FROM skill_tag_links
-         WHERE NOT EXISTS (
-           SELECT 1 FROM scan_keep_skills keep
-           WHERE keep.skill_id = skill_tag_links.skill_id
-         )",
-        "DELETE FROM skill_installations
-         WHERE NOT EXISTS (
-           SELECT 1 FROM scan_keep_skills keep
-           WHERE keep.skill_id = skill_installations.skill_id
-         )",
-        "DELETE FROM skills
-         WHERE NOT EXISTS (
-           SELECT 1 FROM scan_keep_skills keep
-           WHERE keep.skill_id = skills.id
-         )",
-        "DELETE FROM skill_repositories
-         WHERE id <> ?
-           AND is_unknown = 0
-           AND NOT EXISTS (
-             SELECT 1 FROM skill_repository_members
-             WHERE repository_id = skill_repositories.id
-           )",
     ];
 
-    for (index, statement) in statements.iter().enumerate() {
-        let query = if index + 1 == statements.len() {
-            sqlx::query(statement).bind(db::LOCAL_UNKNOWN_REPOSITORY_ID)
-        } else {
-            sqlx::query(statement)
-        };
-        execute_scan_query(tx, query).await?;
+    for statement in independently_scoped_statements {
+        execute_scan_query(tx, sqlx::query(statement)).await?;
     }
+
+    db::delete_owned_skill_relations_missing_from_scan_keep(tx).await?;
+    execute_scan_query(
+        tx,
+        sqlx::query(
+            "DELETE FROM skills
+             WHERE NOT EXISTS (
+               SELECT 1 FROM scan_keep_skills keep
+               WHERE keep.skill_id = skills.id
+             )",
+        ),
+    )
+    .await?;
+    db::prune_empty_skill_repositories_in_transaction(tx).await?;
     Ok(())
 }
 

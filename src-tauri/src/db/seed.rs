@@ -39,6 +39,7 @@ async fn init_database_with_agents(
     builtin_agents: Vec<Agent>,
 ) -> Result<(), sqlx::Error> {
     super::schema::init(pool).await?;
+    super::repair_orphan_skill_relations(pool).await?;
 
     // Seed built-in agents (INSERT OR IGNORE so repeated init is safe)
     seed_builtin_agents(pool, &builtin_agents).await?;

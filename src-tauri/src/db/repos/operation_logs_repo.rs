@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use chrono::{Duration, Local, LocalResult, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{QueryBuilder, Row, Sqlite};
+use sqlx::{Executor, QueryBuilder, Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::db::types::{
@@ -120,10 +120,13 @@ fn push_operation_log_filters(
     }
 }
 
-pub async fn insert_operation_log(
-    pool: &DbPool,
+async fn insert_operation_log_row<'e, E>(
+    executor: E,
     entry: NewOperationLogEntry,
-) -> Result<OperationLogEntry, sqlx::Error> {
+) -> Result<String, sqlx::Error>
+where
+    E: Executor<'e, Database = Sqlite>,
+{
     let id = Uuid::new_v4().to_string();
     let created_at = Utc::now().to_rfc3339();
     let level = normalize_required_log_value(&entry.level, "info");
@@ -158,8 +161,24 @@ pub async fn insert_operation_log(
     .bind(entry.details_json)
     .bind(entry.duration_ms)
     .bind(entry.batch_id)
-    .execute(pool)
+    .execute(executor)
     .await?;
+
+    Ok(id)
+}
+
+pub(crate) async fn insert_operation_log_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+    entry: NewOperationLogEntry,
+) -> Result<String, sqlx::Error> {
+    insert_operation_log_row(&mut **transaction, entry).await
+}
+
+pub async fn insert_operation_log(
+    pool: &DbPool,
+    entry: NewOperationLogEntry,
+) -> Result<OperationLogEntry, sqlx::Error> {
+    let id = insert_operation_log_row(pool, entry).await?;
 
     get_operation_log(pool, &id).await?.ok_or_else(|| {
         sqlx::Error::InvalidArgument("Inserted operation log was not found.".to_string())
