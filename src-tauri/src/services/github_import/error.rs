@@ -100,6 +100,9 @@ pub enum GithubImportError {
     #[error("Repository path '{0}' is not supported.")]
     UnsupportedRepoPath(String),
 
+    #[error("GitHub repository {field} '{value}' is not supported.")]
+    InvalidRepoComponent { field: &'static str, value: String },
+
     #[error("Skill identifier '{0}' is not supported.")]
     InvalidSkillIdentifier(String),
 
@@ -227,9 +230,6 @@ pub enum GithubImportError {
 
     #[error("GitHub preview workspace has expired. Preview the repository again.")]
     PreviewWorkspaceExpired,
-
-    #[error("A source path is required for remote GitHub markdown preview.")]
-    PreviewSourcePathRequired,
 
     #[error("The active remote target changed after preview. Preview the repository again.")]
     PreviewTargetChanged,

@@ -220,11 +220,13 @@ pub async fn read_skills_sh_file_impl(
     let (resolved, auth_used) = resolved_skills_sh_source_with_auth(&source, &auth).await?;
     let normalized_path = normalize_skills_sh_file_path(&file_path)?;
     let client = github_import::github_client()?;
-    let url = format!(
-        "https://raw.githubusercontent.com/{}/{}/{}/{}",
-        resolved.repo.owner, resolved.repo.repo, resolved.repo.branch, normalized_path
-    );
-    Ok(github_import::fetch_raw_text(&client, &url, auth_used.as_deref()).await?)
+    Ok(github_import::fetch_raw_text(
+        &client,
+        &resolved.repo,
+        &normalized_path,
+        auth_used.as_deref(),
+    )
+    .await?)
 }
 
 pub async fn install_from_skills_sh_impl(

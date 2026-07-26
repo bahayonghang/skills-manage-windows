@@ -453,15 +453,17 @@ fi
 pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
     state: &State<'_, AppState>,
     workspace_id: &str,
-    source_path: Option<&str>,
+    repo: &GitHubRepoRef,
+    source_path: &str,
 ) -> Result<String, GithubImportError> {
+    validate_repo_ref(repo)?;
     let workspace =
         get_preview_workspace(workspace_id).ok_or(GithubImportError::PreviewWorkspaceExpired)?;
     if workspace.is_expired(Utc::now()) {
         let _ = take_preview_workspace(workspace_id);
         return Err(GithubImportError::PreviewWorkspaceExpired);
     }
-    let source_path = source_path.ok_or(GithubImportError::PreviewSourcePathRequired)?;
+    validate_remote_markdown_workspace_repo(&workspace, repo)?;
     let active_target = state
         .active_target()
         .await
@@ -489,6 +491,16 @@ pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
         .map_err(GithubImportError::Budget)?;
     String::from_utf8(bytes)
         .map_err(|e| GithubImportError::Parse(format!("Remote SKILL.md is not valid UTF-8: {}", e)))
+}
+
+pub(super) fn validate_remote_markdown_workspace_repo(
+    workspace: &GitHubPreviewWorkspace,
+    repo: &GitHubRepoRef,
+) -> Result<(), GithubImportError> {
+    if &workspace.repo != repo {
+        return Err(GithubImportError::PreviewWorkspaceMismatch);
+    }
+    Ok(())
 }
 
 pub(crate) async fn discard_preview_workspace_for_active_target(

@@ -3,6 +3,7 @@ import { invoke, isTauriRuntime } from "@/lib/ipc";
 import {
   GitHubRepoImportResult,
   GitHubRepoPreview,
+  GitHubRepoRef,
   GitHubSkillImportSelection,
 } from "@/types";
 import {
@@ -200,7 +201,7 @@ export function createMarketplaceGitHubImportSlice({ set, get, getGeneration, bu
     }
   },
 
-  fetchGitHubSkillMarkdown: async (sourcePath: string, downloadUrl: string) => {
+  fetchGitHubSkillMarkdown: async (repo: GitHubRepoRef, sourcePath: string) => {
     const generation = getGeneration();
     const existing = get().githubImport.skillMarkdown[sourcePath];
     if (existing?.status === "loading" || existing?.status === "ready") {
@@ -234,8 +235,8 @@ export function createMarketplaceGitHubImportSlice({ set, get, getGeneration, bu
     }));
 
     try {
-      const content = await invoke<string>("fetch_github_skill_markdown", {
-        downloadUrl,
+      const content = await invoke("fetch_github_skill_markdown", {
+        repo,
         sourcePath,
         previewWorkspaceId:
           get().githubImport.preview?.previewWorkspaceId ?? null,

@@ -1,49 +1,85 @@
-use crate::services::resource_budget::ResourceBudget;
+use crate::services::resource_budget::{BudgetExceeded, ResourceBudget};
+use futures_util::StreamExt;
 
 use super::*;
+
 pub(crate) async fn fetch_raw_text(
     client: &reqwest::Client,
-    url: &str,
+    repo: &GitHubRepoRef,
+    file_path: &str,
     auth_token: Option<&str>,
 ) -> Result<String, GithubImportError> {
-    let bytes = fetch_raw_bytes(client, url, auth_token).await?;
+    let bytes = fetch_raw_bytes(client, repo, file_path, auth_token).await?;
     String::from_utf8(bytes)
         .map_err(|e| GithubImportError::Parse(format!("Skill metadata is not valid UTF-8: {}", e)))
 }
 
-/// Download a single raw blob as bytes through the shared GitHub/mirror fallback
-/// boundary. Used by the tree fast-path to fetch candidate `SKILL.md` and plugin
-/// manifest bytes without materializing the full archive. Bounded by the default
-/// skill `file_bytes` budget (single-file cap, distinct from the archive's
-/// expanded-byte cap).
+pub(crate) async fn fetch_skill_markdown(
+    client: &reqwest::Client,
+    repo: &GitHubRepoRef,
+    source_path: &str,
+    auth_token: Option<&str>,
+) -> Result<String, GithubImportError> {
+    let file_path = join_repo_path(source_path, "SKILL.md")?;
+    fetch_raw_text(client, repo, &file_path, auth_token).await
+}
+
+/// Download a single raw blob through the fixed GitHub/mirror endpoint set.
+/// The renderer and callers provide repository identity plus a repository-
+/// relative path; they never provide the request authority.
 pub(super) async fn fetch_raw_bytes(
     client: &reqwest::Client,
-    url: &str,
+    repo: &GitHubRepoRef,
+    file_path: &str,
     auth_token: Option<&str>,
 ) -> Result<Vec<u8>, GithubImportError> {
-    fetch_raw_bytes_with_budget(client, url, auth_token, RawBytesBudget::Metadata).await
+    fetch_raw_bytes_with_budget(
+        client,
+        repo,
+        file_path,
+        auth_token,
+        RawBytesBudget::Metadata,
+    )
+    .await
 }
 
 pub(super) async fn fetch_raw_repo_file(
     client: &reqwest::Client,
-    url: &str,
+    repo: &GitHubRepoRef,
+    file_path: &str,
     auth_token: Option<&str>,
 ) -> Result<Vec<u8>, GithubImportError> {
-    fetch_raw_bytes_with_budget(client, url, auth_token, RawBytesBudget::RepositoryFile).await
+    fetch_raw_bytes_with_budget(
+        client,
+        repo,
+        file_path,
+        auth_token,
+        RawBytesBudget::RepositoryFile,
+    )
+    .await
 }
 
-#[derive(Clone, Copy)]
-enum RawBytesBudget {
+#[derive(Debug, Clone, Copy)]
+pub(super) enum RawBytesBudget {
     Metadata,
     RepositoryFile,
 }
 
 async fn fetch_raw_bytes_with_budget(
     client: &reqwest::Client,
-    url: &str,
+    repo: &GitHubRepoRef,
+    file_path: &str,
     auth_token: Option<&str>,
     budget_kind: RawBytesBudget,
 ) -> Result<Vec<u8>, GithubImportError> {
+    validate_repo_ref(repo)?;
+    let file_path = normalize_repo_path(file_path)?;
+    if file_path.is_empty() {
+        return Err(GithubImportError::UnsupportedRepoPath(
+            file_path.to_string(),
+        ));
+    }
+
     let (failure_prefix, operation) = match budget_kind {
         RawBytesBudget::Metadata => (
             "Failed to download skill metadata",
@@ -57,24 +93,14 @@ async fn fetch_raw_bytes_with_budget(
     let response = send_github_request_with_fallback(
         client,
         GitHubFetchSurface::Raw,
-        |endpoint| {
-            if let Some(path) = raw_url_to_repo_path(url) {
-                raw_file_url(endpoint, &path.repo, &path.file_path)
-            } else {
-                url.to_string()
-            }
-        },
+        |endpoint| raw_file_url(endpoint, repo, &file_path),
         failure_prefix,
         auth_token,
     )
     .await?;
 
     if response.status() == reqwest::StatusCode::NOT_FOUND {
-        // 404 on a raw blob whose path the tree manifest listed is an
-        // integrity gap. The dispatcher maps `RepoFileGone` to an acquisition
-        // fallback (archive re-fetch). For optional plugin manifests, the
-        // tree fast-path caller treats `RepoFileGone` as "manifest absent".
-        return Err(GithubImportError::RepoFileGone(url.to_string()));
+        return Err(GithubImportError::RepoFileGone(file_path));
     }
     if !response.status().is_success() {
         return Err(classify_github_denial_response(response, operation)
@@ -82,17 +108,56 @@ async fn fetch_raw_bytes_with_budget(
             .unwrap_or_else(|| GithubImportError::Http(format!("{}.", failure_prefix))));
     }
 
-    let budget = ResourceBudget::default_skill();
+    read_raw_response_with_budget(
+        response,
+        ResourceBudget::default_skill(),
+        budget_kind,
+        &file_path,
+    )
+    .await
+}
+
+pub(super) async fn read_raw_response_with_budget(
+    response: reqwest::Response,
+    budget: ResourceBudget,
+    budget_kind: RawBytesBudget,
+    path: &str,
+) -> Result<Vec<u8>, GithubImportError> {
     if let Some(content_length) = response.content_length() {
-        reject_raw_bytes_budget(budget, budget_kind, url, content_length)?;
+        reject_raw_bytes_budget(budget, budget_kind, path, content_length)?;
     }
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| GithubImportError::Http(format!("Failed to read skill metadata: {}", e)))?;
-    reject_raw_bytes_budget(budget, budget_kind, url, bytes.len() as u64)?;
-    Ok(bytes.to_vec())
+    let mut bytes = Vec::new();
+    let mut total = 0_u64;
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| {
+            GithubImportError::Http(format!("Failed to read skill metadata: {}", e))
+        })?;
+        let chunk_len = u64::try_from(chunk.len())
+            .map_err(|_| raw_budget_overflow_error(budget, budget_kind, path))?;
+        total = total
+            .checked_add(chunk_len)
+            .ok_or_else(|| raw_budget_overflow_error(budget, budget_kind, path))?;
+        reject_raw_bytes_budget(budget, budget_kind, path, total)?;
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+fn raw_budget_overflow_error(
+    budget: ResourceBudget,
+    budget_kind: RawBytesBudget,
+    path: &str,
+) -> GithubImportError {
+    let (label, limit) = match budget_kind {
+        RawBytesBudget::Metadata => (format!("File '{path}'"), budget.file_bytes),
+        RawBytesBudget::RepositoryFile => (
+            format!("GitHub repository archive entry '{path}'"),
+            budget.archive_entry_bytes,
+        ),
+    };
+    GithubImportError::Budget(BudgetExceeded::new(label, u64::MAX, limit))
 }
 
 fn reject_raw_bytes_budget(
@@ -108,34 +173,57 @@ fn reject_raw_bytes_budget(
     .map_err(GithubImportError::Budget)
 }
 
-#[derive(Debug, Clone)]
-pub(super) struct RawRepoPath {
-    pub(super) repo: GitHubRepoRef,
-    pub(super) file_path: String,
+pub(super) fn validate_repo_ref(repo: &GitHubRepoRef) -> Result<(), GithubImportError> {
+    validate_repo_owner(&repo.owner)?;
+    validate_repo_name(&repo.repo)?;
+    validate_repo_branch(&repo.branch)
 }
 
-pub(super) fn raw_url_to_repo_path(url: &str) -> Option<RawRepoPath> {
-    let parsed = reqwest::Url::parse(url).ok()?;
-    let host = parsed.host_str()?;
-    if host != "raw.githubusercontent.com" {
-        return None;
+fn invalid_repo_component(field: &'static str, value: &str) -> GithubImportError {
+    GithubImportError::InvalidRepoComponent {
+        field,
+        value: value.to_string(),
     }
+}
 
-    let segments = parsed.path_segments()?;
-    let parts = segments.collect::<Vec<_>>();
-    if parts.len() < 4 {
-        return None;
+fn validate_repo_owner(value: &str) -> Result<(), GithubImportError> {
+    if value.is_empty()
+        || value.trim() != value
+        || value.starts_with('-')
+        || value.ends_with('-')
+        || !value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+    {
+        return Err(invalid_repo_component("owner", value));
     }
+    Ok(())
+}
 
-    Some(RawRepoPath {
-        repo: GitHubRepoRef {
-            owner: parts[0].to_string(),
-            repo: parts[1].to_string(),
-            branch: parts[2].to_string(),
-            normalized_url: format!("https://github.com/{}/{}", parts[0], parts[1]),
-        },
-        file_path: parts[3..].join("/"),
-    })
+fn validate_repo_name(value: &str) -> Result<(), GithubImportError> {
+    if value.is_empty()
+        || value.trim() != value
+        || matches!(value, "." | "..")
+        || !value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+    {
+        return Err(invalid_repo_component("name", value));
+    }
+    Ok(())
+}
+
+fn validate_repo_branch(value: &str) -> Result<(), GithubImportError> {
+    if value.is_empty()
+        || value.trim() != value
+        || matches!(value, "." | "..")
+        || value
+            .chars()
+            .any(|ch| ch.is_control() || matches!(ch, '/' | '\\'))
+    {
+        return Err(invalid_repo_component("branch", value));
+    }
+    Ok(())
 }
 
 pub(super) fn github_endpoint_url(
@@ -143,10 +231,7 @@ pub(super) fn github_endpoint_url(
     surface: GitHubFetchSurface,
     path: &str,
 ) -> String {
-    let base = match surface {
-        GitHubFetchSurface::Api => endpoint.api_base,
-        GitHubFetchSurface::Raw => endpoint.raw_base,
-    };
+    let base = endpoint_base(endpoint, surface);
     format!("{}{}", base.trim_end_matches('/'), path)
 }
 
@@ -155,17 +240,90 @@ pub(super) fn raw_file_url(
     repo: &GitHubRepoRef,
     file_path: &str,
 ) -> String {
-    github_endpoint_url(
-        endpoint,
-        GitHubFetchSurface::Raw,
-        &format!(
-            "/{}/{}/{}/{}",
-            repo.owner,
-            repo.repo,
-            repo.branch,
-            file_path.trim_start_matches('/')
-        ),
-    )
+    let mut url = reqwest::Url::parse(endpoint.raw_base)
+        .expect("built-in GitHub raw endpoint must be a valid base URL");
+    {
+        let mut segments = url
+            .path_segments_mut()
+            .expect("built-in GitHub raw endpoint must be hierarchical");
+        segments.pop_if_empty();
+        for value in [&repo.owner, &repo.repo, &repo.branch] {
+            segments.push(value);
+        }
+        for segment in file_path.trim_matches('/').split('/') {
+            if !segment.is_empty() {
+                segments.push(segment);
+            }
+        }
+    }
+    url.to_string()
+}
+
+fn endpoint_base(endpoint: &GitHubMirrorEndpoint, surface: GitHubFetchSurface) -> &'static str {
+    match surface {
+        GitHubFetchSurface::Api => endpoint.api_base,
+        GitHubFetchSurface::Raw => endpoint.raw_base,
+    }
+}
+
+#[cfg(test)]
+pub(super) fn validate_github_endpoint_request(
+    endpoint: &GitHubMirrorEndpoint,
+    surface: GitHubFetchSurface,
+    request_url: &str,
+) -> Result<(), GithubImportError> {
+    validate_endpoint_request(endpoint, surface, request_url, true)
+}
+
+fn validate_endpoint_request(
+    endpoint: &GitHubMirrorEndpoint,
+    surface: GitHubFetchSurface,
+    request_url: &str,
+    require_https: bool,
+) -> Result<(), GithubImportError> {
+    let base_url = reqwest::Url::parse(endpoint_base(endpoint, surface)).map_err(|e| {
+        GithubImportError::InvalidUrl(format!(
+            "Invalid built-in GitHub endpoint '{}': {}",
+            endpoint.label, e
+        ))
+    })?;
+    let request_url = reqwest::Url::parse(request_url).map_err(|e| {
+        GithubImportError::InvalidUrl(format!("Invalid GitHub URL '{}': {}", request_url, e))
+    })?;
+
+    let base_path = base_url.path().trim_end_matches('/');
+    let request_path = request_url.path();
+    let within_base_path = base_path.is_empty()
+        || request_path == base_path
+        || request_path
+            .strip_prefix(base_path)
+            .is_some_and(|suffix| suffix.starts_with('/'));
+    let valid_scheme = if require_https {
+        request_url.scheme() == "https" && base_url.scheme() == "https"
+    } else {
+        request_url.scheme() == base_url.scheme()
+    };
+    let valid_port = if require_https {
+        request_url.port_or_known_default() == Some(443)
+            && base_url.port_or_known_default() == Some(443)
+    } else {
+        request_url.port_or_known_default() == base_url.port_or_known_default()
+    };
+    let valid = valid_scheme
+        && request_url.username().is_empty()
+        && request_url.password().is_none()
+        && request_url.fragment().is_none()
+        && request_url.host_str() == base_url.host_str()
+        && valid_port
+        && within_base_path;
+
+    if !valid {
+        return Err(GithubImportError::InvalidUrl(format!(
+            "GitHub request URL is outside the built-in '{}' endpoint policy.",
+            endpoint.label
+        )));
+    }
+    Ok(())
 }
 
 pub(super) async fn send_github_request_with_fallback<F>(
@@ -178,17 +336,73 @@ pub(super) async fn send_github_request_with_fallback<F>(
 where
     F: Fn(&GitHubMirrorEndpoint) -> String,
 {
+    send_github_request_with_endpoints(
+        client,
+        surface,
+        GITHUB_MIRROR_ENDPOINTS,
+        true,
+        build_url,
+        failure_prefix,
+        auth_token,
+    )
+    .await
+}
+
+#[cfg(test)]
+pub(super) async fn send_github_request_with_test_endpoints<F>(
+    client: &reqwest::Client,
+    surface: GitHubFetchSurface,
+    endpoints: &[GitHubMirrorEndpoint],
+    build_url: F,
+    failure_prefix: &str,
+    auth_token: Option<&str>,
+) -> Result<reqwest::Response, GithubImportError>
+where
+    F: Fn(&GitHubMirrorEndpoint) -> String,
+{
+    send_github_request_with_endpoints(
+        client,
+        surface,
+        endpoints,
+        false,
+        build_url,
+        failure_prefix,
+        auth_token,
+    )
+    .await
+}
+
+async fn send_github_request_with_endpoints<F>(
+    client: &reqwest::Client,
+    surface: GitHubFetchSurface,
+    endpoints: &[GitHubMirrorEndpoint],
+    require_https: bool,
+    build_url: F,
+    failure_prefix: &str,
+    auth_token: Option<&str>,
+) -> Result<reqwest::Response, GithubImportError>
+where
+    F: Fn(&GitHubMirrorEndpoint) -> String,
+{
     let mut attempts = Vec::new();
     let mut last_retryable_denial = None;
 
-    for endpoint in GITHUB_MIRROR_ENDPOINTS {
-        let url = build_url(endpoint);
-        wait_for_github_host_slot(&url).await?;
-        let mut request = client.get(&url);
-        let mirrors_share_same_url = GITHUB_MIRROR_ENDPOINTS
+    let endpoint_urls = endpoints
+        .iter()
+        .map(|endpoint| {
+            let url = build_url(endpoint);
+            validate_endpoint_request(endpoint, surface, &url, require_https)?;
+            Ok((*endpoint, url))
+        })
+        .collect::<Result<Vec<_>, GithubImportError>>()?;
+
+    for (endpoint, url) in &endpoint_urls {
+        wait_for_github_host_slot(url).await?;
+        let mut request = client.get(url);
+        let mirrors_share_same_url = endpoint_urls
             .iter()
-            .filter(|candidate| candidate.label != "github")
-            .any(|candidate| build_url(candidate) == url);
+            .filter(|(candidate, _)| candidate.label != "github")
+            .any(|(_, candidate_url)| candidate_url == url);
         if endpoint.label == "github" && !mirrors_share_same_url {
             if let Some(token) = auth_token {
                 request = request.bearer_auth(token);

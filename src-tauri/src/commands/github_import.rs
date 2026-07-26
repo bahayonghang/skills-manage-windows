@@ -90,15 +90,16 @@ pub async fn import_github_repo_skills(
 #[tauri::command]
 pub async fn fetch_github_skill_markdown(
     state: State<'_, AppState>,
-    download_url: String,
-    source_path: Option<String>,
+    repo: GitHubRepoRef,
+    source_path: String,
     preview_workspace_id: Option<String>,
 ) -> Result<String, String> {
     if let Some(workspace_id) = preview_workspace_id.as_deref() {
         return github_import::fetch_github_skill_markdown_from_remote_workspace(
             &state,
             workspace_id,
-            source_path.as_deref(),
+            &repo,
+            &source_path,
         )
         .await
         .map_err(|e| e.to_string());
@@ -109,7 +110,7 @@ pub async fn fetch_github_skill_markdown(
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
             .await
             .map_err(|e| e.to_string())?;
-    github_import::fetch_raw_text(&client, &download_url, auth.as_deref())
+    github_import::fetch_skill_markdown(&client, &repo, &source_path, auth.as_deref())
         .await
         .map_err(|e| e.to_string())
 }

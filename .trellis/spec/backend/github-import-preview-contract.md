@@ -1,5 +1,116 @@
 # GitHub Import Preview Contract
 
+## Scenario: Structured Markdown Fetch Boundary
+
+### 1. Scope / Trigger
+
+Apply this contract when GitHub preview Markdown loading, the shared GitHub HTTP
+client, raw/API endpoint construction, or remote preview workspace reuse changes.
+The renderer may choose a previewed repository and repository-relative skill
+path, but it must never choose the request scheme, authority, port, IP address,
+redirect target, or authentication destination.
+
+### 2. Signatures
+
+```rust
+#[tauri::command]
+pub async fn fetch_github_skill_markdown(
+    state: State<'_, AppState>,
+    repo: GitHubRepoRef,
+    source_path: String,
+    preview_workspace_id: Option<String>,
+) -> Result<String, String>;
+
+pub(crate) async fn fetch_skill_markdown(
+    client: &reqwest::Client,
+    repo: &GitHubRepoRef,
+    source_path: &str,
+    auth_token: Option<&str>,
+) -> Result<String, GithubImportError>;
+```
+
+```ts
+fetchGitHubSkillMarkdown(repo: GitHubRepoRef, sourcePath: string): Promise<void>;
+```
+
+### 3. Contracts
+
+- The IPC payload contains `repo`, `sourcePath`, and `previewWorkspaceId`; it
+  never accepts `downloadUrl` as request authority.
+- Local Markdown reads validate `owner`, `repo`, `branch`, and `sourcePath`, then
+  construct `<sourcePath>/SKILL.md` under the fixed `GITHUB_MIRROR_ENDPOINTS`.
+  `normalizedUrl` is display/reference data and is not used for HTTP routing.
+- Remote Markdown reads do not issue local HTTP requests. They require the
+  submitted `repo` to equal the repository stored in the preview workspace
+  before reading the requested relative path.
+- Every production API/raw request is HTTPS, uses the endpoint's exact host and
+  base-path prefix, has no userinfo or fragment, and uses the standard HTTPS
+  port. Bearer auth is sent only to the direct GitHub endpoint.
+- The shared client has a 5-second connect timeout, a 30-second total timeout,
+  and `redirect::Policy::none()`. A 3xx response cannot select a second URL.
+- Raw response bodies are checked against `content_length` when present and are
+  then accumulated with checked arithmetic through `bytes_stream()`. The budget
+  is checked before each chunk is appended.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Invalid owner, repo, or branch component | Return `InvalidRepoComponent`; issue no request |
+| Unsafe or empty repository-relative path | Return `UnsupportedRepoPath`; issue no request |
+| URL falls outside a built-in endpoint's scheme/host/port/path policy | Return `InvalidUrl`; issue no request |
+| Remote workspace repo differs from submitted repo | Return `PreviewWorkspaceMismatch`; read no file |
+| Remote workspace expired or target changed | Preserve the typed preview workspace error |
+| 3xx points to another host or private address | Do not follow; classify/fallback as an HTTP attempt |
+| Declared or streamed body exceeds its budget | Return `Budget` before appending excess bytes |
+| Mirror fallback follows a direct denial/transport failure | Never forward the direct GitHub bearer token |
+
+### 5. Good / Base / Bad Cases
+
+- Good: the wizard submits the `repo` from `GitHubRepoPreview` plus
+  `skills/demo`; the backend fetches a fixed-endpoint
+  `skills/demo/SKILL.md` request with bounded streaming.
+- Base: a remote preview submits the same repo and workspace ID; the backend
+  reads from that workspace and performs no local network request.
+- Bad: the renderer submits `file://`, a metadata IP, a lookalike GitHub host,
+  or a crafted `downloadUrl`; such authority is absent from the IPC contract and
+  cannot reach the HTTP client.
+
+### 6. Tests Required
+
+- Backend pure tests for repository component injection and the SSRF URL matrix:
+  non-HTTPS schemes, loopback/private/link-local IPs, lookalike hosts, userinfo,
+  fragments, and nonstandard ports.
+- A policy test that every API/raw URL generated for every built-in endpoint
+  satisfies that endpoint's declared policy.
+- HTTP fixtures proving redirects are not followed, mirror fallback remains
+  functional, direct PAT auth is not forwarded, and a chunked cap-plus-one body
+  returns `Budget` before EOF.
+- A remote workspace test asserting a mismatched repo returns
+  `PreviewWorkspaceMismatch`.
+- Frontend store and IPC coverage tests asserting `repo`, `sourcePath`, and
+  `previewWorkspaceId` are present and `downloadUrl` is absent.
+- Full gate: `just ci`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```rust
+fetch_raw_text(&client, &renderer_supplied_download_url, auth).await
+```
+
+This lets renderer data choose the network authority and redirect surface.
+
+#### Correct
+
+```rust
+fetch_skill_markdown(&client, &repo, &source_path, auth).await
+```
+
+The service validates structured repository identity and constructs requests
+only from built-in endpoints.
+
 ## Scenario: Plugin Manifest Grouping
 
 ### 1. Scope / Trigger

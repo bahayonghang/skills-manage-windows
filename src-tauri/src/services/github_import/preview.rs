@@ -223,8 +223,7 @@ pub(super) async fn inspect_tree_candidates_from_manifest(
         let raw = if let Some(bytes) = fetched_files.get(&skill_manifest.skill_md_path) {
             bytes.clone()
         } else {
-            let url = raw_file_url(direct_endpoint, repo, &skill_manifest.skill_md_path);
-            let bytes = fetch_raw_bytes(client, &url, auth).await?;
+            let bytes = fetch_raw_bytes(client, repo, &skill_manifest.skill_md_path, auth).await?;
             fetched_files.insert(skill_manifest.skill_md_path.clone(), bytes.clone());
             bytes
         };
@@ -352,9 +351,7 @@ async fn fetch_optional_manifest_bytes(
     if !exists {
         return Ok(None);
     }
-    let endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
-    let url = raw_file_url(endpoint, repo, path);
-    let bytes = fetch_raw_bytes(client, &url, auth).await?;
+    let bytes = fetch_raw_bytes(client, repo, path, auth).await?;
     Ok(Some(bytes))
 }
 

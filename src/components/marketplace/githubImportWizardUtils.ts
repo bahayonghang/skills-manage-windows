@@ -4,6 +4,7 @@ import type {
   DuplicateResolution,
   GitHubRepoImportResult,
   GitHubRepoPreview,
+  GitHubRepoRef,
   GitHubSkillImportSelection,
   SkillWithLinks,
 } from "@/types";
@@ -56,8 +57,8 @@ export const EMPTY_SKILL_MARKDOWN: Record<string, SkillMarkdownEntry> = {};
 export const EMPTY_AI_SUMMARIES: Record<string, GitHubImportAiSummaryEntry> = {};
 
 export async function noopFetchGitHubSkillMarkdown(
+  _repo: GitHubRepoRef,
   _sourcePath: string,
-  _downloadUrl: string,
 ): Promise<void> {}
 
 export async function noopGenerateGitHubImportAiSummary(

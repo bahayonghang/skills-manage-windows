@@ -244,9 +244,8 @@ pub(super) async fn download_tree_selection(
         let repo = repo.clone();
         let auth = auth.clone();
         async move {
-            let endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
-            let url = raw_file_url(endpoint, &repo, &file.repo_path);
-            let bytes = fetch_raw_repo_file(&client, &url, auth.as_deref()).await?;
+            let bytes =
+                fetch_raw_repo_file(&client, &repo, &file.repo_path, auth.as_deref()).await?;
             validate_tree_file_size(&file.repo_path, file.byte_len, bytes.len() as u64)?;
             Ok::<_, GithubImportError>((file.repo_path, bytes))
         }

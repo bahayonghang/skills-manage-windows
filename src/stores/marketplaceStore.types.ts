@@ -2,6 +2,7 @@ import {
   GitHubImportProgressPayload,
   GitHubRepoImportResult,
   GitHubRepoPreview,
+  GitHubRepoRef,
   GitHubSkillImportSelection,
   MarketplaceSkill,
   SkillRegistry,
@@ -78,7 +79,7 @@ export interface MarketplaceState {
     selections: GitHubSkillImportSelection[],
     previewWorkspaceId?: string | null,
   ) => Promise<GitHubRepoImportResult>;
-  fetchGitHubSkillMarkdown: (sourcePath: string, downloadUrl: string) => Promise<void>;
+  fetchGitHubSkillMarkdown: (repo: GitHubRepoRef, sourcePath: string) => Promise<void>;
   generateGitHubImportAiSummary: (
     sourcePath: string,
     skillName: string,

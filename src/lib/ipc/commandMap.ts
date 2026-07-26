@@ -11,6 +11,7 @@ import type {
   DailyOperationCount,
   DashboardCentralSummary,
   DirectoryTreeEntry,
+  GitHubRepoRef,
   ObsidianSkill,
   ObsidianVault,
   OperationLogEntry,
@@ -95,6 +96,14 @@ export const IPC_COMMANDS = {
       renamedSkillId?: string;
     },
     LocalArchiveImportResult
+  >(),
+  fetch_github_skill_markdown: command<
+    {
+      repo: GitHubRepoRef;
+      sourcePath: string;
+      previewWorkspaceId: string | null;
+    },
+    string
   >(),
   set_agent_enabled: command<
     { agentId: string; isEnabled: boolean },
@@ -288,7 +297,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "explain_skill_stream",
   "export_collection",
   "export_skillport_state",
-  "fetch_github_skill_markdown",
   "force_mirror_central_repositories",
   "force_update_central_skills",
   "get_agents",

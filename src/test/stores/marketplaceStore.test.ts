@@ -304,6 +304,40 @@ describe("marketplaceStore", () => {
     expect(useMarketplaceStore.getState().githubImport.isPreviewLoading).toBe(false);
   });
 
+  it("fetches github markdown with repository identity instead of a renderer URL", async () => {
+    const repo = {
+      owner: "anthropics",
+      repo: "skills",
+      branch: "main",
+      normalizedUrl: "https://github.com/anthropics/skills",
+    };
+    useMarketplaceStore.setState((state) => ({
+      githubImport: {
+        ...state.githubImport,
+        preview: {
+          repo,
+          skills: [],
+          previewWorkspaceId: null,
+        },
+      },
+    }));
+    mockInvoke.mockResolvedValueOnce("# Research helper");
+
+    await useMarketplaceStore
+      .getState()
+      .fetchGitHubSkillMarkdown(repo, "skills/research");
+
+    expect(mockInvoke).toHaveBeenCalledWith("fetch_github_skill_markdown", {
+      repo,
+      sourcePath: "skills/research",
+      previewWorkspaceId: null,
+    });
+    expect(mockInvoke.mock.calls[0]?.[1]).not.toHaveProperty("downloadUrl");
+    expect(
+      useMarketplaceStore.getState().githubImport.skillMarkdown["skills/research"],
+    ).toEqual({ status: "ready", content: "# Research helper" });
+  });
+
   it("reports a friendly desktop-only error when preview is triggered outside Tauri", async () => {
     mockIsTauriRuntime.mockReturnValue(false);
 

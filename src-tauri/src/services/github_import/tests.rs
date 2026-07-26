@@ -19,6 +19,28 @@ pub(super) mod suite {
         pool
     }
 
+    fn test_mirror_endpoints(direct_url: String, mirror_url: String) -> Vec<GitHubMirrorEndpoint> {
+        let direct_url: &'static str = Box::leak(direct_url.into_boxed_str());
+        let mirror_url: &'static str = Box::leak(mirror_url.into_boxed_str());
+        vec![
+            GitHubMirrorEndpoint {
+                label: "github",
+                api_base: direct_url,
+                raw_base: direct_url,
+            },
+            GitHubMirrorEndpoint {
+                label: "mirror-one",
+                api_base: mirror_url,
+                raw_base: mirror_url,
+            },
+            GitHubMirrorEndpoint {
+                label: "mirror-two",
+                api_base: mirror_url,
+                raw_base: mirror_url,
+            },
+        ]
+    }
+
     fn sample_frontmatter(name: &str, description: &str) -> String {
         format!("---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n")
     }
@@ -426,6 +448,24 @@ metadata:
     }
 
     #[test]
+    fn parse_github_source_rejects_authority_and_url_suffix_controls() {
+        for source in [
+            "https://user@github.com/example/repo",
+            "https://github.com:444/example/repo",
+            "https://github.com/example/repo?download=1",
+            "https://github.com/example/repo#readme",
+        ] {
+            assert!(
+                matches!(
+                    parse_github_source(source),
+                    Err(GithubImportError::InvalidRepoUrl)
+                ),
+                "source should be rejected: {source}"
+            );
+        }
+    }
+
+    #[test]
     fn parse_github_source_rejects_unsafe_subpaths() {
         let error = parse_github_source("owner/repo/../escape").unwrap_err();
         assert!(error.to_string().contains("not supported"));
@@ -738,21 +778,162 @@ metadata:
     }
 
     #[test]
-    fn raw_url_to_repo_path_parses_github_raw_urls() {
-        let parsed = raw_url_to_repo_path(
-            "https://raw.githubusercontent.com/owner/repo/main/skills/demo/SKILL.md",
-        )
-        .expect("parsed");
+    fn structured_raw_url_ignores_renderer_normalized_url_authority() {
+        let endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
+        let repo = GitHubRepoRef {
+            owner: "owner".to_string(),
+            repo: "repo".to_string(),
+            branch: "main#fragment".to_string(),
+            normalized_url: "http://169.254.169.254/latest/meta-data".to_string(),
+        };
+        let url = raw_file_url(endpoint, &repo, "skills/demo/SKILL.md");
+        let parsed = reqwest::Url::parse(&url).expect("built raw URL");
 
-        assert_eq!(parsed.repo.owner, "owner");
-        assert_eq!(parsed.repo.repo, "repo");
-        assert_eq!(parsed.repo.branch, "main");
-        assert_eq!(parsed.file_path, "skills/demo/SKILL.md");
+        assert_eq!(parsed.scheme(), "https");
+        assert_eq!(parsed.host_str(), Some("raw.githubusercontent.com"));
+        assert!(parsed.fragment().is_none());
+        assert!(parsed.path().contains("main%23fragment"));
+        validate_github_endpoint_request(endpoint, GitHubFetchSurface::Raw, &url)
+            .expect("fixed endpoint URL");
     }
 
     #[test]
-    fn raw_url_to_repo_path_ignores_non_github_raw_hosts() {
-        assert!(raw_url_to_repo_path("https://example.com/file.txt").is_none());
+    fn endpoint_policy_rejects_ssrf_url_matrix() {
+        let endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
+        for url in [
+            "http://raw.githubusercontent.com/owner/repo/main/SKILL.md",
+            "file:///etc/passwd",
+            "ftp://raw.githubusercontent.com/file",
+            "https://127.0.0.1/SKILL.md",
+            "https://[::1]/SKILL.md",
+            "https://10.0.0.1/SKILL.md",
+            "https://172.16.0.1/SKILL.md",
+            "https://192.168.0.1/SKILL.md",
+            "https://169.254.169.254/latest/meta-data",
+            "https://raw.githubusercontent.com.evil.example/SKILL.md",
+            "https://user@raw.githubusercontent.com/owner/repo/main/SKILL.md",
+            "https://raw.githubusercontent.com:444/owner/repo/main/SKILL.md",
+            "https://raw.githubusercontent.com/owner/repo/main/SKILL.md#fragment",
+        ] {
+            assert!(
+                validate_github_endpoint_request(endpoint, GitHubFetchSurface::Raw, url).is_err(),
+                "dangerous URL should be rejected: {url}"
+            );
+        }
+    }
+
+    #[test]
+    fn built_in_endpoint_urls_satisfy_their_declared_policies() {
+        let repo = GitHubRepoRef {
+            owner: "owner".to_string(),
+            repo: "repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/owner/repo".to_string(),
+        };
+
+        for endpoint in GITHUB_MIRROR_ENDPOINTS {
+            let api_url =
+                github_endpoint_url(endpoint, GitHubFetchSurface::Api, "/repos/owner/repo");
+            validate_github_endpoint_request(endpoint, GitHubFetchSurface::Api, &api_url)
+                .unwrap_or_else(|error| panic!("{} API URL: {error}", endpoint.label));
+
+            let raw_url = raw_file_url(endpoint, &repo, "skills/demo/SKILL.md");
+            validate_github_endpoint_request(endpoint, GitHubFetchSurface::Raw, &raw_url)
+                .unwrap_or_else(|error| panic!("{} raw URL: {error}", endpoint.label));
+        }
+    }
+
+    #[test]
+    fn structured_repo_components_reject_authority_and_path_injection() {
+        for (field, value) in [
+            ("owner", "https://127.0.0.1"),
+            ("owner", "owner/other"),
+            ("repo", "repo\\other"),
+            ("branch", "main/other"),
+            ("branch", ".."),
+        ] {
+            let mut repo = GitHubRepoRef {
+                owner: "owner".to_string(),
+                repo: "repo".to_string(),
+                branch: "main".to_string(),
+                normalized_url: "https://github.com/owner/repo".to_string(),
+            };
+            match field {
+                "owner" => repo.owner = value.to_string(),
+                "repo" => repo.repo = value.to_string(),
+                "branch" => repo.branch = value.to_string(),
+                _ => unreachable!(),
+            }
+            assert!(validate_repo_ref(&repo).is_err(), "{field}={value}");
+        }
+    }
+
+    #[tokio::test]
+    async fn github_client_does_not_follow_redirects() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut buffer = [0_u8; 1024];
+            let _ = stream.read(&mut buffer).expect("read request");
+            stream
+                .write_all(
+                    b"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:9/private\r\nContent-Length: 0\r\n\r\n",
+                )
+                .expect("write redirect");
+        });
+
+        let response = github_client()
+            .expect("client")
+            .get(format!("http://{address}/redirect"))
+            .send()
+            .await
+            .expect("redirect response");
+
+        assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+        server.join().expect("server join");
+    }
+
+    #[tokio::test]
+    async fn chunked_raw_body_stops_at_the_streaming_budget() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut buffer = [0_u8; 1024];
+            let _ = stream.read(&mut buffer).expect("read request");
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n6\r\nabcdef\r\n",
+                )
+                .expect("write first chunk");
+        });
+
+        let response = github_client()
+            .expect("client")
+            .get(format!("http://{address}/chunked"))
+            .send()
+            .await
+            .expect("chunked response");
+        assert_eq!(response.content_length(), None);
+        let budget = ResourceBudget {
+            file_bytes: 5,
+            ..ResourceBudget::default_skill()
+        };
+
+        let error =
+            read_raw_response_with_budget(response, budget, RawBytesBudget::Metadata, "SKILL.md")
+                .await
+                .expect_err("cap+1 chunk should fail before EOF");
+
+        assert!(matches!(error, GithubImportError::Budget(_)));
+        server.join().expect("server join");
     }
 
     #[test]
@@ -2096,6 +2277,38 @@ metadata:
     }
 
     #[test]
+    fn remote_markdown_workspace_requires_matching_repo() {
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+        let now = Utc::now();
+        let workspace = GitHubPreviewWorkspace {
+            id: "workspace-markdown".to_string(),
+            target_id: "ssh-demo".to_string(),
+            repo: repo.clone(),
+            source_path: None,
+            remote_workspace_dir: "/tmp/skillport-github-preview.markdown".to_string(),
+            remote_repo_dir: "/tmp/skillport-github-preview.markdown/repo".to_string(),
+            created_at: now,
+            expires_at: now + Duration::minutes(30),
+        };
+
+        assert!(validate_remote_markdown_workspace_repo(&workspace, &repo).is_ok());
+
+        let other_repo = GitHubRepoRef {
+            repo: "other".to_string(),
+            ..repo
+        };
+        assert!(matches!(
+            validate_remote_markdown_workspace_repo(&workspace, &other_repo),
+            Err(GithubImportError::PreviewWorkspaceMismatch)
+        ));
+    }
+
+    #[test]
     fn remote_workspace_download_script_puts_token_only_in_stdin_script() {
         let token = "ghp_secret_for_test";
         let script = remote_workspace_download_script(Some(token)).expect("script");
@@ -2496,10 +2709,12 @@ metadata:
         let client = github_client().expect("client");
         let direct_url = format!("http://{}/direct", address);
         let mirror_url = format!("http://{}/mirror", address);
+        let endpoints = test_mirror_endpoints(direct_url.clone(), mirror_url.clone());
 
-        let response = send_github_request_with_fallback(
+        let response = send_github_request_with_test_endpoints(
             &client,
             GitHubFetchSurface::Api,
+            &endpoints,
             |endpoint| {
                 if endpoint.label == "github" {
                     direct_url.clone()
@@ -2577,10 +2792,12 @@ metadata:
         let client = github_client().expect("client");
         let direct_url = format!("http://{}/raw-direct", address);
         let mirror_url = format!("http://{}/raw-mirror", address);
+        let endpoints = test_mirror_endpoints(direct_url.clone(), mirror_url.clone());
 
-        let response = send_github_request_with_fallback(
+        let response = send_github_request_with_test_endpoints(
             &client,
             GitHubFetchSurface::Raw,
+            &endpoints,
             |endpoint| {
                 if endpoint.label == "github" {
                     direct_url.clone()
@@ -2663,10 +2880,12 @@ metadata:
         let client = github_client().expect("client");
         let direct_url = format!("http://{}/direct", address);
         let mirror_url = format!("http://{}/mirror", address);
+        let endpoints = test_mirror_endpoints(direct_url.clone(), mirror_url.clone());
 
-        let response = send_github_request_with_fallback(
+        let response = send_github_request_with_test_endpoints(
             &client,
             GitHubFetchSurface::Api,
+            &endpoints,
             |endpoint| {
                 if endpoint.label == "github" {
                     direct_url.clone()
