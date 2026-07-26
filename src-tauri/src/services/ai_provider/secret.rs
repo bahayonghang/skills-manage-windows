@@ -423,15 +423,6 @@ pub async fn get_ai_api_key_state_impl(
     })
 }
 
-pub async fn reveal_ai_api_key_impl(
-    pool: &DbPool,
-    secrets: &dyn SecretStore,
-    provider: Option<&str>,
-) -> Result<Option<String>, AiProviderError> {
-    let provider_id = resolve_operation_provider(pool, provider).await;
-    ai_api_key_from_secret_store(pool, secrets, Some(&provider_id)).await
-}
-
 pub async fn set_ai_api_key_impl(
     pool: &DbPool,
     secrets: &dyn SecretStore,

@@ -32,6 +32,7 @@ export function MarketplaceView() {
     getSkillsByAgent,
     githubImport,
     importGitHubRepoSkills,
+    installGitHubPreviewSkill,
     installCentralSkill,
     installFromSkillsSh,
     installingIds,
@@ -187,7 +188,9 @@ export function MarketplaceView() {
       }
 
       const preview = await previewGitHubRepoSkills(repoUrl);
-      const nextPreviewSkills = preview.skills.map(mapGitHubPreviewSkillToPreviewSkill);
+      const nextPreviewSkills = preview.skills.map((skill) =>
+        mapGitHubPreviewSkillToPreviewSkill(skill, repoUrl)
+      );
       setPreviewSkills(nextPreviewSkills);
       setPreviewCache((current) => ({ ...current, [repoUrl]: nextPreviewSkills }));
     } catch (err) {
@@ -205,14 +208,11 @@ export function MarketplaceView() {
   async function handleInstallPreviewSkill(skill: MarketplacePreviewSkill) {
     setPreviewInstallingIds((prev) => new Set(prev).add(skill.name));
     try {
-      const resp = await fetch(skill.downloadUrl);
-      if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
-      const content = await resp.text();
-
-      const { writeTextFile, mkdir, BaseDirectory } = await import("@tauri-apps/plugin-fs");
-      const skillDir = `.skillsmanage/skills/${skill.name}`;
-      await mkdir(skillDir, { baseDir: BaseDirectory.Home, recursive: true });
-      await writeTextFile(`${skillDir}/SKILL.md`, content, { baseDir: BaseDirectory.Home });
+      if (skill.sourceKind === "registry") {
+        await installSkill(skill.registrySkillId);
+      } else {
+        await installGitHubPreviewSkill(skill.repoUrl, skill.sourcePath);
+      }
 
       await rescan();
       toast.success(t("marketplace.installSuccess"));

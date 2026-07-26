@@ -401,6 +401,91 @@ describe("marketplaceStore", () => {
     expect(useMarketplaceStore.getState().githubImport.isImporting).toBe(false);
   });
 
+  it("installs a direct github preview through a fresh backend preview workspace", async () => {
+    const repoUrl = "https://github.com/anthropics/skills";
+    const sourcePath = "skills/research/SKILL.md";
+    const repo = {
+      owner: "anthropics",
+      repo: "skills",
+      branch: "main",
+      normalizedUrl: repoUrl,
+    };
+    const preview = {
+      repo,
+      skills: [
+        {
+          sourcePath,
+          skillId: "research",
+          skillName: "research",
+          description: "Research helper",
+          rootDirectory: "skills",
+          skillDirectoryName: "research",
+          downloadUrl: "https://example.com/research",
+          conflict: null,
+        },
+      ],
+      previewWorkspaceId: "github-preview-install",
+    };
+    const result = {
+      repo,
+      importedSkills: [],
+      skippedSkills: [],
+    };
+    mockInvoke.mockResolvedValueOnce(preview).mockResolvedValueOnce(result);
+
+    await expect(
+      useMarketplaceStore.getState().installGitHubPreviewSkill(repoUrl, sourcePath),
+    ).resolves.toEqual(result);
+
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preview_github_repo_import", {
+      repoUrl,
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "import_github_repo_skills", {
+      repoUrl,
+      selections: [
+        {
+          sourcePath,
+          resolution: "overwrite",
+          renamedSkillId: null,
+        },
+      ],
+      previewWorkspaceId: "github-preview-install",
+    });
+  });
+
+  it("discards the fresh preview workspace when the selected candidate disappeared", async () => {
+    const repoUrl = "https://github.com/anthropics/skills";
+    const sourcePath = "skills/research/SKILL.md";
+    mockInvoke
+      .mockResolvedValueOnce({
+        repo: {
+          owner: "anthropics",
+          repo: "skills",
+          branch: "main",
+          normalizedUrl: repoUrl,
+        },
+        skills: [],
+        previewWorkspaceId: "github-preview-disappeared",
+      })
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      useMarketplaceStore.getState().installGitHubPreviewSkill(repoUrl, sourcePath),
+    ).rejects.toThrow(sourcePath);
+
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preview_github_repo_import", {
+      repoUrl,
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(
+      2,
+      "discard_github_repo_preview_workspace",
+      { workspaceId: "github-preview-disappeared" },
+    );
+    expect(
+      mockInvoke.mock.calls.some(([command]) => command === "import_github_repo_skills"),
+    ).toBe(false);
+  });
+
   it("passes the saved preview workspace id when importing ssh previews", async () => {
     const result = {
       repo: {

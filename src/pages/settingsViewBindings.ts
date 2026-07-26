@@ -38,7 +38,6 @@ export function useSettingsViewBindings() {
   const isSavingGitHubPat = useSettingsStore((state) => state.isSavingGitHubPat);
   const isTestingGitHubPat = useSettingsStore((state) => state.isTestingGitHubPat);
   const loadGitHubPat = useSettingsStore((state) => state.loadGitHubPat);
-  const revealGitHubPat = useSettingsStore((state) => state.revealGitHubPat);
   const saveGitHubPat = useSettingsStore((state) => state.saveGitHubPat);
   const clearGitHubPat = useSettingsStore((state) => state.clearGitHubPat);
   const testGitHubPat = useSettingsStore((state) => state.testGitHubPat);
@@ -53,7 +52,6 @@ export function useSettingsViewBindings() {
   const loadAiSettings = useSettingsStore((state) => state.loadAiSettings);
   const updateAiSettings = useSettingsStore((state) => state.updateAiSettings);
   const switchAiProvider = useSettingsStore((state) => state.switchAiProvider);
-  const revealAiApiKey = useSettingsStore((state) => state.revealAiApiKey);
   const clearAiApiKey = useSettingsStore((state) => state.clearAiApiKey);
   const testAiConnection = useSettingsStore((state) => state.testAiConnection);
 
@@ -134,7 +132,6 @@ export function useSettingsViewBindings() {
     isSavingGitHubPat,
     isTestingGitHubPat,
     loadGitHubPat,
-    revealGitHubPat,
     saveGitHubPat,
     clearGitHubPat,
     testGitHubPat,
@@ -149,7 +146,6 @@ export function useSettingsViewBindings() {
     loadAiSettings,
     updateAiSettings,
     switchAiProvider,
-    revealAiApiKey,
     clearAiApiKey,
     testAiConnection,
     agents,

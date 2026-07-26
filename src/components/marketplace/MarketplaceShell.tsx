@@ -450,6 +450,17 @@ export function MarketplaceShell({
                                           sourceLabel: selectedPublisher.name,
                                           sourceUrl: repo.url,
                                           installed: false,
+                                          previewInstall:
+                                            skill.sourceKind === "registry"
+                                              ? {
+                                                  sourceKind: "registry",
+                                                  registrySkillId: skill.registrySkillId,
+                                                }
+                                              : {
+                                                  sourceKind: "github",
+                                                  repoUrl: skill.repoUrl,
+                                                  sourcePath: skill.sourcePath,
+                                                },
                                         },
                                         event.currentTarget
                                       );
@@ -598,15 +609,18 @@ export function MarketplaceShell({
               void onInstallSkillsSh(detailSkill.source, detailSkill.skillId);
               return;
             }
-            if (detailSkill.id.startsWith("skill-")) {
-              void onInstallFromSource(detailSkill.id);
+            if (detailSkill.previewInstall) {
+              void onInstallPreviewSkill({
+                id: detailSkill.id,
+                name: detailSkill.name,
+                downloadUrl: detailSkill.downloadUrl,
+                ...detailSkill.previewInstall,
+              });
               return;
             }
-            void onInstallPreviewSkill({
-              id: detailSkill.id,
-              name: detailSkill.name,
-              downloadUrl: detailSkill.downloadUrl,
-            });
+            if (detailSkill.id.startsWith("skill-")) {
+              void onInstallFromSource(detailSkill.id);
+            }
           }}
           isInstalling={
             installingIds.has(detailSkill.id) ||

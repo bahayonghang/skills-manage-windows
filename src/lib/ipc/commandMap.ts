@@ -31,6 +31,7 @@ import type {
   SkillCountsSummary,
   SkillDetail,
   SkillDetailRequest,
+  SkillportStateImportPreview,
   SkillWithLinks,
   SshTargetTestResult,
   TagGroup,
@@ -115,6 +116,11 @@ export const IPC_COMMANDS = {
     AgentWithStatus
   >(),
   remove_custom_agent: command<{ agentId: string }, void>(),
+  preview_skillport_state_import_file: command<
+    { path: string },
+    { json: string; preview: SkillportStateImportPreview }
+  >(),
+  save_skillport_state_export: command<{ path: string; json: string }, void>(),
   // ── platform skills ───────────────────────────────────────────────────────
   get_skills_by_agent: command<{ agentId: string }, ScannedSkill[]>(),
   get_central_skills: command<undefined, SkillWithLinks[]>(),
@@ -345,8 +351,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "rename_project",
   "rescan_project",
   "resolve_skills_sh_url",
-  "reveal_ai_api_key",
-  "reveal_github_pat",
   "scan_deleted_platform_copies",
   "scan_platform_duplicate_skills",
   "search_marketplace_skills",

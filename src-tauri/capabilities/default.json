@@ -8,21 +8,7 @@
     "core:window:allow-show",
     "dialog:allow-open",
     "dialog:allow-save",
-    "shell:default",
-    "fs:allow-mkdir",
-    "fs:allow-read-text-file",
-    "fs:allow-write-text-file",
-    {
-      "identifier": "fs:scope",
-      "allow": [
-        "$HOME/.skillsmanage/skills/**",
-        "$HOME/.skillsmanage/exports/**",
-        "$HOME/**",
-        "$DOCUMENT/**",
-        "$DOWNLOAD/**",
-        "$DESKTOP/**"
-      ]
-    },
+    "shell:allow-open",
     "updater:allow-check",
     "updater:allow-download-and-install",
     "process:allow-restart"

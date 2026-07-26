@@ -15,13 +15,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  writeTextFile: vi.fn(),
-  readTextFile: vi.fn(),
-}));
-
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 
 const manifestJson = JSON.stringify({
   kind: "skillport/state-export",
@@ -110,7 +104,9 @@ function renderDialog(props: Partial<ComponentProps<typeof CentralStatePortabili
       onOpenChange={vi.fn()}
       activeTarget={localTarget}
       exportState={exportState}
+      saveExport={vi.fn()}
       previewImport={vi.fn()}
+      previewImportFile={vi.fn()}
       importState={vi.fn()}
       portabilityJob={idlePortabilityJob}
       onCancelJob={vi.fn()}
@@ -134,7 +130,7 @@ describe("CentralStatePortabilityDialog", () => {
     vi.clearAllMocks();
   });
 
-  it("keeps Tauri FS permissions for user-selected JSON files", () => {
+  it("keeps dialogs but removes renderer filesystem permissions", () => {
     const capability = defaultCapability as { permissions: Array<string | { identifier: string }> };
     const scopePermission = capability.permissions.find(
       (permission): permission is { identifier: string } =>
@@ -144,23 +140,22 @@ describe("CentralStatePortabilityDialog", () => {
     expect(capability.permissions).toContain("dialog:allow-open");
     expect(capability.permissions).toContain("dialog:allow-save");
     expect(capability.permissions).not.toContain("dialog:default");
-    expect(capability.permissions).toContain("fs:allow-read-text-file");
-    expect(capability.permissions).toContain("fs:allow-write-text-file");
-    expect(scopePermission).toBeDefined();
+    expect(capability.permissions).not.toContain("fs:allow-read-text-file");
+    expect(capability.permissions).not.toContain("fs:allow-write-text-file");
+    expect(scopePermission).toBeUndefined();
   });
 
   it("saves the exported state JSON", async () => {
     vi.mocked(save).mockResolvedValue("D:\\exports\\skillport-state.json");
-    vi.mocked(writeTextFile).mockResolvedValue(undefined);
-    const exportState = vi.fn().mockResolvedValue(manifestJson);
+    const saveExport = vi.fn().mockResolvedValue(undefined);
 
-    renderDialog({ exportState });
+    const result = renderDialog({ saveExport });
 
-    await waitFor(() => expect(exportState).toHaveBeenCalled());
+    await flushInitialExport(result);
     fireEvent.click(screen.getByTestId("central-portability-save-export"));
 
     await waitFor(() =>
-      expect(writeTextFile).toHaveBeenCalledWith(
+      expect(saveExport).toHaveBeenCalledWith(
         "D:\\exports\\skillport-state.json",
         JSON.stringify(JSON.parse(manifestJson), null, 2)
       )
@@ -221,17 +216,64 @@ describe("CentralStatePortabilityDialog", () => {
 
   it("loads a JSON file and previews it before import", async () => {
     vi.mocked(open).mockResolvedValue("D:\\imports\\skillport-state.json");
-    vi.mocked(readTextFile).mockResolvedValue(manifestJson);
     const previewImport = vi.fn().mockResolvedValue(preview);
+    const previewImportFile = vi.fn().mockResolvedValue({ json: manifestJson, preview });
 
-    renderDialog({ previewImport });
+    renderDialog({ previewImport, previewImportFile });
 
     fireEvent.click(screen.getByTestId("central-portability-import-tab"));
     fireEvent.click(screen.getByTestId("central-portability-choose-file"));
 
-    await waitFor(() => expect(readTextFile).toHaveBeenCalledWith("D:\\imports\\skillport-state.json"));
-    expect(previewImport).toHaveBeenCalledWith(manifestJson);
+    await waitFor(() =>
+      expect(previewImportFile).toHaveBeenCalledWith("D:\\imports\\skillport-state.json")
+    );
+    expect(previewImport).not.toHaveBeenCalled();
     expect(await screen.findByText("frontend-design")).toBeInTheDocument();
+  });
+
+  it("clears stale rename input when a selected file supplies a new preview", async () => {
+    vi.mocked(open).mockResolvedValue("D:\\imports\\next-state.json");
+    const previewImport = vi.fn().mockResolvedValue(preview);
+    const previewImportFile = vi.fn().mockResolvedValue({ json: manifestJson, preview });
+
+    renderDialog({ previewImport, previewImportFile });
+    fireEvent.click(screen.getByTestId("central-portability-import-tab"));
+    fireEvent.change(screen.getByTestId("central-portability-json-input"), {
+      target: { value: manifestJson },
+    });
+    fireEvent.click(screen.getByTestId("central-portability-preview"));
+
+    await screen.findByText("frontend-design");
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "rename" } });
+    fireEvent.change(screen.getByPlaceholderText("新技能 ID"), {
+      target: { value: "stale-rename" },
+    });
+    fireEvent.click(screen.getByTestId("central-portability-choose-file"));
+
+    await waitFor(() => expect(previewImportFile).toHaveBeenCalled());
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "rename" } });
+    expect(screen.getByPlaceholderText("新技能 ID")).toHaveValue("");
+  });
+
+  it("clears a stale preview when a selected file has an invalid manifest", async () => {
+    vi.mocked(open).mockResolvedValue("D:\\imports\\invalid-state.json");
+    const previewImport = vi.fn().mockResolvedValue(preview);
+    const previewImportFile = vi
+      .fn()
+      .mockRejectedValue(new Error("Invalid SkillPort state JSON: bad json"));
+
+    renderDialog({ previewImport, previewImportFile });
+    fireEvent.click(screen.getByTestId("central-portability-import-tab"));
+    fireEvent.change(screen.getByTestId("central-portability-json-input"), {
+      target: { value: manifestJson },
+    });
+    fireEvent.click(screen.getByTestId("central-portability-preview"));
+    await screen.findByText("frontend-design");
+
+    fireEvent.click(screen.getByTestId("central-portability-choose-file"));
+    await waitFor(() => {
+      expect(screen.queryByText("frontend-design")).not.toBeInTheDocument();
+    });
   });
 
   it("renders unrestorable preview diagnostics", async () => {

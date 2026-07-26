@@ -137,13 +137,6 @@ pub async fn get_github_pat(state: State<'_, AppState>) -> Result<GitHubPatState
 }
 
 #[tauri::command]
-pub async fn reveal_github_pat(state: State<'_, AppState>) -> Result<Option<String>, String> {
-    github_import::reveal_github_pat_impl(&state.db, state.secrets.as_ref())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 pub async fn set_github_pat(
     state: State<'_, AppState>,
     value: String,

@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Use the single blocking filesystem seam and keep AppHandle out of blocking closures."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Add portable-state file failures as typed service errors and stringify only at commands."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Preserve the credential boundary while deleting renderer plaintext reveal paths."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Reuse the existing top-level Central mutation boundary for Marketplace preview installation."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Keep IPC calls in stores, type new commands, and remove reveal commands from the allowlist."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Preserve visible failure feedback for portability and Marketplace actions."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Integrate capability drift into the shared just ci entrypoint and apply the Windows bundle gate."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Trace dialog path, store IPC, command, service, filesystem, and UI result contracts end to end."}
+{"file":".trellis/tasks/07-24-renderer-capability-min/research/live-boundary-2026-07-26.md","reason":"Use current authority surfaces, reusable services, validation matrix, and explicit scope boundaries."}

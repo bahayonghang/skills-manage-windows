@@ -1490,6 +1490,19 @@ describe("centralSkillsStore", () => {
     expect(invoke).toHaveBeenCalledWith("export_skillport_state", { options: {} });
   });
 
+  it("saves portable state through the backend file adapter", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await useCentralSkillsStore
+      .getState()
+      .saveSkillportStateExport("D:\\exports\\state.json", "{\"kind\":\"skillport/state-export\"}");
+
+    expect(invoke).toHaveBeenCalledWith("save_skillport_state_export", {
+      path: "D:\\exports\\state.json",
+      json: "{\"kind\":\"skillport/state-export\"}",
+    });
+  });
+
   it("previews a SkillPort portable state import", async () => {
     const preview = {
       githubSources: [],
@@ -1510,6 +1523,37 @@ describe("centralSkillsStore", () => {
 
     expect(result).toEqual(preview);
     expect(invoke).toHaveBeenCalledWith("preview_skillport_state_import", { json: "{}" });
+  });
+
+  it("reads and previews a portable state file through one backend command", async () => {
+    const result = {
+      json: "{}",
+      preview: {
+        githubSources: [],
+        skills: [],
+        summary: {
+          sourcesToAdd: 0,
+          sourcesExisting: 0,
+          sourcesDuplicate: 0,
+          ready: 0,
+          conflicts: 0,
+          missing: 0,
+          unrestorable: 0,
+          duplicateSkipped: 0,
+        },
+        warnings: [],
+      },
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(result);
+
+    await expect(
+      useCentralSkillsStore
+        .getState()
+        .previewSkillportStateImportFile("D:\\imports\\state.json"),
+    ).resolves.toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("preview_skillport_state_import_file", {
+      path: "D:\\imports\\state.json",
+    });
   });
 
   it("imports SkillPort portable state and refreshes Central metadata", async () => {

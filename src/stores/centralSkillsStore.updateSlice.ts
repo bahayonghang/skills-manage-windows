@@ -51,7 +51,9 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
   | "subscribePortabilityProgress"
   | "cancelSkillportStatePortability"
   | "exportSkillportState"
+  | "saveSkillportStateExport"
   | "previewSkillportStateImport"
+  | "previewSkillportStateImportFile"
   | "importSkillportState"
   | "resetForTargetChange"
 > {
@@ -432,6 +434,10 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
     }
   },
 
+  saveSkillportStateExport: async (path: string, json: string) => {
+    await invoke("save_skillport_state_export", { path, json });
+  },
+
   previewSkillportStateImport: async (json: string) => {
     set({
       portabilityJob: {
@@ -450,6 +456,36 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
             : state.portabilityJob,
       }));
       return preview;
+    } catch (err) {
+      set((state) => ({
+        portabilityJob: {
+          ...state.portabilityJob,
+          status: String(err).includes("cancelled") ? "cancelled" : "failed",
+          error: String(err),
+        },
+      }));
+      throw err;
+    }
+  },
+
+  previewSkillportStateImportFile: async (path: string) => {
+    set({
+      portabilityJob: {
+        ...createIdlePortabilityJob(),
+        phase: "previewing",
+        status: "running",
+        total: 3,
+      },
+    });
+    try {
+      const result = await invoke("preview_skillport_state_import_file", { path });
+      set((state) => ({
+        portabilityJob:
+          state.portabilityJob.status === "running"
+            ? { ...state.portabilityJob, status: "completed", completed: state.portabilityJob.total }
+            : state.portabilityJob,
+      }));
+      return result;
     } catch (err) {
       set((state) => ({
         portabilityJob: {

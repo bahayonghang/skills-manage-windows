@@ -229,7 +229,6 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_sql::Builder::new().build())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
@@ -471,11 +470,9 @@ pub fn run() {
             commands::settings::set_setting,
             commands::settings::set_settings,
             commands::settings::get_ai_api_key_state,
-            commands::settings::reveal_ai_api_key,
             commands::settings::set_ai_api_key,
             commands::settings::clear_ai_api_key,
             commands::github_import::get_github_pat,
-            commands::github_import::reveal_github_pat,
             commands::github_import::set_github_pat,
             commands::github_import::clear_github_pat,
             commands::github_import::test_github_pat,
@@ -527,6 +524,8 @@ pub fn run() {
             commands::marketplace::refresh_skill_explanation,
             commands::portable_state::export_skillport_state,
             commands::portable_state::preview_skillport_state_import,
+            commands::portable_state::preview_skillport_state_import_file,
+            commands::portable_state::save_skillport_state_export,
             commands::portable_state::import_skillport_state,
             commands::portable_state::cancel_skillport_state_portability,
             // Saved Views (Central V2)

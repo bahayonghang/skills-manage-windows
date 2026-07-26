@@ -15,6 +15,7 @@ const chains = [
     steps: [
       { name: "typecheck", command: "pnpm", args: ["typecheck"] },
       { name: "lint", command: "pnpm", args: ["lint"] },
+      { name: "capabilitycheck", command: "pnpm", args: ["capabilitycheck"] },
       { name: "sizecheck", command: "pnpm", args: ["sizecheck"] },
       { name: "test", command: "pnpm", args: ["test"] },
       { name: "build", command: "pnpm", args: ["build"] },

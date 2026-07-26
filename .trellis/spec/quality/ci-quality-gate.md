@@ -23,7 +23,7 @@ GitHub Actions required job/check:
 The orchestrator owns two parallel, fail-fast chains:
 
 ```text
-web: typecheck -> lint -> sizecheck -> test -> build
+web: typecheck -> lint -> capabilitycheck -> sizecheck -> test -> build
 rust: entrypointcheck -> fmt --check -> clippy --all-targets --locked -> test --locked
 ```
 
@@ -62,6 +62,7 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 | `just-ci` renamed or guarded | Contract test fails; do not update branch protection casually |
 | Package job lacks event guard | Contract test fails |
 | Rust is not formatted | `cargo fmt --check` fails |
+| Renderer capability, plugin wiring, or inventory drifts | `pnpm capabilitycheck` fails before size/test/build |
 | Test/bin target has a Clippy warning | all-target Clippy fails |
 | Cargo lockfile would change | `--locked` command fails |
 | Frontend unit tests pass but bundling is invalid | `pnpm build` fails |
@@ -80,7 +81,9 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 - `pnpm vitest run src/test/contracts/ciWorkflowContract.test.ts`
   - Parse YAML 1.2; assert event branches, stable job name, shared entrypoint, Rust components, and every package guard.
 - `just ci`
-  - Assert the complete frontend and Rust chains pass from their shared local/remote entrypoint.
+  - Assert the complete frontend and Rust chains pass from their shared local/remote entrypoint, including the required capability drift check.
+- `pnpm exec vitest run src/test/contracts/capabilityDrift.test.ts`
+  - Assert missing permissions, stale JSON/table state, unexpected imports, and stale dependency/initializer sets all fail.
 - For CI, packaging, or release workflow changes on Windows: `pnpm tauri build` and confirm the expected NSIS/MSI bundle path.
 - After changing protection: read the GitHub protection object and branch endpoint back; do not treat a successful PUT alone as evidence.
 
@@ -116,3 +119,7 @@ jobs:
   ci:
     name: just-ci
 ```
+
+Repository checks such as capability drift belong in the ordered `web` steps in
+`scripts/run-ci.mjs`; workflows continue to invoke `just ci` instead of
+duplicating the command.

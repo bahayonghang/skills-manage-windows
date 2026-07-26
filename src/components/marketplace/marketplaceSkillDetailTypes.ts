@@ -12,6 +12,9 @@ export interface MarketplaceSkillDetail {
   remoteKind?: "skills_sh";
   installs?: number;
   stars?: number | null;
+  previewInstall?:
+    | { sourceKind: "registry"; registrySkillId: string }
+    | { sourceKind: "github"; repoUrl: string; sourcePath: string };
 }
 
 export type MarketplaceDetailViewMode = "markdown" | "raw";

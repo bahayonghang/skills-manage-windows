@@ -327,20 +327,6 @@ pub async fn get_ai_api_key_state(
 }
 
 #[tauri::command]
-pub async fn reveal_ai_api_key(
-    state: State<'_, AppState>,
-    provider: Option<String>,
-) -> Result<Option<String>, String> {
-    crate::services::ai_provider::reveal_ai_api_key_impl(
-        &state.db,
-        state.secrets.as_ref(),
-        provider.as_deref(),
-    )
-    .await
-    .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 pub async fn set_ai_api_key(
     state: State<'_, AppState>,
     value: String,

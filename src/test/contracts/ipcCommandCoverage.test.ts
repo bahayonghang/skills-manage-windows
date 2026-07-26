@@ -18,6 +18,7 @@ import { TYPED_IPC_COMMAND_NAMES, UNTYPED_IPC_COMMANDS } from "@/lib/ipc";
 
 const SRC_ROOT = join(process.cwd(), "src");
 const IPC_ADAPTER_DIR = join(SRC_ROOT, "lib", "ipc");
+const TAURI_SOURCE_ROOT = join(process.cwd(), "src-tauri", "src");
 
 function collectSourceFiles(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -27,6 +28,19 @@ function collectSourceFiles(dir: string, out: string[] = []): string[] {
       if (full === IPC_ADAPTER_DIR) continue;
       collectSourceFiles(full, out);
     } else if (/\.(ts|tsx)$/.test(name) && !/\.test\.(ts|tsx)$/.test(name)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+function collectProductionFiles(dir: string, extensions: RegExp, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) {
+      if (name === "test" || name === "tests") continue;
+      collectProductionFiles(full, extensions, out);
+    } else if (extensions.test(name) && !/tests?\.(rs|ts|tsx)$/.test(name)) {
       out.push(full);
     }
   }
@@ -79,5 +93,20 @@ describe("ipc command coverage ratchet", () => {
 
   it("keeps the typed map at or above the design floor (40 commands)", () => {
     expect(TYPED_IPC_COMMAND_NAMES.length).toBeGreaterThanOrEqual(40);
+  });
+
+  it("does not expose saved-secret plaintext reveal commands", () => {
+    const productionFiles = [
+      ...collectProductionFiles(SRC_ROOT, /\.(ts|tsx)$/),
+      ...collectProductionFiles(TAURI_SOURCE_ROOT, /\.rs$/),
+    ];
+    const forbidden = ["reveal_github_pat", "reveal_ai_api_key"];
+    const matches = productionFiles.flatMap((file) => {
+      const source = readFileSync(file, "utf8");
+      return forbidden
+        .filter((command) => source.includes(command))
+        .map((command) => `${command} <- ${file}`);
+    });
+    expect(matches).toEqual([]);
   });
 });

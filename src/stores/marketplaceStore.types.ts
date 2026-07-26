@@ -79,6 +79,10 @@ export interface MarketplaceState {
     selections: GitHubSkillImportSelection[],
     previewWorkspaceId?: string | null,
   ) => Promise<GitHubRepoImportResult>;
+  installGitHubPreviewSkill: (
+    repoUrl: string,
+    sourcePath: string,
+  ) => Promise<GitHubRepoImportResult>;
   fetchGitHubSkillMarkdown: (repo: GitHubRepoRef, sourcePath: string) => Promise<void>;
   generateGitHubImportAiSummary: (
     sourcePath: string,

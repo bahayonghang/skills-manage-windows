@@ -22,12 +22,23 @@ export type MarketplacePreviewStatus =
   | { kind: "browser-fallback"; title: string; detail: string }
   | { kind: "error"; title: string; detail: string };
 
-export type MarketplacePreviewSkill = {
+type MarketplacePreviewSkillBase = {
   id: string;
   name: string;
   description?: string;
   downloadUrl: string;
 };
+
+export type MarketplacePreviewSkill =
+  | (MarketplacePreviewSkillBase & {
+      sourceKind: "registry";
+      registrySkillId: string;
+    })
+  | (MarketplacePreviewSkillBase & {
+      sourceKind: "github";
+      repoUrl: string;
+      sourcePath: string;
+    });
 
 export interface MarketplaceViewModel {
   availableInstallAgents: AgentWithStatus[];
@@ -41,6 +52,8 @@ export function mapRegistrySkillToPreviewSkill(
   skill: MarketplaceSkill
 ): MarketplacePreviewSkill {
   return {
+    sourceKind: "registry",
+    registrySkillId: skill.id,
     id: skill.id,
     name: skill.name,
     description: skill.description ?? undefined,
@@ -52,11 +65,16 @@ export function mapGitHubPreviewSkillToPreviewSkill(
   skill: {
     skillId: string;
     skillName: string;
+    sourcePath: string;
     description?: string | null;
     downloadUrl: string;
-  }
+  },
+  repoUrl: string
 ): MarketplacePreviewSkill {
   return {
+    sourceKind: "github",
+    repoUrl,
+    sourcePath: skill.sourcePath,
     id: skill.skillId,
     name: skill.skillName,
     description: skill.description ?? undefined,

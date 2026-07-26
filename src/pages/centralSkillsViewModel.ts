@@ -124,7 +124,15 @@ async function noopExportSkillportState(): Promise<string> {
   );
 }
 
+async function noopSaveSkillportStateExport(_path: string, _json: string): Promise<void> {}
+
 async function noopPreviewSkillportStateImport(_json: string): Promise<SkillportStateImportPreview> {
+  throw new Error("State import is unavailable");
+}
+
+async function noopPreviewSkillportStateImportFile(
+  _path: string
+): Promise<{ json: string; preview: SkillportStateImportPreview }> {
   throw new Error("State import is unavailable");
 }
 
@@ -218,9 +226,15 @@ export function useCentralSkillsStoreBindings(t: TFunction) {
       useMarketplaceStore((state) => state.resetGitHubImport) ?? noopResetGitHubImport,
     exportSkillportState:
       useCentralSkillsStore((state) => state.exportSkillportState) ?? noopExportSkillportState,
+    saveSkillportStateExport:
+      useCentralSkillsStore((state) => state.saveSkillportStateExport) ??
+      noopSaveSkillportStateExport,
     previewSkillportStateImport:
       useCentralSkillsStore((state) => state.previewSkillportStateImport) ??
       noopPreviewSkillportStateImport,
+    previewSkillportStateImportFile:
+      useCentralSkillsStore((state) => state.previewSkillportStateImportFile) ??
+      noopPreviewSkillportStateImportFile,
     importSkillportState:
       useCentralSkillsStore((state) => state.importSkillportState) ?? noopImportSkillportState,
     setRepositoryPinned: useCentralSkillsStore((state) => state.setRepositoryPinned) ?? noopAsync,

@@ -138,8 +138,6 @@ export interface SettingsPageSectionsProps {
   onPreviewLocalRemoteSync: () => void;
   onProviderChange: (id: string) => void;
   onRefreshWslDistributions: () => void;
-  onRevealAiApiKey: (providerId: string) => Promise<string | null>;
-  onRevealGitHubPat: () => Promise<string | null>;
   onRemoveDirectory: (path: string) => void;
   onRemovePlatform: (agentId: string) => void;
   onSaveGitHubPat: () => void;
@@ -325,7 +323,6 @@ function SettingsIntegrationsPage(props: SettingsPageSectionsProps) {
           isTestingGitHubPat={props.isTestingGitHubPat}
           onClear={props.onClearGitHubPat}
           onInputChange={props.onGitHubPatInputChange}
-          onReveal={props.onRevealGitHubPat}
           onSave={props.onSaveGitHubPat}
           onTest={props.onTestGitHubPat}
         />
@@ -344,7 +341,6 @@ function SettingsIntegrationsPage(props: SettingsPageSectionsProps) {
           showAiTestDetails={props.showAiTestDetails}
           onClearApiKey={props.onClearAiApiKey}
           onProviderChange={props.onProviderChange}
-          onRevealApiKey={props.onRevealAiApiKey}
           onSetShowAiTestDetails={props.onSetShowAiTestDetails}
           onTestConnection={props.onTestAiConnection}
           onUpdateAiSettings={props.onUpdateAiSettings}

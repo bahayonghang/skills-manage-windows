@@ -129,9 +129,13 @@ export interface CentralSkillsState {
   subscribePortabilityProgress: () => Promise<() => void>;
   cancelSkillportStatePortability: () => Promise<void>;
   exportSkillportState: () => Promise<string>;
+  saveSkillportStateExport: (path: string, json: string) => Promise<void>;
   previewSkillportStateImport: (
     json: string,
   ) => Promise<SkillportStateImportPreview>;
+  previewSkillportStateImportFile: (
+    path: string,
+  ) => Promise<{ json: string; preview: SkillportStateImportPreview }>;
   importSkillportState: (
     json: string,
     resolutions: SkillportStateImportResolution[],

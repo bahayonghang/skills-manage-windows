@@ -45,7 +45,6 @@ export interface AiSettingsSliceActions {
   loadAiSettings: () => Promise<void>;
   updateAiSettings: (patch: Partial<AiSettings>) => void;
   switchAiProvider: (providerId: string) => Promise<void>;
-  revealAiApiKey: (providerId: string) => Promise<string | null>;
   clearAiApiKey: () => Promise<void>;
   flushAiSettings: () => Promise<void>;
   testAiConnection: () => Promise<AiConnectionTestResult>;
@@ -354,13 +353,6 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
         } as Partial<TState>);
         throw err;
       }
-    },
-
-    revealAiApiKey: async (providerId) => {
-      if (!isTauriRuntime()) {
-        return null;
-      }
-      return invoke<string | null>("reveal_ai_api_key", { provider: providerId });
     },
 
     clearAiApiKey: async () => {

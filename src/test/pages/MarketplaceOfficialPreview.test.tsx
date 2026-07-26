@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { GitHubRepoPreview, MarketplaceSkill, SkillRegistry } from "@/types";
@@ -24,7 +24,11 @@ vi.mock("@/components/skill/UnifiedSkillCard", () => ({
 }));
 
 vi.mock("@/components/marketplace/MarketplaceSkillDetailDrawer", () => ({
-  MarketplaceSkillDetailDrawer: () => null,
+  MarketplaceSkillDetailDrawer: ({ onInstall }: { onInstall: () => void }) => (
+    <button type="button" data-testid="mock-marketplace-detail-install" onClick={onInstall}>
+      Install from detail
+    </button>
+  ),
 }));
 
 vi.mock("@/components/marketplace/GitHubRepoImportWizard", () => ({
@@ -80,6 +84,7 @@ const storeState: StoreState = {
 const mockLoadRegistries = vi.fn();
 const mockLoadPreviewSkills = vi.fn<() => Promise<MarketplaceSkill[]>>();
 const mockInstallSkill = vi.fn();
+const mockInstallGitHubPreviewSkill = vi.fn();
 const mockPreviewGitHubRepoSkills = vi.fn((repoUrl: string) =>
   mockInvoke("preview_github_repo_import", { repoUrl })
 );
@@ -100,6 +105,7 @@ vi.mock("@/stores/marketplaceStore", () => ({
       loadRegistries: mockLoadRegistries,
       loadPreviewSkills: mockLoadPreviewSkills,
       installSkill: mockInstallSkill,
+      installGitHubPreviewSkill: mockInstallGitHubPreviewSkill,
       getNormalizedRegistryIdentity: normalizeRegistryIdentity,
       previewGitHubRepoSkills: mockPreviewGitHubRepoSkills,
       previewGitHubRepoImport: mockPreviewGitHubRepoImport,
@@ -210,6 +216,7 @@ describe("Marketplace official preview", () => {
     mockLoadRegistries.mockReset();
     mockLoadPreviewSkills.mockReset();
     mockInstallSkill.mockReset();
+    mockInstallGitHubPreviewSkill.mockReset();
     mockPreviewGitHubRepoSkills.mockClear();
     mockPreviewGitHubRepoImport.mockReset();
     mockImportGitHubRepoSkills.mockReset();
@@ -218,6 +225,11 @@ describe("Marketplace official preview", () => {
     mockLoadCentralSkills.mockReset();
     mockInstallCentralSkill.mockReset();
     mockGetSkillsByAgent.mockReset();
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("falls back to direct GitHub preview when the official repo is not registered locally", async () => {
@@ -253,6 +265,94 @@ describe("Marketplace official preview", () => {
     expect(mockLoadPreviewSkills).not.toHaveBeenCalled();
     expect(await screen.findByText("Research")).toBeInTheDocument();
     expect(screen.getByText("Direct GitHub preview skill")).toBeInTheDocument();
+  });
+
+  it("routes direct github preview installation through the store without renderer file access", async () => {
+    mockInvoke.mockResolvedValue({
+      repo: {
+        owner: "anthropics",
+        repo: "knowledge-work-plugins",
+        branch: "main",
+        normalizedUrl: "https://github.com/anthropics/knowledge-work-plugins",
+      },
+      skills: [
+        {
+          sourcePath: "skills/research/SKILL.md",
+          skillId: "research",
+          skillName: "Research",
+          description: "Direct GitHub preview skill",
+          rootDirectory: "skills",
+          skillDirectoryName: "research",
+          downloadUrl: "https://example.com/research",
+          conflict: null,
+        },
+      ],
+    } satisfies GitHubRepoPreview);
+    mockInstallGitHubPreviewSkill.mockResolvedValue(undefined);
+    mockRescan.mockResolvedValue(undefined);
+
+    renderView();
+    await openAnthropicRepo();
+    await screen.findByText("Research");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Install|安装/i }));
+    });
+
+    await waitFor(() => {
+      expect(mockInstallGitHubPreviewSkill).toHaveBeenCalledWith(
+        "https://github.com/anthropics/knowledge-work-plugins",
+        "skills/research/SKILL.md",
+      );
+    });
+    expect(mockInstallSkill).not.toHaveBeenCalled();
+    expect(mockRescan).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled();
+    expect(mockInvoke.mock.calls.map(([command]) => command)).toEqual([
+      "preview_github_repo_import",
+    ]);
+  });
+
+  it("keeps skill-prefixed github previews on the github route from the detail drawer", async () => {
+    mockInvoke.mockResolvedValue({
+      repo: {
+        owner: "anthropics",
+        repo: "knowledge-work-plugins",
+        branch: "main",
+        normalizedUrl: "https://github.com/anthropics/knowledge-work-plugins",
+      },
+      skills: [
+        {
+          sourcePath: "skills/skill-research/SKILL.md",
+          skillId: "skill-research",
+          skillName: "Skill Research",
+          description: "A skill-prefixed direct GitHub preview",
+          rootDirectory: "skills",
+          skillDirectoryName: "skill-research",
+          downloadUrl: "https://example.com/skill-research",
+          conflict: null,
+        },
+      ],
+    } satisfies GitHubRepoPreview);
+    mockInstallGitHubPreviewSkill.mockResolvedValue(undefined);
+    mockRescan.mockResolvedValue(undefined);
+
+    renderView();
+    await openAnthropicRepo();
+    await screen.findByText("Skill Research");
+
+    fireEvent.click(screen.getByRole("button", { name: "Detail" }));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("mock-marketplace-detail-install"));
+    });
+
+    await waitFor(() => {
+      expect(mockInstallGitHubPreviewSkill).toHaveBeenCalledWith(
+        "https://github.com/anthropics/knowledge-work-plugins",
+        "skills/skill-research/SKILL.md",
+      );
+    });
+    expect(mockInstallSkill).not.toHaveBeenCalled();
   });
 
   it("reuses the successful repo preview cache when the same repo is expanded again", async () => {
@@ -362,5 +462,44 @@ describe("Marketplace official preview", () => {
     expect(mockInvoke).not.toHaveBeenCalled();
     expect(await screen.findByText("Cached Preview Skill")).toBeInTheDocument();
     expect(screen.getByText("Loaded from local cache")).toBeInTheDocument();
+  });
+
+  it("routes registry preview installation through the cached marketplace skill id", async () => {
+    storeState.registries = [
+      makeRegistry({
+        id: "anthropic-cache",
+        url: "https://github.com/anthropics/knowledge-work-plugins.git/",
+      }),
+    ];
+    mockLoadPreviewSkills.mockResolvedValue([
+      {
+        id: "cached-skill-1",
+        registry_id: "anthropic-cache",
+        name: "Cached Preview Skill",
+        description: "Loaded from local cache",
+        download_url: "https://example.com/cached-skill-1",
+        is_installed: false,
+        synced_at: "2026-04-21T00:00:00Z",
+        cache_updated_at: "2026-04-21T00:00:00Z",
+      },
+    ] satisfies MarketplaceSkill[]);
+    mockInstallSkill.mockResolvedValue(undefined);
+    mockRescan.mockResolvedValue(undefined);
+
+    renderView();
+    await openAnthropicRepo();
+    await screen.findByText("Cached Preview Skill");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Install|安装/i }));
+    });
+
+    await waitFor(() => {
+      expect(mockInstallSkill).toHaveBeenCalledWith("cached-skill-1");
+    });
+    expect(mockInstallGitHubPreviewSkill).not.toHaveBeenCalled();
+    expect(mockRescan).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled();
+    expect(mockInvoke).not.toHaveBeenCalled();
   });
 });

@@ -1,74 +1,67 @@
 # IPC and Capability Inventory
 
-> Scope: S-02 first tightening for the main Tauri window. This inventory is based on current frontend imports and `src-tauri/capabilities/default.json`.
+The main WebView has no direct filesystem permission and no saved-secret plaintext command. User-selected portability paths cross typed IPC into the portable-state service, and Marketplace preview installs reuse the Marketplace or GitHub import service boundary.
 
-## Baseline risk
+External links remain available through `@tauri-apps/plugin-shell`, but `src/lib/externalUrl.ts` accepts only parsed HTTP(S) URLs and the main capability grants only `shell:allow-open`.
 
-- `src-tauri/tauri.conf.json` previously set `app.security.csp` to `null`.
-- `src-tauri/capabilities/default.json` previously granted broad plugin defaults, including `fs:default`, `shell:default`, `sql:default`, `dialog:default`, and `updater:default`.
-- The backend still registers `tauri_plugin_sql`, `tauri_plugin_fs`, `tauri_plugin_dialog`, `tauri_plugin_shell`, `tauri_plugin_process`, and `tauri_plugin_updater` in `src-tauri/src/lib.rs`; renderer access is now constrained by this capability file.
+The JSON block below is the machine-owned capability contract. Edit it when an intentional plugin or permission change lands, then run `pnpm capabilitycheck -- --update` to regenerate the human-readable table.
 
-## Frontend plugin usage
-
-| Plugin | Current frontend usage | Required permissions after S-02 | Notes |
-|---|---|---|---|
-| `@tauri-apps/plugin-dialog` | Directory pickers in `CentralStoreLocationDialog.tsx` and `ProjectPathPicker.tsx`; JSON import/export open/save in `CentralStatePortabilityDialog.tsx` | `dialog:allow-open`, `dialog:allow-save` | `dialog:default` was replaced with command-specific permissions. |
-| `@tauri-apps/plugin-fs` | JSON export/import read/write in `CentralStatePortabilityDialog.tsx`; legacy Marketplace preview install writes `~/.skillsmanage/skills/<skill>/SKILL.md` in `MarketplaceView.tsx` | `fs:allow-mkdir`, `fs:allow-read-text-file`, `fs:allow-write-text-file`, plus explicit `fs:scope` | The scope keeps current Windows home/common-user-folder flows working while removing the broader default permission set. |
-| `@tauri-apps/plugin-updater` | `check()` and `downloadAndInstall(...)` in `appUpdateStore.ts` | `updater:allow-check`, `updater:allow-download-and-install` | `updater:default` was replaced with the specific commands the app calls. |
-| `@tauri-apps/plugin-process` | `relaunch()` after installing an update in `appUpdateStore.ts` | `process:allow-restart` | Existing specific permission kept. |
-| `@tauri-apps/plugin-shell` | No current frontend imports found | none | `shell:default` removed. File manager opening goes through guarded backend commands. |
-| `@tauri-apps/plugin-sql` | No current frontend imports found | none | `sql:default` removed. Database access stays behind backend commands. |
-
-## CSP baseline
-
-The first production CSP baseline is:
-
-```text
-default-src 'self';
-script-src 'self';
-style-src 'self' 'unsafe-inline';
-img-src 'self' asset: https: data: blob:;
-font-src 'self' data:;
-connect-src 'self' ipc: http://ipc.localhost http://localhost:* ws://localhost:* https:;
-object-src 'none';
-base-uri 'self';
-frame-ancestors 'none'
+<!-- capability-contract:start -->
+```json
+{
+  "capabilityPermissions": [
+    "core:default",
+    "core:window:allow-show",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "process:allow-restart",
+    "shell:allow-open",
+    "updater:allow-check",
+    "updater:allow-download-and-install"
+  ],
+  "frontendPluginImports": [
+    "@tauri-apps/plugin-dialog",
+    "@tauri-apps/plugin-process",
+    "@tauri-apps/plugin-shell",
+    "@tauri-apps/plugin-updater"
+  ],
+  "frontendPluginDependencies": [
+    "@tauri-apps/plugin-dialog",
+    "@tauri-apps/plugin-process",
+    "@tauri-apps/plugin-shell",
+    "@tauri-apps/plugin-sql",
+    "@tauri-apps/plugin-updater"
+  ],
+  "rustPluginDependencies": [
+    "tauri-plugin-deep-link",
+    "tauri-plugin-dialog",
+    "tauri-plugin-process",
+    "tauri-plugin-shell",
+    "tauri-plugin-single-instance",
+    "tauri-plugin-sql",
+    "tauri-plugin-updater"
+  ],
+  "rustPluginInitializers": [
+    "tauri-plugin-deep-link",
+    "tauri-plugin-dialog",
+    "tauri-plugin-process",
+    "tauri-plugin-shell",
+    "tauri-plugin-single-instance",
+    "tauri-plugin-sql",
+    "tauri-plugin-updater"
+  ]
+}
 ```
+<!-- capability-contract:end -->
 
-Rationale:
+<!-- capability-table:start -->
+| Surface | Exact values |
+|---|---|
+| Main-window permissions | `core:default`<br>`core:window:allow-show`<br>`dialog:allow-open`<br>`dialog:allow-save`<br>`process:allow-restart`<br>`shell:allow-open`<br>`updater:allow-check`<br>`updater:allow-download-and-install` |
+| Frontend plugin imports | `@tauri-apps/plugin-dialog`<br>`@tauri-apps/plugin-process`<br>`@tauri-apps/plugin-shell`<br>`@tauri-apps/plugin-updater` |
+| Frontend plugin dependencies | `@tauri-apps/plugin-dialog`<br>`@tauri-apps/plugin-process`<br>`@tauri-apps/plugin-shell`<br>`@tauri-apps/plugin-sql`<br>`@tauri-apps/plugin-updater` |
+| Rust plugin dependencies | `tauri-plugin-deep-link`<br>`tauri-plugin-dialog`<br>`tauri-plugin-process`<br>`tauri-plugin-shell`<br>`tauri-plugin-single-instance`<br>`tauri-plugin-sql`<br>`tauri-plugin-updater` |
+| Rust plugin initializers | `tauri-plugin-deep-link`<br>`tauri-plugin-dialog`<br>`tauri-plugin-process`<br>`tauri-plugin-shell`<br>`tauri-plugin-single-instance`<br>`tauri-plugin-sql`<br>`tauri-plugin-updater` |
+<!-- capability-table:end -->
 
-- `style-src 'unsafe-inline'` is retained for the current Tailwind/runtime style path and should be revisited only after a rendered smoke test.
-- `img-src` allows local app assets, Tauri `asset:` URLs, remote skill/repository images, and data/blob previews.
-- `connect-src` remains broad for HTTPS in this first round because the renderer still downloads Marketplace preview files with `fetch(...)` and provider/GitHub endpoints can be user-configured or mirrored. Backend GitHub/AI requests are not controlled by renderer CSP, but the renderer-side Marketplace path still needs HTTPS.
-- Tauri IPC/dev support is kept with `ipc:`, `http://ipc.localhost`, `http://localhost:*`, and `ws://localhost:*`.
-
-## Current capability after first tightening
-
-The main window now keeps only:
-
-- `core:default`
-- `core:window:allow-show`
-- `dialog:allow-open`
-- `dialog:allow-save`
-- `fs:allow-mkdir`
-- `fs:allow-read-text-file`
-- `fs:allow-write-text-file`
-- explicit `fs:scope` for home/common user export and legacy Marketplace preview install paths
-- `updater:allow-check`
-- `updater:allow-download-and-install`
-- `process:allow-restart`
-
-The capability no longer grants:
-
-- `fs:default`
-- `shell:default`
-- `sql:default`
-- `dialog:default`
-- `updater:default`
-
-## Follow-up hardening
-
-1. Move Marketplace preview installation out of direct `plugin-fs` calls and into a backend command that validates skill IDs, normalizes target paths, and reuses the Central skill install/import path.
-2. Move state import/export file reads and writes behind backend commands that accept dialog-selected paths, enforce `.json`, apply size caps, and report clear user-facing errors.
-3. Replace broad `connect-src https:` with an allowlist once all renderer-side downloads are routed through backend commands or a typed registry of allowed sources.
-4. Add a command/capability drift check so future plugin imports fail CI unless this inventory and `default.json` are updated together.
+`@tauri-apps/plugin-sql` remains installed for compatibility, but no renderer module imports it and the main-window capability grants no SQL command. Deep-link and single-instance plugins are backend lifecycle integrations and do not require renderer permissions.

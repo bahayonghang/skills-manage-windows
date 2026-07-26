@@ -57,7 +57,11 @@ interface CentralStatePortabilityDialogProps {
   onOpenChange: (open: boolean) => void;
   activeTarget: TargetSummary;
   exportState: () => Promise<string>;
+  saveExport: (path: string, json: string) => Promise<void>;
   previewImport: (json: string) => Promise<SkillportStateImportPreview>;
+  previewImportFile: (
+    path: string,
+  ) => Promise<{ json: string; preview: SkillportStateImportPreview }>;
   importState: (
     json: string,
     resolutions: SkillportStateImportResolution[],
@@ -68,7 +72,6 @@ interface CentralStatePortabilityDialogProps {
 }
 
 type TabId = "export" | "import";
-
 const IDLE_PORTABILITY_JOB: SkillportStatePortabilityJob = {
   phase: null,
   status: "idle",
@@ -81,7 +84,9 @@ export function CentralStatePortabilityDialog({
   onOpenChange,
   activeTarget,
   exportState,
+  saveExport,
   previewImport,
+  previewImportFile,
   importState,
   portabilityJob = IDLE_PORTABILITY_JOB,
   onCancelJob,
@@ -186,13 +191,12 @@ export function CentralStatePortabilityDialog({
       const raw = exportJsonRaw || (await exportState());
       const json = exportViewMode === "raw" ? raw : prettifyJson(raw);
       const { save } = await import("@tauri-apps/plugin-dialog");
-      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
       const path = await save({
         defaultPath: defaultExportFileName(),
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
       if (!path) return;
-      await writeTextFile(path, json);
+      await saveExport(path, json);
       toast.success(t("central.portabilityExportSuccess"));
     } catch (err) {
       toast.error(t("central.portabilityExportError", { error: String(err) }));
@@ -202,19 +206,25 @@ export function CentralStatePortabilityDialog({
   async function handleChooseImportFile() {
     try {
       const { open: openFile } = await import("@tauri-apps/plugin-dialog");
-      const { readTextFile } = await import("@tauri-apps/plugin-fs");
       const selected = await openFile({
         multiple: false,
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
       if (typeof selected !== "string") return;
-      const text = await readTextFile(selected);
-      setImportJson(text);
+      setIsPreviewLoading(true);
+      const result = await previewImportFile(selected);
+      setImportJson(result.json);
       setImportFormatError(null);
       setLastImportResult(null);
-      await handlePreview(text);
+      applyPreview(result.preview);
     } catch (err) {
+      if (isManifestPreviewError(err)) {
+        setPreview(null);
+        setLastImportResult(null);
+      }
       toast.error(t("central.portabilityImportError", { error: String(err) }));
+    } finally {
+      setIsPreviewLoading(false);
     }
   }
 
@@ -232,20 +242,7 @@ export function CentralStatePortabilityDialog({
     if (!trimmed) return;
     setIsPreviewLoading(true);
     try {
-      const nextPreview = await previewImport(trimmed);
-      setPreview(nextPreview);
-      setLastImportResult(null);
-      setConflictResolutions(
-        Object.fromEntries(
-          nextPreview.skills
-            .filter((skill) => skill.status === "conflict")
-            .map((skill) => [
-              conflictKey(skill),
-              "skip" as SkillportStateImportResolutionType,
-            ]),
-        ),
-      );
-      setRenameValues({});
+      applyPreview(await previewImport(trimmed));
     } catch (err) {
       if (isManifestPreviewError(err)) {
         setPreview(null);
@@ -255,6 +252,22 @@ export function CentralStatePortabilityDialog({
     } finally {
       setIsPreviewLoading(false);
     }
+  }
+
+  function applyPreview(nextPreview: SkillportStateImportPreview) {
+    setPreview(nextPreview);
+    setLastImportResult(null);
+    setConflictResolutions(
+      Object.fromEntries(
+        nextPreview.skills
+          .filter((skill) => skill.status === "conflict")
+          .map((skill) => [
+            conflictKey(skill),
+            "skip" as SkillportStateImportResolutionType,
+        ]),
+      ),
+    );
+    setRenameValues({});
   }
 
   function buildResolutions(): SkillportStateImportResolution[] {

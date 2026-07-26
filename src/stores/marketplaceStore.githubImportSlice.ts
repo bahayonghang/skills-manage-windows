@@ -1,4 +1,5 @@
 import { setupExplanationStreamListeners } from "@/lib/explanationStream";
+import i18n from "@/i18n";
 import { invoke, isTauriRuntime } from "@/lib/ipc";
 import {
   GitHubRepoImportResult,
@@ -21,6 +22,7 @@ export function createMarketplaceGitHubImportSlice({ set, get, getGeneration, bu
   | "previewGitHubRepoSkills"
   | "previewGitHubRepoImport"
   | "importGitHubRepoSkills"
+  | "installGitHubPreviewSkill"
   | "fetchGitHubSkillMarkdown"
   | "generateGitHubImportAiSummary"
   | "resetGitHubImport"
@@ -199,6 +201,29 @@ export function createMarketplaceGitHubImportSlice({ set, get, getGeneration, bu
       }
       throw err;
     }
+  },
+
+  installGitHubPreviewSkill: async (repoUrl: string, sourcePath: string) => {
+    const preview = await get().previewGitHubRepoImport(repoUrl);
+    const candidate = preview.skills.find((skill) => skill.sourcePath === sourcePath);
+    if (!candidate) {
+      await discardGitHubRepoPreviewWorkspace(preview.previewWorkspaceId);
+      throw new Error(
+        i18n.t("marketplace.previewSkillDisappeared", { skill: sourcePath }),
+      );
+    }
+
+    return get().importGitHubRepoSkills(
+      repoUrl,
+      [
+        {
+          sourcePath: candidate.sourcePath,
+          resolution: "overwrite",
+          renamedSkillId: null,
+        },
+      ],
+      preview.previewWorkspaceId,
+    );
   },
 
   fetchGitHubSkillMarkdown: async (repo: GitHubRepoRef, sourcePath: string) => {

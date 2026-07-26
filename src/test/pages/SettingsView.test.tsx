@@ -172,7 +172,6 @@ function setupMocks({
   isSavingGitHubPat = false,
   isTestingGitHubPat = false,
   loadGitHubPat = vi.fn(),
-  revealGitHubPat = vi.fn(),
   saveGitHubPat = vi.fn(),
   clearGitHubPat = vi.fn(),
   testGitHubPat = vi.fn(),
@@ -188,7 +187,6 @@ function setupMocks({
   loadAiSettings = vi.fn(),
   updateAiSettings = vi.fn(),
   switchAiProvider = vi.fn(),
-  revealAiApiKey = vi.fn(),
   clearAiApiKey = vi.fn(),
   flushAiSettings = vi.fn(),
   testAiConnection = vi.fn(),
@@ -267,14 +265,12 @@ function setupMocks({
       aiTesting,
       aiTestResult,
       loadGitHubPat,
-      revealGitHubPat,
       saveGitHubPat,
       clearGitHubPat,
       testGitHubPat,
       loadAiSettings,
       updateAiSettings,
       switchAiProvider,
-      revealAiApiKey,
       clearAiApiKey,
       flushAiSettings,
       testAiConnection,
@@ -603,10 +599,8 @@ describe("SettingsView", () => {
     expect(screen.queryByRole("link", { name: /API Key 获取页面/ })).toBeNull();
   });
 
-  it("hides a saved AI API key until the reveal eye is clicked", async () => {
-    const revealAiApiKey = vi.fn().mockResolvedValue("sk-openrouter-secret");
+  it("keeps a saved AI API key masked and write-only", () => {
     setupMocks({
-      revealAiApiKey,
       aiApiKeyState: {
         provider: "openrouter",
         configured: true,
@@ -626,23 +620,13 @@ describe("SettingsView", () => {
     expect(screen.getByText("已保存到安全存储")).toBeTruthy();
     expect(screen.getByLabelText("API Key")).toHaveValue("");
     expect(screen.getByPlaceholderText("••••••••••••")).toBeTruthy();
-    const revealButton = screen.getByRole("button", { name: "显示已保存 API Key" });
-    fireEvent.click(revealButton);
-
-    await waitFor(() => {
-      expect(revealAiApiKey).toHaveBeenCalledWith("openrouter");
-    });
-    expect(screen.getByLabelText("API Key")).toHaveValue("sk-openrouter-secret");
-    expect(screen.getByRole("button", { name: "隐藏已保存 API Key" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "隐藏已保存 API Key" }));
-
-    expect(screen.getByLabelText("API Key")).toHaveValue("");
+    expect(screen.getByLabelText("API Key")).toHaveAttribute("type", "password");
+    expect(screen.queryByRole("button", { name: /显示.*Key|隐藏.*Key/ })).toBeNull();
     expect(screen.getByRole("button", { name: "测试当前 Key" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "清除 Key" })).toBeEnabled();
   });
 
-  it("enables the AI API key eye button only for the current input", () => {
+  it("keeps newly entered AI API keys password-masked", () => {
     const updateAiSettings = vi.fn();
     setupMocks({
       aiSettings: {
@@ -664,69 +648,7 @@ describe("SettingsView", () => {
     expect(screen.getByText("保存后将替换当前 OpenRouter Key。")).toBeTruthy();
     const input = screen.getByLabelText("API Key");
     expect(input).toHaveAttribute("type", "password");
-    const revealButton = screen.getByRole("button", { name: "显示本次输入的 Key" });
-    expect(revealButton).toBeEnabled();
-
-    fireEvent.click(revealButton);
-
-    expect(input).toHaveAttribute("type", "text");
-    expect(screen.getByRole("button", { name: "隐藏本次输入的 Key" })).toBeTruthy();
-  });
-
-  it("clears revealed saved AI API key text when switching provider", async () => {
-    const revealAiApiKey = vi.fn().mockResolvedValue("sk-openrouter-secret");
-    const switchAiProvider = vi.fn().mockResolvedValue(undefined);
-    setupMocks({
-      revealAiApiKey,
-      switchAiProvider,
-      aiApiKeyState: {
-        provider: "openrouter",
-        configured: true,
-        storageState: "stored",
-        fingerprint: "sha256:abcd1234",
-        error: null,
-      },
-      aiSettings: {
-        ...defaultAiSettings,
-        provider: "openrouter",
-      },
-    });
-    const view = renderSettingsView("/settings/integrations");
-
-    fireEvent.click(screen.getByRole("button", { name: "显示已保存 API Key" }));
-
-    await waitFor(() => {
-      expect(screen.getByLabelText("API Key")).toHaveValue("sk-openrouter-secret");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "DeepSeek" }));
-
-    await waitFor(() => {
-      expect(switchAiProvider).toHaveBeenCalledWith("deepseek");
-    });
-    setupMocks({
-      revealAiApiKey,
-      switchAiProvider,
-      aiApiKeyState: {
-        provider: "deepseek",
-        configured: false,
-        storageState: "missing",
-        fingerprint: null,
-        error: null,
-      },
-      aiSettings: {
-        ...defaultAiSettings,
-        provider: "deepseek",
-      },
-    });
-    view.rerender(
-      <MemoryRouter initialEntries={["/settings/integrations"]}>
-        <Routes>
-          <Route path="/settings/*" element={<SettingsView />} />
-        </Routes>
-      </MemoryRouter>
-    );
-    expect(screen.getByLabelText("API Key")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: /显示.*Key|隐藏.*Key/ })).toBeNull();
   });
 
   it("switches AI provider through the provider-scoped store action", async () => {
@@ -1040,10 +962,8 @@ describe("SettingsView", () => {
     expect(loadWslDistributions).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the saved github pat hidden until reveal", async () => {
-    const revealGitHubPat = vi.fn().mockResolvedValue("github_pat_saved_value");
+  it("keeps the saved github pat masked and write-only", () => {
     setupMocks({
-      revealGitHubPat,
       githubPatState: { configured: true, storageState: "stored", error: null },
     });
     renderSettingsView("/settings/integrations");
@@ -1053,18 +973,11 @@ describe("SettingsView", () => {
     expect(screen.getByText(/它绝不会被发送到公共镜像或代理回退链路/)).toBeTruthy();
     expect(screen.getByText(/当 GitHub 预览\/导入遇到限流/)).toBeTruthy();
     expect(screen.getByPlaceholderText("••••••••••••")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "显示已保存令牌" }));
-
-    await waitFor(() => {
-      expect(revealGitHubPat).toHaveBeenCalled();
-    });
-    expect(screen.getByLabelText("GitHub Personal Access Token")).toHaveValue(
-      "github_pat_saved_value"
+    expect(screen.getByLabelText("GitHub Personal Access Token")).toHaveAttribute(
+      "type",
+      "password"
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "隐藏已保存令牌" }));
-    expect(screen.getByLabelText("GitHub Personal Access Token")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: /显示.*令牌|隐藏.*令牌/ })).toBeNull();
   });
 
   it("saves the github pat from settings", async () => {

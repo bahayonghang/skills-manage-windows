@@ -16,7 +16,8 @@ use crate::services::github_import;
 use crate::services::portable_state::{
     build_remote_catalog, emit_portability_progress, export_skillport_state_impl,
     import_skillport_state_for_target, parse_manifest, preview_skillport_state_import_impl,
-    PortabilityProgressUpdate, PortableStateError, PortableStateTargetContext,
+    read_skillport_state_file, write_skillport_state_file, PortabilityProgressUpdate,
+    PortableStateError, PortableStateTargetContext,
 };
 use crate::targets::{ActiveTarget, TargetKind};
 use crate::AppState;
@@ -30,6 +31,13 @@ pub use crate::services::portable_state::{
     SkillportStatePortabilityProgressPayload, SkillportStatePortabilityStatus,
     SkillportStateSkillPreview, SkillportStateSourcePreview, SourcePreviewStatus,
 };
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillportStateImportFilePreview {
+    pub json: String,
+    pub preview: SkillportStateImportPreview,
+}
 
 #[tauri::command]
 pub async fn export_skillport_state(
@@ -251,6 +259,26 @@ pub async fn preview_skillport_state_import(
         }
     }
     result.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn preview_skillport_state_import_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<SkillportStateImportFilePreview, String> {
+    let json = read_skillport_state_file(path.into())
+        .await
+        .map_err(|error| error.to_string())?;
+    let preview = preview_skillport_state_import(app, state, json.clone()).await?;
+    Ok(SkillportStateImportFilePreview { json, preview })
+}
+
+#[tauri::command]
+pub async fn save_skillport_state_export(path: String, json: String) -> Result<(), String> {
+    write_skillport_state_file(path.into(), json)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

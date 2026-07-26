@@ -63,7 +63,6 @@ export function SettingsView() {
     isSavingGitHubPat,
     isTestingGitHubPat,
     loadGitHubPat,
-    revealGitHubPat,
     saveGitHubPat,
     clearGitHubPat,
     testGitHubPat,
@@ -78,7 +77,6 @@ export function SettingsView() {
     loadAiSettings,
     updateAiSettings,
     switchAiProvider,
-    revealAiApiKey,
     clearAiApiKey,
     testAiConnection,
     agents,
@@ -598,8 +596,6 @@ export function SettingsView() {
               onRefreshWslDistributions={() => {
                 void loadWslDistributions().catch(() => undefined);
               }}
-              onRevealAiApiKey={revealAiApiKey}
-              onRevealGitHubPat={revealGitHubPat}
               onRemoveDirectory={(path) => {
                 void handleRemoveDirectory(path);
               }}
