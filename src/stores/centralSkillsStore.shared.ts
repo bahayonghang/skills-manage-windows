@@ -162,6 +162,7 @@ export function createIdleAiTagJob(): AiTagJob {
 
 export function createIdleUpdateJob(): CentralSkillUpdateJob {
   return {
+    jobId: null,
     phase: null,
     status: "idle",
     total: 0,
@@ -175,6 +176,7 @@ export function createIdleUpdateJob(): CentralSkillUpdateJob {
 
 export function createIdlePortabilityJob(): SkillportStatePortabilityJob {
   return {
+    jobId: null,
     phase: null,
     status: "idle",
     total: 0,
@@ -184,9 +186,11 @@ export function createIdlePortabilityJob(): SkillportStatePortabilityJob {
 
 export function createRunningUpdateJob(
   phase: NonNullable<CentralSkillUpdateJob["phase"]>,
-  skillIds: string[]
+  skillIds: string[],
+  jobId = createLocalJobId(),
 ): CentralSkillUpdateJob {
   return {
+    jobId,
     phase,
     status: "running",
     total: skillIds.length,
@@ -211,8 +215,8 @@ export function createRunningAiTagJob(skillIds: string[]): AiTagJob {
   };
 }
 
-function createLocalJobId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `ai-tag-${Date.now()}`;
+export function createLocalJobId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `job-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export function mergeAiTagProgress(current: AiTagJob, payload: AiTagProgressPayload): AiTagJob {
@@ -263,6 +267,9 @@ export function mergeUpdateProgress(
   current: CentralSkillUpdateJob,
   payload: CentralSkillUpdateProgressPayload
 ): CentralSkillUpdateJob {
+  if (payload.jobId !== current.jobId) {
+    return current;
+  }
   const items = { ...current.items };
   if (payload.skillId && payload.status === "running") {
     items[payload.skillId] = "running";
@@ -310,6 +317,9 @@ export function mergePortabilityProgress(
   current: SkillportStatePortabilityJob,
   payload: SkillportStatePortabilityProgressPayload
 ): SkillportStatePortabilityJob {
+  if (payload.jobId !== current.jobId) {
+    return current;
+  }
   const status =
     payload.status === "completed"
       ? "completed"

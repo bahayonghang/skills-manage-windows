@@ -40,12 +40,14 @@ pub(crate) async fn preview_skillport_state_import_impl(
     pool: &DbPool,
     manifest: &SkillportStateManifest,
     remote_catalog: Option<&HashMap<RepoKey, RemoteCatalogEntry>>,
+    job_id: &str,
     app: Option<&AppHandle>,
     cancel: Option<&CancelFlag>,
 ) -> Result<SkillportStateImportPreview, PortableStateError> {
     check_cancel(cancel)?;
     emit_portability_step(
         app,
+        job_id,
         SkillportStatePortabilityPhase::Previewing,
         3,
         2,
@@ -251,6 +253,7 @@ pub(crate) async fn preview_skillport_state_import_impl(
     }
     emit_portability_step(
         app,
+        job_id,
         SkillportStatePortabilityPhase::Previewing,
         3,
         3,
@@ -283,6 +286,7 @@ pub(crate) async fn build_remote_catalog(
     pool: &DbPool,
     secrets: &dyn SecretStore,
     manifest: &SkillportStateManifest,
+    job_id: &str,
     app: Option<&AppHandle>,
     cancel: Option<&CancelFlag>,
 ) -> Result<HashMap<RepoKey, RemoteCatalogEntry>, PortableStateError> {
@@ -300,6 +304,7 @@ pub(crate) async fn build_remote_catalog(
     }
     emit_portability_step(
         app,
+        job_id,
         SkillportStatePortabilityPhase::Previewing,
         3,
         1,

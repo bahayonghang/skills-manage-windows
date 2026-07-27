@@ -40,6 +40,13 @@
     "disabled": "禁用"
   },
   "backendErrors": {
+    "job": {
+      "central_update_busy": "已有 Central 更新任务正在运行，请等待完成或先取消当前任务。",
+      "portability_busy": "已有 SkillPort 状态导入或导出任务正在运行。",
+      "id_mismatch": "该取消请求属于较早的任务，已忽略。",
+      "invalid_id": "任务标识无效，请重试此操作。",
+      "registry_unavailable": "任务协调暂时不可用，请重启 SkillPort 后重试。"
+    },
     "ai": {
       "missing_api_key": "请先在设置中配置 AI API Key，再使用 AI 功能。",
       "rate_limit": "AI 服务触发速率限制。请在设置中降低 AI Tag 并发或增大请求间隔。",

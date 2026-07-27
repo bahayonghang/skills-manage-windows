@@ -434,6 +434,7 @@ export type CentralSkillUpdateJobStatus =
   | "cancelled";
 
 export interface CentralSkillUpdateJob {
+  jobId: string | null;
   phase: "checking" | "updating" | null;
   status: CentralSkillUpdateJobStatus;
   total: number;
@@ -447,6 +448,7 @@ export interface CentralSkillUpdateJob {
 }
 
 export interface CentralSkillUpdateProgressPayload {
+  jobId: string;
   phase: "checking" | "updating";
   skillId?: string;
   skillName?: string;
@@ -666,6 +668,7 @@ export type SkillportStatePortabilityPhase =
   | null;
 
 export interface SkillportStatePortabilityJob {
+  jobId: string | null;
   phase: SkillportStatePortabilityPhase;
   status: SkillportStatePortabilityJobStatus;
   total: number;
@@ -676,6 +679,7 @@ export interface SkillportStatePortabilityJob {
 }
 
 export interface SkillportStatePortabilityProgressPayload {
+  jobId: string;
   phase: Exclude<SkillportStatePortabilityPhase, null>;
   status: Exclude<SkillportStatePortabilityJobStatus, "idle" | "cancelling">;
   total: number;

@@ -50,18 +50,12 @@ enum MigrationProgress {
 pub struct AppState {
     pub db: DbPool,
     pub ai_tag_jobs: AiTagJobRegistry,
-    /// Cooperative cancel flag for the at-most-one Central update job.
-    /// Producers (`check_central_skill_updates`, `update_central_skills`)
-    /// reset to false on entry and poll between iterations; the
-    /// `cancel_central_skill_updates` command stores true to request stop.
-    pub central_update_cancel: Arc<AtomicBool>,
+    pub central_update_jobs: services::exclusive_job::ExclusiveJobRegistry,
     /// Short-lived GitHub repository snapshots shared by Central update check
     /// and update commands. This lets "check, then update" reuse the archive
     /// that was just downloaded without copying credentials into target DBs.
     pub central_update_snapshots: CentralUpdateSnapshotCache,
-    /// Cooperative cancel flag for the at-most-one SkillPort state
-    /// portability command (export, preview, or import).
-    pub portable_state_cancel: Arc<AtomicBool>,
+    pub portable_state_jobs: services::exclusive_job::ExclusiveJobRegistry,
     /// Application-level sensitive values such as GitHub PAT and AI API keys.
     /// Commands receive this injectable store from AppState so unit tests do
     /// not need to touch the real OS credential vault.
@@ -293,9 +287,15 @@ pub fn run() {
             app.manage(AppState {
                 db: pool.clone(),
                 ai_tag_jobs: AiTagJobRegistry::default(),
-                central_update_cancel: Arc::new(AtomicBool::new(false)),
+                central_update_jobs: services::exclusive_job::ExclusiveJobRegistry::new(
+                    "job.central_update_busy",
+                    "A Central update job is already running.",
+                ),
                 central_update_snapshots: CentralUpdateSnapshotCache::default(),
-                portable_state_cancel: Arc::new(AtomicBool::new(false)),
+                portable_state_jobs: services::exclusive_job::ExclusiveJobRegistry::new(
+                    "job.portability_busy",
+                    "A portability job is already running.",
+                ),
                 secrets: Arc::clone(&secrets),
                 targets: targets::TargetRegistry::default(),
             });
@@ -615,5 +615,14 @@ mod tests {
         assert!(!cancel_flag.load(Ordering::SeqCst));
         assert!(!registry.cancel("job-after-poison"));
         registry.finish("job-after-poison");
+    }
+
+    #[test]
+    fn app_state_does_not_restore_shared_update_or_portability_cancel_flags() {
+        let source = include_str!("lib.rs");
+        let central_field = ["pub central_update_", "cancel:"].concat();
+        let portability_field = ["pub portable_state_", "cancel:"].concat();
+        assert!(!source.contains(&central_field));
+        assert!(!source.contains(&portability_field));
     }
 }

@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { formatBackendError } from "@/lib/backendError";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import {
   useUpdateCenterStore,
@@ -215,7 +216,7 @@ export function UpdateCenterDialog() {
       }
     } catch (err) {
       toast.error(
-        t("central.updateCenter.applyError", { error: String(err) }),
+        t("central.updateCenter.applyError", { error: formatBackendError(err, t) }),
       );
     }
   }
@@ -447,7 +448,7 @@ export function UpdateCenterDialog() {
           <div className="min-h-[20rem] rounded-xl border border-border p-4 text-sm">
             {error ? (
               <p className="mb-2 text-xs text-destructive-text" role="alert">
-                {error}
+                {formatBackendError(error, t)}
               </p>
             ) : null}
             <UpdateCenterTabContent

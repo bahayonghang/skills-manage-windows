@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::atomic::AtomicBool;
 
 use crate::services::github_import::{DuplicateResolution, GitHubSkillImportSelection};
 
@@ -237,6 +237,7 @@ pub enum SkillportStatePortabilityStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillportStatePortabilityProgressPayload {
+    pub job_id: String,
     pub phase: SkillportStatePortabilityPhase,
     pub status: SkillportStatePortabilityStatus,
     pub total: usize,
@@ -246,7 +247,7 @@ pub struct SkillportStatePortabilityProgressPayload {
     pub error: Option<String>,
 }
 
-pub(crate) type CancelFlag = Arc<AtomicBool>;
+pub(crate) type CancelFlag = AtomicBool;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct RepoKey {
@@ -298,4 +299,26 @@ pub(crate) struct PortabilityProgressUpdate<'a> {
     pub(crate) message: Option<&'a str>,
     pub(crate) current_item: Option<&'a str>,
     pub(crate) error: Option<&'a str>,
+}
+
+#[cfg(test)]
+mod progress_payload_tests {
+    use super::*;
+
+    #[test]
+    fn portability_progress_payload_serializes_job_id_as_camel_case() {
+        let payload = SkillportStatePortabilityProgressPayload {
+            job_id: "portability-job".to_string(),
+            phase: SkillportStatePortabilityPhase::Exporting,
+            status: SkillportStatePortabilityStatus::Running,
+            total: 1,
+            completed: 0,
+            message: None,
+            current_item: None,
+            error: None,
+        };
+        let value = serde_json::to_value(payload).unwrap();
+        assert_eq!(value["jobId"], "portability-job");
+        assert!(value.get("job_id").is_none());
+    }
 }

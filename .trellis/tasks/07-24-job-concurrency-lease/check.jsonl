@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Verify typed registry/migration errors and unchanged string IPC boundary."}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Reject recursive synchronous filesystem work on the async runtime and AppHandle capture in blocking closures."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Verify migration uses the compatible Local lock, rechecks under lock, and has no unlocked fallback."}
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Ensure job cancellation does not bypass the established durable update Saga and migration is not misclassified as a destructive Saga."}
+{"file":".trellis/spec/backend/central-update-inventory-progress.md","reason":"Verify progress identity, listener ordering, stale-event filtering, and preservation of the separate inventory operationId."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Verify typed command args, store-only invoke use, fixture parity, and command-name mocks."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Verify coded busy failures are localized and visible without changing success flows."}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"Verify concurrency/event tests are deterministic under default parallel CI."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Run the repository's full required gate after focused Rust and frontend checks."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Use isolated temp paths and shared fixtures without weakening production lock or filesystem behavior."}

@@ -46,6 +46,7 @@ pub(crate) async fn get_central_skill_update_states_impl(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn check_central_skill_updates_impl(
     app: Option<&AppHandle>,
+    job_id: &str,
     pool: &DbPool,
     fs: &CentralFs,
     cancel: &AtomicBool,
@@ -58,18 +59,17 @@ pub(crate) async fn check_central_skill_updates_impl(
     let total = skills.len();
     let mut counters = UpdateCounters::default();
     let mut states = Vec::with_capacity(total);
-
-    cancel.store(false, Ordering::SeqCst);
-    emit_update_progress(app, "checking", "started", total, &counters, None, None);
-
+    emit_update_progress(
+        app, job_id, "checking", "started", total, &counters, None, None,
+    );
     let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
     let snapshots = prepare_snapshots(client, auth_token, &prepared, snapshots_cache).await?;
-
     for prepared_skill in prepared {
         let skill = &prepared_skill.skill;
         if cancel.load(Ordering::SeqCst) {
             emit_update_progress(
                 app,
+                job_id,
                 "checking",
                 SkillUpdateStatus::Cancelled.as_str(),
                 total,
@@ -79,9 +79,9 @@ pub(crate) async fn check_central_skill_updates_impl(
             );
             return Ok(states);
         }
-
         emit_update_progress(
             app,
+            job_id,
             "checking",
             "running",
             total,
@@ -89,7 +89,6 @@ pub(crate) async fn check_central_skill_updates_impl(
             Some(skill),
             None,
         );
-
         let state_result = match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) => state_from_remote(skill, &remote, false),
             Ok(None) => unsupported_state_from_assignment(skill, &prepared_skill.assignment, None),
@@ -100,11 +99,11 @@ pub(crate) async fn check_central_skill_updates_impl(
                 error_state_from_assignment(skill, &prepared_skill.assignment, &error)
             }
         };
-
         db::upsert_skill_update_state(pool, &state_result).await?;
         update_counters_for_state(&mut counters, &state_result);
         emit_update_progress(
             app,
+            job_id,
             "checking",
             &state_result.status,
             total,
@@ -115,7 +114,16 @@ pub(crate) async fn check_central_skill_updates_impl(
         states.push(state_result);
     }
 
-    emit_update_progress(app, "checking", "completed", total, &counters, None, None);
+    emit_update_progress(
+        app,
+        job_id,
+        "checking",
+        "completed",
+        total,
+        &counters,
+        None,
+        None,
+    );
 
     Ok(states)
 }
@@ -123,6 +131,7 @@ pub(crate) async fn check_central_skill_updates_impl(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn update_central_skills_impl(
     app: Option<&AppHandle>,
+    job_id: &str,
     pool: &DbPool,
     fs: &CentralFs,
     cancel: &AtomicBool,
@@ -143,8 +152,9 @@ pub(crate) async fn update_central_skills_impl(
     let mut skipped = Vec::new();
     let mut states = Vec::new();
 
-    cancel.store(false, Ordering::SeqCst);
-    emit_update_progress(app, "updating", "started", total, &counters, None, None);
+    emit_update_progress(
+        app, job_id, "updating", "started", total, &counters, None, None,
+    );
 
     let prepared = prepare_skill_updates(pool, fs, skills, auth_token, true).await?;
     let snapshots = prepare_snapshots(client, auth_token, &prepared, snapshots_cache).await?;
@@ -155,6 +165,7 @@ pub(crate) async fn update_central_skills_impl(
         if cancel.load(Ordering::SeqCst) {
             emit_update_progress(
                 app,
+                job_id,
                 "updating",
                 SkillUpdateStatus::Cancelled.as_str(),
                 total,
@@ -172,6 +183,7 @@ pub(crate) async fn update_central_skills_impl(
 
         emit_update_progress(
             app,
+            job_id,
             "updating",
             "running",
             total,
@@ -192,6 +204,7 @@ pub(crate) async fn update_central_skills_impl(
                 });
                 emit_update_progress(
                     app,
+                    job_id,
                     "updating",
                     SkillUpdateStatus::UpToDate.as_str(),
                     total,
@@ -217,6 +230,7 @@ pub(crate) async fn update_central_skills_impl(
                 });
                 emit_update_progress(
                     app,
+                    job_id,
                     "updating",
                     SkillUpdateStatus::Unsupported.as_str(),
                     total,
@@ -241,6 +255,7 @@ pub(crate) async fn update_central_skills_impl(
                 });
                 emit_update_progress(
                     app,
+                    job_id,
                     "updating",
                     SkillUpdateStatus::RemoteMissing.as_str(),
                     total,
@@ -262,6 +277,7 @@ pub(crate) async fn update_central_skills_impl(
                 });
                 emit_update_progress(
                     app,
+                    job_id,
                     "updating",
                     SkillUpdateStatus::Error.as_str(),
                     total,
@@ -293,6 +309,7 @@ pub(crate) async fn update_central_skills_impl(
                 succeeded.push(skill.id.clone());
                 emit_update_progress(
                     app,
+                    job_id,
                     "updating",
                     SkillUpdateStatus::UpToDate.as_str(),
                     total,
@@ -305,6 +322,7 @@ pub(crate) async fn update_central_skills_impl(
             Err(CentralUpdatesError::BatchCancelled) => {
                 emit_update_progress(
                     app,
+                    job_id,
                     "updating",
                     SkillUpdateStatus::Cancelled.as_str(),
                     total,
@@ -332,6 +350,7 @@ pub(crate) async fn update_central_skills_impl(
                 });
                 emit_update_progress(
                     app,
+                    job_id,
                     "updating",
                     SkillUpdateStatus::Error.as_str(),
                     total,
@@ -344,7 +363,16 @@ pub(crate) async fn update_central_skills_impl(
         }
     }
 
-    emit_update_progress(app, "updating", "completed", total, &counters, None, None);
+    emit_update_progress(
+        app,
+        job_id,
+        "updating",
+        "completed",
+        total,
+        &counters,
+        None,
+        None,
+    );
 
     Ok(CentralSkillUpdateResult {
         succeeded,
@@ -802,8 +830,10 @@ pub(crate) fn update_counters_for_state(counters: &mut UpdateCounters, state: &S
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_update_progress(
     app: Option<&AppHandle>,
+    job_id: &str,
     phase: &str,
     status: &str,
     total: usize,
@@ -815,6 +845,7 @@ pub(crate) fn emit_update_progress(
         return;
     };
     let payload = CentralSkillUpdateProgressPayload {
+        job_id: job_id.to_string(),
         phase: phase.to_string(),
         status: status.to_string(),
         total,

@@ -40,6 +40,13 @@
     "disabled": "Disabled"
   },
   "backendErrors": {
+    "job": {
+      "central_update_busy": "A Central update is already running. Wait for it to finish or cancel it first.",
+      "portability_busy": "A SkillPort state import or export is already running.",
+      "id_mismatch": "This cancellation request belongs to an older job and was ignored.",
+      "invalid_id": "The job identifier is invalid. Retry the operation.",
+      "registry_unavailable": "Job coordination is temporarily unavailable. Restart SkillPort and try again."
+    },
     "ai": {
       "missing_api_key": "Configure an AI API key in Settings before using AI features.",
       "rate_limit": "The AI provider rate limit was reached. Lower AI Tag concurrency or increase the request interval in Settings.",

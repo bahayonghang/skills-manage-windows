@@ -164,6 +164,7 @@ describe("centralSkillsStore", () => {
       },
       updateStatuses: {},
       updateJob: {
+        jobId: null,
         phase: null,
         status: "idle",
         total: 0,
@@ -174,6 +175,7 @@ describe("centralSkillsStore", () => {
         items: {},
       },
       portabilityJob: {
+        jobId: null,
         phase: null,
         status: "idle",
         total: 0,
@@ -968,6 +970,7 @@ describe("centralSkillsStore", () => {
 
     expect(result).toEqual(mockUpdateStates);
     expect(invoke).toHaveBeenCalledWith("check_central_skill_updates", {
+      jobId: expect.any(String),
       skillIds: ["frontend-design"],
     });
     expect(useCentralSkillsStore.getState().updateStatuses["frontend-design"]).toEqual(
@@ -1035,6 +1038,7 @@ describe("centralSkillsStore", () => {
 
     expect(result).toEqual(preview);
     expect(invoke).toHaveBeenCalledWith("check_central_repository_sync", {
+      jobId: expect.any(String),
       repositoryIds: ["github-owner-repo-main"],
       skillIds: ["frontend-design"],
     });
@@ -1130,6 +1134,7 @@ describe("centralSkillsStore", () => {
 
     expect(result).toEqual(updateResult);
     expect(invoke).toHaveBeenCalledWith("update_central_skills", {
+      jobId: expect.any(String),
       skillIds: ["frontend-design"],
     });
     expect(invoke).toHaveBeenCalledWith("get_central_skills");
@@ -1343,6 +1348,9 @@ describe("centralSkillsStore", () => {
   });
 
   it("updates central update job state from progress events", async () => {
+    useCentralSkillsStore.setState((state) => ({
+      updateJob: { ...state.updateJob, jobId: "update-job", status: "running" },
+    }));
     let handler: ((event: { payload: unknown }) => void) | undefined;
     const unlisten = vi.fn();
     vi.mocked(listen).mockImplementation(async (_event, callback) => {
@@ -1353,6 +1361,7 @@ describe("centralSkillsStore", () => {
     await useCentralSkillsStore.getState().subscribeUpdateProgress();
     handler?.({
       payload: {
+        jobId: "update-job",
         phase: "checking",
         skillId: "frontend-design",
         skillName: "frontend-design",
@@ -1372,6 +1381,23 @@ describe("centralSkillsStore", () => {
 
     handler?.({
       payload: {
+        jobId: "stale-update-job",
+        phase: "checking",
+        status: "completed",
+        total: 99,
+        completed: 99,
+        succeeded: 99,
+        failed: 0,
+        skipped: 0,
+      },
+    });
+    state = useCentralSkillsStore.getState();
+    expect(state.updateJob.status).toBe("running");
+    expect(state.updateJob.total).not.toBe(99);
+
+    handler?.({
+      payload: {
+        jobId: "update-job",
         phase: "checking",
         skillId: "frontend-design",
         status: "update_available",
@@ -1389,6 +1415,7 @@ describe("centralSkillsStore", () => {
 
     handler?.({
       payload: {
+        jobId: "update-job",
         phase: "checking",
         skillId: "code-reviewer",
         status: "remote_missing",
@@ -1409,6 +1436,7 @@ describe("centralSkillsStore", () => {
 
     handler?.({
       payload: {
+        jobId: "update-job",
         phase: "checking",
         status: "completed",
         total: 2,
@@ -1425,6 +1453,13 @@ describe("centralSkillsStore", () => {
   });
 
   it("updates SkillPort portability job state from progress events", async () => {
+    useCentralSkillsStore.setState((state) => ({
+      portabilityJob: {
+        ...state.portabilityJob,
+        jobId: "portability-job",
+        status: "running",
+      },
+    }));
     let handler: ((event: { payload: unknown }) => void) | undefined;
     const unlisten = vi.fn();
     vi.mocked(listen).mockImplementation(async (_event, callback) => {
@@ -1435,6 +1470,7 @@ describe("centralSkillsStore", () => {
     await useCentralSkillsStore.getState().subscribePortabilityProgress();
     handler?.({
       payload: {
+        jobId: "portability-job",
         phase: "previewing",
         status: "running",
         total: 3,
@@ -1451,6 +1487,21 @@ describe("centralSkillsStore", () => {
 
     handler?.({
       payload: {
+        jobId: "stale-portability-job",
+        phase: "previewing",
+        status: "failed",
+        total: 99,
+        completed: 99,
+        error: "stale",
+      },
+    });
+    state = useCentralSkillsStore.getState();
+    expect(state.portabilityJob.status).toBe("running");
+    expect(state.portabilityJob.error).toBeUndefined();
+
+    handler?.({
+      payload: {
+        jobId: "portability-job",
         phase: "previewing",
         status: "cancelled",
         total: 3,
@@ -1467,6 +1518,7 @@ describe("centralSkillsStore", () => {
   it("cancels the active SkillPort portability job", async () => {
     useCentralSkillsStore.setState({
       portabilityJob: {
+        jobId: "active-portability-job",
         phase: "importing",
         status: "running",
         total: 2,
@@ -1477,8 +1529,51 @@ describe("centralSkillsStore", () => {
 
     await useCentralSkillsStore.getState().cancelSkillportStatePortability();
 
-    expect(invoke).toHaveBeenCalledWith("cancel_skillport_state_portability");
+    expect(invoke).toHaveBeenCalledWith("cancel_skillport_state_portability", {
+      jobId: "active-portability-job",
+    });
     expect(useCentralSkillsStore.getState().portabilityJob.status).toBe("cancelling");
+  });
+
+  it("cancels only the active Central update job ID", async () => {
+    useCentralSkillsStore.setState((state) => ({
+      updateJob: {
+        ...state.updateJob,
+        jobId: "active-update-job",
+        status: "running",
+      },
+    }));
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+
+    await useCentralSkillsStore.getState().cancelCentralUpdates();
+
+    expect(invoke).toHaveBeenCalledWith("cancel_central_skill_updates", {
+      jobId: "active-update-job",
+    });
+    expect(useCentralSkillsStore.getState().updateJob.status).toBe("cancelling");
+  });
+
+  it("does not replace active update or portability jobs with duplicate starts", async () => {
+    useCentralSkillsStore.setState((state) => ({
+      updateJob: { ...state.updateJob, jobId: "active-update", status: "running" },
+      portabilityJob: {
+        ...state.portabilityJob,
+        jobId: "active-portability",
+        status: "running",
+      },
+    }));
+
+    await expect(
+      useCentralSkillsStore.getState().updateSkills(["frontend-design"]),
+    ).rejects.toThrow("job.central_update_busy");
+    await expect(
+      useCentralSkillsStore.getState().exportSkillportState(),
+    ).rejects.toThrow("job.portability_busy");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(useCentralSkillsStore.getState().updateJob.jobId).toBe("active-update");
+    expect(useCentralSkillsStore.getState().portabilityJob.jobId).toBe(
+      "active-portability",
+    );
   });
 
   it("exports the SkillPort portable state manifest", async () => {
@@ -1487,7 +1582,10 @@ describe("centralSkillsStore", () => {
     const json = await useCentralSkillsStore.getState().exportSkillportState();
 
     expect(json).toBe("{\"kind\":\"skillport/state-export\"}");
-    expect(invoke).toHaveBeenCalledWith("export_skillport_state", { options: {} });
+    expect(invoke).toHaveBeenCalledWith("export_skillport_state", {
+      jobId: expect.any(String),
+      options: {},
+    });
   });
 
   it("saves portable state through the backend file adapter", async () => {
@@ -1522,7 +1620,10 @@ describe("centralSkillsStore", () => {
     const result = await useCentralSkillsStore.getState().previewSkillportStateImport("{}");
 
     expect(result).toEqual(preview);
-    expect(invoke).toHaveBeenCalledWith("preview_skillport_state_import", { json: "{}" });
+    expect(invoke).toHaveBeenCalledWith("preview_skillport_state_import", {
+      jobId: expect.any(String),
+      json: "{}",
+    });
   });
 
   it("reads and previews a portable state file through one backend command", async () => {
@@ -1552,6 +1653,7 @@ describe("centralSkillsStore", () => {
         .previewSkillportStateImportFile("D:\\imports\\state.json"),
     ).resolves.toEqual(result);
     expect(invoke).toHaveBeenCalledWith("preview_skillport_state_import_file", {
+      jobId: expect.any(String),
       path: "D:\\imports\\state.json",
     });
   });
@@ -1592,6 +1694,7 @@ describe("centralSkillsStore", () => {
 
     expect(result).toEqual(importResult);
     expect(invoke).toHaveBeenNthCalledWith(1, "import_skillport_state", {
+      jobId: expect.any(String),
       json: "{\"kind\":\"skillport/state-export\"}",
       resolutions,
     });

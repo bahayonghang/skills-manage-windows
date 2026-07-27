@@ -1,21 +1,74 @@
-# 重 IO 的 spawn_blocking 约定
+# Heavy Filesystem Work On Blocking Threads
 
-## 规则
+## 1. Scope / Trigger
 
-async 上下文（`#[tauri::command]` 及 services 的 async fn）中：
+Apply this contract inside async commands and services when work recursively traverses, copies, deletes, or moves directories, writes files in bulk, or performs synchronous lock polling. Single-file I/O with no loop and at most one directory level may remain synchronous only when its bounded cost is clear.
 
-- **递归遍历、递归拷贝/删除、批量落盘、目录搬迁**必须经 `crate::fs_util::run_blocking_fs` 包装，禁止直接调用同步 `std::fs`。
-- 单文件小读写（无循环、≤1 层目录）可豁免，但新增豁免需在 PR 中给出评估理由。
-- 全仓唯一包装入口：`src-tauri/src/fs_util.rs`（`services/installation/fs_util.rs` 为兼容 re-export）。禁止自创第二种包装。
+## 2. Signatures
 
-## 行为保持要点
+```rust
+pub async fn run_blocking_fs<T, F>(label: &'static str, task: F) -> Result<T, FsUtilError>;
 
-包装是行为保持型改造：错误传播路径、提前返回点、循环 continue/break、错误消息文本必须与同步版本逐行等价。闭包捕获需要克隆时，注意不要把整批数据（如全部文件字节）预克隆成双缓冲——逐项「瞬时克隆 → 写入」即可。
+pub async fn run_blocking_fs_with<T, E, F, M>(
+    label: &'static str,
+    task: F,
+    map_join_error: M,
+) -> Result<T, E>;
+```
 
-## Windows 坑：AppHandle 不得进 blocking 闭包
+`src-tauri/src/fs_util.rs` is the single implementation; `services/installation/fs_util.rs` is only a compatibility re-export.
 
-blocking 闭包**按值持有 `AppHandle`（含 `Option<AppHandle>`）会破坏 Windows 测试二进制**：AppHandle 的 drop-glue 把 tauri/muda 菜单与对话框代码链入测试二进制，引入 `comctl32.dll!TaskDialogIndirect` 导入，而测试二进制无 comctl32 v6 manifest，进程加载即 `STATUS_ENTRYPOINT_NOT_FOUND`（0xc0000139），全部测试无法启动。
+## 3. Contracts
 
-正确姿势：进度/事件发射保留在 async 侧（按引用持有 AppHandle），闭包只接管纯 fs 工作。参见 `services/github_import/progress.rs` 内注释。
+- Put one coherent recursive filesystem unit in one blocking closure. Preserve error order, early returns, loop control, cleanup, and user-visible error text.
+- Clone owned paths and small metadata into the closure. Do not pre-clone whole batches of file bytes into a second in-memory copy.
+- Map join failure into the caller's typed domain error with `run_blocking_fs_with`; do not return `String` below the command boundary.
+- Keep `AppHandle`, `Option<AppHandle>`, progress emission, database work, and other async handles outside the blocking closure. Return a summary and emit progress on the async side.
+- If the filesystem unit belongs to a mutation lease, acquire the top-level lease first and keep its guard alive across the blocking await and required DB marker/write.
+- Legacy Central migration runs source create/read/copy/failed-partial cleanup as one blocking unit while the Local mutation guard remains alive; its marker read/write remains async.
 
-> 来源任务：06-11-spawn-blocking-io（2026-06-11）
+## 4. Validation & Error Matrix
+
+| Condition | Required result |
+| --- | --- |
+| Closure returns success | Resume async side with returned summary |
+| Closure returns domain error | Preserve the typed error and original behavior |
+| Tokio blocking task cannot join | Map to the domain's `TaskJoin` variant |
+| Recursive copy partially creates a new target then fails | Apply the domain's existing partial-target cleanup; do not broaden deletion |
+| Mutation guard cannot be acquired | Do not run the blocking unit without a lock |
+| Progress is required | Emit before/after await from async code, never from a captured `AppHandle` |
+
+## 5. Good / Base / Bad Cases
+
+- Good: migration owns source/target `PathBuf`s in one closure, returns `CentralStoreMigrationSummary`, then writes the marker asynchronously while still locked.
+- Base: a bounded single-file read remains async-side synchronous under the documented exemption.
+- Bad: each directory entry gets its own `spawn_blocking`, or an `AppHandle` is moved into the closure.
+
+## 6. Tests Required
+
+- Preserve copy/skip/source-retention/partial-failure assertions when moving code to blocking execution.
+- Assert join errors map to a typed `TaskJoin` variant where injection is available.
+- On Windows, run the affected Rust test binary to prove it loads; compile-only evidence cannot catch `TaskDialogIndirect` import failure caused by `AppHandle` drop glue.
+- Search changed async functions for recursive `std::fs` calls outside the blocking closure, then run locked Clippy/tests and `just ci`.
+
+## 7. Wrong vs Correct
+
+```rust
+// Wrong: AppHandle drop glue enters the Windows test binary through the closure.
+run_blocking_fs("copy", move || {
+    copy_tree(&source, &target)?;
+    app.emit("copy-progress", payload)?;
+    Ok(())
+}).await?;
+
+// Correct: closure performs pure filesystem work; async side owns events.
+emit_started(&app);
+let summary = run_blocking_fs_with(
+    "copy",
+    move || copy_tree(&source, &target),
+    DomainError::task_join,
+).await?;
+emit_completed(&app, &summary);
+```
+
+This Windows constraint was first established by task `06-11-spawn-blocking-io`: capturing `AppHandle` can link `comctl32.dll!TaskDialogIndirect` into a test binary without the v6 manifest and fail process startup with `STATUS_ENTRYPOINT_NOT_FOUND` (`0xc0000139`).

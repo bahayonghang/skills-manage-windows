@@ -157,8 +157,13 @@ pub async fn clear_skill_update_inventory(
 pub async fn apply_skill_update_decisions(
     app: AppHandle,
     state: State<'_, AppState>,
+    job_id: String,
     decisions: SkillUpdateDecisions,
 ) -> Result<SkillUpdateApplyResult, String> {
+    let lease = state
+        .central_update_jobs
+        .acquire(&job_id)
+        .map_err(|e| e.to_string())?;
     let request_context = state.resolve_target_context().await?;
     let active_target = request_context.target().clone();
     let pool = request_context.db().clone();
@@ -187,10 +192,11 @@ pub async fn apply_skill_update_decisions(
             let client = github_import::github_client().map_err(|e| e.to_string())?;
             apply_skill_update_decisions_impl(
                 Some(&app),
+                lease.job_id(),
                 &pool,
                 &active_target,
                 &fs,
-                &state.central_update_cancel,
+                lease.cancel_flag(),
                 auth.as_deref(),
                 &client,
                 &state.central_update_snapshots,

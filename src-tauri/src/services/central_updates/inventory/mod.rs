@@ -371,6 +371,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn apply_skill_update_decisions_impl(
     app: Option<&AppHandle>,
+    job_id: &str,
     pool: &DbPool,
     active_target: &ActiveTarget,
     fs: &CentralFs,
@@ -499,6 +500,7 @@ pub(crate) async fn apply_skill_update_decisions_impl(
     if !decisions.updates.is_empty() {
         match update_central_skills_impl(
             app,
+            job_id,
             pool,
             fs,
             cancel,

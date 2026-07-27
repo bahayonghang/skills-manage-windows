@@ -16,6 +16,7 @@ import type {
   CentralRepositorySyncPreview,
 } from "@/types/centralRepositorySync";
 import { collectRepositorySyncDeletePreviewSkillIds } from "@/components/central/repositorySyncUtils";
+import { formatBackendError } from "@/lib/backendError";
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
@@ -192,7 +193,7 @@ export function useCentralSkillsUpdateWorkflow({
       await cancelCentralUpdates();
       toast.info(t("central.updateCancelRequested"));
     } catch (err) {
-      toast.error(t("central.updateError", { error: String(err) }));
+      toast.error(t("central.updateError", { error: formatBackendError(err, t) }));
     }
   }
 
@@ -229,7 +230,7 @@ export function useCentralSkillsUpdateWorkflow({
       }
       openUpdateConfirmDialog(availableStates);
     } catch (err) {
-      toast.error(t("central.updateCheckError", { error: String(err) }));
+      toast.error(t("central.updateCheckError", { error: formatBackendError(err, t) }));
     }
   }
 
@@ -264,7 +265,7 @@ export function useCentralSkillsUpdateWorkflow({
       }
       openUpdateConfirmDialog(availableStates);
     } catch (err) {
-      toast.error(t("central.updateCheckError", { error: String(err) }));
+      toast.error(t("central.updateCheckError", { error: formatBackendError(err, t) }));
     }
   }
 
@@ -290,7 +291,7 @@ export function useCentralSkillsUpdateWorkflow({
       );
       handleUpdateConfirmDialogOpenChange(false);
     } catch (err) {
-      toast.error(t("central.updateError", { error: String(err) }));
+      toast.error(t("central.updateError", { error: formatBackendError(err, t) }));
       throw err;
     }
   }

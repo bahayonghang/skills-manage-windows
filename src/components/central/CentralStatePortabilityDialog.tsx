@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { formatBackendError } from "@/lib/backendError";
 import {
   JsonViewToggle,
   SummaryTile,
@@ -73,6 +74,7 @@ interface CentralStatePortabilityDialogProps {
 
 type TabId = "export" | "import";
 const IDLE_PORTABILITY_JOB: SkillportStatePortabilityJob = {
+  jobId: null,
   phase: null,
   status: "idle",
   total: 0,
@@ -167,9 +169,7 @@ export function CentralStatePortabilityDialog({
       setExportSummary(parseExportSummary(json));
       setExportViewMode("pretty");
     } catch (err) {
-      toast.error(
-        tRef.current("central.portabilityExportError", { error: String(err) }),
-      );
+      toast.error(tRef.current("central.portabilityExportError", { error: formatBackendError(err, tRef.current) }));
     } finally {
       setIsExportLoading(false);
     }
@@ -199,7 +199,7 @@ export function CentralStatePortabilityDialog({
       await saveExport(path, json);
       toast.success(t("central.portabilityExportSuccess"));
     } catch (err) {
-      toast.error(t("central.portabilityExportError", { error: String(err) }));
+      toast.error(t("central.portabilityExportError", { error: formatBackendError(err, t) }));
     }
   }
 
@@ -222,7 +222,7 @@ export function CentralStatePortabilityDialog({
         setPreview(null);
         setLastImportResult(null);
       }
-      toast.error(t("central.portabilityImportError", { error: String(err) }));
+      toast.error(t("central.portabilityImportError", { error: formatBackendError(err, t) }));
     } finally {
       setIsPreviewLoading(false);
     }
@@ -248,7 +248,7 @@ export function CentralStatePortabilityDialog({
         setPreview(null);
         setLastImportResult(null);
       }
-      toast.error(t("central.portabilityPreviewError", { error: String(err) }));
+      toast.error(t("central.portabilityPreviewError", { error: formatBackendError(err, t) }));
     } finally {
       setIsPreviewLoading(false);
     }
@@ -325,7 +325,7 @@ export function CentralStatePortabilityDialog({
       }
       await onAfterImport?.();
     } catch (err) {
-      toast.error(t("central.portabilityImportError", { error: String(err) }));
+      toast.error(t("central.portabilityImportError", { error: formatBackendError(err, t) }));
     } finally {
       setIsImporting(false);
     }

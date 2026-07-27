@@ -35,8 +35,13 @@ pub async fn get_central_skill_update_states(
 pub async fn check_central_skill_updates(
     app: AppHandle,
     state: State<'_, AppState>,
+    job_id: String,
     skill_ids: Option<Vec<String>>,
 ) -> Result<Vec<SkillUpdateState>, String> {
+    let lease = state
+        .central_update_jobs
+        .acquire(&job_id)
+        .map_err(|e| e.to_string())?;
     let request_context = state.resolve_target_context().await?;
     let pool = request_context.db().clone();
     let fs = CentralFs::from_active_target(request_context.target().clone())
@@ -49,9 +54,10 @@ pub async fn check_central_skill_updates(
     let client = github_import::github_client().map_err(|e| e.to_string())?;
     check_central_skill_updates_impl(
         Some(&app),
+        lease.job_id(),
         &pool,
         &fs,
-        &state.central_update_cancel,
+        lease.cancel_flag(),
         auth.as_deref(),
         &client,
         &state.central_update_snapshots,
@@ -68,9 +74,14 @@ pub async fn check_central_skill_updates(
 pub async fn check_central_repository_sync(
     app: AppHandle,
     state: State<'_, AppState>,
+    job_id: String,
     repository_ids: Vec<String>,
     skill_ids: Option<Vec<String>>,
 ) -> Result<CentralRepositorySyncPreview, String> {
+    let lease = state
+        .central_update_jobs
+        .acquire(&job_id)
+        .map_err(|e| e.to_string())?;
     let request_context = state.resolve_target_context().await?;
     let pool = request_context.db().clone();
     let fs = CentralFs::from_active_target(request_context.target().clone())
@@ -83,9 +94,10 @@ pub async fn check_central_repository_sync(
     let client = github_import::github_client().map_err(|e| e.to_string())?;
     check_central_repository_sync_impl(
         Some(&app),
+        lease.job_id(),
         &pool,
         &fs,
-        &state.central_update_cancel,
+        lease.cancel_flag(),
         auth.as_deref(),
         &client,
         &state.central_update_snapshots,
@@ -130,8 +142,13 @@ pub async fn apply_central_repository_sync(
 pub async fn update_central_skills(
     app: AppHandle,
     state: State<'_, AppState>,
+    job_id: String,
     skill_ids: Vec<String>,
 ) -> Result<CentralSkillUpdateResult, String> {
+    let lease = state
+        .central_update_jobs
+        .acquire(&job_id)
+        .map_err(|e| e.to_string())?;
     let request_context = state.resolve_target_context().await?;
     let pool = request_context.db().clone();
     let fs = CentralFs::from_active_target(request_context.target().clone())
@@ -144,9 +161,10 @@ pub async fn update_central_skills(
     let client = github_import::github_client().map_err(|e| e.to_string())?;
     update_central_skills_impl(
         Some(&app),
+        lease.job_id(),
         &pool,
         &fs,
-        &state.central_update_cancel,
+        lease.cancel_flag(),
         auth.as_deref(),
         &client,
         &state.central_update_snapshots,
@@ -157,10 +175,14 @@ pub async fn update_central_skills(
 }
 
 #[tauri::command]
-pub async fn cancel_central_skill_updates(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn cancel_central_skill_updates(
+    state: State<'_, AppState>,
+    job_id: String,
+) -> Result<(), String> {
     state
-        .central_update_cancel
-        .store(true, std::sync::atomic::Ordering::SeqCst);
+        .central_update_jobs
+        .cancel(&job_id)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 

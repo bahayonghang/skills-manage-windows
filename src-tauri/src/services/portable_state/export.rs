@@ -17,6 +17,7 @@ use super::{export_source_path, normalize_registry_identity};
 pub(crate) async fn export_skillport_state_impl(
     pool: &DbPool,
     target: Option<&PortableStateTargetContext>,
+    job_id: &str,
     app: Option<&AppHandle>,
     cancel: Option<&CancelFlag>,
 ) -> Result<String, PortableStateError> {
@@ -24,6 +25,7 @@ pub(crate) async fn export_skillport_state_impl(
     let github_sources = export_github_sources(pool).await?;
     emit_portability_step(
         app,
+        job_id,
         SkillportStatePortabilityPhase::Exporting,
         3,
         1,
@@ -44,6 +46,7 @@ pub(crate) async fn export_skillport_state_impl(
     let mut unrestorable_skills = Vec::new();
     emit_portability_step(
         app,
+        job_id,
         SkillportStatePortabilityPhase::Exporting,
         total_export_steps,
         2,
@@ -55,6 +58,7 @@ pub(crate) async fn export_skillport_state_impl(
         check_cancel(cancel)?;
         emit_portability_step(
             app,
+            job_id,
             SkillportStatePortabilityPhase::Exporting,
             total_export_steps,
             index + 2,
@@ -112,6 +116,7 @@ pub(crate) async fn export_skillport_state_impl(
 
     emit_portability_step(
         app,
+        job_id,
         SkillportStatePortabilityPhase::Finalizing,
         total_export_steps,
         total_export_steps,

@@ -284,10 +284,16 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   },
 
   async apply(decisions, scope) {
+    if (get().isApplying) {
+      throw new Error("job.central_update_busy:A Central update job is already running.");
+    }
+    const jobId = globalThis.crypto?.randomUUID?.()
+      ?? `job-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     set({ isApplying: true, error: null });
     try {
       const result = isTauriRuntime()
         ? await invoke<SkillUpdateApplyResult>("apply_skill_update_decisions", {
+            jobId,
             decisions,
           })
         : emptyApplyResult();

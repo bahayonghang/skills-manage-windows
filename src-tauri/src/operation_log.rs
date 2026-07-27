@@ -479,9 +479,15 @@ mod tests {
         crate::AppState {
             db: pool,
             ai_tag_jobs: crate::AiTagJobRegistry::default(),
-            central_update_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            central_update_jobs: crate::services::exclusive_job::ExclusiveJobRegistry::new(
+                "job.central_update_busy",
+                "A Central update job is already running.",
+            ),
             central_update_snapshots: crate::CentralUpdateSnapshotCache::default(),
-            portable_state_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            portable_state_jobs: crate::services::exclusive_job::ExclusiveJobRegistry::new(
+                "job.portability_busy",
+                "A portability job is already running.",
+            ),
             secrets: std::sync::Arc::new(crate::secrets::MockSecretStore::default()),
             targets: crate::targets::TargetRegistry::default(),
         }

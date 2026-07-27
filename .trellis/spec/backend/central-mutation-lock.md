@@ -2,7 +2,7 @@
 
 ## 1. Scope / Trigger
 
-Apply this contract to operations that finalize writes under a Central skill root, relocate that root, or recover a pending Central operation. GUI and CLI must share the same Local lock; Local/SSH/WSL delete and update also use a target-derived lease so mutations and recovery for one target serialize across processes.
+Apply this contract to operations that finalize writes under a Central skill root, relocate that root, recover a pending Central operation, or copy the legacy Universal Central store into the private Local store. GUI and CLI must share the same Local lock; Local/SSH/WSL delete and update also use a target-derived lease so mutations and recovery for one target serialize across processes.
 
 ## 2. Signatures
 
@@ -28,6 +28,7 @@ Local keeps `paths::central_mutation_lock_path()` as `app_data_dir()/locks/centr
 - Acquire only at the top-level mutation use case. Internal helpers accept the established boundary and must not acquire the same advisory lock again.
 - Lock acquisition runs through `fs_util::run_blocking_fs_with`; async workers must not poll `fs2` directly.
 - Lock failure stops the mutation. There is no unlocked fallback.
+- Legacy Central migration may read its completion marker as an unlocked fast path, but must acquire the Local lock, re-read the marker under that guard, run the copy, and write the marker before releasing the guard. The source is preserved and existing targets are skipped.
 
 ## 4. Validation & Error Matrix
 
@@ -40,12 +41,15 @@ Local keeps `paths::central_mutation_lock_path()` as `app_data_dir()/locks/centr
 | Other open/lock failure | `CentralMutationError::Io` |
 | Blocking task join failure | `CentralMutationError::TaskJoin` |
 | Holder process exits or crashes | OS releases lock; next process can acquire |
+| Legacy migration waits behind another process | Recheck marker after acquisition; skip copy if already completed |
+| Legacy migration lock or copy fails | Write no completion marker; retry on the next startup |
 
 ## 5. Good / Base / Bad Cases
 
 - Good: GitHub import stages and parses first, then locks around target recheck, swap, and DB upsert.
 - Base: pure queries, previews, marketplace search, and remote read-only commands acquire no mutation lease and do not connect solely for recovery.
 - Bad: CLI locks outside a service that locks again, causing self-deadlock.
+- Good: legacy migration holds the Local guard from its second marker read through copy and marker write.
 
 ## 6. Tests Required
 
@@ -55,6 +59,7 @@ Local keeps `paths::central_mutation_lock_path()` as `app_data_dir()/locks/centr
 - Search all production `acquire_central_mutation_guard` call sites and verify they are Local top-level final-apply paths.
 - Assert same-target Local/SSH/WSL delete, update, and recovery contend; different target digests do not contend.
 - Unit tests using the real default lock path serialize through the `cfg(test)` in-process guard so unrelated parallel tests cannot consume the production timeout. Contention/crash tests bypass that guard through `acquire_central_mutation_guard_at` and use isolated paths/processes.
+- Hold an isolated Local guard, assert legacy migration returns typed timeout and writes no marker, release it, then assert the same migration succeeds and preserves the source.
 
 ## 7. Wrong vs Correct
 
@@ -68,4 +73,15 @@ if error.kind() == std::io::ErrorKind::WouldBlock
 {
     retry();
 }
+```
+
+```rust
+// Wrong: marker decision and copy happen outside the shared mutation boundary.
+if marker_missing(pool).await? { copy_legacy().await?; write_marker(pool).await?; }
+
+// Correct: recheck and marker persistence are inside the same Local guard lifetime.
+let _guard = acquire_central_mutation_guard("legacy Central store migration", timeout).await?;
+if let Some(summary) = completed_summary(pool).await? { return Ok(summary); }
+let summary = copy_legacy_blocking().await?;
+write_marker(pool, &summary).await?;
 ```

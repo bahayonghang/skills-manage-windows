@@ -60,7 +60,7 @@ fn manifest_with_skill(id: &str, path: &str) -> SkillportStateManifest {
 #[tokio::test]
 async fn export_empty_state_produces_manifest() {
     let pool = setup_test_db().await;
-    let json = export_skillport_state_impl(&pool, None, None, None)
+    let json = export_skillport_state_impl(&pool, None, "test-job", None, None)
         .await
         .unwrap();
     let manifest = parse_manifest(&json).unwrap();
@@ -88,7 +88,7 @@ async fn export_includes_target_metadata_when_provided() {
         label: "Ubuntu".to_string(),
     };
 
-    let json = export_skillport_state_impl(&pool, Some(&target), None, None)
+    let json = export_skillport_state_impl(&pool, Some(&target), "test-job", None, None)
         .await
         .unwrap();
     let manifest = parse_manifest(&json).unwrap();
@@ -162,7 +162,7 @@ async fn export_includes_github_skill_and_unrestorable_local_skill() {
     db::upsert_skill(&pool, &local).await.unwrap();
 
     let manifest = parse_manifest(
-        &export_skillport_state_impl(&pool, None, None, None)
+        &export_skillport_state_impl(&pool, None, "test-job", None, None)
             .await
             .unwrap(),
     )
@@ -250,7 +250,7 @@ async fn export_counts_distinct_github_repositories_backing_central_skills() {
     .unwrap();
 
     let manifest = parse_manifest(
-        &export_skillport_state_impl(&pool, None, None, None)
+        &export_skillport_state_impl(&pool, None, "test-job", None, None)
             .await
             .unwrap(),
     )
@@ -377,9 +377,16 @@ async fn preview_reports_ready_conflict_missing_and_unrestorable() {
         },
     );
 
-    let preview = preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog), None, None)
-        .await
-        .unwrap();
+    let preview = preview_skillport_state_import_impl(
+        &pool,
+        &manifest,
+        Some(&catalog),
+        "test-job",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(preview.summary.ready, 1);
     assert_eq!(preview.summary.conflicts, 1);
@@ -419,9 +426,16 @@ async fn portable_manifest_stable_uid_conflict_requires_explicit_resolution() {
         },
     )]);
 
-    let preview = preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog), None, None)
-        .await
-        .unwrap();
+    let preview = preview_skillport_state_import_impl(
+        &pool,
+        &manifest,
+        Some(&catalog),
+        "test-job",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(preview.summary.conflicts, 1);
     assert_eq!(
         preview.skills[0].reason.as_deref(),
@@ -474,9 +488,16 @@ async fn preview_reports_internal_duplicate_skills_and_sources() {
         },
     );
 
-    let preview = preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog), None, None)
-        .await
-        .unwrap();
+    let preview = preview_skillport_state_import_impl(
+        &pool,
+        &manifest,
+        Some(&catalog),
+        "test-job",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(preview.summary.sources_duplicate, 1);
     assert_eq!(preview.summary.duplicate_skipped, 1);
@@ -586,9 +607,16 @@ async fn preview_reports_invalid_remote_skill_and_repo_unavailable_as_warning() 
         },
     );
 
-    let preview = preview_skillport_state_import_impl(&pool, &manifest, Some(&catalog), None, None)
-        .await
-        .unwrap();
+    let preview = preview_skillport_state_import_impl(
+        &pool,
+        &manifest,
+        Some(&catalog),
+        "test-job",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     let invalid = preview
         .skills
@@ -799,10 +827,17 @@ async fn import_cancelled_before_groups_returns_partial_cancelled_result() {
     let cancel = Arc::new(AtomicBool::new(true));
 
     let secrets = crate::secrets::MockSecretStore::default();
-    let result =
-        import_skillport_state_impl(&pool, &secrets, &manifest, Vec::new(), None, Some(&cancel))
-            .await
-            .unwrap();
+    let result = import_skillport_state_impl(
+        &pool,
+        &secrets,
+        &manifest,
+        Vec::new(),
+        "test-job",
+        None,
+        Some(&cancel),
+    )
+    .await
+    .unwrap();
 
     assert!(result.cancelled);
     assert_eq!(result.skipped_skills, vec!["cancelled-skill"]);

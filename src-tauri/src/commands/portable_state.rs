@@ -5,7 +5,7 @@
 //! service inputs and operation-log entries.
 
 use serde_json::json;
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 use tauri::{AppHandle, State};
 
@@ -43,10 +43,13 @@ pub struct SkillportStateImportFilePreview {
 pub async fn export_skillport_state(
     app: AppHandle,
     state: State<'_, AppState>,
+    job_id: String,
     _options: Option<SkillportStateExportOptions>,
 ) -> Result<String, String> {
-    state.portable_state_cancel.store(false, Ordering::SeqCst);
-    let cancel = Arc::clone(&state.portable_state_cancel);
+    let lease = state
+        .portable_state_jobs
+        .acquire(&job_id)
+        .map_err(|e| e.to_string())?;
     let started_at = Instant::now();
     let request_context = state.resolve_target_context().await?;
     let active_target = request_context.target().clone();
@@ -55,6 +58,7 @@ pub async fn export_skillport_state(
     let pool = request_context.db().clone();
     emit_portability_progress(
         &app,
+        lease.job_id(),
         PortabilityProgressUpdate {
             phase: SkillportStatePortabilityPhase::Exporting,
             status: SkillportStatePortabilityStatus::Running,
@@ -65,12 +69,19 @@ pub async fn export_skillport_state(
             error: None,
         },
     );
-    let result =
-        export_skillport_state_impl(&pool, Some(&export_target), Some(&app), Some(&cancel)).await;
+    let result = export_skillport_state_impl(
+        &pool,
+        Some(&export_target),
+        lease.job_id(),
+        Some(&app),
+        Some(lease.cancel_flag()),
+    )
+    .await;
     match &result {
         Ok(payload) => {
             emit_portability_progress(
                 &app,
+                lease.job_id(),
                 PortabilityProgressUpdate {
                     phase: SkillportStatePortabilityPhase::Exporting,
                     status: SkillportStatePortabilityStatus::Completed,
@@ -110,6 +121,7 @@ pub async fn export_skillport_state(
             };
             emit_portability_progress(
                 &app,
+                lease.job_id(),
                 PortabilityProgressUpdate {
                     phase: SkillportStatePortabilityPhase::Exporting,
                     status,
@@ -143,17 +155,38 @@ pub async fn export_skillport_state(
 pub async fn preview_skillport_state_import(
     app: AppHandle,
     state: State<'_, AppState>,
+    job_id: String,
     json: String,
 ) -> Result<SkillportStateImportPreview, String> {
-    state.portable_state_cancel.store(false, Ordering::SeqCst);
-    let cancel = Arc::clone(&state.portable_state_cancel);
+    let lease = state
+        .portable_state_jobs
+        .acquire(&job_id)
+        .map_err(|e| e.to_string())?;
+    preview_skillport_state_import_established(
+        &app,
+        state.inner(),
+        json,
+        lease.job_id(),
+        lease.cancel_flag(),
+    )
+    .await
+}
+
+async fn preview_skillport_state_import_established(
+    app: &AppHandle,
+    state: &AppState,
+    json: String,
+    job_id: &str,
+    cancel: &AtomicBool,
+) -> Result<SkillportStateImportPreview, String> {
     let started_at = Instant::now();
     let request_context = state.resolve_target_context().await?;
     let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
     let pool = request_context.db().clone();
     emit_portability_progress(
-        &app,
+        app,
+        job_id,
         PortabilityProgressUpdate {
             phase: SkillportStatePortabilityPhase::Previewing,
             status: SkillportStatePortabilityStatus::Running,
@@ -170,8 +203,9 @@ pub async fn preview_skillport_state_import(
                 &state.db,
                 state.secrets.as_ref(),
                 &manifest,
-                Some(&app),
-                Some(&cancel),
+                job_id,
+                Some(app),
+                Some(cancel),
             )
             .await
             {
@@ -179,8 +213,9 @@ pub async fn preview_skillport_state_import(
                     &pool,
                     &manifest,
                     Some(&remote_catalog),
-                    Some(&app),
-                    Some(&cancel),
+                    job_id,
+                    Some(app),
+                    Some(cancel),
                 )
                 .await
                 {
@@ -195,7 +230,8 @@ pub async fn preview_skillport_state_import(
     match &result {
         Ok(preview) => {
             emit_portability_progress(
-                &app,
+                app,
+                job_id,
                 PortabilityProgressUpdate {
                     phase: SkillportStatePortabilityPhase::Previewing,
                     status: SkillportStatePortabilityStatus::Completed,
@@ -231,7 +267,8 @@ pub async fn preview_skillport_state_import(
                 SkillportStatePortabilityStatus::Failed
             };
             emit_portability_progress(
-                &app,
+                app,
+                job_id,
                 PortabilityProgressUpdate {
                     phase: SkillportStatePortabilityPhase::Previewing,
                     status,
@@ -265,12 +302,24 @@ pub async fn preview_skillport_state_import(
 pub async fn preview_skillport_state_import_file(
     app: AppHandle,
     state: State<'_, AppState>,
+    job_id: String,
     path: String,
 ) -> Result<SkillportStateImportFilePreview, String> {
+    let lease = state
+        .portable_state_jobs
+        .acquire(&job_id)
+        .map_err(|e| e.to_string())?;
     let json = read_skillport_state_file(path.into())
         .await
         .map_err(|error| error.to_string())?;
-    let preview = preview_skillport_state_import(app, state, json.clone()).await?;
+    let preview = preview_skillport_state_import_established(
+        &app,
+        state.inner(),
+        json.clone(),
+        lease.job_id(),
+        lease.cancel_flag(),
+    )
+    .await?;
     Ok(SkillportStateImportFilePreview { json, preview })
 }
 
@@ -285,11 +334,14 @@ pub async fn save_skillport_state_export(path: String, json: String) -> Result<(
 pub async fn import_skillport_state(
     app: AppHandle,
     state: State<'_, AppState>,
+    job_id: String,
     json: String,
     resolutions: Vec<SkillportStateImportResolution>,
 ) -> Result<SkillportStateImportResult, String> {
-    state.portable_state_cancel.store(false, Ordering::SeqCst);
-    let cancel = Arc::clone(&state.portable_state_cancel);
+    let lease = state
+        .portable_state_jobs
+        .acquire(&job_id)
+        .map_err(|e| e.to_string())?;
     let started_at = Instant::now();
     let request_context = state.resolve_target_context().await?;
     let active_target = request_context.target().clone();
@@ -297,6 +349,7 @@ pub async fn import_skillport_state(
     let pool = request_context.db().clone();
     emit_portability_progress(
         &app,
+        lease.job_id(),
         PortabilityProgressUpdate {
             phase: SkillportStatePortabilityPhase::Importing,
             status: SkillportStatePortabilityStatus::Running,
@@ -323,8 +376,9 @@ pub async fn import_skillport_state(
                         auth.as_deref(),
                         &manifest,
                         resolutions,
+                        lease.job_id(),
                         Some(&app),
-                        Some(&cancel),
+                        Some(lease.cancel_flag()),
                     )
                     .await
                 }
@@ -349,6 +403,7 @@ pub async fn import_skillport_state(
             };
             emit_portability_progress(
                 &app,
+                lease.job_id(),
                 PortabilityProgressUpdate {
                     phase: SkillportStatePortabilityPhase::Importing,
                     status: if import_result.cancelled {
@@ -405,6 +460,7 @@ pub async fn import_skillport_state(
             };
             emit_portability_progress(
                 &app,
+                lease.job_id(),
                 PortabilityProgressUpdate {
                     phase: SkillportStatePortabilityPhase::Importing,
                     status,
@@ -435,8 +491,14 @@ pub async fn import_skillport_state(
 }
 
 #[tauri::command]
-pub async fn cancel_skillport_state_portability(state: State<'_, AppState>) -> Result<(), String> {
-    state.portable_state_cancel.store(true, Ordering::SeqCst);
+pub async fn cancel_skillport_state_portability(
+    state: State<'_, AppState>,
+    job_id: String,
+) -> Result<(), String> {
+    state
+        .portable_state_jobs
+        .cancel(&job_id)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 

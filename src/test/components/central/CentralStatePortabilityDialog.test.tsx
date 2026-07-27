@@ -72,6 +72,7 @@ const preview: SkillportStateImportPreview = {
 };
 
 const idlePortabilityJob: SkillportStatePortabilityJob = {
+  jobId: null,
   phase: null,
   status: "idle",
   total: 0,
@@ -499,6 +500,7 @@ describe("CentralStatePortabilityDialog", () => {
     const result = renderDialog({
       onCancelJob,
       portabilityJob: {
+        jobId: "active-portability-job",
         phase: "importing",
         status: "running",
         total: 4,

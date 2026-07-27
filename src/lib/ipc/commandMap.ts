@@ -5,6 +5,8 @@ import type {
   BatchUninstallSkillResult,
   BootstrapSnapshot,
   CentralTopTag,
+  CentralSkillUpdateResult,
+  CentralSkillUpdateState,
   CreateSshTargetRequest,
   CreateWslTargetRequest,
   CustomAgentConfig,
@@ -36,6 +38,8 @@ import type {
   SkillDetail,
   SkillDetailRequest,
   SkillportStateImportPreview,
+  SkillportStateImportResolution,
+  SkillportStateImportResult,
   SkillWithLinks,
   SshTargetTestResult,
   TagGroup,
@@ -49,6 +53,13 @@ import type {
   WslDistributionSummary,
   WslTargetTestResult,
 } from "@/types";
+import type {
+  CentralRepositorySyncPreview,
+} from "@/types/centralRepositorySync";
+import type {
+  SkillUpdateApplyResult,
+  SkillUpdateDecisions,
+} from "@/types/skillUpdateInventory";
 import type { SkillExplanationSummaryMap } from "@/types/skillExplanation";
 import type {
   ProviderHealth,
@@ -133,8 +144,38 @@ export const IPC_COMMANDS = {
   >(),
   remove_custom_agent: command<{ agentId: string }, void>(),
   preview_skillport_state_import_file: command<
-    { path: string },
+    { jobId: string; path: string },
     { json: string; preview: SkillportStateImportPreview }
+  >(),
+  export_skillport_state: command<
+    { jobId: string; options: Record<string, never> },
+    string
+  >(),
+  preview_skillport_state_import: command<
+    { jobId: string; json: string },
+    SkillportStateImportPreview
+  >(),
+  import_skillport_state: command<
+    { jobId: string; json: string; resolutions: SkillportStateImportResolution[] },
+    SkillportStateImportResult
+  >(),
+  cancel_skillport_state_portability: command<{ jobId: string }, void>(),
+  check_central_skill_updates: command<
+    { jobId: string; skillIds: string[] | null },
+    CentralSkillUpdateState[]
+  >(),
+  check_central_repository_sync: command<
+    { jobId: string; repositoryIds: string[]; skillIds: string[] | null },
+    CentralRepositorySyncPreview
+  >(),
+  update_central_skills: command<
+    { jobId: string; skillIds: string[] },
+    CentralSkillUpdateResult
+  >(),
+  cancel_central_skill_updates: command<{ jobId: string }, void>(),
+  apply_skill_update_decisions: command<
+    { jobId: string; decisions: SkillUpdateDecisions },
+    SkillUpdateApplyResult
   >(),
   save_skillport_state_export: command<{ path: string; json: string }, void>(),
   // ── platform skills ───────────────────────────────────────────────────────
@@ -300,7 +341,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "apply_central_repository_sync",
   "apply_central_store_location_change",
   "apply_local_remote_sync",
-  "apply_skill_update_decisions",
   "assign_skill_tags",
   "assign_skills_to_repository",
   "batch_install_central_skills",
@@ -309,10 +349,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "browse_skills_sh_directory",
   "bulk_suggest_skill_tags",
   "cancel_ai_tag_job",
-  "cancel_central_skill_updates",
-  "cancel_skillport_state_portability",
-  "check_central_repository_sync",
-  "check_central_skill_updates",
   "clear_ai_api_key",
   "clear_github_pat",
   "clear_skill_update_inventory",
@@ -326,7 +362,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "explain_skill",
   "explain_skill_stream",
   "export_collection",
-  "export_skillport_state",
   "force_mirror_central_repositories",
   "force_update_central_skills",
   "get_agents",
@@ -347,7 +382,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "import_collection",
   "import_obsidian_skill_to_central",
   "import_obsidian_skill_to_platform",
-  "import_skillport_state",
   "install_from_skills_sh",
   "install_marketplace_skill",
   "install_skill_to_agent",
@@ -361,7 +395,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "preview_delete_central_skills",
   "preview_delete_skill_repository",
   "preview_local_remote_sync",
-  "preview_skillport_state_import",
   "read_skills_sh_file",
   "record_frontend_runtime_log",
   "refresh_skill_explanation",
@@ -388,6 +421,5 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "test_github_pat",
   "unassign_skill_tags",
   "uninstall_skill_from_project",
-  "update_central_skills",
   "update_collection",
 ];

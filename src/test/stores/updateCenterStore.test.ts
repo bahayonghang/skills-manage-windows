@@ -18,7 +18,11 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
-import type { SkillUpdateInventory } from "@/types/skillUpdateInventory";
+import type {
+  SkillUpdateApplyResult,
+  SkillUpdateDecisions,
+  SkillUpdateInventory,
+} from "@/types/skillUpdateInventory";
 
 function emptyInventory(): SkillUpdateInventory {
   return {
@@ -187,6 +191,40 @@ describe("updateCenterStore", () => {
       isRefreshing: false,
       refreshProgress: null,
       error: "network unavailable",
+    });
+  });
+
+  it("passes a renderer-owned job ID when applying decisions", async () => {
+    const decisions: SkillUpdateDecisions = {
+      updates: [],
+      keepMissing: [],
+      deleteMissing: [],
+      importAdditions: [],
+      skipAdditions: [],
+      unskipAdditions: [],
+      removePlatformDuplicates: [],
+      removeDeletedPlatformCopies: [],
+    };
+    const result: SkillUpdateApplyResult = {
+      updatedSkillIds: [],
+      keptMissingSkillIds: [],
+      deletedSkillIds: [],
+      importedSkillIds: [],
+      skippedAdditions: [],
+      unskippedAdditions: [],
+      removedPlatformDuplicatePaths: [],
+      removedDeletedPlatformCopyPaths: [],
+      failures: [],
+    };
+    mockInvoke.mockResolvedValueOnce(result).mockResolvedValueOnce(emptyInventory());
+
+    await expect(
+      useUpdateCenterStore.getState().apply(decisions, { kind: "all" }),
+    ).resolves.toEqual(result);
+
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "apply_skill_update_decisions", {
+      jobId: expect.any(String),
+      decisions,
     });
   });
 });

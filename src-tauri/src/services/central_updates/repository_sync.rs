@@ -144,6 +144,7 @@ pub struct CentralRepositorySyncApplyResult {
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn check_central_repository_sync_impl(
     app: Option<&AppHandle>,
+    job_id: &str,
     pool: &DbPool,
     fs: &CentralFs,
     cancel: &AtomicBool,
@@ -170,9 +171,11 @@ pub(crate) async fn check_central_repository_sync_impl(
     let mut counters = UpdateCounters::default();
     let mut states = Vec::with_capacity(total);
     let mut failed_repositories = Vec::new();
+    let mut cancelled = false;
 
-    cancel.store(false, Ordering::SeqCst);
-    emit_update_progress(app, "checking", "started", total, &counters, None, None);
+    emit_update_progress(
+        app, job_id, "checking", "started", total, &counters, None, None,
+    );
 
     let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
     let mut snapshot_repos = prepared
@@ -194,6 +197,7 @@ pub(crate) async fn check_central_repository_sync_impl(
         if cancel.load(Ordering::SeqCst) {
             emit_update_progress(
                 app,
+                job_id,
                 "checking",
                 SkillUpdateStatus::Cancelled.as_str(),
                 total,
@@ -201,11 +205,13 @@ pub(crate) async fn check_central_repository_sync_impl(
                 None,
                 None,
             );
+            cancelled = true;
             break;
         }
 
         emit_update_progress(
             app,
+            job_id,
             "checking",
             "running",
             total,
@@ -229,6 +235,7 @@ pub(crate) async fn check_central_repository_sync_impl(
         update_counters_for_state(&mut counters, &state_result);
         emit_update_progress(
             app,
+            job_id,
             "checking",
             &state_result.status,
             total,
@@ -239,7 +246,18 @@ pub(crate) async fn check_central_repository_sync_impl(
         states.push(state_result);
     }
 
-    emit_update_progress(app, "checking", "completed", total, &counters, None, None);
+    if !cancelled {
+        emit_update_progress(
+            app,
+            job_id,
+            "checking",
+            "completed",
+            total,
+            &counters,
+            None,
+            None,
+        );
+    }
 
     let remote_additions = collect_remote_added_skills(
         pool,

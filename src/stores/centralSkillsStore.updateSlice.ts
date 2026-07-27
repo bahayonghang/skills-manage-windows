@@ -22,6 +22,7 @@ import {
   PORTABILITY_PROGRESS_EVENT,
   createCentralSkillsInitialState,
   createIdlePortabilityJob,
+  createLocalJobId,
   createRunningUpdateJob,
   indexUpdateStates,
   mergeAiTagProgress,
@@ -36,6 +37,16 @@ import { usePlatformStore } from "./platformStore";
  *  fire-and-forget：refreshDashboardSummary 内部已吞错，不阻塞本流程。 */
 function invalidateDashboardSummary() {
   void usePlatformStore.getState().refreshDashboardSummary();
+}
+
+function isActiveJob(status: string): boolean {
+  return status === "running" || status === "cancelling";
+}
+
+function assertJobCanStart(status: string, code: string, summary: string) {
+  if (isActiveJob(status)) {
+    throw new Error(`${code}:${summary}`);
+  }
 }
 
 export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralStoreContext): Pick<CentralSkillsState,
@@ -63,17 +74,24 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       return [];
     }
 
+    assertJobCanStart(
+      get().updateJob.status,
+      "job.central_update_busy",
+      "A Central update job is already running.",
+    );
+    const jobId = createLocalJobId();
     const targetIds = skillIds ?? get().skills.map((skill) => skill.id);
     set({
       isCheckingUpdates: true,
       error: null,
-      updateJob: createRunningUpdateJob("checking", targetIds),
+      updateJob: createRunningUpdateJob("checking", targetIds, jobId),
     });
     try {
       const states = await invoke<CentralSkillUpdateState[]>("check_central_skill_updates", {
+        jobId,
         skillIds: skillIds ?? null,
       });
-      set((state) => ({
+      set((state) => state.updateJob.jobId === jobId ? ({
         updateStatuses: mergeUpdateStates(state.updateStatuses, states ?? []),
         isCheckingUpdates: false,
         updateJob:
@@ -84,11 +102,11 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
                 completed: states?.length ?? state.updateJob.completed,
               }
             : state.updateJob,
-      }));
+      }) : {});
       invalidateDashboardSummary();
       return states ?? [];
     } catch (err) {
-      set((state) => ({
+      set((state) => state.updateJob.jobId === jobId ? ({
         error: String(err),
         isCheckingUpdates: false,
         updateJob: {
@@ -96,7 +114,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
           status: "failed",
           error: String(err),
         },
-      }));
+      }) : {});
       throw err;
     }
   },
@@ -116,21 +134,28 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       throw new Error("Desktop-only feature: repository sync is available in the Tauri app.");
     }
 
+    assertJobCanStart(
+      get().updateJob.status,
+      "job.central_update_busy",
+      "A Central update job is already running.",
+    );
+    const jobId = createLocalJobId();
     const targetIds = skillIds ?? get().skills.map((skill) => skill.id);
     set({
       isCheckingUpdates: true,
       error: null,
-      updateJob: createRunningUpdateJob("checking", targetIds),
+      updateJob: createRunningUpdateJob("checking", targetIds, jobId),
     });
     try {
       const preview = await invoke<CentralRepositorySyncPreview>(
         "check_central_repository_sync",
         {
+          jobId,
           repositoryIds,
           skillIds: skillIds ?? null,
         }
       );
-      set((state) => ({
+      set((state) => state.updateJob.jobId === jobId ? ({
         updateStatuses: mergeUpdateStates(state.updateStatuses, preview.states ?? []),
         isCheckingUpdates: false,
         updateJob:
@@ -143,10 +168,10 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
                 failed: preview.failedRepositories.length,
               }
             : state.updateJob,
-      }));
+      }) : {});
       return preview;
     } catch (err) {
-      set((state) => ({
+      set((state) => state.updateJob.jobId === jobId ? ({
         error: String(err),
         isCheckingUpdates: false,
         updateJob: {
@@ -154,7 +179,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
           status: "failed",
           error: String(err),
         },
-      }));
+      }) : {});
       throw err;
     }
   },
@@ -164,7 +189,13 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       throw new Error("Desktop-only feature: repository sync is available in the Tauri app.");
     }
 
-      const targetIds = [
+    assertJobCanStart(
+      get().updateJob.status,
+      "job.central_update_busy",
+      "A Central update job is already running.",
+    );
+    const jobId = createLocalJobId();
+    const targetIds = [
         ...decisions.keepSkillIds,
         ...decisions.deleteRequests.map((request) => request.skill_id),
         ...decisions.additions.flatMap((item) =>
@@ -176,7 +207,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
     set({
       updatingSkillIds: targetIds,
       error: null,
-      updateJob: createRunningUpdateJob("updating", targetIds),
+      updateJob: createRunningUpdateJob("updating", targetIds, jobId),
     });
     try {
       const result = await invoke<CentralRepositorySyncApplyResult>(
@@ -195,7 +226,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
         (count, item) => count + item.importedSkills.length,
         0
       );
-      set((state) => ({
+      set((state) => state.updateJob.jobId === jobId ? ({
         skills: skills ?? [],
         repositories: repositories ?? state.repositories,
         tags: tags ?? state.tags,
@@ -222,10 +253,10 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
                 failed,
               }
             : state.updateJob,
-      }));
+      }) : {});
       return result;
     } catch (err) {
-      set((state) => ({
+      set((state) => state.updateJob.jobId === jobId ? ({
         error: String(err),
         updatingSkillIds: [],
         updateJob: {
@@ -233,7 +264,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
           status: "failed",
           error: String(err),
         },
-      }));
+      }) : {});
       throw err;
     }
   },
@@ -246,17 +277,24 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       throw new Error("Desktop-only feature: Central skill updates are available in the Tauri app.");
     }
 
+    assertJobCanStart(
+      get().updateJob.status,
+      "job.central_update_busy",
+      "A Central update job is already running.",
+    );
+    const jobId = createLocalJobId();
     set({
       updatingSkillIds: skillIds,
       error: null,
-      updateJob: createRunningUpdateJob("updating", skillIds),
+      updateJob: createRunningUpdateJob("updating", skillIds, jobId),
     });
     try {
       const result = await invoke<CentralSkillUpdateResult>("update_central_skills", {
+        jobId,
         skillIds,
       });
       const skills = await invoke<SkillWithLinks[]>("get_central_skills");
-      set((state) => ({
+      set((state) => state.updateJob.jobId === jobId ? ({
         skills: skills ?? [],
         updateStatuses: mergeUpdateStates(state.updateStatuses, result.states ?? []),
         updatingSkillIds: [],
@@ -271,11 +309,11 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
                 skipped: result.skipped.length,
               }
             : state.updateJob,
-      }));
+      }) : {});
       invalidateDashboardSummary();
       return result;
     } catch (err) {
-      set((state) => ({
+      set((state) => state.updateJob.jobId === jobId ? ({
         error: String(err),
         updatingSkillIds: [],
         updateJob: {
@@ -283,7 +321,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
           status: "failed",
           error: String(err),
         },
-      }));
+      }) : {});
       throw err;
     }
   },
@@ -292,15 +330,19 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
     if (!isTauriRuntime()) {
       return;
     }
+    const jobId = get().updateJob.jobId;
+    if (!jobId) {
+      return;
+    }
     set((state) =>
       state.updateJob.status === "running"
         ? { updateJob: { ...state.updateJob, status: "cancelling" } }
         : {}
     );
     try {
-      await invoke("cancel_central_skill_updates");
+      await invoke("cancel_central_skill_updates", { jobId });
     } catch (err) {
-      set({ error: String(err) });
+      set((state) => state.updateJob.jobId === jobId ? { error: String(err) } : {});
       throw err;
     }
   },
@@ -391,45 +433,56 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
     if (!isTauriRuntime()) {
       return;
     }
+    const jobId = get().portabilityJob.jobId;
+    if (!jobId) {
+      return;
+    }
     set((state) =>
       state.portabilityJob.status === "running"
         ? { portabilityJob: { ...state.portabilityJob, status: "cancelling" } }
         : {}
     );
     try {
-      await invoke("cancel_skillport_state_portability");
+      await invoke("cancel_skillport_state_portability", { jobId });
     } catch (err) {
-      set({ error: String(err) });
+      set((state) => state.portabilityJob.jobId === jobId ? { error: String(err) } : {});
       throw err;
     }
   },
 
   exportSkillportState: async () => {
+    assertJobCanStart(
+      get().portabilityJob.status,
+      "job.portability_busy",
+      "A portability job is already running.",
+    );
+    const jobId = createLocalJobId();
     set({
       portabilityJob: {
         ...createIdlePortabilityJob(),
+        jobId,
         phase: "exporting",
         status: "running",
         total: 1,
       },
     });
     try {
-      const json = await invoke<string>("export_skillport_state", { options: {} });
-      set((state) => ({
+      const json = await invoke<string>("export_skillport_state", { jobId, options: {} });
+      set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob:
-          state.portabilityJob.status === "running"
+          state.portabilityJob.jobId === jobId && state.portabilityJob.status === "running"
             ? { ...state.portabilityJob, status: "completed", completed: state.portabilityJob.total }
             : state.portabilityJob,
-      }));
+      }) : {});
       return json;
     } catch (err) {
-      set((state) => ({
+      set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob: {
           ...state.portabilityJob,
           status: String(err).includes("cancelled") ? "cancelled" : "failed",
           error: String(err),
         },
-      }));
+      }) : {});
       throw err;
     }
   },
@@ -439,69 +492,96 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
   },
 
   previewSkillportStateImport: async (json: string) => {
+    assertJobCanStart(
+      get().portabilityJob.status,
+      "job.portability_busy",
+      "A portability job is already running.",
+    );
+    const jobId = createLocalJobId();
     set({
       portabilityJob: {
         ...createIdlePortabilityJob(),
+        jobId,
         phase: "previewing",
         status: "running",
         total: 3,
       },
     });
     try {
-      const preview = await invoke<SkillportStateImportPreview>("preview_skillport_state_import", { json });
-      set((state) => ({
+      const preview = await invoke<SkillportStateImportPreview>("preview_skillport_state_import", {
+        jobId,
+        json,
+      });
+      set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob:
-          state.portabilityJob.status === "running"
+          state.portabilityJob.jobId === jobId && state.portabilityJob.status === "running"
             ? { ...state.portabilityJob, status: "completed", completed: state.portabilityJob.total }
             : state.portabilityJob,
-      }));
+      }) : {});
       return preview;
     } catch (err) {
-      set((state) => ({
+      set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob: {
           ...state.portabilityJob,
           status: String(err).includes("cancelled") ? "cancelled" : "failed",
           error: String(err),
         },
-      }));
+      }) : {});
       throw err;
     }
   },
 
   previewSkillportStateImportFile: async (path: string) => {
+    assertJobCanStart(
+      get().portabilityJob.status,
+      "job.portability_busy",
+      "A portability job is already running.",
+    );
+    const jobId = createLocalJobId();
     set({
       portabilityJob: {
         ...createIdlePortabilityJob(),
+        jobId,
         phase: "previewing",
         status: "running",
         total: 3,
       },
     });
     try {
-      const result = await invoke("preview_skillport_state_import_file", { path });
-      set((state) => ({
+      const result = await invoke<{ json: string; preview: SkillportStateImportPreview }>(
+        "preview_skillport_state_import_file",
+        { jobId, path },
+      );
+      set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob:
-          state.portabilityJob.status === "running"
+          state.portabilityJob.jobId === jobId && state.portabilityJob.status === "running"
             ? { ...state.portabilityJob, status: "completed", completed: state.portabilityJob.total }
             : state.portabilityJob,
-      }));
+      }) : {});
       return result;
     } catch (err) {
-      set((state) => ({
+      set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob: {
           ...state.portabilityJob,
           status: String(err).includes("cancelled") ? "cancelled" : "failed",
           error: String(err),
         },
-      }));
+      }) : {});
       throw err;
     }
   },
 
   importSkillportState: async (json: string, resolutions: SkillportStateImportResolution[]) => {
+    assertJobCanStart(
+      get().portabilityJob.status,
+      "job.portability_busy",
+      "A portability job is already running.",
+    );
+    const jobId = createLocalJobId();
     set({
       portabilityJob: {
         ...createIdlePortabilityJob(),
+        jobId,
         phase: "importing",
         status: "running",
         total: Math.max(1, resolutions.length),
@@ -510,17 +590,18 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
     let result: SkillportStateImportResult;
     try {
       result = await invoke<SkillportStateImportResult>("import_skillport_state", {
+        jobId,
         json,
         resolutions,
       });
     } catch (err) {
-      set((state) => ({
+      set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob: {
           ...state.portabilityJob,
           status: String(err).includes("cancelled") ? "cancelled" : "failed",
           error: String(err),
         },
-      }));
+      }) : {});
       throw err;
     }
     const [skills, repositories, tags, updateStates] = await Promise.all([
@@ -529,20 +610,20 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       invoke<SkillTag[]>("get_skill_tags"),
       invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
     ]);
-    set({
-      skills: skills ?? [],
-      repositories: repositories ?? [],
-      tags: tags ?? [],
-      updateStatuses: indexUpdateStates(updateStates ?? []),
-      portabilityJob: {
-        ...get().portabilityJob,
-        status: result.cancelled
-          ? "cancelled"
-          : result.failedSkills.length > 0
-            ? "failed"
-            : "completed",
-      },
-    });
+    set((state) => state.portabilityJob.jobId === jobId ? ({
+        skills: skills ?? [],
+        repositories: repositories ?? [],
+        tags: tags ?? [],
+        updateStatuses: indexUpdateStates(updateStates ?? []),
+        portabilityJob: {
+          ...state.portabilityJob,
+          status: result.cancelled
+            ? "cancelled"
+            : result.failedSkills.length > 0
+              ? "failed"
+              : "completed",
+        },
+      }) : {});
     return result;
   },
 

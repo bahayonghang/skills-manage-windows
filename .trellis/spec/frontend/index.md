@@ -17,3 +17,4 @@
 - [Import Intent Controller Contract](./import-intent-controller.md)
 - [Local Archive Import Controller Contract](./local-archive-import-controller.md)
 - [GitHub Preview Snapshot Token Contract（渲染层）](./github-preview-snapshot-token.md)
+- [Renderer Job Correlation And Cancellation Contract](./job-correlation-cancellation.md)

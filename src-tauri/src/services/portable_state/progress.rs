@@ -19,6 +19,7 @@ pub(crate) fn check_cancel(cancel: Option<&CancelFlag>) -> Result<(), PortableSt
 
 pub(crate) fn emit_portability_step(
     app: Option<&AppHandle>,
+    job_id: &str,
     phase: SkillportStatePortabilityPhase,
     total: usize,
     completed: usize,
@@ -28,6 +29,7 @@ pub(crate) fn emit_portability_step(
     if let Some(app) = app {
         emit_portability_progress(
             app,
+            job_id,
             PortabilityProgressUpdate {
                 phase,
                 status: SkillportStatePortabilityStatus::Running,
@@ -41,8 +43,13 @@ pub(crate) fn emit_portability_step(
     }
 }
 
-pub(crate) fn emit_portability_progress(app: &AppHandle, update: PortabilityProgressUpdate<'_>) {
+pub(crate) fn emit_portability_progress(
+    app: &AppHandle,
+    job_id: &str,
+    update: PortabilityProgressUpdate<'_>,
+) {
     let payload = SkillportStatePortabilityProgressPayload {
+        job_id: job_id.to_string(),
         phase: update.phase,
         status: update.status,
         total: update.total,

@@ -82,6 +82,7 @@ const IDLE_AI_TAG_JOB: AiTagJob = {
   items: {},
 };
 const IDLE_UPDATE_JOB: CentralSkillUpdateJob = {
+  jobId: null,
   phase: null,
   status: "idle",
   total: 0,
@@ -92,6 +93,7 @@ const IDLE_UPDATE_JOB: CentralSkillUpdateJob = {
   items: {},
 };
 const IDLE_PORTABILITY_JOB: SkillportStatePortabilityJob = {
+  jobId: null,
   phase: null,
   status: "idle",
   total: 0,
