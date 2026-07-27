@@ -302,7 +302,6 @@ pub async fn install_from_skills_sh_with_options_impl(
                 &repo_url,
                 vec![selection],
                 None,
-                None,
                 auth_used.as_deref(),
             )
             .await?;

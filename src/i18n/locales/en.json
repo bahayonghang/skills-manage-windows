@@ -57,6 +57,14 @@
       "network": "The AI network request failed.",
       "empty_response": "The model returned no displayable explanation text."
     },
+    "github_import": {
+      "preview_missing": "The repository preview is no longer available. Preview the repository again before importing.",
+      "preview_expired": "The repository preview expired. Preview the repository again to confirm the current contents.",
+      "preview_mismatch": "The repository preview no longer matches the active target or repository. Preview the repository again.",
+      "preview_integrity": "The previewed repository contents changed. Preview the repository again and review the update.",
+      "preview_busy": "This preview is already being imported. Wait for it to finish before retrying.",
+      "preview_commit_unresolved": "The repository commit could not be resolved. Preview the repository again."
+    },
     "local_archive": {
       "archive_not_found": "The selected ZIP archive was not found.",
       "archive_read_failed": "The selected ZIP archive could not be read.",
@@ -2267,7 +2275,11 @@
     "githubImportToolbarLabel": "Preview workspace",
     "githubImportToolbarSelected": "{{count}} selected",
     "githubImportRemoteWorkspaceHint": "Preview workspace is on the active SSH target.",
+    "githubImportSnapshotCommit": "Commit {{sha}}",
+    "githubImportSnapshotExpires": "Preview valid until {{time}}",
+    "githubImportPreviewRequired": "Preview the repository before importing.",
     "githubImportRepreview": "Re-preview",
+    "githubImportRepreviewHint": "Preview the repository again to confirm the current contents before importing.",
     "githubImportSelectionTitle": "Previewed skills",
     "githubImportSelectionDesc": "Choose which skill to inspect and which skills to import.",
     "githubImportPluginGroupOther": "Other",

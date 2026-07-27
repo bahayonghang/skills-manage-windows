@@ -53,16 +53,18 @@ async function setupGitHubImportEventListeners(
   );
 }
 
-async function discardGitHubRepoPreviewWorkspace(
-  previewWorkspaceId?: string | null,
-) {
-  if (!previewWorkspaceId || !isTauriRuntime()) {
+/**
+ * Release a preview snapshot the renderer will no longer use.
+ *
+ * Best effort: a consumed or expired token is already gone on the backend, so a
+ * rejection here must not surface as a user-facing failure.
+ */
+async function discardGitHubRepoPreviewSnapshot(previewId?: string | null) {
+  if (!previewId || !isTauriRuntime()) {
     return;
   }
   await Promise.resolve(
-    invoke("discard_github_repo_preview_workspace", {
-      workspaceId: previewWorkspaceId,
-    }),
+    invoke("discard_github_repo_preview_snapshot", { previewId }),
   ).catch(() => undefined);
 }
 
@@ -70,11 +72,14 @@ export {
   cleanupGitHubImportAiSummaryListener,
   createInitialGitHubImportState,
   createMarketplaceBaseState,
-  discardGitHubRepoPreviewWorkspace,
+  discardGitHubRepoPreviewSnapshot,
   setupGitHubImportEventListeners,
 };
 
-export function rememberGitHubImportAiUnlistener(sourcePath: string, unlisten: UnlistenFn) {
+export function rememberGitHubImportAiUnlistener(
+  sourcePath: string,
+  unlisten: UnlistenFn,
+) {
   githubImportAiUnlisteners.set(sourcePath, unlisten);
 }
 

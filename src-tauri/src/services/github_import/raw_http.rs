@@ -14,16 +14,6 @@ pub(crate) async fn fetch_raw_text(
         .map_err(|e| GithubImportError::Parse(format!("Skill metadata is not valid UTF-8: {}", e)))
 }
 
-pub(crate) async fn fetch_skill_markdown(
-    client: &reqwest::Client,
-    repo: &GitHubRepoRef,
-    source_path: &str,
-    auth_token: Option<&str>,
-) -> Result<String, GithubImportError> {
-    let file_path = join_repo_path(source_path, "SKILL.md")?;
-    fetch_raw_text(client, repo, &file_path, auth_token).await
-}
-
 /// Download a single raw blob through the fixed GitHub/mirror endpoint set.
 /// The renderer and callers provide repository identity plus a repository-
 /// relative path; they never provide the request authority.

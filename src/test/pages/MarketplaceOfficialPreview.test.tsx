@@ -252,6 +252,10 @@ describe("Marketplace official preview", () => {
           conflict: null,
         },
       ],
+      previewId: "github-preview-official",
+      resolvedCommitSha: "abcdef0123456789abcdef0123456789abcdef01",
+      snapshotDigest: `sha256-v1:${"c".repeat(64)}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     } satisfies GitHubRepoPreview);
 
     renderView();
@@ -287,6 +291,10 @@ describe("Marketplace official preview", () => {
           conflict: null,
         },
       ],
+      previewId: "github-preview-official",
+      resolvedCommitSha: "abcdef0123456789abcdef0123456789abcdef01",
+      snapshotDigest: `sha256-v1:${"c".repeat(64)}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     } satisfies GitHubRepoPreview);
     mockInstallGitHubPreviewSkill.mockResolvedValue(undefined);
     mockRescan.mockResolvedValue(undefined);
@@ -333,6 +341,10 @@ describe("Marketplace official preview", () => {
           conflict: null,
         },
       ],
+      previewId: "github-preview-official",
+      resolvedCommitSha: "abcdef0123456789abcdef0123456789abcdef01",
+      snapshotDigest: `sha256-v1:${"c".repeat(64)}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     } satisfies GitHubRepoPreview);
     mockInstallGitHubPreviewSkill.mockResolvedValue(undefined);
     mockRescan.mockResolvedValue(undefined);
@@ -375,6 +387,10 @@ describe("Marketplace official preview", () => {
           conflict: null,
         },
       ],
+      previewId: "github-preview-official",
+      resolvedCommitSha: "abcdef0123456789abcdef0123456789abcdef01",
+      snapshotDigest: `sha256-v1:${"c".repeat(64)}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     } satisfies GitHubRepoPreview);
 
     renderView();
@@ -415,6 +431,10 @@ describe("Marketplace official preview", () => {
           conflict: null,
         },
       ],
+      previewId: "github-preview-official",
+      resolvedCommitSha: "abcdef0123456789abcdef0123456789abcdef01",
+      snapshotDigest: `sha256-v1:${"c".repeat(64)}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     } satisfies GitHubRepoPreview);
 
     renderView();

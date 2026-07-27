@@ -1,0 +1,17 @@
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"GitHub preview spans acquisition, registry, IPC, store, UI, and SQLite provenance boundaries."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse the existing preview workspace, archive fingerprint, target context, and import transaction seams."}
+{"file":".trellis/spec/backend/index.md","reason":"Backend guideline index for the affected GitHub import, database, error, target, and test layers."}
+{"file":".trellis/spec/backend/github-import-preview-contract.md","reason":"Primary contract for preview DTOs, snapshot acquisition, Markdown reads, manifests, and import behavior."}
+{"file":".trellis/spec/backend/local-archive-import.md","reason":"Reference fail-before-mutation fingerprint and bounded snapshot integrity behavior."}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"Migration v4 must preserve immutable contiguous descriptors, checksums, backup, and restore semantics."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"New snapshot failures require typed GithubImportError variants and safe command-boundary strings."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Tokens, workspace paths, manifests, content, and PAT data must stay out of logs and IPC diagnostics."}
+{"file":".trellis/spec/backend/target-context.md","reason":"Registry bindings and cleanup must use one request-scoped Local, SSH, or WSL target identity."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Snapshot verification and import leasing must compose with existing Central mutation serialization."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Rust DB, remote FakeRunner, and cross-platform test fixtures must follow the shared harness contract."}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend guideline index for the affected IPC adapter, async feedback, and wizard tests."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"previewId payload and command map changes must preserve the single typed IPC entrypoint."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Expired or invalid snapshots need visible retry guidance while the current wizard remains usable."}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"The multi-step GitHub import wizard tests need scoped async-surface queries and stable waits."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"The child must finish with the repository-wide just ci contract."}
+{"file":".trellis/tasks/07-24-github-preview-snapshot/research/live-preview-snapshot.md","reason":"Live evidence for current Local re-fetch, remote fallback, TTL registry, reset flow, and provenance placement."}

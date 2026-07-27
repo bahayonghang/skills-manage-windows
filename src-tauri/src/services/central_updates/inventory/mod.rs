@@ -462,7 +462,6 @@ pub(crate) async fn apply_skill_update_decisions_impl(
                     active_target,
                     &repo_url,
                     import_selections,
-                    addition.preview_workspace_id.as_deref(),
                     app,
                     auth_token,
                 )

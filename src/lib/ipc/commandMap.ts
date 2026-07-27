@@ -11,7 +11,10 @@ import type {
   DailyOperationCount,
   DashboardCentralSummary,
   DirectoryTreeEntry,
+  GitHubRepoImportResult,
+  GitHubRepoPreview,
   GitHubRepoRef,
+  GitHubSkillImportSelection,
   ObsidianSkill,
   ObsidianVault,
   OperationLogEntry,
@@ -100,14 +103,25 @@ export const IPC_COMMANDS = {
     },
     LocalArchiveImportResult
   >(),
+  // ── GitHub import: every content read is bound to a preview snapshot ─────
+  preview_github_repo_import: command<{ repoUrl: string }, GitHubRepoPreview>(),
   fetch_github_skill_markdown: command<
     {
+      previewId: string;
       repo: GitHubRepoRef;
       sourcePath: string;
-      previewWorkspaceId: string | null;
     },
     string
   >(),
+  import_github_repo_skills: command<
+    {
+      previewId: string;
+      repoUrl: string;
+      selections: GitHubSkillImportSelection[];
+    },
+    GitHubRepoImportResult
+  >(),
+  discard_github_repo_preview_snapshot: command<{ previewId: string }, void>(),
   set_agent_enabled: command<
     { agentId: string; isEnabled: boolean },
     AgentWithStatus
@@ -309,7 +323,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "delete_central_skills",
   "delete_collection",
   "delete_skill_repository",
-  "discard_github_repo_preview_workspace",
   "explain_skill",
   "explain_skill_stream",
   "export_collection",
@@ -332,7 +345,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "get_skill_tags",
   "get_skill_update_inventory",
   "import_collection",
-  "import_github_repo_skills",
   "import_obsidian_skill_to_central",
   "import_obsidian_skill_to_platform",
   "import_skillport_state",
@@ -348,7 +360,6 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "preview_central_store_location_change",
   "preview_delete_central_skills",
   "preview_delete_skill_repository",
-  "preview_github_repo_import",
   "preview_local_remote_sync",
   "preview_skillport_state_import",
   "read_skills_sh_file",

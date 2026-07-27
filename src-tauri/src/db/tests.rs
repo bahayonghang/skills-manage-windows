@@ -2051,6 +2051,92 @@ async fn test_assign_github_repository_to_skill_records_source_path() {
     assert!(!assignment.is_source_unknown);
 }
 
+/// Per-skill GitHub provenance is written in the skill/repository transaction
+/// and is never downgraded by a later writer that has no confirmed snapshot
+/// (Central update, CLI, portable state), so a skipped or non-preview write
+/// cannot erase a known commit/digest pair.
+#[tokio::test]
+async fn test_github_provenance_is_written_once_and_preserved_by_later_writers() {
+    let pool = setup_test_db().await;
+    let skill = make_skill("provenance-skill", "Provenance Skill", true);
+
+    // Before any provenance-aware import the row is absent: provenance unknown.
+    assert!(get_skill_repository_provenance(&pool, "provenance-skill")
+        .await
+        .unwrap()
+        .is_none());
+
+    upsert_skill_with_github_repository(
+        &pool,
+        &skill,
+        "openai",
+        "skills",
+        "main",
+        "https://github.com/openai/skills",
+        "skills/provenance-skill",
+        Some("1234567890abcdef1234567890abcdef12345678"),
+        Some("sha256-v1:aa"),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        get_skill_repository_provenance(&pool, "provenance-skill")
+            .await
+            .unwrap(),
+        Some((
+            Some("1234567890abcdef1234567890abcdef12345678".to_string()),
+            Some("sha256-v1:aa".to_string()),
+        ))
+    );
+
+    // A later writer without a confirmed snapshot must not clear provenance.
+    upsert_skill_with_github_repository(
+        &pool,
+        &skill,
+        "openai",
+        "skills",
+        "main",
+        "https://github.com/openai/skills",
+        "skills/provenance-skill",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        get_skill_repository_provenance(&pool, "provenance-skill")
+            .await
+            .unwrap(),
+        Some((
+            Some("1234567890abcdef1234567890abcdef12345678".to_string()),
+            Some("sha256-v1:aa".to_string()),
+        ))
+    );
+
+    // A skill that was never imported through a preview snapshot stays unknown.
+    let other = make_skill("unknown-provenance-skill", "Unknown", true);
+    upsert_skill(&pool, &other).await.unwrap();
+    assign_github_repository_to_skill(
+        &pool,
+        "openai",
+        "skills",
+        "main",
+        "https://github.com/openai/skills",
+        "unknown-provenance-skill",
+        "skills/unknown-provenance-skill",
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        get_skill_repository_provenance(&pool, "unknown-provenance-skill")
+            .await
+            .unwrap(),
+        Some((None, None))
+    );
+}
+
 #[tokio::test]
 async fn test_skill_repository_sync_skip_upsert_list_and_delete() {
     let pool = setup_test_db().await;

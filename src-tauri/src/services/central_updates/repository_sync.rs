@@ -85,12 +85,14 @@ pub struct CentralRepositorySyncPreview {
     pub failed_repositories: Vec<CentralRepositorySyncFailure>,
 }
 
+/// Central repository sync confirms additions through its own verified
+/// inventory snapshot, not through a renderer preview token. It therefore
+/// carries no `previewId` and must never fabricate one.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositoryAddedSkillSelection {
     pub repository_id: String,
     pub selections: Vec<GitHubSkillImportSelection>,
-    pub preview_workspace_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -400,7 +402,6 @@ pub(crate) async fn apply_central_repository_sync_impl(
                     active_target,
                     &repo_url,
                     import_selections,
-                    addition.preview_workspace_id.as_deref(),
                     app,
                     auth_token,
                 )

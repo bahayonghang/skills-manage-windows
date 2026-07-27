@@ -48,10 +48,13 @@ export interface CentralRepositorySyncPreview {
   failedRepositories: CentralRepositorySyncFailure[];
 }
 
+/**
+ * Central repository sync confirms additions from its own verified inventory,
+ * not from a wizard preview snapshot, so it carries no `previewId`.
+ */
 export interface CentralRepositoryAddedSkillSelection {
   repositoryId: string;
   selections: GitHubSkillImportSelection[];
-  previewWorkspaceId?: string | null;
 }
 
 export interface CentralRepositoryAdditionSkipRequest {

@@ -25,12 +25,30 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
+  formatGitHubImportError,
+  isPreviewSnapshotFailure,
   looksLikeConfiguredGitHubTokenFailure,
   looksLikeGitHubAuthGuidance,
-  normalizeMessage,
   type WizardStep,
 } from "@/components/marketplace/githubImportWizardUtils";
 import { isRemoteLikeTarget, isSshTarget } from "@/lib/targetKind";
+
+/**
+ * Render the preview snapshot expiry in the active locale.
+ *
+ * Only the expiry instant is shown; the opaque token, the local snapshot, and
+ * the remote workspace path never reach the UI.
+ */
+function formatPreviewExpiry(expiresAt: string, language: string): string {
+  const parsed = new Date(expiresAt);
+  if (Number.isNaN(parsed.getTime())) {
+    return expiresAt;
+  }
+  return parsed.toLocaleTimeString(language, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 interface GitHubRepoImportWizardHeaderProps {
   launcherLabel: string;
@@ -235,7 +253,17 @@ function GitHubRepoImportUrlInputBlock({
           <div className="flex items-start gap-2">
             <AlertCircle className="mt-0.5 size-4 shrink-0" />
             <div className="space-y-2">
-              <span className="block">{normalizeMessage(previewError)}</span>
+              <span className="block">
+                {formatGitHubImportError(previewError, t)}
+              </span>
+              {isPreviewSnapshotFailure(previewError) ? (
+                <span
+                  className="block text-xs text-destructive-text"
+                  data-testid="github-import-repreview-hint"
+                >
+                  {t("marketplace.githubImportRepreviewHint")}
+                </span>
+              ) : null}
               {looksLikeGitHubAuthGuidance(previewError) ? (
                 <span className="block text-xs text-destructive-text">
                   {looksLikeConfiguredGitHubTokenFailure(previewError)
@@ -270,7 +298,7 @@ function GitHubRepoImportPreviewToolbar({
   activeTarget,
   onPreviewSubmit,
 }: GitHubRepoImportPreviewToolbarProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
     <div
@@ -307,7 +335,22 @@ function GitHubRepoImportPreviewToolbar({
               {preview.repo.normalizedUrl}
             </span>
           </div>
-          {isRemoteLikeTarget(activeTarget) && preview.previewWorkspaceId ? (
+          <div
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui-meta text-muted-foreground"
+            data-testid="github-import-snapshot-provenance"
+          >
+            <span className="font-mono">
+              {t("marketplace.githubImportSnapshotCommit", {
+                sha: preview.resolvedCommitSha.slice(0, 7),
+              })}
+            </span>
+            <span>
+              {t("marketplace.githubImportSnapshotExpires", {
+                time: formatPreviewExpiry(preview.expiresAt, i18n.language),
+              })}
+            </span>
+          </div>
+          {isRemoteLikeTarget(activeTarget) ? (
             <div
               className="text-xs text-primary"
               data-testid="github-import-remote-workspace-hint"

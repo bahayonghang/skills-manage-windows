@@ -26,23 +26,40 @@ pub(super) enum TreeImportOutcome {
     Fallback(tree_manifest::FallbackReason),
 }
 
+/// Which repository subtrees the caller needs retained.
+///
+/// `AllCandidates` is used by preview, which must retain every byte it shows so
+/// the confirmed import never re-resolves the branch. `Selected` is used by the
+/// non-preview import paths, which only need the chosen subtrees.
+pub(super) enum TreeSelectionScope<'a> {
+    AllCandidates,
+    Selected(&'a [GitHubSkillImportSelection]),
+}
+
+/// Acquire the selected repository subtrees through the recursive Git tree API.
+///
+/// `pinned_repo` supplies the acquisition ref (a resolved commit for preview);
+/// `display_repo` supplies the user-facing branch used for candidate
+/// `downloadUrl` values so pinned acquisition never leaks into display data.
 pub(super) async fn try_prepare_tree_import(
     client: &reqwest::Client,
-    repo: &GitHubRepoRef,
+    pinned_repo: &GitHubRepoRef,
+    display_repo: &GitHubRepoRef,
     source_path: Option<&str>,
-    selections: &[GitHubSkillImportSelection],
+    scope: TreeSelectionScope<'_>,
     auth: Option<&str>,
     allow_invalid_candidates: bool,
 ) -> Result<TreeImportOutcome, GithubImportError> {
     let started = Instant::now();
-    let manifest = match tree_manifest::try_fetch_tree_manifest(client, repo, auth).await {
+    let manifest = match tree_manifest::try_fetch_tree_manifest(client, pinned_repo, auth).await {
         Ok(manifest) => manifest,
         Err(error) => return tree_import_fallback(error, "tree_manifest", started),
     };
     let inspection = match preview::inspect_tree_candidates_from_manifest(
         client,
         &manifest,
-        repo,
+        pinned_repo,
+        display_repo,
         source_path,
         auth,
     )
@@ -62,20 +79,31 @@ pub(super) async fn try_prepare_tree_import(
         return Err(GithubImportError::NoImportableSkills);
     }
 
-    let planned_selections = if allow_invalid_candidates {
-        let valid_paths = inspection
+    let planned_selections = match scope {
+        TreeSelectionScope::AllCandidates => inspection
             .inspected
             .valid_candidates
             .iter()
-            .map(|candidate| candidate.source_path.as_str())
-            .collect::<HashSet<_>>();
-        selections
-            .iter()
-            .filter(|selection| valid_paths.contains(selection.source_path.as_str()))
-            .cloned()
-            .collect::<Vec<_>>()
-    } else {
-        selections.to_vec()
+            .map(|candidate| GitHubSkillImportSelection {
+                source_path: candidate.source_path.clone(),
+                resolution: DuplicateResolution::Overwrite,
+                renamed_skill_id: None,
+            })
+            .collect::<Vec<_>>(),
+        TreeSelectionScope::Selected(selections) if allow_invalid_candidates => {
+            let valid_paths = inspection
+                .inspected
+                .valid_candidates
+                .iter()
+                .map(|candidate| candidate.source_path.as_str())
+                .collect::<HashSet<_>>();
+            selections
+                .iter()
+                .filter(|selection| valid_paths.contains(selection.source_path.as_str()))
+                .cloned()
+                .collect::<Vec<_>>()
+        }
+        TreeSelectionScope::Selected(selections) => selections.to_vec(),
     };
 
     let plan = match plan_tree_selection(
@@ -102,7 +130,9 @@ pub(super) async fn try_prepare_tree_import(
     }
 
     let snapshot =
-        match download_tree_selection(client, repo, &plan, auth, inspection.fetched_files).await {
+        match download_tree_selection(client, pinned_repo, &plan, auth, inspection.fetched_files)
+            .await
+        {
             Ok(snapshot) => snapshot,
             Err(error) => return tree_import_fallback(error, "raw_download", started),
         };

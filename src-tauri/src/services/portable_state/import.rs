@@ -223,7 +223,6 @@ async fn import_group_for_target(
                 active_target,
                 &group.repo_url,
                 group.selections.clone(),
-                None,
                 app,
                 auth,
             )

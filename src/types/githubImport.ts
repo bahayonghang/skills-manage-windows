@@ -16,6 +16,8 @@ export interface GitHubSkillConflict {
 export interface GitHubSkillPreviewFile {
   path: string;
   byteLen: number;
+  /** `sha256-v1:<hex>` digest of the previewed file bytes. */
+  sha256: string;
 }
 
 export interface GitHubSkillPreview {
@@ -31,10 +33,21 @@ export interface GitHubSkillPreview {
   files?: GitHubSkillPreviewFile[] | null;
 }
 
+/**
+ * Immutable preview snapshot handle.
+ *
+ * `previewId` is an opaque backend token. Every subsequent Markdown read and
+ * the confirmed import must send it; the backend resolves content only from the
+ * registered snapshot and never re-resolves the branch.
+ */
 export interface GitHubRepoPreview {
   repo: GitHubRepoRef;
   skills: GitHubSkillPreview[];
-  previewWorkspaceId?: string | null;
+  previewId: string;
+  resolvedCommitSha: string;
+  snapshotDigest: string;
+  /** RFC 3339 timestamp after which the snapshot must be previewed again. */
+  expiresAt: string;
 }
 
 export type DuplicateResolution = "overwrite" | "skip" | "rename";

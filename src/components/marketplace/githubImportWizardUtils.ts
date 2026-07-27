@@ -8,10 +8,13 @@ import type {
   GitHubSkillImportSelection,
   SkillWithLinks,
 } from "@/types";
+import type { TFunction } from "i18next";
+
 import type {
   GitHubImportAiSummaryEntry,
   SkillMarkdownEntry,
 } from "@/stores/marketplaceStore";
+import { formatBackendError, parseBackendError } from "@/lib/backendError";
 
 export type WizardStep = "input" | "preview" | "confirm" | "result";
 
@@ -54,7 +57,8 @@ export interface GitHubRepoImportWizardProps {
 }
 
 export const EMPTY_SKILL_MARKDOWN: Record<string, SkillMarkdownEntry> = {};
-export const EMPTY_AI_SUMMARIES: Record<string, GitHubImportAiSummaryEntry> = {};
+export const EMPTY_AI_SUMMARIES: Record<string, GitHubImportAiSummaryEntry> =
+  {};
 
 export async function noopFetchGitHubSkillMarkdown(
   _repo: GitHubRepoRef,
@@ -87,6 +91,44 @@ export function buildInitialSelections(
 
 export function normalizeMessage(message: string) {
   return message.replace(/^Error:\s*/, "");
+}
+
+/**
+ * Translate a backend GitHub-import failure.
+ *
+ * Preview snapshot lifecycle failures arrive as a stable
+ * `github_import.<code>:<summary>` envelope and are localized; every other
+ * message keeps its historical text. The `Error:` prefix is stripped before
+ * parsing so a stringified `Error` still resolves its code.
+ */
+export function formatGitHubImportError(message: string, t: TFunction) {
+  return formatBackendError(normalizeMessage(message), t);
+}
+
+/**
+ * True when the failure means the confirmed preview snapshot is gone, expired,
+ * mismatched, or tampered with, so the user must preview the repository again.
+ */
+export function isPreviewSnapshotFailure(message: string) {
+  return (
+    parseBackendError(normalizeMessage(message)).code?.startsWith(
+      "github_import.preview",
+    ) === true
+  );
+}
+
+/**
+ * Localize a rejected import/install for a toast.
+ *
+ * Only the coded preview snapshot envelope is translated; every other message
+ * keeps its exact historical text so unrelated failures cannot be reshaped by
+ * the coded-error parser.
+ */
+export function formatGitHubImportToast(error: unknown, t: TFunction) {
+  const message = String(error);
+  return isPreviewSnapshotFailure(message)
+    ? formatGitHubImportError(message, t)
+    : message;
 }
 
 export function looksLikeGitHubAuthGuidance(message: string) {

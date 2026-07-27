@@ -482,6 +482,8 @@ async fn persist_updated_skill_in_transaction(
         &remote.source.repo.branch,
         &remote.source.repo.normalized_url,
         &remote.source.source_path,
+        None,
+        None,
     )
     .await?;
     Ok(())

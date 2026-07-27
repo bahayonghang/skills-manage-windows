@@ -716,7 +716,6 @@ describe("CentralRepositorySyncDialog", () => {
         [
           {
             repositoryId: "github-openai-skills-main",
-            previewWorkspaceId: null,
             selections: [
               {
                 sourcePath: "skills/skipped-import",

@@ -28,12 +28,12 @@ pub async fn preview_github_repo_import(
     let auth =
         github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_ipc_error())?;
     match &active_target {
         ActiveTarget::Local => {
             github_import::preview_github_repo_import_with_auth(&pool, &repo_url, auth.as_deref())
                 .await
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.to_ipc_error())
         }
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
             github_import::preview_github_repo_import_remote_with_auth(
@@ -43,89 +43,64 @@ pub async fn preview_github_repo_import(
                 auth.as_deref(),
             )
             .await
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_ipc_error())
         }
     }
 }
 
+/// Import the skills confirmed in a registered preview snapshot.
+///
+/// `previewId` is required for every target. The command never falls back to
+/// re-resolving the repository URL, so a branch that moved after preview cannot
+/// change what is imported.
 #[tauri::command]
 pub async fn import_github_repo_skills(
     app: AppHandle,
     state: State<'_, AppState>,
+    preview_id: String,
     repo_url: String,
     selections: Vec<GitHubSkillImportSelection>,
-    preview_workspace_id: Option<String>,
 ) -> Result<GitHubRepoImportResult, String> {
     let request_context = state.resolve_target_context().await?;
     let active_target = request_context.target().clone();
     let pool = request_context.db().clone();
-    let auth =
-        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await
-            .map_err(|e| e.to_string())?;
-    match &active_target {
-        ActiveTarget::Local => github_import::import_github_repo_skills_with_auth(
-            &pool,
-            &repo_url,
-            selections,
-            Some(&app),
-            auth.as_deref(),
-        )
-        .await
-        .map_err(|e| e.to_string()),
-        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-            github_import::import_github_repo_skills_remote_with_auth(
-                &pool,
-                &active_target,
-                &repo_url,
-                selections,
-                preview_workspace_id.as_deref(),
-                Some(&app),
-                auth.as_deref(),
-            )
-            .await
-            .map_err(|e| e.to_string())
-        }
-    }
+    github_import::import_github_repo_skills_from_preview(
+        &pool,
+        &active_target,
+        &preview_id,
+        &repo_url,
+        selections,
+        Some(&app),
+    )
+    .await
+    .map_err(|e| e.to_ipc_error())
 }
 
 #[tauri::command]
 pub async fn fetch_github_skill_markdown(
     state: State<'_, AppState>,
+    preview_id: String,
     repo: GitHubRepoRef,
     source_path: String,
-    preview_workspace_id: Option<String>,
 ) -> Result<String, String> {
-    if let Some(workspace_id) = preview_workspace_id.as_deref() {
-        let request_context = state.resolve_target_context().await?;
-        return github_import::fetch_github_skill_markdown_from_remote_workspace(
-            request_context.target(),
-            workspace_id,
-            &repo,
-            &source_path,
-        )
-        .await
-        .map_err(|e| e.to_string());
-    }
-
-    let client = github_import::github_client().map_err(|e| e.to_string())?;
-    let auth =
-        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
-            .await
-            .map_err(|e| e.to_string())?;
-    github_import::fetch_skill_markdown(&client, &repo, &source_path, auth.as_deref())
-        .await
-        .map_err(|e| e.to_string())
+    let request_context = state.resolve_target_context().await?;
+    github_import::fetch_github_skill_markdown_from_snapshot(
+        request_context.target(),
+        &preview_id,
+        &repo,
+        &source_path,
+    )
+    .await
+    .map_err(|e| e.to_ipc_error())
 }
 
 #[tauri::command]
-pub async fn discard_github_repo_preview_workspace(
+pub async fn discard_github_repo_preview_snapshot(
     state: State<'_, AppState>,
-    workspace_id: String,
+    preview_id: String,
 ) -> Result<(), String> {
     let request_context = state.resolve_target_context().await?;
-    github_import::discard_preview_workspace_for_target(request_context.target(), &workspace_id)
-        .await;
+    github_import::discard_preview_snapshot_for_target(request_context.target(), &preview_id).await;
     Ok(())
 }
 

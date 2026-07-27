@@ -121,7 +121,7 @@ export function makeRegistry(id: string, url: string): SkillRegistry {
 
 export function makePreview(
   skills: GitHubRepoPreview["skills"],
-  previewWorkspaceId?: string | null,
+  previewId = "github-preview-view-support",
 ): GitHubRepoPreview {
   return {
     repo: {
@@ -131,7 +131,10 @@ export function makePreview(
       normalizedUrl: "https://github.com/openai/skills",
     },
     skills,
-    previewWorkspaceId,
+    previewId,
+    resolvedCommitSha: "0f1e2d3c4b5a69788796a5b4c3d2e1f001234567",
+    snapshotDigest: `sha256-v1:${"d".repeat(64)}`,
+    expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
   };
 }
 
@@ -292,7 +295,7 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
         (skill) => selectionState[skill.sourcePath]?.selected ?? false,
       );
       const showRemoteWorkspaceHint =
-        Boolean(preview?.previewWorkspaceId) && isRemoteLikeTarget(activeTarget);
+        Boolean(preview?.previewId) && isRemoteLikeTarget(activeTarget);
       const needsSshPasswordRepair =
         step === "confirm" &&
         requiresSshPasswordRepair(activeTarget) &&

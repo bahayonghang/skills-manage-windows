@@ -59,8 +59,16 @@ export interface MarketplaceState {
   loadPreviewSkills: (registryId: string) => Promise<MarketplaceSkill[]>;
   installSkill: (skillId: string) => Promise<void>;
   /** Re-run AI explanation for a marketplace preview. Used by preview dialogs/drawers. */
-  triggerSkillExplanation: (skillId: string, content: string, lang: string) => Promise<void>;
-  addRegistry: (name: string, sourceType: string, url: string) => Promise<SkillRegistry>;
+  triggerSkillExplanation: (
+    skillId: string,
+    content: string,
+    lang: string,
+  ) => Promise<void>;
+  addRegistry: (
+    name: string,
+    sourceType: string,
+    url: string,
+  ) => Promise<SkillRegistry>;
   removeRegistry: (registryId: string) => Promise<void>;
   getNormalizedRegistryIdentity: (url: string) => string | null;
   findDuplicateRegistry: (url: string) => SkillRegistry | null;
@@ -68,38 +76,45 @@ export interface MarketplaceState {
   resolveSkillsShUrl: (source: string, skillId: string) => Promise<string>;
   browseSkillsShDirectory: (
     source: string,
-    skillId: string
+    skillId: string,
   ) => Promise<SkillsShFileEntry[]>;
   readSkillsShFile: (source: string, filePath: string) => Promise<string>;
   installFromSkillsSh: (source: string, skillId: string) => Promise<string>;
   previewGitHubRepoSkills: (repoUrl: string) => Promise<GitHubRepoPreview>;
   previewGitHubRepoImport: (repoUrl: string) => Promise<GitHubRepoPreview>;
+  /**
+   * Import the skills confirmed in a preview snapshot. `previewId` defaults to
+   * the snapshot currently held in the store; without one the action rejects
+   * instead of letting the backend re-resolve the branch.
+   */
   importGitHubRepoSkills: (
     repoUrl: string,
     selections: GitHubSkillImportSelection[],
-    previewWorkspaceId?: string | null,
+    previewId?: string | null,
   ) => Promise<GitHubRepoImportResult>;
   installGitHubPreviewSkill: (
     repoUrl: string,
     sourcePath: string,
   ) => Promise<GitHubRepoImportResult>;
-  fetchGitHubSkillMarkdown: (repo: GitHubRepoRef, sourcePath: string) => Promise<void>;
+  fetchGitHubSkillMarkdown: (
+    repo: GitHubRepoRef,
+    sourcePath: string,
+  ) => Promise<void>;
   generateGitHubImportAiSummary: (
     sourcePath: string,
     skillName: string,
     content: string,
     lang: string,
-    refresh?: boolean
+    refresh?: boolean,
   ) => Promise<void>;
   resetGitHubImport: () => void;
   resetForTargetChange: () => void;
 }
 
-
 export type MarketplaceStoreSet = (
   partial:
     | Partial<MarketplaceState>
-    | ((state: MarketplaceState) => Partial<MarketplaceState>)
+    | ((state: MarketplaceState) => Partial<MarketplaceState>),
 ) => void;
 
 export type MarketplaceStoreGet = () => MarketplaceState;

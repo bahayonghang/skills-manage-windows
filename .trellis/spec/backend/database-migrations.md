@@ -35,8 +35,8 @@ pool-only initialization are test-only or documented legacy-fixture seams.
 - Startup preflight is read-only and rejects descriptor gaps, applied gaps,
   unknown future versions, and checksum mismatch before backup or mutation.
 - File startup order is `open private pool -> preflight -> backup when pending
-  -> legacy baseline -> orphan repair/audit -> FK migration -> global
-  foreign_key_check -> seed -> publish pool`.
+-> legacy baseline -> orphan repair/audit -> FK migration -> global
+foreign_key_check -> seed -> publish pool`.
 - Existing non-empty files with pending work receive a fresh bound-path
   `VACUUM INTO` snapshot. The snapshot is integrity-checked and synced before
   publish. Only then may older same-source-version backups be pruned.
@@ -54,21 +54,31 @@ pool-only initialization are test-only or documented legacy-fixture seams.
   target/operation/phase checks, lookup indexes, and a partial unique index
   allowing only one nonterminal operation per target and skill. Its manifest
   contents are not part of operation-log export.
+- Migration 4 is append-only: two `ALTER TABLE ... ADD COLUMN` statements adding
+  nullable `resolved_commit_sha` and `content_digest` to
+  `skill_repository_members`. It must not rewrite the frozen table definition
+  installed by migration 2. Existing rows stay `NULL`, which every reader treats
+  as "provenance unknown". Provenance lives on the per-skill membership row, not
+  on `skill_repositories`, because repository rows are shared by every skill
+  imported from the same repo and would overwrite each other. See
+  [GitHub Import Preview Contract](./github-import-preview-contract.md).
 
 ## 4. Validation & Error Matrix
 
-| Condition | Required result |
-| --- | --- |
-| Descriptor or DB version gap | Fail preflight; no backup or write |
-| Future version or checksum mismatch | Fail preflight; no backup or write |
-| Existing non-empty DB with pending migration | Create and validate a new source-version backup |
-| Empty/new or checksum-current DB | Do not create a backup |
-| Backup creation or validation fails | Block before repair/migration |
-| Migration or FK validation fails after backup | Restore original DB, retain backup and quarantine, return failure |
-| Restore also fails | Return combined error and retain backup plus quarantine |
-| Any pooled connection has `foreign_keys != 1` | Reject that connection |
-| Table rebuild row count changes | Roll back migration 2 |
-| Migration 3 active-operation uniqueness or schema check fails | Roll back migration 3 and restore the pre-migration database backup |
+| Condition                                                     | Required result                                                        |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Descriptor or DB version gap                                  | Fail preflight; no backup or write                                     |
+| Future version or checksum mismatch                           | Fail preflight; no backup or write                                     |
+| Existing non-empty DB with pending migration                  | Create and validate a new source-version backup                        |
+| Empty/new or checksum-current DB                              | Do not create a backup                                                 |
+| Backup creation or validation fails                           | Block before repair/migration                                          |
+| Migration or FK validation fails after backup                 | Restore original DB, retain backup and quarantine, return failure      |
+| Restore also fails                                            | Return combined error and retain backup plus quarantine                |
+| Any pooled connection has `foreign_keys != 1`                 | Reject that connection                                                 |
+| Table rebuild row count changes                               | Roll back migration 2                                                  |
+| Migration 3 active-operation uniqueness or schema check fails | Roll back migration 3 and restore the pre-migration database backup    |
+| Migration 4 `ADD COLUMN` fails                                | Roll back migration 4 and restore the pre-migration database backup    |
+| A later writer supplies no provenance for an existing row     | `COALESCE` keeps the stored commit/digest; never overwrite with `NULL` |
 
 All errors below command boundaries remain `sqlx::Error`; backup, metadata,
 repair audit, restore, and FK validation are never best effort.
@@ -76,8 +86,9 @@ repair audit, restore, and FK validation are never best effort.
 ## 5. Good / Base / Bad Cases
 
 - Good: a `v0.10.9` file is snapshotted, normalized, repaired, FK-rebuilt, and
-  reopened at version 2 with its sentinel row intact.
-- Base: a current version-2 DB passes checks, seeds idempotently, and creates no
+  reopened at the latest version with its sentinel row intact and its
+  pre-existing provenance columns `NULL`.
+- Base: a checksum-current DB passes checks, seeds idempotently, and creates no
   additional backup.
 - Good: a reserved rebuild-table collision restores the exact unversioned
   source and returns the migration error.
@@ -91,11 +102,17 @@ repair audit, restore, and FK validation are never best effort.
 ## 6. Tests Required
 
 - Manifest/checksum-locked readable SQL fixtures for all five selected tags.
-- A locked digest for each descriptor, including migration 3; changing runtime repair code alone must
-  not change an already-released migration digest.
-- Fixture pre-schema assertions, three contiguous migration rows, preserved
+- A locked digest for each descriptor, including migrations 3 and 4; changing
+  runtime repair code alone must not change an already-released migration digest.
+- Fixture pre-schema assertions, four contiguous migration rows, preserved
   sentinel data, seven cascade FKs, empty `foreign_key_check`, and idempotent
   current reopen with no extra backup.
+- The future-version preflight fixture must sit one above the highest descriptor;
+  adding a descriptor requires bumping that fixture too.
+- Provenance coverage: pre-v4 rows read back as `(None, None)`, an assignment
+  without a snapshot writes `(None, None)`, and a later provenance-less writer
+  preserves a stored commit/digest
+  (`test_github_provenance_is_written_once_and_preserved_by_later_writers`).
 - Multiple simultaneous pool connections each report `foreign_keys=1`.
 - Checksum drift, applied gap, and future version reject without backup/write.
 - Backup refusal prevents schema writes; injected migration failure restores;

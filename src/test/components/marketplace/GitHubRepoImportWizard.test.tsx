@@ -46,6 +46,8 @@ vi.mock("@/components/marketplace/githubImportWizardBindings", () => ({
   }),
 }));
 
+const PREVIEW_FILE_SHA256 = `sha256-v1:${"b".repeat(64)}`;
+
 function makePreview(): GitHubRepoPreview {
   return {
     repo: {
@@ -65,14 +67,17 @@ function makePreview(): GitHubRepoPreview {
         downloadUrl: "https://example.com/design-an-interface/SKILL.md",
         conflict: null,
         files: [
-          { path: "SKILL.md", byteLen: 1024 },
-          { path: "assets/palette.json", byteLen: 512 },
-          { path: "references/guide.md", byteLen: 768 },
-          { path: "references/deep/example.md", byteLen: 256 },
+          { path: "SKILL.md", byteLen: 1024, sha256: PREVIEW_FILE_SHA256 },
+          { path: "assets/palette.json", byteLen: 512, sha256: PREVIEW_FILE_SHA256 },
+          { path: "references/guide.md", byteLen: 768, sha256: PREVIEW_FILE_SHA256 },
+          { path: "references/deep/example.md", byteLen: 256, sha256: PREVIEW_FILE_SHA256 },
         ],
       },
     ],
-    previewWorkspaceId: "preview-1",
+    previewId: "preview-1",
+    resolvedCommitSha: "1234567890abcdef1234567890abcdef12345678",
+    snapshotDigest: `sha256-v1:${"a".repeat(64)}`,
+    expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
   };
 }
 
@@ -88,7 +93,7 @@ function makeConflictPreview(): GitHubRepoPreview {
         rootDirectory: "skills",
         skillDirectoryName: "conflicting-skill",
         downloadUrl: "https://example.com/conflicting-skill/SKILL.md",
-        files: [{ path: "SKILL.md", byteLen: 400 }],
+        files: [{ path: "SKILL.md", byteLen: 400, sha256: PREVIEW_FILE_SHA256 }],
         conflict: {
           existingSkillId: "conflicting-skill",
           existingName: "Local conflicting skill",
@@ -107,7 +112,7 @@ function makeConflictPreview(): GitHubRepoPreview {
         skillDirectoryName: "fresh-skill",
         downloadUrl: "https://example.com/fresh-skill/SKILL.md",
         conflict: null,
-        files: [{ path: "SKILL.md", byteLen: 300 }],
+        files: [{ path: "SKILL.md", byteLen: 300, sha256: PREVIEW_FILE_SHA256 }],
       },
     ],
   };
@@ -127,7 +132,7 @@ function makeGroupedPreview(): GitHubRepoPreview {
         skillDirectoryName: "ask-matt",
         downloadUrl: "https://example.com/ask-matt/SKILL.md",
         conflict: null,
-        files: [{ path: "SKILL.md", byteLen: 200 }],
+        files: [{ path: "SKILL.md", byteLen: 200, sha256: PREVIEW_FILE_SHA256 }],
       },
       {
         sourcePath: "skills/engineering/code-review",
@@ -139,7 +144,7 @@ function makeGroupedPreview(): GitHubRepoPreview {
         skillDirectoryName: "code-review",
         downloadUrl: "https://example.com/code-review/SKILL.md",
         conflict: null,
-        files: [{ path: "SKILL.md", byteLen: 220 }],
+        files: [{ path: "SKILL.md", byteLen: 220, sha256: PREVIEW_FILE_SHA256 }],
       },
       {
         sourcePath: "skills/utility/ungrouped",
@@ -150,7 +155,7 @@ function makeGroupedPreview(): GitHubRepoPreview {
         skillDirectoryName: "ungrouped",
         downloadUrl: "https://example.com/ungrouped/SKILL.md",
         conflict: null,
-        files: [{ path: "SKILL.md", byteLen: 180 }],
+        files: [{ path: "SKILL.md", byteLen: 180, sha256: PREVIEW_FILE_SHA256 }],
       },
     ],
   };
@@ -201,6 +206,53 @@ async function reviewImport() {
 }
 
 describe("GitHubRepoImportWizard", () => {
+  it("shows the resolved commit short sha and preview expiry without leaking the token", async () => {
+    const preview = makePreview();
+    renderWizard({ preview });
+    await screen.findByTestId("github-import-preview-workspace");
+
+    const provenance = screen.getByTestId("github-import-snapshot-provenance");
+    expect(provenance).toHaveTextContent("1234567");
+    expect(provenance.textContent).not.toContain(preview.resolvedCommitSha);
+    expect(provenance.textContent).not.toContain(preview.previewId);
+    expect(provenance.textContent).not.toContain(preview.snapshotDigest);
+    expect(
+      screen.getByTestId("github-import-repo-toolbar").textContent,
+    ).not.toContain(preview.previewId);
+  });
+
+  it.each([
+    ["github_import.preview_expired:expired", "重新预览"],
+    ["github_import.preview_missing:missing", "重新预览"],
+    ["github_import.preview_integrity:changed", "重新预览"],
+  ])(
+    "asks the user to preview again for %s",
+    async (previewError, expectedHint) => {
+      renderWizard({ preview: null, previewError });
+
+      const hint = await screen.findByTestId("github-import-repreview-hint");
+      expect(hint.textContent ?? "").toContain(expectedHint);
+      expect(
+        screen.queryByText(/Personal Access Token|个人访问令牌/i),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps uncoded preview failures on their historical message", async () => {
+    renderWizard({
+      preview: null,
+      previewError:
+        "No importable skills found in this repository. Supported layouts include subpaths.",
+    });
+
+    expect(
+      await screen.findByText(/No importable skills found/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("github-import-repreview-hint"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows a virtualized file tree with snapshot totals and expandable deep folders", async () => {
     renderWizard();
     await screen.findByTestId("github-import-preview-workspace");
@@ -250,8 +302,8 @@ describe("GitHubRepoImportWizard", () => {
 
     const refreshedPreview = makePreview();
     refreshedPreview.skills[0].files = [
-      { path: "SKILL.md", byteLen: 1024 },
-      { path: "scripts/new-command.ts", byteLen: 320 },
+      { path: "SKILL.md", byteLen: 1024, sha256: PREVIEW_FILE_SHA256 },
+      { path: "scripts/new-command.ts", byteLen: 320, sha256: PREVIEW_FILE_SHA256 },
     ];
     rendered.rerender(wizardElement({ preview: refreshedPreview }));
 
@@ -298,10 +350,11 @@ describe("GitHubRepoImportWizard", () => {
   it("keeps the rendered tree row count bounded for the archive file limit", async () => {
     const preview = makePreview();
     preview.skills[0].files = [
-      { path: "SKILL.md", byteLen: 10 },
+      { path: "SKILL.md", byteLen: 10, sha256: PREVIEW_FILE_SHA256 },
       ...Array.from({ length: 19_999 }, (_, index) => ({
         path: `root-file-${String(index).padStart(5, "0")}.txt`,
         byteLen: 1,
+        sha256: PREVIEW_FILE_SHA256,
       })),
     ];
     renderWizard({ preview });

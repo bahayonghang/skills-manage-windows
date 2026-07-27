@@ -405,6 +405,11 @@ pub async fn assign_github_repository_to_skill(
 /// upsert and repository membership in one transaction prevents a half-state
 /// where the Central skill row exists without source metadata (or vice versa)
 /// if the second write fails.
+///
+/// `resolved_commit_sha` / `content_digest` carry per-skill provenance from an
+/// immutable preview snapshot. Callers without a confirmed snapshot pass `None`,
+/// which preserves the existing membership provenance (or leaves it NULL for a
+/// new row, read as "provenance unknown").
 #[allow(clippy::too_many_arguments)]
 pub async fn upsert_skill_with_github_repository(
     pool: &DbPool,
@@ -414,6 +419,8 @@ pub async fn upsert_skill_with_github_repository(
     branch: &str,
     url: &str,
     source_path: &str,
+    resolved_commit_sha: Option<&str>,
+    content_digest: Option<&str>,
 ) -> Result<(), sqlx::Error> {
     let mut transaction = pool.begin().await?;
 
@@ -425,6 +432,8 @@ pub async fn upsert_skill_with_github_repository(
         branch,
         url,
         source_path,
+        resolved_commit_sha,
+        content_digest,
     )
     .await?;
     transaction.commit().await
@@ -439,6 +448,8 @@ pub(crate) async fn upsert_skill_with_github_repository_in_transaction(
     branch: &str,
     url: &str,
     source_path: &str,
+    resolved_commit_sha: Option<&str>,
+    content_digest: Option<&str>,
 ) -> Result<(), sqlx::Error> {
     upsert_skill_in_transaction(transaction, skill).await?;
 
@@ -475,21 +486,50 @@ pub(crate) async fn upsert_skill_with_github_repository_in_transaction(
 
     sqlx::query(
         "INSERT INTO skill_repository_members
-         (skill_id, repository_id, source_path, added_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)
+         (skill_id, repository_id, source_path, resolved_commit_sha, content_digest, added_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(skill_id) DO UPDATE SET
            repository_id = excluded.repository_id,
            source_path = COALESCE(excluded.source_path, skill_repository_members.source_path),
+           resolved_commit_sha = COALESCE(excluded.resolved_commit_sha, skill_repository_members.resolved_commit_sha),
+           content_digest = COALESCE(excluded.content_digest, skill_repository_members.content_digest),
            updated_at = excluded.updated_at",
     )
     .bind(&skill.id)
     .bind(&repository_id)
     .bind(source_path)
+    .bind(resolved_commit_sha)
+    .bind(content_digest)
     .bind(&now)
     .bind(&now)
     .execute(&mut **transaction)
     .await?;
     Ok(())
+}
+
+/// Read the per-skill GitHub import provenance recorded at import time.
+///
+/// `None` values mean "provenance unknown" (pre-migration rows or imports that
+/// did not run through a confirmed preview snapshot).
+pub async fn get_skill_repository_provenance(
+    pool: &DbPool,
+    skill_id: &str,
+) -> Result<Option<(Option<String>, Option<String>)>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT resolved_commit_sha, content_digest
+         FROM skill_repository_members
+         WHERE skill_id = ?",
+    )
+    .bind(skill_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|row| {
+        (
+            row.get::<Option<String>, _>("resolved_commit_sha"),
+            row.get::<Option<String>, _>("content_digest"),
+        )
+    }))
 }
 
 pub async fn set_skill_repository_pinned(

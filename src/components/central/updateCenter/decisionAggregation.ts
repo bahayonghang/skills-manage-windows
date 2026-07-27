@@ -265,7 +265,6 @@ export function buildDecisions(
     }
     const entry = additionsByRepo.get(item.repositoryId) ?? {
       repositoryId: item.repositoryId,
-      previewWorkspaceId: null,
       selections: [],
     };
     entry.selections.push({

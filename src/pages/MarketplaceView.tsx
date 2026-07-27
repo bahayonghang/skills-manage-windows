@@ -5,6 +5,7 @@ import i18n from "@/i18n";
 
 import { InstallDialog } from "@/components/central/InstallDialog";
 import { MarketplaceShell } from "@/components/marketplace/MarketplaceShell";
+import { formatGitHubImportToast } from "@/components/marketplace/githubImportWizardUtils";
 import type { MarketplaceSkillDetail } from "@/components/marketplace/marketplaceSkillDetailTypes";
 import type { OfficialPublisher, SkillTag } from "@/data/officialSources";
 import { isTauriRuntime } from "@/lib/ipc";
@@ -217,7 +218,7 @@ export function MarketplaceView() {
       await rescan();
       toast.success(t("marketplace.installSuccess"));
     } catch (err) {
-      toast.error(String(err));
+      toast.error(formatGitHubImportToast(err, t));
     } finally {
       setPreviewInstallingIds((prev) => {
         const next = new Set(prev);
@@ -251,7 +252,9 @@ export function MarketplaceView() {
       );
       return result;
     } catch (err) {
-      toast.error(String(err));
+      // Preview snapshot lifecycle failures use a coded envelope; localize them
+      // so the toast asks the user to preview the repository again.
+      toast.error(formatGitHubImportToast(err, t));
       throw err;
     }
   }

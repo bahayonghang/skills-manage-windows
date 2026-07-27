@@ -31,6 +31,9 @@ pub struct GitHubSkillConflict {
 pub struct GitHubSkillPreviewFile {
     pub path: String,
     pub byte_len: u64,
+    /// `sha256-v1:<hex>` digest of the previewed file bytes. Display/evidence
+    /// only: the backend never trusts a renderer-supplied value.
+    pub sha256: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -50,13 +53,20 @@ pub struct GitHubSkillPreview {
     pub files: Option<Vec<GitHubSkillPreviewFile>>,
 }
 
+/// Immutable preview snapshot handle returned to the renderer.
+///
+/// `previewId` is an opaque random lookup key. It never encodes a path,
+/// credential, target, or repository so it cannot be forged into another
+/// snapshot binding.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitHubRepoPreview {
     pub repo: GitHubRepoRef,
     pub skills: Vec<GitHubSkillPreview>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preview_workspace_id: Option<String>,
+    pub preview_id: String,
+    pub resolved_commit_sha: String,
+    pub snapshot_digest: String,
+    pub expires_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -213,9 +223,8 @@ pub(super) const PRIORITY_SKILL_ROOTS: &[&str] = &[
     ".zencoder/skills",
 ];
 
-pub(super) static GITHUB_PREVIEW_WORKSPACES: OnceLock<
-    Mutex<HashMap<String, GitHubPreviewWorkspace>>,
-> = OnceLock::new();
+pub(super) static GITHUB_PREVIEW_SNAPSHOTS: OnceLock<Mutex<HashMap<String, PreviewSnapshotEntry>>> =
+    OnceLock::new();
 pub(super) static GITHUB_SHARED_CLIENT: OnceLock<Result<reqwest::Client, reqwest::Error>> =
     OnceLock::new();
 pub(super) static GITHUB_HOST_RATE_LIMITERS: OnceLock<
@@ -224,34 +233,95 @@ pub(super) static GITHUB_HOST_RATE_LIMITERS: OnceLock<
 
 pub(super) const DEFAULT_GITHUB_HOST_QPS: f64 = 10.0;
 
-#[derive(Debug, Clone)]
+/// Bounded remote workspace holding one extracted repository.
+///
+/// Target, repository, source root, expiry, and identity all live on the owning
+/// [`PreviewSnapshot`]; the workspace only records where the bytes are, so there
+/// is a single binding authority.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct GitHubPreviewWorkspace {
-    pub(super) id: String,
-    pub(super) target_id: String,
-    pub(super) repo: GitHubRepoRef,
-    pub(super) source_path: Option<String>,
     pub(super) remote_workspace_dir: String,
     pub(super) remote_repo_dir: String,
-    pub(super) created_at: DateTime<Utc>,
-    pub(super) expires_at: DateTime<Utc>,
 }
 
-impl GitHubPreviewWorkspace {
+/// Where the immutable bytes of a registered preview snapshot live.
+///
+/// Local previews retain the bounded in-memory repository snapshot; SSH/WSL
+/// previews retain the bounded remote workspace that already holds the
+/// extracted repository.
+#[derive(Debug, Clone)]
+pub(super) enum PreviewSnapshotStorage {
+    Local(Arc<GitHubRepoSnapshot>),
+    Remote(GitHubPreviewWorkspace),
+}
+
+/// One repository file inside a registered snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct PreviewSnapshotFile {
+    pub(super) repo_path: String,
+    pub(super) byte_len: u64,
+    pub(super) sha256: [u8; 32],
+}
+
+/// A previewed candidate skill and the digest of its complete file set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct PreviewSnapshotCandidate {
+    pub(super) source_path: String,
+    pub(super) content_digest: String,
+}
+
+/// An immutable, target-bound preview snapshot.
+///
+/// The registry owns these; import and Markdown reads may only resolve bytes
+/// through a registered snapshot, never by re-resolving a branch.
+#[derive(Debug, Clone)]
+pub(super) struct PreviewSnapshot {
+    pub(super) id: String,
+    pub(super) target_id: String,
+    pub(super) target_kind: TargetKind,
+    pub(super) repo: GitHubRepoRef,
+    pub(super) source_path: Option<String>,
+    pub(super) resolved_commit_sha: String,
+    pub(super) snapshot_digest: String,
+    pub(super) files: Vec<PreviewSnapshotFile>,
+    pub(super) candidates: Vec<PreviewSnapshotCandidate>,
+    pub(super) created_at: DateTime<Utc>,
+    pub(super) expires_at: DateTime<Utc>,
+    pub(super) storage: PreviewSnapshotStorage,
+}
+
+impl PreviewSnapshot {
     pub(super) fn is_expired(&self, now: DateTime<Utc>) -> bool {
         debug_assert!(self.expires_at >= self.created_at);
         self.expires_at <= now
     }
 
-    pub(super) fn matches_source(
-        &self,
-        target_id: &str,
-        repo: &GitHubRepoRef,
-        source_path: Option<&str>,
-    ) -> bool {
-        self.target_id == target_id
-            && &self.repo == repo
-            && self.source_path.as_deref() == source_path
+    pub(super) fn candidate(&self, source_path: &str) -> Option<&PreviewSnapshotCandidate> {
+        self.candidates
+            .iter()
+            .find(|candidate| candidate.source_path == source_path)
     }
+
+    pub(super) fn file(&self, repo_path: &str) -> Option<&PreviewSnapshotFile> {
+        self.files.iter().find(|file| file.repo_path == repo_path)
+    }
+
+    pub(super) fn remote_workspace(&self) -> Option<&GitHubPreviewWorkspace> {
+        match &self.storage {
+            PreviewSnapshotStorage::Remote(workspace) => Some(workspace),
+            PreviewSnapshotStorage::Local(_) => None,
+        }
+    }
+}
+
+/// Registry lifecycle state. Only one import lease may exist per snapshot; a
+/// discard requested while the lease is held is deferred until the lease ends
+/// so an in-flight read cannot lose its remote workspace.
+#[derive(Debug, Clone)]
+pub(super) struct PreviewSnapshotEntry {
+    pub(super) snapshot: Arc<PreviewSnapshot>,
+    pub(super) importing: bool,
+    pub(super) discard_pending: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

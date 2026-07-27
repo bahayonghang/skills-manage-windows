@@ -57,6 +57,14 @@
       "network": "AI 网络请求失败。",
       "empty_response": "模型没有返回可显示的解释正文。"
     },
+    "github_import": {
+      "preview_missing": "仓库预览已失效，请重新预览后再导入。",
+      "preview_expired": "仓库预览已过期，请重新预览以确认当前内容。",
+      "preview_mismatch": "仓库预览与当前目标或仓库不一致，请重新预览。",
+      "preview_integrity": "预览的仓库内容已变化，请重新预览并确认更新。",
+      "preview_busy": "该预览正在导入中，请等待完成后重试。",
+      "preview_commit_unresolved": "无法解析仓库提交，请重新预览。"
+    },
     "local_archive": {
       "archive_not_found": "未找到所选 ZIP 压缩包。",
       "archive_read_failed": "无法读取所选 ZIP 压缩包。",
@@ -2267,7 +2275,11 @@
     "githubImportToolbarLabel": "预览工作台",
     "githubImportToolbarSelected": "已选 {{count}} 个",
     "githubImportRemoteWorkspaceHint": "预览工作区位于当前 SSH 目标。",
+    "githubImportSnapshotCommit": "提交 {{sha}}",
+    "githubImportSnapshotExpires": "预览有效期至 {{time}}",
+    "githubImportPreviewRequired": "请先预览仓库再导入。",
     "githubImportRepreview": "重新预览",
+    "githubImportRepreviewHint": "请重新预览仓库，确认当前内容后再导入。",
     "githubImportSelectionTitle": "预览技能",
     "githubImportSelectionDesc": "在左侧选择要查看的技能，并决定哪些技能参与导入。",
     "githubImportPluginGroupOther": "其他",

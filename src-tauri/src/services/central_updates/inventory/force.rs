@@ -418,7 +418,6 @@ async fn force_import_remote_added(
                     active_target,
                     &repo_url,
                     selections,
-                    None,
                     app,
                     auth_token,
                 )
