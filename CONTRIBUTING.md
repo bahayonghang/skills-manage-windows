@@ -36,9 +36,19 @@ Run the complete local gate before you submit a PR:
 
 ```bash
 just ci
+just audit
 ```
 
-This runs frontend type checking, linting, source-size contracts, Vitest, and the production build in parallel with Rust entrypoint contracts, formatting, all-target Clippy, and locked tests. GitHub runs the same gate as the required `just-ci` check for pull requests targeting `main`.
+`just ci` runs frontend type checking, linting, source-size contracts, Vitest,
+and the production build in parallel with Rust entrypoint contracts, formatting,
+all-target Clippy, and locked tests. `just audit` checks production pnpm
+high/critical advisories and Cargo vulnerabilities against the exact,
+time-bounded exceptions in `security/dependency-audit-exceptions.json`.
+
+GitHub first runs the same source checks on Ubuntu and macOS plus the dependency
+audit. The Windows `just-ci` required check then runs the complete local gate and
+fails if either prerequisite job failed. Routine pull requests do not build
+installers; package smoke remains a manual/release workflow concern.
 
 - Keep production source files under `src/` and `src-tauri/src/` at or below 800 lines whenever practical.
 - The repository currently carries a small frozen allowlist of oversized production files; `pnpm sizecheck` fails if a new file crosses 800 lines or if an allowlisted file grows further.

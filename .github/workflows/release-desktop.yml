@@ -39,7 +39,7 @@ jobs:
           [ "$GITHUB_REF" = "refs/heads/main" ] || { echo "Manual releases must run from the main workflow definition." >&2; exit 1; }
 
       - name: Checkout context resolver
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -74,30 +74,30 @@ jobs:
     runs-on: windows-2022
     steps:
       - name: Checkout frozen release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ needs.release-context.outputs.sha }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
         with:
           version: 10.12.3
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           targets: x86_64-pc-windows-msvc
 
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
           workspaces: |
             src-tauri -> target
@@ -161,7 +161,7 @@ jobs:
           node scripts/generate-latest-json.mjs --version $env:RELEASE_VERSION --tag $env:RELEASE_TAG --asset-dir release-assets
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-release-windows
           path: release-assets/*
@@ -173,26 +173,26 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Checkout frozen release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ needs.release-context.outputs.sha }}
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
         with:
           version: 10.12.3
           run_install: false
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
           workspaces: |
             src-tauri -> target
@@ -224,7 +224,7 @@ jobs:
           cp "${DMGS[0]}" "release-assets/skillport_${RELEASE_VERSION}_macos_universal.dmg"
           tar -C "$(dirname "${APPS[0]}")" -czf "release-assets/skillport_${RELEASE_VERSION}_macos_universal.tar.gz" "$(basename "${APPS[0]}")"
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-release-macos
           path: release-assets/*
@@ -247,24 +247,24 @@ jobs:
             continue_on_error: true
     steps:
       - name: Checkout frozen release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ needs.release-context.outputs.sha }}
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
         with:
           version: 10.12.3
           run_install: false
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
           workspaces: |
             src-tauri -> target
@@ -297,7 +297,7 @@ jobs:
           cp "${RPMS[0]}" "release-assets/skillport_${RELEASE_VERSION}_linux_${ASSET_ARCH}.rpm"
           cp "${APPIMAGES[0]}" "release-assets/skillport_${RELEASE_VERSION}_linux_${ASSET_ARCH}.AppImage"
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-release-linux-${{ matrix.asset-arch }}
           path: release-assets/*
@@ -309,22 +309,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout frozen release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ needs.release-context.outputs.sha }}
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
         with:
           version: 10.12.3
           run_install: false
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - name: Install verifier system deps
         run: |
           sudo apt-get update
@@ -334,7 +334,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Download platform artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: desktop-release-*
           path: release-assets
@@ -353,7 +353,7 @@ jobs:
           node scripts/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir release-assets
           node scripts/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir release-assets --verify
       - name: Upload validated release set
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: validated-desktop-release
           path: release-assets/*
@@ -373,11 +373,11 @@ jobs:
       RELEASE_NAME: ${{ needs.release-context.outputs.release_name }}
     steps:
       - name: Checkout frozen release metadata
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ needs.release-context.outputs.sha }}
       - name: Download validated release set
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: validated-desktop-release
           path: release-assets

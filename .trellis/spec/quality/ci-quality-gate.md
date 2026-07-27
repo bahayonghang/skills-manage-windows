@@ -13,16 +13,26 @@ just ci
   -> node scripts/sync-version.mjs
   -> node scripts/run-ci.mjs
 
+just audit
+  -> node scripts/check-dependency-audit.mjs
+  -> pnpm audit --prod --json + cargo audit --json
+
 GitHub Actions required job/check:
   workflow: .github/workflows/ci.yml
   job id: ci
   job name / check context: just-ci
   check app id: 15368 (GitHub Actions)
+  needs: source-validation + supply-chain
+  runner: windows-2022
+
+Routine prerequisites:
+  source-validation: ubuntu-22.04 + macos-14, node scripts/run-ci.mjs
+  supply-chain: ubuntu-22.04, pnpm audit:dependencies
 
 Reusable CI:
   workflow_call.inputs.checkout_ref: required string
   checkout: frozen commit SHA
-  jobs run: just-ci only
+  jobs run: source-validation + supply-chain -> just-ci
 
 Desktop release:
   trigger: push v* tag or workflow_dispatch(tag) from main
@@ -41,12 +51,12 @@ rust: entrypointcheck -> fmt --check -> clippy --all-targets --locked -> test --
 
 ### Event contract
 
-| GitHub event | `just-ci` | Package smoke jobs |
-| --- | --- | --- |
-| Pull request to `main` | Run | Skip |
-| Push to `main` or `dev` | Run | Skip |
-| `workflow_dispatch` | Run | Run |
-| `workflow_call(checkout_ref)` | Run at `checkout_ref` | Skip |
+| GitHub event | Ubuntu/macOS source | Supply chain | Windows `just-ci` | Package smoke |
+| --- | --- | --- | --- | --- |
+| Pull request to `main` | Run | Run | Run after both pass | Skip |
+| Push to `main` or `dev` | Run | Run | Run after both pass | Skip |
+| `workflow_dispatch` | Run | Run | Run after both pass | Run |
+| `workflow_call(checkout_ref)` | Run at ref | Run at ref | Run at ref after both | Skip |
 
 The CI workflow has no `release.published` trigger. Direct manual dispatch is
 the only CI event that runs package smoke jobs. The canonical
@@ -77,12 +87,31 @@ universal, Linux x64, and optional Linux arm64 release matrix.
 Package job guards must remain:
 
 ```yaml
-if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
+if: ${{ github.event_name == 'workflow_dispatch' }}
 ```
+
+### Supply-chain contract
+
+- Every external Action in `.github/workflows/*.yml` is referenced by a full
+  40-character commit SHA. Version comments are informational; Dependabot's
+  weekly `github-actions` updates keep the commits reviewable and current.
+- `pnpm audit --prod --json` blocks high/critical advisories. `cargo audit
+  --json` blocks every vulnerability. Moderate/low npm advisories and Cargo
+  informational warnings remain visible without expanding this gate's scope.
+- Exceptions are exact `(ecosystem, advisory)` entries with non-empty owner and
+  reason plus an ISO expiry date. Malformed, duplicate, expired, cross-ecosystem,
+  or unused entries fail closed.
+- Current exceptions expire on 2026-08-11: React Router's RSC-only advisory has
+  no stable fixed release, and `tauri-plugin-sql 2.4.0` internally enables the
+  SQLx/RSA closure even when the application uses only SQLite. Neither exception
+  permits a package-wide or severity-wide ignore.
 
 ### Branch protection contract
 
 - `main` requires an up-to-date `just-ci` check bound to app id `15368`.
+- `just-ci` uses `needs` plus an `always()` result assertion so a failed source
+  matrix or supply-chain job fails the existing required context; no new remote
+  required-check name is needed.
 - Administrators are subject to the check.
 - A pull request is required, with zero approvals for the single-maintainer repository.
 - Conversations must be resolved; force pushes and deletion are disabled.
@@ -96,6 +125,10 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 | --- | --- |
 | PR/push trigger removed | `ciWorkflowContract.test.ts` fails |
 | `just-ci` renamed or guarded | Contract test fails; do not update branch protection casually |
+| Source matrix or supply-chain prerequisite fails | Windows job still reports `just-ci` and its final prerequisite assertion fails |
+| External Action uses a tag, branch, or short SHA | CI workflow contract fails |
+| Audit exception is malformed, expired, duplicate, cross-ecosystem, or unused | `just audit` fails closed |
+| New npm high/critical or Cargo vulnerability appears | `just audit` fails unless one exact current exception exists |
 | Package job lacks event guard | Contract test fails |
 | Reusable CI runs package jobs | Contract test fails; `workflow_call` owns only `just-ci` |
 | Manual release runs from a non-`main` workflow ref | Context job fails before checkout/build |
@@ -117,8 +150,11 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 
 ## 5. Good / Base / Bad Cases
 
-- Good: a PR to `main` runs one stable `just-ci` gate; package jobs skip; merge waits for the current head to pass.
-- Base: a manual run executes `just-ci` plus all smoke packages for pre-release validation.
+- Good: a PR to `main` runs Ubuntu/macOS source validation and the supply-chain
+  audit, then one stable Windows `just-ci` gate; package jobs skip and merge waits
+  for the current head plus both prerequisite results.
+- Base: a manual run executes the same prerequisites and `just-ci` plus all smoke
+  packages for pre-release validation.
 - Good: a release tag peels to `main`, reusable CI and all required builds pass,
   the draft survives fresh-download verification, and one final API call makes
   the complete release public.
@@ -130,12 +166,22 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
   post-upload checks pass.
 - Bad: expanding the whole release packaging matrix to every PR, which adds tens of minutes without improving routine feedback proportionally.
 - Bad: adding a new local check without adding it to `scripts/run-ci.mjs`, or duplicating different commands directly in the workflow.
+- Bad: adding non-required matrix jobs without propagating their result into the
+  existing required `just-ci` context.
+- Bad: suppressing an audit by package name, severity, or non-expiring ignore.
 
 ## 6. Tests Required
 
 - `pnpm vitest run src/test/contracts/ciWorkflowContract.test.ts`
   - Parse YAML 1.2; assert event branches, reusable frozen checkout, stable job
-    name, shared entrypoint, Rust components, and manual-only package guards.
+    name, prerequisite result propagation, Ubuntu/macOS matrix, audit job, full
+    Action SHAs, Dependabot schedule, Rust components, and manual-only package guards.
+- `pnpm exec vitest run src/test/contracts/dependencyAuditContract.test.ts`
+  - Assert unknown high/RUSTSEC findings block; exact current exceptions pass;
+    malformed, duplicate, expired, cross-ecosystem, and unused exceptions fail.
+- `just audit`
+  - Run the live pnpm and Cargo advisory databases; inspect the raw audit outputs
+    when the wrapper reports a new or malformed finding.
 - `pnpm vitest run src/test/contracts/releaseWorkflowContract.test.ts src/test/scripts/release*.test.ts`
   - Assert frozen tag checkout, required-job DAG, optional artifact rules, draft
     ordering, least privilege, final tag recheck, sole public transition,
@@ -183,8 +229,16 @@ on:
         type: string
 
 jobs:
+  source-validation:
+    strategy:
+      matrix:
+        runner: [ubuntu-22.04, macos-14]
+  supply-chain:
+    name: supply-chain
   ci:
     name: just-ci
+    needs: [source-validation, supply-chain]
+    if: ${{ always() }}
 
 # release-desktop.yml
 jobs:

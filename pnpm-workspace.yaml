@@ -8,4 +8,7 @@ allowBuilds:
   msw: false
 
 minimumReleaseAgeExclude:
-  - shadcn@4.8.1
+  - shadcn@4.15.0
+
+overrides:
+  postcss: 8.5.23

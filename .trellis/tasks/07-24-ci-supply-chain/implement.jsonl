@@ -1,0 +1,3 @@
+{"file":".trellis/spec/quality/index.md","reason":"Load the repository quality-spec entry point before changing CI policy."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Preserve the stable Windows check, reusable release gate, and package-smoke boundaries."}
+{"file":".trellis/tasks/07-24-ci-supply-chain/research/ci-supply-chain-evidence.md","reason":"Use the verified audit baseline, focused upgrade paths, and external Action SHAs."}

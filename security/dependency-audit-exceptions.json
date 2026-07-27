@@ -1,0 +1,16 @@
+[
+  {
+    "ecosystem": "npm",
+    "advisory": "GHSA-qwww-vcr4-c8h2",
+    "owner": "lyh",
+    "reason": "React Router has no stable patched release; this desktop app does not use RSC or data actions.",
+    "expires": "2026-08-11"
+  },
+  {
+    "ecosystem": "cargo",
+    "advisory": "RUSTSEC-2023-0071",
+    "owner": "lyh",
+    "reason": "tauri-plugin-sql 2.4.0 unconditionally enables SQLx default features; the app uses SQLite only and the RSA advisory has no patched release.",
+    "expires": "2026-08-11"
+  }
+]
