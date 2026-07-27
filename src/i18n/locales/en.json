@@ -2,6 +2,31 @@
   "app": {
     "name": "SkillPort"
   },
+  "startup": {
+    "loading": "Checking local data...",
+    "recoveryTitle": "Local data needs recovery",
+    "fatalTitle": "SkillPort could not finish starting",
+    "retry": "Check again",
+    "retrying": "Checking again",
+    "rebuild": "Back up and rebuild database",
+    "rebuilding": "Backing up and rebuilding",
+    "exit": "Exit SkillPort",
+    "backupCreated": "The previous database is preserved in a separate recovery backup.",
+    "actionError": "The action did not finish. Existing data was not silently overwritten. Retry or exit SkillPort.",
+    "issues": {
+      "dataDirectoryUnavailable": "The application data directory cannot be created or written. Check its permissions and available disk space, then retry.",
+      "databaseOpenFailed": "The local database cannot be opened. Check again, or preserve it and create a new database.",
+      "schemaInitializationFailed": "The database structure check or upgrade did not finish. The existing database will not be silently overwritten.",
+      "databaseRecoveryFailed": "Database recovery could not finish safely. SkillPort stopped startup to avoid mixing old and new data.",
+      "stateUnavailable": "The startup status could not be read. Check again, or exit and restart SkillPort if the problem continues."
+    },
+    "diagnostics": {
+      "notRun": "No database integrity diagnosis is available.",
+      "healthy": "The database file is readable, but schema initialization did not pass.",
+      "corrupt": "The integrity check reports that the database file is damaged.",
+      "unavailable": "The database integrity check could not finish. Diagnostic details were written to the local runtime log."
+    }
+  },
   "common": {
     "install": "Install",
     "uninstall": "Uninstall",

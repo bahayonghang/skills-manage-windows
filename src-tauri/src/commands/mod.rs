@@ -22,6 +22,7 @@ pub mod settings;
 mod settings_policy;
 pub mod skill_update_inventory;
 pub mod skills;
+pub mod startup;
 pub mod tag_groups;
 pub mod targets;
 pub mod usage;

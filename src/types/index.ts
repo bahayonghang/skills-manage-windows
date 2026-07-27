@@ -787,3 +787,9 @@ export type {
   LocalArchivePreviewSkill,
   LocalSkillConflict,
 } from "./localArchiveImport";
+
+export type {
+  StartupDiagnostic,
+  StartupIssue,
+  StartupStatus,
+} from "./startup";

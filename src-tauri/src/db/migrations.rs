@@ -13,6 +13,35 @@ use sqlx::Row;
 
 use super::types::{Agent, DbPool};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DatabaseOpenStage {
+    Open,
+    Initialize,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum DatabaseOpenFailure {
+    #[error(transparent)]
+    Open(sqlx::Error),
+    #[error(transparent)]
+    Initialize(sqlx::Error),
+}
+
+impl DatabaseOpenFailure {
+    pub(crate) fn stage(&self) -> DatabaseOpenStage {
+        match self {
+            Self::Open(_) => DatabaseOpenStage::Open,
+            Self::Initialize(_) => DatabaseOpenStage::Initialize,
+        }
+    }
+
+    fn into_sqlx(self) -> sqlx::Error {
+        match self {
+            Self::Open(error) | Self::Initialize(error) => error,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 struct MigrationState {
     applied_version: i64,
@@ -185,18 +214,23 @@ async fn migrate_and_seed(pool: &DbPool, agents: &[Agent]) -> Result<(), sqlx::E
     super::seed::seed_database_with_agents(pool, agents).await
 }
 
-async fn open_database_with_agents(path: &Path, agents: Vec<Agent>) -> Result<DbPool, sqlx::Error> {
+async fn open_database_with_agents_diagnosed(
+    path: &Path,
+    agents: Vec<Agent>,
+) -> Result<DbPool, DatabaseOpenFailure> {
     let path = crate::paths::canonicalize_path_with_missing(path);
     let source_had_data = std::fs::metadata(&path)
         .map(|metadata| metadata.is_file() && metadata.len() > 0)
         .unwrap_or(false);
-    let pool = super::pool::create_pool(&path).await?;
+    let pool = super::pool::create_pool(&path)
+        .await
+        .map_err(DatabaseOpenFailure::Open)?;
     let state = match preflight(&pool).await {
         Ok(state) => state,
         Err(error) => {
             pool.close().await;
             drop(pool);
-            return Err(error);
+            return Err(DatabaseOpenFailure::Initialize(error));
         }
     };
 
@@ -206,7 +240,7 @@ async fn open_database_with_agents(path: &Path, agents: Vec<Agent>) -> Result<Db
             Err(error) => {
                 pool.close().await;
                 drop(pool);
-                return Err(error);
+                return Err(DatabaseOpenFailure::Initialize(error));
             }
         }
     } else {
@@ -220,29 +254,42 @@ async fn open_database_with_agents(path: &Path, agents: Vec<Agent>) -> Result<Db
             drop(pool);
             if let Some(backup_path) = backup_path {
                 if let Err(restore_error) = backup::restore_backup(&path, &backup_path).await {
-                    return Err(sqlx::Error::InvalidArgument(format!(
+                    return Err(DatabaseOpenFailure::Initialize(
+                        sqlx::Error::InvalidArgument(format!(
                         "Database migration failed: {migration_error}; backup restore also failed: {restore_error}"
-                    )));
+                    )),
+                    ));
                 }
             }
-            Err(migration_error)
+            Err(DatabaseOpenFailure::Initialize(migration_error))
         }
     }
 }
 
 pub async fn open_database(path: &Path) -> Result<DbPool, sqlx::Error> {
-    open_database_with_agents(path, super::seed::builtin_agents()).await
+    open_database_with_agents_diagnosed(path, super::seed::builtin_agents())
+        .await
+        .map_err(DatabaseOpenFailure::into_sqlx)
 }
 
 pub async fn open_database_for_remote_home(
     path: &Path,
     remote_home: &str,
 ) -> Result<DbPool, sqlx::Error> {
-    open_database_with_agents(
+    open_database_with_agents_diagnosed(
         path,
         super::seed::builtin_agents_for_posix_home(remote_home),
     )
     .await
+    .map_err(DatabaseOpenFailure::into_sqlx)
+}
+
+pub(crate) async fn open_database_for_startup(path: &Path) -> Result<DbPool, DatabaseOpenFailure> {
+    open_database_with_agents_diagnosed(path, super::seed::builtin_agents()).await
+}
+
+pub(crate) async fn inspect_database_integrity(path: &Path) -> Result<bool, sqlx::Error> {
+    backup::inspect_sqlite_file(path).await
 }
 
 pub(crate) async fn initialize_pool(pool: &DbPool, agents: Vec<Agent>) -> Result<(), sqlx::Error> {

@@ -8,7 +8,7 @@ import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 import type { TargetSummary } from "@/types";
-import { listen, isTauriRuntime, showMainWindowWhenReady } from "@/lib/ipc";
+import { listen, isTauriRuntime } from "@/lib/ipc";
 import { toast } from "sonner";
 
 let triggerRescanInMock = false;
@@ -36,7 +36,6 @@ vi.mock("@/stores/marketplaceStore", () => ({
 vi.mock("@/lib/ipc", () => ({
   listen: vi.fn(),
   isTauriRuntime: vi.fn(() => true),
-  showMainWindowWhenReady: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("sonner", () => ({
@@ -84,7 +83,6 @@ const mockUseSkillStore = vi.mocked(useSkillStore);
 const mockUseMarketplaceStore = vi.mocked(useMarketplaceStore);
 const mockListen = vi.mocked(listen);
 const mockIsTauriRuntime = vi.mocked(isTauriRuntime);
-const mockShowMainWindowWhenReady = vi.mocked(showMainWindowWhenReady);
 
 let testNavigate: ReturnType<typeof useNavigate> | null = null;
 
@@ -569,19 +567,4 @@ describe("AppShell", () => {
     );
   });
 
-  it("shows the hidden Tauri window after the shell mounts", async () => {
-    render(
-      <MemoryRouter initialEntries={["/a"]}>
-        <Routes>
-          <Route path="/" element={<AppShell />}>
-            <Route path="a" element={<DummyPage label="page-a" />} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      expect(mockShowMainWindowWhenReady).toHaveBeenCalledTimes(1);
-    });
-  });
 });

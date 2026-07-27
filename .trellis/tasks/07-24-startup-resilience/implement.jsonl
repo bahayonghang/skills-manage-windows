@@ -1,0 +1,8 @@
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Map startup status and actions across Tauri setup, IPC, Zustand, and the React root."}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"Preserve the versioned migration, validated backup, rollback, and foreign-key contracts."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Use typed service errors and stringify only at the startup command boundary."}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Keep DB companion backup and rollback in one coherent blocking filesystem unit."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Prevent raw database diagnostics, paths, or sensitive values from crossing IPC or UI boundaries."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Keep startup invoke ownership in a Zustand store and maintain typed browser fixtures."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Provide visible retry and rebuild failures while keeping the recovery surface usable."}
+{"file":".trellis/tasks/07-24-startup-resilience/research.md","reason":"Use current startup, migration, window-show, IPC, and test-layout evidence gathered during planning."}

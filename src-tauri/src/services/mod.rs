@@ -23,4 +23,5 @@ pub mod portable_state;
 pub mod projects;
 pub mod resource_budget;
 pub mod scanner;
+pub mod startup;
 pub mod usage;

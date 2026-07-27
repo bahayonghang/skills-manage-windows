@@ -18,7 +18,6 @@ pub mod test_support;
 use db::DbPool;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::fs;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -201,6 +200,135 @@ fn force_windows_foreground(window: &tauri::WebviewWindow) -> bool {
     }
 }
 
+async fn install_ready_state(
+    app: &tauri::AppHandle,
+    pool: DbPool,
+) -> Result<(), services::startup::StartupError> {
+    if let Err(error) = services::central_operation::recover_pending_operations(
+        &pool,
+        &targets::ActiveTarget::Local,
+    )
+    .await
+    {
+        tracing::warn!(
+            code = error.code(),
+            "Local Central operation recovery remains pending"
+        );
+    }
+    if targets::recover_target_config(&pool).await.is_err() {
+        tracing::warn!(
+            code = "target_config_recovery_failed",
+            "Target configuration recovery remains pending"
+        );
+    }
+
+    let secrets: Arc<dyn secrets::SecretStore> = Arc::new(secrets::SystemSecretStore::default());
+    if !app.manage(AppState {
+        db: pool.clone(),
+        ai_tag_jobs: AiTagJobRegistry::default(),
+        central_update_jobs: services::exclusive_job::ExclusiveJobRegistry::new(
+            "job.central_update_busy",
+            "A Central update job is already running.",
+        ),
+        central_update_snapshots: CentralUpdateSnapshotCache::default(),
+        portable_state_jobs: services::exclusive_job::ExclusiveJobRegistry::new(
+            "job.portability_busy",
+            "A portability job is already running.",
+        ),
+        secrets: Arc::clone(&secrets),
+        targets: targets::TargetRegistry::default(),
+    }) {
+        return Err(services::startup::StartupError::StateAlreadyInstalled);
+    }
+
+    let github_pat_migration_pool = pool.clone();
+    let github_pat_migration_secrets = Arc::clone(&secrets);
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = services::github_import::migrate_github_pat_on_startup(
+            &github_pat_migration_pool,
+            github_pat_migration_secrets.as_ref(),
+        )
+        .await
+        {
+            tracing::warn!(error = %error, "Failed to run GitHub token secure-storage migration");
+        }
+    });
+
+    let ai_api_key_migration_pool = pool.clone();
+    let ai_api_key_migration_secrets = Arc::clone(&secrets);
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = services::ai_provider::migrate_ai_api_key_on_startup(
+            &ai_api_key_migration_pool,
+            ai_api_key_migration_secrets.as_ref(),
+        )
+        .await
+        {
+            tracing::warn!(error = %error, "Failed to run AI API key secure-storage migration");
+        }
+    });
+
+    let migration_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = migration_handle.emit(MIGRATION_PROGRESS_EVENT, MigrationProgress::Started);
+        match central_migration::migrate_legacy_central_skills_to_private_store(&pool).await {
+            Ok(summary) => {
+                let _ = migration_handle.emit(
+                    MIGRATION_PROGRESS_EVENT,
+                    MigrationProgress::Completed {
+                        copied: summary.copied,
+                        skipped: summary.skipped_existing,
+                        failed: summary.failed,
+                    },
+                );
+            }
+            Err(error) => {
+                tracing::error!(error = %error, "Failed to migrate legacy Central Skills store");
+                let _ = migration_handle.emit(
+                    MIGRATION_PROGRESS_EVENT,
+                    MigrationProgress::Failed {
+                        error: error.to_string(),
+                    },
+                );
+            }
+        }
+    });
+    Ok(())
+}
+
+pub(crate) async fn run_startup_attempt(
+    app: &tauri::AppHandle,
+    coordinator: &services::startup::StartupCoordinator,
+    backup_created: bool,
+) -> services::startup::StartupStatus {
+    coordinator.set_status(services::startup::StartupStatus::Checking);
+    let status = match services::startup::attempt_startup(coordinator.db_path()).await {
+        Ok(pool) => match install_ready_state(app, pool).await {
+            Ok(()) => services::startup::StartupStatus::Ready,
+            Err(error) => {
+                tracing::error!(
+                    code = services::startup::StartupIssue::DatabaseRecoveryFailed.code(),
+                    error = %error,
+                    "Startup application state installation failed"
+                );
+                services::startup::StartupStatus::Fatal {
+                    issue: services::startup::StartupIssue::DatabaseRecoveryFailed,
+                }
+            }
+        },
+        Err(failure) => {
+            tracing::error!(
+                code = failure.issue.code(),
+                diagnostic = ?failure.diagnostic,
+                error = %failure.error,
+                "Desktop startup prerequisites failed"
+            );
+            failure.status(backup_created)
+        }
+    };
+    coordinator.set_status(status.clone());
+    status
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 #[allow(deprecated)]
 pub fn run() {
@@ -253,115 +381,25 @@ pub fn run() {
                 ),
             }
 
-            let db_dir = paths::app_data_dir();
-            fs::create_dir_all(&db_dir).expect("Failed to create ~/.skillsmanage directory");
-            let db_path = db_dir.join("db.sqlite");
-
-            // Synchronously open the SQLite pool and initialize schema. These
-            // are required before any IPC command can run, so they stay in
-            // the setup block. Legacy migration is deferred to the background
-            // (spawned below) to keep cold-start latency small.
-            let pool = tauri::async_runtime::block_on(async {
-                db::open_database(&db_path)
-                    .await
-                    .expect("Failed to open and migrate SQLite database")
-            });
-            if let Err(error) = tauri::async_runtime::block_on(
-                services::central_operation::recover_pending_operations(
-                    &pool,
-                    &targets::ActiveTarget::Local,
-                ),
-            ) {
-                tracing::warn!(code = error.code(), "Local Central operation recovery remains pending");
-            }
-            if tauri::async_runtime::block_on(targets::recover_target_config(&pool)).is_err() {
-                tracing::warn!(
-                    code = "target_config_recovery_failed",
-                    "Target configuration recovery remains pending"
+            let db_path = paths::app_data_dir().join("db.sqlite");
+            if !app.manage(services::startup::StartupCoordinator::new(db_path)) {
+                return Err(
+                    std::io::Error::other("Startup coordinator is already installed").into(),
                 );
             }
-
-            let secrets: Arc<dyn secrets::SecretStore> =
-                Arc::new(secrets::SystemSecretStore::default());
-
-            app.manage(AppState {
-                db: pool.clone(),
-                ai_tag_jobs: AiTagJobRegistry::default(),
-                central_update_jobs: services::exclusive_job::ExclusiveJobRegistry::new(
-                    "job.central_update_busy",
-                    "A Central update job is already running.",
-                ),
-                central_update_snapshots: CentralUpdateSnapshotCache::default(),
-                portable_state_jobs: services::exclusive_job::ExclusiveJobRegistry::new(
-                    "job.portability_busy",
-                    "A portability job is already running.",
-                ),
-                secrets: Arc::clone(&secrets),
-                targets: targets::TargetRegistry::default(),
-            });
-
-            let github_pat_migration_pool = pool.clone();
-            let github_pat_migration_secrets = Arc::clone(&secrets);
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = services::github_import::migrate_github_pat_on_startup(
-                    &github_pat_migration_pool,
-                    github_pat_migration_secrets.as_ref(),
-                )
-                .await
-                {
-                    tracing::warn!(error = %error, "Failed to run GitHub token secure-storage migration");
-                }
-            });
-
-            let ai_api_key_migration_pool = pool.clone();
-            let ai_api_key_migration_secrets = Arc::clone(&secrets);
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = services::ai_provider::migrate_ai_api_key_on_startup(
-                    &ai_api_key_migration_pool,
-                    ai_api_key_migration_secrets.as_ref(),
-                )
-                .await
-                {
-                    tracing::warn!(error = %error, "Failed to run AI API key secure-storage migration");
-                }
-            });
-
-            // Legacy central-skills migration runs after the IPC handlers are
-            // wired up, so the UI never waits on disk copies during startup.
-            // Progress is broadcast via MIGRATION_PROGRESS_EVENT.
-            let migration_handle = app.handle().clone();
-            let migration_pool = pool;
-            tauri::async_runtime::spawn(async move {
-                let _ = migration_handle.emit(MIGRATION_PROGRESS_EVENT, MigrationProgress::Started);
-                match central_migration::migrate_legacy_central_skills_to_private_store(
-                    &migration_pool,
-                )
-                .await
-                {
-                    Ok(summary) => {
-                        let _ = migration_handle.emit(
-                            MIGRATION_PROGRESS_EVENT,
-                            MigrationProgress::Completed {
-                                copied: summary.copied,
-                                skipped: summary.skipped_existing,
-                                failed: summary.failed,
-                            },
-                        );
-                    }
-                    Err(error) => {
-                        tracing::error!(error = %error, "Failed to migrate legacy Central Skills store");
-                        let _ = migration_handle.emit(
-                            MIGRATION_PROGRESS_EVENT,
-                            MigrationProgress::Failed {
-                                error: error.to_string(),
-                            },
-                        );
-                    }
-                }
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::block_on(async {
+                let coordinator = app_handle.state::<services::startup::StartupCoordinator>();
+                let _operation = coordinator.lock_operation().await;
+                run_startup_attempt(&app_handle, coordinator.inner(), false).await;
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::startup::get_startup_status,
+            commands::startup::retry_startup,
+            commands::startup::rebuild_startup_database,
+            commands::startup::exit_startup,
             commands::deep_link::mark_import_intent_frontend_ready,
             commands::bootstrap::get_bootstrap_snapshot,
             commands::bootstrap::get_skill_counts_summary,

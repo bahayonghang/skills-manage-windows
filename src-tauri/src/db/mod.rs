@@ -20,6 +20,9 @@ mod util;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use migrations::{
+    inspect_database_integrity, open_database_for_startup, DatabaseOpenFailure, DatabaseOpenStage,
+};
 pub use migrations::{open_database, open_database_for_remote_home};
 #[cfg(test)]
 pub(crate) use pool::{create_memory_pool, create_memory_pool_single_conn, create_pool};

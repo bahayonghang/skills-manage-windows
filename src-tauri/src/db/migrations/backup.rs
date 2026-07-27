@@ -73,7 +73,7 @@ fn rename_with_retry(source: &Path, target: &Path) -> io::Result<()> {
     unreachable!("rename retry loop always returns")
 }
 
-pub(super) async fn validate_sqlite_file(path: &Path) -> Result<(), sqlx::Error> {
+async fn sqlite_integrity_result(path: &Path) -> Result<String, sqlx::Error> {
     let options = SqliteConnectOptions::new().filename(path).read_only(true);
     let mut connection = SqliteConnection::connect_with(&options).await?;
     let result = sqlx::query("PRAGMA integrity_check")
@@ -81,10 +81,19 @@ pub(super) async fn validate_sqlite_file(path: &Path) -> Result<(), sqlx::Error>
         .await?
         .try_get::<String, _>(0)?;
     connection.close().await?;
+    Ok(result)
+}
+
+pub(super) async fn inspect_sqlite_file(path: &Path) -> Result<bool, sqlx::Error> {
+    Ok(sqlite_integrity_result(path).await? == "ok")
+}
+
+pub(super) async fn validate_sqlite_file(path: &Path) -> Result<(), sqlx::Error> {
+    let result = sqlite_integrity_result(path).await?;
     if result != "ok" {
         return Err(sqlx::Error::InvalidArgument(format!(
             "SQLite integrity check failed for '{}': {result}",
-            path.display()
+            path.display(),
         )));
     }
     Ok(())

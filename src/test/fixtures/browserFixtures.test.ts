@@ -16,6 +16,7 @@ import { usePlatformStore } from "@/stores/platformStore";
 import { useRuntimeLogStore } from "@/stores/runtimeLogStore";
 import { useSavedViewsStore } from "@/stores/savedViewsStore";
 import { useSkillStore } from "@/stores/skillStore";
+import { resetStartupStoreForTests, useStartupStore } from "@/stores/startupStore";
 import { useTagGroupsStore } from "@/stores/tagGroupsStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { useUsageStore } from "@/stores/usageStore";
@@ -51,6 +52,12 @@ afterAll(() => {
 });
 
 describe("browser fixtures drive real store loaders", () => {
+  it("startupStore enters ready before DB-backed loaders run", async () => {
+    resetStartupStoreForTests();
+    await useStartupStore.getState().loadStatus();
+    expect(useStartupStore.getState().status).toEqual({ phase: "ready" });
+  });
+
   it("platformStore.initialize populates agents and counts", async () => {
     await usePlatformStore.getState().initialize();
 

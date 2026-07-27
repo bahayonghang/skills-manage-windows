@@ -42,6 +42,7 @@ import type {
   SkillportStateImportResult,
   SkillWithLinks,
   SshTargetTestResult,
+  StartupStatus,
   TagGroup,
   TargetSummary,
   TargetConfigQuarantineStatus,
@@ -84,6 +85,11 @@ type IpcCommandSpec<Args, Result> = {
 const command = <Args, Result>() => ({}) as IpcCommandSpec<Args, Result>;
 
 export const IPC_COMMANDS = {
+  // ── startup gate ─────────────────────────────────────────────────────────
+  get_startup_status: command<undefined, StartupStatus>(),
+  retry_startup: command<undefined, StartupStatus>(),
+  rebuild_startup_database: command<undefined, StartupStatus>(),
+  exit_startup: command<undefined, void>(),
   // ── skill detail / obsidian（旧 lib/ipc.ts 首批）───────────────────────────
   get_skill_detail: command<SkillDetailRequest, SkillDetail>(),
   read_file_by_path: command<SkillPathRequest, string>(),

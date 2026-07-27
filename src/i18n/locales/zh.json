@@ -2,6 +2,31 @@
   "app": {
     "name": "SkillPort"
   },
+  "startup": {
+    "loading": "正在检查本地数据...",
+    "recoveryTitle": "本地数据需要恢复",
+    "fatalTitle": "SkillPort 无法完成启动",
+    "retry": "重新检查",
+    "retrying": "正在重新检查",
+    "rebuild": "备份并重建数据库",
+    "rebuilding": "正在备份并重建",
+    "exit": "退出 SkillPort",
+    "backupCreated": "原数据库已保留在独立恢复备份中。",
+    "actionError": "操作未完成。当前数据未被静默覆盖，请重试或退出 SkillPort。",
+    "issues": {
+      "dataDirectoryUnavailable": "应用数据目录无法创建或写入。请检查目录权限和可用磁盘空间后重试。",
+      "databaseOpenFailed": "本地数据库无法打开。你可以先重新检查，或保留原数据库后创建一个新的数据库。",
+      "schemaInitializationFailed": "数据库结构检查或升级未完成。现有数据库不会被静默覆盖。",
+      "databaseRecoveryFailed": "数据库恢复未能安全完成。SkillPort 已停止继续启动，避免混用新旧数据。",
+      "stateUnavailable": "无法读取启动状态。请重新检查；如果问题持续，请退出后重新启动 SkillPort。"
+    },
+    "diagnostics": {
+      "notRun": "当前没有可用的数据库完整性诊断。",
+      "healthy": "数据库文件可读取，但结构初始化未通过。",
+      "corrupt": "完整性检查表明数据库文件已损坏。",
+      "unavailable": "无法完成数据库完整性检查。详细诊断已写入本地运行日志。"
+    }
+  },
   "common": {
     "install": "安装",
     "uninstall": "卸载",

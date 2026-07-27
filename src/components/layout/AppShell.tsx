@@ -13,7 +13,7 @@ import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
-import { isTauriRuntime, listen, showMainWindowWhenReady } from "@/lib/ipc";
+import { isTauriRuntime, listen } from "@/lib/ipc";
 
 type MigrationProgressPayload =
   | { phase: "started" }
@@ -64,10 +64,6 @@ export function AppShell() {
     await rescan();
     await loadCentralSkills();
   }, [loadCentralSkills, rescan]);
-
-  useEffect(() => {
-    void showMainWindowWhenReady().catch(() => undefined);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;

@@ -8,6 +8,7 @@ import { registerSkillsFixtures } from "./skills";
 import { registerTagGroupFixtures } from "./tagGroups";
 import { registerTargetFixtures } from "./targets";
 import { registerUsageFixtures } from "./usage";
+import { registerStartupFixtures } from "./startup";
 
 /**
  * 浏览器演示态的 IPC fixture 总装：按命令名注册到 @/lib/ipc 的 fixture 侧。
@@ -16,6 +17,7 @@ import { registerUsageFixtures } from "./usage";
  * 未注册命令在演示态会 reject IpcFixtureMissingError（fail loud，缺口可定位）。
  */
 export function installBrowserIpcFixtures(): void {
+  registerStartupFixtures();
   registerSettingsFixtures();
   registerMiscFixtures();
   registerPlatformFixtures();
